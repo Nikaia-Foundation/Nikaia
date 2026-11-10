@@ -206,7 +206,7 @@ pub fn lsp_uri_path(uri: &str) -> Option<String> {
             let high = lsp_hex(*unsafe { nikaia_std::proven::read(&given, (nikaia_std::proven::add::<i64>(i, 1)) as usize) });
             let low = lsp_hex(*unsafe { nikaia_std::proven::read(&given, (nikaia_std::proven::add::<i64>(i, 2)) as usize) });
             if high >= 0 && low >= 0 {
-                decoded.push(u8::try_from(high * 16 + low).unwrap_or_else(|_| panic!("the value does not fit in an `u8`")));
+                decoded.push(u8::try_from(unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::mul::<i64>(high, 16), low) }).unwrap_or_else(|_| panic!("the value does not fit in an `u8`")));
                 i = unsafe { nikaia_std::proven::add::<i64>(i, 3) };
                 continue;
             }
@@ -278,7 +278,7 @@ pub fn lsp_offset(source: &str, line: i64, character: i64) -> i64 {
         let code = c as i64;
         byte += if code < 128 { 1 } else if code < 2048 { 2 } else if code < 65536 { 3 } else { 4 };
         if c == '\n' {
-            at_line += 1;
+            at_line = unsafe { nikaia_std::proven::add::<i64>(at_line, 1) };
             column = 0;
         } else if at_line == line { column += if code < 65536 { 1 } else { 2 }; }
     }

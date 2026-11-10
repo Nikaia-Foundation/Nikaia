@@ -659,7 +659,7 @@ pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, wor
             state.facts.nullable_args.insert(id_of(given) as i64, match how { Some(__nikaia_value) => __nikaia_value, None => continue });
             continue;
         }
-        let lent_here = own && lends_in_own(contract, unsafe { nikaia_std::proven::sub::<i64>(i, 1) } + offset, &vec![world.library]);
+        let lent_here = own && lends_in_own(contract, unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::sub::<i64>(i, 1), offset) }, &vec![world.library]);
         if !lent_here && state.a_view_copied_out(world, &have, &want, Some(given)) { continue; }
         if !is_a_literal(given) && an_integer_that_does_not_widen(&have, &want) {
             let at = check_span_at(world, given, span);

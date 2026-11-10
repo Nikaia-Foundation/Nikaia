@@ -358,6 +358,10 @@ impl EmitState {
                     self.emit_core_call_inner(world, walk, out, host, base, args, config, unchecked, depth, flow, scope)?;
                     return Ok(());
                 }
+                if self.facts.plain_bracket_calls.contains(&node_key(base)) && !self.facts.unrolled_calls.contains_key(&node_key(base)) {
+                    self.emit_core_call_inner(world, walk, out, host, base, args, config, unchecked, depth, flow, scope)?;
+                    return Ok(());
+                }
             },
             _ => { },
         }
@@ -373,6 +377,10 @@ impl EmitState {
         let awaits_a_parameter = self.emit_call_awaits_a_parameter(func, scope);
         let decided = pausing.is_none() && self.decided_by_its_lambda(world, func);
         let settled = decided && (flow.in_lambda || !self.lowered_pausing(&scope.function));
+        let rust_result = self.emit_call_rust_owner_result(world, func);
+        let fails_here = flow.can_throw && !flow.caught;
+        let wraps_result = rust_result != "" && (fails_here || !call_can_fail(world.words, &self.own_contracts, world.library, &self.described, func));
+        if wraps_result && rust_result == "Vec" { out.push("nikaia_std::block::List::from("); } else if wraps_result { out.push("nikaia_std::block::Text::from("); }
         if settled { out.push("nikaia_std::rt::exec::settled("); }
         let boxed = pausing.is_some() && self.closes_a_pausing_cycle(&scope.function, nikaia_std::index::or(pausing.as_deref(), || ""));
         if boxed { out.push("Box::pin("); }
@@ -389,7 +397,16 @@ impl EmitState {
             if code_fails { out.push(&self.box_into_channel(world, scope)); }
             out.push("?");
         }
+        if wraps_result { out.push(")"); }
         Ok(())
+    }
+    pub(crate) fn emit_call_rust_owner_result(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> String {
+        let name = match call_written_name(world.words, func) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        if self.own_contracts.functions.contains_key(&name) { return String::from(""); }
+        let contract = match self.described.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        emit_rust_owner(result)
     }
     pub(crate) fn emit_call_awaits_a_parameter(&self, func: &Expr, scope: &EmitScope) -> bool {
         match func {
@@ -514,8 +531,20 @@ impl EmitState {
                     out.push(&format!(", {}::{}(), {}, |source, how| {}::{}::parse_{}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){}", package, options, claimed, package, book, rule, question));
                     return Ok(true);
                 }
-                out.push("nikaia_std::grammar::parse(&*");
-                self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
+                let mut table: Option<Expr> = None;
+                for c in config.iter() { if emit_text(world, c.name) == "words" && !nikaia_std::list::contains(&options, &"words") { table = Some(c.value.clone()); } }
+                match table {
+                    Some(ref words) => {
+                        out.push("nikaia_std::grammar::parse_in(&*");
+                        self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
+                        out.push(", &");
+                        self.emit_expr(world, walk, out, host, words, depth, flow, scope)?;
+                    },
+                    None => {
+                        out.push("nikaia_std::grammar::parse(&*");
+                        self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
+                    },
+                }
                 out.push(&format!(", {}::{}::parse_{}()){}", package, book, rule, question));
                 return Ok(true);
             },
@@ -1220,8 +1249,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple90412| {
-        let (i, word) = __nikaia_tuple90412;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple93272| {
+        let (i, word) = __nikaia_tuple93272;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

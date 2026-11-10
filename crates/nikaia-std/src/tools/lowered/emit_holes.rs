@@ -8,7 +8,7 @@ pub enum EmitHole {
 }
 
 pub trait EmitHolesHost {
-    fn hole(&self, site: u32, text: String) -> EmitHole;
+    fn hole(&self, site: u32, text: &str) -> EmitHole;
     fn wrapped_hole(&self, at: u32, hole: &Expr) -> Option<Expr>;
     fn cached_holes(&self) -> collections::BTreeMap<(i64, String), Expr>;
     fn cached_kept_calls(&self) -> collections::BTreeMap<(String, i64), EmitKeptCall>;
@@ -57,7 +57,7 @@ pub fn emit_holes_literal_bound<H: EmitHolesHost>(host: &H, words: &winnow_gramm
         _ => {
             let site = id_of(literal);
             for (text, bound) in emit_holes_template_texts(words, literal) {
-                match host.hole(site, text) {
+                match host.hole(site, &text) {
                     EmitHole::Parsed(ref hole) => { out.push((hole.clone(), bound.copy_owned())); },
                     EmitHole::Refused(_) => { },
                 }
@@ -171,7 +171,7 @@ pub(crate) fn emit_holes_ask_block<H: EmitHolesHost>(host: &H, words: &winnow_gr
     for expr in visited_in_block(body) {
         let site = id_of(expr);
         for (text, _) in emit_holes_template_texts(words, expr) {
-            match host.hole(site, nikaia_std::block::Text::from(text.to_string())) {
+            match host.hole(site, &nikaia_std::block::Text::from(text.to_string())) {
                 EmitHole::Refused(ref said) => { errors.insert((site as i64, nikaia_std::block::Text::from(text.to_string())), nikaia_std::block::Text::from(said.to_string())); },
                 EmitHole::Parsed(_) => { },
             }

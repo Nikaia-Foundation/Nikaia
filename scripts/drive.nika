@@ -165,7 +165,8 @@
 // output from FILE instead of running `cycle.nika` (for tests).
 // Disk (#1521): each batch ends with the cleanup (drive_cleanup: target/debug,
 // target/nikaia-example-tests, the sandboxes of dead `nikaia test` runs,
-// `nikaia cache prune` of target/nikaia-project-tests at 2G) and its line
+// `nikaia cache prune` of target/nikaia-project-tests at 2G; under 6 GB after
+// that, target/*/incremental unless a build writes there) and its line
 // `CLEANUP freed <N> MB, <M> MB free: ...`; before each agent, under 6 GB free
 // (`df -m` of /) it runs at once (`DISK <M> MB free, under 6 GB: cleanup`),
 // and still under 3 GB the driver escalates instead of starting the agent.
@@ -1569,12 +1570,14 @@ fn drive_sweep() -> i64 throws {
 // low (#1521): target/debug and target/nikaia-example-tests (the driver uses
 // neither), the sandboxes of dead `nikaia test` runs, and `nikaia cache
 // prune` on target/nikaia-project-tests at the driver's limit, 2G (the tests'
-// cache is pruned, never removed whole). Prints `CLEANUP freed <N> MB, <M> MB
+// cache is pruned, never removed whole); still under 6 GB after that and with
+// no cargo or rustc building into them, cargo's incremental caches (target/fast and
+// target/release, often 9 GB; the next build only takes longer). Prints `CLEANUP freed <N> MB, <M> MB
 // free: ...`.
 fn drive_cleanup(exe: String, dry: bool) throws {
 	drive_say(
 		dry,
-		f"rm -rf target/debug target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; print CLEANUP freed <N> MB, <M> MB free",
+		f"rm -rf target/debug target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free",
 	)
 	if dry { return }
 	let before = drive_free()
@@ -1593,8 +1596,16 @@ fn drive_cleanup(exe: String, dry: bool) throws {
 		let lines: Vec[String] = out.stdout.trim().split("\n").collect()
 		pruned = lines[lines.len() - 1].replace(cache, "target/nikaia-project-tests")
 	}
+	let mut incremental: String = ""
+	if drive_free() < 6144 && process::run(
+		"sh",
+		["-c", "ps -eo comm=,args= | awk '$1 == \"cargo\" || $1 == \"rustc\"' | grep -E 'target/(fast|release)|--profile fast|--release'"],
+	).stdout.trim() == "" {
+		process::run("rm", ["-rf", "target/fast/incremental", "target/release/incremental"])
+		incremental = ", target/*/incremental"
+	}
 	let after = drive_free()
-	println(f"CLEANUP freed {after - before} MB, {after} MB free: target/debug, target/nikaia-example-tests, {swept} stale sandboxes, {pruned}")
+	println(f"CLEANUP freed {after - before} MB, {after} MB free: target/debug, target/nikaia-example-tests, {swept} stale sandboxes, {pruned}{incremental}")
 }
 
 // Free disk before agents start: under 6 GB the cleanup runs at once, and

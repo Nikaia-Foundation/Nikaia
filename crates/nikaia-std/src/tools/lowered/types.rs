@@ -62,7 +62,7 @@ pub(crate) fn with_its_last_segment(key: &str, known: &mut collections::BTreeSet
     let c: Vec<scalar> = nikaia_std::list::chars(key.chars());
     let mut last: i64 = -1;
     for at in 0..c.len() as i64 { if ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ':' && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == ':' { last = at; } }
-    if last >= 0 { known.insert(slice(&c, last + 2, c.len() as i64)); }
+    if last >= 0 { known.insert(slice(&c, unsafe { nikaia_std::proven::add::<i64>(last, 2) }, c.len() as i64)); }
 }
 
 pub(crate) fn known_names(own: &Ledger, library: &Ledger, declared: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {

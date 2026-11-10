@@ -441,10 +441,10 @@ pub(crate) fn one_answer(asked: &Asked<'_, '_, '_>, here: &Here, symbol: winnow_
     let mut best: i64 = 0;
     for i in 1..candidates.len() as i64 {
         let rank_i = rank(&unsafe { nikaia_std::proven::read(&candidates, (i) as usize) }.1);
-        let rank_best = rank(&nikaia_std::index::get(&candidates, nikaia_std::index::at(best)).1);
+        let rank_best = rank(&unsafe { nikaia_std::proven::read(&candidates, (best) as usize) }.1);
         if rank_i < rank_best || rank_i == rank_best && unsafe { nikaia_std::proven::read(&candidates, (i) as usize) }.0.start < unsafe { nikaia_std::proven::read(&candidates, (best) as usize) }.0.start { best = i; }
     }
-    out.push(Stored { span: nikaia_std::index::get(&candidates, nikaia_std::index::at(best)).0.clone(), param: signed.param, ty: signed.ty, function: signed.function, subject: signed.subject, into: unsafe { nikaia_std::proven::read(&candidates, (best) as usize) }.1.clone(), carried, method: signed.method, symbol, carrier: if one_carrier && carried { carrier } else { None } });
+    out.push(Stored { span: unsafe { nikaia_std::proven::read(&candidates, (best) as usize) }.0.clone(), param: signed.param, ty: signed.ty, function: signed.function, subject: signed.subject, into: unsafe { nikaia_std::proven::read(&candidates, (best) as usize) }.1.clone(), carried, method: signed.method, symbol, carrier: if one_carrier && carried { carrier } else { None } });
 }
 
 pub(crate) fn a_param_field(into: &Destination) -> bool { matches!(into, Destination::ParamField { .. }) }
@@ -1738,7 +1738,7 @@ pub(crate) fn rsrc_struct_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &
         let mut either_whole = false;
         for (written, ty) in declared.iter() {
             if written == named && !ty.is_view && !ty.either && (rsrc_plain_text(asked, ty) || rsrc_scalar(asked, ty)) { owning = true; }
-            if written == named && ty.either && rsrc_plain_text(asked, ty) && whole { either_whole = true; }
+            if written == named && ty.either && rsrc_text_or_none(asked, ty) && whole { either_whole = true; }
         }
         if either_whole {
             let mut kept = rsrc_none();
@@ -1768,7 +1768,21 @@ pub(crate) fn rsrc_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, k
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn rsrc_with(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, base: &Expr, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
     let mut out = rsrc_eval(unit, asked, here, known, &own_buffer, base, flow);
-    let more = rsrc_fields(unit, asked, here, known, &own_buffer, fields, flow);
+    let mut owner: Option<String> = None;
+    match base {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            for (written, ty) in here.declared.iter() {
+                let written = *written;
+                if written == name && (*ty.code).is_none() && !ty.is_nullable && ty.generics.is_empty() { owner = Some(nikaia_std::block::Text::from(asked.names.resolve(ty.name).to_string())); }
+            }
+        },
+        _ => { },
+    }
+    let more = match owner {
+        None => rsrc_fields(unit, asked, here, known, &own_buffer, fields, flow),
+        Some(ref o) => rsrc_struct_fields(unit, asked, here, known, &own_buffer, o, fields, flow),
+    };
     rsrc_join(&mut out, &more);
     out
 }
@@ -2470,6 +2484,8 @@ pub(crate) fn rsrc_either_text(asked: &Asked<'_, '_, '_>, ty: Option<&Type>) -> 
     let result = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
     result.either && rsrc_plain_text(asked, result)
 }
+
+pub(crate) fn rsrc_text_or_none(asked: &Asked<'_, '_, '_>, ty: &Type) -> bool { (*ty.code).is_none() && ty.generics.is_empty() && asked.names.resolve(ty.name) == "String" }
 
 pub(crate) fn rsrc_plain_text(asked: &Asked<'_, '_, '_>, ty: &Type) -> bool { (*ty.code).is_none() && !ty.is_nullable && ty.generics.is_empty() && asked.names.resolve(ty.name) == "String" }
 

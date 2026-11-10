@@ -90,9 +90,63 @@ pub fn declared_grammar(words: &winnow_grammar::InternerContext, aliases: &colle
         let mut options: Vec<ConfigContract> = vec![];
         for option in rule.config.iter() { options.push(ConfigContract { name: nikaia_std::block::Text::from(words.resolve(option.name).to_string()), ty: written_ty(words, aliases, &option.ty), default: default_text(&option.default) }); }
         contract.signature = Some(Signature { bounds: vec![], mutable: vec![], params, config: options, result });
+        contract.interns = grammar_entry_interns(words, definition, words.resolve(rule.name));
         out.push(DeclaredFn { key: format!("{}::{}", owner, words.resolve(rule.name)), contract });
     }
     out
+}
+
+pub fn grammar_entry_interns(words: &winnow_grammar::InternerContext, definition: &GrammarDef, entry: &str) -> bool {
+    let mut rules: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for r in definition.rules.iter() { rules.insert(nikaia_std::block::Text::from(words.resolve(r.name).to_string())); }
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut todo: Vec<String> = vec![nikaia_std::block::Text::from(entry.to_string())];
+    while !todo.is_empty() {
+        let at = match todo.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        if !seen.contains(&at) {
+            seen.insert(nikaia_std::block::Text::from(at.to_string()));
+            for r in definition.rules.iter() { if words.resolve(r.name) == at { for alt in r.alts.iter() { if grammar_pattern_interns(words, &alt.pattern.node, &rules, &mut todo) { return true; } } } }
+        }
+    }
+    false
+}
+
+pub(crate) fn grammar_pattern_interns(words: &winnow_grammar::InternerContext, pattern: &Pattern, rules: &collections::BTreeSet<String>, todo: &mut Vec<String>) -> bool {
+    match pattern {
+        Pattern::Seq(parts) => return parts.iter().any(|p| { grammar_pattern_interns(words, &p.node, rules, todo) }),
+        Pattern::Choice(parts) => return parts.iter().any(|p| { grammar_pattern_interns(words, &p.node, rules, todo) }),
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); return grammar_pattern_interns(words, &pat.node, rules, todo) },
+        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); return grammar_pattern_interns(words, &pat.node, rules, todo) },
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); return grammar_pattern_interns(words, &pat.node, rules, todo) },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); return grammar_pattern_interns(words, &pat.node, rules, todo) },
+        Pattern::Ref { name, args, .. } => {
+            let name = *name;
+            let called = nikaia_std::block::Text::from(words.resolve(name).to_string());
+            if rules.contains(&called) {
+                todo.push(called);
+                return false;
+            }
+            if called == "ident" || called == "intern" { return true; }
+            return args.iter().any(|p| { grammar_pattern_interns(words, &p.node, rules, todo) });
+        },
+        Pattern::Call { name, .. } => {
+            let name = *name;
+            todo.push(nikaia_std::block::Text::from(words.resolve(name).to_string()));
+            return false;
+        },
+        Pattern::Fold(spec) => {
+            todo.push(nikaia_std::block::Text::from(words.resolve(spec.rule).to_string()));
+            return false;
+        },
+        Pattern::Choose { arms, .. } => return arms.iter().any(|arm| { arm.alts.iter().any(|alt| { grammar_pattern_interns(words, &alt.pattern.node, rules, todo) }) }),
+        Pattern::Members { key, value, sep, fields, .. } => {
+            let key = nikaia_std::boxed::open(key); let sep = nikaia_std::boxed::open(sep); let value = *value;
+            todo.push(nikaia_std::block::Text::from(words.resolve(value).to_string()));
+            for field in fields.iter() { todo.push(nikaia_std::block::Text::from(words.resolve(field.value).to_string())); }
+            return grammar_pattern_interns(words, &key.node, rules, todo) || grammar_pattern_interns(words, &sep.node, rules, todo);
+        },
+        _ => return false,
+    }
 }
 
 pub(crate) fn folds_in_parallel(pattern: &Pattern) -> bool {

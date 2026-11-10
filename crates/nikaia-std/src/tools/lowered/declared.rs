@@ -88,7 +88,8 @@ pub fn code_lends_at(names: &winnow_grammar::InternerContext, ty: &Type, at: i64
     if at < code.param_keeps.len() as i64 && *nikaia_std::index::get(&code.param_keeps, nikaia_std::index::at(at)) { return false; }
     let part = nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at));
     if part.is_view || part.is_mut || part.is_nullable || part.is_tuple || part.is_slice || (*part.code).is_some() { return false; }
-    !part.generics.is_empty() || names.resolve(part.name) == "String"
+    let name = names.resolve(part.name);
+    !part.generics.is_empty() || !(a_number_name(name) || name == "int" || name == "bool" || name == "char" || name == "scalar")
 }
 
 pub fn code_lends_unmarked(names: &winnow_grammar::InternerContext, ty: &Type) -> bool {

@@ -36,7 +36,7 @@ pub(crate) fn check_crossings_mentioned(world: &CheckWorld<'_, '_, '_, '_, '_, '
 pub(crate) fn check_crossings_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, stmts: &[Spanned<Stmt>], from: i64, in_loop: bool) -> CheckCrossingsPath {
     let mut at = from;
     while at < stmts.len() as i64 {
-        let flow = check_crossings_step(world, name, &nikaia_std::index::get(&stmts, nikaia_std::index::at(at)).node, in_loop);
+        let flow = check_crossings_step(world, name, &unsafe { nikaia_std::proven::read(&stmts, (at) as usize) }.node, in_loop);
         if flow != CheckCrossingsPath::Falls { return flow; }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }

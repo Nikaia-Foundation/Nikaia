@@ -305,15 +305,23 @@ impl CheckState {
     /// contract does not lend (its body keeps it), that is not `mut`, `self`
     /// or a view - a part of it may be moved out.
     pub fn an_owned_parameter(ref self, world: ref CheckWorld, given: ref Expr) -> bool sync {
+        let lent = self.a_plain_parameter_lent(world, given) ?? return false
+        return !lent
+    }
+
+    /// **Whether a plain parameter is lent** (ADR-277 D17, #1498): `null`
+    /// where `given` names no parameter, or one that is `mut`, `self` or a
+    /// view.
+    fn a_plain_parameter_lent(ref self, world: ref CheckWorld, given: ref Expr) -> bool? sync {
         let name = match given {
             Expr::Variable(name, _) => world.words.resolve(name).clone(),
-            else => return false,
+            else => return null,
         }
-        let key = self.current ?? return false
-        let contract = world.own.functions[key]?.clone() ?? return false
-        let signature = contract.signature?.clone() ?? return false
+        let key = self.current ?? return null
+        let contract = world.own.functions[key]?.clone() ?? return null
+        let signature = contract.signature?.clone() ?? return null
         if name == "self" || signature.mutable.contains(name) {
-            return false
+            return null
         }
         let mut at: i64 = -1
         let mut scan = 0
@@ -324,9 +332,9 @@ impl CheckState {
             scan = scan + 1
         }
         if at < 0 || signature.params[at].1.is_a_view() {
-            return false
+            return null
         }
-        return !lends_in_own(contract, at, [world.library])
+        return lends_in_own(contract, at, [world.library])
     }
 
     /// **A parameter this function owns, handed back whole where its result
@@ -335,12 +343,15 @@ impl CheckState {
     /// pass refuses handing it back with NK2302, in the trait's words
     /// (ADR-views-3 D14). An NK1104 asking for `ref` would refuse the same
     /// fault twice, in a word that left the language (D4). Only where the
-    /// views pass marks the parameter: its type holds text or a list.
+    /// views pass marks the parameter: its type holds text or a list. **A
+    /// lent parameter handed back is a view of it, of any type** (ADR-views-3
+    /// D12, #1498): what its `from` names is NK1335's to refuse.
     pub fn an_owned_parameter_handed_back(ref self, world: ref CheckWorld, found: ref Ty, want: ref Ty, given: ref Expr) -> bool sync {
         if found.is_a_view() || !want.is_a_view() || want.text() != f"ref {found.text()}" {
             return false
         }
-        return check_fields_holds_text(world, found, []) && self.an_owned_parameter(world, given)
+        let lent = self.a_plain_parameter_lent(world, given) ?? return false
+        return lent || check_fields_holds_text(world, found, [])
     }
 
     /// **A `comptime` binding used where a type is asked**: the use is written

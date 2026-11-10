@@ -59,6 +59,29 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_place_either<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        match value {
+            Expr::Coalesce { value: left, fallback, .. } => {
+                let left = nikaia_std::boxed::open(left); let fallback = nikaia_std::boxed::open(fallback);
+                if self.facts.optional_fallbacks.contains(&node_key(value)) {
+                    out.push("nikaia_std::index::or_maybe(nikaia_std::either_text::either(");
+                    self.emit_expr(world, walk, out, host, left, depth, flow, scope)?;
+                    out.push("), || nikaia_std::either_text::either(");
+                    self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)?;
+                    out.push("))");
+                    return Ok(());
+                }
+            },
+            _ => { },
+        }
+        out.push("nikaia_std::either_text::either(");
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
+        out.push(")");
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn emit_place_around(&self, node: &Expr, field: &str) -> Result<(String, String), nikaia_std::error::Thrown<EmitRefused>> {
         let held = match self.facts.nullable_fields.get(&(node_key(node), nikaia_std::block::Text::from(field.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return Ok((String::from(""), String::from(""))) };
         Ok(emit_around_held(&held)?)
@@ -445,12 +468,10 @@ impl EmitState {
             if either {
                 out.push(": ");
                 out.push(&before);
-                out.push("nikaia_std::either_text::either(");
                 if field.value.is_some() {
                     let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                    self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
-                } else { out.push(&written); }
-                out.push(")");
+                    self.emit_place_either(world, walk, out, host, value, depth, flow, scope)?;
+                } else { out.push(&format!("nikaia_std::either_text::either({})", written)); }
                 out.push(&after);
             } else if field.value.is_some() {
                 let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
@@ -535,17 +556,14 @@ impl EmitState {
                 continue;
             }
             let either = self.either_field(world, &owner, field.name) && !emit_place_null((field.value).as_ref()) && !emit_place_mixed(&self.facts.mixed_choices, (field.value).as_ref());
+            let (before, after) = self.emit_place_around(node, &emit_text(world, field.name))?;
             if field.value.is_some() {
                 let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                if either {
-                    out.push(": nikaia_std::either_text::either(");
-                    self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
-                    out.push(")");
-                } else {
-                    out.push(": ");
-                    self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
-                }
-            } else if either { out.push(&format!(": nikaia_std::either_text::either({})", written)); }
+                out.push(": ");
+                out.push(&before);
+                if either { self.emit_place_either(world, walk, out, host, value, depth, flow, scope)?; } else { self.emit_expr(world, walk, out, host, value, depth, flow, scope)?; }
+                out.push(&after);
+            } else if either { out.push(&format!(": {}nikaia_std::either_text::either({}){}", before, written, after)); } else if before != "" || after != "" { out.push(&format!(": {}{}{}", before, written, after)); }
             out.push(", ");
         }
         if whole {

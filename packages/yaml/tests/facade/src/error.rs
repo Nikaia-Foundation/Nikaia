@@ -1,10 +1,10 @@
-//! serde_yaml 0.9's `tests/test_error.rs`, without
-//! `test_serialize_nested_enum` (it needs `to_string`, #1515).
+//! serde_yaml 0.9's `tests/test_error.rs`.
 
 use crate::Case;
+use nikaia_yaml::value::{Tag, TaggedValue};
 use nikaia_yaml::{Deserializer, Value};
-use serde::Deserialize;
 use serde::de::{SeqAccess, Visitor};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
@@ -30,6 +30,10 @@ pub const CASES: &[Case] = &[
         test_second_document_syntax_error,
     ),
     ("error::test_missing_enum_tag", test_missing_enum_tag),
+    (
+        "error::test_serialize_nested_enum",
+        test_serialize_nested_enum,
+    ),
     (
         "error::test_deserialize_nested_enum",
         test_deserialize_nested_enum,
@@ -189,6 +193,43 @@ fn test_missing_enum_tag() {
 "#;
     let expected = "invalid type: map, expected a YAML tag starting with '!'";
     test_error::<E>(yaml, expected);
+}
+
+fn test_serialize_nested_enum() {
+    #[derive(Serialize, Debug)]
+    pub enum Outer {
+        Inner(Inner),
+    }
+    #[derive(Serialize, Debug)]
+    pub enum Inner {
+        Newtype(usize),
+        Tuple(usize, usize),
+        Struct { x: usize },
+    }
+
+    let expected = "serializing nested enums in YAML is not supported yet";
+
+    let e = Outer::Inner(Inner::Newtype(0));
+    let error = nikaia_yaml::to_string(&e).unwrap_err();
+    assert_eq!(error.to_string(), expected);
+
+    let e = Outer::Inner(Inner::Tuple(0, 0));
+    let error = nikaia_yaml::to_string(&e).unwrap_err();
+    assert_eq!(error.to_string(), expected);
+
+    let e = Outer::Inner(Inner::Struct { x: 0 });
+    let error = nikaia_yaml::to_string(&e).unwrap_err();
+    assert_eq!(error.to_string(), expected);
+
+    let e = Value::Tagged(Box::new(TaggedValue {
+        tag: Tag::new("Outer"),
+        value: Value::Tagged(Box::new(TaggedValue {
+            tag: Tag::new("Inner"),
+            value: Value::Null,
+        })),
+    }));
+    let error = nikaia_yaml::to_string(&e).unwrap_err();
+    assert_eq!(error.to_string(), expected);
 }
 
 fn test_deserialize_nested_enum() {

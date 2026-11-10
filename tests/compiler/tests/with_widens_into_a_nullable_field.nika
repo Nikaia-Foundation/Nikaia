@@ -1,0 +1,13 @@
+// A `with` that gives a plain value to a nullable field wraps it, as a
+// literal does (Part I 2.3, #1515).
+struct P {
+	n: i64,
+	t: String?,
+	k: i64?,
+}
+
+fn main() throws {
+	let p = P { n: 1, t: null, k: null }
+	let q = p with { t: "x", k: 3 }
+	println(f"{q.t ?? "none"} {q.k ?? 0}")
+}

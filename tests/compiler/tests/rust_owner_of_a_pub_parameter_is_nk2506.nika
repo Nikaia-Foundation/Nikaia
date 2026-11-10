@@ -1,0 +1,45 @@
+// A `pub` function that hands its parameter to a Rust function owning it
+// is NK2506 (ADR-327 D8, #1541): the compiler cannot follow the list back
+// to where a caller built it. With the `.clone()` the help names, it runs.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+/// The crate `keeper` and a program beside it that calls it, described by
+/// hand: `nikaia describe` reads no `&[u8]` (#1541's report).
+fn project(tmp: ref String) throws {
+    process::run("mkdir", ["-p", f"{tmp}/rs/src", f"{tmp}/app/src", f"{tmp}/app/contracts"])
+    fs::write(f"{tmp}/rs/Cargo.toml", fs::Root::Anywhere, "[package]\nname = \"keeper\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\n\n[workspace]\n")
+    fs::write(f"{tmp}/rs/src/lib.rs", fs::Root::Anywhere, "use std::sync::Mutex;\n\nstatic MADE: Mutex<u64> = Mutex::new(0);\nstatic KEPT: Mutex<Vec<Vec<u8>>> = Mutex::new(Vec::new());\nstatic KEPT_TEXT: Mutex<Vec<String>> = Mutex::new(Vec::new());\n\n/// A list built here; `made_at` says where.\npub fn make(n: u64) -> Vec<u8> {\n    let v = vec![7; n as usize];\n    *MADE.lock().unwrap() = v.as_ptr() as u64;\n    v\n}\n\npub fn made_at() -> u64 {\n    *MADE.lock().unwrap()\n}\n\npub fn lends_list(items: &[u8]) -> u64 {\n    items.as_ptr() as u64\n}\n\n/// Keeps the list, so its memory is not handed out again.\npub fn owns_list(items: Vec<u8>) -> u64 {\n    let at = items.as_ptr() as u64;\n    KEPT.lock().unwrap().push(items);\n    at\n}\n\npub fn lends_text(text: &str) -> u64 {\n    text.as_ptr() as u64\n}\n\npub fn owns_text(text: String) -> u64 {\n    let at = text.as_ptr() as u64;\n    KEPT_TEXT.lock().unwrap().push(text);\n    at\n}\n")
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nkeeper = { type = \"rust\", path = \"../rs\" }\n")
+    fs::write(f"{tmp}/app/contracts/keeper.contracts", fs::Root::Anywhere, "version = 4\n\n[fn.\"keeper::lends_list\"]\npub = true\nsync = true\nsignature = \"(items: ref Array[u8]) -> u64\"\n\n[fn.\"keeper::lends_text\"]\npub = true\nsync = true\nsignature = \"(text: ref String) -> u64\"\n\n[fn.\"keeper::made_at\"]\npub = true\nsync = true\nsignature = \"() -> u64\"\n\n[fn.\"keeper::make\"]\npub = true\nsync = true\nsignature = \"(n: u64) -> Vec[u8]\"\n\n[fn.\"keeper::owns_list\"]\npub = true\nsync = true\nkeeps = [\"items\"]\nsignature = \"(items: Vec[u8]) -> u64\"\n\n[fn.\"keeper::owns_text\"]\npub = true\nsync = true\nkeeps = [\"text\"]\nsignature = \"(text: String) -> u64\"\n")
+    let hash = process::run("sh", ["-c", f"sha256sum {tmp}/rs/src/lib.rs | cut -d' ' -f1"]).stdout.trim().clone()
+    fs::write(f"{tmp}/app/contracts/keeper.derived", fs::Root::Anywhere, "version = 3\ntoolchain = \"nikaia 0.1.0\"\ninference = \"described-from-signatures\"\n\n[sources]\n\"src/lib.rs\" = \"" + hash + "\"\n")
+}
+
+fn shown(tmp: ref String, command: String, main: String) throws {
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, main)
+    let out = process::run(toolchain(), [command, "src/main.nika"]; dir: f"{tmp}/app")
+    let mut lines: Vec[String] = []
+    for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+        let t = line.trim()
+        if !t.starts_with("Compiling") && !t.starts_with("Finished") && !t.starts_with("Running") && !t.starts_with("Locking") && !t.starts_with("Adding") {
+            lines.push(line.clone())
+        }
+    }
+    println(lines.join("\n"))
+    println(f"exit {out.code}")
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    project(tmp)
+    shown(tmp, "check", "use keeper\n\npub fn hand_on(items: Vec[u8]) -> u64 sync {\n\treturn keeper::owns_list(items)\n}\n\nfn main() throws {\n\tprintln(f\"{hand_on([1, 2]) > 0}\")\n}\n")
+    shown(tmp, "run", "use keeper\n\npub fn hand_on(items: Vec[u8]) -> u64 sync {\n\treturn keeper::owns_list(items.clone())\n}\n\nfn main() throws {\n\tprintln(f\"{hand_on([1, 2]) > 0}\")\n}\n")
+    process::run("rm", ["-rf", tmp])
+}

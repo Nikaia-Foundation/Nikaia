@@ -1768,29 +1768,6 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
     for view in units {
         declare_unit(view.words, view.items, package)
     }
-    // **An `impl`'s method keeps what its trait's method keeps**, by position
-    // (ADR-277 D11), keyed by the trait method's ledger name. For a by-value
-    // **data** parameter the trait's column is still the seed *by value means
-    // kept* (#1012 step 3 computes it), but for one the result's `from` names,
-    // which is lent (#1230); a `fn` parameter's is computed in the
-    // fixpoint below (D17). Read once, from every unit, before the walk: the
-    // trait may be declared after its `impl`.
-    let mut trait_keeps: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
-    for view in units {
-        for item in view.items {
-            match item.node {
-                Item::Trait { name, methods, .. } => {
-                    let owner = view.text(name)
-                    for method in methods {
-                        let positions: Vec[i64] = method.node.args.iter().enumerate().filter(fn((at, arg)) { by_value(arg) && arg.ty.code == null && !method.node.ret_from.contains(arg.name) && !keeps_a_copied_scalar(written_ty(view.words, view.aliases, arg.ty)) }).map(fn((at, arg)) { at }).collect()
-                        let called = view.text(method.node.name)
-                        trait_keeps.insert(f"{owner}::{called}", positions)
-                    }
-                },
-                else => {},
-            }
-        }
-    }
     // **The impls of each trait method of this package** (ADR-277 D17), by
     // the trait method's ledger name: the edges *the trait keeps what an impl
     // keeps* are added once every impl has been seen.
@@ -1820,20 +1797,16 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
                                 Item::Fn { name, receiver, args, .. } => {
                                     let own = view.text(name ?? continue)
                                     let at_trait = f"{owner}::{own}"
-                                    for at in trait_positions(trait_keeps, at_trait) {
-                                        if at < args.len() {
-                                            found.uses.kept.insert(view.text(args[at].name))
-                                        }
-                                    }
                                     // **An impl keeps what its trait method keeps**
-                                    // (D17, D11): a `fn` parameter is handed to the
+                                    // (D17, D11): every by-value parameter, code or
+                                    // data, is handed to the
                                     // trait method's node, in the loop rather than
                                     // before it. A trait of another package answers
                                     // from its ledger (`keeps_its`).
                                     let first = if receiver != null { 1 } else { 0 }
                                     let mut at = 0
                                     for arg in args {
-                                        if by_value(arg) && arg.ty.code != null {
+                                        if by_value(arg) {
                                             found.uses.passed.push(Passed { parameter: view.text(arg.name), callee: at_trait.clone(), at: at + first })
                                         }
                                         at += 1
@@ -1852,21 +1825,14 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
                 // `[H: A]`) cannot see which `impl` answers, so the column is
                 // the union of theirs, and with no impl the method runs. Its
                 // own evidence is empty (a trait method has no body); the
-                // edges to its impls are added below. A by-value **data**
-                // parameter keeps the seed *by value means kept* until #1012
-                // step 3, except one the result's `from` names: the result is
-                // a view of it, so it is lent (ADR-views-3 D2, D14, #1230).
+                // edges to its impls are added below. **Every by-value
+                // parameter, code or data**: by value no longer means kept
+                // (D17, #1012; ADR-views-3 D2, a plain parameter is lent).
                 Item::Trait { name, methods, .. } => {
                     let owner = view.text(name)
                     for method in methods {
-                        let mut uses = no_uses()
-                        for arg in method.node.args {
-                            if by_value(arg) && arg.ty.code == null && !method.node.ret_from.contains(arg.name) {
-                                uses.kept.insert(view.text(arg.name))
-                            }
-                        }
                         let called = view.text(method.node.name)
-                        graph.insert(f"{owner}::{called}", uses)
+                        graph.insert(f"{owner}::{called}", no_uses())
                     }
                 },
                 // **A `entry` rule is an entry, and its one parameter is the
@@ -1914,7 +1880,7 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
         unit += 1
     }
 
-    // **The trait keeps what an impl keeps** (D17): each `fn` parameter of a
+    // **The trait keeps what an impl keeps** (D17): each by-value parameter of a
     // trait method is handed to every impl of it in this package, at the same
     // position. With the impls' edges back, a trait method and its impls are
     // one cycle and settle on one column; the least fixpoint leaves a cycle
@@ -1932,7 +1898,7 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
                         let mut edges: Vec[Passed] = []
                         let mut at = 0
                         for arg in method.node.args {
-                            if by_value(arg) && arg.ty.code != null {
+                            if by_value(arg) {
                                 for callee in impls {
                                     edges.push(Passed { parameter: view.text(arg.name), callee: callee.clone(), at: at + first })
                                 }
@@ -2139,11 +2105,6 @@ fn keeps_path_text(view: ref ParsedView, segments: ref Vec[winnow_grammar::Symbo
     return f"{ty}::{view.text(segments[1])}"
 }
 
-fn trait_positions(keeps: ref collections::BTreeMap[String, Vec[i64]], key: ref String) -> Vec[i64] {
-    let held = keeps[key] ?? return []
-    return held.clone()
-}
-
 fn add_impl(mut impls_of: collections::BTreeMap[String, collections::BTreeSet[String]], at_trait: ref String, name: ref String) {
     let mut names: collections::BTreeSet[String] = collections::BTreeSet()
     if impls_of.contains_key(at_trait) {
@@ -2167,8 +2128,7 @@ fn keeps_the_impls_own[H: KeepsHost](units: ref Vec[ParsedView], rows: ref Vec[K
             column.keepers.insert(row.at_trait.clone(), collections::BTreeMap())
         }
     }
-    // Only a by-value `fn` parameter has a column the impls make (D17; a data
-    // parameter's is the seed until #1012 step 3).
+    // Only a by-value parameter has a column the impls make (D17).
     let mut asked: Vec[ref KeepsImplRow] = []
     for row in rows {
         if asks_a_column(row, graph, library) {
@@ -2209,7 +2169,7 @@ fn keeps_the_impls_own[H: KeepsHost](units: ref Vec[ParsedView], rows: ref Vec[K
                 for arg in args {
                     at += 1
                     let parameter = view.text(arg.name)
-                    if !by_value(arg) || arg.ty.code == null || !mine.contains(parameter) {
+                    if !by_value(arg) || !mine.contains(parameter) {
                         continue
                     }
                     // An absent position is a signature read wrongly: nothing to say.
@@ -2242,11 +2202,11 @@ fn trait_parameter_at(contract: ref FnContract, at: i64) -> String? {
 }
 
 fn asks_a_column(row: ref KeepsImplRow, graph: ref collections::BTreeMap[String, Uses], library: ref Ledger) -> bool {
-    let takes_a_fn = match row.method.node {
-        Item::Fn { args, .. } => args.iter().any(fn(a) { by_value(a) && a.ty.code != null }),
+    let takes_by_value = match row.method.node {
+        Item::Fn { args, .. } => args.iter().any(fn(a) { by_value(a) }),
         else => false,
     }
-    return takes_a_fn && (graph.contains_key(row.at_trait) || library.functions.contains_key(row.at_trait))
+    return takes_by_value && (graph.contains_key(row.at_trait) || library.functions.contains_key(row.at_trait))
 }
 
 fn add_keeper(mut column: KeepsColumn, at_trait: ref String, parameter: ref String, keeper: KeepsKeeper) {

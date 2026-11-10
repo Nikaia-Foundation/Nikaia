@@ -20,12 +20,12 @@ pub fn unclosed_quote(source: &str) -> i64 {
     let mut at: i64 = 0;
     while at < c.len() as i64 {
         if open >= 0 {
-            if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '\\' {
+            if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '\\' {
                 at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
                 continue;
             }
             if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '"' { open = -1; }
-        } else if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '"' { open = at; } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '/' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '/' {
+        } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '"' { open = at; } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '/' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '/' {
             at = past_the_line(&c, at);
             continue;
         }
@@ -41,12 +41,12 @@ pub fn unclosed_bracket(source: &str) -> i64 {
     let mut at: i64 = 0;
     while at < c.len() as i64 {
         if in_string {
-            if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '\\' {
+            if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '\\' {
                 at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
                 continue;
             }
             if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '"' { in_string = false; }
-        } else if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '"' { in_string = true; } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '/' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '/' {
+        } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '"' { in_string = true; } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '/' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '/' {
             at = past_the_line(&c, at);
             continue;
         } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '{' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '(' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '[' { stack.push(at); } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '}' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ')' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ']' { stack.pop(); }
@@ -58,7 +58,7 @@ pub fn unclosed_bracket(source: &str) -> i64 {
 
 pub(crate) fn past_the_line(c: &[scalar], at: i64) -> i64 {
     let mut k = at;
-    while k < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(k)) != '\n' { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
+    while k < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (k) as usize) } != '\n' { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
     k + 1
 }
 

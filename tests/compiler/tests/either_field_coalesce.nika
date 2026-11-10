@@ -1,0 +1,43 @@
+// A `??` of a view option and an option of either kind into a field that
+// holds either kind (#1515): each side is made either kind, not the whole,
+// so rustc gets one `Option<EitherText>` (it refused the code before).
+struct Props {
+	tag: String?,
+}
+
+struct Node {
+	tag: String?,
+}
+
+fn props(s: String) -> Props {
+	return Props { tag: s }
+}
+
+fn owned(s: String) -> Node {
+	return Node { tag: f"tag:{s}" }
+}
+
+fn viewed(s: String) -> Node {
+	return Node { tag: s }
+}
+
+fn source() -> String {
+	let mut s = String()
+	s.push_str("!a b c !d")
+	return s
+}
+
+fn main() throws {
+	let src = source()
+	let w: Vec[String] = src.split(" ").collect()
+	let p = props(w[0])
+	let none = Props { tag: null }
+	let a = Node { tag: p.tag ?? owned(w[1]).tag }
+	let b = Node { tag: none.tag ?? owned(w[2]).tag }
+	let c = Node { tag: none.tag ?? viewed(w[3]).tag }
+	let d = Node { tag: none.tag ?? Node { tag: null }.tag }
+	println(a.tag ?? "none")
+	println(b.tag ?? "none")
+	println(c.tag ?? "none")
+	println(d.tag ?? "none")
+}

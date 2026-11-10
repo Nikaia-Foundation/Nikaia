@@ -1,32 +1,33 @@
-error[NK2302]: `P.pick` implements a trait method that hands back views of `a` only, but this hands back a view of `b`, which it takes by value.
-   --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:37:9
+error[NK1335]: `P::pick` hands back a view of `b`'s data, but its result says `from a`.
+   --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:36:5
     |
- 37 |         return b
-    |         ^^^^^^^^
+ 36 |     fn pick(self, a: String, b: String) -> String from a {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: The trait's result says `from a`, so `b` is not lent: it is moved into `P.pick` and ends with it, and a view of it can't outlive the call (ADR-views-3 D14).
-    = help: Hand back a view of what the trait names, or write `from a | b` on the trait's result.
-error[NK2302]: `P.pick_all` implements a trait method that hands back views of `a` only, but this hands back a view of `b`, which it takes by value.
-   --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:43:9
+    = note: A caller reads the signature: it keeps `a` unchanged while the result is used, and nothing holds `b` (ADR-views-3 D8).
+    = help: Write `from a | b`, or hand back a copy of what comes from `b` with `.clone()`.
+error[NK1335]: `P::pick_all` hands back a view of `b`'s data, but its result says `from a`.
+   --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:42:5
     |
- 43 |         b
-    |         ^
+ 42 |     fn pick_all(self, a: Vec[i64], b: Vec[i64]) -> Vec[i64] from a {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: The trait's result says `from a`, so `b` is not lent: it is moved into `P.pick_all` and ends with it, and a view of it can't outlive the call (ADR-views-3 D14).
-    = help: Hand back a view of what the trait names, or write `from a | b` on the trait's result.
-error[NK2302]: `P.pick_named` implements a trait method that hands back views of `a` only, but this hands back a view of `b`, which it takes by value.
-   --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:49:9
+    = note: A caller reads the signature: it keeps `a` unchanged while the result is used, and nothing holds `b` (ADR-views-3 D8).
+    = help: Write `from a | b`, or hand back a copy of what comes from `b` with `.clone()`.
+error[NK1335]: `P::pick_named` hands back a view of `b`'s data, but its result says `from a`.
+   --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:48:5
     |
- 49 |         return b
-    |         ^^^^^^^^
+ 48 |     fn pick_named(self, a: Named, b: Named) -> Named from a {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: The trait's result says `from a`, so `b` is not lent: it is moved into `P.pick_named` and ends with it, and a view of it can't outlive the call (ADR-views-3 D14).
-    = help: Hand back a view of what the trait names, or write `from a | b` on the trait's result.
-error[NK1104]: You're returning `Number`, but the function is declared to return `ref Number`.
-   --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:55:16
+    = note: A caller reads the signature: it keeps `a` unchanged while the result is used, and nothing holds `b` (ADR-views-3 D8).
+    = help: Write `from a | b`, or hand back a copy of what comes from `b` with `.clone()`.
+error[NK1335]: `P::pick_number` hands back a view of `b`'s data, but its result says `from a`.
+   --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:54:5
     |
- 55 |         return b
-    |                ^
+ 54 |     fn pick_number(self, a: Number, b: Number) -> Number from a {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = help: Make it a view of a `Number` that something else keeps, or change the declaration to `Number`.
-1 type error, 3 views kept past the call that was given it
+    = note: A caller reads the signature: it keeps `a` unchanged while the result is used, and nothing holds `b` (ADR-views-3 D8).
+    = help: Write `from a | b`, or hand back a copy of what comes from `b` with `.clone()`.
+4 type errors

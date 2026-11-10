@@ -51,7 +51,7 @@ pub(crate) fn scale_at(c: &[scalar], from: i64) -> Option<Scale> {
     let mut turns: i64 = 0;
     while turns < power {
         by = by * base;
-        turns += 1;
+        turns = unsafe { nikaia_std::proven::add::<i64>(turns, 1) };
     }
     Some(Scale { by, len })
 }

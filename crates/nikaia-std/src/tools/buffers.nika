@@ -1961,6 +1961,12 @@ fn buffers_view_call(arg: ref Expr, ask: ref BufferAsk, unaliased: fn(ref String
                 false => buffers_hands_back_a_view(ask.library.functions[named], ask),
             }
         }
+        // **A cut of a text that lives makes no buffer either** (#1498):
+        // `second(o.trim(), o2.trim())` views `o2`, which outlives the call.
+        Expr::MethodCall { receiver, method, .. } => {
+            let name = ask.names.resolve(method)
+            name != "clone" && buffers_a_trim(name) && !made_in_the_call(receiver)
+        }
         else => false,
     }
 }

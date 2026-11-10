@@ -214,7 +214,7 @@ pub fn a_view_of(written: &str) -> Option<String> {
         let c: Vec<scalar> = nikaia_std::list::chars(written.chars());
         let close = closing(&c, 4, ')');
         if close >= 0 {
-            let rest = between(&c, close + 1, c.len() as i64);
+            let rest = between(&c, unsafe { nikaia_std::proven::add::<i64>(close, 1) }, c.len() as i64);
             return Some(nikaia_std::block::Text::from(rest.trim_start().to_string()));
         }
     }
@@ -310,7 +310,7 @@ pub(crate) fn a_function(written: &str) -> Option<Ty> {
     let c: Vec<scalar> = nikaia_std::list::chars(written.chars());
     let close = closing(&c, 3, ')');
     if close < 0 { return None; }
-    let after = between(&c, close + 1, c.len() as i64);
+    let after = between(&c, unsafe { nikaia_std::proven::add::<i64>(close, 1) }, c.len() as i64);
     let mut tail: String = nikaia_std::block::Text::from(after.trim().to_string());
     let mut is_sync = false;
     let mut can_throw = false;
@@ -350,7 +350,7 @@ pub(crate) fn a_sequence(written: &str, word: &str, parallel: bool) -> Option<Ty
     let c: Vec<scalar> = nikaia_std::list::chars(rest.chars());
     let close = closing(&c, 1, ']');
     if close < 0 { return None; }
-    let after = between(&c, close + 1, c.len() as i64);
+    let after = between(&c, unsafe { nikaia_std::proven::add::<i64>(close, 1) }, c.len() as i64);
     let mut tail: String = nikaia_std::block::Text::from(after.trim().to_string());
     let mut is_sync = false;
     let mut pauses = false;
@@ -414,7 +414,7 @@ pub(crate) fn a_name(rest: &str, view: bool) -> Ty {
     for at in 0..c.len() as i64 { if open < 0 && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '[' { open = at; } }
     if open >= 0 {
         let named_text = between(&c, 0, open);
-        return Ty::Named { name: nikaia_std::block::Text::from(named_text.trim().to_string()), args: each(&split_args(&between(&c, open + 1, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 1) }))), view };
+        return Ty::Named { name: nikaia_std::block::Text::from(named_text.trim().to_string()), args: each(&split_args(&between(&c, unsafe { nikaia_std::proven::add::<i64>(open, 1) }, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 1) }))), view };
     }
     Ty::Named { name: nikaia_std::block::Text::from(rest.to_string()), args: vec![], view }
 }
@@ -746,16 +746,18 @@ pub struct FnContract {
     pub maps: Vec<String>,
     pub ends_by_length: bool,
     pub pieces: bool,
+    pub interns: bool,
     pub consumers: Vec<String>,
     pub requires: Vec<String>,
     pub ensures: Vec<String>,
     pub ensures_each: Vec<String>,
     pub inferred: Vec<String>,
     pub from: Vec<String>,
+    pub described: bool,
 }
 
 impl FnContract {
-    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, trusted: vec![], signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, panics: Panics::Unknown, places: false, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![] } }
+    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, trusted: vec![], signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, panics: Panics::Unknown, places: false, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, interns: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![], described: false } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,0 +1,31 @@
+// Text of two tiers in one type variable (ADR-views-3 D12, #1342, #1498): a
+// literal or a cut meets text of its own in `T`, so `T` is the view and the
+// owned text is lent as one; the result is read at the call, and `o` and
+// `o2` stay usable.
+
+fn second[T](_x: T, y: T) -> T {
+    return y
+}
+
+fn hand[T](x: T) -> T {
+    return x
+}
+
+fn make(s: String) -> String {
+    let mut made = String()
+    made.push_str(s)
+    return made
+}
+
+fn main() throws {
+    let o = make("o")
+    let o2 = make("o2")
+    println(second(o, "p"))
+    println(second(o.trim(), make("q")))
+    println(second(o.trim(), o2.trim()))
+    println(second("a", "b"))
+    println(hand("h"))
+    println(second(o, o2))
+    println(o)
+    println(o2)
+}

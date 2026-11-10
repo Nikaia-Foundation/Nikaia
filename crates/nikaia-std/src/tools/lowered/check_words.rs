@@ -193,7 +193,7 @@ pub fn articles(text: &str) -> String {
         let close = if end < c.len() as i64 { unsafe { nikaia_std::proven::add::<i64>(end, 1) } } else { c.len() as i64 };
         let written = article_written_before(&before);
         let mut kept = before.len() as i64;
-        if written > 0 && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && (*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) }).is_alphanumeric() { kept = before.len() as i64 - written; }
+        if written > 0 && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && (*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) }).is_alphanumeric() { kept = unsafe { nikaia_std::proven::sub::<i64>(before.len() as i64, written) }; }
         let mut i: i64 = 0;
         while i < kept {
             out.push(*nikaia_std::index::get(&before, (i) as usize));
@@ -225,7 +225,7 @@ pub(crate) fn article_written_before(b: &[scalar]) -> i64 {
     let mut written: i64 = 0;
     if *unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) } == 'a' || *unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) } == 'A' { written = 2; } else if n >= 3 && *unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) } == 'n' && (*unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 3)) as usize) } == 'a' || *unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 3)) as usize) } == 'A') { written = 3; }
     if written == 0 || n == written { return written; }
-    let last = *nikaia_std::index::get(&b, nikaia_std::index::at(n - written - 1));
+    let last = *nikaia_std::index::get(&b, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(n, written) } - 1));
     if last.is_alphanumeric() || last == '`' || last == '_' { return 0; }
     written
 }

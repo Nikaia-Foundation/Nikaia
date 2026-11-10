@@ -474,7 +474,7 @@ pub fn lg_alethe_write(source: &TermArena, facts: &[i64], goal: i64) -> Option<S
     }
     let step = proof.assume(&format!("(not {})", lg_term(&arena, goal)));
     pending.push(LgClause { step, parts: vec![LgPart { id: goal, positive: false }] });
-    let mut clauses: Vec<LgClause> = vec![];
+    let mut clauses: Vec<LgClause> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     while !pending.is_empty() {
         let clause = (*unsafe { nikaia_std::proven::read(&pending, (nikaia_std::proven::sub::<i64>(pending.len() as i64, 1)) as usize) }).clone();
         pending.pop();

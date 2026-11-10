@@ -135,7 +135,7 @@ pub fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &str, dump
 
 pub(crate) fn cr_lines(text: &str) -> i64 {
     let mut count: i64 = 0;
-    for c in text.chars() { if c == '\n' { count += 1; } }
+    for c in text.chars() { if c == '\n' { count = unsafe { nikaia_std::proven::add::<i64>(count, 1) }; } }
     count
 }
 

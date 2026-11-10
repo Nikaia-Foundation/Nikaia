@@ -430,10 +430,12 @@ impl CheckState {
     }
 }
 
-/// The name of a type variable taken by value.
+/// The name of a type variable, taken by value or lent: a plain parameter of
+/// a type variable is lent (ADR-views-3 D12, #1498), and `T` is one type
+/// behind the `&` as well.
 fn a_variable_by_value(ty: ref Ty) -> String? sync {
     return match ty {
-        Ty::Var { name, view } => if !view { name.clone() } else { null },
+        Ty::Var { name, .. } => name.clone(),
         else => null,
     }
 }

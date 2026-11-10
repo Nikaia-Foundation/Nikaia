@@ -1,0 +1,26 @@
+// #1516: a counter a parameter starts (`let mut i = from`) asks the callers
+// for `0 <= from`, and the characters of an ASCII literal, collected, are as
+// many as it has, so `digits[v & 15]` reads inside sixteen.
+fn skip_blanks(cs: ref Vec[scalar], from: i64) -> i64 sync {
+	let mut i = from
+	while i < cs.len() && cs[i] == ' ' {
+		i += 1
+	}
+	return i
+}
+
+fn hex(v: i64) -> String sync {
+	let digits: Vec[scalar] = "0123456789ABCDEF".chars().collect()
+	let mut out = String()
+	let mut k = 12
+	while k >= 0 {
+		out.push(digits[(v >> k) & 15])
+		k -= 4
+	}
+	return out
+}
+
+fn main() throws {
+	let cs: Vec[scalar] = "a   b".chars().collect()
+	println(f"{skip_blanks(cs, 1)} {skip_blanks(cs, 0)} {hex(48879)}")
+}

@@ -241,34 +241,41 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn an_owned_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
+        let lent = match self.a_plain_parameter_lent(world, given) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        !lent
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_plain_parameter_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> Option<bool> {
         let name = match given {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
-            _ => return false,
+            _ => return None,
         };
-        let key = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let key = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         let contract = match match *nikaia_std::index::get(&world.own.functions, key) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        } { Some(__nikaia_value) => __nikaia_value, None => return None };
         let signature = match match contract.signature.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        } { Some(__nikaia_value) => __nikaia_value, None => return false };
-        if name == "self" || nikaia_std::list::contains(&signature.mutable, &name) { return false; }
+        } { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if name == "self" || nikaia_std::list::contains(&signature.mutable, &name) { return None; }
         let mut at: i64 = -1;
         let mut scan: i64 = 0;
         while scan < signature.params.len() as i64 {
             if at < 0 && unsafe { nikaia_std::proven::read(&signature.params, (scan) as usize) }.0 == name { at = scan; }
             scan = unsafe { nikaia_std::proven::add::<i64>(scan, 1) };
         }
-        if at < 0 || nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).1.is_a_view() { return false; }
-        !lends_in_own(&contract, at, &vec![world.library])
+        if at < 0 || nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).1.is_a_view() { return None; }
+        Some(lends_in_own(&contract, at, &vec![world.library]))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn an_owned_parameter_handed_back(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, given: &Expr) -> bool {
         if found.is_a_view() || !want.is_a_view() || want.text() != format!("ref {}", found.text()) { return false; }
-        check_fields_holds_text(world, found, &vec![]) && self.an_owned_parameter(world, given)
+        let lent = match self.a_plain_parameter_lent(world, given) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        lent || check_fields_holds_text(world, found, &vec![])
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

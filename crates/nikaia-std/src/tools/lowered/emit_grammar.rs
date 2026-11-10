@@ -213,8 +213,8 @@ impl EmitState {
         let rule_name = emit_text(world, rule.name);
         let ty = match rule.ret_type.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         let item = host.ty_named(walk, ty)?;
-        let mut params = String::new();
-        let mut handed = String::new();
+        let mut params = nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block);
+        let mut handed = nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block);
         for i in 0..rule.args.len() as i64 {
             let value_ty = host.ty_named(walk, &unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.ty)?;
             params.push_str(&format!(", __wg_value{}: {}", i, value_ty));

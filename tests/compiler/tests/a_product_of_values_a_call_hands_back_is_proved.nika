@@ -1,0 +1,32 @@
+// #1516 (ADR-306 D30): what a function or a grammar rule hands back lies in
+// an interval the walk finds from its returns (`hex_value` in 0..=24, `low`
+// in 0..=7, `Hex2` in 0..=408), and a product of such values is proved.
+fn hex_value(x: scalar) -> i64 sync {
+	let c = x as i64
+	return (c & 15) + 9 * (c >> 6)
+}
+
+fn pair(a: scalar, b: scalar) -> i64 sync {
+	return hex_value(a) * 16 + hex_value(b)
+}
+
+fn low(n: i64) -> i64 sync {
+	return n & 7
+}
+
+fn squared(n: i64) -> i64 sync {
+	let d = low(n)
+	return d * d
+}
+
+grammar G {
+	rule Hex -> i64 = h:hex_digit -> { hex_value(h) }
+	rule Hex2 -> i64 = a:Hex b:Hex -> { a * 16 + b }
+	rule Hex4 -> i64 = a:Hex2 b:Hex2 -> { a * 256 + b }
+	entry rule Hex8 -> i64 = a:Hex4 b:Hex4 eof -> { a * 65536 + b }
+}
+
+fn main() throws {
+	let v = G::Hex8(Bytes("0000ff10".bytes().collect())) catch { -1 }
+	println(f"{pair('f', 'a')} {squared(12)} {v}")
+}

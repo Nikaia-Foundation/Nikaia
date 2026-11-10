@@ -313,7 +313,7 @@ pub(crate) fn fmt_render(toks: &[FmtToken]) -> String {
 pub(crate) fn fmt_code_width(toks: &[FmtToken]) -> i64 {
     let last = fmt_last_code(toks);
     let mut width: i64 = 0;
-    for k in 0..last + 1 {
+    for k in 0..unsafe { nikaia_std::proven::add::<i64>(last, 1) } {
         if fmt_spaced(toks, k) { width += 1; }
         width += nikaia_std::index::get(&toks, nikaia_std::index::at(k)).width;
     }
@@ -363,7 +363,7 @@ pub(crate) fn fmt_shape(toks: &[FmtToken]) -> FmtShape {
                 bars -= 1;
             }
             if !stack.is_empty() { stack.pop(); } else { under = unsafe { nikaia_std::proven::add::<i64>(under, 1) }; }
-            depth.push(stack.len() as i64 - under);
+            depth.push(unsafe { nikaia_std::proven::sub::<i64>(stack.len() as i64, under) });
             barred.push(bars > 0);
         } else if bar && top == "|" {
             stack.pop();
@@ -631,7 +631,7 @@ impl FmtPrinter {
         if fmt_has_multi(&toks) || indent * 4 + fmt_code_width(&toks) <= 100 { return vec![]; }
         let shape = fmt_shape(&toks);
         let mut cuts: Vec<i64> = vec![];
-        if !self.frames.is_empty() { for k in 0..last { if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).kind == FmtKind::Punct && unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.text == "," && *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(k)) == 0 { cuts.push(unsafe { nikaia_std::proven::add::<i64>(k, 1) }); } } }
+        if !self.frames.is_empty() { for k in 0..last { if unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.kind == FmtKind::Punct && unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.text == "," && *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(k)) == 0 { cuts.push(unsafe { nikaia_std::proven::add::<i64>(k, 1) }); } } }
         if !cuts.is_empty() { return fmt_cut(line, &cuts); }
         let loosest = fmt_loosest(&toks, &shape, last);
         if loosest > 0 && loosest < 7 { return fmt_cut(line, &fmt_operators(&toks, &shape, last, loosest)); }

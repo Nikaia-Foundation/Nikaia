@@ -413,15 +413,23 @@ fn check_core_args_slot(callee: ref FnContract?, at: i64) -> bool {
 /// for whether it keeps the parameter a lambda lands in (D11).
 pub fn check_core_arguments_given[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], expected: ref Vec[Ty], declared_here: bool, callee: ref FnContract?, span: ref Span) -> Vec[Ty] sync {
     let mut out: Vec[Ty] = []
+    let mut bound: collections::BTreeMap[String, Ty] = collections::BTreeMap()
     let mut at = 0
     for arg in args {
         if check_core_args_slot(callee, at) {
             // A type, read by the call itself (ADR-330 D1).
             out.push(Ty::Unknown)
         } else if check_core_args_is_lambda(arg, expected, at) {
-            out.push(check_core_args_lambda(state, world, host, arg, expected[at], declared_here, callee, at, false, span))
+            // **A lambda handed to an own generic function is handed what
+            // the arguments before it bound** (#1504): `twice(row, fn(v) {
+            // v.name })` reads `v` as the `ref Row` its `fn(T)` lends.
+            let wanted = if declared_here && !bound.is_empty() { substitute(expected[at], bound) } else { expected[at].clone() }
+            out.push(check_core_args_lambda(state, world, host, arg, wanted, declared_here, callee, at, false, span))
         } else {
             out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, false, span))
+        }
+        if declared_here && at < expected.len() {
+            bind(expected[at], out[at], bound)
         }
         at += 1
     }

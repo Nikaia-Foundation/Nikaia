@@ -1,6 +1,7 @@
 // An `impl` of a trait whose result writes `from a` hands back the plain
 // parameter `b`: refused in the words of the trait's `from` (ADR-views-3
-// D14), not with the pre-views-3 "take it as `ref`" (#1280).
+// D14), not with the pre-views-3 "take it as `ref`" (#1280). `b` is lent
+// (ADR-277 D17, #1498), so it is NK1335's view outside the `from`.
 
 trait Pick {
     fn pick(self, a: String, b: String) -> String from a

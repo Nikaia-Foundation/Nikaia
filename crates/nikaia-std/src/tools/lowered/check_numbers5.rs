@@ -45,7 +45,7 @@ impl CheckState {
     pub fn constant_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<CheckConstant> {
         let element = self.element_constant(world, expr);
         if element.is_some() { return std::convert::identity(element); }
-        let folded = constant_of(expr, &|name| { self.a_name_folded(world, name) });
+        let folded = constant_of(expr, &|name| { self.a_name_folded(world, *name) });
         checked_constant(&folded)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

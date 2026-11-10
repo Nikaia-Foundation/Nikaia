@@ -84,8 +84,8 @@ impl<'de> Deserializer<'de> {
                     remaining_depth: 128,
                     current_enum: None,
                 })?;
-                if let Some(mark) = document.error {
-                    return Err(error::new(ErrorImpl::UnknownAnchor(mark)));
+                if let Some(err) = &document.error {
+                    return Err(error::shared(Arc::clone(err)));
                 }
                 return Ok(t);
             }
@@ -105,8 +105,8 @@ impl<'de> Deserializer<'de> {
             remaining_depth: 128,
             current_enum: None,
         })?;
-        if let Some(mark) = document.error {
-            return Err(error::new(ErrorImpl::UnknownAnchor(mark)));
+        if let Some(err) = &document.error {
+            return Err(error::shared(Arc::clone(err)));
         }
         if loader.next_document().is_none() {
             Ok(t)
@@ -314,8 +314,9 @@ enum Event<'de> {
 
 struct Document<'de> {
     events: Vec<(Event<'de>, Mark)>,
-    /// An alias to no anchor ends the events here.
-    error: Option<Mark>,
+    /// An alias to no anchor, or the stream's error in the document it
+    /// stopped in, ends the events here.
+    error: Option<Arc<ErrorImpl>>,
     /// The anchor of each alias: its id to its node's index in `events`.
     aliases: BTreeMap<usize, usize>,
 }
@@ -387,10 +388,11 @@ impl Document<'_> {
 
 /// Each document's events, as serde_yaml's loader gives them: no document
 /// at all is one document of one `Void` event, and an anchor is the
-/// document's own.
+/// document's own. The documents before one that fails are read; the one
+/// that fails is a document of its error, which the stream ends with.
 fn load(input: &[u8]) -> Result<Vec<Document<'_>>> {
-    let docs = native::documents(input, native::default_limits())
-        .map_err(|thrown| error::parse(thrown.held()))?;
+    let read = native::read(input, native::default_limits());
+    let docs = read.documents;
     let lines = Lines::new(input);
     let mut documents = Vec::new();
     let mut anchors: BTreeMap<&str, usize> = BTreeMap::new();
@@ -419,7 +421,7 @@ fn load(input: &[u8]) -> Result<Vec<Document<'_>>> {
                     native::EventKind::Alias => match anchors.get(event.value) {
                         Some(id) => Event::Alias(*id),
                         None => {
-                            document.error = Some(mark);
+                            document.error = Some(Arc::new(ErrorImpl::UnknownAnchor(mark)));
                             continue;
                         }
                     },
@@ -444,6 +446,13 @@ fn load(input: &[u8]) -> Result<Vec<Document<'_>>> {
             document.aliases.insert(id, document.events.len());
         }
         document.events.push((converted, mark));
+    }
+    if let Some(err) = &read.error {
+        documents.push(Document {
+            events: Vec::new(),
+            error: Some(error::parse(err).shared()),
+            aliases: BTreeMap::new(),
+        });
     }
     if documents.is_empty() {
         documents.push(Document {
@@ -558,8 +567,8 @@ impl<'de, 'document> DeserializerFromEvents<'de, 'document> {
     fn peek_event_mark(&self) -> Result<(&'document Event<'de>, Mark)> {
         match self.document.events.get(*self.pos) {
             Some((event, mark)) => Ok((event, *mark)),
-            None => Err(match self.document.error {
-                Some(mark) => error::new(ErrorImpl::UnknownAnchor(mark)),
+            None => Err(match &self.document.error {
+                Some(err) => error::shared(Arc::clone(err)),
                 None => error::new(ErrorImpl::EndOfStream),
             }),
         }

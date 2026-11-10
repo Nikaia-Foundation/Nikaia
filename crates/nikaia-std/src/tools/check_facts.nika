@@ -285,8 +285,9 @@ pub struct CheckFacts {
     /// (`check_core_view_list_assigned`).
     pub view_list_assigns: collections::BTreeSet[i64],
     /// **The list literals placed in the running task's block** (ADR-327
-    /// D9, step 5 of #490), by the literal's node: the emitter writes
-    /// `Place::Block` there, `Place::Outside` everywhere else
+    /// D9, step 5 of #490), by the literal's node, and the texts by the
+    /// `String` of their `String()`: the emitter writes `Place::Block`
+    /// there, `Place::Outside` everywhere else
     /// (`check_core_place_in_block`).
     pub placed_in_block: collections::BTreeSet[i64],
     /// **The lists of views a `let` binds what they may view after** (#490),
@@ -508,6 +509,17 @@ pub struct CheckFacts {
     /// The calls whose result, a view of a parameter of a type bound to a
     /// copied word, is read at the call (ADR-views-3 D12, #1239).
     pub copied_results: collections::BTreeSet[i64],
+    /// **Text of its own lent as the view a type variable holds** (ADR-views-3
+    /// D12, #1498): in `second(o, "p")` of `fn second[T](x: T, y: T) -> T`,
+    /// `T` is the `&str` the literal is, so `o` goes as `&o.as_str()`.
+    pub lent_text_views: collections::BTreeSet[i64],
+    /// The calls (by their span's start) whose type variable holds a view of
+    /// text (#1498): the result, a view of that view, is read at the call.
+    pub viewed_text_calls: collections::BTreeSet[i64],
+    /// **Brackets the arguments already say are the plain call** (NK1233,
+    /// #1498): `id[i64](3)` is lowered as `id(3)`, by the callee's node, so a
+    /// lent type variable is the view its argument is.
+    pub plain_bracket_calls: collections::BTreeSet[i64],
     pub compared_numbers: collections::BTreeSet[(i64, String)],
     /// **Text ordered against text** (#733), and a lambda's lent item
     /// compared with text (#688), by the operator's span: both sides are
@@ -815,6 +827,9 @@ impl CheckFacts {
             wrapped: collections::BTreeMap(),
             compared_views: collections::BTreeSet(),
             copied_results: collections::BTreeSet(),
+            lent_text_views: collections::BTreeSet(),
+            viewed_text_calls: collections::BTreeSet(),
+            plain_bracket_calls: collections::BTreeSet(),
             compared_numbers: collections::BTreeSet(),
             ordered_texts: collections::BTreeSet(),
             claims: collections::BTreeMap(),

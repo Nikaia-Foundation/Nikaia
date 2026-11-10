@@ -724,7 +724,7 @@ pub trait ProjectDriveWrapperHost {
     fn trace(&self, verdict: &str);
     fn run(&self) -> Result<i32, Box<dyn std::error::Error>>;
     fn crate_name(&self) -> Option<String>;
-    fn lower(&self, source: &std::path::Path, no_cache: bool, allowlist: Option<fs::Path>, shown: Option<String>) -> Result<(String, Vec<fs::Path>), Box<dyn std::error::Error>>;
+    fn lower(&self, source: &std::path::Path, no_cache: bool, allowlist: Option<&std::path::Path>, shown: Option<&str>) -> Result<(String, Vec<fs::Path>), Box<dyn std::error::Error>>;
     fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), Box<dyn std::error::Error>>;
     fn replace_source(&self, generated: &std::path::Path);
     fn args(&self) -> Vec<String>;
@@ -758,7 +758,7 @@ pub fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32
         },
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
-    let (rust, sources) = host.lower(&source, no_cache, allowlist, shown)?;
+    let (rust, sources) = host.lower(&source, no_cache, (allowlist).as_deref(), (shown).as_deref())?;
     let name = nikaia_std::index::or(host.crate_name(), || nikaia_std::index::or(match nikaia_std::fs::path::file_name(&(nikaia_std::fs::path::with_extension(&(source), std::path::Path::new(&(""))))).as_ref() {
         Some(__nikaia_it) => Some(nikaia_std::fs::path::display(&(__nikaia_it))),
         None => None,

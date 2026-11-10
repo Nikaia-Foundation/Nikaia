@@ -356,6 +356,21 @@ impl EmitState {
                 if source_at.is_some() { source_name = Some(nikaia_std::index::get(&args, nikaia_std::index::at(nikaia_std::index::or(source_at, || 0))).name); } else if !several_at.is_empty() { source_name = Some(nikaia_std::index::get(&args, nikaia_std::index::at(*nikaia_std::index::get(&several_at, 0))).name); } else if source_option.is_some() { source_name = Some(nikaia_std::index::get(&config, nikaia_std::index::at(nikaia_std::index::or(source_option, || 0))).name); }
                 let source_kept = source_name.is_some() && has_kept && self.tethered_position(&key, "<result>");
                 let shared = source_name.is_some() && !source_kept;
+                let mut lifted_whole = false;
+                if shared && !source_nested && emit_is_elided(&lifetimes) && inner_views.is_none() && stores.is_empty() {
+                    match source_at {
+                        Some(at) => {
+                            let ty = nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.clone();
+                            if self.carries_a_view(world, &ty) && self.borrows(world, ty.name) && ty.generics.is_empty() && !ty.is_nullable {
+                                match ret_type {
+                                    Some(each) => { lifted_whole = emit_text(world, each.name) == emit_text(world, ty.name) && each.generics.is_empty() && !each.is_nullable; },
+                                    None => { },
+                                }
+                            }
+                        },
+                        None => { },
+                    }
+                }
                 let mut nothing_borrowed = false;
                 if emit_is_elided(&lifetimes) && plain_signature && !has_kept && has_borrows && named.is_empty() {
                     match ret_type {
@@ -421,7 +436,7 @@ impl EmitState {
                         let inside = walk.in_parameter;
                         walk.in_parameter = true;
                         let mut position = how;
-                        if is_source && shared { if source_nested { position = EmitLifetimes::Within; } else { position = EmitLifetimes::Shared; } }
+                        if is_source && shared { if source_nested { position = EmitLifetimes::Within; } else if lifted_whole { position = EmitLifetimes::SharedIn; } else { position = EmitLifetimes::Shared; } }
                         let fast = standalone && self.fast_slots.contains(&format!("p:{}:{}", own_name, k));
                         let outer = walk.trusting;
                         walk.trusting = fast;
@@ -496,6 +511,7 @@ impl EmitState {
                 }
                 if has_kept && emit_is_kept(&kept_lt) { declared.insert(0, String::from("'k")); }
                 if emit_is_elided(&lifetimes) && (!input_empty || inner_views.is_some() || !stores.is_empty()) { declared.insert(0, String::from("'a")); }
+                if lifted_whole && !nikaia_std::list::contains(&declared, &"'a") { declared.insert(0, String::from("'a")); }
                 if shared { declared.insert(0, String::from("'r")); }
                 if !either_first.is_empty() { declared.insert(0, String::from("'e")); }
                 walk.either_prelude = either_first.copy_owned();
@@ -521,7 +537,7 @@ impl EmitState {
                             let mut lifetimes_of_args = false;
                             for each in args.iter() { if self.carries_a_view(world, &each.ty) && !(each.ty.either && each.ty.generics.is_empty()) { lifetimes_of_args = true; } }
                             let mut result: EmitLifetimes = lifetimes;
-                            if has_kept && self.tethered_position(&key, "<result>") { result = kept_lt; } else if shared { result = EmitLifetimes::Shared; } else if widens { result = EmitLifetimes::Static; } else if inner_views.is_some() { result = EmitLifetimes::Named; } else if emit_is_elided(&lifetimes) && receiver.is_none() && !walk.either_prelude.is_empty() && !lifetimes_of_args { result = EmitLifetimes::Each; }
+                            if has_kept && self.tethered_position(&key, "<result>") { result = kept_lt; } else if lifted_whole { result = EmitLifetimes::SharedIn; } else if shared { result = EmitLifetimes::Shared; } else if widens { result = EmitLifetimes::Static; } else if inner_views.is_some() { result = EmitLifetimes::Named; } else if emit_is_elided(&lifetimes) && receiver.is_none() && !walk.either_prelude.is_empty() && !lifetimes_of_args { result = EmitLifetimes::Each; }
                             let fast = standalone && self.fast_slots.contains(&format!("r:{}", own_name));
                             let outer = walk.trusting;
                             walk.trusting = fast;

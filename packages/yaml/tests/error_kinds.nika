@@ -1,0 +1,50 @@
+// What kind of failure an error is and where (#1520, ADR-yaml-1 D5, D8):
+// nesting past the depth limit at the opening that passes it, a character no
+// token starts with at it, a closing bracket where a node is due at it, and a
+// scalar whose text does not fit its core tag at its tag, with the tag and
+// the text, as serde_yaml reports each.
+use yaml
+
+fn show(text: String, limits: yaml::Limits) throws {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::load(input; limits: limits) catch {
+		println(f"{error.line}:{error.column} {error.kind:?} tag `{error.tag}` text `{error.text}`")
+		return
+	}
+	println(f"ok, {docs.len()} document(s)")
+}
+
+fn shallow() -> yaml::Limits {
+	return yaml::Limits { depth: 2, alias_nodes: 10000, bytes: 4294967295 }
+}
+
+fn main() throws {
+	// the depth limit: the third opening, of a flow sequence, mapping, block
+	// sequence
+	show("[[[x]]]\n", shallow())
+	show("{a: {b: {c: x}}}\n", shallow())
+	show("- - - x\n", shallow())
+	show("[[x]]\n", shallow())
+	// the size limit
+	show("a: 1\n", yaml::Limits { depth: 128, alias_nodes: 10000, bytes: 4 })
+	// characters no token starts with
+	show("@\n", yaml::default_limits())
+	show("a: `b\n", yaml::default_limits())
+	// a closing bracket where a node is due
+	show("]\n", yaml::default_limits())
+	show("---\n0\n---\n]\n", yaml::default_limits())
+	show("a:\n}\n", yaml::default_limits())
+	// another syntax error
+	show("a: [b\n", yaml::default_limits())
+	// scalars that do not fit their core tags
+	show("---\n!!bool str\n", yaml::default_limits())
+	show("---\n!!int str\n", yaml::default_limits())
+	show("---\n!!float str\n", yaml::default_limits())
+	show("---\n!!null str\n", yaml::default_limits())
+	show("- a\n- !!int 'x'\n", yaml::default_limits())
+	show("{k: !!bool \"yes\"}\n", yaml::default_limits())
+	show("!!int 12\n", yaml::default_limits())
+	// the load's own
+	show("*a\n", yaml::default_limits())
+	show("{a: 1, a: 2}\n", yaml::default_limits())
+}

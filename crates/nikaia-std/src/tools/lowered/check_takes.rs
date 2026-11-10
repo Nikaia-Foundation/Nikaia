@@ -571,7 +571,7 @@ impl CheckState {
                 if given_back { continue; }
                 let mut found: i64 = -1;
                 for r in 0..reports.len() as i64 { if found < 0 && unsafe { nikaia_std::proven::read(&reports, (r) as usize) }.subject == out.subject && unsafe { nikaia_std::proven::read(&reports, (r) as usize) }.at == position.0 && unsafe { nikaia_std::proven::read(&reports, (r) as usize) }.seq == position.1 { found = r; } }
-                if found >= 0 { reports[nikaia_std::index::at(found)].parts.push(index); } else { reports.push(CheckMissing { subject: nikaia_std::block::Text::from(out.subject.to_string()), at: position.0, seq: position.1, way: position.2, parts: vec![index] }); }
+                if found >= 0 { (*unsafe { nikaia_std::proven::slot(&mut reports, (found) as usize) }).parts.push(index); } else { reports.push(CheckMissing { subject: nikaia_std::block::Text::from(out.subject.to_string()), at: position.0, seq: position.1, way: position.2, parts: vec![index] }); }
                 break;
             }
         }

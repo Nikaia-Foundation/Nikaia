@@ -148,11 +148,11 @@ pub fn code_as_read(names: ref winnow_grammar::InternerContext, ty: ref Type) ->
 
 /// **Whether a function type lends its parameter at `at` as a view**
 /// (ADR-views-3 D2, D14): one its `from` names, or a plain one, unless it
-/// writes `keep` (Part I §C, #1466). Lent is what a read cannot copy: text,
-/// and a type with arguments (`Vec[i64]`, `collections::HashMap[K, V]`). A
-/// bare name may be a payloadless enum or a ledger copy, which a read copies
-/// and a lend would not change; this function cannot tell them from a struct,
-/// so a bare name other than `String` stays as written.
+/// writes `keep` (Part I §C, #1466): text, a struct, a type variable, a type
+/// with arguments (#1504). A number, a `bool`, a `char` and a `scalar` stay
+/// as written: a read copies them. A payloadless enum or a ledger copy, which
+/// this function cannot tell from a struct by its name, is lent as well, and
+/// the emitter copies it out where the code reads it.
 pub fn code_lends_at(names: ref winnow_grammar::InternerContext, ty: ref Type, at: i64) -> bool {
     let code = ty.code ?? return false
     if at >= ty.generics.len() {
@@ -168,11 +168,12 @@ pub fn code_lends_at(names: ref winnow_grammar::InternerContext, ty: ref Type, a
     if part.is_view || part.is_mut || part.is_nullable || part.is_tuple || part.is_slice || part.code != null {
         return false
     }
-    return !part.generics.is_empty() || names.resolve(part.name) == "String"
+    let name = names.resolve(part.name)
+    return !part.generics.is_empty() || !(a_number_name(name) || name == "int" || name == "bool" || name == "char" || name == "scalar")
 }
 
 /// Whether `code_as_read` changes a function type: it writes `from`, or
-/// one of its parameters is plain text it lends.
+/// one of its parameters is a plain one it lends (#1504).
 pub fn code_lends_unmarked(names: ref winnow_grammar::InternerContext, ty: ref Type) -> bool {
     let code = ty.code ?? return false
     if !code.result_from.is_empty() {

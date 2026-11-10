@@ -25,6 +25,28 @@ pub(crate) fn emit_arg_opening_inside(inner: &Ty) -> String {
     }
 }
 
+pub fn emit_rust_owner(ty: &Ty) -> String {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; if view { String::from("") } else if name == "String" && args.is_empty() { String::from("String") } else if name == "Vec" && args.len() == 1 && !emit_ty_holds_text(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { String::from("Vec") } else { String::from("") } },
+        _ => String::from(""),
+    }
+}
+
+pub(crate) fn emit_ty_holds_text(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, .. } => name == "String" || args.iter().any(|a| { emit_ty_holds_text(a) }),
+        Ty::Tuple(parts) => parts.iter().any(|a| { emit_ty_holds_text(a) }),
+        _ => true,
+    }
+}
+
+pub fn emit_rust_owner_param(described: &Ledger, callee: &str, i: i64) -> String {
+    let contract = match described.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+    if i >= signature.params.len() as i64 { return String::from(""); }
+    emit_rust_owner(&nikaia_std::index::get(&signature.params, nikaia_std::index::at(i)).1)
+}
+
 pub(crate) fn emit_arg_lends_own(contract: &FnContract, at: i64, library: &Ledger, described: &Ledger) -> bool { lends_in_own(contract, at, &vec![library, described]) }
 
 pub(crate) fn emit_arg_opening_in(contract: &FnContract, i: i64, library: &Ledger, described: &Ledger) -> String {
@@ -320,6 +342,8 @@ impl EmitState {
         let copy_in = lent_option && emit_arg_names_a_place(arg) && !self.facts.kept_functions.contains_key(&node_key(arg));
         if lent_option || lent_path { out.push("&"); }
         out.push(&before);
+        let rust_owner = if method_callee.is_none() && !lend && !change && !self.own_contracts.functions.contains_key(callee) { emit_rust_owner_param(&self.described, callee, i) } else { String::from("") };
+        if rust_owner == "Vec" { out.push("::std::vec::Vec::from("); } else if rust_owner == "String" { out.push("::std::string::String::from("); }
         if either { out.push("nikaia_std::either_text::either("); }
         let keeps_bytes = self.emit_arg_keeps_bytes(world, callee, method_callee, i);
         if keeps_bytes { out.push("&*nikaia_std::bytes::kept("); }
@@ -352,6 +376,7 @@ impl EmitState {
             if change && self.facts.reborrowed_args.contains(&node) { out.push("&mut *"); } else if change { out.push("&mut "); } else {
                 let keep = if lend && made_in_the_call(arg) { nikaia_std::index::or(self.argument_keep(&walk, &scope.function, flow.statement, callee, i), || "".into()) } else { String::from("") };
                 if lend && keep != "" {
+                    if self.facts.lent_text_views.contains(&node) { out.push("&"); }
                     out.push(&format!("({}).put(", keep));
                     kept_here = true;
                 } else if self.facts.lent_arms.contains(&node) { out.push("&*"); } else if lend && !self.facts.views_handed_on.contains(&node) && !emit_stmt_a_kept_name(world, &walk, arg) {
@@ -382,9 +407,11 @@ impl EmitState {
         if has_how && how != "" { out.push(&how); }
         if count { out.push(")"); }
         if kept_here { out.push(")"); }
+        if lend && self.facts.lent_text_views.contains(&node) { out.push(".as_str()"); }
         if keeps_bytes { out.push(")"); }
         if either { out.push(")"); }
         if copy_in { out.push(".clone()"); }
+        if rust_owner != "" { out.push(")"); }
         out.push(&after);
         let copied = copies && !lend && !change && !self.facts.kept_args.contains(&node);
         if duplicate || copied { out.push(".clone()"); }
@@ -509,7 +536,7 @@ impl EmitState {
         out.push(&format!("({})", emit_arg_passing(&names, &lent)));
         Ok(())
     }
-    pub(crate) fn emit_arg_lent_params(&self, world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<bool> {
+    pub(crate) fn emit_arg_lent_params(&self, world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<i64> {
         let key = match arg {
             Expr::Variable(name, _) => { let name = *name; emit_text(world, name) },
             _ => return vec![],
@@ -522,11 +549,13 @@ impl EmitState {
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
         if signature.takes_a_receiver() { return vec![]; }
-        let mut lent: Vec<bool> = vec![];
+        let mut lent: Vec<i64> = vec![];
         let mut any = false;
         for at in 0..signature.params.len() as i64 {
-            let one = emit_arg_lends_own(contract, at, world.library, &self.described) && !(at < viewed.len() as i64 && *unsafe { nikaia_std::proven::read(&viewed, (at) as usize) });
-            any = any || one;
+            let lends = emit_arg_lends_own(contract, at, world.library, &self.described);
+            let slot_lends = at < viewed.len() as i64 && *unsafe { nikaia_std::proven::read(&viewed, (at) as usize) };
+            let one: i64 = if lends && !slot_lends { 1 } else if !lends && slot_lends { 2 } else { 0 };
+            any = any || one != 0;
             lent.push(one);
         }
         if !any { return vec![]; }
@@ -569,11 +598,11 @@ impl EmitState {
     }
 }
 
-pub(crate) fn emit_arg_passing(names: &[String], lent: &[bool]) -> String {
+pub(crate) fn emit_arg_passing(names: &[String], lent: &[i64]) -> String {
     #[allow(unused_mut)] let mut passed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut passed = passed;
     for name in names.iter() {
-        if ((at) as usize) < lent.len() && *unsafe { nikaia_std::proven::read(&lent, (at) as usize) } { passed.push(format!("&{}", name)); } else { passed.push(nikaia_std::block::Text::from(name.to_string())); }
+        if ((at) as usize) < lent.len() && *unsafe { nikaia_std::proven::read(&lent, (at) as usize) } == 1 { passed.push(format!("&{}", name)); } else if ((at) as usize) < lent.len() && *unsafe { nikaia_std::proven::read(&lent, (at) as usize) } == 2 { passed.push(format!("*{}", name)); } else { passed.push(nikaia_std::block::Text::from(name.to_string())); }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     nikaia_std::block::Text::from(passed.join(", "))
@@ -1269,6 +1298,10 @@ impl EmitState {
             }
         }
         if self.emit_call_supervised(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(true); }
+        if args.is_empty() && self.facts.placed_in_block.contains(&node_key(func)) {
+            out.push("nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block)");
+            return Ok(true);
+        }
         match func {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -1371,6 +1404,7 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || "".into());
+        if written == "" && self.facts.plain_bracket_calls.contains(&node_key(base)) { return Ok(false); }
         if written == "" {
             let mut types: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let parts: Vec<Expr> = match index {

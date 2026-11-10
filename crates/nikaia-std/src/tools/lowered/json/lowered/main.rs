@@ -64,7 +64,7 @@ pub(crate) fn fail(r: &Reader, message: String, path: String) -> Error {
         if *unsafe { nikaia_std::proven::read(&r.cs, (i) as usize) } == '\n' {
             line = unsafe { nikaia_std::proven::add::<i64>(line, 1) };
             column = 1;
-        } else { column += 1; }
+        } else { column = unsafe { nikaia_std::proven::add::<i64>(column, 1) }; }
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     Error { message, line, column, path }

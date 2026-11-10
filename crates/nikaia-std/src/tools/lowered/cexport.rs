@@ -692,7 +692,7 @@ pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position:
                         { let __nikaia_stored = true; nikaia_std::index::set(&mut *crossing, nikaia_std::index::at(which), __nikaia_stored); }
                         rust_args.push(String::from("std::ffi::c_int"));
                         c_args.push(format!("{}_{}", prefix, plain.name));
-                        closure_params.push(format!("{}: {}", name, plain.name));
+                        closure_params.push(format!("{}: &{}", name, plain.name));
                         passed.push(format!("match {} {{ {} }}", name, cx_choice_arms_out(&plain)));
                     },
                     CxLent::Text => {

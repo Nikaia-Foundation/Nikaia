@@ -65,7 +65,7 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
             let name = *name;
             out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
             for field in fields.iter() {
-                out.insert(nikaia_std::block::Text::from(words.resolve(field.name).to_string()));
+                if field.value.is_none() { out.insert(nikaia_std::block::Text::from(words.resolve(field.name).to_string())); }
                 maybe_names_in((field.value).as_ref(), words, out);
             }
         },
@@ -73,7 +73,7 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
             let base = nikaia_std::boxed::open(base);
             names_in(base, words, out);
             for field in fields.iter() {
-                out.insert(nikaia_std::block::Text::from(words.resolve(field.name).to_string()));
+                if field.value.is_none() { out.insert(nikaia_std::block::Text::from(words.resolve(field.name).to_string())); }
                 maybe_names_in((field.value).as_ref(), words, out);
             }
         },

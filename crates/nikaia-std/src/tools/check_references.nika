@@ -415,7 +415,7 @@ impl CheckState {
 }
 
 /// **Whether an arm hands a name back by value**: as its own value, or through
-/// a `return`. Either needs the part itself and not a view of it.
+/// a `return` or a `throw`. Either needs the part itself and not a view of it.
 pub fn check_gives_back(body: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     return check_gives_back_tail(body, name, words) || check_gives_back_returns(body, name, words)
 }
@@ -554,6 +554,13 @@ fn check_gives_back_returns(expr: ref Expr, name: ref String, words: ref winnow_
         match inner {
             Expr::Return(value, _) => {
                 if value != null && check_gives_back_is_name(value ?? return false, name, words) {
+                    found = true
+                }
+            },
+            // **A thrown name is handed on as a returned one is**: the error
+            // leaves the function by value, so the arm binds it, not a view.
+            Expr::Throw(value, _) => {
+                if check_gives_back_is_name(value, name, words) {
                     found = true
                 }
             },

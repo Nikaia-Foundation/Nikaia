@@ -7,9 +7,10 @@ pub struct BmMatched {
     pub classes: collections::BTreeMap<String, Range>,
     pub text_lengths: collections::BTreeMap<String, Range>,
     pub text_classes: collections::BTreeMap<String, Range>,
+    pub rule_binds: collections::BTreeMap<String, String>,
 }
 
-pub fn bm_empty() -> BmMatched { BmMatched { given: collections::BTreeMap::new(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new() } }
+pub fn bm_empty() -> BmMatched { BmMatched { given: collections::BTreeMap::new(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), rule_binds: collections::BTreeMap::new() } }
 
 pub(crate) fn bm_range(lo: i64, hi: i64) -> Range { Range { lo: Some(lo), hi: Some(hi) } }
 
@@ -70,6 +71,10 @@ pub(crate) fn bm_bound(words: &winnow_grammar::InternerContext, rules: &collecti
     match what {
         Pattern::Ref { name, generics, args } => {
             let name = *name;
+            if generics.is_empty() && rules.contains(words.resolve(name)) {
+                found.rule_binds.insert(nikaia_std::block::Text::from(bound_name.to_string()), nikaia_std::block::Text::from(words.resolve(name).to_string()));
+                return;
+            }
             if words.resolve(name) != "dec" || rules.contains("dec") || generics.len() != 1 { return; }
             if args.len() != 1 { return; }
             let mut digits: i64 = 1;

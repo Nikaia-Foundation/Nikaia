@@ -13,7 +13,9 @@ pub fn project_check_summary(findings: &[CheckFinding], violations: i64) -> Stri
     if undescribed > 0 { refused.push(format!("{} Rust crate{} nothing describes", undescribed, project_check_plural(undescribed))); }
     let stale = project_check_count(findings, "NK2505");
     if stale > 0 { refused.push(format!("{} description{} of a crate that has moved", stale, project_check_plural(stale))); }
-    let crossings = project_check_count(findings, "NK25") - reaching - undescribed - stale;
+    let unfollowed = project_check_count(findings, "NK2506");
+    if unfollowed > 0 { refused.push(format!("{} value{} handed to Rust that the compiler can't follow back", unfollowed, project_check_plural(unfollowed))); }
+    let crossings = project_check_count(findings, "NK25") - reaching - undescribed - stale - unfollowed;
     if crossings > 0 { refused.push(format!("{} value{} that may not cross a thread", crossings, project_check_plural(crossings))); }
     let aliases = project_check_count(findings, "NK2302");
     if aliases > 0 { refused.push(format!("{} view{} kept past the call that was given it", aliases, project_check_plural(aliases))); }
@@ -47,7 +49,7 @@ pub fn project_check_summary(findings: &[CheckFinding], violations: i64) -> Stri
     if rules > 0 { refused.push(format!("{} place{} that can fail without saying so", rules, project_check_plural(rules))); }
     let locks = vec!["NK2203", "NK2204", "NK2205", "NK2207", "NK2208"].iter().map(|code| { project_check_count(findings, code) }).sum::<i64>();
     if locks > 0 { refused.push(format!("{} mistake{} with a lock", locks, project_check_plural(locks))); }
-    let others = findings.iter().filter(|&f| { f.severity == CheckSeverity::Error }).count() as i64 - locks - rules - refuted - types - crossings - reaching - undescribed - stale - aliases - changed_under - tethered - untethered - tasks - walked - pausing - paused_in_a_door - pauses_forbidden - under_a_lock;
+    let others = findings.iter().filter(|&f| { f.severity == CheckSeverity::Error }).count() as i64 - locks - rules - refuted - types - crossings - reaching - undescribed - stale - unfollowed - aliases - changed_under - tethered - untethered - tasks - walked - pausing - paused_in_a_door - pauses_forbidden - under_a_lock;
     if others > 0 { refused.push(format!("{} other error{}", others, project_check_plural(others))); }
     let may_not = violations + pausing;
     if may_not > 0 {
@@ -159,14 +161,14 @@ pub fn project_check_keeps_that_moved(committed: &Ledger, inferred: &Ledger) -> 
         let before = match committed.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let now = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         let then = match before.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple23458| {
-            let (param, _) = __nikaia_tuple23458;
-            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple23517| {
-                let (p, _) = __nikaia_tuple23517;
+        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple23854| {
+            let (param, _) = __nikaia_tuple23854;
+            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple23913| {
+                let (p, _) = __nikaia_tuple23913;
                 AsRef::<str>::as_ref(&(p)) == AsRef::<str>::as_ref(&(param))
             })
-        }).filter_map(|__nikaia_tuple23558| {
-            let (param, ty) = __nikaia_tuple23558;
+        }).filter_map(|__nikaia_tuple23954| {
+            let (param, ty) = __nikaia_tuple23954;
             let kept = nikaia_std::list::contains(&contract.keeps, &param);
             if kept != nikaia_std::list::contains(&before.keeps, &param) { Some(ProjectCheckKept { param: nikaia_std::block::Text::from(param.to_string()), now: kept, ty: ty.text() }) } else { None }
         }).collect::<Vec<_>>();
@@ -194,11 +196,11 @@ pub fn project_check_explain<H: ProjectCheckExplainHost>(host: &H, comptime_aske
 }
 
 pub fn project_check_explain_kinds(overlaps: bool, sharing: bool, tethers: bool, asserts: bool, bounds: bool, trust: bool) -> Vec<String> {
-    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple26136| {
-        let (_, asked) = __nikaia_tuple26136; let asked = nikaia_std::num::value(asked);
+    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple26532| {
+        let (_, asked) = __nikaia_tuple26532; let asked = nikaia_std::num::value(asked);
         asked
-    }).map(|__nikaia_tuple26166| {
-        let (kind, _) = __nikaia_tuple26166;
+    }).map(|__nikaia_tuple26562| {
+        let (kind, _) = __nikaia_tuple26562;
         nikaia_std::block::Text::from(kind.to_string())
     }).collect::<Vec<_>>()
 }

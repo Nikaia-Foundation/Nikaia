@@ -19,8 +19,8 @@ pub(crate) fn sv_row_constant(c: i64) -> SvRow { SvRow { cols: vec![], ks: vec![
 pub(crate) fn sv_row_of(terms: Vec<SvTerm>, constant: i64) -> Option<SvRow> {
     let mut sorted = terms;
     sorted.sort_by_key(|t| { t.col });
-    let mut cols: Vec<u32> = vec![];
-    let mut ks: Vec<i64> = vec![];
+    let mut cols: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut ks: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for t in sorted.iter() {
         let t = *t;
         let last = unsafe { nikaia_std::proven::sub::<i64>(cols.len() as i64, 1) };

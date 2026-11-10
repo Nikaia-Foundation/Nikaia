@@ -29,7 +29,7 @@
 
 pub use task_block::text::{format, join, repeat, replace, replacen, to_lowercase, to_uppercase};
 pub use task_block::{
-    BLOCK, Block, Entered, List, Place, Text, enter, extend, full, list, push, reserve,
+    BLOCK, Block, Entered, Housed, List, Place, Text, enter, extend, full, list, push, reserve,
 };
 
 /// **A map whose table may be refused**: `std`'s own map

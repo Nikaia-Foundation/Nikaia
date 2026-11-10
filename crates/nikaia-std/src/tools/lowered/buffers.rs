@@ -1471,6 +1471,11 @@ pub(crate) fn buffers_view_call(arg: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, 
                 false => buffers_hands_back_a_view(*nikaia_std::index::get(&ask.library.functions, &named), ask),
             }
         },
+        Expr::MethodCall { receiver, method, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let name = ask.names.resolve(method);
+            name != "clone" && buffers_a_trim(name) && !made_in_the_call(receiver)
+        },
         _ => false,
     }
 }

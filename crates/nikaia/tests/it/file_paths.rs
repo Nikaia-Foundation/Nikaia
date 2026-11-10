@@ -69,9 +69,9 @@ fn text_stands_where_a_file_name_is_asked() {
     );
     let rust = lowered(PROGRAM);
     for written in [
-        "fn owned(p: fs::Path) -> fs::Path",
+        "fn owned(p: &std::path::Path) -> &std::path::Path",
         "let p: fs::Path = std::path::PathBuf::from(\"a.txt\");",
-        "owned(std::path::PathBuf::from(name))",
+        "owned(std::path::Path::new(&(name)))",
         "Job { at: std::path::PathBuf::from(\"c.txt\") }",
         "ConfigError::NotFound(std::path::PathBuf::from(\"d.txt\"))",
     ] {

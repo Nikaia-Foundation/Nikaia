@@ -62,17 +62,17 @@ pub(crate) fn stepped(n: Option<Integer>, heading: bool, pinned: String) -> Fold
     Folded::Value(Constant { value: found, pinned })
 }
 
-pub fn constant_of(expr: &Expr, name_is: &dyn Fn(winnow_grammar::Symbol) -> Folded) -> Folded {
+pub fn constant_of(expr: &Expr, name_is: &dyn Fn(&winnow_grammar::Symbol) -> Folded) -> Folded {
     match expr {
         Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; Folded::Value(Constant { value: integer(value, negative), pinned: String::from("") }) },
-        Expr::Variable(name, _) => { let name = *name; name_is(name) },
+        Expr::Variable(name, _) => { let name = *name; name_is(&name) },
         Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); negated(op, expr, &name_is) },
         Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); combined(op, lhs, rhs, &name_is) },
         _ => Folded::Nothing,
     }
 }
 
-pub(crate) fn negated(op: &UnaryOp, inner: &Expr, name_is: &dyn Fn(winnow_grammar::Symbol) -> Folded) -> Folded {
+pub(crate) fn negated(op: &UnaryOp, inner: &Expr, name_is: &dyn Fn(&winnow_grammar::Symbol) -> Folded) -> Folded {
     if *op != UnaryOp::Neg { return Folded::Nothing; }
     match constant_of(inner, &name_is) {
         Folded::Value(c) => pinned_step(Constant { value: integer_negated(&c.value), pinned: c.pinned }),
@@ -83,7 +83,7 @@ pub(crate) fn negated(op: &UnaryOp, inner: &Expr, name_is: &dyn Fn(winnow_gramma
 
 pub(crate) fn pinned_step(c: Constant) -> Folded { if fits(&c, &c.pinned) { Folded::Value(c) } else { Folded::Overflows(c) } }
 
-pub(crate) fn combined(op: &BinaryOp, lhs: &Expr, rhs: &Expr, name_is: &dyn Fn(winnow_grammar::Symbol) -> Folded) -> Folded {
+pub(crate) fn combined(op: &BinaryOp, lhs: &Expr, rhs: &Expr, name_is: &dyn Fn(&winnow_grammar::Symbol) -> Folded) -> Folded {
     let a = match constant_of(lhs, &name_is) {
         Folded::Value(c) => c,
         other => return other,

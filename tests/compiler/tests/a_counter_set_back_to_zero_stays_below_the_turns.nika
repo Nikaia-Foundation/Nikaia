@@ -1,0 +1,31 @@
+// #1516 (ADR-361 D13): a counter a loop sets back to a constant at or below
+// where it started, and otherwise raises by one, never passes the loop's
+// turns. `columns` counts the column of a text's last line, `since` the
+// items past the last zero: both `column += 1` are proved.
+fn columns(raw: String) -> i64 sync {
+	let mut column = 0
+	for c in raw.chars() {
+		if c == '\n' {
+			column = 0
+		} else {
+			column += 1
+		}
+	}
+	return column
+}
+
+fn since(xs: Vec[i64]) -> i64 sync {
+	let mut column = 0
+	for x in xs {
+		if x == 0 {
+			column = 0
+		} else {
+			column += 1
+		}
+	}
+	return column
+}
+
+fn main() throws {
+	println(f"{columns("ab\ncde")} {since([4, 0, 7, 8])}")
+}

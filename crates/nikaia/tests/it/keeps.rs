@@ -54,17 +54,17 @@ fn a_parameter_that_is_only_read_is_not_kept() {
     );
 }
 
-/// **Handed back by value, it is kept** — the value outlives the call by
-/// definition. Text is the exception: a `String` handed back unchanged is
-/// lent, and the result is a view of it (ADR-282 D5, D12; #678).
+/// **Handed back by value, it is lent**, whatever its type: the result is a
+/// view of the argument (ADR-views-3 D12, #1498; for text ADR-282 D5, D12;
+/// #678).
 #[test]
-fn a_parameter_returned_by_value_is_kept() {
-    assert_eq!(
+fn a_parameter_returned_by_value_is_lent() {
+    assert!(
         keeps(
             "fn label(text: Vec[i64]) -> Vec[i64] { return text }",
             "label"
-        ),
-        ["text"]
+        )
+        .is_empty()
     );
     assert!(keeps("fn label(text: String) -> String { return text }", "label").is_empty());
 }
@@ -141,11 +141,13 @@ fn a_parameter_assigned_into_a_place_is_kept() {
 
 /// **And it travels up the call graph**, which is what makes the column an
 /// answer about a *program* rather than about one body: `shout` keeps `text`
-/// only because `label` does.
+/// only because `label` does. A parameter handed back is lent (ADR-views-3
+/// D12), so it is `store` that keeps here.
 #[test]
 fn keeping_travels_up_the_call_graph() {
-    let source = "fn label(text: Vec[i64]) -> Vec[i64] { return text }\n\
-                  fn shout(text: Vec[i64]) -> Vec[i64] { return label(text) }\n\
+    let source = "struct Row { ids: Vec[i64] }\n\
+                  fn label(text: Vec[i64]) -> Row { return Row { ids: text } }\n\
+                  fn shout(text: Vec[i64]) -> Row { return label(text) }\n\
                   fn width(text: String) -> i64 { return text.len() as i64 }\n\
                   fn measure(text: String) -> i64 { return width(text) }";
 
@@ -438,7 +440,11 @@ fn a_field_of_a_type_this_file_does_not_declare_keeps() {
 #[test]
 fn a_parameter_that_leaves_by_any_way_out_is_kept() {
     assert_eq!(
-        keeps("fn same(name: Vec[i64]) -> Vec[i64] { name }", "same"),
+        keeps(
+            "struct Row { ids: Vec[i64] }\n\
+             fn same(name: Vec[i64]) -> Row { Row { ids: name } }",
+            "same"
+        ),
         ["name"]
     );
     assert_eq!(
@@ -593,17 +599,16 @@ fn main() {
     assert_eq!(keeps(source, "note"), vec!["line".to_text()]);
 }
 
-/// **A trait's method keeps what it takes by value**: a call through a bound
-/// cannot see the `impl` that answers, so a caller's by-value parameter handed
-/// on to it is kept, and lowered as a value rather than a `&` the method's
-/// signature does not take. What the method takes by `ref` stays lent.
+/// **A trait's method lends what it takes by value** (ADR-277 D17, #1498): a
+/// plain data parameter is lowered as the impl lowers it, a `&`, so a caller's
+/// by-value parameter handed on to it stays lent too.
 #[test]
-fn a_parameter_handed_to_a_trait_method_by_value_is_kept() {
+fn a_parameter_handed_to_a_trait_method_by_value_is_lent() {
     let source = "struct Flow { pub n: i64 }\n\
          trait Host { fn go(ref self, f: Flow, g: ref Flow) -> i64 sync }\n\
          fn pass[H: Host](host: ref H, f: Flow, g: Flow) -> i64 sync { return host.go(f, g) }";
-    assert_eq!(keeps(source, "Host::go"), ["f"]);
-    assert_eq!(keeps(source, "pass"), ["f"]);
+    assert!(keeps(source, "Host::go").is_empty());
+    assert!(keeps(source, "pass").is_empty());
 }
 
 /// What `nikaia lower` says about a program, and what it prints once lowered,

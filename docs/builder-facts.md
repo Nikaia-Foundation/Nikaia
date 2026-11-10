@@ -75,9 +75,6 @@ together with the specification section and an example test.
   missing one goes under `Deviation`. A pre-flight names a commit by subject
   (`git log --grep`), never by hash: rebases change hashes (p9).
 * A script test that compares a driver's `--dry-run` text fails when `scripts/*.nika` wording changes; bless it from the project dir (`nikaia test --filter NAME --bless` in `tests/compiler`) and review the diff, since `nikaia run FILE` refuses a non-entry file. (qa-task)
-* **A build default reaches a program only through `project_settings::optimizations`**; `lower-std` lowers at `sysroot::tools_build` (`Build::default()`), so changing the program default rewrites no lowered file but the one changed, and `.bounds` expectations drop the level (`project_tests.nika`). (issue-1474)
-* **A change to a build default breaks the `it` tests whose helpers lower with no `--optimization`** (`lower()` in `overflow.rs`, `pausing.rs`, also `assume.rs`, `simd.rs`, `byte_sets.rs`, `unsafe_follows_switches.rs`, `bounds_checks.rs`, `value_bounds.rs`): find them by grep of `fn lower`, `fn lowered`, `tool(` and run only those; name the old level in the helper rather than rewriting the asserts. (issue-1474)
-* **`nikaia-std` limits `unsafe` (ADR-218 D4, D5)**: only the lowered code may hold the emitter's `unsafe { nikaia_std::proven::… }`; before a full `lower-std` at a new level, build one hand-lowered probe file inside the crate against its attributes (a minute, not the 6-minute lowering). `lower-std`'s level is set at `sysroot::tools_build()`, and `runtime/lowered/` changes with `tools/lowered/`. (issue-1475)
 * Two `qa-input.txt` files exist (`docs/briefs/` and `docs/briefs/views/`); read the one in the lane directory your task names. (qa-task)
 * Before putting back a "workaround" an issue names, check `git log -S` on that line: a later commit may have removed it on purpose. (issue-1125)
 * The tether's keep plan (`tools/buffers.nika`, `is_a_buffer` in `tether.nika`) treats only text and bytes as buffers, so a view of a list or struct local handed back is NK2304 (ADR-283 D9), never NK2303, which is not a refusal. (issue-1155)
@@ -213,7 +210,8 @@ together with the specification section and an example test.
 * Files of one package share one namespace: call a sibling file's `pub fn` by its bare name, since `mod x` is a parse error. (issue-1481)
 * A `??` whose left side reads a map value (`m[k] ?? []`) is NK1185 in tools code; write `m[k]?.clone() ?? []` behind a `contains_key` check. (issue-1485)
 * A heredoc report or edit script with backticks needs a quoted delimiter (`<<'EOF'`); unquoted, each backticked word runs as a shell command and silently drops out of the text. (issue-1485)
-* rustc ignores a lint attribute on `include!(...)` (it warns "unused attribute"), so lift a lint for included lowered code by wrapping the `include!` in `#[allow(..)] mod lowered { use super::*; include!(..) } pub use lowered::*;`. (issue-1475)
-* `lower-std` lowers at two levels: `sysroot::tools_build()` for the tools and runtime packages, and `emit_std_against` in `emit/mod.rs` for `text.nika` and `supervisor.nika`. A level change needs both. (issue-1475)
-* The `runtime` module in `nikaia-std/src/lib.rs` carries fewer clippy allows than `tools`; a new emitter form in lowered runtime code may need one added there. (issue-1475)
+* A new `.stderr` expectation is written only when the file is absent before `--bless-stderr`. (issue-1490)
+* A `-> ref(a) String` or `a: borrowed` in the ledger for a `String` parameter comes from the text-tier pass (`lendable_parameter`, `a_keeping_target` in `text_tiers.nika`), which runs before the keep inference and the checker. (issue-1491)
+* A `.stdout`-only test passes even when the compiler prints a warning; add an empty `.stderr` beside it to pin "no warning". (issue-1491)
+* Files of the views-3 migration may carry `keep` marks the old binary already warned NK1334 on; when your fix makes `keep` mean kept, drop such marks where the file means lent. (issue-1491)
 

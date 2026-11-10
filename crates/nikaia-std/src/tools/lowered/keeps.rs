@@ -1041,7 +1041,7 @@ pub(crate) fn hands_on_a_bound_tail(block: &Block, interner: &winnow_grammar::In
 
 pub trait KeepsHost {
     fn holes(&self, unit: i64, expr: &Expr) -> Vec<Expr>;
-    fn keeping_statement(&self, unit: i64, method: &Spanned<Item>, target: String, parameter: String, own_kept: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, library: &Ledger) -> Span;
+    fn keeping_statement(&self, unit: i64, method: &Spanned<Item>, target: &str, parameter: &str, own_kept: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, library: &Ledger) -> Span;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1150,29 +1150,6 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
     let mut graph: collections::BTreeMap<String, Uses> = collections::BTreeMap::new();
     let mut package = PackageTypes::empty();
     for view in units.iter() { declare_unit(view.words, view.items, &mut package); }
-    let mut trait_keeps: collections::BTreeMap<String, Vec<i64>> = collections::BTreeMap::new();
-    for view in units.iter() {
-        for item in view.items.iter() {
-            match &item.node {
-                Item::Trait { name, methods, .. } => {
-                    let name = *name;
-                    let owner = view.text(name);
-                    for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple86524| {
-                            let (at, arg) = __nikaia_tuple86524; let at = nikaia_std::num::value(at);
-                            by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple86700| {
-                            let (at, arg) = __nikaia_tuple86700;
-                            at
-                        }).collect::<Vec<_>>();
-                        let called = view.text(method.node.name);
-                        trait_keeps.insert(format!("{}::{}", owner, called), positions);
-                    }
-                },
-                _ => { },
-            }
-        }
-    }
     let mut impls_of: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     let mut impl_rows: Vec<KeepsImplRow<'_>> = vec![];
     let mut unit: i64 = 0;
@@ -1198,11 +1175,10 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                                     let name = *name;
                                     let own = view.text(match name { Some(__nikaia_value) => __nikaia_value, None => continue });
                                     let at_trait = format!("{}::{}", owner, own);
-                                    for at in trait_positions(&trait_keeps, &at_trait) { if at < args.len() as i64 { found.uses.kept.insert(view.text(nikaia_std::index::get(&args, nikaia_std::index::at(at)).name)); } }
                                     let first: i64 = if receiver.is_some() { 1 } else { 0 };
                                     let mut at: i64 = 0;
                                     for arg in args.iter() {
-                                        if by_value(arg) && (*arg.ty.code).is_some() { found.uses.passed.push(Passed { parameter: view.text(arg.name), callee: nikaia_std::block::Text::from(at_trait.to_string()), at: unsafe { nikaia_std::proven::add::<i64>(at, first) } }); }
+                                        if by_value(arg) { found.uses.passed.push(Passed { parameter: view.text(arg.name), callee: nikaia_std::block::Text::from(at_trait.to_string()), at: unsafe { nikaia_std::proven::add::<i64>(at, first) } }); }
                                         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                                     }
                                     add_impl(&mut impls_of, &at_trait, &found.key);
@@ -1218,10 +1194,8 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let mut uses = no_uses();
-                        for arg in method.node.args.iter() { if by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) { uses.kept.insert(view.text(arg.name)); } }
                         let called = view.text(method.node.name);
-                        graph.insert(format!("{}::{}", owner, called), uses);
+                        graph.insert(format!("{}::{}", owner, called), no_uses());
                     }
                 },
                 Item::Grammar(def) => {
@@ -1254,8 +1228,8 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                         let mut edges: Vec<Passed> = vec![];
                         let mut at: i64 = 0;
                         for arg in method.node.args.iter() {
-                            if by_value(arg) && (*arg.ty.code).is_some() { for callee in impls.iter() { edges.push(Passed { parameter: view.text(arg.name), callee: nikaia_std::block::Text::from(callee.to_string()), at: at + first }); } }
-                            at += 1;
+                            if by_value(arg) { for callee in impls.iter() { edges.push(Passed { parameter: view.text(arg.name), callee: nikaia_std::block::Text::from(callee.to_string()), at: unsafe { nikaia_std::proven::add::<i64>(at, first) } }); } }
+                            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                         }
                         if graph.contains_key(&key) {
                             let uses = match nikaia_std::index::get_mut(&mut graph, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -1409,11 +1383,6 @@ pub(crate) fn keeps_path_text(view: &ParsedView<'_, '_, '_, '_, '_, '_>, segment
     Some(format!("{}::{}", ty, view.text(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) })))
 }
 
-pub(crate) fn trait_positions(keeps: &collections::BTreeMap<String, Vec<i64>>, key: &str) -> Vec<i64> {
-    let held = match *nikaia_std::index::get(&keeps, key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-    held.copy_owned()
-}
-
 pub(crate) fn add_impl(impls_of: &mut collections::BTreeMap<String, collections::BTreeSet<String>>, at_trait: &str, name: &str) {
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
     if impls_of.contains_key(at_trait) {
@@ -1457,10 +1426,10 @@ pub(crate) fn keeps_the_impls_own<H: KeepsHost>(units: &[ParsedView<'_, '_, '_, 
                 for arg in args.iter() {
                     at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                     let parameter = view.text(arg.name);
-                    if !by_value(arg) || (*arg.ty.code).is_none() || !mine.contains(&parameter) { continue; }
+                    if !by_value(arg) || !mine.contains(&parameter) { continue; }
                     let theirs = match trait_parameter_at(&contract, unsafe { nikaia_std::proven::sub::<i64>(at, 1) } + row.first) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     if foreign && nikaia_std::list::contains(&contract.keeps, &theirs) { continue; }
-                    let span = host.keeping_statement(row.unit, row.method, nikaia_std::block::Text::from(row.target.to_string()), nikaia_std::block::Text::from(parameter.to_string()), &own_kept, ledger, library);
+                    let span = host.keeping_statement(row.unit, row.method, &nikaia_std::block::Text::from(row.target.to_string()), &nikaia_std::block::Text::from(parameter.to_string()), &own_kept, ledger, library);
                     if !foreign {
                         add_keeper(&mut column, &row.at_trait, &theirs, KeepsKeeper { name: nikaia_std::block::Text::from(row.key.to_string()), unit: row.unit, span });
                         continue;
@@ -1482,11 +1451,11 @@ pub(crate) fn trait_parameter_at(contract: &FnContract, at: i64) -> Option<Strin
 }
 
 pub(crate) fn asks_a_column(row: &KeepsImplRow<'_>, graph: &collections::BTreeMap<String, Uses>, library: &Ledger) -> bool {
-    let takes_a_fn = match &row.method.node {
-        Item::Fn { args, .. } => args.iter().any(|a| { by_value(a) && (*a.ty.code).is_some() }),
+    let takes_by_value = match &row.method.node {
+        Item::Fn { args, .. } => args.iter().any(|a| { by_value(a) }),
         _ => false,
     };
-    takes_a_fn && (graph.contains_key(&row.at_trait) || library.functions.contains_key(&row.at_trait))
+    takes_by_value && (graph.contains_key(&row.at_trait) || library.functions.contains_key(&row.at_trait))
 }
 
 pub(crate) fn add_keeper(column: &mut KeepsColumn, at_trait: &str, parameter: &str, keeper: KeepsKeeper) {
