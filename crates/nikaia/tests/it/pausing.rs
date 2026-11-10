@@ -28,6 +28,11 @@ fn lower(dir: &Path, source: &str) -> String {
         .args(["lower", input.to_str().unwrap()])
         .args(["--output", output.to_str().unwrap()])
         .args(["--no-cache"])
+        // Every check as written: the default drops a proved one (ADR-306 D26).
+        .args([
+            "--optimization",
+            "remove-bounds-checks:off,remove-overflow-checks:off",
+        ])
         .env("NIKAIA_CACHE_DIR", dir.join("cache"))
         .output()
         .expect("the nikaia binary runs");

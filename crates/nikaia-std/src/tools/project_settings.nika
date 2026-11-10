@@ -95,10 +95,12 @@ pub fn unproved_claims(word: String) -> String throws {
 /// ([ADR-306](../../../docs/specification/adr/adr-306.md) D14). The names are
 /// `remove-bounds-checks` and `remove-overflow-checks`
 /// ([ADR-306](../../../docs/specification/adr/adr-306.md) D6); a later word for
-/// a name wins over an earlier one.
+/// a name wins over an earlier one. **A name the words leave out is `on`**
+/// ([ADR-306](../../../docs/specification/adr/adr-306.md) D26): a check the
+/// walk proved is dropped unless the build says `off`.
 pub fn optimizations(words: String) -> (BoundsChecks, OverflowChecks) throws {
-    let mut bounds = BoundsChecks::Kept
-    let mut overflow = OverflowChecks::Kept
+    let mut bounds = BoundsChecks::Removed
+    let mut overflow = OverflowChecks::Removed
     for word in words.split(",").map(fn(w) { w.trim() }).filter(fn(w) { !w.is_empty() }) {
         let (name, level) = word.split_once(":") ?? throw ProjectSettingsRefusal::Refused(f"`--optimization={word}` needs `on` or `off`: write `--optimization=remove-bounds-checks:on` or `--optimization=remove-overflow-checks:on`")
         match name {

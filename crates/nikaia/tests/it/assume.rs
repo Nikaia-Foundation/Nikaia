@@ -139,7 +139,7 @@ fn a_false_assumption_stops_where_no_checks_are_removed() {
     let (ok, out, err) = run(
         "off",
         &PICK.replace("AT", "5"),
-        "remove-bounds-checks:off",
+        "remove-bounds-checks:off,remove-overflow-checks:off",
         "",
     );
     assert!(!ok, "the index 6 is past the end: {out}");
@@ -149,7 +149,7 @@ fn a_false_assumption_stops_where_no_checks_are_removed() {
     let (ok, out, err) = run(
         "off-holds",
         &PICK.replace("AT", "0"),
-        "remove-bounds-checks:off",
+        "remove-bounds-checks:off,remove-overflow-checks:off",
         "",
     );
     assert!(ok, "{err}");

@@ -436,7 +436,8 @@ fn the_overflow_option_is_read_and_a_wrong_level_is_refused() {
         optimizations("remove-bounds-checks:off,remove-overflow-checks:on").unwrap();
     assert_eq!(bounds, BoundsChecks::Kept);
     assert_eq!(overflow, OverflowChecks::Removed);
-    assert_eq!(optimizations("").unwrap().1, OverflowChecks::Kept);
+    // ADR-306 D26: a name the words leave out is `on`.
+    assert_eq!(optimizations("").unwrap().1, OverflowChecks::Removed);
     let basic = optimizations("remove-overflow-checks:basic").unwrap_err();
     assert!(basic.to_text().contains("`on` or `off`"), "{basic}");
 }

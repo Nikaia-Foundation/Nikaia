@@ -1,0 +1,6 @@
+named nothing: 1 proven::read, 1 proven::add
+on: 1 proven::read, 1 proven::add
+off: 0 proven::read, 0 proven::add
+named nothing is on: true
+15 9 42 42
+15 9 42 42
