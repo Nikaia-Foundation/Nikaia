@@ -309,7 +309,7 @@ fn the_loops_binding_does_not_outlive_it() {
          comptime N = leaks()\n",
     )
     .into_iter()
-    .filter(|f| f.code == "NK1127" || f.code == "NK1152")
+    .filter(|f| f.code == "NK1117")
     .collect();
     assert_eq!(found.len(), 1, "{found:#?}");
 }
