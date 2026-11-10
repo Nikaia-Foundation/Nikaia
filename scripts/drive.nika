@@ -1768,6 +1768,9 @@ fn drive_stop(exe: String, dry: bool, dir: String, stop: String) throws {
 	drive_settle(exe, dir)
 	drive_unlock()
 	println(f"ESCALATE {stop}: the supervisor writes the next briefs")
+	if stop.starts_with("CUT") && !stop.ends_with("brief missing") && !stop.contains(": Pushed:") && !stop.contains(": Result: blocked") {
+		println("CLEAR with a line `Supervisor: YYYY-MM-DD: accepted ...` in the report (batch.nika); the builder's lines stay")
+	}
 	process::exit(2)
 }
 

@@ -29,6 +29,8 @@ fn emit(source: &str, build: Build) -> String {
 
 // --- What the emitter produced, compiled ---
 
+// The emitted `DeepSize` impl sums from `0 +` (ADR-327 D9).
+#[allow(clippy::identity_op)]
 mod measurements {
     //! The names `measurements.nika` uses without declaring live here: the
     //! grammar module is generated with `use super::*`, so they resolve where

@@ -304,9 +304,21 @@ impl<T> Local<T> {
 
     /// …and the second: replacing. The new value is computed outside, so the
     /// lock is open for the duration of one store.
+    ///
+    /// **The value's deep size moves from the setter to the shared value**
+    /// (ADR-327 D9): where it does not fit the value's block, the store
+    /// panics with the block in place, and the value is poisoned (D6).
     #[track_caller]
-    pub fn set(&self, value: T) {
-        self.held(|held| *held = value)
+    pub fn set(&self, value: T)
+    where
+        T: crate::block::DeepSize,
+    {
+        let size = crate::block::deep_size(&value);
+        crate::block::hand_over(size);
+        self.held(|held| {
+            crate::block::received(size);
+            *held = value
+        })
     }
 
     /// **Reading in place** ([ADR-281](../../../docs/specification/adr/adr-281.md)
@@ -477,9 +489,19 @@ impl<T> Crossing<T> {
         self.access(|value| value.clone())
     }
 
+    /// [`Local::set`]'s deep size moves here too (ADR-327 D9): a value that
+    /// does not fit poisons the mutex.
     #[track_caller]
-    pub fn set(&self, value: T) {
-        self.hold(|slot| *slot = value);
+    pub fn set(&self, value: T)
+    where
+        T: crate::block::DeepSize,
+    {
+        let size = crate::block::deep_size(&value);
+        crate::block::hand_over(size);
+        self.hold(|slot| {
+            crate::block::received(size);
+            *slot = value
+        });
     }
 
     /// **Reading in place** ([ADR-281](../../../docs/specification/adr/adr-281.md)

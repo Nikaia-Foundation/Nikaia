@@ -1,0 +1,30 @@
+// A strategy passed as `admission:` replaces `std`'s (ADR-327 D7, D15): its
+// budget of four segments lets a task hold 96 KiB, and ends one that holds
+// more with `task::OverBudget`.
+struct Tight {}
+
+impl task::Admission for Tight {
+    fn decide(mut self, _load: task::Load) -> task::Decision sync {
+        return task::Decision { start: 1, budget: 262144 }
+    }
+}
+
+fn fill(n: i64) -> i64 {
+    let mut xs: Vec[i64] = []
+    for i in 0..<n {
+        xs.push(i)
+    }
+    return xs.len()
+}
+
+fn main() throws {
+    let fits = async(admission: Tight {}) fill(12000) catch { -1 }
+    let over = async(admission: Tight {}) fill(100000) catch {
+        match error {
+            task::OverBudget => println(f"over budget: {error}"),
+            else => println(f"failed: {error}"),
+        }
+        0
+    }
+    println(f"fits: {fits}, over: {over}")
+}

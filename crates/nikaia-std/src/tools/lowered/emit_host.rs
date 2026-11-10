@@ -22,6 +22,7 @@ pub trait EmitHost {
     fn refuse_unwritten_item(&self, written: &Spanned<Item>) -> Result<(), Box<dyn std::error::Error>>;
     fn counts_steps(&self) -> bool;
     fn skip_free_at_exit(&self) -> bool;
+    fn counts_heap(&self) -> bool;
     fn char_literal(&self, written: &str) -> String;
 }
 

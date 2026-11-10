@@ -343,7 +343,7 @@ impl EmitState {
         if lent_option || lent_path { out.push("&"); }
         out.push(&before);
         let rust_owner = if method_callee.is_none() && !lend && !change && !self.own_contracts.functions.contains_key(callee) { emit_rust_owner_param(&self.described, callee, i) } else { String::from("") };
-        if rust_owner == "Vec" { out.push("::std::vec::Vec::from("); } else if rust_owner == "String" { out.push("::std::string::String::from("); }
+        if rust_owner == "Vec" { out.push("nikaia_std::block::handed_list("); } else if rust_owner == "String" { out.push("nikaia_std::block::handed_text("); }
         if either { out.push("nikaia_std::either_text::either("); }
         let keeps_bytes = self.emit_arg_keeps_bytes(world, callee, method_callee, i);
         if keeps_bytes { out.push("&*nikaia_std::bytes::kept("); }

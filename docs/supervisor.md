@@ -259,6 +259,10 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   results, tokens, cost, queue, `kept k/m`), the pending bumps while CI is
   green, the next area. An area with an empty queue is skipped; every area
   empty escalates, and `CUT` or `RED` stops the driver for the supervisor. The final lines are those of the cycle below.
+  A `CUT` on `Result:`, `Gate:` or `Deviation:` the supervisor accepts is
+  cleared by a line `Supervisor: <date>: accepted ...` in the report, the
+  builder's lines left as written (owner, 2026-11-10); `Result: blocked`,
+  `Pushed:` and `Owner:` still stop.
   The focus driver always runs (owner, 2026-11-01): when it ends, on
   `--max N agent runs reached` or a block's end, the main session starts it
   again at once; it stops only for an escalation that needs the supervisor or

@@ -174,6 +174,35 @@ impl EmitState {
                     }
                 }
                 out.push("}\n");
+                if !self.is_std && !variants.is_empty() {
+                    let mut arms: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                    for variant in variants.iter() {
+                        let vname = escaped_name(&emit_text(world, variant.name));
+                        match &variant.fields {
+                            VariantFields::Unit => { arms.push(format!("Self::{} => 0", vname)); },
+                            VariantFields::Tuple(types) => {
+                                #[allow(unused_mut)] let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                                let mut walked: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
+                                for i in 0..types.len() as i64 {
+                                    bound.push(format!("f{}", i));
+                                    walked.push(format!(" + nikaia_std::__nikaia_deep_size!(*f{})", i));
+                                }
+                                arms.push(format!("Self::{}({}) => 0{}", vname, nikaia_std::block::Text::from(bound.join(", ")), nikaia_std::block::Text::from(walked.join(""))));
+                            },
+                            VariantFields::Named(fields) => {
+                                #[allow(unused_mut)] let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                                let mut walked: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
+                                for f in fields.iter() {
+                                    let n = escaped_name(&emit_text(world, f.name));
+                                    walked.push(format!(" + nikaia_std::__nikaia_deep_size!(*{})", n));
+                                    bound.push(n);
+                                }
+                                arms.push(format!("Self::{} {{ {} }} => 0{}", vname, nikaia_std::block::Text::from(bound.join(", ")), nikaia_std::block::Text::from(walked.join(""))));
+                            },
+                        }
+                    }
+                    out.push(&format!("#[automatically_derived]\nimpl{} nikaia_std::block::DeepSize for {}{} {{\n    fn heap(&self) -> usize {{\n        match self {{ {} }}\n    }}\n}}\n", params, escaped_name(&enum_name), params, nikaia_std::block::Text::from(arms.join(", "))));
+                }
             },
             Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
@@ -207,7 +236,7 @@ impl EmitState {
                     let field_vis = if field.is_public || is_extern { "pub " } else { "" };
                     body.push(&format!("    {}{}: {},\n", field_vis, escaped_name(&field_text), self.boxed_ty(&text, &field_text, lowered)));
                 }
-                let mut hidden: i64 = 0;
+                let mut hidden: i64 = 0; #[allow(clippy::redundant_locals)] let slots = slots;
                 if seeded { hidden = emit_seeds_finish(&mut walk.place, 0); }
                 let mut parts: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let slots = slots;
                 if self.borrowing.contains(&text) {
@@ -236,6 +265,29 @@ impl EmitState {
                     if !same.is_empty() { compared = nikaia_std::block::Text::from(same.join(" && ")); }
                     out.push(&format!("impl{} PartialEq for {}{} {{\n    fn eq(&self, other: &Self) -> bool {{ {} }}\n}}\n", declares, me, applied, compared));
                     if self.facts.compares_totally.contains(&text) { out.push(&format!("impl{} Eq for {}{} {{}}\n", declares, me, applied)); }
+                }
+                if !self.is_std {
+                    #[allow(unused_mut)] let mut declared: Vec<String> = vec![];
+                    #[allow(unused_mut)] let mut applied: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
+                    if self.borrowing.contains(&text) {
+                        declared.push(String::from("'a"));
+                        applied.push(String::from("'a"));
+                        let mut more: i64 = 1;
+                        while ((more) as usize) < slots.len() {
+                            declared.push(format!("'a{}", more));
+                            applied.push(format!("'a{}", more));
+                            more += 1;
+                        }
+                    }
+                    for g in generics.iter() {
+                        declared.push(emit_bounded(world, g));
+                        applied.push(escaped_name(world.words.resolve(g.name)));
+                    }
+                    for s in emit_seeds_declared(0, hidden, false) { declared.push(s); }
+                    for s in emit_seeds_applied(0, hidden) { applied.push(s); }
+                    let mut walked: String = String::from("0"); #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared; #[allow(unused_mut, clippy::redundant_locals)] let mut applied = applied;
+                    for f in fields.iter() { walked = format!("{} + nikaia_std::__nikaia_deep_size!(self.{})", walked, escaped_name(&emit_text(world, f.name))); }
+                    out.push(&format!("#[automatically_derived]\nimpl{} nikaia_std::block::DeepSize for {}{} {{\n    fn heap(&self) -> usize {{\n        {}\n    }}\n}}\n", emit_angled(&declared), escaped_name(&text), emit_angled(&applied), walked));
                 }
             },
             Item::Fn { name, .. } => {

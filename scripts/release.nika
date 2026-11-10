@@ -213,10 +213,10 @@ fn release_bump(title: String, entries: Vec[String]) -> String throws {
         if line.starts_with("Co-Authored-By:") || line.starts_with("Claude-Session:") { message = message + "\n" + line }
     }
     if !process::run("git", ["commit", "-m", message]).ok { return "NO BUMP: commit failed" }
-    if !process::run("git", ["push", "origin", "develop"]).ok {
+    if !process::run("git", ["push", "origin", "HEAD:develop"]).ok {
         process::run("git", ["pull", "--rebase", "origin", "develop"])
         process::run("python3", ["scripts/bump.py", "rebase-fix"])
-        if !process::run("git", ["push", "origin", "develop"]).ok { return "PUSH REJECTED" }
+        if !process::run("git", ["push", "origin", "HEAD:develop"]).ok { return "PUSH REJECTED" }
     }
     return f"BUMP {release_version()}"
 }

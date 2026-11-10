@@ -16,22 +16,28 @@
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
-/// **What the runtime counts for a strategy** (D18): the tasks of the form
-/// running and waiting, and the descriptors the process holds and may hold
-/// (`0` allowed where the system does not say). The memory budget joins it
-/// with #490.
+/// **What the runtime counts for a strategy** (D18, ADR-327 D15): the tasks
+/// of the form running and waiting, the descriptors the process holds and may
+/// hold (`0` allowed where the system does not say), and the memory: what the
+/// system reports (the cgroup's limit where one is set, else the memory
+/// available; `0` where it does not say) and what the tasks' blocks hold.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Load {
     pub running: i64,
     pub waiting: i64,
     pub descriptors_in_use: i64,
     pub descriptors_allowed: i64,
+    pub memory_reported: i64,
+    pub memory_held: i64,
 }
 
-/// **How many tasks may start until the next decision** (D18).
+/// **How many tasks may start until the next decision, and the budget each
+/// of them gets** (D18, ADR-327 D7, D15): the bytes a task starting now may
+/// hold, which it keeps until it ends; less than a segment is a segment.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Decision {
     pub start: i64,
+    pub budget: i64,
 }
 
 /// **Who decides when the next task of a form starts** (D18,
@@ -41,10 +47,13 @@ pub trait Admission {
     fn decide(&mut self, load: Load) -> Decision;
 }
 
-/// **`std`'s strategy** (D18): tasks start while descriptors are free,
-/// a quarter of the free ones at a time, and keep a reserve for the rest
-/// of the program. It counts tasks and descriptors; the memory budget joins
-/// it with #490.
+/// **`std`'s strategy** (D18, ADR-327 D15): tasks start while descriptors
+/// are free, a quarter of the free ones at a time, and keep a reserve for the
+/// rest of the program. The memory not held yet is shared among the tasks
+/// running and wanting to start, and one share more for the rest of the
+/// program: that share is a starting task's budget, and none starts where it
+/// is less than a segment. Where the system reports no memory, the budget is
+/// not bounded.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Adaptive {
     reserve: i64,
@@ -65,14 +74,34 @@ impl Default for Adaptive {
 
 impl Admission for Adaptive {
     fn decide(&mut self, load: Load) -> Decision {
-        if load.descriptors_allowed <= 0 {
+        Adaptive::decide(self, load)
+    }
+}
+
+impl Adaptive {
+    /// **`std`'s decision for `load`** (ADR-async-5 D18, ADR-327 D15), as a
+    /// task that wants to start asks it; inherent as well, so a program that
+    /// calls `.decide` on the strategy reaches it without the trait in scope.
+    pub fn decide(&mut self, load: Load) -> Decision {
+        let start = if load.descriptors_allowed <= 0 {
+            load.waiting.max(1)
+        } else {
+            let free = load.descriptors_allowed - load.descriptors_in_use - self.reserve;
+            (free / 4).max(0)
+        };
+        if load.memory_reported <= 0 {
             return Decision {
-                start: load.waiting.max(1),
+                start,
+                budget: i64::MAX,
             };
         }
-        let free = load.descriptors_allowed - load.descriptors_in_use - self.reserve;
+        let free = (load.memory_reported - load.memory_held).max(0);
+        let shares = load.running.max(0) + load.waiting.max(1) + 1;
+        let budget = free / shares;
+        let segment = crate::block::BLOCK as i64;
         Decision {
-            start: (free / 4).max(0),
+            start: if budget < segment { 0 } else { start },
+            budget: budget.max(segment),
         }
     }
 }
@@ -97,7 +126,7 @@ pub fn admitted(strategy: impl Admission + 'static) -> Box<dyn Admission> {
 /// task runs there to its end whatever it says, as every task that never
 /// pauses does (D20 at `user_parallelism = no`): none of its form runs then.
 pub fn asked(mut strategy: Box<dyn Admission>) {
-    strategy.decide(load_of(0, 1));
+    crate::block::granted(strategy.decide(load_of(0, 1)).budget);
 }
 
 /// **`admission: s` on `async(detached) fn { … }`** (D15, D18), which may
@@ -108,10 +137,13 @@ pub fn admitted_sent(strategy: impl Admission + Send + 'static) -> Box<dyn Admis
 
 /// **A detached task waits, unstarted, until its strategy admits it** (D15,
 /// D18, D37): awaited first in its body, the strategy asked on each beat of
-/// the runtime until it lets the task start.
+/// the runtime until it lets the task start. Its block is in place already,
+/// empty, and takes the decision's budget before the body runs (ADR-327 D15).
 pub async fn admission_first(mut strategy: Box<dyn Admission + Send>) {
     std::future::poll_fn(|cx| {
-        if strategy.decide(load_of(0, 1)).start > 0 {
+        let decision = strategy.decide(load_of(0, 1));
+        if decision.start > 0 {
+            crate::block::budget_running(decision.budget);
             return std::task::Poll::Ready(());
         }
         cx.waker().wake_by_ref();
@@ -121,13 +153,15 @@ pub async fn admission_first(mut strategy: Box<dyn Admission + Send>) {
 }
 
 /// The load a strategy is shown: `running` and `waiting` tasks of its form,
-/// and the descriptors.
-fn load_of(running: i64, waiting: i64) -> Load {
+/// the descriptors and the memory.
+pub(crate) fn load_of(running: i64, waiting: i64) -> Load {
     Load {
         running,
         waiting,
         descriptors_in_use: descriptors_in_use(),
         descriptors_allowed: descriptors_allowed(),
+        memory_reported: memory_reported(),
+        memory_held: i64::try_from(crate::block::held()).unwrap_or(i64::MAX),
     }
 }
 
@@ -183,6 +217,8 @@ struct GateState {
     running: usize,
     /// Starts the last decision left.
     allowance: i64,
+    /// The budget the last decision gives each of them (ADR-327 D15).
+    budget: i64,
     /// What waits for a place to free: woken where one does.
     wanting: Vec<std::task::Waker>,
 }
@@ -196,6 +232,7 @@ impl Gate {
                 state: RefCell::new(GateState {
                     running: 0,
                     allowance: 0,
+                    budget: 0,
                     wanting: Vec::new(),
                 }),
             }),
@@ -244,24 +281,29 @@ impl Gate {
         }
         // Where none runs, one starts whatever the strategy says, so it is
         // not asked: a group whose tasks run one after the other never counts
-        // descriptors.
+        // descriptors. It has the budget of the gate's last decision, or the
+        // program's before the first (ADR-327 D15).
         if state.running == 0 {
+            if state.budget > 0 {
+                crate::block::granted(state.budget);
+            }
             return true;
         }
         if state.allowance <= 0 {
-            let load = Load {
-                running: state.running as i64,
-                waiting,
-                descriptors_in_use: descriptors_in_use(),
-                descriptors_allowed: descriptors_allowed(),
-            };
+            let running = state.running as i64;
             drop(state);
-            let decision = self.inner.admission.borrow_mut().decide(load);
+            let decision = self
+                .inner
+                .admission
+                .borrow_mut()
+                .decide(load_of(running, waiting));
             state = self.state();
             state.allowance = decision.start;
+            state.budget = decision.budget.max(1);
         }
         if state.allowance > 0 {
             state.allowance -= 1;
+            crate::block::granted(state.budget);
             return true;
         }
         false
@@ -492,16 +534,19 @@ impl<'x> Waiting<'x> {
     /// asked again where the main line next pauses or waits.
     pub fn queues_admitted(&self, mut admission: Box<dyn Admission>) -> bool {
         let waiting = self.queued_members();
-        if waiting > 0
-            || admission
-                .decide(load_of(self.running_members(), waiting + 1))
-                .start
-                <= 0
-        {
+        if waiting > 0 {
             *self.admitting.borrow_mut() = Some(admission);
             return true;
         }
-        !self.room(waiting + 1)
+        let decision = admission.decide(load_of(self.running_members(), waiting + 1));
+        if decision.start <= 0 {
+            *self.admitting.borrow_mut() = Some(admission);
+            return true;
+        }
+        let queued = !self.room(waiting + 1);
+        // The task's own strategy sizes its block, not the gate's.
+        crate::block::granted(decision.budget);
+        queued
     }
 
     /// Whether the task's own strategy admits it, `waiting` wanting to start;
@@ -512,13 +557,10 @@ impl<'x> Waiting<'x> {
         let Some(strategy) = own.as_mut() else {
             return true;
         };
-        if forced
-            || strategy
-                .decide(load_of(self.running_members(), waiting))
-                .start
-                > 0
-        {
+        let decision = strategy.decide(load_of(self.running_members(), waiting));
+        if forced || decision.start > 0 {
             *own = None;
+            crate::block::granted(decision.budget);
             return true;
         }
         false
@@ -696,4 +738,27 @@ fn descriptors_allowed() -> i64 {
         .and_then(|line| line.split_whitespace().nth(3))
         .and_then(|soft| soft.parse().ok())
         .unwrap_or(0)
+}
+
+/// **The memory the system reports** (ADR-327 D15): the cgroup's limit where
+/// one is set (v2, then v1), else the memory available; `0` where the system
+/// does not say.
+pub(crate) fn memory_reported() -> i64 {
+    let read = |path: &str| std::fs::read_to_string(path).ok();
+    let limit = read("/sys/fs/cgroup/memory.max")
+        .or_else(|| read("/sys/fs/cgroup/memory/memory.limit_in_bytes"))
+        .and_then(|text| text.trim().parse::<i64>().ok())
+        // v1 writes a limit near `i64::MAX` where none is set.
+        .filter(|&limit| limit > 0 && limit < i64::MAX / 2);
+    if let Some(limit) = limit {
+        return limit;
+    }
+    read("/proc/meminfo")
+        .and_then(|info| {
+            info.lines()
+                .find(|line| line.starts_with("MemAvailable:"))
+                .and_then(|line| line.split_whitespace().nth(1))
+                .and_then(|kib| kib.parse::<i64>().ok())
+        })
+        .map_or(0, |kib| kib.saturating_mul(1024))
 }

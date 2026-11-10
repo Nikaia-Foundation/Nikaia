@@ -544,10 +544,12 @@ impl EmitState {
         // task's block (a local handed to a call never is in it), so the
         // conversion gives Rust the memory the list was built in, no copy.
         let rust_owner = if method_callee == null && !lend && !change && !self.own_contracts.functions.contains_key(callee) { emit_rust_owner_param(self.described, callee, i) } else { "" }
+        // **And it leaves the task's account at the call** (ADR-327 D9,
+        // #1541): the Rust owner keeps it.
         if rust_owner == "Vec" {
-            out.push("::std::vec::Vec::from(")
+            out.push("nikaia_std::block::handed_list(")
         } else if rust_owner == "String" {
-            out.push("::std::string::String::from(")
+            out.push("nikaia_std::block::handed_text(")
         }
         if either {
             out.push("nikaia_std::either_text::either(")

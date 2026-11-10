@@ -27,8 +27,14 @@ fn lower(dir: &Path, package: &str) -> String {
         nikaia::modules::Program::read_with(&root.join("src/main.nika"), &dependencies)
     })
     .expect("the program reads");
+    // Only a program writes the allocator (ADR-327 D9): the library is linked
+    // into one, and two allocators are a rustc error.
+    let build = nikaia::emit::Build {
+        counts_heap: package != "lib",
+        ..Default::default()
+    };
     program
-        .emit_reading(Default::default(), &common::reads())
+        .emit_reading(build, &common::reads())
         .expect("the program lowers")
         .rust
 }

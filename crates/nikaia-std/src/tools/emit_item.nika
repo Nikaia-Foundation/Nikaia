@@ -239,6 +239,37 @@ impl EmitState {
                     }
                 }
                 out.push("}\n")
+                // **What it holds on the heap** (ADR-327 D9, decision (a)):
+                // each variant's fields, walked where their type has `DeepSize`.
+                if !self.is_std && !variants.is_empty() {
+                    let mut arms: Vec[String] = []
+                    for variant in variants {
+                        let vname = escaped_name(emit_text(world, variant.name))
+                        match variant.fields {
+                            VariantFields::Unit => { arms.push(f"Self::{vname} => 0") },
+                            VariantFields::Tuple(types) => {
+                                let mut bound: Vec[String] = []
+                                let mut walked: Vec[String] = []
+                                for i in 0..<types.len() {
+                                    bound.push(f"f{i}")
+                                    walked.push(f" + nikaia_std::__nikaia_deep_size!(*f{i})")
+                                }
+                                arms.push(f"Self::{vname}({bound.join(", ")}) => 0{walked.join("")}")
+                            },
+                            VariantFields::Named(fields) => {
+                                let mut bound: Vec[String] = []
+                                let mut walked: Vec[String] = []
+                                for f in fields {
+                                    let n = escaped_name(emit_text(world, f.name))
+                                    walked.push(f" + nikaia_std::__nikaia_deep_size!(*{n})")
+                                    bound.push(n)
+                                }
+                                arms.push(f"Self::{vname} {{ {bound.join(", ")} }} => 0{walked.join("")}")
+                            },
+                        }
+                    }
+                    out.push(f"#[automatically_derived]\nimpl{params} nikaia_std::block::DeepSize for {escaped_name(enum_name)}{params} {{\n    fn heap(&self) -> usize {{\n        match self {{ {arms.join(", ")} }}\n    }}\n}}\n")
+                }
             },
             Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
                 let text = emit_text(world, name)
@@ -330,6 +361,38 @@ impl EmitState {
                     if self.facts.compares_totally.contains(text) {
                         out.push(f"impl{declares} Eq for {me}{applied} {{}}\n")
                     }
+                }
+                // **What it holds on the heap** (ADR-327 D9, decision (a)):
+                // each field, walked where its type has `DeepSize`; a closure or
+                // a Rust-owned type counts its own size only.
+                if !self.is_std {
+                    let mut declared: Vec[String] = []
+                    let mut applied: Vec[String] = []
+                    if self.borrowing.contains(text) {
+                        declared.push("'a")
+                        applied.push("'a")
+                        let mut more = 1
+                        while more < slots.len() {
+                            declared.push(f"'a{more}")
+                            applied.push(f"'a{more}")
+                            more += 1
+                        }
+                    }
+                    for g in generics {
+                        declared.push(emit_bounded(world, g))
+                        applied.push(escaped_name(world.words.resolve(g.name)))
+                    }
+                    for s in emit_seeds_declared(0, hidden, false) {
+                        declared.push(s)
+                    }
+                    for s in emit_seeds_applied(0, hidden) {
+                        applied.push(s)
+                    }
+                    let mut walked: String = "0"
+                    for f in fields {
+                        walked = f"{walked} + nikaia_std::__nikaia_deep_size!(self.{escaped_name(emit_text(world, f.name))})"
+                    }
+                    out.push(f"#[automatically_derived]\nimpl{emit_angled(declared)} nikaia_std::block::DeepSize for {escaped_name(text)}{emit_angled(applied)} {{\n    fn heap(&self) -> usize {{\n        {walked}\n    }}\n}}\n")
                 }
             },
             Item::Fn { name, .. } => {

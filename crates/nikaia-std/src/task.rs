@@ -27,7 +27,7 @@
 //! *compiler* put together — went with the automatic grouping itself
 //! (ADR-292 D1).
 
-mod gate;
+pub(crate) mod gate;
 mod group;
 
 pub use gate::{
@@ -181,7 +181,11 @@ impl<F: std::future::Future<Output = T>, T, Q: crate::cleanup::Queue> Cancellabl
         match polled {
             std::task::Poll::Ready(value) => {
                 self.body = None;
-                self.slot.fill(value);
+                // **What the task still holds outside its block is its
+                // value's** (ADR-327 D9): it leaves the task's account here,
+                // with the block in place, and the joiner takes it.
+                let size = crate::block::leftover();
+                self.slot.fill_sized(value, size);
                 std::task::Poll::Ready(())
             }
             std::task::Poll::Pending => {
@@ -369,7 +373,7 @@ impl<T: 'static> TaskHandle<T> {
             slot: slot.clone(),
             asked: asked.clone(),
             queues: crate::cleanup::Queues::default(),
-            block: crate::block::Block::default(),
+            block: crate::block::for_a_task(),
         });
         TaskHandle { slot, asked }
     }
@@ -449,7 +453,7 @@ impl<T: Send + 'static> TaskHandle<T> {
             slot: slot.clone(),
             asked: asked.clone(),
             queues: crate::cleanup::SendQueues::default(),
-            block: crate::block::Block::default(),
+            block: crate::block::for_a_task(),
         });
         TaskHandle { slot, asked }
     }
