@@ -1,0 +1,39 @@
+// #1516 (ADR-306 D29): what a call's result is found to hold of its
+// arguments: `skip(cs, from)` hands back at least `from` and at most
+// `cs.len()`, so a loop that steps with `i = skip(cs, i + 1)` grows, and an
+// index `cs[j]` after `j < cs.len()` needs no lower bound of its own.
+fn skip(cs: ref Vec[i64], from: i64) -> i64 sync {
+	if from < 0 {
+		return 0
+	}
+	let mut i = from
+	while i < cs.len() && cs[i] == 0 {
+		i += 1
+	}
+	return i
+}
+
+fn walk(cs: Vec[i64]) -> i64 sync {
+	let mut s = 0
+	let mut i = 0
+	while i < cs.len() {
+		s = cs[i]
+		i = skip(cs, i + 1)
+	}
+	return s
+}
+
+fn first(xs: Vec[i64], k: i64) -> i64 sync {
+	if k < 0 {
+		return -1
+	}
+	let j = skip(xs, k)
+	if j < xs.len() {
+		return xs[j]
+	}
+	return -1
+}
+
+fn main() throws {
+	println(f"{walk([3, 0, 0, 4])} {first([0, 0, 7], 1)} {first([1], 5)}")
+}
