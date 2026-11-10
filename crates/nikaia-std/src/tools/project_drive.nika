@@ -991,8 +991,10 @@ pub trait ProjectDriveWrapperHost {
     fn crate_name(ref self) -> String? sync
     /// **Lowers `source` as the project build does**: under the settings the
     /// environment carries and the packages its manifest names, reading under
-    /// `allowlist`, the entry shown as `shown`. The Rust and the files read.
-    fn lower(ref self, source: ref fs::Path, no_cache: bool, allowlist: fs::Path?, shown: String?) -> (String, Vec[fs::Path]) sync throws
+    /// `allowlist`, the entry shown as `shown`; a `program` (a binary crate)
+    /// writes the allocator that counts each task's heap (ADR-327 D9). The
+    /// Rust and the files read.
+    fn lower(ref self, source: ref fs::Path, no_cache: bool, allowlist: fs::Path?, shown: String?, program: bool) -> (String, Vec[fs::Path]) sync throws
     /// Writes `text` to `path` where it differs from what is there.
     fn write_if_changed(ref self, path: ref fs::Path, text: ref String) sync throws
     /// Points the invocation at `generated` in place of the `.nika` source.
@@ -1038,7 +1040,11 @@ pub fn project_drive_wrapper[H: ProjectDriveWrapperHost](host: ref H) -> i32 syn
         },
     }
     let no_cache = env::var("NIKAIA_NO_CACHE") != null
-    let (rust, sources) = host.lower(source, no_cache, allowlist, shown)
+    // **Only the program counts the heap** (ADR-327 D9): a library crate is
+    // linked into one, and a binary takes one allocator.
+    let args = host.args()
+    let a_program = args.iter().zip(args.iter().skip(1)).any(fn((a, b)) { a == "--crate-type" && b == "bin" })
+    let (rust, sources) = host.lower(source, no_cache, allowlist, shown, a_program)
     let name = host.crate_name() ?? (source.with_extension("").file_name()?.display() ?? "main")
     let tag = env::var("NIKAIA_PROGRAM_TAG") ?? ""
     let name = name.strip_suffix(tag)?.clone() ?? name
@@ -1059,8 +1065,6 @@ pub fn project_drive_wrapper[H: ProjectDriveWrapperHost](host: ref H) -> i32 syn
     // **The program links the libraries its packages name** (ADR-324 D2,
     // D3), and only the program: a library crate is linked into it, and the
     // build-time library is built elsewhere and never sees these (ADR-321 D14).
-    let args = host.args()
-    let a_program = args.iter().zip(args.iter().skip(1)).any(fn((a, b)) { a == "--crate-type" && b == "bin" })
     if a_program {
         match env::var("NIKAIA_LINK_FLAGS") {
             null => {},

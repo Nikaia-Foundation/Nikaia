@@ -1,0 +1,18 @@
+// ADR-327 D9 (#1543): a value set into a shared value that does not fit its block poisons it; the setter ends Crashed and the value is rebuilt.
+fn store(cache: SharedMut[Vec[i64]]) -> i64 {
+	let mut big: Vec[i64] = []
+	for i in 0..<20000 {
+		big.push(i)
+	}
+	cache.set(big)
+	return 1
+}
+
+fn main() throws {
+	let cache: SharedMut[Vec[i64]] = SharedMut::supervised(fn { [7] })
+	let t = async(detached) fn { store(cache) }
+	let done = t.join() catch { 0 }
+	println(f"stored: {done}")
+	let now: Vec[i64] = cache.get()
+	println(f"rebuilt: {now[0]}, {now.len()} item")
+}

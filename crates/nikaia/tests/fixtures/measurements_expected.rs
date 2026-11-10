@@ -48,4 +48,10 @@ pub struct Reading<'a> {
     name: &'a str,
     temp: i32,
 }
+#[automatically_derived]
+impl<'a> nikaia_std::block::DeepSize for Reading<'a> {
+    fn heap(&self) -> usize {
+        0 + nikaia_std::__nikaia_deep_size!(self.name) + nikaia_std::__nikaia_deep_size!(self.temp)
+    }
+}
 

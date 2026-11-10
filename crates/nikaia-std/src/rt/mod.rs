@@ -283,27 +283,24 @@ fn report(why: String) -> Config {
 #[must_use = "the runtime is drained by calling `finish`"]
 pub struct Started {
     /// **`main`'s block** ([ADR-327](../../../docs/specification/adr/adr-327.md)
-    /// D14): `main` is the root task and allocates from a block of its own.
-    /// Here it is created, empty: a block takes its memory only when
-    /// something is first placed in it. It is not put in place yet: its budget
-    /// is the strategy's, normally the memory the program may use (D7), and a
-    /// block is 64 KiB until the strategy sizes it (#490 step 8), which puts
-    /// it in place around `__nikaia_main` with [`Started::root`]; until then
-    /// what `main` places in a block lives outside. What `main` hands back is built outside (D9), so
-    /// the block may go with this value.
+    /// D14, D15): `main` is the root task and allocates from a block of its
+    /// own, with the budget of the first decision, taken before `main` runs.
+    /// The entry puts it in place around `__nikaia_main` with
+    /// [`Started::root`]. Here it is created, empty: a block takes its memory
+    /// only when something is first placed in it. What `main` hands back is
+    /// built outside (D9), so the block may go with this value.
     root: crate::block::Block,
 }
 
 impl Started {
-    /// The runtime's handle, with `main`'s block not yet taken.
+    /// The runtime's handle, with `main`'s block sized and not yet taken.
     fn new() -> Started {
         Started {
-            root: crate::block::Block::default(),
+            root: crate::block::for_main(),
         }
     }
 
-    /// **`main`'s block** (D14), for [`crate::block::enter`] once the
-    /// strategy sizes it (#490 step 8).
+    /// **`main`'s block** (D14), for [`crate::block::enter`] around `main`.
     pub fn root(&self) -> &crate::block::Block {
         &self.root
     }

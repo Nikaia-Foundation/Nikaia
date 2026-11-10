@@ -29,8 +29,80 @@
 
 pub use task_block::text::{format, join, repeat, replace, replacen, to_lowercase, to_uppercase};
 pub use task_block::{
-    BLOCK, Block, Entered, Housed, List, Place, Text, enter, extend, full, list, push, reserve,
+    BLOCK, Block, Counting, Entered, Housed, List, Place, Text, count, enter, extend, full,
+    hand_over, held, leftover, list, push, reserve, take_over,
 };
+
+use std::cell::Cell;
+use std::sync::atomic::{AtomicI64, Ordering};
+
+thread_local! {
+    /// **The budget of the next task this thread starts** (ADR-327 D15), as
+    /// the decision that admitted it gave it; `-1` where none did.
+    static NEXT: Cell<i64> = const { Cell::new(-1) };
+    /// Task blocks made on this thread since the program's budget was last
+    /// decided here.
+    static BEAT: Cell<u32> = const { Cell::new(0) };
+}
+
+/// **The program's budget** (ADR-327 D7, D15): what a task gets that no
+/// decision of its own admitted, `std`'s strategy deciding it before `main`
+/// runs and again on the beat. Unbounded until the first decision.
+static PROGRAM: AtomicI64 = AtomicI64::new(i64::MAX);
+
+/// How many task blocks a thread makes between two decisions of the
+/// program's budget.
+const BEAT_EVERY: u32 = 1024;
+
+/// A budget in bytes as a block takes it.
+fn bytes(budget: i64) -> usize {
+    usize::try_from(budget.max(0)).unwrap_or(usize::MAX)
+}
+
+/// **A decision admitted the next task with `budget` bytes** (ADR-327 D15):
+/// the next task block this thread makes takes it.
+pub(crate) fn granted(budget: i64) {
+    NEXT.with(|next| next.set(budget.max(0)));
+}
+
+/// The running task's block takes the decision's budget (a detached task,
+/// whose strategy is asked inside it before its body runs).
+pub(crate) fn budget_running(budget: i64) {
+    task_block::budget_running(bytes(budget));
+}
+
+/// **The program's budget, decided now by `std`'s strategy** (ADR-327 D14,
+/// D15): before `main` runs, its block's, and on the beat.
+pub fn decide_program() -> i64 {
+    let tasks = i64::try_from(held() / BLOCK).unwrap_or(i64::MAX);
+    let decision = crate::task::Adaptive().decide(crate::task::gate::load_of(tasks, 1));
+    PROGRAM.store(decision.budget, Ordering::Relaxed);
+    decision.budget
+}
+
+/// **`main`'s block** (ADR-327 D14): the first decision's budget, taken
+/// before `main` runs.
+pub fn for_main() -> Block {
+    Block::with_budget(bytes(decide_program()))
+}
+
+/// **A new task's block** (ADR-327 D15): the budget of the decision that
+/// admitted the task, else the program's. The task keeps it until it ends.
+pub fn for_a_task() -> Block {
+    let next = NEXT.with(|next| next.replace(-1));
+    if next >= 0 {
+        return Block::with_budget(bytes(next));
+    }
+    let beat = BEAT.with(|beat| {
+        let now = beat.get().wrapping_add(1);
+        beat.set(now);
+        now
+    });
+    if beat.is_multiple_of(BEAT_EVERY) {
+        decide_program();
+    }
+    Block::with_budget(bytes(PROGRAM.load(Ordering::Relaxed)))
+}
 
 /// **A map whose table may be refused**: `std`'s own map
 /// ([`crate::map::HashMap`]), whose table is placed by its handle and grows
@@ -129,5 +201,281 @@ macro_rules! __nikaia_text {
     ($($part:tt)*) => {{
         let text = $crate::block::format($crate::block::Place::Outside, ::std::format_args!($($part)*));
         text
+    }};
+}
+
+/// **What a value holds on the heap** (ADR-327 D9): the walk a hand-over
+/// measures it with, to move its deep size from the giver's account to the
+/// receiver's. The emitter writes it for every declared struct and enum; a
+/// closure and a Rust-owned type count their own size only, which holds
+/// nothing beyond the value itself (decision (a), #1543).
+pub trait DeepSize {
+    /// The bytes the value holds beyond its own size.
+    fn heap(&self) -> usize;
+}
+
+/// **A value's deep size as it crosses** (D9): what it holds on the heap.
+/// Its own bytes move with it, from one frame or slot to another, and were
+/// never counted outside: a closure or a Rust-owned type has no deep size
+/// beyond its own.
+pub fn deep_size<T: DeepSize>(value: &T) -> usize {
+    value.heap()
+}
+
+/// **A value that does not fit where it is handed** (ADR-327 D9, decision
+/// (c)): the receiving task panics at the take and ends `task::Crashed`; a
+/// shared value is poisoned (D6). It unwinds without the panic hook, as
+/// `OverBudget` does: the sentence is the payload `task::Crashed` carries,
+/// not a line on stderr naming a runtime file and thread.
+#[cold]
+#[inline(never)]
+pub fn does_not_fit(size: usize) -> ! {
+    std::panic::resume_unwind(Box::new(format!(
+        "a value of {size} bytes handed over does not fit the receiver's memory budget"
+    )))
+}
+
+/// **Take a value of `size` bytes over** (D9) into the running task or
+/// shared value: counted, and a panic where it does not fit.
+#[inline]
+#[track_caller]
+pub fn received(size: usize) {
+    if !take_over(size) {
+        does_not_fit(size)
+    }
+}
+
+/// **A list handed to a Rust owner leaves the giver's account** at the call
+/// (D8, D9; #1541): the owner keeps it, and what it frees later counts
+/// against whoever runs. Its elements are Rust's to measure, so only its memory
+/// moves. What Rust hands back was allocated by [`Counting`] in the task
+/// that called it, and is in that task's account already.
+#[inline]
+pub fn handed_list<T>(list: impl Into<Vec<T>>) -> Vec<T> {
+    let list = list.into();
+    hand_over(list.capacity() * std::mem::size_of::<T>());
+    list
+}
+
+/// [`handed_list`], for a text.
+#[inline]
+pub fn handed_text(text: impl Into<String>) -> String {
+    let text = text.into();
+    hand_over(text.capacity());
+    text
+}
+
+macro_rules! shallow_only {
+    ($($t:ty),* $(,)?) => {
+        $(impl DeepSize for $t {
+            #[inline]
+            fn heap(&self) -> usize {
+                0
+            }
+        })*
+    };
+}
+
+shallow_only!(
+    (),
+    bool,
+    char,
+    i8,
+    i16,
+    i32,
+    i64,
+    i128,
+    isize,
+    u8,
+    u16,
+    u32,
+    u64,
+    u128,
+    usize,
+    f32,
+    f64,
+    std::time::Duration,
+);
+
+impl DeepSize for String {
+    fn heap(&self) -> usize {
+        self.capacity()
+    }
+}
+
+impl DeepSize for Text {
+    fn heap(&self) -> usize {
+        if self.is_outside() {
+            self.capacity()
+        } else {
+            0
+        }
+    }
+}
+
+impl<T: DeepSize> DeepSize for Vec<T> {
+    fn heap(&self) -> usize {
+        self.capacity() * std::mem::size_of::<T>() + self.iter().map(DeepSize::heap).sum::<usize>()
+    }
+}
+
+impl<T: DeepSize> DeepSize for List<T> {
+    fn heap(&self) -> usize {
+        let own = if self.is_outside() {
+            self.capacity() * std::mem::size_of::<T>()
+        } else {
+            0
+        };
+        own + self.iter().map(DeepSize::heap).sum::<usize>()
+    }
+}
+
+impl<T: DeepSize> DeepSize for std::collections::VecDeque<T> {
+    fn heap(&self) -> usize {
+        self.capacity() * std::mem::size_of::<T>() + self.iter().map(DeepSize::heap).sum::<usize>()
+    }
+}
+
+impl<T: DeepSize> DeepSize for Option<T> {
+    fn heap(&self) -> usize {
+        self.as_ref().map_or(0, DeepSize::heap)
+    }
+}
+
+impl<T: DeepSize, E: DeepSize> DeepSize for Result<T, E> {
+    fn heap(&self) -> usize {
+        match self {
+            Ok(value) => value.heap(),
+            Err(error) => error.heap(),
+        }
+    }
+}
+
+impl<T: DeepSize + ?Sized> DeepSize for Box<T> {
+    fn heap(&self) -> usize {
+        std::mem::size_of_val::<T>(self) + T::heap(self)
+    }
+}
+
+/// **A view has no deep size**: what it shows is its owner's.
+impl<T: ?Sized> DeepSize for &T {
+    fn heap(&self) -> usize {
+        0
+    }
+}
+
+/// **A shared value has no deep size where it crosses**: what it holds stays
+/// counted where it was built, and another holder keeps it alive.
+impl<T: ?Sized> DeepSize for std::sync::Arc<T> {
+    fn heap(&self) -> usize {
+        0
+    }
+}
+
+impl<T: ?Sized> DeepSize for std::rc::Rc<T> {
+    fn heap(&self) -> usize {
+        0
+    }
+}
+
+/// **A closure counts its own size** (decision (a)): its captures stay
+/// counted where it was made.
+impl<F: ?Sized> DeepSize for crate::func::Kept<F> {
+    fn heap(&self) -> usize {
+        0
+    }
+}
+
+impl<K: DeepSize, V: DeepSize, S> DeepSize for std::collections::HashMap<K, V, S> {
+    fn heap(&self) -> usize {
+        // The table's slots and a control byte each, which is what
+        // `hashbrown` allocates, near enough for a budget.
+        self.capacity() * (std::mem::size_of::<(K, V)>() + 1)
+            + self.iter().map(|(k, v)| k.heap() + v.heap()).sum::<usize>()
+    }
+}
+
+impl<K: DeepSize, S> DeepSize for std::collections::HashSet<K, S> {
+    fn heap(&self) -> usize {
+        self.capacity() * (std::mem::size_of::<K>() + 1)
+            + self.iter().map(DeepSize::heap).sum::<usize>()
+    }
+}
+
+impl<K: DeepSize, V: DeepSize> DeepSize for std::collections::BTreeMap<K, V> {
+    fn heap(&self) -> usize {
+        self.iter()
+            .map(|(k, v)| std::mem::size_of::<(K, V)>() + k.heap() + v.heap())
+            .sum()
+    }
+}
+
+impl<K: DeepSize> DeepSize for std::collections::BTreeSet<K> {
+    fn heap(&self) -> usize {
+        self.iter()
+            .map(|k| std::mem::size_of::<K>() + k.heap())
+            .sum()
+    }
+}
+
+macro_rules! deep_size_tuples {
+    ($(($($name:ident),+)),* $(,)?) => {
+        $(impl<$($name: DeepSize),+> DeepSize for ($($name,)+) {
+            #[allow(non_snake_case)]
+            fn heap(&self) -> usize {
+                let ($($name,)+) = self;
+                0 $(+ $name.heap())+
+            }
+        })*
+    };
+}
+
+deep_size_tuples!(
+    (A),
+    (A, B),
+    (A, B, C),
+    (A, B, C, D),
+    (A, B, C, D, E),
+    (A, B, C, D, E, G),
+);
+
+/// **The field walk the emitter writes** (decision (a)): a field whose type
+/// has [`DeepSize`] is walked, any other - a Rust-owned type - counts its own
+/// size only. Picked by method resolution on the field's concrete type.
+pub struct Sizing<'a, T: ?Sized>(pub &'a T);
+
+/// The walk, where the field's type has [`DeepSize`].
+pub trait DeepSizeKnown {
+    fn deep_size(&self) -> usize;
+}
+
+impl<T: DeepSize + ?Sized> DeepSizeKnown for Sizing<'_, T> {
+    #[inline]
+    fn deep_size(&self) -> usize {
+        self.0.heap()
+    }
+}
+
+/// Its own size only, where the field's type has no [`DeepSize`].
+pub trait DeepSizeOwn {
+    fn deep_size(&self) -> usize;
+}
+
+impl<T: ?Sized> DeepSizeOwn for &Sizing<'_, T> {
+    #[inline]
+    fn deep_size(&self) -> usize {
+        0
+    }
+}
+
+/// `nikaia_std::__nikaia_deep_size!(self.field)`: what a field holds on the
+/// heap, as the emitter's `DeepSize` impls write it.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __nikaia_deep_size {
+    ($e:expr) => {{
+        #[allow(unused_imports)]
+        use $crate::block::{DeepSizeKnown as _, DeepSizeOwn as _};
+        (&$crate::block::Sizing(&$e)).deep_size()
     }};
 }

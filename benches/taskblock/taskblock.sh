@@ -17,8 +17,8 @@ command -v valgrind >/dev/null || { echo "taskblock.sh needs valgrind (callgrind
 
 cargo build --manifest-path "$root/Cargo.toml" --release --quiet -p taskblock-bench
 bin="$root/target/release"
-programs="global budget block reuse bumpreuse pages"
-long_programs="global budget reuse bumpreuse pages"
+programs="global budget block reuse bumpreuse pages segments"
+long_programs="global budget reuse bumpreuse pages segments"
 
 # The same output first, byte for byte, or the counts mean nothing.
 "$bin/global" "$tasks" > "$work/global.out"

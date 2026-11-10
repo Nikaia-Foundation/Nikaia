@@ -82,6 +82,9 @@ pub trait EmitHost {
 
     /// Whether the program leaves the memory of what dies to the system.
     fn skip_free_at_exit(ref self) -> bool sync
+    /// Whether this unit is the program's own crate, the one that counts
+    /// each task's heap (ADR-327 D9): a package a program test links is not.
+    fn counts_heap(ref self) -> bool sync
     /// A `'…'` as the language below writes it (ADR-320 D8, `check::char_literal`).
     fn char_literal(ref self, written: ref String) -> String sync
 }
