@@ -59,21 +59,38 @@ description: >-
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Caught at compile time</span>
         <h3><a href="{{ "/safe/#logic" | relative_url }}">Contracts kept at every call</a></h3>
-        <p>An <code>assert</code> is a contract. The compiler proves it, through loops too, without an invariant written by hand, and a call that breaks it is refused. Two tasks that change the same value are refused too.</p>
-<div class="home-code markdown-body"><pre><code class="language-nika">fn ship(orders: int) -&gt; int {
-    assert(orders &gt;= 0)
-    let mut waiting = orders
-    let mut shipped = 0
-    while waiting &gt; 0 {
-        waiting -= 1
-        shipped += 1
+        <p>An <code>assert</code> is a contract. The compiler proves it, through loops and recursion, where other provers want the loop invariants written by hand, and a call that breaks it is refused. In this quicksort three asserts are all it takes: every index is proved in range, so none is checked when the program runs. Two tasks that change the same value are refused too.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">fn partition(mut a: Vec[i64], lo: i64, hi: i64) -&gt; i64 {
+    assert(0 &lt;= lo &amp;&amp; lo &lt;= hi &amp;&amp; hi &lt; a.len())
+    let pivot = a[hi]
+    let mut i = lo
+    for j in lo..&lt;hi {
+        if a[j] &lt; pivot {
+            let t = a[i]
+            a[i] = a[j]
+            a[j] = t
+            i += 1
+        }
     }
-    assert(shipped == orders)    // none lost, none sent twice
-    return shipped
+    a[hi] = a[i]
+    a[i] = pivot
+    assert(lo &lt;= i &amp;&amp; i &lt;= hi)    // the pivot lands inside the range
+    return i
 }
 
-ship(-3)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code>  assert(shipped == orders)  <b>proved through the loop</b>
-<span class="d-error">error</span><b>: This call breaks `ship`'s precondition `orders &gt;= 0` every time it is reached.</b></code></pre></div>
+fn sort(mut a: Vec[i64], lo: i64, hi: i64) {
+    assert(0 &lt;= lo &amp;&amp; hi &lt; a.len())
+    if lo &lt; hi {
+        let p = partition(a, lo, hi)
+        sort(a, lo, p - 1)
+        sort(a, p + 1, hi)
+    }
+}
+
+let mut v: Vec[i64] = [5, 3, 9, 1, 4]
+sort(v, 0, v.len())</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code>  3 asserts proved, 9 indexes proved
+<span class="d-error">error</span><b>: This call breaks `sort`'s precondition `0 &lt;= lo &amp;&amp; hi &lt; a.len()` every time it is reached.</b>
+  = note: Here `a.len()` is 5, `hi` is 5, `lo` is 0.</code></pre></div>
         <a class="safe-more" href="{{ "/safe/#logic" | relative_url }}">Read more →</a>
       </div>
       <div class="safe-tile safe-tile-b">
