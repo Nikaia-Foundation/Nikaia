@@ -1,10 +1,9 @@
-bounds in src/main.nika: 66 indexes, 58 proved; 103 operations, 75 proved
+bounds in src/main.nika: 66 indexes, 59 proved; 103 operations, 75 proved
   1411  depth_of(x) + 1                       checked: a call's result, which the walk knows nothing of (#382)
   1417  depth_of(e.key) + 1                   checked: a call's result, which the walk knows nothing of (#382)
   1417  depth_of(e.value) + 1                 checked: a call's result, which the walk knows nothing of (#382)
   1647  n * 10 + (…)                          checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
   1647  n * 10                                checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
-  1710  place[0]                              checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
   1744  e.offset - 1                          checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
   1773  input[at - 1]                         checked: a parameter whose callers do not prove a bound (ADR-391 D1)
   1773  input[at - 1]                         checked: a parameter whose callers do not prove a bound (ADR-391 D1)

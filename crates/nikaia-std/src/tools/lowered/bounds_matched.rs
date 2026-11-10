@@ -155,6 +155,38 @@ pub fn bm_ensured(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeS
     out
 }
 
+pub fn bm_collected(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> collections::BTreeMap<String, Ensured> {
+    let mut out: collections::BTreeMap<String, Ensured> = collections::BTreeMap::new();
+    for ledger in ledgers.iter() {
+        let ledger = *ledger;
+        for (key, contract) in ledger.functions.iter() {
+            if contract.ensures.is_empty() || out.contains_key(key) { continue; }
+            let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+            #[allow(unused_mut)] let mut params: Vec<String> = vec![];
+            let mut chars: Vec<bool> = vec![];
+            for (name, ty) in signature.params.iter() {
+                if name != "self" {
+                    params.push(nikaia_std::block::Text::from(name.to_string()));
+                    chars.push(bm_char(ty));
+                }
+            }
+            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+            names.extend(params.iter().cloned());
+            let counted = length_of("result");
+            names.insert(nikaia_std::block::Text::from(counted.to_string()));
+            let mut conditions: Vec<Vec<SolverTerm>> = vec![];
+            for text in contract.ensures.iter() {
+                if !text.contains(&*counted) { continue; }
+                let nodes = read(text, &names);
+                if !nodes.is_empty() { conditions.push(nodes); }
+            }
+            if conditions.is_empty() { continue; }
+            out.insert(nikaia_std::block::Text::from(key.to_string()), Ensured { params, chars, options: vec![], conditions });
+        }
+    }
+    out
+}
+
 pub fn bm_required(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> collections::BTreeMap<String, Ensured> {
     let mut out: collections::BTreeMap<String, Ensured> = collections::BTreeMap::new();
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();

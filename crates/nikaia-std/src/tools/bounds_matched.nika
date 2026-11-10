@@ -210,6 +210,50 @@ pub fn bm_ensured(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collect
     return out
 }
 
+/// **What each sequence the ledgers describe ensures of how many it yields**
+/// (ADR-306 D4, #1546), read back over its parameters and `result.len()`, by
+/// the ledger's key (`str::split`): what a list it is collected into holds of
+/// its length. The first ledger that has an entry answers; a condition that
+/// does not read back is left out.
+pub fn bm_collected(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> collections::BTreeMap[String, Ensured] {
+    let mut out: collections::BTreeMap[String, Ensured] = collections::BTreeMap()
+    for ledger in ledgers {
+        for (key, contract) in ledger.functions {
+            if contract.ensures.len() == 0 || out.contains_key(key) {
+                continue
+            }
+            let signature = contract.signature ?? continue
+            let mut params: Vec[String] = []
+            let mut chars: Vec[bool] = []
+            for (name, ty) in signature.params {
+                if name != "self" {
+                    params.push(name.clone())
+                    chars.push(bm_char(ty))
+                }
+            }
+            let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+            names.extend(params.clone())
+            let counted = length_of("result")
+            names.insert(counted.clone())
+            let mut conditions: Vec[Vec[SolverTerm]] = []
+            for text in contract.ensures {
+                if !text.contains(counted) {
+                    continue
+                }
+                let nodes = read(text, names)
+                if nodes.len() > 0 {
+                    conditions.push(nodes)
+                }
+            }
+            if conditions.len() == 0 {
+                continue
+            }
+            out.insert(key.clone(), Ensured { params: params, chars: chars, options: [], conditions: conditions })
+        }
+    }
+    return out
+}
+
 /// **What each callee the ledgers describe requires** (ADR-269 D5, #776),
 /// read back over its parameters, by the ledger's key. The first ledger that
 /// has an entry answers; an entry with a condition that does not read back is

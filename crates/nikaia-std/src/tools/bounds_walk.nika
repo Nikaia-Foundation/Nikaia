@@ -41,6 +41,10 @@ pub struct BoundsContext {
 	/// What each element of a sequence a ledger entry hands back holds, by
 	/// the entry's key (ADR-375 D5).
 	pub each: collections::BTreeMap[String, Ensured],
+	/// What a sequence's ledger entry ensures of how many it yields, over
+	/// `result.len()`, by the entry's key (#1546): a list it is collected
+	/// into is as long.
+	pub collected: collections::BTreeMap[String, Ensured],
 	/// The method calls on a type `std`'s ledger describes, by node, with the
 	/// type's name as the ledger keys it (ADR-314 D3, ADR-375 D5).
 	pub std_receivers: collections::BTreeMap[i64, String],
@@ -5941,6 +5945,9 @@ fn bounding_let(
 		}
 	}
 	bounding_built(walk, facts, name, value, words)
+	if bounding_declared_list(ty, words) {
+		bounding_collected(walk, facts, name, value, context, program, words)
+	}
 	if walk.shape.roots.contains(name) {
 		match value {
 			Expr::ListLit { items, .. } => {
@@ -6001,6 +6008,62 @@ fn bounding_leaves(expr: ref Expr) -> bool {
 fn bounding_declared_whole(ty: ref Type?, words: ref winnow_grammar::InternerContext) -> bool? {
 	let t = ty ?? return null
 	return t.generics.is_empty() && is_whole_number(words.resolve(t.name))
+}
+
+/// Whether a declared type is a list, `Vec[T]`: a sequence collected into
+/// it holds one element for each item.
+fn bounding_declared_list(ty: ref Type?, words: ref winnow_grammar::InternerContext) -> bool {
+	let t = ty ?? return false
+	let name = words.resolve(t.name)
+	return t.generics.len() == 1 && (name == "Vec" || name == "List")
+}
+
+/// **A sequence collected into a list keeps what `std`'s ledger ensures of
+/// how many it yields** (ADR-306 D4, #1546): `t.split(", ").collect()` is one
+/// piece at least, so `name.len() >= 1`. The arguments stand for the
+/// parameters, each a number of its own where the walk does not read it.
+fn bounding_collected(
+	mut walk: BoundsWalk,
+	mut facts: BoundsFacts,
+	name: ref String,
+	value: ref Expr,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+) {
+	match value {
+		Expr::MethodCall { receiver: sequence, method, args, .. } => {
+			if !args.is_empty() || words.resolve(method) != "collect" {
+				return
+			}
+			match sequence {
+				Expr::MethodCall { method: made, args: given, .. } => {
+					let ty = context.std_receivers[node_key(sequence)] ?? return
+					let collected = context.collected[f"{ty}::{words.resolve(made)}"] ?? return
+					if given.len() != collected.params.len() {
+						return
+					}
+					let mut named: collections::BTreeMap[String, i64] = collections::BTreeMap()
+					for k in 0..<given.len() {
+						let term = if collected.chars[k] {
+							bounding_code_of(walk, given[k], context, words)
+						} else {
+							bounding_lin(walk, given[k], facts, context, program, words) ?? bounding_fresh(walk)
+						}
+						named.insert(collected.params[k].clone(), term)
+					}
+					named.insert(length_of("result"), walk.arena.var(length_of(name)))
+					for nodes in collected.conditions {
+						let read = walk.arena.adopt(nodes)
+						let fact = walk.arena.substitute(read, named)
+						bounding_push(walk, facts, fact)
+					}
+				},
+				else => {},
+			}
+		},
+		else => {},
+	}
 }
 
 fn bounding_declared_unsigned(ty: ref Type?, words: ref winnow_grammar::InternerContext) -> bool {

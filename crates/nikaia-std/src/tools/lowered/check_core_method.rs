@@ -436,7 +436,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     let std_type = check_core_method_ledger_type(&on, bytes);
     if std_type != "" { state.facts.std_receivers.insert(id_of(expr) as i64, std_type); } else {
         let own_type = check_core_method_own_type(world, &on, written);
-        if own_type != "" { state.facts.std_receivers.insert(id_of(expr) as i64, own_type); }
+        if own_type != "" { state.facts.std_receivers.insert(id_of(expr) as i64, own_type); } else if is_text_type(&on) && resolve_method(world, &format!("str::{}", written)).is_some() { state.facts.std_receivers.insert(id_of(expr) as i64, String::from("str")); }
     }
     let pattern_at = check_core_method_pattern_at(&name);
     if text && pattern_at >= 0 && pattern_at < args.len() as i64 {
