@@ -681,6 +681,7 @@ pub(crate) fn flow_tuple_parts(going: &TierGoing, value: &Expr, kinds: &Kinds, a
                 path.push(at);
                 let mut given = text.clone();
                 if (parts.len() as i64) == items.len() as i64 && !tuple_part_holds_text(ask.names, nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at))) { given = (*nikaia_std::index::get(&parts, nikaia_std::index::at(at))).clone(); }
+                given = lent_back_in_part(going, nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at)), &path, item, given, ask, walk);
                 flow_value(&going_into(&going.owner, nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at)), path, true), Some(item), &given, ask, walk);
                 at += 1;
             }
@@ -1566,11 +1567,17 @@ pub(crate) fn flow_whole(going: &TierGoing, value: &Expr, ask: &TierAsk<'_, '_, 
             if !a_list { return; }
             let element = (*nikaia_std::index::get(&ty.generics, 0)).clone();
             let beside_null = items_beside_null(items);
+            let handed_back = match &going.owner {
+                TextOwner::Returned(_) => going.path.is_empty(),
+                _ => false,
+            };
             for item in items.iter() {
+                walk.read_here = handed_back;
                 let mut kinds = tier_expr(item, ask, walk);
                 if beside_null && !a_null(item) { kinds = owned_kinds(); }
                 let mut at = going.path.copy_owned();
                 at.push(0);
+                kinds = lent_back_in_part(going, &element, &at, item, kinds, ask, walk);
                 flow_value(&going_into(&going.owner, &element, at, true), Some(item), &kinds, ask, walk);
             }
         },
@@ -1584,6 +1591,48 @@ pub(crate) fn flow_whole(going: &TierGoing, value: &Expr, ask: &TierAsk<'_, '_, 
         },
         _ => { link_from(going, value, ask, walk); },
     }
+}
+
+pub(crate) fn kinds_beside_lent_items(value: &Expr, result: &Type, kinds: &Kinds, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
+    let items = match value {
+        Expr::ListLit { items, .. } => items,
+        _ => return kinds.clone(),
+    };
+    if !a_container(ask.names, result) || a_map(ask.names, result) || result.generics.is_empty() { return kinds.clone(); }
+    let element = (*nikaia_std::index::get(&result.generics, 0)).clone();
+    if !plain_string(ask.names, &element) || element.is_nullable { return kinds.clone(); }
+    let mut left = no_kinds();
+    for item in items.iter() {
+        if lendable_parameter(item, ask, walk).is_none() {
+            walk.read_here = true;
+            left = kinds_joined(&left, &tier_expr(item, ask, walk));
+        }
+    }
+    left
+}
+
+pub(crate) fn lent_back_in_part(going: &TierGoing, part: &Type, path: &[i64], item: &Expr, kinds: Kinds, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
+    let key = match &going.owner {
+        TextOwner::Returned(key) => nikaia_std::block::Text::from(key.to_string()),
+        _ => return kinds,
+    };
+    if !going.path.is_empty() || !plain_string(ask.names, part) || part.is_nullable { return kinds; }
+    let function = match match *nikaia_std::index::get(&walk.declared.fns, &key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return kinds };
+    if function.of_a_trait { return kinds; }
+    let word = match lendable_parameter(item, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return kinds };
+    let to = seen(&going.owner, path, walk);
+    let before = nikaia_std::index::or(match *nikaia_std::index::get(&walk.flows.lent_kinds, &word) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || no_kinds().into());
+    walk.flows.lent_kinds.insert(nikaia_std::block::Text::from(word.to_string()), kinds_joined(&before, &kinds));
+    let lent_before = nikaia_std::index::or(*nikaia_std::index::get(&walk.flows.lent_uses, &word), || 0);
+    walk.flows.lent_uses.insert(nikaia_std::block::Text::from(word.to_string()), lent_before + 1);
+    walk.flows.lent_into.insert((word, to));
+    no_kinds()
 }
 
 pub(crate) fn link_from(going: &TierGoing, value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
@@ -2138,6 +2187,7 @@ pub(crate) fn flow_result(value: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_,
             _ => { },
         }
     }
+    if !function.of_a_trait { handed = kinds_beside_lent_items(value, &result, &handed, ask, walk); }
     if plain_string(ask.names, &result) && !function.of_a_trait {
         let mut sides: Vec<String> = vec![];
         if lendable_sides(value, ask, walk, &mut sides) && !sides.is_empty() {

@@ -1,0 +1,29 @@
+// ADR-views-3 D16 (#1507): a list or a tuple handed back that is built from
+// several `String` parameters holds views of each, and each argument stays
+// the caller's, whatever the caller reads after the call.
+fn pair(a: String, b: String) -> Vec[String] {
+	return [a, b]
+}
+
+fn both(a: String, b: String) -> (String, String) {
+	return (a, b)
+}
+
+fn made(s: String) -> String {
+	let mut g = String()
+	g.push_str(s)
+	return g
+}
+
+fn main() throws {
+	let x = made("x")
+	let y = made("y")
+	let p = pair(x, y)
+	println(p.join(","))
+	println(x)
+	let u = made("u")
+	let v = made("v")
+	let (l, r) = both(u, v)
+	println(f"{l}{r}")
+	println(v)
+}
