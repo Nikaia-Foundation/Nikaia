@@ -15,7 +15,7 @@ pub(crate) fn emit_candidates(ledger: &Ledger, method: &str) -> Vec<FnContract> 
 pub(crate) fn emit_takes_self(contract: &FnContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
     if signature.params.is_empty() { return false; }
-    unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "self"
+    (unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "self")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

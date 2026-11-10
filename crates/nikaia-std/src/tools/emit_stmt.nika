@@ -473,8 +473,15 @@ impl EmitState {
                     let given = value ?? return
                     if is_return {
                         // A `return` that ends a function body is that
-                        // function's value, written as one.
+                        // function's value, written as one; brackets where
+                        // it starts with a proved operation's `unsafe { … }`
+                        // (ADR-306 D26), which Rust would end the statement at.
+                        let start = out.mark()
                         self.emit_core_handed_back(world, walk, out, host, given, at, depth, here, scope)
+                        if out.block_headed_from(start) {
+                            out.insert_at(start, "(")
+                            out.push(")")
+                        }
                     } else if here.can_throw {
                         out.push("return Ok(")
                         self.emit_core_handed_back(world, walk, out, host, given, at, depth, here, scope)
@@ -1333,7 +1340,14 @@ impl EmitState {
         if is_return && self.facts.lent_returns.contains(at) {
             out.push("&")
         }
+        let start = out.mark()
         self.emit_expr(world, walk, out, host, expr, depth, flow, scope)
+        // `unsafe { add(i, 3) } == n` at the head of a statement is the block
+        // and a stray `== n` to Rust (ADR-306 D26): written in brackets.
+        if out.block_headed_from(start) {
+            out.insert_at(start, "(")
+            out.push(")")
+        }
         if either {
             out.push(")")
         }

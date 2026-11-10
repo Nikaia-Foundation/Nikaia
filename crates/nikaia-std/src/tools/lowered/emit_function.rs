@@ -112,7 +112,7 @@ impl EmitState {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let signature = match c.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         if at < 0 || at >= signature.params.len() as i64 { return false; }
-        unsafe { nikaia_std::proven::read(&signature.params, (at) as usize) }.1.is_a_view()
+        (unsafe { nikaia_std::proven::read(&signature.params, (at) as usize) }.1.is_a_view())
     }
     pub(crate) fn emit_fn_keeps(&self, key: &str, name: &str) -> bool {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };

@@ -3053,13 +3053,13 @@ pub(crate) fn late_bind(name: String, late: &mut TierLate) {
 pub(crate) fn late_serial(name: &str, late: &TierLate) -> i64 {
     let held = match *nikaia_std::index::get(&late.bound, name) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
     if held.is_empty() { return -1; }
-    unsafe { nikaia_std::proven::read(&held, (nikaia_std::proven::sub::<i64>(held.len() as i64, 1)) as usize) }.serial
+    (unsafe { nikaia_std::proven::read(&held, (nikaia_std::proven::sub::<i64>(held.len() as i64, 1)) as usize) }.serial)
 }
 
 pub(crate) fn late_loops(name: &str, late: &TierLate) -> i64 {
     let held = match *nikaia_std::index::get(&late.bound, name) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
     if held.is_empty() { return 0; }
-    unsafe { nikaia_std::proven::read(&held, (nikaia_std::proven::sub::<i64>(held.len() as i64, 1)) as usize) }.loops
+    (unsafe { nikaia_std::proven::read(&held, (nikaia_std::proven::sub::<i64>(held.len() as i64, 1)) as usize) }.loops)
 }
 
 pub(crate) fn late_read(name: &str, late: &mut TierLate) {
