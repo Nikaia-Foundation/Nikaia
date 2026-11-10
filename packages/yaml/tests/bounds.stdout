@@ -1,4 +1,4 @@
-bounds in src/main.nika: 50 indexes, 45 proved; 85 operations, 49 proved
+bounds in src/main.nika: 50 indexes, 45 proved; 85 operations, 51 proved
   1068  a * 16 + b                            checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
   1068  a * 16                                checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
   1069  a * 256 + b                           checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
@@ -10,7 +10,6 @@ bounds in src/main.nika: 50 indexes, 45 proved; 85 operations, 49 proved
   1379  depth_of(e.value) + 1                 checked: a call's result, which the walk knows nothing of (#382)
   1609  n * 10 + (…)                          checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
   1609  n * 10                                checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
-  1634  at_column += 1                        checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
   1650  place[0]                              checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
   1760  10 * nodes_in(d.root) + alias_nodes   checked: a call's result, which the walk knows nothing of (#382)
   1760  10 * nodes_in(d.root)                 checked: a call's result, which the walk knows nothing of (#382)
@@ -26,7 +25,6 @@ bounds in src/main.nika: 50 indexes, 45 proved; 85 operations, 49 proved
   2209  hex_value(…) * 16                     checked: a call's result, which the walk knows nothing of (#382)
   2391  n + d                                 checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
   2415  from + (…)                            checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
-  2441  column += 1                           checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
   2505  cs[i]                                 checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
   2515  cs[i]                                 checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
   2545  cs[i]                                 checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
