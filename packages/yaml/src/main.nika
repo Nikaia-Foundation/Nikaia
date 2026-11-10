@@ -573,7 +573,13 @@ grammar Yaml {
 	// An implicit key: one line (`ns-s-implicit-yaml-key`, `c-s-implicit-json-key`),
 	// a flow collection, a quoted or a plain scalar.
 	rule Key(ds: Vec[Dir], left: i64) -> Node =
-		p:Props(ds) Sep1 t:text(v:KeyNode(ds, left, tag_kind(ds, p.tag))) if(one_line(t), "an implicit key on one line") if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
+		p:Props(ds) v:KeyTail(ds, left, p) -> { v }
+		| t:text(v:KeyNode(ds, left, TagKind::Untagged)) if(one_line(t), "an implicit key on one line") -> {
+			v
+		}
+	// What follows a key's properties `p`, read once: a node, or none.
+	rule KeyTail(ds: Vec[Dir], left: i64, p: Props) -> Node =
+		Sep1 t:text(v:KeyNode(ds, left, tag_kind(ds, p.tag))) if(one_line(t), "an implicit key on one line") if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -585,10 +591,7 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| t:text(v:KeyNode(ds, left, TagKind::Untagged)) if(one_line(t), "an implicit key on one line") -> {
-			v
-		}
-		| p:Props(ds) if(empty_fits(tag_kind(ds, p.tag)), "a node its tag fits") peek(Sp ":" Gap) -> {
+		| if(empty_fits(tag_kind(ds, p.tag)), "a node its tag fits") peek(Sp ":" Gap) -> {
 			empty_of(tag_kind(ds, p.tag), p)
 		}
 	rule KeyNode(ds: Vec[Dir], left: i64, k: TagKind) -> Node =
@@ -609,7 +612,10 @@ grammar Yaml {
 	// the node below then holds the other one, and the two join. `k` is the
 	// tag a property line above gave it.
 	rule Propped(ds: Vec[Dir], left: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
-		p:Props(ds) s:count(" " | "\t") if(s > 0) v:BlockScalar(n; k: kind_with(ds, p.tag, k)) BlockTail -> {
+		p:Props(ds) v:PropTail(ds, left, n, p; c: c, k: k) -> { v }
+	// What follows the properties `p` of `Propped`, read once.
+	rule PropTail(ds: Vec[Dir], left: i64, n: i64, p: Props; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
+		s:count(" " | "\t") if(s > 0) v:BlockScalar(n; k: kind_with(ds, p.tag, k)) BlockTail -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -621,7 +627,7 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| p:Props(ds) s:count(" " | "\t") if(s > 0) v:Inline(ds, left, n; k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") Eol Blanks -> {
+		| s:count(" " | "\t") if(s > 0) v:Inline(ds, left, n; k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") Eol Blanks -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -633,7 +639,7 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| p:Props(ds) Eol Blanks v:Block(ds, left, n; c: c, k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") if(p.anchor == null || v.anchor == null, "one anchor to a node") if(p.tag == null || v.tag == null, "one tag to a node") -> {
+		| Eol Blanks v:Block(ds, left, n; c: c, k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") if(p.anchor == null || v.anchor == null, "one anchor to a node") if(p.tag == null || v.tag == null, "one tag to a node") -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -645,17 +651,18 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| p:Props(ds) if(empty_fits(kind_with(ds, p.tag, k)), "a node its tag fits") Eol Blanks -> {
+		| if(empty_fits(kind_with(ds, p.tag, k)), "a node its tag fits") Eol Blanks -> {
 			empty_of(kind_with(ds, p.tag, k), p)
 		}
 	rule Nothing = "" -> { }
 
 	// `c-ns-properties`: a tag and an anchor, in either order, or one alone.
+	// The first property is read once; the second, after blanks, may follow.
 	rule Props(ds: Vec[Dir]) -> Props =
-		a:here t:Tag(ds) Sep1 n:Anchor b:here -> { Props { start: a, end: b, anchor: n, tag: t } }
-		| a:here n:Anchor Sep1 t:Tag(ds) b:here -> { Props { start: a, end: b, anchor: n, tag: t } }
-		| a:here t:Tag(ds) b:here -> { Props { start: a, end: b, anchor: null, tag: t } }
-		| a:here n:Anchor b:here -> { Props { start: a, end: b, anchor: n, tag: null } }
+		a:here t:Tag(ds) n:AnchorAfter? b:here -> { Props { start: a, end: b, anchor: n, tag: t } }
+		| a:here n:Anchor t:TagAfter(ds)? b:here -> { Props { start: a, end: b, anchor: n, tag: t } }
+	rule AnchorAfter -> String = Sep1 n:Anchor -> { n }
+	rule TagAfter(ds: Vec[Dir]) -> String = Sep1 t:Tag(ds) -> { t }
 	rule Sep1 = (" " | "\t")+ -> { }
 	// `c-ns-anchor-property`: the name, after `&`.
 	rule Anchor -> String = "&" s:text(AnchorChar+) -> { s }
@@ -957,7 +964,11 @@ grammar Yaml {
 	// A flow node, with properties or without; properties alone are an empty
 	// node.
 	rule FlowAny(ds: Vec[Dir], left: i64, n: i64) -> Node =
-		p:Props(ds) Fs(n) v:FlowNode(ds, left, n, tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
+		p:Props(ds) v:FlowPropTail(ds, left, n, p) -> { v }
+		| v:FlowNode(ds, left, n, TagKind::Untagged) -> { v }
+	// What follows a flow node's properties `p`, read once: a node, or none.
+	rule FlowPropTail(ds: Vec[Dir], left: i64, n: i64, p: Props) -> Node =
+		Fs(n) v:FlowNode(ds, left, n, tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -969,7 +980,7 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| p:Props(ds) if(empty_fits(tag_kind(ds, p.tag)), "a node its tag fits") e:text(Nothing) -> {
+		| if(empty_fits(tag_kind(ds, p.tag)), "a node its tag fits") e:text(Nothing) -> {
 			let v = match tag_kind(ds, p.tag) {
 				TagKind::Str => Value::Str(Scalar {
 					raw: e,
@@ -998,7 +1009,6 @@ grammar Yaml {
 				value: v,
 			}
 		}
-		| v:FlowNode(ds, left, n, TagKind::Untagged) -> { v }
 	rule FlowNode(ds: Vec[Dir], left: i64, n: i64, k: TagKind) -> Node =
 		v:FlowSeq(ds, left, n) -> { v }
 		| v:FlowMap(ds, left, n) -> { v }
