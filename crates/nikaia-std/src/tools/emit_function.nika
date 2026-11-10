@@ -500,7 +500,15 @@ impl EmitState {
                             }
                         }
                         let at = position ?? -1
-                        if at >= 0 && self.emit_fn_lowered_as_a_view(world, key, recv, at, args[at]) && !self.borrows(world, args[at].ty.name) {
+                        // **A struct of views handed over** (#1523): `fn
+                        // pair<'r>(k: Node<'r, 'r>, v: Node<'r, 'r>) ->
+                        // Node<'r, 'r>`, one lifetime over all its views, as
+                        // the single parameter of #1380 has.
+                        let mut owned_views = false
+                        if at >= 0 {
+                            owned_views = !args[at].ty.is_view && !self.emit_fn_lends(world, key, at + recv) && !self.emit_fn_changes(key, emit_text(world, args[at].name)) && self.carries_a_view(world, args[at].ty) && args[at].ty.generics.is_empty()
+                        }
+                        if at >= 0 && self.emit_fn_lowered_as_a_view(world, key, recv, at, args[at]) && (!self.borrows(world, args[at].ty.name) || owned_views) {
                             // A parameter whose type arguments hold views of
                             // their own has two lifetimes, which one cannot
                             // name; a `ref Vec[E]` of plain elements has one.

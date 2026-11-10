@@ -321,7 +321,9 @@ impl EmitState {
                         let mut position: Option<i64> = None;
                         for k in 0..args.len() as i64 { if position.is_none() && emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(k)).name) == *each { position = Some(k); } }
                         let at = nikaia_std::index::or(position, || -1);
-                        if at >= 0 && self.emit_fn_lowered_as_a_view(world, &key, recv, at, nikaia_std::index::get(&args, nikaia_std::index::at(at))) && !self.borrows(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name) {
+                        let mut owned_views = false;
+                        if at >= 0 { owned_views = !nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.is_view && !self.emit_fn_lends(world, &key, at + recv) && !self.emit_fn_changes(&key, &emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).name)) && self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty) && nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.is_empty(); }
+                        if at >= 0 && self.emit_fn_lowered_as_a_view(world, &key, recv, at, nikaia_std::index::get(&args, nikaia_std::index::at(at))) && (!self.borrows(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name) || owned_views) {
                             let mut inside = false;
                             for g in nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.iter() { if self.carries_a_view(world, g) { inside = true; } }
                             if !inside { found.push(at); }
