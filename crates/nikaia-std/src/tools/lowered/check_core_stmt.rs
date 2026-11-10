@@ -687,7 +687,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let single: String = format!("{}", world.words.resolve(*nikaia_std::index::get(&names, 0)));
         check_crossings_a_value_with_a_cleanup_bound(state, world, &single, &found, span);
     }
-    #[allow(unused_mut)] let mut bound_names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    #[allow(unused_mut)] let mut bound_names: Vec<String> = vec![];
     for n in names.iter() {
         let n = *n;
         bound_names.push(format!("{}", world.words.resolve(n)));
@@ -722,6 +722,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         moved_out = a_name_or_a_field(value) && owned_root && (state.findings.len() as i64) == before;
     }
     for n in bound_names.iter() { if n != "_" { state.written_at.push((nikaia_std::block::Text::from(n.to_string()), span.start as i64)); } }
+    state.a_let_that_may_lend(world, &bound_names, value, &found);
     if !mutable && ty.is_none() && check_core_stmt_a_lent_list_read(&state, world, value) { check_core_stmt_lent_let(state, world, names, span); }
     if !moved_out && check_core_stmt_a_place(&state, value) && state.takes_away(world, &found) && !state.facts.text_bytes.contains(&node_key(value)) { check_core_stmt_lent_let(state, world, names, span); }
     if mutable && names.len() == 1 && shape.is_empty() {
@@ -1002,6 +1003,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         };
     }
     if declared_option && names.len() == 1 && shape.is_empty() { state.flow.declared_options.insert(local.id); }
+    state.a_let_made_here(world, id, value, &local.ty);
     state.bind_local(local);
     if mutable && state.facts.mut_view_reads.contains_key(&(id_of(value) as i64)) { state.flow.mut_view_bindings.insert(id); }
     if mutable && state.flow.text_slot_views.contains(&(id_of(check_core_stmt_slot_read(value)) as i64)) { state.flow.text_slot_bindings.insert(id); }
@@ -1648,10 +1650,13 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             state.lent_lets.insert((format!("{}", world.words.resolve(b)), frame_at));
         }
     }
+    let handed_before = state.handed.len() as i64;
     state.flow.loops += 1;
     check_core_stmt_body_discarded(state, body);
     check_core_block(state, world, host, body);
     state.flow.loops -= 1;
+    let items = (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame_at))).copy_owned();
+    state.a_loop_over_a_needless_clone(world, iter, &over, body, &items, handed_before, mutable, span);
     if mut_view && !body.stmts.is_empty() { state.views_end(frame_at, nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).span.end as i64); }
     if mut_view {
         for b in bindings.iter() {

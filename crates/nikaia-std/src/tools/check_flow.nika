@@ -412,6 +412,28 @@ pub struct CheckFlow {
     /// in the frame it was bound in. An assignment in a nested block forgets
     /// it, and a loop or a lambda around a read does not see it.
     pub followed: collections::BTreeMap[i64, Integer],
+    /// **The `.clone()`s of a `let` that may be its last use** (`NK1350`,
+    /// #1318), asked where the body ends.
+    pub clones: Vec[CheckClone],
+    /// **The names a `let` bound to a view of another**, by that other's
+    /// binding: a read of the view after a clone keeps the clone needed.
+    pub clone_loans: Vec[(String, i64?)],
+    /// **The `let`s bound to a value made there**, by binding: a call's, a
+    /// literal's; only their clone can be the last use (`NK1350`).
+    pub clone_owners: collections::BTreeSet[i64],
+}
+
+/// **A `.clone()` of a `let`, held to the body's end** (`NK1350`, #1318): the
+/// copy is needless where no read of the binding follows it on a path.
+pub struct CheckClone {
+    pub name: String,
+    pub binding: i64?,
+    /// The read of the receiver, in the walk's order.
+    pub seq: i64,
+    pub choices: Vec[(i64, i64)],
+    /// The call's node, said once.
+    pub node: i64,
+    pub span: Span,
 }
 
 impl CheckFlow {
@@ -526,6 +548,9 @@ impl CheckFlow {
             at_a_write_door: false,
             pushed_into: null,
             pushed_receiver: -1,
+            clones: [],
+            clone_loans: [],
+            clone_owners: collections::BTreeSet(),
         }
     }
 }

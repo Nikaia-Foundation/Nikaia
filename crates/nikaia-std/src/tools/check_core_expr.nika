@@ -266,6 +266,9 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let read = check_core_method(state, world, host, expr, false, receiver, method, args, config, span)
             check_core_expr_declared_method(state, expr, receiver)
+            if args.len() == 0 && world.words.resolve(method) == "clone" {
+                state.a_clone_seen(world, expr, receiver, read, span)
+            }
             read
         },
         Expr::SafeMethod { receiver, method, args, config, .. } => {

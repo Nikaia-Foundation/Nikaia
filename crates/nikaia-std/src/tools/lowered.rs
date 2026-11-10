@@ -3218,7 +3218,7 @@ pub mod check_fields {
 }
 pub mod check_flow {
     #[allow(unused_imports)]
-    pub use super::{CheckConstant, CheckOpenNumber, CheckOpenChar, CheckUnsignedSlot, CheckUnrolling, CheckLambdaReturn, CheckFlow};
+    pub use super::{CheckConstant, CheckOpenNumber, CheckOpenChar, CheckUnsignedSlot, CheckUnrolling, CheckLambdaReturn, CheckFlow, CheckClone};
 }
 pub mod check_function {
     #[allow(unused_imports)]

@@ -709,6 +709,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.a_part_left_out();
     state.concatenated_names_read_again();
     state.data_handed_over_is_used_again();
+    state.needless_clones_said();
     state.reads_on_paths.clear();
     state.flow.read_index = collections::BTreeMap::new();
     state.lent_lets = collections::BTreeSet::new();

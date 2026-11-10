@@ -1,0 +1,24 @@
+warning[NK1350]: `p` is a `P`, which copies by itself: `.clone()` makes nothing new.
+   --> tests/a_clone_that_copies_nothing_new_is_warned.nika:18:10
+    |
+ 18 | 	let q = p.clone()
+    |          ^^^^^^^^^
+    |
+    = note: A number, a `bool`, a `char` and a type whose every part copies are copied wherever they are read (ADR-294 D9.1).
+    = help: Delete `.clone()`.
+warning[NK1350]: This `.clone()` is the last use of `s`: it copies `s` only to drop it.
+   --> tests/a_clone_that_copies_nothing_new_is_warned.nika:21:15
+    |
+ 21 | 	println(take(s.clone()))
+    |               ^^^^^^^^^
+    |
+    = note: Nothing reads `s` after it, so it can be handed over itself.
+    = help: Hand `s` itself: write `s` for `s.clone()`.
+warning[NK1350]: `xs` is copied only to be walked: nothing in the loop changes it or takes it.
+   --> tests/a_clone_that_copies_nothing_new_is_warned.nika:23:11
+    |
+ 23 | 	for x in xs.clone() {
+    |           ^^^^^^^^^^
+    |
+    = note: A `for` over a place lends its elements (ADR-094 D4), so the loop can walk the place itself.
+    = help: Delete `.clone()`.

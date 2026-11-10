@@ -1,0 +1,72 @@
+// **No `NK1350` where the clone is needed** (#1318): a later read, a loop
+// around it, a view still read, a loop that changes or keeps what it walks, a
+// read after a branch, a parameter, a reference a `let` binds.
+use std::collections
+
+struct W { s: String }
+
+fn take(s: String) -> i64 {
+	return s.len() as i64
+}
+
+fn make() -> String {
+	let mut g = String()
+	g.push_str(" abc ")
+	return g
+}
+
+fn keepw(w: W) -> i64 {
+	let mut all: Vec[W] = []
+	all.push(w)
+	return all.len() as i64
+}
+
+fn lent(s: String) -> i64 {
+	return take(s.clone())
+}
+
+fn main() throws {
+	// a clone before a later use
+	let s = make()
+	println(take(s.clone()))
+	println(s)
+	// a clone inside a loop of a name declared outside it
+	let t = make()
+	for i in 0..<2 {
+		println(take(t.clone()) + i)
+	}
+	// a clone while a view of the name is still read
+	let w = W { s: make() }
+	let v = w.s.trim()
+	println(keepw(w.clone()))
+	println(v)
+	// a loop that pushes to the list it walks a copy of
+	let mut xs = [make()]
+	for x in xs.clone() {
+		xs.push(x)
+	}
+	println(xs.len())
+	// a loop that keeps the elements it walks
+	let ys = [make()]
+	let mut kept: Vec[String] = []
+	for y in ys.clone() {
+		kept.push(y)
+	}
+	println(kept.len() + ys.len())
+	// the clone in one branch, a read in a later statement
+	let u = make()
+	if u.len() > 2 {
+		println(take(u.clone()))
+	}
+	println(u)
+	println(lent(make()))
+	// a `let` bound to what a map holds
+	let mut m: collections::BTreeMap[String, String] = collections::BTreeMap()
+	m.insert(make(), make())
+	println(first_value(m, " abc "))
+}
+
+fn first_value(m: ref collections::BTreeMap[String, String], k: String) -> i64 {
+	let at = m.get(k) ?? return 0
+	return take(at.clone())
+}
