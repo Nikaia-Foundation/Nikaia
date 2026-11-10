@@ -794,10 +794,23 @@ pub(crate) fn adopt(value: Option<&Expr>, going: &TierGoing, ask: &TierAsk<'_, '
     };
     let local = match tier_local(&name, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut at = local.empty;
-    if at < 0 && local.listed >= 0 && position_published(&going.owner, &walk.declared) { at = local.listed; }
+    let mut own = false;
+    if at < 0 && local.listed >= 0 {
+        if position_published(&going.owner, &walk.declared) { at = local.listed; } else if !walk.flows.adopted.contains_key(&local.listed) {
+            at = local.listed;
+            own = true;
+        }
+    }
     if at < 0 { return; }
     let kind = nikaia_std::index::or(container_of(ask.names, &going.ty), || "".into());
     if is_a_map_name(&kind) || kind == "HashSet" { return; }
+    if own {
+        let mut ty = going.ty.clone();
+        ty.is_view = false;
+        ty.is_mut = false;
+        walk.flows.adopted.insert(at, Declaring { owner: TextOwner::Let(at), ty });
+        return;
+    }
     walk.flows.adopted.insert(at, Declaring { owner: going.owner.clone(), ty: going.ty.clone() });
 }
 
@@ -1931,6 +1944,7 @@ pub(crate) fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Optio
     let mut literal: i64 = -1;
     let mut empty: i64 = -1;
     let mut listed: i64 = -1;
+    let mut adopted_list = false;
     let mut declared: Option<Declaring> = None;
     let written = ty.is_some();
     let from = text_source_word(Some(value), ask, walk);
@@ -1957,7 +1971,17 @@ pub(crate) fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Optio
                 None => None,
             };
         }
-        if !an_empty_container(value, ask) && is_a_list_literal_expr(value) { listed = at; }
+        if !an_empty_container(value, ask) && is_a_list_literal_expr(value) {
+            listed = at;
+            walk.reads.adopted.insert(at);
+            if declared.is_none() && walk.adopted.contains_key(&at) {
+                declared = match *nikaia_std::index::get(&walk.adopted, &at) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                };
+                adopted_list = true;
+            }
+        }
     }
     let mut bound = kinds;
     if declared.is_some() {
@@ -1965,13 +1989,13 @@ pub(crate) fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Optio
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return };
-        if !written { bound = kinds_of_declared(&found, ask, walk); } else {
+        if !written && !adopted_list { bound = kinds_of_declared(&found, ask, walk); } else {
             flow_value(&going_into(&found.owner, &found.ty, vec![], true), Some(value), &kinds, ask, walk);
             bound = kinds_of_declared(&found, ask, walk);
         }
     }
     if names.len() == 1 {
-        let text_items = !written && declared.is_none() && own_text_items(value, &bound);
+        let text_items = !written && (declared.is_none() || adopted_list) && own_text_items(value, &bound);
         let mut element_of: Option<String> = None;
         if !written { element_of = made_element_read(value, ask, walk); }
         let local = TierLocal { kinds: bound, of, literal, declared, from, empty, listed, through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of, cut: a_cut(value, ask), element_of, text_items, called: !written && a_function_call(value) };
