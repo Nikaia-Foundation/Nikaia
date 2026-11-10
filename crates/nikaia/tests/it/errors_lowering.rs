@@ -59,8 +59,8 @@ fn an_inherent_impl_is_unchanged() {
         "#,
     );
     assert!(rust.contains("impl User {"), "{rust}");
-    // The `Weigh` impl every struct gets (ADR-327 D9) is not the author's.
-    let rust = rust.replace("block::Weigh for User", "");
+    // The `DeepSize` impl every struct gets (ADR-327 D9) is not the author's.
+    let rust = rust.replace("block::DeepSize for User", "");
     assert!(!rust.contains(" for User"), "{rust}");
 }
 

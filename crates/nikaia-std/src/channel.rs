@@ -29,7 +29,7 @@ struct Shared<T> {
 }
 
 struct Waiting<T> {
-    /// The values, each with its weight (ADR-327 D9): taken off the sender's
+    /// The values, each with its deep size (ADR-327 D9): taken off the sender's
     /// account at the send, put on the receiver's at the take.
     queue: VecDeque<(T, usize)>,
     /// Whoever is waiting for room.
@@ -81,7 +81,7 @@ pub fn bounded<T>(capacity: i64) -> (Sender<T>, Receiver<T>) {
     )
 }
 
-impl<T: crate::block::Weigh> Sender<T> {
+impl<T: crate::block::DeepSize> Sender<T> {
     /// **Put a value in, waiting for room where there is none** (D2).
     ///
     /// A suspension point, which the ledger says by *not* saying `sync` — so a
@@ -90,10 +90,10 @@ impl<T: crate::block::Weigh> Sender<T> {
     /// channel is for: back-pressure is a pause, and a pause is something this
     /// language's ledger already talks about.
     ///
-    /// **The value's weight leaves the sender** (ADR-327 D9): it is weighed
+    /// **The value's deep size leaves the sender** (ADR-327 D9): its deep size is taken
     /// once, and its bytes move from the sender's account to the receiver's.
     pub async fn send(&self, value: T) {
-        let weight = crate::block::weight(&value);
+        let size = crate::block::deep_size(&value);
         let mut value = Some(value);
         std::future::poll_fn(move |context| {
             let mut inner = self.shared.inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -103,8 +103,8 @@ impl<T: crate::block::Weigh> Sender<T> {
             }
             inner
                 .queue
-                .push_back((value.take().expect("a value is sent once"), weight));
-            crate::block::hand_over(weight);
+                .push_back((value.take().expect("a value is sent once"), size));
+            crate::block::hand_over(size);
             let receiving = inner.receiving.take();
             drop(inner);
             // Outside the lock: waking may poll, and polling reaches for this
@@ -149,18 +149,18 @@ impl<T> Receiver<T> {
     pub async fn recv(&self) -> Option<T> {
         std::future::poll_fn(move |context| {
             let mut inner = self.shared.inner.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some((value, weight)) = inner.queue.pop_front() {
+            if let Some((value, size)) = inner.queue.pop_front() {
                 let sending = inner.sending.take();
                 drop(inner);
                 if let Some(waker) = sending {
                     waker.wake();
                 }
                 crate::rt::ring_the_bell();
-                // **The receiver takes the value's weight** (ADR-327 D9):
+                // **The receiver takes the value's deep size** (ADR-327 D9):
                 // where it does not fit, the take panics and the task ends
                 // `task::Crashed` (decision (c)); the value is the
                 // receiver's, and its free counts there.
-                crate::block::received(weight);
+                crate::block::received(size);
                 return Poll::Ready(Some(value));
             }
             // **The queue is read before the sender count**, and that ordering

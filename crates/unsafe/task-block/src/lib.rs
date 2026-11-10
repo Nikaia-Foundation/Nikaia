@@ -703,25 +703,25 @@ pub fn count(bytes: isize) {
     }
 }
 
-/// **A value of `weight` bytes leaves the running task** (D9): sent, set
+/// **A value of `size` bytes leaves the running task** (D9): sent, set
 /// into a shared value, or handed to a Rust owner.
 #[inline]
-pub fn hand_over(weight: usize) {
-    count(-isize::try_from(weight).unwrap_or(isize::MAX));
+pub fn hand_over(size: usize) {
+    count(-isize::try_from(size).unwrap_or(isize::MAX));
 }
 
-/// **A value of `weight` bytes reaches the running task or shared value**
+/// **A value of `size` bytes reaches the running task or shared value**
 /// (D9): counted, and whether its block still holds what it holds within its
 /// budget. Where it does not, the caller panics (D6): the value is the
 /// receiver's now, and its free counts there.
 #[inline]
-pub fn take_over(weight: usize) -> bool {
-    count(isize::try_from(weight).unwrap_or(isize::MAX));
+pub fn take_over(size: usize) -> bool {
+    count(isize::try_from(size).unwrap_or(isize::MAX));
     current().is_none_or(Block::within)
 }
 
 /// **What the running task still holds outside** (D9) as it ends, taken
-/// off its block: its value's weight, for whoever joins it.
+/// off its block: its value's deep size, for whoever joins it.
 pub fn leftover() -> usize {
     match current() {
         Some(block) => usize::try_from(block.outside.replace(0)).unwrap_or(0),

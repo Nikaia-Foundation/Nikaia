@@ -205,19 +205,20 @@ macro_rules! __nikaia_text {
 }
 
 /// **What a value holds on the heap** (ADR-327 D9): the walk a hand-over
-/// weighs it with, to move its weight from the giver's account to the
+/// measures it with, to move its deep size from the giver's account to the
 /// receiver's. The emitter writes it for every declared struct and enum; a
-/// closure and a Rust-owned type weigh their own size only, which holds
+/// closure and a Rust-owned type count their own size only, which holds
 /// nothing beyond the value itself (decision (a), #1543).
-pub trait Weigh {
+pub trait DeepSize {
     /// The bytes the value holds beyond its own size.
     fn heap(&self) -> usize;
 }
 
-/// **What a value weighs as it crosses** (D9): what it holds on the heap.
+/// **A value's deep size as it crosses** (D9): what it holds on the heap.
 /// Its own bytes move with it, from one frame or slot to another, and were
-/// never counted outside: a closure or a Rust-owned type weighs nothing more.
-pub fn weight<T: Weigh>(value: &T) -> usize {
+/// never counted outside: a closure or a Rust-owned type has no deep size
+/// beyond its own.
+pub fn deep_size<T: DeepSize>(value: &T) -> usize {
     value.heap()
 }
 
@@ -228,25 +229,25 @@ pub fn weight<T: Weigh>(value: &T) -> usize {
 /// not a line on stderr naming a runtime file and thread.
 #[cold]
 #[inline(never)]
-pub fn does_not_fit(weight: usize) -> ! {
+pub fn does_not_fit(size: usize) -> ! {
     std::panic::resume_unwind(Box::new(format!(
-        "a value of {weight} bytes handed over does not fit the receiver's memory budget"
+        "a value of {size} bytes handed over does not fit the receiver's memory budget"
     )))
 }
 
-/// **Take a value of `weight` bytes over** (D9) into the running task or
+/// **Take a value of `size` bytes over** (D9) into the running task or
 /// shared value: counted, and a panic where it does not fit.
 #[inline]
 #[track_caller]
-pub fn received(weight: usize) {
-    if !take_over(weight) {
-        does_not_fit(weight)
+pub fn received(size: usize) {
+    if !take_over(size) {
+        does_not_fit(size)
     }
 }
 
 /// **A list handed to a Rust owner leaves the giver's account** at the call
 /// (D8, D9; #1541): the owner keeps it, and what it frees later counts
-/// against whoever runs. Its elements are Rust's to weigh, so only its memory
+/// against whoever runs. Its elements are Rust's to measure, so only its memory
 /// moves. What Rust hands back was allocated by [`Counting`] in the task
 /// that called it, and is in that task's account already.
 #[inline]
@@ -264,9 +265,9 @@ pub fn handed_text(text: impl Into<String>) -> String {
     text
 }
 
-macro_rules! weighs_nothing {
+macro_rules! shallow_only {
     ($($t:ty),* $(,)?) => {
-        $(impl Weigh for $t {
+        $(impl DeepSize for $t {
             #[inline]
             fn heap(&self) -> usize {
                 0
@@ -275,7 +276,7 @@ macro_rules! weighs_nothing {
     };
 }
 
-weighs_nothing!(
+shallow_only!(
     (),
     bool,
     char,
@@ -296,13 +297,13 @@ weighs_nothing!(
     std::time::Duration,
 );
 
-impl Weigh for String {
+impl DeepSize for String {
     fn heap(&self) -> usize {
         self.capacity()
     }
 }
 
-impl Weigh for Text {
+impl DeepSize for Text {
     fn heap(&self) -> usize {
         if self.is_outside() {
             self.capacity()
@@ -312,36 +313,36 @@ impl Weigh for Text {
     }
 }
 
-impl<T: Weigh> Weigh for Vec<T> {
+impl<T: DeepSize> DeepSize for Vec<T> {
     fn heap(&self) -> usize {
-        self.capacity() * std::mem::size_of::<T>() + self.iter().map(Weigh::heap).sum::<usize>()
+        self.capacity() * std::mem::size_of::<T>() + self.iter().map(DeepSize::heap).sum::<usize>()
     }
 }
 
-impl<T: Weigh> Weigh for List<T> {
+impl<T: DeepSize> DeepSize for List<T> {
     fn heap(&self) -> usize {
         let own = if self.is_outside() {
             self.capacity() * std::mem::size_of::<T>()
         } else {
             0
         };
-        own + self.iter().map(Weigh::heap).sum::<usize>()
+        own + self.iter().map(DeepSize::heap).sum::<usize>()
     }
 }
 
-impl<T: Weigh> Weigh for std::collections::VecDeque<T> {
+impl<T: DeepSize> DeepSize for std::collections::VecDeque<T> {
     fn heap(&self) -> usize {
-        self.capacity() * std::mem::size_of::<T>() + self.iter().map(Weigh::heap).sum::<usize>()
+        self.capacity() * std::mem::size_of::<T>() + self.iter().map(DeepSize::heap).sum::<usize>()
     }
 }
 
-impl<T: Weigh> Weigh for Option<T> {
+impl<T: DeepSize> DeepSize for Option<T> {
     fn heap(&self) -> usize {
-        self.as_ref().map_or(0, Weigh::heap)
+        self.as_ref().map_or(0, DeepSize::heap)
     }
 }
 
-impl<T: Weigh, E: Weigh> Weigh for Result<T, E> {
+impl<T: DeepSize, E: DeepSize> DeepSize for Result<T, E> {
     fn heap(&self) -> usize {
         match self {
             Ok(value) => value.heap(),
@@ -350,42 +351,42 @@ impl<T: Weigh, E: Weigh> Weigh for Result<T, E> {
     }
 }
 
-impl<T: Weigh + ?Sized> Weigh for Box<T> {
+impl<T: DeepSize + ?Sized> DeepSize for Box<T> {
     fn heap(&self) -> usize {
         std::mem::size_of_val::<T>(self) + T::heap(self)
     }
 }
 
-/// **A view weighs nothing**: what it shows is its owner's.
-impl<T: ?Sized> Weigh for &T {
+/// **A view has no deep size**: what it shows is its owner's.
+impl<T: ?Sized> DeepSize for &T {
     fn heap(&self) -> usize {
         0
     }
 }
 
-/// **A shared value weighs nothing where it crosses**: what it holds stays
+/// **A shared value has no deep size where it crosses**: what it holds stays
 /// counted where it was built, and another holder keeps it alive.
-impl<T: ?Sized> Weigh for std::sync::Arc<T> {
+impl<T: ?Sized> DeepSize for std::sync::Arc<T> {
     fn heap(&self) -> usize {
         0
     }
 }
 
-impl<T: ?Sized> Weigh for std::rc::Rc<T> {
+impl<T: ?Sized> DeepSize for std::rc::Rc<T> {
     fn heap(&self) -> usize {
         0
     }
 }
 
-/// **A closure weighs its own size** (decision (a)): its captures stay
+/// **A closure counts its own size** (decision (a)): its captures stay
 /// counted where it was made.
-impl<F: ?Sized> Weigh for crate::func::Kept<F> {
+impl<F: ?Sized> DeepSize for crate::func::Kept<F> {
     fn heap(&self) -> usize {
         0
     }
 }
 
-impl<K: Weigh, V: Weigh, S> Weigh for std::collections::HashMap<K, V, S> {
+impl<K: DeepSize, V: DeepSize, S> DeepSize for std::collections::HashMap<K, V, S> {
     fn heap(&self) -> usize {
         // The table's slots and a control byte each, which is what
         // `hashbrown` allocates, near enough for a budget.
@@ -394,14 +395,14 @@ impl<K: Weigh, V: Weigh, S> Weigh for std::collections::HashMap<K, V, S> {
     }
 }
 
-impl<K: Weigh, S> Weigh for std::collections::HashSet<K, S> {
+impl<K: DeepSize, S> DeepSize for std::collections::HashSet<K, S> {
     fn heap(&self) -> usize {
         self.capacity() * (std::mem::size_of::<K>() + 1)
-            + self.iter().map(Weigh::heap).sum::<usize>()
+            + self.iter().map(DeepSize::heap).sum::<usize>()
     }
 }
 
-impl<K: Weigh, V: Weigh> Weigh for std::collections::BTreeMap<K, V> {
+impl<K: DeepSize, V: DeepSize> DeepSize for std::collections::BTreeMap<K, V> {
     fn heap(&self) -> usize {
         self.iter()
             .map(|(k, v)| std::mem::size_of::<(K, V)>() + k.heap() + v.heap())
@@ -409,7 +410,7 @@ impl<K: Weigh, V: Weigh> Weigh for std::collections::BTreeMap<K, V> {
     }
 }
 
-impl<K: Weigh> Weigh for std::collections::BTreeSet<K> {
+impl<K: DeepSize> DeepSize for std::collections::BTreeSet<K> {
     fn heap(&self) -> usize {
         self.iter()
             .map(|k| std::mem::size_of::<K>() + k.heap())
@@ -417,9 +418,9 @@ impl<K: Weigh> Weigh for std::collections::BTreeSet<K> {
     }
 }
 
-macro_rules! weighs_tuples {
+macro_rules! deep_size_tuples {
     ($(($($name:ident),+)),* $(,)?) => {
-        $(impl<$($name: Weigh),+> Weigh for ($($name,)+) {
+        $(impl<$($name: DeepSize),+> DeepSize for ($($name,)+) {
             #[allow(non_snake_case)]
             fn heap(&self) -> usize {
                 let ($($name,)+) = self;
@@ -429,7 +430,7 @@ macro_rules! weighs_tuples {
     };
 }
 
-weighs_tuples!(
+deep_size_tuples!(
     (A),
     (A, B),
     (A, B, C),
@@ -439,42 +440,42 @@ weighs_tuples!(
 );
 
 /// **The field walk the emitter writes** (decision (a)): a field whose type
-/// has [`Weigh`] is walked, any other - a Rust-owned type - weighs its own
+/// has [`DeepSize`] is walked, any other - a Rust-owned type - counts its own
 /// size only. Picked by method resolution on the field's concrete type.
-pub struct Weighing<'a, T: ?Sized>(pub &'a T);
+pub struct Sizing<'a, T: ?Sized>(pub &'a T);
 
-/// The walk, where the field's type has [`Weigh`].
-pub trait WeighKnown {
-    fn weigh(&self) -> usize;
+/// The walk, where the field's type has [`DeepSize`].
+pub trait DeepSizeKnown {
+    fn deep_size(&self) -> usize;
 }
 
-impl<T: Weigh + ?Sized> WeighKnown for Weighing<'_, T> {
+impl<T: DeepSize + ?Sized> DeepSizeKnown for Sizing<'_, T> {
     #[inline]
-    fn weigh(&self) -> usize {
+    fn deep_size(&self) -> usize {
         self.0.heap()
     }
 }
 
-/// Its own size only, where the field's type has no [`Weigh`].
-pub trait WeighOwn {
-    fn weigh(&self) -> usize;
+/// Its own size only, where the field's type has no [`DeepSize`].
+pub trait DeepSizeOwn {
+    fn deep_size(&self) -> usize;
 }
 
-impl<T: ?Sized> WeighOwn for &Weighing<'_, T> {
+impl<T: ?Sized> DeepSizeOwn for &Sizing<'_, T> {
     #[inline]
-    fn weigh(&self) -> usize {
+    fn deep_size(&self) -> usize {
         0
     }
 }
 
-/// `nikaia_std::__nikaia_weigh!(self.field)`: what a field holds on the
-/// heap, as the emitter's `Weigh` impls write it.
+/// `nikaia_std::__nikaia_deep_size!(self.field)`: what a field holds on the
+/// heap, as the emitter's `DeepSize` impls write it.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __nikaia_weigh {
+macro_rules! __nikaia_deep_size {
     ($e:expr) => {{
         #[allow(unused_imports)]
-        use $crate::block::{WeighKnown as _, WeighOwn as _};
-        (&$crate::block::Weighing(&$e)).weigh()
+        use $crate::block::{DeepSizeKnown as _, DeepSizeOwn as _};
+        (&$crate::block::Sizing(&$e)).deep_size()
     }};
 }

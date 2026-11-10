@@ -184,8 +184,8 @@ impl<F: std::future::Future<Output = T>, T, Q: crate::cleanup::Queue> Cancellabl
                 // **What the task still holds outside its block is its
                 // value's** (ADR-327 D9): it leaves the task's account here,
                 // with the block in place, and the joiner takes it.
-                let weight = crate::block::leftover();
-                self.slot.fill_weighed(value, weight);
+                let size = crate::block::leftover();
+                self.slot.fill_sized(value, size);
                 std::task::Poll::Ready(())
             }
             std::task::Poll::Pending => {

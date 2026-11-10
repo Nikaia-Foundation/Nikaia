@@ -1,4 +1,4 @@
-// ADR-327 D9 (#1543): a value sent moves its weight from the producer to the consumer, so a producer that sends far more than its budget in total runs on.
+// ADR-327 D9 (#1543): a value sent moves its deep size from the producer to the consumer, so a producer that sends far more than its budget in total runs on.
 use std::channel
 
 // producer: sends far more than its budget in total, places some each turn

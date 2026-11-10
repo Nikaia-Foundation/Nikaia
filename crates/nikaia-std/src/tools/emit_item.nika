@@ -240,7 +240,7 @@ impl EmitState {
                 }
                 out.push("}\n")
                 // **What it holds on the heap** (ADR-327 D9, decision (a)):
-                // each variant's fields, walked where their type has `Weigh`.
+                // each variant's fields, walked where their type has `DeepSize`.
                 if !self.is_std && !variants.is_empty() {
                     let mut arms: Vec[String] = []
                     for variant in variants {
@@ -252,7 +252,7 @@ impl EmitState {
                                 let mut walked: Vec[String] = []
                                 for i in 0..<types.len() {
                                     bound.push(f"f{i}")
-                                    walked.push(f" + nikaia_std::__nikaia_weigh!(*f{i})")
+                                    walked.push(f" + nikaia_std::__nikaia_deep_size!(*f{i})")
                                 }
                                 arms.push(f"Self::{vname}({bound.join(", ")}) => 0{walked.join("")}")
                             },
@@ -261,14 +261,14 @@ impl EmitState {
                                 let mut walked: Vec[String] = []
                                 for f in fields {
                                     let n = escaped_name(emit_text(world, f.name))
-                                    walked.push(f" + nikaia_std::__nikaia_weigh!(*{n})")
+                                    walked.push(f" + nikaia_std::__nikaia_deep_size!(*{n})")
                                     bound.push(n)
                                 }
                                 arms.push(f"Self::{vname} {{ {bound.join(", ")} }} => 0{walked.join("")}")
                             },
                         }
                     }
-                    out.push(f"#[automatically_derived]\nimpl{params} nikaia_std::block::Weigh for {escaped_name(enum_name)}{params} {{\n    fn heap(&self) -> usize {{\n        match self {{ {arms.join(", ")} }}\n    }}\n}}\n")
+                    out.push(f"#[automatically_derived]\nimpl{params} nikaia_std::block::DeepSize for {escaped_name(enum_name)}{params} {{\n    fn heap(&self) -> usize {{\n        match self {{ {arms.join(", ")} }}\n    }}\n}}\n")
                 }
             },
             Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
@@ -363,8 +363,8 @@ impl EmitState {
                     }
                 }
                 // **What it holds on the heap** (ADR-327 D9, decision (a)):
-                // each field, walked where its type has `Weigh`; a closure or
-                // a Rust-owned type weighs its own size only.
+                // each field, walked where its type has `DeepSize`; a closure or
+                // a Rust-owned type counts its own size only.
                 if !self.is_std {
                     let mut declared: Vec[String] = []
                     let mut applied: Vec[String] = []
@@ -390,9 +390,9 @@ impl EmitState {
                     }
                     let mut walked: String = "0"
                     for f in fields {
-                        walked = f"{walked} + nikaia_std::__nikaia_weigh!(self.{escaped_name(emit_text(world, f.name))})"
+                        walked = f"{walked} + nikaia_std::__nikaia_deep_size!(self.{escaped_name(emit_text(world, f.name))})"
                     }
-                    out.push(f"#[automatically_derived]\nimpl{emit_angled(declared)} nikaia_std::block::Weigh for {escaped_name(text)}{emit_angled(applied)} {{\n    fn heap(&self) -> usize {{\n        {walked}\n    }}\n}}\n")
+                    out.push(f"#[automatically_derived]\nimpl{emit_angled(declared)} nikaia_std::block::DeepSize for {escaped_name(text)}{emit_angled(applied)} {{\n    fn heap(&self) -> usize {{\n        {walked}\n    }}\n}}\n")
                 }
             },
             Item::Fn { name, .. } => {

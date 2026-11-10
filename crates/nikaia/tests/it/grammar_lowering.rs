@@ -29,7 +29,7 @@ fn emit(source: &str, build: Build) -> String {
 
 // --- What the emitter produced, compiled ---
 
-// The emitted `Weigh` impl sums from `0 +` (ADR-327 D9).
+// The emitted `DeepSize` impl sums from `0 +` (ADR-327 D9).
 #[allow(clippy::identity_op)]
 mod measurements {
     //! The names `measurements.nika` uses without declaring live here: the

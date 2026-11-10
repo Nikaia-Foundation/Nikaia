@@ -185,7 +185,7 @@ impl EmitState {
                                 let mut walked: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
                                 for i in 0..types.len() as i64 {
                                     bound.push(format!("f{}", i));
-                                    walked.push(format!(" + nikaia_std::__nikaia_weigh!(*f{})", i));
+                                    walked.push(format!(" + nikaia_std::__nikaia_deep_size!(*f{})", i));
                                 }
                                 arms.push(format!("Self::{}({}) => 0{}", vname, nikaia_std::block::Text::from(bound.join(", ")), nikaia_std::block::Text::from(walked.join(""))));
                             },
@@ -194,14 +194,14 @@ impl EmitState {
                                 let mut walked: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
                                 for f in fields.iter() {
                                     let n = escaped_name(&emit_text(world, f.name));
-                                    walked.push(format!(" + nikaia_std::__nikaia_weigh!(*{})", n));
+                                    walked.push(format!(" + nikaia_std::__nikaia_deep_size!(*{})", n));
                                     bound.push(n);
                                 }
                                 arms.push(format!("Self::{} {{ {} }} => 0{}", vname, nikaia_std::block::Text::from(bound.join(", ")), nikaia_std::block::Text::from(walked.join(""))));
                             },
                         }
                     }
-                    out.push(&format!("#[automatically_derived]\nimpl{} nikaia_std::block::Weigh for {}{} {{\n    fn heap(&self) -> usize {{\n        match self {{ {} }}\n    }}\n}}\n", params, escaped_name(&enum_name), params, nikaia_std::block::Text::from(arms.join(", "))));
+                    out.push(&format!("#[automatically_derived]\nimpl{} nikaia_std::block::DeepSize for {}{} {{\n    fn heap(&self) -> usize {{\n        match self {{ {} }}\n    }}\n}}\n", params, escaped_name(&enum_name), params, nikaia_std::block::Text::from(arms.join(", "))));
                 }
             },
             Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
@@ -286,8 +286,8 @@ impl EmitState {
                     for s in emit_seeds_declared(0, hidden, false) { declared.push(s); }
                     for s in emit_seeds_applied(0, hidden) { applied.push(s); }
                     let mut walked: String = String::from("0"); #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared; #[allow(unused_mut, clippy::redundant_locals)] let mut applied = applied;
-                    for f in fields.iter() { walked = format!("{} + nikaia_std::__nikaia_weigh!(self.{})", walked, escaped_name(&emit_text(world, f.name))); }
-                    out.push(&format!("#[automatically_derived]\nimpl{} nikaia_std::block::Weigh for {}{} {{\n    fn heap(&self) -> usize {{\n        {}\n    }}\n}}\n", emit_angled(&declared), escaped_name(&text), emit_angled(&applied), walked));
+                    for f in fields.iter() { walked = format!("{} + nikaia_std::__nikaia_deep_size!(self.{})", walked, escaped_name(&emit_text(world, f.name))); }
+                    out.push(&format!("#[automatically_derived]\nimpl{} nikaia_std::block::DeepSize for {}{} {{\n    fn heap(&self) -> usize {{\n        {}\n    }}\n}}\n", emit_angled(&declared), escaped_name(&text), emit_angled(&applied), walked));
                 }
             },
             Item::Fn { name, .. } => {
