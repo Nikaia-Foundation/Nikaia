@@ -183,7 +183,7 @@ pub(crate) fn derived_claims(args: &[FnArg], body: &Block, method: bool, words: 
         if arg.ty.generics.is_empty() && is_whole_number(&ty) {
             if ty.starts_with('u') { unsigned.insert(nikaia_std::block::Text::from(name.to_string())); }
             ints.push(name);
-        } else if ty == "Vec" || ty == "List" || ty == "Array" { lists.push(name); }
+        } else if ty == "Vec" || ty == "List" || ty == "Array" || ty == "Bytes" { lists.push(name); }
     }
     let mut compared: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut ints = ints; #[allow(unused_mut, clippy::redundant_locals)] let mut lists = lists;
     let mut indexed: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut ints = ints; #[allow(unused_mut, clippy::redundant_locals)] let mut lists = lists;
@@ -225,6 +225,21 @@ pub(crate) fn derived_claims(args: &[FnArg], body: &Block, method: bool, words: 
                         Expr::Variable(name, _) => {
                             let name = *name;
                             compared.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
+                        },
+                        Expr::Binary { op, lhs, rhs, .. } => {
+                            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+                            if *op == BinaryOp::Add || *op == BinaryOp::Sub {
+                                match lhs {
+                                    Expr::Variable(name, _) => {
+                                        let name = *name;
+                                        match rhs {
+                                            Expr::LitInt { .. } => { compared.insert(nikaia_std::block::Text::from(words.resolve(name).to_string())); },
+                                            _ => { },
+                                        }
+                                    },
+                                    _ => { },
+                                }
+                            }
                         },
                         _ => { },
                     }

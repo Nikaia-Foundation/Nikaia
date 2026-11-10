@@ -1,0 +1,31 @@
+/// A list parameter not written `mut` keeps its length when the body hands
+/// it to a call (ADR-094 D3), so a result found at most its length stays
+/// found so (ADR-306 D31, #1516): `start`'s result bounds the slice in
+/// `head` though `start` asks `is_mark(input, i)` on the way.
+fn is_mark(input: ref Bytes, i: i64) -> bool sync {
+	return i < input.len() as i64 && input[i] == 45
+}
+
+fn start(input: ref Bytes, at: i64) -> i64 sync {
+	let n = input.len() as i64
+	let mut i = at.min(n)
+	while i > 0 {
+		if input[i - 1] == 10 && is_mark(input, i) {
+			return i
+		}
+		i -= 1
+	}
+	return 0
+}
+
+fn head(input: ref Bytes, at: i64) -> i64 sync {
+	let end = start(input, at)
+	return input[0..<end].len() as i64
+}
+
+fn main() throws {
+	let input = Bytes([1, 10, 45, 4])
+	println(head(input, 3))
+	println(head(input, 9))
+	println(head(input, 1))
+}

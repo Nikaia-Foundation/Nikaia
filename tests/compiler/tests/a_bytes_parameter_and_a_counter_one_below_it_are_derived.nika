@@ -1,0 +1,18 @@
+/// A precondition derived from the callers (ADR-391 D1) holds of a `Bytes`
+/// as of a `Vec` (#1516), and of a counter that starts one below the
+/// parameter and falls (`let mut i = at - 1`): every caller hands `first` an
+/// `at` below `input.len()`, so neither `input[i]` nor `at - 1` needs a check.
+fn first(input: ref Bytes, at: i64) -> bool sync {
+	let mut i = at - 1
+	while i >= 0 && input[i] == 32 {
+		i -= 1
+	}
+	return i < 0 || input[i] == 10
+}
+
+fn main() throws {
+	let input = Bytes([65, 10, 32, 66])
+	for at in 0..<input.len() as i64 {
+		println(f"{at}: {first(input, at)}")
+	}
+}

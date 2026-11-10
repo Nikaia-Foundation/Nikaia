@@ -1,0 +1,8 @@
+bounds in tests/a_let_of_an_if_or_match_value_is_proved.nika: 4 indexes, 3 proved; 3 operations, 3 proved
+    16  input[i - 1]    proved
+    16  i - 1           proved
+    19  i -= 1          proved
+    27  input[0..<end]  proved
+    38  input[0..<end]  proved
+    43  n - 1           proved
+    44  input[0..<end]  checked: an `if` or `match` value, which the walk does not read (#1053)

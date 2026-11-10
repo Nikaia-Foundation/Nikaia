@@ -1,0 +1,21 @@
+/// `a.min(b)` and `a.max(b)` of whole numbers are at most (at least) both
+/// (#1516): a counter started at `at.min(n)` stays within `input`, so
+/// `input[i - 1]` needs no check, whatever `at` is.
+fn line_start(input: ref Vec[u8], at: i64) -> i64 sync {
+	let n = input.len() as i64
+	let mut i = at.min(n)
+	while i > 0 {
+		if input[i - 1] == 10 {
+			return i
+		}
+		i -= 1
+	}
+	return 0
+}
+
+fn main() throws {
+	let input: Vec[u8] = [65, 10, 66, 67]
+	println(line_start(input, 3))
+	println(line_start(input, 99))
+	println(line_start(input, -5))
+}
