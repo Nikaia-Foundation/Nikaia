@@ -1,0 +1,29 @@
+use std::channel
+
+// A parameter handed to `send` leaves the giver (ADR-327 D9): the ledger says
+// `send` keeps its value, so the function takes it by value and moves it on,
+// rather than lending it and handing rustc a reference (#1544).
+
+struct Job { name: String }
+
+fn forward_text(tx: channel::Sender[String], x: String) { tx.send(x) }
+
+fn forward_job(tx: channel::Sender[Job], job: Job) { tx.send(job) }
+
+fn made(word: String) -> String {
+    let mut g = String()
+    g.push_str(word)
+    return g
+}
+
+fn main() throws {
+    let (tx, rx) = channel::bounded[String](4)
+    forward_text(tx, made("text"))
+    let heard: String? = rx.recv()
+    println(heard ?? "none")
+
+    let (jobs, done) = channel::bounded[Job](4)
+    forward_job(jobs, Job { name: made("job") })
+    let job: Job? = done.recv()
+    println(job?.name ?? "none")
+}
