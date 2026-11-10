@@ -37,7 +37,7 @@ sync = true
 locks = "?"
 panics = true
 views = ["text: borrowed", "each: borrowed"]
-signature = "(text: ref String, each: fn(ref String, Case) -> bool sync) -> i64"
+signature = "(text: ref String, each: fn(ref String, ref Case) -> bool sync) -> i64"
 
 [type."Case"]
 pub = true

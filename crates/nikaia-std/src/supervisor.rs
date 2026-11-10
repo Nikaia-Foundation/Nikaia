@@ -20,6 +20,6 @@ pub struct Failures {
 }
 
 pub trait Restart {
-    fn decide(&mut self, history: &Failures) -> Next;
+    fn decide(&mut self, history: Failures) -> Next;
 }
 

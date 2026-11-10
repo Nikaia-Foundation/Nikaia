@@ -82,7 +82,7 @@ fn main() throws {
 "#,
     );
     assert!(
-        rust.contains("fn hand<T>(x: T) -> T"),
+        rust.contains("fn hand<T>(x: &T) -> &T"),
         "the parameter is written where Rust declares one:\n{rust}"
     );
 }
@@ -390,7 +390,7 @@ struct Holder[T] {
 }
 
 impl Holder[T] {
-    fn get(ref self, other: T, pick: bool) -> T {
+    fn get(ref self, keep other: T, pick: bool) -> T {
         if pick {
             return other
         }

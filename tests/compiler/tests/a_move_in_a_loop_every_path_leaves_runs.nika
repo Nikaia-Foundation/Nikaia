@@ -10,14 +10,14 @@ struct Holder {
     e: Expr,
 }
 
-fn kept(a: Expr, b: Expr) -> Expr {
+fn kept(keep a: Expr, keep b: Expr) -> Expr {
     if b.name.len() > 5 {
         return b
     }
     return a
 }
 
-fn continue_before(x: Expr, c: bool) -> i64 {
+fn continue_before(keep x: Expr, c: bool) -> i64 {
     let mut all: Vec[Expr] = []
     for i in 0..<3 {
         if c && i == 0 {
@@ -29,7 +29,7 @@ fn continue_before(x: Expr, c: bool) -> i64 {
     return 0
 }
 
-fn same_arm(x: Expr, c: bool) -> i64 {
+fn same_arm(keep x: Expr, c: bool) -> i64 {
     let mut all: Vec[Expr] = []
     for _ in 0..<2 {
         if c {
@@ -40,7 +40,7 @@ fn same_arm(x: Expr, c: bool) -> i64 {
     return 0
 }
 
-fn then_break(x: Expr) -> i64 {
+fn then_break(keep x: Expr) -> i64 {
     let mut all: Vec[Expr] = []
     for _ in 0..<2 {
         all.push(x)
@@ -49,7 +49,7 @@ fn then_break(x: Expr) -> i64 {
     return all.len() as i64
 }
 
-fn inner_break_then_return(x: Expr) -> i64 {
+fn inner_break_then_return(keep x: Expr) -> i64 {
     let mut all: Vec[Expr] = []
     for _ in 0..<2 {
         for _ in 0..<2 {

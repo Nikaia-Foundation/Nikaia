@@ -428,7 +428,7 @@ fn a_parameter_that_carries_a_view_keeps_the_elision() {
          fn main() { println(\"x\") }\n",
     );
     assert!(
-        rust.contains("fn keep<'r>(e: Entry<'r>) -> Entry<'r>"),
+        rust.contains("fn keep<'r, 'a>(e: &'r Entry<'a>) -> &'r Entry<'a>"),
         "{rust}"
     );
     assert!(!rust.contains("'static"), "{rust}");
