@@ -155,12 +155,6 @@ fn om_open() -> Vec[Open] {
     for cell in ["owned_given_index", "owned_given_for", "view_kept_index", "view_kept_for", "view_given_index", "view_given_for"] {
         open.push(Open { cell: cell.clone(), why: elements.clone() })
     }
-    for cell in ["owned_kept_result", "owned_given_result", "view_kept_result", "view_given_result"] {
-        open.push(Open { cell: cell.clone(), why: "`fn own(keep a: String) -> String { return a }` warns NK1334 and its ledger lends `a` (`-> ref(a) String`), against ADR-views-3 D12; a view handed to it runs" })
-    }
-    for cell in ["owned_given_parameter", "owned_given_map_value", "view_given_parameter", "view_given_map_value"] {
-        open.push(Open { cell: cell.clone(), why: "with `s` used again after it, the text tiers (ADR-282) lower the `keep a: String` parameter to a view and the cell runs, where ADR-views-3 D2 (D5 for a view) refuses it; the `kept` cell of the same position is refused or owns" })
-    }
     return open
 }
 

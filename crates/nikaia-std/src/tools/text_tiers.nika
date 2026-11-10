@@ -323,6 +323,10 @@ struct FnDecl {
     params: Vec[Type],
     /// Which parameters are `mut`: what is handed there may be changed.
     changes: Vec[bool],
+    /// Which parameters are written `keep` (ADR-views-3 D2, D12, #1491): the
+    /// callee owns what is handed there, so it is never lent, even where the
+    /// body only hands it back.
+    keeps: Vec[bool],
     result: Type?,
     published: bool,
     /// A method of a trait's: its signature is the trait's.
@@ -439,7 +443,7 @@ fn declare_rules(def: ref GrammarDef, names: ref winnow_grammar::InternerContext
     for rule in def.rules {
         let key = f"{gname}::{names.resolve(rule.name)}"
         declared.rules.insert(key.clone())
-        declared.fns.insert(key, FnDecl { params: [], changes: [], result: rule.ret_type?.clone(), published: def.public && rule.is_entry, of_a_trait: false, changes_self: false })
+        declared.fns.insert(key, FnDecl { params: [], changes: [], keeps: [], result: rule.ret_type?.clone(), published: def.public && rule.is_entry, of_a_trait: false, changes_self: false })
     }
 }
 
@@ -456,11 +460,13 @@ fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::
     }
     let mut params: Vec[Type] = []
     let mut changes: Vec[bool] = []
+    let mut keeps: Vec[bool] = []
     for arg in args {
         params.push(arg.ty.clone())
         changes.push(arg.mutable)
+        keeps.push(arg.keep)
     }
-    declared.fns.insert(key, FnDecl { params: params, changes: changes, result: ret_type?.clone(), published: is_public || of_a_trait, of_a_trait: of_a_trait, changes_self: changes_self })
+    declared.fns.insert(key, FnDecl { params: params, changes: changes, keeps: keeps, result: ret_type?.clone(), published: is_public || of_a_trait, of_a_trait: of_a_trait, changes_self: changes_self })
 }
 
 fn own_name(name: ref winnow_grammar::Symbol?, names: ref winnow_grammar::InternerContext) -> String {
@@ -3216,6 +3222,12 @@ fn lendable_parameter(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> 
     }
     let function = walk.declared.fns[key]?.clone() ?? return null
     if function.of_a_trait || at >= function.params.len() || function.changes[at] {
+        return null
+    }
+    // **A `keep` parameter handed back is owned** (ADR-views-3 D12, #1491):
+    // `fn own(keep a: String) -> String { return a }` moves `a` out, so its
+    // result owns and the caller gives `a` up.
+    if at < function.keeps.len() && function.keeps[at] {
         return null
     }
     let ty = function.params[at].clone()
@@ -7066,12 +7078,18 @@ fn viewed_param_arms(flows: ref Flows, before: ref collections::BTreeSet[i64]) -
 
 /// **A `String` parameter of a function of this file that keeps its text**
 /// (#716): not published - a published one is decided for the package
-/// (ADR-282 D22) - nor a trait's, `mut`, `String?` or written `ref`.
+/// (ADR-282 D22) - nor a trait's, `mut`, `String?` or written `ref`. **Nor
+/// one written `keep`** (ADR-views-3 D2, #1491): it owns what it is handed,
+/// so a caller that reads its argument again is refused with `.clone()`,
+/// never handed a view in its place.
 fn a_keeping_target(function: ref FnDecl, at: i64, ask: ref TierAsk) -> bool {
     if function.published || function.of_a_trait || at >= function.params.len() {
         return false
     }
     if at < function.changes.len() && function.changes[at] {
+        return false
+    }
+    if at < function.keeps.len() && function.keeps[at] {
         return false
     }
     let ty = function.params[at].clone()

@@ -200,6 +200,7 @@ pub(crate) struct FieldDecl {
 pub(crate) struct FnDecl {
     pub(crate) params: Vec<Type>,
     pub(crate) changes: Vec<bool>,
+    pub(crate) keeps: Vec<bool>,
     pub(crate) result: Option<Type>,
     published: bool,
     pub(crate) of_a_trait: bool,
@@ -281,7 +282,7 @@ pub(crate) fn declare_rules(def: &GrammarDef, names: &winnow_grammar::InternerCo
     for rule in def.rules.iter() {
         let key = format!("{}::{}", gname, names.resolve(rule.name));
         declared.rules.insert(nikaia_std::block::Text::from(key.to_string()));
-        declared.fns.insert(key, FnDecl { params: vec![], changes: vec![], result: match rule.ret_type.as_ref() {
+        declared.fns.insert(key, FnDecl { params: vec![], changes: vec![], keeps: vec![], result: match rule.ret_type.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, published: def.public && rule.is_entry, of_a_trait: false, changes_self: false });
@@ -299,11 +300,13 @@ pub(crate) fn declare_function(item: &Item, target: Option<&str>, names: &winnow
     if target.is_some() { declared.methods.entry(nikaia_std::block::Text::from(own.to_string())).or_insert(vec![]).push(nikaia_std::block::Text::from(key.to_string())); }
     let mut params: Vec<Type> = vec![];
     let mut changes: Vec<bool> = vec![];
+    let mut keeps: Vec<bool> = vec![];
     for arg in args.iter() {
         params.push(arg.ty.clone());
         changes.push(arg.mutable);
+        keeps.push(arg.keep);
     }
-    declared.fns.insert(key, FnDecl { params, changes, result: match ret_type {
+    declared.fns.insert(key, FnDecl { params, changes, keeps, result: match ret_type {
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
     }, published: is_public || of_a_trait, of_a_trait, changes_self });
@@ -2268,6 +2271,7 @@ pub(crate) fn lendable_parameter(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return None };
     if function.of_a_trait || at >= function.params.len() as i64 || *nikaia_std::index::get(&function.changes, nikaia_std::index::at(at)) { return None; }
+    if at < function.keeps.len() as i64 && *nikaia_std::index::get(&function.keeps, nikaia_std::index::at(at)) { return None; }
     let ty = (*nikaia_std::index::get(&function.params, nikaia_std::index::at(at))).clone();
     if !plain_string(ask.names, &ty) || ty.is_view { return None; }
     Some(seen(&parameter, &no_path(), walk))
@@ -5117,6 +5121,7 @@ pub(crate) fn viewed_param_arms(flows: &Flows, before: &collections::BTreeSet<i6
 pub(crate) fn a_keeping_target(function: &FnDecl, at: i64, ask: &TierAsk<'_, '_, '_, '_, '_>) -> bool {
     if function.published || function.of_a_trait || at >= function.params.len() as i64 { return false; }
     if at < function.changes.len() as i64 && *nikaia_std::index::get(&function.changes, nikaia_std::index::at(at)) { return false; }
+    if at < function.keeps.len() as i64 && *nikaia_std::index::get(&function.keeps, nikaia_std::index::at(at)) { return false; }
     let ty = (*nikaia_std::index::get(&function.params, nikaia_std::index::at(at))).clone();
     if !plain_string(ask.names, &ty) || ty.is_nullable || ty.is_view { return false; }
     true
