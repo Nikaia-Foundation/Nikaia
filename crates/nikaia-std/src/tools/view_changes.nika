@@ -1213,6 +1213,7 @@ fn vc_let(name: ref String, value: ref Expr, at: ref Span, mut views: Vec[VcView
     // that part, followed as the argument was, so changing it in place is
     // D4's. A struct's field is watched alone; a tuple's or a list's element
     // is read as part of its container.
+    let mut lent: collections::BTreeSet[String] = collections::BTreeSet()
     for (moved, part, node) in vc_moved_parts(name, value, ask) {
         // Refused at the move: a change of the part is not refused again.
         if refused.contains(moved) {
@@ -1221,8 +1222,10 @@ fn vc_let(name: ref String, value: ref Expr, at: ref Span, mut views: Vec[VcView
         // **A view of the text goes in, the text stays in its keep** (D8,
         // #948): the part is no data of the new local's, so a callee that
         // changes the local cannot change it. A change in place of the part
-        // makes it own its text, and the move is refused above (D9).
+        // makes it own its text, and the move is refused above (D9). The new
+        // local views the name it was given (D5, #1490).
         if node >= 0 && ask.viewed.contains(node) {
+            lent.insert(moved.clone())
             continue
         }
         for mut view in views {
@@ -1231,6 +1234,13 @@ fn vc_let(name: ref String, value: ref Expr, at: ref Span, mut views: Vec[VcView
                 view.parts.insert(part.clone())
             }
         }
+    }
+    // **A literal that lends a name is a view of it while it is used** (D5,
+    // #1490): changing the name in place then is refused, as for a view a
+    // call makes.
+    if lent.len() > 0 {
+        let root = lent.first() ?? ""
+        views.push(VcView { name: name.clone(), roots: lent, parts: collections::BTreeSet(), made: at.clone(), from: f"`{name}` is built here over `{root}`, which it views", way_out: collections::BTreeMap(), used: null, call: null, callee: null, shown: [], help: f"Use `{name}` before this change, or build it with a copy: `{root}.clone()`.", looped: false, exclusive: false })
     }
     // A move into a local (D3): the new name holds the same data, followed
     // as the argument was, and the old buffer lives in the frame's keep from

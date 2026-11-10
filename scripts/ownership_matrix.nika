@@ -151,9 +151,9 @@ fn om_open() -> Vec[Open] {
             })
         }
     }
-    let literals = "a struct or list literal over `s` takes it (NK2105) or refuses a view of it (NK1103, NK1106), though ADR-views-3 D5 says a literal lends while the value stays in the function"
-    for cell in ["owned_lent_field", "owned_lent_index", "owned_lent_for", "owned_given_index", "owned_given_for", "view_lent_field", "view_lent_index", "view_lent_for", "view_kept_index", "view_kept_for", "view_given_index", "view_given_for"] {
-        open.push(Open { cell: cell.clone(), why: literals.clone() })
+    let elements = "the list literal lends `s` (ADR-views-3 D5, #1490), and the text tiers (ADR-282) lower the `keep a: String` parameter its element is handed to to a view, so the cell runs, where D5 makes an element handed to a `keep` parameter own and names `.clone()`"
+    for cell in ["owned_given_index", "owned_given_for", "view_kept_index", "view_kept_for", "view_given_index", "view_given_for"] {
+        open.push(Open { cell: cell.clone(), why: elements.clone() })
     }
     for cell in ["owned_kept_result", "owned_given_result", "view_kept_result", "view_given_result"] {
         open.push(Open { cell: cell.clone(), why: "`fn own(keep a: String) -> String { return a }` warns NK1334 and its ledger lends `a` (`-> ref(a) String`), against ADR-views-3 D12; a view handed to it runs" })

@@ -1,0 +1,30 @@
+// ADR-views-3 D5, #1490: `let s = h.name` is a view of the field, and a
+// struct or list literal a `let` binds lends it, read again or not: neither
+// literal needs text of its own.
+
+struct Holder {
+    name: String,
+}
+
+struct Named {
+    name: String,
+}
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("abc")
+    return g
+}
+
+fn measure(a: String) -> i64 {
+    return a.len()
+}
+
+fn main() throws {
+    let h = Holder { name: make() }
+    let s = h.name
+    let xs: Vec[String] = [s]
+    println(measure(xs[0]))
+    let w = Named { name: s }
+    println(w.name)
+}
