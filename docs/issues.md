@@ -71,13 +71,17 @@ it, like the checks in `docs/supervisor.md`.
   no body); the sites list goes into the issue by file and line (#1453).
   A site that needs several mechanisms is counted under the one built last,
   so that a group's count is what falls when its item is built (#1470).
+  An item that promises every listed site proved has traced each site
+  (`--bounds-trace`) for all the facts it needs; a site that also needs a
+  fact the walk lacks (`a.min(n)`) is listed under that gap (#1496).
   A site in a method of a type with field rules (ADR-306 D21, D28) has a
   probe reduced from the real code: the function and every `ref mut self`
   method of its type, with stub types, kept as the acceptance check; a
   synthetic probe passed while the real code stayed checked (#1470).
 * **I9. A numbered *To build* list.** Each item is one change a builder can
   commit on its own, and names its test: a `.nika` with `.stdout` / `.stderr`
-  in `tests/compiler/` (or the package's tests), and the rows it must show.
+  in `tests/compiler/tests/` (or the package's tests), and the rows it must show
+  (#1470: an issue that said `tests/compiler/` sent the builder to the wrong place).
   The order is the order to build in; an item resting on another says so.
 * **I10. The rule that repeats**: when a fix widens or narrows a rule, the
   other functions that test the same condition are named (or the issue says
@@ -87,6 +91,21 @@ it, like the checks in `docs/supervisor.md`.
   output that must stay byte-identical). A move into Nikaia names the Rust it
   replaces and the `std` counterparts it needs (Part III 17); a missing one
   is its own issue, linked.
+  It names the limits the work will run into: a cap the code keeps (the
+  walk's 48 facts, `most_facts()`), a set that is silently trimmed (#1470).
+  A change to a pass every build runs (the bounds walk runs in each
+  `lower-std`) names the time before it, on one named file, as a limit
+  (#1470: a rule that made the walk 4.5 times slower stopped the run).
+  The limit says the command, the file and whether wall or user time, with
+  the figure measured before (#1470: "1.2 times its time" without a
+  baseline cost a run its measuring), and names any recomputation the
+  pass already does per body that the change would multiply.
+  Several steps in one pass get one limit on the whole run, or a per-step
+  limit only where that step's own cost was measured or estimated (#1470: a
+  1.2 times limit per probe could not hold the cost of D25's own checks).
+  An issue that changes which facts the bounds walk asks with shows a
+  `--bounds-trace` of its probe on the binary of the day (#1500: the
+  trace showed the shared turn variable the rule had missed).
 * **I12. What was ruled out**: approaches tried and dropped, and why, so the
   builder does not try them again. Empty when nothing was tried.
 
@@ -96,6 +115,9 @@ it, like the checks in `docs/supervisor.md`.
   item goes into the issue (a comment, or the *To build* list ticked), not
   only into a report or a commit. An item found wrong is corrected in the
   issue before the next run.
+  A section that says where the work stands (a branch, uncommitted files)
+  is checked against `git log` and `git branch -r` before each run (#1470:
+  it named a stale branch and files already committed).
 
 ## How a run judges its issue
 

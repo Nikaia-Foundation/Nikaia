@@ -1,5 +1,0 @@
-bounds in tests/prove_element_bound_grows.nika: 3 indexes, 2 proved; 1 operations, 0 proved
-    14  sum += values[at]  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
-    14  values[at]         proved
-    31  values[at]         proved
-    49  values[at]         checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)

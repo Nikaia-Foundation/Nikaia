@@ -1,0 +1,85 @@
+/// **A read after a loop that grows many lists keeps its relation** (ADR-306
+/// D30, #1500): one loop pushes to `xs`, `ys` and 30 other local lists, so
+/// the point after it holds more turn facts than a question is asked with.
+/// Every turn fact reads the loop's `#turn`, so all of them are connected to
+/// the goal of `ys[i]`; the question takes the nearest, and `xs`'s and `ys`'s
+/// lengths at the loop's entry are among them, however many the other lists
+/// add. It was checked while a point kept only its 48 newest facts.
+pub fn read_after(n: i64, i: i64) -> i64 sync {
+	let mut xs: Vec[i64] = []
+	let mut ys: Vec[i64] = []
+	let mut l0: Vec[i64] = []
+	let mut l1: Vec[i64] = []
+	let mut l2: Vec[i64] = []
+	let mut l3: Vec[i64] = []
+	let mut l4: Vec[i64] = []
+	let mut l5: Vec[i64] = []
+	let mut l6: Vec[i64] = []
+	let mut l7: Vec[i64] = []
+	let mut l8: Vec[i64] = []
+	let mut l9: Vec[i64] = []
+	let mut l10: Vec[i64] = []
+	let mut l11: Vec[i64] = []
+	let mut l12: Vec[i64] = []
+	let mut l13: Vec[i64] = []
+	let mut l14: Vec[i64] = []
+	let mut l15: Vec[i64] = []
+	let mut l16: Vec[i64] = []
+	let mut l17: Vec[i64] = []
+	let mut l18: Vec[i64] = []
+	let mut l19: Vec[i64] = []
+	let mut l20: Vec[i64] = []
+	let mut l21: Vec[i64] = []
+	let mut l22: Vec[i64] = []
+	let mut l23: Vec[i64] = []
+	let mut l24: Vec[i64] = []
+	let mut l25: Vec[i64] = []
+	let mut l26: Vec[i64] = []
+	let mut l27: Vec[i64] = []
+	let mut l28: Vec[i64] = []
+	let mut l29: Vec[i64] = []
+	let mut t = 0
+	while t < n {
+		xs.push(t)
+		ys.push(t)
+		l0.push(t)
+		l1.push(t)
+		l2.push(t)
+		l3.push(t)
+		l4.push(t)
+		l5.push(t)
+		l6.push(t)
+		l7.push(t)
+		l8.push(t)
+		l9.push(t)
+		l10.push(t)
+		l11.push(t)
+		l12.push(t)
+		l13.push(t)
+		l14.push(t)
+		l15.push(t)
+		l16.push(t)
+		l17.push(t)
+		l18.push(t)
+		l19.push(t)
+		l20.push(t)
+		l21.push(t)
+		l22.push(t)
+		l23.push(t)
+		l24.push(t)
+		l25.push(t)
+		l26.push(t)
+		l27.push(t)
+		l28.push(t)
+		l29.push(t)
+		t += 1
+	}
+	if i < 0 || i >= xs.len() {
+		return 0
+	}
+	ys[i]
+}
+
+fn main() throws {
+	println(f"{read_after(3, 1)} {read_after(2, 5)}")
+}

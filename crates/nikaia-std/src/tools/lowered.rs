@@ -3013,7 +3013,7 @@ pub mod bounds_reasons {
 }
 pub mod bounds_report {
     #[allow(unused_imports)]
-    pub use super::{BoundsReportFacts, bounds_report_checked, bounds_report_derived};
+    pub use super::{BoundsReportFacts, bounds_report_checked, bounds_report_derived, bounds_report_trace, bounds_report_trace_rows};
 }
 pub mod bounds_rules {
     #[allow(unused_imports)]

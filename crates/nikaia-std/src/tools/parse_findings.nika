@@ -30,7 +30,7 @@ pub fn parse_findings_too_long(length: i64, longest: i64) -> String? {
 /// The character index byte `byte` of `source` stands at: what the parse
 /// errors (`parse_errors.nika`) count in. A byte past the end is the end.
 pub fn parse_findings_char_of(source: String, byte: i64) -> i64 {
-    let end = byte.min(source.len())
+    let end = byte.min(source.bytes.len())
     return source.bytes[0..<end].iter().filter(fn(b) { (b & 192) != 128 }).count()
 }
 
@@ -119,7 +119,7 @@ pub fn parse_findings_one_task_limit(at: i64) -> Finding {
 /// its position, 1-based line and column in characters, for whoever has no
 /// path to render it at.
 pub fn parse_findings_refusal(finding: Finding, source: String) -> ParseFindingsRefusal {
-    let end = (finding.span.start as i64).min(source.len())
+    let end = (finding.span.start as i64).min(source.bytes.len())
     let mut from = end
     while from > 0 && source.bytes[from - 1] != 10 {
         from -= 1

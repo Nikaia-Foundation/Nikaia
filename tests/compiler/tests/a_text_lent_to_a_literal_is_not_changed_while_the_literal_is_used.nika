@@ -1,0 +1,22 @@
+// ADR-views-3 D5, #1490: a struct literal a `let` binds lends the text built
+// into it while the value stays in the function, so `s` is still used after
+// it; a change of `s` in place while the literal is used is refused, as one
+// while a view a call made is used.
+
+struct Named {
+    name: String,
+}
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("abc")
+    return g
+}
+
+fn main() throws {
+    let mut s = make()
+    let w = Named { name: s }
+    s.push_str("!")
+    println(w.name)
+    println(s)
+}

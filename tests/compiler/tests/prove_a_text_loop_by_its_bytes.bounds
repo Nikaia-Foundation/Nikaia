@@ -1,0 +1,3 @@
+bounds in tests/prove_a_text_loop_by_its_bytes.nika: 1 indexes, 1 proved; 1 operations, 1 proved
+     7  source.bytes[at]  proved
+    10  at += 1           proved

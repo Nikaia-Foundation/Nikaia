@@ -80,18 +80,10 @@ fn a_key_written_is_given_away() {
     );
 }
 
+// The long form `Person { name: name }` lends the local since ADR-views-3 D5 (#1490,
+// tests/compiler a_field_lends_what_it_is_given); the shorthand still hands it over.
 #[test]
 fn a_field_holds_what_it_is_given() {
-    one_refusal(
-        &format!(
-            "{PERSON}fn main() throws {{\n\
-             \x20   let name: String = f\"b\"\n\
-             \x20   let p = Person {{ name: name }}\n\
-             \x20   println(name)\n\
-             }}\n"
-        ),
-        "`name` again, but it was stored in `Person.name`",
-    );
     one_refusal(
         &format!(
             "{PERSON}fn main() throws {{\n\

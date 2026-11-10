@@ -25,7 +25,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   `Tests:`, `Deviation:`, `Found:`, `Needs:`, `Changelog:`, `Issue:`, ...), one line
   each, no prose: `scripts/release.nika` parses them. `Gate:` is the bare
   word `green` or `red` (`Gate: cheap checks green` cuts the batch, v23
-  2026-11-05). A test added for a fix
+  2026-11-05). With nothing committed (`Result: blocked`), `Gate:` is `green`:
+  the gate judges commits, and a red gate on none stops the driver for
+  nothing (#1473). A test added for a fix
   is run once against the unfixed compiler (stash the fix) and the report
   says it failed there. **New tests are Nikaia programs in `tests/compiler/`,
   never a new Rust `#[test]`** (CLAUDE.md).
@@ -92,12 +94,14 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **Never run the full suite yourself**: the driver does, once per commit.
   Measure (callgrind, counts) only when your order has a *Measure* line, and
   then on one file or a small program, never on a whole `lower-std` or a test
-  run.
+  run. An order with a stop threshold ("more than 25 %, stop") is measured
+  first, on the smallest change that shows the cost, before the rest is
+  built (#1473: the whole draft was built, then stopped on the figure).
 * **Few builds: finish first, then build once.** Build and test with
   `--profile fast` (`cargo build --profile fast -p nikaia`, `cargo test
   --profile fast -p nikaia --test it -- a:: b::`, binary `target/fast/nikaia`):
   after a one-file change about 20 s instead of 70 s, the tests as fast as at
-  release; `--release` is CI's. A build still costs, `lower-std` cold 181 G instructions (about 40 s), after a body or comment change 60 G (one file re-lowered, the ledger pass still runs), unchanged 1.3 G (under a second
+  release; `--release` is CI's. A build still costs, `lower-std` cold 181 G instructions (about 40 s; 10+ minutes after a change to a `bounds_*.nika`, which re-proves std), after a body or comment change 60 G (one file re-lowered, the ledger pass still runs), unchanged 1.3 G (under a second
   when no `.nika` changed), and the touched tests often 10 minutes more. Before the first one, write down the
   whole probe matrix: every case the step must handle (own field, getter of
   a getter, `std` methods, the example programs the issue names), and run

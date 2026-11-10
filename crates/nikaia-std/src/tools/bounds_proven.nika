@@ -41,6 +41,8 @@ pub struct BoundsAllProven {
 	pub negations: collections::BTreeSet[i64],
 	pub calls: collections::BTreeMap[i64, String],
 	pub derived: Vec[String],
+	/// What `--bounds-trace` shows (#1495), each goal's rows once.
+	pub trace: Vec[String],
 }
 
 /// **Every index and every operation the walks prove**, whatever a build
@@ -57,6 +59,7 @@ pub fn bounds_proven(
 	ledgers: ref Vec[ref Ledger],
 	nonnegative: ref collections::BTreeSet[i64],
 	through_loops: bool,
+	trace: ref Vec[i64],
 	read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 	ask_in: fn(ref String, i64, ref TermArena, ref Vec[i64], i64) -> bool sync,
@@ -71,6 +74,7 @@ pub fn bounds_proven(
 		negations: collections::BTreeSet(),
 		calls: collections::BTreeMap(),
 		derived: [],
+		trace: [],
 	}
 	// What each call may change, each function's frame among it (ADR-306
 	// D17, ADR-391 D2): `tools/bounds_frame.nika`.
@@ -98,6 +102,7 @@ pub fn bounds_proven(
 		whole_parts: facts.whole_parts.clone(),
 		array_lengths: facts.array_lengths.clone(),
 		through_loops: through_loops,
+		trace: trace.clone(),
 		decided: bp_decided(program, words, facts.comptime_values),
 		list_indices: facts.list_indices.clone(),
 		returns: collections::BTreeMap(),
@@ -203,6 +208,11 @@ fn bp_add(mut out: BoundsAllProven, walked: ref BoundsProven) {
 	}
 	for (at, key) in walked.calls {
 		out.calls.insert(at, key.clone())
+	}
+	for row in walked.trace {
+		if !out.trace.contains(row) {
+			out.trace.push(row.clone())
+		}
 	}
 }
 

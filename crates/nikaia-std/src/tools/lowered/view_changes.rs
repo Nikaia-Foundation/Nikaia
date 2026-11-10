@@ -625,7 +625,7 @@ pub(crate) fn vc_kept_in_places(at: &Span, func: &Expr, args: &[Expr], ask: &VcA
         let pieces: Vec<&str> = entry.split(':').collect::<Vec<_>>();
         if pieces.len() < 2 { continue; }
         let place = nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).to_string()); ::core::mem::drop(pieces);
-        let source = match nikaia_std::index::get(&entry.as_bytes(), nikaia_std::index::at(place.len() as i64 + 1..entry.len() as i64)).text() {
+        let source = match nikaia_std::index::get(&entry.as_bytes(), nikaia_std::index::at(place.len() as i64 + 1..)).text() {
             Ok(value) => value,
             Err(_error) => { continue; },
         };
@@ -796,15 +796,23 @@ pub(crate) fn vc_let(name: &str, value: &Expr, at: &Span, views: &mut Vec<VcView
         let refusal = match *nikaia_std::index::get(&ask.refused, &node) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if vc_refuse_move(&moved, name, &head, refusal, at, &views, walk) { refused.insert(moved); }
     }
+    let mut lent: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (moved, part, node) in vc_moved_parts(name, value, ask) {
         if refused.contains(&moved) { continue; }
-        if node >= 0 && ask.viewed.contains(&node) { continue; }
+        if node >= 0 && ask.viewed.contains(&node) {
+            lent.insert(nikaia_std::block::Text::from(moved.to_string()));
+            continue;
+        }
         for view in views.iter_mut() {
             if (*view).roots.contains(&moved) {
                 (*view).roots.insert(nikaia_std::block::Text::from(name.to_string()));
                 (*view).parts.insert(nikaia_std::block::Text::from(part.to_string()));
             }
         }
+    }
+    if !lent.is_empty() {
+        let root = nikaia_std::index::or(lent.first().map(|__nikaia_found| nikaia_std::block::Text::from(__nikaia_found.to_string())), || "".into());
+        views.push(VcView { name: nikaia_std::block::Text::from(name.to_string()), roots: lent, parts: collections::BTreeSet::new(), made: at.clone(), from: format!("`{}` is built here over `{}`, which it views", name, root), way_out: collections::BTreeMap::new(), used: None, call: None, callee: None, shown: vec![], help: Some(format!("Use `{}` before this change, or build it with a copy: `{}.clone()`.", name, root)), looped: false, exclusive: false });
     }
     let other = match vc_variable(value, ask) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut viewer: Option<String> = None;

@@ -343,7 +343,7 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions; #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
     for (key, claim) in claims.iter() {
         let mut start = key.0;
-        if start > source.len() as i64 { start = source.len() as i64; }
+        if start > source.as_bytes().len() as i64 { start = source.as_bytes().len() as i64; }
         if start > at {
             for c in nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(at..start)).iter() {
                 let c = nikaia_std::num::value(c);

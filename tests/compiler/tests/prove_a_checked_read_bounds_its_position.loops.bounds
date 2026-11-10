@@ -1,5 +1,0 @@
-bounds in tests/prove_a_checked_read_bounds_its_position.nika: 4 indexes, 2 proved; 0 operations, 0 proved
-    13  xs[at]  checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
-    14  xs[at]  proved
-    15  ys[at]  proved
-    26  ys[at]  checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
