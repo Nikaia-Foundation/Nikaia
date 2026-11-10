@@ -149,7 +149,7 @@ fn main() throws {
         println(f"committed {short} local")
         return
     }
-    let pushed = process::run("git", ["push", "origin", "develop"]).ok
+    let pushed = process::run("git", ["push", "origin", "HEAD:develop"]).ok
     commit_put_pushed(path, report, if pushed { sha.clone() } else { "rejected" })
     if !pushed { println(f"PUSH REJECTED {sha}") }
     println(f"committed {short} {if pushed { "pushed" } else { "rejected" }}")
