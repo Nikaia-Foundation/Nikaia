@@ -13,13 +13,13 @@ bounds in src/main.nika: 66 indexes, 66 proved; 101 operations, 77 proved
   2098  self.expanded + nodes                 justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
   2107  self.expanded += nodes                justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
   2108  self.made += nodes                    justified: a count of nodes, which the memory holding them bounds: the nodes alias expansion made, at most `limit`
-  2652  n + d                                 justified: a count over the input, which its length bounds: an indentation and an indicator digit
-  2676  from + (…)                            justified: a count over the input, which its length bounds: an offset into the scalar's text
-  2871  value * radix + hex_value(cs[i])      justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
-  2871  value * radix                         justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
-  3076  self.column += 1                      justified: a column of the text the library writes, which its length bounds
-  3135  self.indent += 2                      justified: an indentation of the text the library writes, at most twice the depth
-  3408  (…) + tag_length(n.tag)               justified: a count over the input, which its length bounds: a tag's length
-  3428  length += …                           justified: a count over the input, which its length bounds: the length of a node's text
-  3490  (width - 1) * 4                       justified: a width the callers write as a literal, 2 to 8 digits
-  3490  width - 1                             justified: a width the callers write as a literal, 2 to 8 digits
+  2645  n + d                                 justified: a count over the input, which its length bounds: an indentation and an indicator digit
+  2669  from + (…)                            justified: a count over the input, which its length bounds: an offset into the scalar's text
+  2864  value * radix + hex_value(cs[i])      justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
+  2864  value * radix                         justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
+  3069  self.column += 1                      justified: a column of the text the library writes, which its length bounds
+  3128  self.indent += 2                      justified: an indentation of the text the library writes, at most twice the depth
+  3401  (…) + tag_length(n.tag)               justified: a count over the input, which its length bounds: a tag's length
+  3421  length += …                           justified: a count over the input, which its length bounds: the length of a node's text
+  3483  (width - 1) * 4                       justified: a width the callers write as a literal, 2 to 8 digits
+  3483  width - 1                             justified: a width the callers write as a literal, 2 to 8 digits

@@ -360,7 +360,7 @@ signature = "(e: ref Event) -> String"
 [fn."events"]
 pub = true
 sync = true
-returns = "anchor: ref(docs), style: ref(docs), value: ref(docs)"
+returns = "ref(docs)"
 panics = false
 places = true
 touches = []
@@ -956,13 +956,12 @@ signature = "(t: String) -> String"
 
 [fn."walk"]
 sync = true
-returns = "anchor: ref(n), style: ref(n), value: ref(n)"
 keeps = ["n"]
 panics = false
 places = true
 touches = []
-views = ["n: borrowed", "ds: borrowed", "<result>: borrowed"]
-signature = "(n: ref Node, ds: ref Vec[Dir]) -> Vec[Event]"
+views = ["n: borrowed", "ds: borrowed", "out: borrowed"]
+signature = "(n: ref Node, ds: ref Vec[Dir], mut out: Vec[Event])"
 
 [fn."write"]
 pub = true

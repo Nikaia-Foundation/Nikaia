@@ -2493,69 +2493,62 @@ fn opening(kind: EventKind, n: ref Node, ds: ref Vec[Dir]) -> Event sync {
 	}
 }
 
-// A node's events: a collection's start, its children's events and its end;
-// a scalar's or an alias's one event.
-fn walk(n: ref Node, ds: ref Vec[Dir]) -> Vec[Event] sync {
-	return match n.value {
+// A node's events, pushed onto `out`: a collection's start, its children's
+// events and its end; a scalar's or an alias's one event. One list for the
+// whole walk, so no event is copied once per level around it.
+fn walk(n: ref Node, ds: ref Vec[Dir], mut out: Vec[Event]) sync {
+	match n.value {
 		Value::Seq(items) => {
-			let mut out: Vec[Event] = [opening(EventKind::SequenceStart, n, ds)]
+			out.push(opening(EventKind::SequenceStart, n, ds))
 			for x in items {
-				out.extend(walk(x, ds))
+				walk(x, ds, out)
 			}
 			out.push(bare(EventKind::SequenceEnd, n.end, n.end))
-			out
 		}
 		Value::Map(entries) => {
-			let mut out: Vec[Event] = [opening(EventKind::MappingStart, n, ds)]
+			out.push(opening(EventKind::MappingStart, n, ds))
 			for e in entries {
-				out.extend(walk(e.key, ds))
-				out.extend(walk(e.value, ds))
+				walk(e.key, ds, out)
+				walk(e.value, ds, out)
 			}
 			out.push(bare(EventKind::MappingEnd, n.end, n.end))
-			out
 		}
-		Value::Alias(a) => [
-			Event {
-				kind: EventKind::Alias,
-				start: n.start,
-				end: n.end,
-				explicit: false,
-				flow: false,
-				anchor: null,
-				tag: null,
-				style: Style::Plain,
-				value: a,
-				text: null,
-			},
-		]
-		Value::Str(s) => [
-			Event {
-				kind: EventKind::Scalar,
-				start: n.start,
-				end: n.end,
-				explicit: false,
-				flow: false,
-				anchor: n.anchor,
-				tag: resolved(ds, n.tag),
-				style: s.style,
-				value: n.raw,
-				text: text(s),
-			},
-		]
-		else => [
-			Event {
-				kind: EventKind::Scalar,
-				start: n.start,
-				end: n.end,
-				explicit: false,
-				flow: false,
-				anchor: n.anchor,
-				tag: resolved(ds, n.tag),
-				style: n.style,
-				value: n.raw,
-				text: null,
-			},
-		]
+		Value::Alias(a) => out.push(Event {
+			kind: EventKind::Alias,
+			start: n.start,
+			end: n.end,
+			explicit: false,
+			flow: false,
+			anchor: null,
+			tag: null,
+			style: Style::Plain,
+			value: a,
+			text: null,
+		})
+		Value::Str(s) => out.push(Event {
+			kind: EventKind::Scalar,
+			start: n.start,
+			end: n.end,
+			explicit: false,
+			flow: false,
+			anchor: n.anchor,
+			tag: resolved(ds, n.tag),
+			style: s.style,
+			value: n.raw,
+			text: text(s),
+		})
+		else => out.push(Event {
+			kind: EventKind::Scalar,
+			start: n.start,
+			end: n.end,
+			explicit: false,
+			flow: false,
+			anchor: n.anchor,
+			tag: resolved(ds, n.tag),
+			style: n.style,
+			value: n.raw,
+			text: null,
+		})
 	}
 }
 
@@ -2566,7 +2559,7 @@ pub fn events(docs: ref Vec[Document]) -> Vec[Event] sync {
 	let mut last: u32 = 0
 	for d in docs {
 		out.push(marker(EventKind::DocumentStart, d.root.start, d.root.end, d.start))
-		out.extend(walk(d.root, d.directives))
+		walk(d.root, d.directives, out)
 		out.push(marker(EventKind::DocumentEnd, d.root.end, d.root.end, d.end))
 		last = d.root.end
 	}
