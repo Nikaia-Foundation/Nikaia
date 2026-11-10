@@ -5972,6 +5972,9 @@ pub = true
 #
 # No `touches`, which is the fail-closed answer: what a send orders against is
 # whatever the other end does with the value.
+#
+# **`keeps = ["value"]`**: the value leaves the giver (ADR-327 D9), so what is
+# handed to a send is given away rather than lent, as with `Vec::push` (#1544).
 # Put a value in, waiting for room where there is none.
 #
 # It gives the thread up rather than holding it, so other work runs while this
@@ -5979,6 +5982,7 @@ pub = true
 [fn."channel::Sender::send"]
 pub = true
 panics = false
+keeps = ["value"]
 signature = "[T](self: ref channel::Sender[T], value: ?)"
 
 # **`-> T?`**, and the `?` is D3: a closed channel is the ordinary **end** of a
