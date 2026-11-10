@@ -12,7 +12,7 @@
 // brief's frontmatter through `agent.nika --info`, defaults for a brief
 // without); a brief that does not exist prints `CUT <brief>: brief missing`;
 // no `DIR/batch.txt` prints `BATCH none (no DIR/batch.txt)`; a report whose
-// `Owner:` is neither empty nor starts with `none` prints
+// `Owner:` is neither empty nor starts with `none` or `nothing` (any case) prints
 // `OWNER <brief>: <text>`; a report whose `Result:` first word (`done.` too)
 // is not `done` or `noop`, `Pushed:` is `rejected` or `none` (not for `noop`),
 // `Gate:` is present and does not start with `green`, or `Deviation:` is not
@@ -109,7 +109,8 @@ fn batch_run(dir: String) -> String throws {
         }
         let text = fs::read_to_string(path, fs::Root::Anywhere)
         let question = batch_field(text.clone(), "Owner:")
-        if question != "" && !question.starts_with("none") { return f"OWNER {brief}: {question}" }
+        let lower = question.to_lowercase()
+        if question != "" && !lower.starts_with("none") && !lower.starts_with("nothing") { return f"OWNER {brief}: {question}" }
         let why = batch_cut(text.clone())
         if why != "" { return f"CUT {brief}: {why}" }
         if batch_field(text, "Changelog:") != "none" { changelogs += 1 }
