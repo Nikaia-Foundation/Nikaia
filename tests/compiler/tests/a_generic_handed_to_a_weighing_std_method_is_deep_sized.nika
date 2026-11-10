@@ -1,0 +1,31 @@
+// A type parameter a std operation weighs (a channel's `send`, a shared
+// value's `set`) is bounded by `DeepSize` in the Rust it becomes, and so is
+// the parameter of a generic caller that hands its own on (ADR-327 D9,
+// #1559).
+use std::channel
+
+fn forward[T](tx: channel::Sender[T], x: T) {
+    tx.send(x)
+}
+
+fn relay[T](tx: channel::Sender[T], x: T) {
+    forward(tx, x)
+}
+
+fn store[T](cell: SharedMut[T], x: T) {
+    cell.set(x)
+}
+
+fn main() throws {
+    let (tx, rx) = channel::bounded[i64](4)
+    forward(tx, 7)
+    let a: i64? = rx.recv()
+    let (ty, ry) = channel::bounded[String](4)
+    let word: String = "eight"
+    relay(ty, word)
+    let b: String? = ry.recv()
+    println(f"{a ?? 0} {b ?? "none"}")
+    let cell = SharedMut(1)
+    store(cell, 9)
+    println(f"{cell.get()}")
+}

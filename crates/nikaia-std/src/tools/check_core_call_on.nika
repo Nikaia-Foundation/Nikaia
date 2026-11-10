@@ -1392,6 +1392,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     }
     state.a_bound_the_argument_does_not_meet(world, key, bound, span)
     check_crossings_a_standard_bound_not_met(state, world, key, bound, span)
+    check_core_call_on_weighed_through(state, key, bound)
     let substituted = substitute(result, bound)
     state.flow.text_slot = views_text_slots(result, bound, true)
     state.flow.text_walk = views_text_slots(result, bound, false)
@@ -1438,6 +1439,8 @@ pub fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckW
     // run under `Array` (ADR-184 D3).
     let has_name = check_core_call_on_has_name(on)
     let type_name = check_core_call_on_type_name(on)
+    check_core_call_on_weighs(state, on, entry)
+    check_core_call_on_hashed_key(state, world, on, entry, span)
     // **A copy of a number, a `bool`, a `char` or a tuple is the derived one.**
     if entry == "clone" && args.len() == 0 {
         let copied: Ty? = check_core_call_on_copied(on)
@@ -1670,5 +1673,108 @@ fn check_core_call_on_names_text(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, .. } => args.len() == 0 && (type_last_segment(name) == "String" || type_last_segment(name) == "str"),
         else => false,
+    }
+}
+
+/// The type parameters in scope that `ty` names, anywhere in it.
+fn check_core_call_on_parameters_in(state: ref CheckState, ty: ref Ty) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut stack: Vec[Ty] = [ty.clone()]
+    while stack.len() > 0 {
+        let one = stack.pop() ?? break
+        match one {
+            Ty::Named { name, args, .. } => {
+                if args.len() == 0 && state.type_parameters.contains_key(name) {
+                    out.insert(name.clone())
+                }
+                for arg in args {
+                    stack.push(arg.clone())
+                }
+            },
+            Ty::Tuple(parts) => {
+                for part in parts {
+                    stack.push(part.clone())
+                }
+            },
+            Ty::Nullable(inner) => stack.push(inner.clone()),
+            else => {},
+        }
+    }
+    return out
+}
+
+/// **A std operation that weighs what it is handed** (ADR-327 D9, #1559):
+/// every method of a channel's sender, and a shared value's `set`, whose Rust
+/// is bounded by `DeepSize` (`channel.rs`, `lock.rs`). A type parameter the
+/// receiver holds is weighed in the function being walked; the emitter
+/// writes the bound, since the weight is the language's and no Nikaia bound
+/// says it.
+fn check_core_call_on_weighs(mut state: CheckState, on: ref Ty, entry: ref String) sync {
+    let current = (state.current ?? return).clone()
+    let base = match on.unseen() {
+        Ty::Named { name, .. } => type_last_segment(name),
+        else => return,
+    }
+    if base != "Sender" && !(base == "SharedMut" && entry == "set") {
+        return
+    }
+    let found = check_core_call_on_parameters_in(state, on.unseen())
+    if found.is_empty() {
+        return
+    }
+    let mut held: collections::BTreeSet[String] = state.facts.weighed.get(current)?.clone() ?? collections::BTreeSet()
+    held.extend(found)
+    state.facts.weighed.insert(current, held)
+}
+
+/// **A generic call that hands the caller's own type parameter on** (#1559):
+/// where the callee weighs its parameter, the caller weighs its own in what
+/// binds it (`EmitState` reads `CheckFacts::weighed_of`).
+pub fn check_core_call_on_weighed_through(mut state: CheckState, key: ref String, bound: ref collections::BTreeMap[String, Ty]) sync {
+    let current = (state.current ?? return).clone()
+    let mut edges: collections::BTreeSet[(String, String, String)] = collections::BTreeSet()
+    for (param, ty) in bound {
+        for own in check_core_call_on_parameters_in(state, ty) {
+            edges.insert((key.clone(), param.clone(), own.clone()))
+        }
+    }
+    if edges.is_empty() {
+        return
+    }
+    let mut held: collections::BTreeSet[(String, String, String)] = state.facts.weighed_through.get(current)?.clone() ?? collections::BTreeSet()
+    held.extend(edges)
+    state.facts.weighed_through.insert(current, held)
+}
+
+/// What a hashed collection's methods do without its key: neither hash nor
+/// compare one.
+fn check_core_call_on_keyless(entry: ref String) -> bool {
+    return entry == "len" || entry == "is_empty" || entry == "iter" || entry == "iter_mut" || entry == "keys" || entry == "values" || entry == "values_mut" || entry == "into_keys" || entry == "into_values" || entry == "clear" || entry == "drain" || entry == "retain" || entry == "clone" || entry == "capacity"
+}
+
+/// **`NK1248`: a type parameter as a hashed key with no bound that compares
+/// it** (Part II, beside `Hash`, #1559): a key is compared, so it needs
+/// `[T: Eq]` (or `Ord`) as `==` does.
+fn check_core_call_on_hashed_key(mut state: CheckState, world: ref CheckWorld, on: ref Ty, entry: ref String, span: ref Span) sync {
+    let (base, args) = match on.unseen() {
+        Ty::Named { name, args, .. } => (type_last_segment(name), args.clone()),
+        else => return,
+    }
+    if (base != "HashMap" && base != "HashSet") || args.is_empty() || check_core_call_on_keyless(entry) {
+        return
+    }
+    for name in check_core_call_on_parameters_in(state, args[0]) {
+        let bounds = state.type_parameters.get(name) ?? continue
+        let mut allowed = false
+        for bound in bounds {
+            if !world.own.traits.contains_key(bound) && (bound == "Eq" || bound == "Ord") {
+                allowed = true
+            }
+        }
+        if allowed {
+            continue
+        }
+        let what = if base == "HashSet" { "an element of a `HashSet`" } else { "a key of a `HashMap`" }
+        state.findings.push(check_refusal("NK1248", span, f"`{entry}` needs `{name}: Eq`: `{name}` is {what}.", [f"`{name}` can be any type the caller picks, and a key is compared and hashed, so it needs a bound that says how."], f"Write `[{name}: Eq]`."))
     }
 }

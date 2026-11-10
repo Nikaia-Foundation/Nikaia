@@ -1,0 +1,13 @@
+// A type parameter used as a `HashSet` element or a `HashMap` key is
+// compared, so it needs `[T: Eq]` as `==` does (#1559).
+use std::collections
+
+fn put[T](mut s: ref collections::HashSet[T], x: T) {
+    s.insert(x)
+}
+
+fn main() throws {
+    let mut s: collections::HashSet[i64] = collections::HashSet()
+    put(s, 3)
+    println(s.len())
+}
