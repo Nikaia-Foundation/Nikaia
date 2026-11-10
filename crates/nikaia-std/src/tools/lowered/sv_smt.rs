@@ -50,7 +50,7 @@ pub struct SvBoth {
     pub exact_checks: i64,
 }
 
-pub(crate) fn sv_both(names: Vec<String>) -> SvBoth { SvBoth { simplex: sv_simplex(names.to_owned()), exact: sv_theory(names), by_exact: false, ran_at: -1, exact_checks: 0 } }
+pub(crate) fn sv_both(names: Vec<String>) -> SvBoth { SvBoth { simplex: sv_simplex(names.copy_owned()), exact: sv_theory(names), by_exact: false, ran_at: -1, exact_checks: 0 } }
 
 impl SvTh for SvBoth {
     fn push_level(&mut self) {
@@ -172,7 +172,7 @@ pub(crate) fn sv_smt_lemma<T: SvTh>(s: &mut SvSmt<T>, clause: &SvClause) -> bool
         if !s.sat.knows(l) { return false; }
     }
     s.lemmas += 1;
-    let key = sv_sorted(clause.lits.to_owned());
+    let key = sv_sorted(clause.lits.copy_owned());
     if s.seen.contains(&key) { s.repeated += 1; } else { s.seen.insert(key); }
     let conflict = s.sat.add_lemma(&clause.lits, clause.id);
     if conflict >= 0 {
@@ -278,7 +278,7 @@ pub(crate) fn sv_smt_congruences(cnf: &SvCnf, ids: &[u32], book: &mut SvBook, un
     }
     let mut c: i64 = 0;
     while ((c) as usize) < cnf.query.clauses.len() {
-        let clause = (*nikaia_std::index::get(&cnf.query.clauses, (c) as usize)).to_owned();
+        let clause = (*nikaia_std::index::get(&cnf.query.clauses, (c) as usize)).copy_owned();
         if clause.len() == 2 {
             for k in [0, 1] {
                 let d = *nikaia_std::index::get(&clause, nikaia_std::index::at(k));
@@ -293,7 +293,7 @@ pub(crate) fn sv_smt_congruences(cnf: &SvCnf, ids: &[u32], book: &mut SvBook, un
     }
     c = 0;
     while ((c) as usize) < cnf.query.clauses.len() {
-        let clause = (*nikaia_std::index::get(&cnf.query.clauses, (c) as usize)).to_owned();
+        let clause = (*nikaia_std::index::get(&cnf.query.clauses, (c) as usize)).copy_owned();
         let mut defined = clause.len() >= 2;
         for l in clause.iter() {
             let l = nikaia_std::num::value(l);
@@ -308,16 +308,16 @@ pub(crate) fn sv_smt_congruences(cnf: &SvCnf, ids: &[u32], book: &mut SvBook, un
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sv_smt_congruence(clause: &[u32], id: u32, short_lit: &[Vec<u32>], short_id: &[Vec<u32>], book: &mut SvBook, units: &mut Vec<u32>, unit_ids: &mut Vec<u32>, facts: &mut Vec<u32>) -> bool {
     let mut column: i64 = -1;
-    let mut values: Vec<i64> = vec![];
-    let mut ps: Vec<u32> = vec![];
-    let mut ns: Vec<u32> = vec![];
-    let mut p_ids: Vec<u32> = vec![];
-    let mut n_ids: Vec<u32> = vec![];
+    let mut values: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut ps: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut ns: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut p_ids: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut n_ids: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for h in clause.iter() {
         let h = nikaia_std::num::value(h);
         let a = (sv_not(h) / 2u32) as i64;
         let n = (*nikaia_std::index::get(&short_lit, nikaia_std::index::at(a))).len() as i64;
-        let mut rows: Vec<SvBound> = vec![];
+        let mut rows: Vec<SvBound> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut second: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
         for k in 0..n {
             let r = match book.lit_bound(*nikaia_std::index::get(nikaia_std::index::get(&short_lit, nikaia_std::index::at(a)), nikaia_std::index::at(k))) { Some(__nikaia_value) => __nikaia_value, None => return true };
@@ -393,7 +393,7 @@ pub(crate) fn sv_smt_engine_sorted(arena: &TermArena, facts: &[i64], goal: i64, 
 
 pub(crate) fn sv_smt_engine_set(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudget, theory: String, reals: &collections::BTreeSet<String>, settings: &str) -> Option<SvEngineRun> {
     let mut base = sv_params();
-    if !sv_params_set_all(&mut base, &settings.to_string()) { return None; }
+    if !sv_params_set_all(&mut base, &nikaia_std::block::Text::from(settings.to_string())) { return None; }
     let mut why = lg_why();
     let read = sv_cnf_sorted(arena, facts, goal, reals, &mut why);
     if read.is_none() { return Some(sv_engine_unknown(why.unknown.clone(), 0)); }
@@ -405,7 +405,7 @@ pub(crate) fn sv_smt_engine_set(arena: &TermArena, facts: &[i64], goal: i64, bud
 }
 
 pub(crate) fn sv_smt_search_cnf(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudget, cnf: &SvCnf, p: &SvParams, phases: &[bool]) -> SvEngineRun {
-    let theory = p.theory.to_string();
+    let theory = nikaia_std::block::Text::from(p.theory.to_string());
     let real = !cnf.query.reals.is_empty();
     if real && theory == "fm" { return sv_engine_unknown(LgUnknown::OutsideTheTheory, 0); }
     let mut book = match sv_book(&cnf.query) { Some(__nikaia_value) => __nikaia_value, None => return sv_engine_unknown(LgUnknown::Overflow, 0) };
@@ -417,12 +417,12 @@ pub(crate) fn sv_smt_search_cnf(arena: &TermArena, facts: &[i64], goal: i64, bud
     }
     let fast = if p.fast { sv_fast(&mut book, cnf, &ids) } else { sv_fast_skip() };
     match fast.end {
-        SvFastEnd::Unsat => { return SvEngineRun { driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.to_owned()), work: fast.work, path: fast.path.to_string(), carried: vec![], stats: sv_smt_stats_none() }; },
-        SvFastEnd::Sat(ref values) => { return SvEngineRun { driven: SvDriven::Answer(lg_consistent_answer(arena, facts, goal, true, values)), work: fast.work, path: fast.path.to_string(), carried: vec![], stats: sv_smt_stats_none() }; },
+        SvFastEnd::Unsat => { return SvEngineRun { driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.copy_owned()), work: fast.work, path: nikaia_std::block::Text::from(fast.path.to_string()), carried: vec![], stats: sv_smt_stats_none() }; },
+        SvFastEnd::Sat(ref values) => { return SvEngineRun { driven: SvDriven::Answer(lg_consistent_answer(arena, facts, goal, true, values)), work: fast.work, path: nikaia_std::block::Text::from(fast.path.to_string()), carried: vec![], stats: sv_smt_stats_none() }; },
         SvFastEnd::Skip => { },
     }
     let pre = if p.pre { sv_pre(&mut book, cnf, &ids) } else { sv_pre_none() };
-    if pre.unsat { return SvEngineRun { driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.to_owned()), work: 0, path: String::from("pre"), carried: vec![], stats: sv_smt_stats_none() }; }
+    if pre.unsat { return SvEngineRun { driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.copy_owned()), work: 0, path: String::from("pre"), carried: vec![], stats: sv_smt_stats_none() }; }
     let shown = sv_smt_pre_shown(&pre);
     let mut units: Vec<u32> = vec![];
     let mut unit_ids: Vec<u32> = vec![];
@@ -453,12 +453,12 @@ pub(crate) fn sv_smt_search_cnf(arena: &TermArena, facts: &[i64], goal: i64, bud
         v += 1;
     }
     let mut run = if real {
-        let mut sx = sv_strategy_simplex(cnf.names.to_owned(), p);
-        sx.reals = cnf.query.reals.to_owned();
+        let mut sx = sv_strategy_simplex(cnf.names.copy_owned(), p);
+        sx.reals = cnf.query.reals.copy_owned();
         sv_smt_run(sx, sat, theory_atom, &known, cnf, arena, facts, goal, budget)
-    } else if theory == "fm" { sv_smt_run(sv_theory(cnf.names.to_owned()), sat, theory_atom, &known, cnf, arena, facts, goal, budget) } else if theory == "simplex" { sv_smt_run(sv_strategy_simplex(cnf.names.to_owned(), p), sat, theory_atom, &known, cnf, arena, facts, goal, budget) } else {
-        let mut both = sv_both(cnf.names.to_owned());
-        both.simplex = sv_strategy_simplex(cnf.names.to_owned(), p);
+    } else if theory == "fm" { sv_smt_run(sv_theory(cnf.names.copy_owned()), sat, theory_atom, &known, cnf, arena, facts, goal, budget) } else if theory == "simplex" { sv_smt_run(sv_strategy_simplex(cnf.names.copy_owned(), p), sat, theory_atom, &known, cnf, arena, facts, goal, budget) } else {
+        let mut both = sv_both(cnf.names.copy_owned());
+        both.simplex = sv_strategy_simplex(cnf.names.copy_owned(), p);
         sv_smt_run(both, sat, theory_atom, &known, cnf, arena, facts, goal, budget)
     };
     run.path = shown;
@@ -483,7 +483,7 @@ pub(crate) fn sv_smt_run<T: SvTh>(th: T, sat: SvSat, theory_atom: Vec<bool>, kno
     let end = sv_smt_search(&mut s);
     let stats = SvSmtStats { conflicts: s.sat.stats.conflicts, theory_conflicts: s.conflicts, lemmas: s.lemmas, repeated: s.repeated, decisions: s.sat.stats.decisions, restarts: s.sat.stats.restarts };
     match end {
-        SvSmtEnd::Unsat => SvEngineRun { driven: SvDriven::Proved(cnf.query.clone(), s.sat.book.log.steps.to_owned()), work: s.checks, path: String::from(""), carried: vec![], stats: stats.clone() },
+        SvSmtEnd::Unsat => SvEngineRun { driven: SvDriven::Proved(cnf.query.clone(), s.sat.book.log.steps.copy_owned()), work: s.checks, path: String::from(""), carried: vec![], stats: stats.clone() },
         SvSmtEnd::Sat => {
             if cnf.query.reals.is_empty() { return SvEngineRun { driven: SvDriven::Answer(lg_consistent_answer(arena, facts, goal, true, &s.th.model())), work: s.checks, path: String::from(""), carried: vec![], stats: stats.clone() }; }
             let values = s.th.real_values();
@@ -504,7 +504,7 @@ pub(crate) fn sv_smt_run<T: SvTh>(th: T, sat: SvSat, theory_atom: Vec<bool>, kno
                     let l = nikaia_std::num::value(l);
                     if ((l / 2u32) as i64) >= atoms { inside = false; }
                 }
-                if inside { run.carried.push(c.to_owned()); }
+                if inside { run.carried.push(c.copy_owned()); }
             }
             run
         },

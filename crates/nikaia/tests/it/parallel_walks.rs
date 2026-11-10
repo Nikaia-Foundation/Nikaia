@@ -5,6 +5,8 @@
 //! what each setting lowers to and what a parallel lambda may not do.
 
 use nikaia::contracts::LedgerOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;

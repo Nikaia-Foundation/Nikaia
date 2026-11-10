@@ -7,6 +7,8 @@
 //! checker accepted a function that took a part and kept it, and `rustc` refused
 //! the result in its own words.
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::check::{Finding, Severity};
 use nikaia::contracts::{Ledger, LedgerOps, STD};

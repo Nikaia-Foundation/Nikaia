@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/main.rs
 //
 // The whole compiler builds on stable: nothing here needs an unstable feature,
@@ -285,8 +287,10 @@ pub enum Command {
     /// it prints (ADR-392).
     Migrate {
         /// The edition to migrate to: `views-3` or `print-throws`.
+        // Rust's `String`: a list of names is clap's `PossibleValuesParser`,
+        // which hands back that type and no other (#490).
         #[arg(value_parser = ["views-3", "print-throws"])]
-        edition: String,
+        edition: std::string::String,
         /// The files, or directories to migrate the `.nika` and `.md` files of.
         #[arg(value_name = "PATH", required = true)]
         files: Vec<PathBuf>,
@@ -464,12 +468,12 @@ fn explain(input: &std::path::Path, settings: &Settings, source: &str) -> Result
     let parsed = parser::parse_to_ast(source)?;
     let lowered = emit::emit_program(&parsed, settings.build)?;
 
-    let mut rustc_json = String::new();
+    let mut rustc_json = std::string::String::new();
     std::io::stdin().read_to_string(&mut rustc_json)?;
 
     let generated = input.with_extension("rs");
-    let path = input.display().to_string();
-    let generated = generated.display().to_string();
+    let path = input.display().to_text();
+    let generated = generated.display().to_text();
 
     let diagnostics = diagnostics::translate(&rustc_json, &lowered.map, source);
     let errors = diagnostics.iter().filter(|d| d.level == "error").count();
@@ -702,7 +706,7 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
                 list.split(',')
                     .map(str::trim)
                     .filter(|name| !name.is_empty())
-                    .map(str::to_string)
+                    .map(str::to_text)
                     .collect()
             });
             project.settings.optimize(&args.optimization)?;
@@ -934,7 +938,7 @@ impl TestHost<'_> {
         let args = self.args;
         let mut built = Project::open(self.start, args.target.as_deref(), Some(setting))?;
         built.settings.words.tests = testing;
-        built.variant = Some(variant.to_string());
+        built.variant = Some(variant.to_text());
         built.settings.optimize(&args.optimization)?;
         built.settings.choose_cpu(args.cpu.as_deref())?;
         built.settings.refutations(
@@ -1108,7 +1112,7 @@ fn cache_prune() {
         println!("removed {} ({})", entry.display(), show_size(*size));
     }
     let bound = match limit {
-        0 => "no limit".to_string(),
+        0 => "no limit".to_text(),
         limit => format!("limit {}", show_size(limit)),
     };
     println!(
@@ -1203,7 +1207,7 @@ fn run() -> Result<()> {
             action: CacheAction::Clean,
         } => {
             let dir = orchestrator::cache::clean()
-                .with_context(|| "emptying the user cache".to_string())?;
+                .with_context(|| "emptying the user cache".to_text())?;
             println!("emptied {}", dir.display());
             Ok(())
         }

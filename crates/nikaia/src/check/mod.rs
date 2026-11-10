@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/check/mod.rs
 //
 // The type checker.
@@ -63,7 +65,7 @@ impl CodeOps for Finding {
         if let Some(kept) = codes.get(self.code.as_str()) {
             return kept;
         }
-        let kept: &'static str = Box::leak(self.code.clone().into_boxed_str());
+        let kept: &'static str = Box::leak(Box::<str>::from(self.code.as_str()));
         codes.insert(kept);
         kept
     }
@@ -250,7 +252,7 @@ fn dump_accepted(parsed: &Parsed, checked: &Checked) {
     };
     let binary = std::env::current_exe()
         .ok()
-        .and_then(|exe| exe.file_stem().map(|s| s.to_string_lossy().into_owned()))
+        .and_then(|exe| exe.file_stem().map(|s| s.to_string_lossy().to_text()))
         .unwrap_or_default();
     // The name, cargo's hash trimmed, or none (`tools/check_glue.nika`).
     let Some(name) = nikaia_std::tools::check_glue::check_accepted_dump_name(

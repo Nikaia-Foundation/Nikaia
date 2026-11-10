@@ -5,6 +5,8 @@
 //! never accepted. A test keeps them honest.
 
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 
 fn samples_dir() -> PathBuf {
@@ -42,7 +44,7 @@ fn trailing_input_is_rejected() {
     // truncated parse.
     // `%`, because `@` starts an attribute since ADR-331 and is read as one.
     let err = parse_to_ast("fn main() {}\n%%%").expect_err("should reject trailing garbage");
-    let msg = err.to_string();
+    let msg = err.to_text();
     assert!(
         msg.contains("Didn't expect `%` here."),
         "unexpected error: {msg}"

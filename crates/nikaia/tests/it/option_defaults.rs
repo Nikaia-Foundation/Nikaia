@@ -10,6 +10,8 @@ use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program_reading};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn codes(source: &str) -> Vec<String> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -18,7 +20,7 @@ fn codes(source: &str) -> Vec<String> {
     common::checked(&parsed, &own, &library)
         .findings
         .into_iter()
-        .map(|f| f.code.to_string())
+        .map(|f| f.code.to_text())
         .collect()
 }
 
@@ -62,7 +64,7 @@ fn a_default_that_cannot_run_at_build_time_is_refused() {
          fn main() throws {\n\
          \x20   println(f\"{a()}\")\n\
          }\n";
-    assert_eq!(codes(source), vec!["NK1152".to_string()]);
+    assert_eq!(codes(source), vec!["NK1152".to_text()]);
 }
 
 /// **A default that needs itself is a ring** (ADR-318, `NK1168`), said once,
@@ -79,7 +81,7 @@ fn a_default_that_needs_itself_is_a_ring() {
          fn main() throws {\n\
          \x20   println(f\"{f()}\")\n\
          }\n";
-    assert_eq!(codes(source), vec!["NK1168".to_string()]);
+    assert_eq!(codes(source), vec!["NK1168".to_text()]);
 }
 
 fn refused(source: &str) -> Vec<(String, String)> {
@@ -89,7 +91,7 @@ fn refused(source: &str) -> Vec<(String, String)> {
     common::checked(&parsed, &own, &library)
         .findings
         .into_iter()
-        .map(|f| (f.code.to_string(), source[f.span.bytes()].to_string()))
+        .map(|f| (f.code.to_text(), source[f.span.bytes()].to_text()))
         .collect()
 }
 
@@ -110,7 +112,7 @@ fn a_default_that_owns_memory_is_refused_at_the_default() {
          }\n";
     assert_eq!(
         refused(source),
-        vec![("NK1167".to_string(), "three()".to_string())]
+        vec![("NK1167".to_text(), "three()".to_text())]
     );
 }
 
@@ -131,7 +133,7 @@ fn a_refused_default_is_pointed_at() {
          }\n";
     assert_eq!(
         refused(source),
-        vec![("NK1152".to_string(), "loud()".to_string())]
+        vec![("NK1152".to_text(), "loud()".to_text())]
     );
 }
 
@@ -196,7 +198,7 @@ fn a_struct_default_with_a_field_that_owns_memory_is_refused() {
          }\n";
     assert_eq!(
         refused(source),
-        vec![("NK1167".to_string(), "bag()".to_string())]
+        vec![("NK1167".to_text(), "bag()".to_text())]
     );
 }
 
@@ -246,8 +248,8 @@ fn a_computed_default_reaches_another_package() {
         .arg("run")
         .output()
         .expect("the nikaia binary runs");
-    let stdout = String::from_utf8_lossy(&run.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&run.stderr).to_string();
+    let stdout = String::from_utf8_lossy(&run.stdout).to_text();
+    let stderr = String::from_utf8_lossy(&run.stderr).to_text();
     let ledger = std::fs::read_to_string(dir.join("app/nikaia.contracts")).unwrap_or_default();
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(stdout, "p 1 2 30\n", "{stderr}");
@@ -295,8 +297,8 @@ fn a_duration_default_reaches_another_package() {
         .arg("run")
         .output()
         .expect("the nikaia binary runs");
-    let stdout = String::from_utf8_lossy(&run.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&run.stderr).to_string();
+    let stdout = String::from_utf8_lossy(&run.stdout).to_text();
+    let stderr = String::from_utf8_lossy(&run.stderr).to_text();
     let ledger = std::fs::read_to_string(dir.join("app/nikaia.contracts")).unwrap_or_default();
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(stdout, "w 30\n", "{stderr}");
@@ -433,5 +435,5 @@ fn a_text_view_option_lends_an_owned_string() {
          \x20   println(v)\n\
          }\n";
     // `ref` on the option is redundant (`NK1261`, a warning), not refused.
-    assert_eq!(codes(source), vec!["NK1261".to_string()]);
+    assert_eq!(codes(source), vec!["NK1261".to_text()]);
 }

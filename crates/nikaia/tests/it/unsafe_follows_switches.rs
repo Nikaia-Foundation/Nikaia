@@ -5,6 +5,8 @@
 //! the dropped check in a debug build.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 /// Every kind of check a proof drops: an index, a run read as a vector and as
@@ -60,7 +62,7 @@ fn lowered(name: &str, source: &str, optimization: Option<&str>) -> String {
         "{name} did not lower:\n{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    rust
+    String::from(rust)
 }
 
 #[test]
@@ -79,7 +81,7 @@ fn with_the_switches_on_each_unsafe_is_a_call_into_proven() {
     assert_eq!(all, proven, "{rust}");
     for operation in ["read", "array", "add", "shr", "neg"] {
         assert!(
-            rust.contains(&format!("unsafe {{ nikaia_std::proven::{operation}")),
+            rust.contains(&*format!("unsafe {{ nikaia_std::proven::{operation}")),
             "no proven::{operation}:\n{rust}"
         );
     }

@@ -17,6 +17,8 @@
 //! `tests/build-time/src/comptime_item.nika`.
 use crate::common;
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::check;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
@@ -173,7 +175,7 @@ fn a_function_called_only_at_build_time_is_not_warned_unused() {
     assert!(out.status.success(), "{said}\n{rust}");
     for used in ["helper", "three", "scaled"] {
         assert!(
-            !said.contains(&format!("function `{used}` is never used")),
+            !said.contains(&*format!("function `{used}` is never used")),
             "`{used}` runs at build time:\n{said}"
         );
     }
@@ -208,7 +210,7 @@ fn an_open_constant_written_out_at_its_uses_is_used() {
     assert!(out.status.success(), "{said}\n{rust}");
     for used in ["SLOTS", "STEP"] {
         assert!(
-            !said.contains(&format!("constant `{used}` is never used")),
+            !said.contains(&*format!("constant `{used}` is never used")),
             "`{used}` is read at its uses:\n{said}\n{rust}"
         );
     }

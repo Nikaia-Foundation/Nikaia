@@ -342,8 +342,11 @@ fn check_core_method_run(on: ref Ty) -> Ty? {
                 return item.clone()
             }
         },
-        Ty::Named { name, args, view } => {
-            if view && name == ARRAY && args.len() == 1 {
+        // **An `Array[T]` with no length is a run whether or not it is
+        // written `ref`** (ADR-views-3 D11, #1472): a plain parameter
+        // `xs: Array[i64]` views the caller's elements as `ref` does.
+        Ty::Named { name, args, .. } => {
+            if name == ARRAY && args.len() == 1 {
                 return args[0].clone()
             }
         },
@@ -560,6 +563,11 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     if text && (name == "find" || name == "rfind" || name == "replacen" || name == "split_at") {
         state.facts.text_finds.insert(id_of(receiver) as i64)
     }
+    // **A view of the receiver** (ADR-views-3 D9, #1478): `s.trim()` points
+    // into `s`, so a change to `s` while it is used is NK2305.
+    if text && views_what_it_is_called_on(name) {
+        state.facts.receiver_views.insert(id_of(expr) as i64)
+    }
     // **A copy of a list or a set** (ADR-collections-1 D4): `extend` takes its
     // elements one by one.
     let collection = match on {
@@ -689,6 +697,9 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
         // The language below infers no type for what `sum` hands back: the
         // number's type is written (D4).
         let typed = state.open_number_typed(world, expr)
+        if name == "sum" && args.len() == 0 {
+            state.flow.open_sums.insert(id_of(receiver) as i64, walk_item ?? 0)
+        }
     }
     if state.flow.walk_lent {
         let lent = state.flow.lent_walks.insert(id_of(expr) as i64)

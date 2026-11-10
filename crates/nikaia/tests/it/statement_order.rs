@@ -7,6 +7,8 @@
 //! same (D2): each case is lowered with the switches off and on.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::bounds::{BoundsChecks, OverflowChecks};
@@ -118,7 +120,7 @@ fn source() -> String {
 
 /// The emitted body of method `name`.
 fn body<'r>(rust: &'r str, name: &str) -> &'r str {
-    rust.split(&format!("fn {name}("))
+    rust.split(&*format!("fn {name}("))
         .nth(1)
         .and_then(|rest| rest.split("\n    }").next())
         .unwrap_or_else(|| panic!("{name} is emitted:\n{rust}"))
@@ -200,7 +202,7 @@ fn a_moved_write_changes_nothing_the_program_prints() {
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
-        printed.push(String::from_utf8_lossy(&out.stdout).to_string());
+        printed.push(String::from_utf8_lossy(&out.stdout).to_text());
     }
     assert_eq!(printed[0], printed[1]);
     assert_eq!(printed[0], "5\n10\n10\n15\n20\n20\n25\n");

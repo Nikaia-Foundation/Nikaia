@@ -1,0 +1,33 @@
+// #1417: a function of another package that takes `ref H?` lends a plain
+// value handed to it inside the option, `lib::f(Some(&held), 2)`, as a call
+// within one package does, and the caller still holds it after the call.
+// So does a plain `H?` the callee only reads (#1256). The package's
+// signature names its `H?` with the package in front.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/lib/src", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/lib/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/lib/src/main.nika", fs::Root::Anywhere, "pub struct H {\n\tpub n: i64,\n\tpub s: String,\n}\n\npub fn f(h: ref H?, e: i64) -> i64 {\n\tmatch h {\n\t\tx => return x.n + e,\n\t\tnull => return e,\n\t}\n}\n\npub fn k(h: H?, e: i64) -> i64 {\n\tmatch h {\n\t\tx => return x.n * e,\n\t\tnull => return 0,\n\t}\n}\n")
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use lib\n\nfn main() throws {\n\tlet held = lib::H { n: 4, s: \"kept\" }\n\tprintln(lib::f(held, 2))\n\tprintln(lib::f(null, 2))\n\tprintln(lib::k(held, 3))\n\tprintln(held.s)\n}\n")
+    let out = process::run(toolchain(), ["run", "src/main.nika"]; dir: f"{tmp}/app")
+    let mut shown: Vec[String] = []
+    for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+        let t = line.trim()
+        if !t.starts_with("Compiling") && !t.starts_with("Finished") && !t.starts_with("Running") && !t.starts_with("note:") && !t.starts_with("help:") {
+            shown.push(line.clone())
+        }
+    }
+    println(shown.join("\n"))
+    println(f"exit {out.code}")
+    process::run("rm", ["-rf", tmp])
+}

@@ -7,6 +7,8 @@ use crate::common;
 use nikaia::check::Finding;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 const NUM: &str = "grammar Num {\n    entry rule n -> i64 = d:dec[i64](digit+) -> { d }\n}\n\n";

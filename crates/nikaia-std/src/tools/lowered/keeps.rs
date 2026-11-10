@@ -50,13 +50,13 @@ pub(crate) fn keeps_statement(stmt: &Stmt, interner: &winnow_grammar::InternerCo
             let mutable = *mutable;
             let reached = reached_of(value, interner, context, own, library, &walk, true);
             let owned_declared = keeps_an_owned_declared((ty).as_ref());
-            if owned_declared { for name in reached_of(value, interner, context, own, library, &walk, false) { if context.options.contains(&name) { walk.uses.kept.insert(name.to_string()); } } }
+            if owned_declared { for name in reached_of(value, interner, context, own, library, &walk, false) { if context.options.contains(&name) { walk.uses.kept.insert(nikaia_std::block::Text::from(name.to_string())); } } }
             let viewed = keeps_viewed_of(value, interner, context, own, library, &walk);
-            if mutable { for name in reached_of(value, interner, context, own, library, &walk, false) { if !context.lent.contains(&name) { walk.uses.kept.insert(name.to_string()); } } }
+            if mutable { for name in reached_of(value, interner, context, own, library, &walk, false) { if !context.lent.contains(&name) { walk.uses.kept.insert(nikaia_std::block::Text::from(name.to_string())); } } }
             if !reached.is_empty() {
                 for bound in names.iter() {
                     let bound = *bound;
-                    alias(interner.resolve(bound).to_string(), &reached, &mut walk.aliases);
+                    alias(nikaia_std::block::Text::from(interner.resolve(bound).to_string()), &reached, &mut walk.aliases);
                 }
             }
             if !mutable && !owned_declared {
@@ -66,15 +66,15 @@ pub(crate) fn keeps_statement(stmt: &Stmt, interner: &winnow_grammar::InternerCo
                     lent.insert(nikaia_std::index::or(read, || "".into()));
                     for bound in names.iter() {
                         let bound = *bound;
-                        alias(interner.resolve(bound).to_string(), &lent, &mut walk.aliases);
-                        alias(interner.resolve(bound).to_string(), &lent, &mut walk.views);
+                        alias(nikaia_std::block::Text::from(interner.resolve(bound).to_string()), &lent, &mut walk.aliases);
+                        alias(nikaia_std::block::Text::from(interner.resolve(bound).to_string()), &lent, &mut walk.views);
                     }
                 }
             }
             if !viewed.is_empty() {
                 for bound in names.iter() {
                     let bound = *bound;
-                    alias(interner.resolve(bound).to_string(), &viewed, &mut walk.views);
+                    alias(nikaia_std::block::Text::from(interner.resolve(bound).to_string()), &viewed, &mut walk.views);
                 }
             }
         },
@@ -170,8 +170,8 @@ pub(crate) fn reached_of(expr: &Expr, interner: &winnow_grammar::InternerContext
         Expr::AsyncGroup(block, _, _, _, _) => { reached_by_last(block, interner, context, own, library, walk, through_calls, &mut found); },
         Expr::Variable(ident, _) => {
             let ident = *ident;
-            let name = interner.resolve(ident).to_string();
-            if context.parameters.contains(&name) { found.insert(name.to_string()); }
+            let name = nikaia_std::block::Text::from(interner.resolve(ident).to_string());
+            if context.parameters.contains(&name) { found.insert(nikaia_std::block::Text::from(name.to_string())); }
             let aliased = match *nikaia_std::index::get(&walk.aliases, &name) { Some(__nikaia_value) => __nikaia_value, None => return found };
             found.extend(aliased.iter().cloned());
         },
@@ -185,7 +185,7 @@ pub(crate) fn reached_of(expr: &Expr, interner: &winnow_grammar::InternerContext
                 }, || collections::BTreeSet::new().into()) },
                 _ => collections::BTreeSet::new(),
             };
-            for one in aliased.iter() { if one != "self" && !a_field_that_copies(one, interner.resolve(name), context) { found.insert(one.to_string()); } }
+            for one in aliased.iter() { if one != "self" && !a_field_that_copies(one, interner.resolve(name), context) { found.insert(nikaia_std::block::Text::from(one.to_string())); } }
             let parameter = match parameter_named(base, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return found };
             if parameter != "self" && !a_field_that_copies(&parameter, interner.resolve(name), context) { found.insert(parameter); }
         },
@@ -250,7 +250,7 @@ pub(crate) fn through_a_view(func: &Expr, args: &[Expr], interner: &winnow_gramm
 }
 
 pub(crate) fn a_position_the_result_points_into(callee: Option<&str>, at: i64, own: &Ledger, library: &Ledger) -> bool {
-    let known = match callee { Some(__nikaia_value) => __nikaia_value, None => return false }.to_string();
+    let known = nikaia_std::block::Text::from(match callee { Some(__nikaia_value) => __nikaia_value, None => return false }.to_string());
     if own.functions.contains_key(&known) { return points_into_at(match *nikaia_std::index::get(&own.functions, &known) { Some(__nikaia_value) => __nikaia_value, None => return false }, at); }
     points_into_at(match *nikaia_std::index::get(&library.functions, &known) { Some(__nikaia_value) => __nikaia_value, None => return false }, at)
 }
@@ -271,7 +271,7 @@ pub(crate) fn points_into_at(contract: &FnContract, at: i64) -> bool {
     if at >= signature.params.len() as i64 { return false; }
     let parameter = &nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).0;
     if nikaia_std::list::contains(&contract.borrows, &parameter) { return true; }
-    contract.returns.contains(&format!("ref({})", parameter)) || contract.returns.contains(&format!("ref({} |", parameter)) || contract.returns.contains(&format!("| {})", parameter)) || contract.returns.contains(&format!("| {} |", parameter))
+    contract.returns.contains(&*format!("ref({})", parameter)) || contract.returns.contains(&*format!("ref({} |", parameter)) || contract.returns.contains(&*format!("| {})", parameter)) || contract.returns.contains(&*format!("| {} |", parameter))
 }
 
 pub(crate) fn keeps_expression(expr: &Expr, interner: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
@@ -421,7 +421,7 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
             for field in fields.iter() {
                 let viewing = keeps_a_view_field(of, interner.resolve(field.name), own);
                 if field.value.is_none() {
-                    let named = interner.resolve(field.name).to_string();
+                    let named = nikaia_std::block::Text::from(interner.resolve(field.name).to_string());
                     keep_viewed_name(&named, walk);
                     let lent_here = viewing && keeps_lendable(&named, context);
                     if context.parameters.contains(&named) && !keeps_a_lent_text(&named, context) && !lent_here { walk.uses.kept.insert(named); }
@@ -447,7 +447,10 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
             }
         },
         Expr::ListRepeat { value, .. } => { let value = nikaia_std::boxed::open(value); keep_part(Some(value), interner, context, own, library, walk); },
-        Expr::Coalesce { value, .. } => { let value = nikaia_std::boxed::open(value); keep_part(Some(value), interner, context, own, library, walk); },
+        Expr::Coalesce { value, fallback, .. } => {
+            let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+            if !keeps_a_scalar_literal(fallback) { keep_part(Some(value), interner, context, own, library, walk); }
+        },
         Expr::SafeField { base, name, .. } => {
             let base = nikaia_std::boxed::open(base); let name = *name;
             let parameter = parameter_named(base, interner, context);
@@ -470,7 +473,7 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     }, || collections::BTreeSet::new().into());
-                    for one in aliased.iter() { if one != "self" && !context.lent.contains(one) { walk.uses.kept.insert(one.to_string()); } }
+                    for one in aliased.iter() { if one != "self" && !context.lent.contains(one) { walk.uses.kept.insert(nikaia_std::block::Text::from(one.to_string())); } }
                 }
                 return;
             }
@@ -481,7 +484,7 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
             for arm in arms.iter() {
                 let mut bound: collections::BTreeSet<String> = collections::BTreeSet::new();
                 names_a_pattern_binds(&arm.pattern, interner, &mut bound);
-                for one in bound.iter() { alias(one.to_string(), &whole, &mut walk.aliases); }
+                for one in bound.iter() { alias(nikaia_std::block::Text::from(one.to_string()), &whole, &mut walk.aliases); }
             }
         },
         Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); keep_what_a_task_names(body, interner, holes_of, context, walk); },
@@ -519,19 +522,19 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn keep_argument(arg: &Expr, callee: Option<&str>, at: i64, interner: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
-    let known = nikaia_std::index::or(callee, || "").to_string();
+    let known = nikaia_std::block::Text::from(nikaia_std::index::or(callee, || "").to_string());
     let mut handed = keeps_handed(arg, interner, context, own, library, &walk);
     handed.extend(keeps_named_by_a_lambda(arg, interner, holes_of, context, &walk));
-    for parameter in handed.iter() { if callee.is_none() { walk.uses.kept.insert(parameter.to_string()); } else { walk.uses.passed.push(Passed { parameter: parameter.to_string(), callee: known.to_string(), at }); } }
+    for parameter in handed.iter() { if callee.is_none() { walk.uses.kept.insert(nikaia_std::block::Text::from(parameter.to_string())); } else { walk.uses.passed.push(Passed { parameter: nikaia_std::block::Text::from(parameter.to_string()), callee: nikaia_std::block::Text::from(known.to_string()), at }); } }
 }
 
 pub(crate) fn keep_option(setting: &ConfigArg, callee: Option<&str>, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
     let names = keeps_handed(&setting.value, interner, context, own, library, &walk);
     if names.is_empty() { return; }
-    let known = nikaia_std::index::or(callee, || "").to_string();
+    let known = nikaia_std::block::Text::from(nikaia_std::index::or(callee, || "").to_string()); #[allow(clippy::redundant_locals)] let names = names;
     let mut at: Option<i64> = None;
     if own.functions.contains_key(&known) { at = option_at(match *nikaia_std::index::get(&own.functions, &known) { Some(__nikaia_value) => __nikaia_value, None => return }, interner.resolve(setting.name)); } else if library.functions.contains_key(&known) { at = option_at(match *nikaia_std::index::get(&library.functions, &known) { Some(__nikaia_value) => __nikaia_value, None => return }, interner.resolve(setting.name)); }
-    for parameter in names.iter() { if at.is_none() { walk.uses.kept.insert(parameter.to_string()); } else { walk.uses.passed.push(Passed { parameter: parameter.to_string(), callee: known.to_string(), at: nikaia_std::index::or(at, || 0) }); } }
+    for parameter in names.iter() { if at.is_none() { walk.uses.kept.insert(nikaia_std::block::Text::from(parameter.to_string())); } else { walk.uses.passed.push(Passed { parameter: nikaia_std::block::Text::from(parameter.to_string()), callee: nikaia_std::block::Text::from(known.to_string()), at: nikaia_std::index::or(at, || 0) }); } }
 }
 
 pub(crate) fn keep_method_options(config: &[ConfigArg], interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) { for setting in config.iter() { walk.uses.kept.extend(keeps_handed(&setting.value, interner, context, own, library, &walk)); } }
@@ -542,8 +545,8 @@ pub(crate) fn keep_receiver(receiver: &Expr, method: &str, interner: &winnow_gra
     match receiver {
         Expr::Variable(ident, _) => {
             let ident = *ident;
-            if method == "clone" && context.cloned_keeps.contains(interner.resolve(ident)) { walk.uses.kept.insert(interner.resolve(ident).to_string()); }
-            if context.parameters.contains(interner.resolve(ident)) { names.push(interner.resolve(ident).to_string()); }
+            if method == "clone" && context.cloned_keeps.contains(interner.resolve(ident)) { walk.uses.kept.insert(nikaia_std::block::Text::from(interner.resolve(ident).to_string())); }
+            if context.parameters.contains(interner.resolve(ident)) { names.push(nikaia_std::block::Text::from(interner.resolve(ident).to_string())); }
             for one in keeps_viewed_of(receiver, interner, context, own, library, &walk) { names.push(one); }
         },
         Expr::Field { .. } => {
@@ -568,7 +571,7 @@ pub(crate) fn keeps_field_root(expr: &Expr, interner: &winnow_grammar::InternerC
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); return keeps_field_root(base, interner, context) },
         Expr::Variable(ident, _) => {
             let ident = *ident;
-            if context.parameters.contains(interner.resolve(ident)) { return Some(interner.resolve(ident).to_string()); }
+            if context.parameters.contains(interner.resolve(ident)) { return Some(nikaia_std::block::Text::from(interner.resolve(ident).to_string())); }
             return None;
         },
         _ => return None,
@@ -594,7 +597,7 @@ pub(crate) fn keep_method_arguments(receiver: &Expr, args: &[Expr], method: &str
         let params: Vec<Ty> = nikaia_std::index::or(code, || vec![].into());
         for k in 0..args.len() as i64 {
             if ((k) as usize) < params.len() && ((*nikaia_std::index::get(&params, (k) as usize)).is_a_view() || lent_mut(nikaia_std::index::get(&params, (k) as usize)).is_some()) { continue; }
-            for name in keeps_handed(nikaia_std::index::get(&args, (k) as usize), interner, context, own, library, &walk) { walk.uses.kept.insert(name.to_string()); }
+            for name in keeps_handed(nikaia_std::index::get(&args, (k) as usize), interner, context, own, library, &walk) { walk.uses.kept.insert(nikaia_std::block::Text::from(name.to_string())); }
         }
         return;
     }
@@ -605,8 +608,8 @@ pub(crate) fn keep_method_arguments(receiver: &Expr, args: &[Expr], method: &str
         let mut handed = keeps_handed(nikaia_std::index::get(&args, (k) as usize), interner, context, own, library, &walk);
         handed.extend(keeps_named_by_a_lambda(nikaia_std::index::get(&args, (k) as usize), interner, holes_of, context, &walk));
         for name in handed.iter() {
-            for key in ours.iter() { walk.uses.passed.push(Passed { parameter: name.to_string(), callee: key.to_string(), at: k + 1 }); }
-            if theirs.hit || ours.is_empty() && !theirs.any { walk.uses.kept.insert(name.to_string()); }
+            for key in ours.iter() { walk.uses.passed.push(Passed { parameter: nikaia_std::block::Text::from(name.to_string()), callee: nikaia_std::block::Text::from(key.to_string()), at: k + 1 }); }
+            if theirs.hit || ours.is_empty() && !theirs.any { walk.uses.kept.insert(nikaia_std::block::Text::from(name.to_string())); }
         }
     }
 }
@@ -615,7 +618,7 @@ pub(crate) fn candidate_keys(ledger: &Ledger, methods: &MethodIndex, method: &st
     let mut keys: Vec<String> = vec![];
     for key in method_keys_of(methods, method, owner) {
         let contract = match *nikaia_std::index::get(&ledger.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if takes_self(contract) && has_position(contract, given) { keys.push(key.to_string()); }
+        if takes_self(contract) && has_position(contract, given) { keys.push(nikaia_std::block::Text::from(key.to_string())); }
     }
     keys
 }
@@ -661,7 +664,7 @@ pub(crate) fn keeps_owner_of(receiver: &Expr, method: &str, interner: &winnow_gr
             let bounds = match *nikaia_std::index::get(&context.bounds, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return None };
             for bound in bounds.iter() {
                 let by_bound = format!("{}::{}", bound, method);
-                if own.functions.contains_key(&by_bound) || library.functions.contains_key(&by_bound) { return Some(bound.to_string()); }
+                if own.functions.contains_key(&by_bound) || library.functions.contains_key(&by_bound) { return Some(nikaia_std::block::Text::from(bound.to_string())); }
             }
             return None;
         },
@@ -671,7 +674,7 @@ pub(crate) fn keeps_owner_of(receiver: &Expr, method: &str, interner: &winnow_gr
 
 pub(crate) fn keeps_ledger_owner(written: &str) -> String {
     if written == "String" { return String::from("str"); }
-    written.to_string()
+    nikaia_std::block::Text::from(written.to_string())
 }
 
 pub(crate) fn method_keys_of(methods: &MethodIndex, method: &str, owner: Option<&str>) -> Vec<String> {
@@ -679,7 +682,7 @@ pub(crate) fn method_keys_of(methods: &MethodIndex, method: &str, owner: Option<
     let named = match owner { Some(__nikaia_value) => __nikaia_value, None => return keys };
     let wanted = format!("{}::{}", named, method);
     let mut out: Vec<String> = vec![];
-    for key in keys.iter() { if *key == wanted || key.ends_with(&format!("::{}", wanted)) { out.push(key.to_string()); } }
+    for key in keys.iter() { if *key == wanted || key.ends_with(AsRef::<str>::as_ref(&format!("::{}", wanted))) { out.push(nikaia_std::block::Text::from(key.to_string())); } }
     out
 }
 
@@ -731,11 +734,11 @@ pub(crate) fn keeps_named_by_a_lambda(arg: &Expr, interner: &winnow_grammar::Int
     let mut names: Vec<String> = vec![];
     for one in seen.iter() {
         match one {
-            Seen::Spawn { .. } => { return context.parameters.iter().map(|p| { p.to_string() }).collect::<Vec<_>>(); },
+            Seen::Spawn { .. } => { return context.parameters.iter().map(|p| { nikaia_std::block::Text::from(p.to_string()) }).collect::<Vec<_>>(); },
             Seen::Name(name) => {
-                if context.parameters.contains(name) { names.push(name.to_string()); }
+                if context.parameters.contains(name) { names.push(nikaia_std::block::Text::from(name.to_string())); }
                 let viewing = match *nikaia_std::index::get(&walk.views, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                for viewed in viewing.iter() { names.push(viewed.to_string()); }
+                for viewed in viewing.iter() { names.push(nikaia_std::block::Text::from(viewed.to_string())); }
             },
             _ => { },
         }
@@ -743,7 +746,7 @@ pub(crate) fn keeps_named_by_a_lambda(arg: &Expr, interner: &winnow_grammar::Int
     names
 }
 
-pub(crate) fn keep_if_a_parameter(name: &str, context: &KeepsBody<'_, '_>, uses: &mut Uses) { if context.parameters.contains(name) { uses.kept.insert(name.to_string()); } }
+pub(crate) fn keep_if_a_parameter(name: &str, context: &KeepsBody<'_, '_>, uses: &mut Uses) { if context.parameters.contains(name) { uses.kept.insert(nikaia_std::block::Text::from(name.to_string())); } }
 
 pub(crate) fn keep_named(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
     walk.uses.kept.extend(keeps_viewed_of(expr, interner, context, own, library, &walk));
@@ -765,6 +768,17 @@ pub(crate) fn keeps_text_as_is(expr: &Expr, interner: &winnow_grammar::InternerC
             }
         },
         _ => return false,
+    }
+}
+
+pub(crate) fn keeps_a_scalar_literal(expr: &Expr) -> bool {
+    match expr {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::LitChar(_, _) => true,
+        Expr::LitBool(_, _) => true,
+        Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); keeps_a_scalar_literal(inner) },
+        _ => false,
     }
 }
 
@@ -796,7 +810,7 @@ pub(crate) fn keeps_lent_into_views(expr: &Expr, interner: &winnow_grammar::Inte
             let of = interner.resolve(name);
             for field in fields.iter() {
                 if !keeps_a_view_field(of, interner.resolve(field.name), own) { continue; }
-                let mut root = interner.resolve(field.name).to_string();
+                let mut root = nikaia_std::block::Text::from(interner.resolve(field.name).to_string());
                 if field.value.is_some() { root = match keeps_place_root(match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue }, interner) { Some(__nikaia_value) => __nikaia_value, None => continue }; }
                 if keeps_lendable(&root, context) && !context.lent.contains(&root) { found.insert(root); }
             }
@@ -808,7 +822,7 @@ pub(crate) fn keeps_lent_into_views(expr: &Expr, interner: &winnow_grammar::Inte
 
 pub(crate) fn keeps_place_root(expr: &Expr, interner: &winnow_grammar::InternerContext) -> Option<String> {
     match expr {
-        Expr::Variable(ident, _) => { let ident = *ident; Some(interner.resolve(ident).to_string()) },
+        Expr::Variable(ident, _) => { let ident = *ident; Some(nikaia_std::block::Text::from(interner.resolve(ident).to_string())) },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); keeps_place_root(base, interner) },
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); keeps_place_root(base, interner) },
         _ => None,
@@ -822,7 +836,7 @@ pub(crate) fn keeps_a_lent_text(name: &str, context: &KeepsBody<'_, '_>) -> bool
 }
 
 pub(crate) fn keep_viewed_name(name: &str, walk: &mut KeepsWalk) {
-    let viewing = match *nikaia_std::index::get(&walk.views, name) { Some(__nikaia_value) => __nikaia_value, None => return }.to_owned();
+    let viewing = match *nikaia_std::index::get(&walk.views, name) { Some(__nikaia_value) => __nikaia_value, None => return }.copy_owned();
     walk.uses.kept.extend(viewing.iter().cloned());
 }
 
@@ -834,8 +848,8 @@ pub(crate) fn keeps_handed(expr: &Expr, interner: &winnow_grammar::InternerConte
         },
         _ => { },
     }
-    let mut names: Vec<String> = vec![];
-    let part = part_of_a_parameter(expr, interner, context);
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    let part = part_of_a_parameter(expr, interner, context); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     if part.is_some() { names.push(nikaia_std::index::or(part, || "".into())); }
     for one in keeps_viewed_of(expr, interner, context, own, library, walk) { names.push(one); }
     match expr {
@@ -846,7 +860,7 @@ pub(crate) fn keeps_handed(expr: &Expr, interner: &winnow_grammar::InternerConte
         Expr::Variable(ident, _) => {
             let ident = *ident;
             let moved = match *nikaia_std::index::get(&walk.aliases, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return names };
-            for one in moved.iter() { names.push(one.to_string()); }
+            for one in moved.iter() { names.push(nikaia_std::block::Text::from(one.to_string())); }
         },
         _ => { },
     }
@@ -856,7 +870,7 @@ pub(crate) fn keeps_handed(expr: &Expr, interner: &winnow_grammar::InternerConte
 pub(crate) fn parameter_named(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>) -> Option<String> {
     match expr {
         Expr::Variable(ident, _) => { let ident = *ident; match context.parameters.contains(interner.resolve(ident)) {
-            true => Some(interner.resolve(ident).to_string()),
+            true => Some(nikaia_std::block::Text::from(interner.resolve(ident).to_string())),
             false => None,
         } },
         _ => None,
@@ -865,13 +879,28 @@ pub(crate) fn parameter_named(expr: &Expr, interner: &winnow_grammar::InternerCo
 
 pub(crate) fn coalesced_option(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>) -> Option<String> {
     match expr {
-        Expr::Coalesce { value, .. } => {
-            let value = nikaia_std::boxed::open(value);
-            let parameter = match parameter_named(value, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            if context.options.contains(&parameter) { Some(parameter) } else { None }
-        },
+        Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); match value {
+            Expr::Field { base, name, .. } => {
+                let base = nikaia_std::boxed::open(base); let name = *name;
+                if !keeps_a_jump(fallback) { return None; }
+                let parameter = match parameter_named(base, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                if parameter != "self" && an_option_field(&parameter, interner.resolve(name), context) { Some(parameter) } else { None }
+            },
+            _ => {
+                let parameter = match parameter_named(value, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                if context.options.contains(&parameter) { Some(parameter) } else { None }
+            },
+        } },
         _ => None,
     }
+}
+
+pub(crate) fn keeps_a_jump(expr: &Expr) -> bool { matches!(expr, Expr::Throw(_, _) | Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_)) }
+
+pub(crate) fn an_option_field(parameter: &str, field: &str, context: &KeepsBody<'_, '_>) -> bool {
+    let fields = match *nikaia_std::index::get(&context.fields, parameter) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let ty = match *nikaia_std::index::get(&fields, field) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    matches!(ty, Ty::Nullable(_))
 }
 
 pub(crate) fn a_read_option(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>) -> bool { coalesced_option(expr, interner, context).is_some() }
@@ -912,7 +941,7 @@ pub(crate) fn part_of_a_parameter(expr: &Expr, interner: &winnow_grammar::Intern
 
 pub(crate) fn field_root(expr: &Expr, interner: &winnow_grammar::InternerContext) -> Option<String> {
     match expr {
-        Expr::Variable(ident, _) => { let ident = *ident; Some(interner.resolve(ident).to_string()) },
+        Expr::Variable(ident, _) => { let ident = *ident; Some(nikaia_std::block::Text::from(interner.resolve(ident).to_string())) },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); field_root(base, interner) },
         _ => None,
     }
@@ -930,7 +959,7 @@ pub(crate) fn keeps_code_field(receiver: &Expr, method: &str, interner: &winnow_
             let fields = match *nikaia_std::index::get(&context.fields, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let ty = match *nikaia_std::index::get(&fields, method) { Some(__nikaia_value) => __nikaia_value, None => return None };
             return match ty {
-                Ty::Fn { params, .. } => Some(params.to_owned()),
+                Ty::Fn { params, .. } => Some(params.copy_owned()),
                 _ => None,
             };
         },
@@ -946,7 +975,7 @@ pub(crate) fn a_field_that_copies(parameter: &str, field: &str, context: &KeepsB
 
 pub(crate) fn resolved_callee(func: &Expr, interner: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger) -> Option<String> {
     let written = match func {
-        Expr::Variable(ident, _) => { let ident = *ident; interner.resolve(ident).to_string() },
+        Expr::Variable(ident, _) => { let ident = *ident; nikaia_std::block::Text::from(interner.resolve(ident).to_string()) },
         Expr::Path(segments, _) => written_path(interner, segments),
         _ => return None,
     };
@@ -956,7 +985,7 @@ pub(crate) fn resolved_callee(func: &Expr, interner: &winnow_grammar::InternerCo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn name_as_it_is(name: &str) -> String { name.to_string() }
+pub(crate) fn name_as_it_is(name: &str) -> String { nikaia_std::block::Text::from(name.to_string()) }
 
 pub(crate) fn an_arm_hands_on_what_it_binds(arms: &[MatchArm], interner: &winnow_grammar::InternerContext) -> bool {
     for arm in arms.iter() {
@@ -972,7 +1001,7 @@ pub(crate) fn names_a_pattern_binds(pattern: &MatchPattern, interner: &winnow_gr
         MatchPattern::Path(segments) => {
             if segments.len() == 1 {
                 let name = interner.resolve(*nikaia_std::index::get(&segments, 0));
-                if !names_a_type(name) { bound.insert(name.to_string()); }
+                if !names_a_type(name) { bound.insert(nikaia_std::block::Text::from(name.to_string())); }
             }
         },
         MatchPattern::Tuple { parts, .. } => { for part in parts.iter() { names_a_pattern_binds(part, interner, bound); } },
@@ -980,7 +1009,7 @@ pub(crate) fn names_a_pattern_binds(pattern: &MatchPattern, interner: &winnow_gr
         MatchPattern::Named { fields, .. } => { for field in fields.iter() { names_a_pattern_binds(&field.pat, interner, bound); } },
         MatchPattern::RestNamed(name) => {
             let name = *name;
-            bound.insert(interner.resolve(name).to_string());
+            bound.insert(nikaia_std::block::Text::from(interner.resolve(name).to_string()));
         },
         MatchPattern::Or(alternatives) => { for part in alternatives.iter() { names_a_pattern_binds(part, interner, bound); } },
         _ => { },
@@ -1065,7 +1094,7 @@ pub fn keeps_a_copy_type(ty: &Ty, copies: &collections::BTreeSet<String>) -> boo
 
 pub(crate) fn keeps_type_name(ty: &Ty) -> Option<String> {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() { Some(name.to_string()) } else { None } },
+        Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() { Some(nikaia_std::block::Text::from(name.to_string())) } else { None } },
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); keeps_type_name(inner) },
         _ => None,
     }
@@ -1129,11 +1158,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple84628| {
-                            let (at, arg) = __nikaia_tuple84628; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple86524| {
+                            let (at, arg) = __nikaia_tuple86524; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple84804| {
-                            let (at, arg) = __nikaia_tuple84804;
+                        }).map(|__nikaia_tuple86700| {
+                            let (at, arg) = __nikaia_tuple86700;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);
@@ -1152,7 +1181,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
             match &item.node {
                 Item::Fn { .. } => {
                     let found = match keeps_uses_of(view, &item.node, None, &ledger, library, &indexes, resolved, &|e| { host.holes(unit, e) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                    graph.insert(found.key.to_string(), found.uses);
+                    graph.insert(nikaia_std::block::Text::from(found.key.to_string()), found.uses);
                 },
                 Item::Impl { trait_name, target, methods } => {
                     let trait_name = *trait_name;
@@ -1162,7 +1191,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                         Some(t) => view.text(t),
                     };
                     for method in methods.iter() {
-                        let mut found = match keeps_uses_of(view, &method.node, Some(&target_name.to_string()), &ledger, library, &indexes, resolved, &|e| { host.holes(unit, e) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        let mut found = match keeps_uses_of(view, &method.node, Some(&nikaia_std::block::Text::from(target_name.to_string())), &ledger, library, &indexes, resolved, &|e| { host.holes(unit, e) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
                         if trait_name.is_some() {
                             match &method.node {
                                 Item::Fn { name, receiver, args, .. } => {
@@ -1173,16 +1202,16 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                                     let first: i64 = if receiver.is_some() { 1 } else { 0 };
                                     let mut at: i64 = 0;
                                     for arg in args.iter() {
-                                        if by_value(arg) && (*arg.ty.code).is_some() { found.uses.passed.push(Passed { parameter: view.text(arg.name), callee: at_trait.to_string(), at: at + first }); }
+                                        if by_value(arg) && (*arg.ty.code).is_some() { found.uses.passed.push(Passed { parameter: view.text(arg.name), callee: nikaia_std::block::Text::from(at_trait.to_string()), at: at + first }); }
                                         at += 1;
                                     }
                                     add_impl(&mut impls_of, &at_trait, &found.key);
-                                    impl_rows.push(KeepsImplRow { unit, method, target: target_name.to_string(), key: found.key.to_string(), trait_name: owner.to_string(), at_trait: at_trait.to_string(), first });
+                                    impl_rows.push(KeepsImplRow { unit, method, target: nikaia_std::block::Text::from(target_name.to_string()), key: nikaia_std::block::Text::from(found.key.to_string()), trait_name: nikaia_std::block::Text::from(owner.to_string()), at_trait: nikaia_std::block::Text::from(at_trait.to_string()), first });
                                 },
                                 _ => { },
                             }
                         }
-                        graph.insert(found.key.to_string(), found.uses);
+                        graph.insert(nikaia_std::block::Text::from(found.key.to_string()), found.uses);
                     }
                 },
                 Item::Trait { name, methods, .. } => {
@@ -1200,7 +1229,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     for rule in def.rules.iter() {
                         if !rule.is_entry { continue; }
                         let mut uses = no_uses();
-                        if a_parse_that_views(view.words, (rule.ret_type).as_ref(), &package) { uses.kept.insert(INPUT_POSITION.to_string()); }
+                        if a_parse_that_views(view.words, (rule.ret_type).as_ref(), &package) { uses.kept.insert(nikaia_std::block::Text::from(INPUT_POSITION.to_string())); }
                         for arg in rule.args.iter() { if by_value(arg) { uses.kept.insert(view.text(arg.name)); } }
                         let called = view.text(rule.name);
                         graph.insert(format!("{}::{}", named, called), uses);
@@ -1225,7 +1254,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                         let mut edges: Vec<Passed> = vec![];
                         let mut at: i64 = 0;
                         for arg in method.node.args.iter() {
-                            if by_value(arg) && (*arg.ty.code).is_some() { for callee in impls.iter() { edges.push(Passed { parameter: view.text(arg.name), callee: callee.to_string(), at: at + first }); } }
+                            if by_value(arg) && (*arg.ty.code).is_some() { for callee in impls.iter() { edges.push(Passed { parameter: view.text(arg.name), callee: nikaia_std::block::Text::from(callee.to_string()), at: at + first }); } }
                             at += 1;
                         }
                         if graph.contains_key(&key) {
@@ -1244,7 +1273,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
         if ledger.functions.contains_key(name) {
             let contract = match nikaia_std::index::get_mut(&mut ledger.functions, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut list: Vec<String> = vec![];
-            for parameter in parameters.iter() { list.push(parameter.to_string()); }
+            for parameter in parameters.iter() { list.push(nikaia_std::block::Text::from(parameter.to_string())); }
             contract.keeps = list;
         }
     }
@@ -1259,12 +1288,12 @@ pub(crate) fn keeps_by_value(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         if !signature.takes_a_receiver() { continue; }
         let mut by_value: Vec<String> = vec![];
-        for (name, ty) in signature.params.iter() { if name != "self" && (named.contains(key) || keeps_a_held_view(ty, &ledger, library)) { by_value.push(name.to_string()); } }
-        found.insert(key.to_string(), by_value);
+        for (name, ty) in signature.params.iter() { if name != "self" && (named.contains(key) || keeps_a_held_view(ty, &ledger, library)) { by_value.push(nikaia_std::block::Text::from(name.to_string())); } }
+        found.insert(nikaia_std::block::Text::from(key.to_string()), by_value);
     }
     for (key, by_value) in found.iter() {
         let contract = match nikaia_std::index::get_mut(&mut ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        contract.by_value = by_value.to_owned();
+        contract.by_value = by_value.copy_owned();
     }
 }
 
@@ -1362,7 +1391,7 @@ pub(crate) fn keeps_named_among(view: &ParsedView<'_, '_, '_, '_, '_, '_>, exprs
     }
     for (key, count) in seen.iter() {
         let count = nikaia_std::num::value(count);
-        if count > 0 && ledger.functions.contains_key(key) { named.insert(key.to_string()); }
+        if count > 0 && ledger.functions.contains_key(key) { named.insert(nikaia_std::block::Text::from(key.to_string())); }
     }
 }
 
@@ -1376,13 +1405,13 @@ pub(crate) fn keeps_path_key(view: &ParsedView<'_, '_, '_, '_, '_, '_>, expr: &E
 pub(crate) fn keeps_path_text(view: &ParsedView<'_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol], owner: &str) -> Option<String> {
     if segments.len() != 2 { return None; }
     let first = view.text(*nikaia_std::index::get(&segments, 0));
-    let ty = if first == "Self" { owner.to_string() } else { first };
+    let ty = if first == "Self" { nikaia_std::block::Text::from(owner.to_string()) } else { first };
     Some(format!("{}::{}", ty, view.text(*nikaia_std::index::get(&segments, 1))))
 }
 
 pub(crate) fn trait_positions(keeps: &collections::BTreeMap<String, Vec<i64>>, key: &str) -> Vec<i64> {
     let held = match *nikaia_std::index::get(&keeps, key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-    held.to_owned()
+    held.copy_owned()
 }
 
 pub(crate) fn add_impl(impls_of: &mut collections::BTreeMap<String, collections::BTreeSet<String>>, at_trait: &str, name: &str) {
@@ -1391,26 +1420,26 @@ pub(crate) fn add_impl(impls_of: &mut collections::BTreeMap<String, collections:
         let held = match *nikaia_std::index::get(&impls_of, at_trait) { Some(__nikaia_value) => __nikaia_value, None => return };
         names.extend(held.iter().cloned());
     }
-    names.insert(name.to_string());
-    impls_of.insert(at_trait.to_string(), names);
+    names.insert(nikaia_std::block::Text::from(name.to_string()));
+    impls_of.insert(nikaia_std::block::Text::from(at_trait.to_string()), names);
 }
 
 pub(crate) fn keeps_the_impls_own<H: KeepsHost>(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], rows: &[KeepsImplRow<'_>], graph: &collections::BTreeMap<String, Uses>, ledger: &Ledger, library: &Ledger, host: &H) -> KeepsColumn {
     let mut column = KeepsColumn { beyond: vec![], keepers: collections::BTreeMap::new() };
-    for row in rows.iter() { if graph.contains_key(&row.at_trait) && !column.keepers.contains_key(&row.at_trait) { column.keepers.insert(row.at_trait.to_string(), collections::BTreeMap::new()); } }
+    for row in rows.iter() { if graph.contains_key(&row.at_trait) && !column.keepers.contains_key(&row.at_trait) { column.keepers.insert(nikaia_std::block::Text::from(row.at_trait.to_string()), collections::BTreeMap::new()); } }
     let mut asked: Vec<&KeepsImplRow<'_>> = vec![];
     for row in rows.iter() { if asks_a_column(row, graph, library) { asked.push(row); } }
     if asked.is_empty() { return column; }
     let mut traits: collections::BTreeSet<String> = collections::BTreeSet::new();
     for row in asked.iter() {
         let row = *row;
-        traits.insert(row.at_trait.to_string());
+        traits.insert(nikaia_std::block::Text::from(row.at_trait.to_string()));
     }
     let mut own_graph: collections::BTreeMap<String, Uses> = collections::BTreeMap::new();
     for (name, uses) in graph.iter() {
         let mut passed: Vec<Passed> = vec![];
-        for p in uses.passed.iter() { if !traits.contains(&p.callee) { passed.push(Passed { parameter: p.parameter.to_string(), callee: p.callee.to_string(), at: p.at }); } }
-        own_graph.insert(name.to_string(), Uses { kept: uses.kept.to_owned(), passed });
+        for p in uses.passed.iter() { if !traits.contains(&p.callee) { passed.push(Passed { parameter: nikaia_std::block::Text::from(p.parameter.to_string()), callee: nikaia_std::block::Text::from(p.callee.to_string()), at: p.at }); } }
+        own_graph.insert(nikaia_std::block::Text::from(name.to_string()), Uses { kept: uses.kept.copy_owned(), passed });
     }
     let own_kept = kept_by(&own_graph, ledger, library);
     for row in asked.iter() {
@@ -1431,9 +1460,9 @@ pub(crate) fn keeps_the_impls_own<H: KeepsHost>(units: &[ParsedView<'_, '_, '_, 
                     if !by_value(arg) || (*arg.ty.code).is_none() || !mine.contains(&parameter) { continue; }
                     let theirs = match trait_parameter_at(&contract, at - 1 + row.first) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     if foreign && nikaia_std::list::contains(&contract.keeps, &theirs) { continue; }
-                    let span = host.keeping_statement(row.unit, row.method, row.target.to_string(), parameter.to_string(), &own_kept, ledger, library);
+                    let span = host.keeping_statement(row.unit, row.method, nikaia_std::block::Text::from(row.target.to_string()), nikaia_std::block::Text::from(parameter.to_string()), &own_kept, ledger, library);
                     if !foreign {
-                        add_keeper(&mut column, &row.at_trait, &theirs, KeepsKeeper { name: row.key.to_string(), unit: row.unit, span });
+                        add_keeper(&mut column, &row.at_trait, &theirs, KeepsKeeper { name: nikaia_std::block::Text::from(row.key.to_string()), unit: row.unit, span });
                         continue;
                     }
                     column.beyond.push((row.unit, check_refusal("NK1264", &span, format!("`{}` keeps `{}`, which the trait method `{}` runs.", row.key, parameter, row.at_trait), vec![format!("callers through `{}` were written against its `keeps` column, which keeps nothing at `{}` (ADR-277 D17).", row.at_trait, theirs), format!("only the package that declares `{}` widens the column.", row.trait_name)], Some(format!("run `{}` here rather than keep it, or keep it in a type of your own that does not implement `{}`.", parameter, row.trait_name)))));
@@ -1464,7 +1493,7 @@ pub(crate) fn add_keeper(column: &mut KeepsColumn, at_trait: &str, parameter: &s
     let mut inner: collections::BTreeMap<String, Vec<KeepsKeeper>> = collections::BTreeMap::new();
     if column.keepers.contains_key(at_trait) {
         let held = match *nikaia_std::index::get(&column.keepers, at_trait) { Some(__nikaia_value) => __nikaia_value, None => return };
-        for (name, keepers) in held.iter() { inner.insert(name.to_string(), copied_keepers(keepers)); }
+        for (name, keepers) in held.iter() { inner.insert(nikaia_std::block::Text::from(name.to_string()), copied_keepers(keepers)); }
     }
     let mut list: Vec<KeepsKeeper> = vec![];
     if inner.contains_key(parameter) {
@@ -1472,13 +1501,13 @@ pub(crate) fn add_keeper(column: &mut KeepsColumn, at_trait: &str, parameter: &s
         list = copied_keepers(had);
     }
     list.push(keeper);
-    inner.insert(parameter.to_string(), list);
-    column.keepers.insert(at_trait.to_string(), inner);
+    inner.insert(nikaia_std::block::Text::from(parameter.to_string()), list);
+    column.keepers.insert(nikaia_std::block::Text::from(at_trait.to_string()), inner);
 }
 
 pub(crate) fn copied_keepers(keepers: &[KeepsKeeper]) -> Vec<KeepsKeeper> {
     let mut copy: Vec<KeepsKeeper> = vec![];
-    for one in keepers.iter() { copy.push(KeepsKeeper { name: one.name.to_string(), unit: one.unit, span: one.span.clone() }); }
+    for one in keepers.iter() { copy.push(KeepsKeeper { name: nikaia_std::block::Text::from(one.name.to_string()), unit: one.unit, span: one.span.clone() }); }
     copy
 }
 
@@ -1492,7 +1521,7 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
                 Some(n) => view.text(n),
             };
             let target_name = nikaia_std::index::or(match target {
-                Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                 None => None,
             }, || "".into());
             let is_method = target.is_some();
@@ -1523,7 +1552,7 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
                 for held in declared.iter() {
                     if held.name == arg.ty.name {
                         of = collections::BTreeMap::new();
-                        for (field, ty) in held.fields.iter() { of.insert(field.to_string(), written_ty(view.words, view.aliases, ty)); }
+                        for (field, ty) in held.fields.iter() { of.insert(nikaia_std::block::Text::from(field.to_string()), written_ty(view.words, view.aliases, ty)); }
                         found = true;
                     }
                 }
@@ -1535,7 +1564,7 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
                 let contract = match *nikaia_std::index::get(&ledger.types, &written) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&library.types, &written) { Some(__nikaia_value) => __nikaia_value, None => continue } };
                 if contract.fields.is_empty() { continue; }
                 let mut of: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
-                for field in contract.fields.iter() { of.insert(field.name.to_string(), field.ty.clone()); }
+                for field in contract.fields.iter() { of.insert(nikaia_std::block::Text::from(field.name.to_string()), field.ty.clone()); }
                 fields.insert(view.text(arg.name), of);
             }
             let mut unresolved = false;
@@ -1551,7 +1580,7 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
                     for g in generics.iter() { if g.name == a.ty.name && !g.bounds.is_empty() { bounds.insert(view.text(a.name), g.bounds.iter().map(|b| { view.text(*b) }).collect::<Vec<_>>()); } }
                 }
             }
-            if is_method { types.insert(String::from("self"), target_name.to_string()); }
+            if is_method { types.insert(String::from("self"), nikaia_std::block::Text::from(target_name.to_string())); }
             let mut cloned_keeps: collections::BTreeSet<String> = collections::BTreeSet::new();
             for a in args.iter() { if a.ty.is_view && !a.ty.is_nullable && !a.ty.is_slice && a.ty.generics.is_empty() && view.text(a.ty.name) == "Bytes" { cloned_keeps.insert(view.text(a.name)); } }
             let mut options: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -1563,12 +1592,12 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
                 for at in 0..a.ty.generics.len() as i64 { each.push(nikaia_std::index::get(&a.ty.generics, nikaia_std::index::at(at)).is_view || code_lends_at(view.words, &a.ty, at)); }
                 code_lends.insert(view.text(a.name), each);
             }
-            let context = KeepsBody { parameters: parameters.to_owned(), lent, fields, returns_a_view, hands_back_its_last: ret_type.is_some() && !returns_a_view, unresolved, types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps, code_lends, options, bounds };
+            let context = KeepsBody { parameters: parameters.copy_owned(), lent, fields, returns_a_view, hands_back_its_last: ret_type.is_some() && !returns_a_view, unresolved, types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps, code_lends, options, bounds };
             let uses = uses_in(body, view.words, holes_of, &context, ledger, library);
             let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new();
-            for name in uses.kept.iter() { if !unkept.contains(name) { kept.insert(name.to_string()); } }
+            for name in uses.kept.iter() { if !unkept.contains(name) { kept.insert(nikaia_std::block::Text::from(name.to_string())); } }
             let mut passed: Vec<Passed> = vec![];
-            for p in uses.passed.iter() { if !unkept.contains(&p.parameter) { passed.push(Passed { parameter: p.parameter.to_string(), callee: p.callee.to_string(), at: p.at }); } }
+            for p in uses.passed.iter() { if !unkept.contains(&p.parameter) { passed.push(Passed { parameter: nikaia_std::block::Text::from(p.parameter.to_string()), callee: nikaia_std::block::Text::from(p.callee.to_string()), at: p.at }); } }
             return Some(KeepsFound { key, uses: Uses { kept, passed } });
         },
         _ => { return None; },

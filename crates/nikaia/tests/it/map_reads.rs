@@ -19,6 +19,8 @@ use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -178,7 +180,7 @@ fn panic_ends_the_program_at_the_nikaia_line() {
         .output()
         .expect("run the program");
     assert!(!ran.status.success(), "the program stops");
-    let said = String::from_utf8_lossy(&ran.stderr).to_string();
+    let said = String::from_utf8_lossy(&ran.stderr).to_text();
     let _ = std::fs::remove_dir_all(&dir);
     assert!(said.contains("was a key a moment ago"), "{said}");
     assert!(said.contains("main.rs") || said.contains(".nika"), "{said}");
@@ -441,7 +443,7 @@ fn ran(purpose: &str, source: &str) -> String {
         .expect("run the program");
     let _ = std::fs::remove_dir_all(&dir);
     assert!(ran.status.success(), "{purpose} failed");
-    String::from_utf8_lossy(&ran.stdout).trim().to_string()
+    String::from_utf8_lossy(&ran.stdout).trim().to_text()
 }
 
 const TWO_MAPS: &str = "use std::collections

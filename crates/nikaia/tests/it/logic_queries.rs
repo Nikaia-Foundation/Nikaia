@@ -2,6 +2,8 @@
 //! terms, and the reference solver's answer. Nothing here knows Nikaia.
 
 use crate::nikaia_logic;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia_logic::{
     Answer, Arena, Budget, Certificate, FourierMotzkin, Model, Query, Refutation, Rejected, Solver,
@@ -26,7 +28,7 @@ fn check(arena: &Arena, facts: &[TermId], goal: TermId) -> Answer {
 fn refuted(values: &[(&str, i64)]) -> Answer {
     Answer::Refuted {
         model: Model {
-            values: values.iter().map(|(n, v)| (n.to_string(), *v)).collect(),
+            values: values.iter().map(|(n, v)| (n.to_text(), *v)).collect(),
         },
     }
 }
@@ -553,7 +555,7 @@ fn a_split_that_leaves_an_alternative_out_is_rejected() {
 
     let short = Certificate::Split {
         disjunction: *disjunction,
-        cases: cases[..1].to_vec(),
+        cases: Vec::from(&cases[..1]),
     };
     assert_eq!(
         verify(&query, &short),

@@ -242,13 +242,21 @@ impl EmitState {
     /// Whether this unit's function `callee` only reads its parameter `i`,
     /// which is then lowered a `&str` (`Option<&str>`) below whatever text
     /// flows in (ADR-282 D5, D11): a view is lent as it is, not wrapped (#598).
-    fn emit_arg_only_read(ref self, world: ref EmitWorld, callee: ref String, i: i64) -> bool {
-        let contract = self.own_contracts.functions.get(callee) ?? return false
+    fn emit_arg_only_read(ref self, world: ref EmitWorld, callee: ref String, method_callee: ref String?, i: i64) -> bool {
+        let contract = self.own_contracts.functions.get(method_callee?.clone() ?? callee.clone()) ?? return false
         let signature = contract.signature?.clone() ?? return false
+        // **A method call's argument `i` is the method's parameter `i + 1`**,
+        // after `self`, as its declaration counts them (#1515): a text the
+        // method only reads is a `&str` there, so the call hands it
+        // unwrapped. A call by the method's path names `self` itself.
+        let mut at = i
         if signature.takes_a_receiver() {
-            return false
+            if method_callee == null {
+                return false
+            }
+            at = i + 1
         }
-        return emit_arg_lends_own(contract, i, world.library, self.described)
+        return emit_arg_lends_own(contract, at, world.library, self.described)
     }
 
     /// Whether `callee` takes its parameter `i` as a `Bytes` with its owner
@@ -393,6 +401,19 @@ impl EmitState {
             out.push(scalar.clone())
             return
         }
+        // **Text of its own handed to a described Rust crate is Rust's
+        // `String`** (ADR-327 D8, #490): the crate's traits are for `std`'s
+        // text, not a block's (`describe<T: Describe>(value: T)` with
+        // `Describe` for `String`), and toward Rust text crosses as it is.
+        if self.described.functions.contains_key(callee) && self.facts.owned_texts.contains(node_key(arg)) {
+            match arg {
+                Expr::LitStr { text, .. } => {
+                    out.push(f"std::string::String::from(\"{text}\")")
+                    return
+                },
+                else => {}
+            }
+        }
         // **`entry`'s key built into the map's text** (#676).
         if self.facts.owned_entry_keys.contains(node_key(arg)) {
             out.push("String::from(")
@@ -467,7 +488,7 @@ impl EmitState {
         }
         // **Into a parameter both kinds of text flow into, each argument goes as
         // it is** (ADR-282 D2): a view borrowed, text of its own moved in.
-        let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, method_callee?.clone() ?? callee.clone(), i) && !self.facts.mixed_choices.contains(node_key(arg))
+        let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, callee, method_callee, i) && !self.facts.mixed_choices.contains(node_key(arg))
         // **A plain value lent to a `T?` the callee reads as `&Option<T>`**
         // (#1080) is lent in an option made for the call: `&Some(name.clone())`,
         // a place copied in, a value made there moved in. A named function
@@ -1353,18 +1374,20 @@ impl EmitState {
     /// Whether a channel can carry a task's crash: the crash itself, the box,
     /// its envelope, or a generated sum with `task::Crashed` among its members.
     fn emit_channel_holds_a_crash(ref self, channel: ref String) -> bool sync {
-        if channel == "nikaia_std::task::Crashed" || channel == "Box<dyn std::error::Error>" || channel == "nikaia_std::task::Boxed" {
+        // `task::OverBudget` takes a crash apart (ADR-327 D13): a full block
+        // is its own, any other crash unwinds on.
+        if channel == "nikaia_std::task::Crashed" || channel == "nikaia_std::task::OverBudget" || channel == "Box<dyn std::error::Error>" || channel == "nikaia_std::task::Boxed" {
             return true
         }
         if channel.starts_with("nikaia_std::error::Thrown<") {
-            return channel.ends_with("task::Crashed>")
+            return channel.ends_with("task::Crashed>") || channel.ends_with("task::OverBudget>")
         }
         let root = self.sum_root()
         for (members, name) in self.sums {
             let full = f"{root}{name}"
             if channel == full || channel.starts_with(f"{full}<") {
                 for member in members {
-                    if member == "task::Crashed" {
+                    if member == "task::Crashed" || member == "task::OverBudget" {
                         return true
                     }
                 }

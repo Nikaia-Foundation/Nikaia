@@ -3,6 +3,8 @@
 //! problem, its SMT-LIB `HORN` text, and what makes a candidate invariant
 //! usable.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use nikaia_std::tools::logic_horn::{
     LgExit, LgLoop, lg_horn_write, lg_loop_check, lg_primed, lg_proved,
 };
@@ -37,13 +39,13 @@ fn section_one(arena: &mut TermArena) -> LgLoop {
     let ten_a = arena.mul(ten, a);
     let goal = arena.equal(total, ten_a);
     LgLoop {
-        state: vec!["i".to_string(), "total".to_string()],
+        state: vec!["i".to_text(), "total".to_text()],
         fixed: vec![a_positive, a_small],
         entry: vec![i_zero, total_zero],
         condition: Some(condition),
         step,
         exits: vec![LgExit {
-            kind: "condition".to_string(),
+            kind: "condition".to_text(),
             relation: leave,
         }],
         goals: vec![goal],

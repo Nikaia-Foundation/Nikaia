@@ -44,16 +44,16 @@ pub(crate) struct ShapeSeen {
 }
 
 pub fn shape_of(args: &[FnArg], body: &Block, pinned: &collections::BTreeSet<String>, around: &Around, words: &winnow_grammar::InternerContext) -> BodyShape {
-    let mut seen = ShapeSeen { bound: collections::BTreeMap::new(), shape: BodyShape { constants: collections::BTreeMap::new(), unsigned: collections::BTreeSet::new(), roots: collections::BTreeSet::new(), aliases: collections::BTreeMap::new(), bound: collections::BTreeSet::new(), twice: collections::BTreeSet::new(), fields: around.fields.to_owned() }, lost: collections::BTreeSet::new(), returning: around.returning.to_owned() };
+    let mut seen = ShapeSeen { bound: collections::BTreeMap::new(), shape: BodyShape { constants: collections::BTreeMap::new(), unsigned: collections::BTreeSet::new(), roots: collections::BTreeSet::new(), aliases: collections::BTreeMap::new(), bound: collections::BTreeSet::new(), twice: collections::BTreeSet::new(), fields: around.fields.copy_owned() }, lost: collections::BTreeSet::new(), returning: around.returning.copy_owned() };
     for arg in args.iter() { bind_name(words.resolve(arg.name), &mut seen); }
     look_block(body, &Look::Bound, false, around, words, &mut seen);
     for (name, times) in seen.bound.iter() {
         let times = nikaia_std::num::value(times);
-        seen.shape.bound.insert(name.to_string());
-        if times > 1 { seen.shape.twice.insert(name.to_string()); }
+        seen.shape.bound.insert(nikaia_std::block::Text::from(name.to_string()));
+        if times > 1 { seen.shape.twice.insert(nikaia_std::block::Text::from(name.to_string())); }
     }
     for arg in args.iter() {
-        let name = words.resolve(arg.name).to_string();
+        let name = nikaia_std::block::Text::from(words.resolve(arg.name).to_string());
         if once(&name, &seen) && is_unsigned(&plain_name(&arg.ty, words)) { seen.shape.unsigned.insert(name); }
     }
     look_block(body, &Look::Lets, false, around, words, &mut seen);
@@ -68,7 +68,7 @@ pub fn shape_of(args: &[FnArg], body: &Block, pinned: &collections::BTreeSet<Str
     }
     seen.lost.extend(through.iter().cloned());
     let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for root in seen.shape.roots.iter() { if !seen.lost.contains(root) { kept.insert(root.to_string()); } }
+    for root in seen.shape.roots.iter() { if !seen.lost.contains(root) { kept.insert(nikaia_std::block::Text::from(root.to_string())); } }
     seen.shape.roots = kept;
     seen.shape
 }
@@ -78,9 +78,9 @@ pub fn elements_key(shape: &BodyShape, expr: &Expr, words: &winnow_grammar::Inte
         Expr::Variable(n, _) => {
             let n = *n;
             let name = words.resolve(n);
-            if shape.roots.contains(name) { return Some(name.to_string()); }
+            if shape.roots.contains(name) { return Some(nikaia_std::block::Text::from(name.to_string())); }
             let key = match shape.aliases.get(name) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            return Some(key.to_string());
+            return Some(nikaia_std::block::Text::from(key.to_string()));
         },
         Expr::Index { base, .. } => {
             let base = nikaia_std::boxed::open(base);
@@ -118,12 +118,12 @@ pub fn only_removes(method: &str) -> bool { matches!(method, "pop" | "remove" | 
 
 pub fn key_root(key: &str) -> String {
     let parts: Vec<&str> = key.split('[').collect::<Vec<_>>();
-    (*nikaia_std::index::get(&parts, 0)).to_string()
+    nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string())
 }
 
 pub fn root_name(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match expr {
-        Expr::Variable(n, _) => { let n = *n; Some(words.resolve(n).to_string()) },
+        Expr::Variable(n, _) => { let n = *n; Some(nikaia_std::block::Text::from(words.resolve(n).to_string())) },
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); root_name(base, words) },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); root_name(base, words) },
         _ => None,
@@ -146,12 +146,12 @@ pub fn is_whole_number(ty: &str) -> bool {
 
 pub(crate) fn plain_name(ty: &Type, words: &winnow_grammar::InternerContext) -> String {
     if !ty.generics.is_empty() { return String::from(""); }
-    words.resolve(ty.name).to_string()
+    nikaia_std::block::Text::from(words.resolve(ty.name).to_string())
 }
 
 pub(crate) fn bind_name(name: &str, seen: &mut ShapeSeen) {
     let before = nikaia_std::index::or(seen.bound.get(name), || 0);
-    seen.bound.insert(name.to_string(), before + 1);
+    seen.bound.insert(nikaia_std::block::Text::from(name.to_string()), before + 1);
 }
 
 pub(crate) fn bind_all(names: &[winnow_grammar::Symbol], words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
@@ -195,12 +195,12 @@ pub(crate) fn read_let(name: &str, mutable: bool, ty: Option<&Type>, value: &Exp
     if !once(name, &seen) { return; }
     let declared = declared_name(ty, words);
     let whole = declared.is_none() || is_whole_number(nikaia_std::index::or(declared.as_deref(), || ""));
-    if is_unsigned(nikaia_std::index::or(declared.as_deref(), || "")) { seen.shape.unsigned.insert(name.to_string()); }
+    if is_unsigned(nikaia_std::index::or(declared.as_deref(), || "")) { seen.shape.unsigned.insert(nikaia_std::block::Text::from(name.to_string())); }
     if !mutable && whole {
         let n = literal_count(value);
-        if n.is_some() { seen.shape.constants.insert(name.to_string(), nikaia_std::index::or(n, || 0)); }
+        if n.is_some() { seen.shape.constants.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::index::or(n, || 0)); }
     }
-    if is_list_literal(value) || is_empty_map(value, words) || returning_call(value, &seen.returning, words) { seen.shape.roots.insert(name.to_string()); }
+    if is_list_literal(value) || is_empty_map(value, words) || returning_call(value, &seen.returning, words) { seen.shape.roots.insert(nikaia_std::block::Text::from(name.to_string())); }
 }
 
 pub(crate) fn returning_call(expr: &Expr, returning: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> bool {
@@ -221,9 +221,9 @@ pub fn is_empty_map(expr: &Expr, words: &winnow_grammar::InternerContext) -> boo
             let last = match func {
                 Expr::Path(segments, _) => {
                     if segments.is_empty() { return false; }
-                    words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_string()
+                    nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_string())
                 },
-                Expr::Variable(n, _) => { let n = *n; words.resolve(n).to_string() },
+                Expr::Variable(n, _) => { let n = *n; nikaia_std::block::Text::from(words.resolve(n).to_string()) },
                 _ => return false,
             };
             last == "BTreeMap" || last == "HashMap"
@@ -235,7 +235,7 @@ pub fn is_empty_map(expr: &Expr, words: &winnow_grammar::InternerContext) -> boo
 pub(crate) fn read_alias(name: &str, value: &Expr, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
     if !once(name, &seen) || seen.shape.roots.contains(name) { return; }
     let key = match elements_key(&seen.shape, value, words) { Some(__nikaia_value) => __nikaia_value, None => return };
-    seen.shape.aliases.insert(name.to_string(), key);
+    seen.shape.aliases.insert(nikaia_std::block::Text::from(name.to_string()), key);
 }
 
 pub(crate) fn lose(expr: &Expr, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
@@ -263,7 +263,7 @@ pub(crate) fn callee_params(func: &Expr, around: &Around, words: &winnow_grammar
         Expr::Variable(name, _) => {
             let name = *name;
             let params = match around.functions.get(words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            Some(params.to_owned())
+            Some(params.copy_owned())
         },
         _ => None,
     }
@@ -327,7 +327,7 @@ pub(crate) fn look_expr_here(expr: &Expr, look: &Look, deferred: bool, around: &
                 match expr {
                     Expr::Variable(n, _) => {
                         let n = *n;
-                        seen.lost.insert(words.resolve(n).to_string());
+                        seen.lost.insert(nikaia_std::block::Text::from(words.resolve(n).to_string()));
                     },
                     _ => { },
                 }

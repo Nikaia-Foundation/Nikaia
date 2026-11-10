@@ -21,13 +21,26 @@ fn root() -> String throws {
     return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
 }
 
+// The tests' cache entry cargo builds in, `<kind>/<toolchain key>` under
+// target/nikaia-project-tests: stamped as `use_entry` stamps one
+// (`.nikaia-used`), so `nikaia cache prune` counts it and removes it when it
+// was used longest ago (#1521); cargo's lock on it keeps it while it builds.
+// One per toolchain, so what an older compiler built goes as a whole.
+fn cache_entry(repo: String, nikaia: String, kind: String) -> String throws {
+    let key = process::run("sha256sum", [nikaia]).stdout.split(" ").collect()[0].clone()
+    let entry = f"{repo}/target/nikaia-project-tests/{kind}/{key}"
+    process::run("mkdir", ["-p", entry.clone()])
+    fs::write(f"{entry}/.nikaia-used", fs::Root::Anywhere, "")
+    return entry
+}
+
 fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
     let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
     let from = f"{repo}/tests/compiler/rust_library_splice"
     process::run("cp", ["-r", f"{from}/demo", f"{from}/user", tmp.clone()])
-    let cache = f"{repo}/target/nikaia-project-tests/rust-library-splice"
+    let cache = cache_entry(repo.clone(), nikaia.clone(), "rust-library-splice")
     let mut env: Vec[(String, String)] = []
     env.push(("CARGO_TARGET_DIR", cache.clone()))
     env.push(("CARGO_NET_OFFLINE", "true"))

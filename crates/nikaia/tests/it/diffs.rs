@@ -2,6 +2,8 @@
 //! of a ledger a `--locked` build finds different, and the difference an
 //! output test prints between what it expected and what it produced.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use nikaia_std::tools::diffs::{changed_lines, differing_lines};
 
 /// A changed line is named under its entry, once; a new entry names itself.
@@ -12,9 +14,9 @@ fn a_changed_ledger_line_is_named_under_its_entry() {
     assert_eq!(
         changed_lines(built, committed),
         vec![
-            "  [fn.\"a\"]".to_string(),
-            "      throws = [\"E\"]".to_string(),
-            "  [fn.\"b\"]".to_string(),
+            "  [fn.\"a\"]".to_text(),
+            "      throws = [\"E\"]".to_text(),
+            "  [fn.\"b\"]".to_text(),
         ]
     );
 }

@@ -998,6 +998,18 @@ fn check_core_call_on_member_one(mut state: CheckState, world: ref CheckWorld, k
     // `i64`, as `let taken: i64` would; nothing below the call infers it.
     state.number_asked(world, args[at], want, span, true)
     let have: Ty = check_core_call_on_written(found[at])
+    // **A number where the receiver binds a type no integer is** (#1462):
+    // `m.insert(5, 7)` on a `HashMap[String, i64]`. A literal or an open
+    // number has no type yet, so it read as `?` and fit; the receiver's
+    // binding is the use that decides it (ADR-285 D2), and none can.
+    if have.is_unknown() && !want.is_unknown() && state.number_shaped(world, args[at]) && state.no_integer_is(world, want) {
+        let wanted = want.text()
+        let number_at = check_span_at(world, args[at], span)
+        let message: String = f"`{key}` expects `{wanted}` here, but you're passing a number."
+        let help: String = f"Make it a `{wanted}`, or give the number to a place that holds one."
+        state.findings.push(check_refusal("NK1102", number_at, message, ["A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number."], help))
+        return
+    }
     if check_core_call_on_may_fit(have, want) {
         return
     }
@@ -1230,7 +1242,9 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         }
     }
     // **The items of a walk of an open number are that number** (ADR-285
-    // D34, #594): handed to a lambda, and handed on.
+    // D34, #594): handed to a lambda, and handed on. So are a list
+    // literal's walked in place (#1485).
+    state.open_literal_receiver(world, receiver, span)
     let items: i64? = state.open_items_of(world, receiver)
     let outer_params = state.flow.open_params.clone()
     state.flow.open_params = state.open_walk_params(world, contract, args, items)

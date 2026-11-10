@@ -1205,6 +1205,12 @@ pub struct FnContract {
     /// **Whether it can panic** (ADR-async-5 D35, Part III 13.5 `panics`):
     /// inferred over the call graph; absent from a ledger is `Unknown`.
     pub panics: Panics,
+    /// **Whether it builds a list in the block of the task it runs in**
+    /// (ADR-327 D13): one of its own literals placed there
+    /// (`check_core_place_in_block`), or a callee that does. A task whose
+    /// body reaches one can end with `task::OverBudget`. Written only where
+    /// it holds; a call nobody can see into does not count.
+    pub places: bool,
     pub threads: Threads,
     pub views: Vec[Held],
     pub sharing: Vec[Class],
@@ -1264,6 +1270,7 @@ impl FnContract {
             mutates: false,
             touches_a_lock: Lock::No,
             panics: Panics::Unknown,
+            places: false,
             threads: Threads::Undecided,
             views: [],
             sharing: [],
@@ -2045,6 +2052,12 @@ pub fn qualify(ty: ref Ty, module: ref String, declared: ref collections::BTreeS
         Ty::Named { name, args, view } => Ty::Named { name: qualified_name(name, module, declared), args: qualified_each(args, module, declared), view: view },
         Ty::Tuple(parts) => Ty::Tuple(qualified_each(parts, module, declared)),
         Ty::Fn { params, result, is_sync, can_throw } => Ty::Fn { params: qualified_each(params, module, declared), result: qualified_result(result, module, declared), is_sync: is_sync, can_throw: can_throw },
+        // **Inside an option, a pointer and a sequence too** (#1505, #1417): a
+        // package's `-> Item?` or `@stream` entry's `Seq[Item]` names its type
+        // as the package does, and a caller's walk reads `a::Item`.
+        Ty::Nullable(inner) => Ty::Nullable(qualify(inner, module, declared)),
+        Ty::Pointed { item, slice, mutable } => Ty::Pointed { item: qualify(item, module, declared), slice: slice, mutable: mutable },
+        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: qualify(item, module, declared), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() },
         else => ty.clone(),
     }
 }
@@ -2077,6 +2090,8 @@ pub fn renamed(ty: ref Ty, renames: ref collections::BTreeMap[String, String]) -
         Ty::Tuple(parts) => Ty::Tuple(renamed_each(parts, renames)),
         Ty::Fn { params, result, is_sync, can_throw } => Ty::Fn { params: renamed_each(params, renames), result: renamed_result(result, renames), is_sync: is_sync, can_throw: can_throw },
         Ty::Nullable(inner) => Ty::Nullable(renamed(inner, renames)),
+        Ty::Pointed { item, slice, mutable } => Ty::Pointed { item: renamed(item, renames), slice: slice, mutable: mutable },
+        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: renamed(item, renames), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() },
         else => ty.clone(),
     }
 }

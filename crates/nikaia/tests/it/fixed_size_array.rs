@@ -21,6 +21,8 @@ use nikaia::contracts::ty::TyOps;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -230,7 +232,7 @@ fn a_vec_of_arrays_takes_its_shape_one_level_down() {
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
-        lowered(source).contains("let grid: Vec<[f64; 2]> = vec![[1.0, 2.0], [3.0, 4.0]];"),
+        lowered(source).contains("let grid: Vec<[f64; 2]> = nikaia_std::block::List::from_array_in([[1.0, 2.0], [3.0, 4.0]], nikaia_std::block::Place::Block);"),
         "{}",
         lowered(source)
     );
@@ -278,7 +280,7 @@ fn a_plain_list_is_still_a_vec() {
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
-        lowered(source).contains("let plain: Vec<i64> = vec![1, 2, 3];"),
+        lowered(source).contains("let plain: Vec<i64> = nikaia_std::block::List::from_array_in([1, 2, 3], nikaia_std::block::Place::Block);"),
         "{}",
         lowered(source)
     );

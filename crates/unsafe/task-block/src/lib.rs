@@ -138,11 +138,25 @@ const MEMORY: std::alloc::Layout = match std::alloc::Layout::from_size_align(BLO
 };
 
 /// **A full block ends the task** (D6), here and not in the allocator, which
-/// only refuses. Cold: a task that fits its block never comes here.
+/// only refuses. Cold: a task that fits its block never comes here. It unwinds
+/// as a panic does, so the cleanups run, but past the panic hook: the task did
+/// not crash, it ran out of its budget, and whoever waits for it is told so
+/// with `task::OverBudget` (ADR-327 D13, ADR-async-5 D19).
 #[cold]
 #[inline(never)]
 pub fn full() -> ! {
-    panic!("the task is over its memory budget")
+    std::panic::resume_unwind(Box::new(OverBudget))
+}
+
+/// **What a full block unwinds with** (ADR-327 D13): the task's edge tells it
+/// from a panic by this payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OverBudget;
+
+impl std::fmt::Display for OverBudget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the task is over its memory budget")
+    }
 }
 
 impl Block {
@@ -391,6 +405,13 @@ impl Place {
         }
     }
 
+    /// Whether `ptr` is in the running task's block, where this handle
+    /// places.
+    #[inline(always)]
+    pub(crate) fn holds(self, ptr: *mut u8) -> bool {
+        self.block().is_some_and(|block| block.ours(ptr))
+    }
+
     /// The running task's block where `ptr` is in it.
     #[inline(always)]
     fn holding<'a>(self, ptr: NonNull<u8>) -> Option<&'a Block> {
@@ -450,9 +471,11 @@ unsafe impl Allocator for Place {
     }
 }
 
-/// **A list whose growth may be refused** (D4): `List`'s ground, placed by
-/// its handle.
-pub type List<T> = allocator_api2::vec::Vec<T, Place>;
+mod list;
+pub mod text;
+
+pub use list::List;
+pub use text::Text;
 
 /// A new, empty list placed at `place`.
 #[inline]
@@ -462,113 +485,23 @@ pub fn list<T>(place: Place) -> List<T> {
 
 /// Room for `more` elements, or the task ends (D6).
 #[inline]
+#[track_caller]
 pub fn reserve<T>(list: &mut List<T>, more: usize) {
-    if list.capacity() - list.len() < more && list.try_reserve(more).is_err() {
-        full()
-    }
+    list.reserve(more);
 }
 
 /// Push `item`, ending the task where the block refuses (D6).
 #[inline]
+#[track_caller]
 pub fn push<T>(list: &mut List<T>, item: T) {
-    if list.len() == list.capacity() && list.try_reserve(1).is_err() {
-        full()
-    }
     list.push(item);
 }
 
-/// **Append a run of elements with one copy**, as `std`'s `Vec` does:
-/// `allocator-api2`'s `extend_from_slice` clones one element at a time on
-/// stable Rust, which doubled the tasks' count (`benches/fallible`).
+/// **Append a run of elements with one copy** ([`List::extend_copied`]).
 #[inline]
+#[track_caller]
 pub fn extend<T: Copy>(list: &mut List<T>, run: &[T]) {
-    reserve(list, run.len());
-    let len = list.len();
-    // SAFETY: `reserve` left room for `run.len()` more, and a `Copy` element
-    // has nothing to drop; a list and a run it is extended from are two
-    // values, so they do not overlap.
-    unsafe {
-        std::ptr::copy_nonoverlapping(run.as_ptr(), list.as_mut_ptr().add(len), run.len());
-        list.set_len(len + run.len());
-    }
-}
-
-/// **Text whose growth may be refused**: valid UTF-8 in a [`List`] of bytes.
-/// Every byte in it came from a `str`, so it is handed out as one without
-/// being checked again (#490 step 3), as `String` does.
-pub struct Text {
-    bytes: List<u8>,
-}
-
-impl Text {
-    /// A new, empty text placed at `place`.
-    #[inline]
-    pub fn new_in(place: Place) -> Text {
-        Text {
-            bytes: List::new_in(place),
-        }
-    }
-
-    /// Append `s`, with one copy.
-    #[inline]
-    pub fn push_str(&mut self, s: &str) {
-        extend(&mut self.bytes, s.as_bytes());
-    }
-
-    /// Append one character.
-    #[inline]
-    pub fn push(&mut self, c: char) {
-        self.push_str(c.encode_utf8(&mut [0; 4]));
-    }
-
-    /// The text, unchecked: it only ever grew by whole `str`s.
-    #[inline]
-    pub fn as_str(&self) -> &str {
-        // SAFETY: every append is a whole `str`.
-        unsafe { std::str::from_utf8_unchecked(&self.bytes) }
-    }
-
-    /// Its bytes.
-    #[inline]
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    /// ASCII letters made lower case where they are, which keeps the UTF-8
-    /// valid.
-    #[inline]
-    pub fn make_ascii_lowercase(&mut self) {
-        self.bytes.make_ascii_lowercase();
-    }
-}
-
-impl std::ops::Deref for Text {
-    type Target = str;
-
-    #[inline]
-    fn deref(&self) -> &str {
-        self.as_str()
-    }
-}
-
-impl std::fmt::Write for Text {
-    #[inline]
-    fn write_str(&mut self, s: &str) -> std::fmt::Result {
-        self.push_str(s);
-        Ok(())
-    }
-}
-
-impl std::fmt::Display for Text {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl std::fmt::Debug for Text {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(self.as_str(), f)
-    }
+    list.extend_copied(run);
 }
 
 #[cfg(test)]
@@ -651,10 +584,7 @@ mod tests {
             reserve(&mut more, 4000);
         }));
         let payload = ended.expect_err("a full block ends the task");
-        assert_eq!(
-            payload.downcast_ref::<&str>(),
-            Some(&"the task is over its memory budget")
-        );
+        assert_eq!(payload.downcast_ref::<OverBudget>(), Some(&OverBudget));
         // What it frees, it can allocate again.
         held.clear();
         reserve(&mut more, 4000);

@@ -20,6 +20,8 @@ use nikaia::check::{self, Finding};
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn all_findings(source: &str) -> Vec<Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -628,7 +630,7 @@ fn the_ledger_names_the_source() {
             .expect("the source parses");
     let own = Ledger::infer(&parsed);
     let contract = own.functions.get("pick").expect("pick has an entry");
-    assert_eq!(contract.borrows, vec!["a".to_string()]);
+    assert_eq!(contract.borrows, vec!["a".to_text()]);
 }
 
 // --- holes the review found: a view that reaches a second parameter by a way the
@@ -1214,7 +1216,10 @@ fn a_reassigned_argument_may_be_changed_afterwards() {
     );
     assert!(changed_under(&source).is_empty());
     let rust = lowered(&source);
-    assert!(rust.contains("let mut y = \"re\""), "{rust}");
+    assert!(
+        rust.contains("let mut y = nikaia_std::block::Text::from(\"re\")"),
+        "{rust}"
+    );
     compiled("a_reassigned_argument_may_be_changed_afterwards", &source);
 }
 

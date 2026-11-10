@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/emit/template.rs
 //
 // The `html` template DSL (ADR-017), compiled where the template is written.

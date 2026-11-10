@@ -17,7 +17,7 @@ pub(crate) struct LgOrdered {
 }
 
 pub fn lg_normal_of(arena: &TermArena, facts: &[i64], goal: i64) -> LgNormal {
-    let mut ordered: Vec<LgOrdered> = vec![];
+    let mut ordered: Vec<LgOrdered> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for fact in facts.iter() {
         let fact = nikaia_std::num::value(fact);
         let shape = lg_written(arena, fact, true, true);
@@ -30,8 +30,8 @@ pub fn lg_normal_of(arena: &TermArena, facts: &[i64], goal: i64) -> LgNormal {
             ordered.insert(nikaia_std::count::of(at), LgOrdered { shape, named, fact });
         }
     }
-    let mut normal = LgNormal { arena: TermArena::empty(), facts: vec![], goal: 0, names: vec![] };
-    let mut renamed: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    #[allow(unused_mut)] let mut normal = LgNormal { arena: TermArena::empty(), facts: vec![], goal: 0, names: vec![] };
+    let mut renamed: collections::BTreeMap<String, String> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut normal = normal;
     for one in ordered.iter() {
         let copied = lg_copy(&mut normal, arena, one.fact, &mut renamed, true);
         normal.facts.push(copied);
@@ -174,12 +174,12 @@ pub(crate) fn lg_copy(normal: &mut LgNormal, from: &TermArena, id: i64, renamed:
             let mut fresh = format!("v{}", renamed.len() as i64);
             if known.is_some() {
                 fresh = nikaia_std::index::or(match known {
-                    Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                    Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                     None => None,
                 }, || fresh.into());
             } else {
-                normal.names.push(name.to_string());
-                renamed.insert(name.to_string(), fresh.to_string());
+                normal.names.push(nikaia_std::block::Text::from(name.to_string()));
+                renamed.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(fresh.to_string()));
             }
             normal.arena.var(&fresh)
         },
@@ -293,33 +293,33 @@ impl LgNormal {
     }
     pub(crate) fn original(&self, name: &str) -> String {
         if name.starts_with('v') {
-            let digits = nikaia_std::index::or(name.strip_prefix('v'), || "").to_string();
+            let digits = nikaia_std::block::Text::from(nikaia_std::index::or(name.strip_prefix('v'), || "").to_string());
             let mut plain = !digits.is_empty();
             for c in digits.chars() { if c < '0' || c > '9' { plain = false; } }
             if plain {
                 let n = nikaia_std::index::or(text::parse_i64(&digits), || -1);
-                if n >= 0 && n < self.names.len() as i64 { return (*nikaia_std::index::get(&self.names, nikaia_std::index::at(n))).to_string(); }
+                if n >= 0 && n < self.names.len() as i64 { return nikaia_std::block::Text::from((*nikaia_std::index::get(&self.names, nikaia_std::index::at(n))).to_string()); }
             }
         }
-        name.to_string()
+        nikaia_std::block::Text::from(name.to_string())
     }
 }
 
 pub fn lg_certificate_text(certificate: &LgCertificate) -> String {
     match certificate {
         LgCertificate::Refuted(refutation) => {
-            let mut steps: Vec<String> = vec![];
+            let mut steps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for step in refutation.steps.iter() {
                 let step = *step;
                 steps.push(lg_step_text(&step));
             }
-            format!("R({})", steps.join(","))
+            format!("R({})", nikaia_std::block::Text::from(steps.join(",")))
         },
         LgCertificate::Split { disjunction, cases } => {
             let disjunction = *disjunction;
-            let mut parts: Vec<String> = vec![];
+            let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for one in cases.iter() { parts.push(lg_certificate_text(one)); }
-            format!("S{}[{}]", disjunction, parts.join("|"))
+            format!("S{}[{}]", disjunction, nikaia_std::block::Text::from(parts.join("|")))
         },
     }
 }
@@ -346,28 +346,28 @@ pub fn lg_certificate_of(text: &str) -> Option<LgCertificate> {
 
 pub(crate) fn lg_certificate_from(text: &str) -> Option<LgParsed> {
     if text.starts_with("R(") {
-        let rest = nikaia_std::index::or(text.strip_prefix("R("), || "").to_string();
+        let rest = nikaia_std::block::Text::from(nikaia_std::index::or(text.strip_prefix("R("), || "").to_string());
         let end = match nikaia_std::search::find(&rest, &")", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut steps: Vec<LgStep> = vec![];
-        let inside = nikaia_std::index::get(&rest, nikaia_std::index::at(0..end)).to_string();
+        let inside = nikaia_std::block::Text::from(nikaia_std::index::get(&rest, nikaia_std::index::at(0..end)).to_string());
         for word in inside.split(',') {
             if word.is_empty() { continue; }
             steps.push(match lg_step_of(word) { Some(__nikaia_value) => __nikaia_value, None => return None });
         }
-        return Some(LgParsed { certificate: LgCertificate::Refuted(LgRefutation { steps }), rest: nikaia_std::index::get(&rest, nikaia_std::index::at(end + ")".len() as i64..)).to_string() });
+        return Some(LgParsed { certificate: LgCertificate::Refuted(LgRefutation { steps }), rest: nikaia_std::block::Text::from(nikaia_std::index::get(&rest, nikaia_std::index::at(end + ")".len() as i64..)).to_string()) });
     }
     if !text.starts_with('S') { return None; }
-    let rest = nikaia_std::index::or(text.strip_prefix('S'), || "").to_string();
+    let rest = nikaia_std::block::Text::from(nikaia_std::index::or(text.strip_prefix('S'), || "").to_string());
     let open = match nikaia_std::search::find(&rest, &"[", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let disjunction = match lg_number(&nikaia_std::index::get(&rest, nikaia_std::index::at(0..open)).to_string()) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let mut after = nikaia_std::index::get(&rest, nikaia_std::index::at(open + 1..)).to_string();
+    let disjunction = match lg_number(&nikaia_std::block::Text::from(nikaia_std::index::get(&rest, nikaia_std::index::at(0..open)).to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let mut after = nikaia_std::block::Text::from(nikaia_std::index::get(&rest, nikaia_std::index::at(open + 1..)).to_string());
     let mut cases: Vec<LgCertificate> = vec![];
     loop {
         let case = match lg_certificate_from(&after) { Some(__nikaia_value) => __nikaia_value, None => return None };
         cases.push(case.certificate.clone());
-        if case.rest.starts_with('|') { after = nikaia_std::index::or(case.rest.strip_prefix('|'), || "").to_string(); } else {
+        if case.rest.starts_with('|') { after = nikaia_std::block::Text::from(nikaia_std::index::or(case.rest.strip_prefix('|'), || "").to_string()); } else {
             if !case.rest.starts_with(']') { return None; }
-            return Some(LgParsed { certificate: LgCertificate::Split { disjunction, cases }, rest: nikaia_std::index::or(case.rest.strip_prefix(']'), || "").to_string() });
+            return Some(LgParsed { certificate: LgCertificate::Split { disjunction, cases }, rest: nikaia_std::block::Text::from(nikaia_std::index::or(case.rest.strip_prefix(']'), || "").to_string()) });
         }
     }
 }
@@ -379,10 +379,10 @@ pub(crate) fn lg_number(word: &str) -> Option<i64> {
 }
 
 pub(crate) fn lg_step_of(word: &str) -> Option<LgStep> {
-    if word.starts_with('h') { return Some(LgStep::Hypothesis(match lg_number(&nikaia_std::index::or(word.strip_prefix('h'), || "").to_string()) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
-    if word.starts_with('t') { return Some(LgStep::Tighten(match lg_number(&nikaia_std::index::or(word.strip_prefix('t'), || "").to_string()) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
+    if word.starts_with('h') { return Some(LgStep::Hypothesis(match lg_number(&nikaia_std::block::Text::from(nikaia_std::index::or(word.strip_prefix('h'), || "").to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
+    if word.starts_with('t') { return Some(LgStep::Tighten(match lg_number(&nikaia_std::block::Text::from(nikaia_std::index::or(word.strip_prefix('t'), || "").to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
     if !word.starts_with('c') { return None; }
-    let body = nikaia_std::index::or(word.strip_prefix('c'), || "").to_string();
+    let body = nikaia_std::block::Text::from(nikaia_std::index::or(word.strip_prefix('c'), || "").to_string());
     let parts: Vec<&str> = body.split(':').collect::<Vec<_>>();
     if parts.len() != 4 { return None; }
     let left = match lg_number(*nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -394,12 +394,12 @@ pub(crate) fn lg_step_of(word: &str) -> Option<LgStep> {
 
 pub fn lg_model_text(model: &LgModel) -> String {
     if model.values.is_empty() { return String::from("-"); }
-    let mut values: Vec<String> = vec![];
+    let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (name, value) in model.values.iter() {
         let value = nikaia_std::num::value(value);
         values.push(format!("{}={}", name, value));
     }
-    values.join(",")
+    nikaia_std::block::Text::from(values.join(","))
 }
 
 pub fn lg_model_of(text: &str) -> Option<LgModel> {
@@ -407,10 +407,10 @@ pub fn lg_model_of(text: &str) -> Option<LgModel> {
     if text != "-" {
         for pair in text.split(',') {
             let at = match nikaia_std::search::find(&pair, &"=", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let name = nikaia_std::index::get(&pair, nikaia_std::index::at(0..at)).to_string();
+            let name = nikaia_std::block::Text::from(nikaia_std::index::get(&pair, nikaia_std::index::at(0..at)).to_string());
             if name.is_empty() { return None; }
             for c in name.chars() { if c.is_whitespace() { return None; } }
-            let value = match text::parse_i64(&nikaia_std::index::get(&pair, nikaia_std::index::at(at + 1..)).to_string()) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let value = match text::parse_i64(&nikaia_std::block::Text::from(nikaia_std::index::get(&pair, nikaia_std::index::at(at + 1..)).to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None };
             values.insert(name, value);
         }
     }

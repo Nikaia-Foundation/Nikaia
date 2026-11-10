@@ -192,7 +192,7 @@ impl EmitState {
             n += 1;
             match part {
                 FPart::Text(text) => {
-                    let shown = text.replace("{{", "{").replace("}}", "}");
+                    let shown = nikaia_std::block::Text::from(nikaia_std::block::Text::from(text.replace("{{", "{")).replace("}}", "}"));
                     out.push(&format!("std::ffi::OsStr::new(\"{}\")", shown));
                 },
                 FPart::Hole { expr, at, .. } => {
@@ -269,8 +269,8 @@ impl EmitState {
                     return Ok(());
                 }
                 if !emit_leaf_has_holes(parts) {
-                    let text = format_of(parts).replace("{{", "{").replace("}}", "}");
-                    out.push(&format!("\"{}\".to_string()", text));
+                    let text = nikaia_std::block::Text::from(nikaia_std::block::Text::from(format_of(parts).replace("{{", "{")).replace("}}", "}"));
+                    if self.on_block_types() { out.push(&format!("nikaia_std::block::Text::from(\"{}\")", text)); } else { out.push(&format!("\"{}\".to_string()", text)); }
                     return Ok(());
                 }
                 out.push("format!(");
@@ -306,7 +306,7 @@ impl EmitState {
     pub fn emit_core_method_options<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, method: winnow_grammar::Symbol, on_node: i64, args: i64, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let name = emit_text(world, method);
         if self.dsl_drivers.contains(&name) { return Ok(()); }
-        let options = match self.facts.method_options.get(&(on_node, name.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+        let options = match self.facts.method_options.get(&(on_node, nikaia_std::block::Text::from(name.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         let mut n = 0;
         for (option, default) in options.iter() {
             if n > 0 || args > 0 { out.push(", "); }
@@ -350,8 +350,8 @@ impl EmitState {
             false => "?",
         };
         let name = emit_text(world, grammar_symbol);
-        if !self.grammars.contains_key(&name.to_string()) { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("There's no grammar called `{}` in this file.", name), at: Some(flow.statement) }, &"emit_core_grammar_entry")); }
-        let def = match self.grammars.get(&name.to_string()) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+        if !self.grammars.contains_key(&nikaia_std::block::Text::from(name.to_string())) { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("There's no grammar called `{}` in this file.", name), at: Some(flow.statement) }, &"emit_core_grammar_entry")); }
+        let def = match self.grammars.get(&nikaia_std::block::Text::from(name.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         let mut found = false;
         let mut parallel = false;
         let mut named = false;
@@ -372,7 +372,7 @@ impl EmitState {
             return Err(nikaia_std::error::throwing(EmitRefused { message: format!("Grammar `{}` has no entry called `{}`.", name, rule), at: Some(flow.statement) }, &"emit_core_grammar_entry"));
         }
         let mut over = "";
-        let mut lowered: String = name.to_string();
+        let mut lowered: String = nikaia_std::block::Text::from(name.to_string());
         if self.facts.bytes_entries.contains(&node_key(input)) {
             over = "_bytes";
             lowered = emit_bytes_grammar(&name);
@@ -400,11 +400,43 @@ impl EmitState {
         };
         if streamed {
             let rule = match entered { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-            if !rule.args.is_empty() || !rule.config.is_empty() || table.is_some() { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("The compiler can't translate a call of `@stream` entry `{}` that hands it values or a table yet.", rule_name), at: Some(flow.statement) }, &"emit_core_grammar_entry")); }
             out.push("Ok::<_, nikaia_std::grammar::ParseError>({ let __wg_source = ::std::convert::AsRef::<[u8]>::as_ref(&*");
             self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
-            out.push(").to_vec(); let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
-            out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &_| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ", lowered, rule_name));
+            out.push(").to_vec(); ");
+            let mut handed = String::new();
+            for i in 0..rule.args.len() as i64 {
+                out.push(&format!("let __wg_value{} = ", i));
+                if ((i) as usize) < values.len() { self.emit_expr(world, walk, out, host, nikaia_std::index::get(&values, (i) as usize), depth, flow, scope)?; }
+                out.push("; ");
+                handed.push_str(&format!("__wg_value{}, ", i));
+            }
+            let mut j = 0;
+            for option in rule.config.iter() {
+                out.push(&format!("let __wg_option{} = ", j));
+                let mut given = false;
+                for c in config.iter() {
+                    if !given && c.name == option.name {
+                        self.emit_expr(world, walk, out, host, &c.value, depth, flow, scope)?;
+                        given = true;
+                    }
+                }
+                if !given { self.emit_expr(world, walk, out, host, &option.default, depth, flow, scope)?; }
+                out.push("; ");
+                handed.push_str(&format!("__wg_option{}, ", j));
+                j += 1;
+            }
+            let mut context = "winnow_grammar::ParseContext::<()>::default()";
+            match table {
+                None => { },
+                Some(ref words) => {
+                    out.push("let __wg_words = winnow_grammar::InternerContext::clone(&");
+                    self.emit_expr(world, walk, out, host, words, depth, flow, scope)?;
+                    out.push("); ");
+                    context = "winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_words)";
+                },
+            }
+            out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
+            out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut {}, winnow_grammar::rt::Reading::default(), {}|__wg_item: &_| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ", lowered, rule_name, context, handed));
             out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() })");
             out.push(&format!("{}", question));
             return Ok(());
@@ -452,16 +484,16 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_template_segments<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, site: i64, segments: &[Segment], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        let pad = "    ".repeat(nikaia_std::count::of(depth));
+        let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
         for segment in segments.iter() {
             match segment {
                 Segment::Text(text) => { out.push(&format!("{}__html.push_str({});\n", pad, rust_string(text))); },
                 Segment::Hole { expr, .. } => {
-                    if !self.template_holes.contains_key(&(site, expr.to_string())) {
-                        let said = nikaia_std::index::or(self.template_errors.get(&(site, expr.to_string())), || "");
+                    if !self.template_holes.contains_key(&(site, nikaia_std::block::Text::from(expr.to_string()))) {
+                        let said = nikaia_std::index::or(self.template_errors.get(&(site, nikaia_std::block::Text::from(expr.to_string()))), || "");
                         return Err(nikaia_std::error::throwing(EmitRefused { message: format!("The template hole `{{{}}}` can't be read. {}", expr, said), at: Some(flow.statement) }, &"emit_core_template_segments"));
                     }
-                    let parsed = match self.template_holes.get(&(site, expr.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                    let parsed = match self.template_holes.get(&(site, nikaia_std::block::Text::from(expr.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                     out.push(&format!("{}__html.push_str(&::nikaia_std::html::Render::render(&", pad));
                     self.emit_expr(world, walk, out, host, &parsed, depth, flow, scope)?;
                     out.push("));\n");
@@ -484,7 +516,7 @@ impl EmitState {
                 let given = match context { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                 return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`dsl {} {{ … }}` with `:name` holes can't take a context, but `{}` was given.", name, emit_text(world, given)), at: Some(flow.statement) }, &"emit_core_template"));
             }
-            let trimmed: String = content.trim().to_string();
+            let trimmed: String = nikaia_std::block::Text::from(content.trim().to_string());
             out.push(&rust_string(&trimmed));
             return Ok(());
         }
@@ -493,7 +525,7 @@ impl EmitState {
             let given = match context { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`dsl html` can't take a context, but `{}` was given.", emit_text(world, given)), at: Some(flow.statement) }, &"emit_core_template"));
         }
-        let framed: String = content.trim().to_string();
+        let framed: String = nikaia_std::block::Text::from(content.trim().to_string());
         let segments = match split(&framed) {
             Ok(value) => value,
             Err(error) => {
@@ -510,8 +542,8 @@ impl EmitState {
             }
             return Err(nikaia_std::error::throwing(EmitRefused { message, at: None }, &"emit_core_template"));
         }
-        let pad = "    ".repeat(nikaia_std::count::of(depth + 1));
-        let close = "    ".repeat(nikaia_std::count::of(depth));
+        let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1)));
+        let close = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
         out.push(&format!("{{\n{}let mut __html = String::with_capacity({});\n", pad, literal_length(&segments)));
         self.emit_core_template_segments(world, walk, out, host, site, &segments, depth + 1, flow, scope)?;
         out.push(&format!("{}__html\n{}}}", pad, close));

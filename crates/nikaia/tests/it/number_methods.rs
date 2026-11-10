@@ -11,6 +11,8 @@ use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn codes(source: &str) -> Vec<String> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -19,7 +21,7 @@ fn codes(source: &str) -> Vec<String> {
     nikaia::check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new())
         .findings
         .into_iter()
-        .map(|f| f.code.to_string())
+        .map(|f| f.code.to_text())
         .collect()
 }
 
@@ -58,7 +60,7 @@ fn min_max_and_div_euclid_are_described_and_do_not_pause() {
     let rust = lowered(DESCRIBED);
     for name in ["lo", "hi", "floor_half", "size"] {
         assert!(
-            rust.contains(&format!("\nfn {name}(")),
+            rust.contains(&*format!("\nfn {name}(")),
             "`{name}` calls only described methods, so it is not `async`:\n{rust}"
         );
     }
@@ -68,9 +70,9 @@ fn min_max_and_div_euclid_are_described_and_do_not_pause() {
 #[test]
 fn a_method_of_a_number_nothing_describes_is_refused() {
     let source = "fn f(a: i64) -> i64 {\n    return a.frobnicate(2)\n}\n\nfn main() {}\n";
-    assert_eq!(codes(source), vec!["NK1210".to_string()]);
+    assert_eq!(codes(source), vec!["NK1210".to_text()]);
     let float = "fn g(a: f64) -> f64 {\n    return a.frobnicate()\n}\n\nfn main() {}\n";
-    assert_eq!(codes(float), vec!["NK1210".to_string()]);
+    assert_eq!(codes(float), vec!["NK1210".to_text()]);
 }
 
 /// **The methods a program reaches for first are described** (#443): since
@@ -104,7 +106,7 @@ fn found(source: &str) -> Vec<(String, Option<String>)> {
     nikaia::check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new())
         .findings
         .into_iter()
-        .map(|f| (f.code.to_string(), f.help.clone()))
+        .map(|f| (f.code.to_text(), f.help.clone()))
         .collect()
 }
 
@@ -127,7 +129,7 @@ fn a_same_width_truncating_name_is_refused_naming_bits_as() {
         assert_eq!(got.len(), 1, "{source}: {got:?}");
         assert_eq!(got[0].0, "NK1210", "{source}: {got:?}");
         let help = got[0].1.clone().unwrap_or_default();
-        assert!(help.contains(&format!("`{named}()`")), "{source}: {help}");
+        assert!(help.contains(&*format!("`{named}()`")), "{source}: {help}");
     }
     for method in ["bits_as_i32()", "bits_as_u32()", "wrapping_neg()"] {
         let source = format!(
@@ -196,7 +198,7 @@ fn bits_as_and_u8_names_are_width_dependent() {
             "fn f({decl}) throws {{\n    {line}\n    println(f\"{{t}}\")\n}}\n\nfn main() {{}}\n"
         );
         assert!(
-            codes(&source).contains(&"NK1215".to_string()),
+            codes(&source).contains(&"NK1215".to_text()),
             "{source}: {:?}",
             codes(&source)
         );
@@ -226,7 +228,7 @@ fn rotations_are_described_and_lowered_with_any_count() {
     }
     let narrow = "fn f(a: u8) throws {\n    let t: u32 = a.rotate_left(1)\n    println(f\"{t}\")\n}\n\nfn main() {}\n";
     assert!(
-        codes(narrow).contains(&"NK1215".to_string()),
+        codes(narrow).contains(&"NK1215".to_text()),
         "{:?}",
         codes(narrow)
     );

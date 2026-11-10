@@ -28,14 +28,14 @@ pub(crate) fn emit_is_element(keep: &KeepAt, at: i64) -> bool {
 
 impl EmitState {
     pub(crate) fn keep_plan_key(&self, walk: &EmitWalk, function: &str) -> Option<String> {
-        if self.keep_plans.contains_key(function) { return Some(function.to_string()); }
-        if self.keep_plans.contains_key(&walk.keep_function) { return Some(walk.keep_function.to_string()); }
+        if self.keep_plans.contains_key(function) { return Some(nikaia_std::block::Text::from(function.to_string())); }
+        if self.keep_plans.contains_key(&walk.keep_function) { return Some(nikaia_std::block::Text::from(walk.keep_function.to_string())); }
         None
     }
     pub fn keep_prelude(&self, walk: &EmitWalk, function: &str, at: i64) -> Option<String> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let mut lines: Vec<String> = vec![];
+        let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if plan.first == at {
             if plan.frame_keep { lines.push(String::from("let __keep_frame = nikaia_std::tether::Keep::new();")); }
             if plan.task_keep { lines.push(String::from("let __keep_task = std::sync::Arc::new(nikaia_std::tether::Keep::new());")); }
@@ -52,7 +52,7 @@ impl EmitState {
         }
         if element { lines.push(format!("let __keep_{} = std::sync::Arc::new(nikaia_std::tether::Keep::new());", at)); }
         if lines.is_empty() { return None; }
-        Some(lines.join(" "))
+        Some(nikaia_std::block::Text::from(lines.join(" ")))
     }
     pub fn argument_keep(&self, walk: &EmitWalk, function: &str, statement: i64, callee: &str, i: i64) -> Option<String> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -63,7 +63,7 @@ impl EmitState {
     pub fn keep_handed(&self, walk: &EmitWalk, function: &str, statement: i64, callee: &str) -> Option<String> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let keep = match plan.calls.get(&(statement, callee.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let keep = match plan.calls.get(&(statement, nikaia_std::block::Text::from(callee.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(emit_keep_expr(&keep, true))
     }
     pub fn kept_lifetimes(&self, key: &str, lifetimes: &EmitLifetimes) -> Option<EmitLifetimes> {
@@ -144,7 +144,7 @@ pub(crate) fn emit_returned_by(world: &EmitWorld<'_, '_, '_, '_>, wanted: &str) 
 pub fn emit_tethered_type(world: &EmitWorld<'_, '_, '_, '_>, ty: Option<&Type>, value: &Expr) -> Option<Type> {
     if ty.is_some() {
         return match ty {
-            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
             None => None,
         };
     }

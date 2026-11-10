@@ -4,6 +4,8 @@
 //! find and three queries check.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::Path;
 use std::process::{Command, Output};
 
@@ -338,7 +340,7 @@ fn invariant_lines(dir: &Path) -> Vec<String> {
         .expect("the file is written")
         .lines()
         .filter(|l| l.split(' ').nth(1) == Some("invariant"))
-        .map(str::to_string)
+        .map(str::to_text)
         .collect()
 }
 
@@ -416,11 +418,11 @@ fn a_broken_invariant_in_the_file_is_searched_again_or_refused() {
         "{} {} {} closed-forms=eq(total,0)",
         words[0], words[1], words[2]
     );
-    let broken = written.replace(&line, &wrong);
+    let broken = written.replace(&*line, &wrong);
     std::fs::write(dir.join("nikaia.proofs"), &broken).expect("rewritten");
 
     let locked = build_in(&dir, &["build", "--no-cache", "--locked"]);
-    let stderr = String::from_utf8_lossy(&locked.stderr).to_string();
+    let stderr = String::from_utf8_lossy(&locked.stderr).to_text();
     assert!(!locked.status.success(), "{stderr}");
     assert!(stderr.contains("commit `nikaia.proofs`"), "{stderr}");
     assert!(invariants(&locked).0 >= 1, "searched again: {stderr}");

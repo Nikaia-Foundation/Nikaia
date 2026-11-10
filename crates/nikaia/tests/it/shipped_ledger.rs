@@ -4,6 +4,8 @@
 //! sources still hold, and refuses it where they do not.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 

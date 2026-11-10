@@ -5,6 +5,8 @@
 //! `user_parallelism`.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -117,7 +119,7 @@ fn build(dir: &Path, source: &str, parallel: &str) -> (PathBuf, String) {
         "the emitted Rust did not compile:\n{}\n--- emitted ---\n{rust}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    (binary, rust)
+    (binary, String::from(rust))
 }
 
 /// Run `binary` with a runtime configuration file, or with none.
@@ -145,14 +147,14 @@ fn the_folds(out: &Output) -> Vec<String> {
     let sum: i64 = (0..1_000_000).sum();
     let lines: Vec<String> = String::from_utf8_lossy(&out.stdout)
         .lines()
-        .map(str::to_owned)
+        .map(str::to_text)
         .collect();
     assert_eq!(
         lines[1..],
         [
             format!("{sum} {sum} {sum} {sum} {} {sum} {sum}", 2 * sum),
-            "1000000 0".to_owned(),
-            "7 8".to_owned(),
+            "1000000 0".to_text(),
+            "7 8".to_text(),
             format!("{sum}"),
             format!("{sum}"),
         ],
@@ -192,7 +194,7 @@ fn a_fold_is_the_sequential_fold_at_both_settings_and_both_orders() {
     assert_eq!(lines[0], "3");
     let lines = the_folds(&run(&at_yes, &dir.join("run-default"), None));
     let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
-    assert_eq!(lines[0], threads.to_string());
+    assert_eq!(lines[0], threads.to_text());
 }
 
 /// **`b.par_pieces(sep; piece:)`** (ADR-372 D3, D4, D7): for every piece size,
@@ -275,7 +277,7 @@ fn cuts(bytes: &[u8], size: usize) -> usize {
 fn the_pieces(out: &Output) {
     let lines: Vec<String> = String::from_utf8_lossy(&out.stdout)
         .lines()
-        .map(str::to_owned)
+        .map(str::to_text)
         .collect();
     let mut ended = String::new();
     for i in 0..5000 {

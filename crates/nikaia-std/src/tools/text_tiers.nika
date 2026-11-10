@@ -572,6 +572,11 @@ struct TierLocal {
     /// (`let xs = [a + "!"]`, #1368): a list the body made, as one declared
     /// `Vec[String]` is (`made_list_local`).
     text_items: bool,
+    /// Bound by a `let` without a type to the call of a function (`let xs =
+    /// words(a)`, #1481): with the callee's list result as `declared`, a
+    /// list the body made when its items are text of its own
+    /// (`made_list_local`).
+    called: bool,
 }
 
 /// What one walk found, every position by its word.
@@ -823,7 +828,7 @@ fn tier_arm_read(node: i64, mut walk: TierWalk) -> bool {
 }
 
 fn plain_local(kinds: Kinds) -> TierLocal {
-    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false }
+    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false, called: false }
 }
 
 fn tier_at(word: ref String, mut walk: TierWalk) -> Tier {
@@ -2841,7 +2846,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         if !written {
             element_of = made_element_read(value, ask, walk)
         }
-        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, listed: listed, through: through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of: items_of, cut: a_cut(value, ask), element_of: element_of, text_items: text_items }
+        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, listed: listed, through: through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of: items_of, cut: a_cut(value, ask), element_of: element_of, text_items: text_items, called: !written && a_function_call(value) }
         bind_tier_local(ask.names.resolve(names[0]).clone(), local, walk)
         return
     }
@@ -2953,6 +2958,8 @@ fn tier_assign(target: ref Expr, value: ref Expr, compound: bool, ask: ref TierA
             let mut local = tier_local(name, walk) ?? return
             // Assigned again: no longer the element it was bound to (#1368).
             local.element_of = null
+            // Nor the list a call handed back (#1481).
+            local.called = false
             if local.declared == null {
                 local.kinds = kinds_joined(local.kinds, kinds)
                 // Below, the name is of the type of the position it was read
@@ -3508,6 +3515,25 @@ fn made_list_local(name: ref String, walk: ref TierWalk) -> bool {
     let declared = local.declared ?? return false
     return match declared.owner {
         TextOwner::Let(_) => local.made && !declared.ty.is_view && !declared.ty.is_nullable,
+        // **A list a call handed back** (#1481): the body owns it as it owns
+        // a list it built; an element of it is handed back as a view only
+        // where the callee's items stay text of its own (`handed_kinds`
+        // asks), and the list moves into the caller's keep.
+        TextOwner::Returned(_) => local.made && local.called && !declared.ty.is_view && !declared.ty.is_nullable,
+        else => false,
+    }
+}
+
+/// The call of a function by its name, `words(a)`, or of a method,
+/// `m.words(a)`: the calls whose list the tether roots
+/// (`untethered_called_list` in `buffers.nika`).
+fn a_function_call(value: ref Expr) -> bool {
+    return match value {
+        Expr::Call { func, .. } => match func {
+            Expr::Variable(_, _) => true,
+            else => false,
+        },
+        Expr::MethodCall { .. } => true,
         else => false,
     }
 }
@@ -6446,7 +6472,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
         if lent_fields.contains(ask.names.resolve(arg.name)) {
             ty.is_view = true
         }
-        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: ty }, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false }
+        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: ty }, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false, called: false }
         bind_tier_local(ask.names.resolve(arg.name).clone(), local, walk)
         at += 1
     }
@@ -6459,7 +6485,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     walk.lent_self = false
     if receiver != null && target != null {
         walk.lent_self = receiver?.is_ref ?? false
-        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false }
+        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false, called: false }
         bind_tier_local("self", local, walk)
     }
     walk.handed_back = -1
@@ -8261,7 +8287,11 @@ fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref 
     }
     match item {
         Item::Fn { name, receiver, args, ret_type, body, is_extern, ret_from, .. } => {
-            if is_extern || !hb_result_may_be_a_view(ret_type, words, plain) {
+            // **A nullable result is a view as well** (ADR-views-3 D7, D8,
+            // #1486): `-> U? from self`, or `-> U?` where every way out reads
+            // `self`, is `ref U?`, as a plain `U` is `ref U`.
+            let nullable = hb_nullable_may_be_a_view(ret_type, words, plain)
+            if is_extern || (!nullable && !hb_result_may_be_a_view(ret_type, words, plain)) {
                 return
             }
             let mut sources: Vec[i64] = []
@@ -8287,6 +8317,9 @@ fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref 
                 return
             }
             let roots = hb_roots(body, args, hb_plain_self(receiver), words, opted, views) ?? return
+            if nullable && (roots.is_empty() || roots.iter().any(fn(root) { root != "self" })) {
+                return
+            }
             for (at, arg) in args.iter().enumerate() {
                 if roots.contains(words.resolve(arg.name)) {
                     sources.push(at as i64)
@@ -8608,6 +8641,18 @@ fn hb_result_may_be_a_view(ty: ref Type?, words: ref winnow_grammar::InternerCon
     return !t.is_view && hb_type_may_be_a_view(t, words, plain)
 }
 
+/// A nullable result type whose held type a view can stand in, not one yet:
+/// `U?`, not `String?` nor `i64?` (#1486).
+fn hb_nullable_may_be_a_view(ty: ref Type?, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String]) -> bool {
+    let t = ty ?? return false
+    if !t.is_nullable || t.is_view {
+        return false
+    }
+    let mut held = t.clone()
+    held.is_nullable = false
+    return hb_type_may_be_a_view(held, words, plain)
+}
+
 /// A type a view of a parameter can stand in, whether or not it is one
 /// already: not text, not a word copied at a read, nothing a place cannot be.
 /// `Bytes` can: a piece of a lent `Bytes` handed back is a view of it, as a
@@ -8634,6 +8679,10 @@ fn hb_roots(body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref 
     }
     let mut roots: collections::BTreeSet[String] = collections::BTreeSet()
     for way in ways {
+        // A `null` handed back points into nothing (#1486).
+        if hb_a_null(way) {
+            continue
+        }
         if hb_place_root(way, words) != null {
             roots.insert(hb_root(way, body, args, plain_self, words, opted, false) ?? return null)
             continue
@@ -8647,6 +8696,13 @@ fn hb_roots(body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref 
         }
     }
     return roots
+}
+
+fn hb_a_null(way: ref Expr) -> bool {
+    return match way {
+        Expr::LitNull(_) => true,
+        else => false,
+    }
 }
 
 /// The parameter the place `way` hands back a view of; `null` where it is

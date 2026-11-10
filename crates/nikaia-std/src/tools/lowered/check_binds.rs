@@ -60,12 +60,12 @@ impl CheckState {
         let mut frame: i64 = 0;
         if !self.scope.is_empty() { frame = self.scope.len() as i64 - 1; }
         for index in 0..names.len() as i64 {
-            let bound = world.words.resolve(*nikaia_std::index::get(&names, (index) as usize)).to_string();
+            let bound = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&names, (index) as usize)).to_string());
             self.nameable(&bound, span, "a `let`");
             self.a_tuple_part_is_lent(lent, &bound, nikaia_std::index::get(&parts, (index) as usize), at, frame);
             let mut ty = (*nikaia_std::index::get(&parts, (index) as usize)).clone();
-            if self.facts.copied_tuple_parts.contains(&(at, bound.to_string())) { ty = ty.owned(); }
-            self.bind_with(bound.to_string(), ty, None);
+            if self.facts.copied_tuple_parts.contains(&(at, nikaia_std::block::Text::from(bound.to_string()))) { ty = ty.owned(); }
+            self.bind_with(nikaia_std::block::Text::from(bound.to_string()), ty, None);
             if check_owned_text(nikaia_std::index::get(&parts, (index) as usize)) && (lent || (*nikaia_std::index::get(&parts, (index) as usize)).is_a_view()) {
                 let local = match self.binding(&bound) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 self.flow.lent_text_params.insert(local.id);
@@ -99,7 +99,7 @@ impl CheckState {
             for _ in 0..count { out.push(Ty::Unknown); }
             return out;
         }
-        let mut pending: Vec<Ty> = vec![];
+        let mut pending: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut index = top.len() as i64;
         while index > 0 {
             index -= 1;
@@ -173,11 +173,11 @@ impl CheckState {
     pub(crate) fn a_tuple_part_is_lent(&mut self, lent: bool, bound: &str, part: &Ty, at: i64, frame: i64) {
         if bound == "_" { return; }
         let viewed = match part {
-            Ty::Named { name, args, view } => { let view = *view; view && a_copy_by_value(&Ty::Named { name: name.to_string(), args: args.to_owned(), view: false }) },
+            Ty::Named { name, args, view } => { let view = *view; view && a_copy_by_value(&Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: args.copy_owned(), view: false }) },
             _ => false,
         };
         if viewed {
-            self.facts.copied_tuple_parts.insert((at, bound.to_string()));
+            self.facts.copied_tuple_parts.insert((at, nikaia_std::block::Text::from(bound.to_string())));
             return;
         }
         let a_view = match part {
@@ -185,7 +185,7 @@ impl CheckState {
             _ => false,
         };
         if !lent && !a_view { return; }
-        if a_copy_by_value(part) { self.facts.copied_tuple_parts.insert((at, bound.to_string())); } else { self.lent_lets.insert((bound.to_string(), frame)); }
+        if a_copy_by_value(part) { self.facts.copied_tuple_parts.insert((at, nikaia_std::block::Text::from(bound.to_string()))); } else { self.lent_lets.insert((nikaia_std::block::Text::from(bound.to_string()), frame)); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -204,7 +204,7 @@ impl CheckState {
         self.flow.async_group = None;
         self.flow.async_started = 0;
         self.flow.async_depth = 0;
-        self.flow.barrier = Some(what.to_string());
+        self.flow.barrier = Some(nikaia_std::block::Text::from(what.to_string()));
         self.narrowing.walls.push(self.scope.len() as i64);
         self.handed_over = None;
         self.inside_a_sync_function = None;
@@ -237,7 +237,7 @@ pub(crate) fn binds_a_scalar(name: &str) -> bool { name == "i8" || name == "i16"
 
 pub(crate) fn binds_tuple_parts(found: &Ty, count: i64) -> Vec<Ty> {
     match found {
-        Ty::Tuple(parts) => { if (parts.len() as i64) == count { return parts.to_owned(); } },
+        Ty::Tuple(parts) => { if (parts.len() as i64) == count { return parts.copy_owned(); } },
         _ => { },
     }
     let mut unknown: Vec<Ty> = vec![];
@@ -252,7 +252,7 @@ pub fn binds_hands_a_view(method: &str) -> bool { method == "filter" || method =
 pub(crate) fn binds_item_params(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr, ty: &Ty, held: &str) -> Vec<(String, bool)> {
     let mut out: Vec<(String, bool)> = vec![];
     let types: Vec<Ty> = match ty {
-        Ty::Fn { params, .. } => params.to_owned(),
+        Ty::Fn { params, .. } => params.copy_owned(),
         _ => return out,
     };
     match arg {
@@ -262,7 +262,7 @@ pub(crate) fn binds_item_params(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
                 let p = *p;
                 if at < types.len() as i64 {
                     match *nikaia_std::index::get(&types, (at) as usize) {
-                        Ty::Var { ref name, view } => { if name == held { out.push((world.words.resolve(p).to_string(), view)); } },
+                        Ty::Var { ref name, view } => { if name == held { out.push((nikaia_std::block::Text::from(world.words.resolve(p).to_string()), view)); } },
                         _ => { },
                     }
                 }

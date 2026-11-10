@@ -11,6 +11,8 @@
 //! writes and what is refused.
 
 use nikaia::contracts::LedgerOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;

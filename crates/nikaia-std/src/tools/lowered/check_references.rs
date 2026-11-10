@@ -72,7 +72,7 @@ impl CheckState {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
-                let name = world.words.resolve(symbol).to_string();
+                let name = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
                 let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 found.changing
             },
@@ -85,7 +85,7 @@ impl CheckState {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
-                let name = world.words.resolve(symbol).to_string();
+                let name = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
                 let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 self.flow.mut_view_bindings.contains(&found.id)
             },
@@ -98,7 +98,7 @@ impl CheckState {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
-                let name = world.words.resolve(symbol).to_string();
+                let name = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
                 let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 self.flow.text_slot_bindings.contains(&found.id)
             },
@@ -111,7 +111,7 @@ impl CheckState {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
-                let name = world.words.resolve(symbol).to_string();
+                let name = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
                 let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 self.flow.either_bindings.contains(&found.id)
             },
@@ -124,7 +124,7 @@ impl CheckState {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
-                let name = world.words.resolve(symbol).to_string();
+                let name = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
                 let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 found.lent
             },
@@ -188,7 +188,7 @@ impl CheckState {
                 position = at + 1;
             }
             if position < signature.params.len() as i64 {
-                let name = nikaia_std::index::get(&signature.params, nikaia_std::index::at(position)).0.to_string();
+                let name = nikaia_std::block::Text::from(nikaia_std::index::get(&signature.params, nikaia_std::index::at(position)).0.to_string());
                 changes = nikaia_std::list::contains(&signature.mutable, &name);
             }
         }
@@ -298,7 +298,7 @@ pub(crate) fn check_gives_back_field_path(expr: &Expr, name: &str, words: &winno
         Expr::Field { base, name: field, .. } => {
             let base = nikaia_std::boxed::open(base); let field = *field;
             let mut path = match check_gives_back_field_path(base, name, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            path.push(words.resolve(field).to_string());
+            path.push(nikaia_std::block::Text::from(words.resolve(field).to_string()));
             Some(path)
         },
         _ => None,

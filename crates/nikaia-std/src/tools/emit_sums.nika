@@ -149,6 +149,15 @@ impl EmitState {
         return sum_member_type(kind, member, "", self.is_std)
     }
 
+    /// A bare value of `std`'s error `member`, put in the envelope the sum
+    /// holds it in (ADR-280 D13).
+    pub fn sum_member_value(ref self, world: ref EmitWorld, member: ref String, value: ref String) -> String {
+        if self.name_of_error(world, member) == 0 {
+            return value.clone()
+        }
+        return f"nikaia_std::error::Thrown::from({value})"
+    }
+
     /// Write every generated sum, once, at the crate root: a module is its own
     /// file below, so a sum written into each of them would be a different type
     /// per file and a failure could not cross one.
@@ -188,9 +197,31 @@ impl EmitState {
                 out.push(f"    {variant}({held}),\n")
             }
             out.push("}\n")
+            // **A full block arrives as a crash marked over budget** (ADR-327
+            // D13): a sum holding `task::OverBudget` takes it apart, and one
+            // without `task::Crashed` hands any other crash on unwinding.
+            let mut over = false
+            let mut crash_member = false
+            for member in members {
+                if member == "task::OverBudget" {
+                    over = true
+                }
+                if member == "task::Crashed" {
+                    crash_member = true
+                }
+            }
+            if over {
+                let budget = self.sum_member_value(world, "task::OverBudget", "nikaia_std::task::OverBudget")
+                let crash = self.sum_member_value(world, "task::Crashed", "error")
+                let rest = if crash_member { f"{name}::{sum_variant("task::Crashed")}({crash})" } else { "std::panic::resume_unwind(Box::new(error.to_string()))" }
+                out.push(f"impl{decl} From<nikaia_std::task::Crashed> for {name}{params} {{\n    fn from(error: nikaia_std::task::Crashed) -> {name}{params} {{\n        if error.over_budget() {{\n            return {name}::{sum_variant("task::OverBudget")}({budget});\n        }}\n        {rest}\n    }}\n}}\n")
+            }
             for member in members {
                 let variant = sum_variant(member)
                 let held = self.sum_member_held(world, member, params)
+                if over && member == "task::Crashed" {
+                    continue
+                }
                 out.push(f"impl{decl} From<{held}> for {name}{params} {{\n    fn from(error: {held}) -> {name}{params} {{ {name}::{variant}(error) }}\n}}\n")
                 // A `?` straight from `std` hands a library's error bare, and
                 // the member is its envelope (ADR-280 D13): put on here, with no
@@ -285,7 +316,11 @@ impl EmitState {
                 out.push(f"impl{decl} nikaia_std::task::Crosses for {name}{params} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n")
             }
             // `error.message()` on an error, one of several (ADR-280 D30).
-            out.push(f"impl{decl} {name}{params} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string() }}\n}}\n")
+            // On the block types (#490) `String` is a block's text, and
+            // so is what `Full` answers.
+            let block_types = self.on_block_types()
+            let into = if block_types { ".into()" } else { "" }
+            out.push(f"impl{decl} {name}{params} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string(){into} }}\n}}\n")
             // The long form asks the member (D2): a member the program declares
             // carries its envelope and therefore its site, and a library's says
             // there is none.

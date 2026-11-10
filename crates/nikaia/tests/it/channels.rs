@@ -15,6 +15,8 @@ use nikaia::contracts::ty::TyOps;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -91,10 +93,10 @@ fn a_signature_that_hands_back_a_tuple_parses() {
     let signature = bounded.signature.as_ref().expect("it carries a signature");
     assert_eq!(signature.arguments().len(), 1);
     assert_eq!(signature.arguments()[0].0, "capacity");
-    assert_eq!(signature.arguments()[0].1.to_string(), "i64");
+    assert_eq!(signature.arguments()[0].1.to_text(), "i64");
     assert_eq!(
-        signature.result.as_ref().map(|t| t.to_string()),
-        Some("(channel::Sender[$T], channel::Receiver[$T])".to_string())
+        signature.result.as_ref().map(|t| t.to_text()),
+        Some("(channel::Sender[$T], channel::Receiver[$T])".to_text())
     );
 }
 

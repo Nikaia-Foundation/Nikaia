@@ -626,6 +626,9 @@ fn check_function_handed_back[H: CheckHost](mut state: CheckState, world: ref Ch
                     check_core_a_field_of_a_lent_place_handed_back(state, world, host, value, at)
                 }
                 tail_view = state.lent_arms_handed_back(world, value, check_function_is_nullable(want))
+                if !tail_lent && !tail_view {
+                    check_core_lent_places_in_arms_handed_back(state, world, host, value, at)
+                }
             }
             // A body's numbers, typed by their uses once all of them have
             // been seen (ADR-285 D24): the tail's included.
@@ -641,13 +644,17 @@ fn check_function_handed_back[H: CheckHost](mut state: CheckState, world: ref Ch
 fn check_function_tail_checks[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, body: ref Block, expected: ref Ty, tail: Ty, lending: bool, tail_view: bool, span: ref Span) sync {
     let last = body.stmts[body.stmts.len() - 1]
     let nullable = check_function_is_nullable(expected)
+    let tail_nullable = check_function_is_nullable(tail) && !tail.is_a_view()
     let mut shown = tail
     if lending || tail_view {
         shown = view_of_type(shown)
     }
     match last.node {
         Stmt::Expr(value) => {
-            if lending && nullable {
+            if lending && nullable && tail_nullable && check_core_a_field(value) {
+                // A `T?` lent into a `ref T?` is the option of a view (#1486).
+                state.facts.lent_option_results.insert(node_key(value))
+            } else if lending && nullable {
                 state.facts.lent_reads.insert(id_of(value) as i64)
             } else if lending {
                 state.facts.lent_returns.insert(span.start as i64)

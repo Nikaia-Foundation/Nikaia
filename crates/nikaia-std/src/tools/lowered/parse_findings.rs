@@ -52,7 +52,7 @@ pub fn parse_findings_misplaced_async(at: i64, word: &str) -> Finding {
         _ => ("`async` stands before a loop, but `async` is a prefix of an expression and no loop has a value.", "`async` starts only tasks whose number stands in the source.", "To run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`."),
     };
     let (message, note, help) = finding;
-    Finding { code: String::from("NK2115"), span, message: message.to_string(), notes: vec![note.to_string()], help: Some(help.to_string()), warning: false, labels: vec![CheckLabel { span, word: String::from("async"), text: String::from(""), main: true }] }
+    Finding { code: String::from("NK2115"), span, message: nikaia_std::block::Text::from(message.to_string()), notes: vec![nikaia_std::block::Text::from(note.to_string())], help: Some(nikaia_std::block::Text::from(help.to_string())), warning: false, labels: vec![CheckLabel { span, word: String::from("async"), text: String::from(""), main: true }] }
 }
 
 pub fn parse_findings_one_task_limit(at: i64) -> Finding {

@@ -2,7 +2,7 @@
 // Edit project_check.nika in the directory above, not this file.
 
 pub fn project_check_summary(findings: &[CheckFinding], violations: i64) -> String {
-    let mut refused: Vec<String> = vec![];
+    let mut refused: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let refuted = project_check_count(findings, "NK1207");
     if refuted > 0 { refused.push(format!("{} claim{} shown false", refuted, project_check_plural(refuted))); }
     let types = project_check_count(findings, "NK1") - refuted;
@@ -54,10 +54,10 @@ pub fn project_check_summary(findings: &[CheckFinding], violations: i64) -> Stri
         let hole_118 = if may_not == 1 { "" } else { "s" };
         refused.push(format!("{} call{} a `sync` function may not make", may_not, hole_118));
     }
-    refused.join(", ")
+    nikaia_std::block::Text::from(refused.join(", "))
 }
 
-pub(crate) fn project_check_count(findings: &[CheckFinding], family: &str) -> i64 { findings.iter().filter(|&f| { f.severity == CheckSeverity::Error && f.code.starts_with(family) }).count() as i64 }
+pub(crate) fn project_check_count(findings: &[CheckFinding], family: &str) -> i64 { findings.iter().filter(|&f| { f.severity == CheckSeverity::Error && f.code.starts_with(AsRef::<str>::as_ref(family)) }).count() as i64 }
 
 pub(crate) fn project_check_plural(n: i64) -> &'static str { if n == 1 { "" } else { "s" } }
 
@@ -112,7 +112,7 @@ pub struct ProjectCheckSaid {
 
 pub fn project_check_check<H: ProjectCheckHost>(host: &H, path: &str, source: &str, user_parallelism: &str, refuted_claims: &str, unproved_claims: &str, building_a_library: bool) -> ProjectCheckSaid {
     let mut all = host.check_against();
-    if building_a_library { all = all.iter().filter(|&finding| { finding.code != "NK1238" }).map(|finding| { finding.clone() }).collect::<Vec<_>>(); }
+    if building_a_library { all = { let __nikaia_value = all.iter().filter(|&finding| { finding.code != "NK1238" }).map(|finding| { finding.clone() }).collect::<Vec<_>>(); __nikaia_value }; }
     all.extend(host.foreign_check());
     all.sort_by_key(|finding| { finding.span.start });
     project_check_lint_where_nothing_crosses(&mut all, user_parallelism);
@@ -122,7 +122,7 @@ pub fn project_check_check<H: ProjectCheckHost>(host: &H, path: &str, source: &s
     if all.is_empty() && violations == 0 { return ProjectCheckSaid { warnings: String::from(""), refused: None }; }
     let in_the_wrapper = host.in_the_wrapper();
     let mut warnings: String = String::from("");
-    let lines: Vec<String> = source.split("\n").map(|line| { line.to_string() }).collect::<Vec<_>>();
+    let lines: Vec<String> = source.split("\n").map(|line| { nikaia_std::block::Text::from(line.to_string()) }).collect::<Vec<_>>();
     for finding in all.iter() {
         let rendered = host.render_finding_in(finding, path, &lines);
         if finding.severity == CheckSeverity::Warning {
@@ -140,8 +140,8 @@ pub fn project_check_gained(committed: &Ledger, inferred: &Ledger) -> collection
     let mut out: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for (name, contract) in inferred.functions.iter() {
         let before = match committed.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let gained: Vec<String> = contract.fails_with.iter().filter(|&error| { !nikaia_std::list::contains(&before.fails_with, &error) }).map(|x| { x.to_string() }).collect::<Vec<_>>();
-        if !gained.is_empty() { out.insert(name.to_string(), gained); }
+        let gained: Vec<String> = contract.fails_with.iter().filter(|&error| { !nikaia_std::list::contains(&before.fails_with, &error) }).map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect::<Vec<_>>();
+        if !gained.is_empty() { out.insert(nikaia_std::block::Text::from(name.to_string()), gained); }
     }
     out
 }
@@ -168,9 +168,9 @@ pub fn project_check_keeps_that_moved(committed: &Ledger, inferred: &Ledger) -> 
         }).filter_map(|__nikaia_tuple23558| {
             let (param, ty) = __nikaia_tuple23558;
             let kept = nikaia_std::list::contains(&contract.keeps, &param);
-            if kept != nikaia_std::list::contains(&before.keeps, &param) { Some(ProjectCheckKept { param: param.to_string(), now: kept, ty: ty.text() }) } else { None }
+            if kept != nikaia_std::list::contains(&before.keeps, &param) { Some(ProjectCheckKept { param: nikaia_std::block::Text::from(param.to_string()), now: kept, ty: ty.text() }) } else { None }
         }).collect::<Vec<_>>();
-        if !moved.is_empty() { out.insert(name.to_string(), moved); }
+        if !moved.is_empty() { out.insert(nikaia_std::block::Text::from(name.to_string()), moved); }
     }
     out
 }
@@ -199,7 +199,7 @@ pub fn project_check_explain_kinds(overlaps: bool, sharing: bool, tethers: bool,
         asked
     }).map(|__nikaia_tuple26166| {
         let (kind, _) = __nikaia_tuple26166;
-        kind.to_string()
+        nikaia_std::block::Text::from(kind.to_string())
     }).collect::<Vec<_>>()
 }
 

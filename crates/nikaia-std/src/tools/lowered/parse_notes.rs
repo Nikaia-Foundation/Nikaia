@@ -36,7 +36,7 @@ pub fn unclosed_quote(source: &str) -> i64 {
 
 pub fn unclosed_bracket(source: &str) -> i64 {
     let c: Vec<scalar> = nikaia_std::list::chars(source.chars());
-    let mut stack: Vec<i64> = vec![];
+    let mut stack: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut in_string = false;
     let mut at: i64 = 0;
     while at < c.len() as i64 {
@@ -64,7 +64,7 @@ pub(crate) fn past_the_line(c: &[scalar], at: i64) -> i64 {
 
 pub fn opening_of_an_unclosed_comment(source: &str) -> i64 {
     let c: Vec<scalar> = nikaia_std::list::chars(source.chars());
-    let mut open: Vec<i64> = vec![];
+    let mut open: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut at: i64 = 0;
     while at < c.len() as i64 {
         if open.is_empty() {
@@ -104,12 +104,12 @@ pub fn first_sentence(text: &str) -> Vec<String> {
     let mut quoted = false;
     for at in 0..c.len() as i64 {
         if *nikaia_std::index::get(&c, (at) as usize) == '`' { quoted = !quoted; } else if *nikaia_std::index::get(&c, (at) as usize) == '.' && !quoted && ((at + 1) as usize) < c.len() && *nikaia_std::index::get(&c, (at + 1) as usize) == ' ' {
-            let rest = slice(&c, at + 1, c.len() as i64).trim().to_string();
+            let rest = nikaia_std::block::Text::from(slice(&c, at + 1, c.len() as i64).trim().to_string());
             if rest.is_empty() { return vec![slice(&c, 0, at + 1)]; }
             return vec![slice(&c, 0, at + 1), rest];
         }
     }
-    vec![text.to_string()]
+    vec![nikaia_std::block::Text::from(text.to_string())]
 }
 
 pub fn the_spelling_ref_replaced_note(found: &str) -> Option<String> {

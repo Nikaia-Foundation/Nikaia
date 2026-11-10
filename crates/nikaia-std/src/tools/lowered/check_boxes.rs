@@ -17,10 +17,10 @@ impl CheckState {
     pub(crate) fn a_pattern_inside_a_box_at(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span, at: &CheckDepth) {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
-                let mut written: Vec<String> = vec![];
+                let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for symbol in path.iter() {
                     let symbol = *symbol;
-                    written.push(world.words.resolve(symbol).to_string());
+                    written.push(nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()));
                 }
                 for index in 0..parts.len() as i64 {
                     let part = nikaia_std::index::get(&parts, nikaia_std::index::at(index));
@@ -36,7 +36,7 @@ impl CheckState {
                             CheckDepth::InAlternative => { why = "in one alternative of an `|` pattern"; },
                         }
                         if reported {
-                            let owner = written.join("::");
+                            let owner = nikaia_std::block::Text::from(written.join("::"));
                             self.findings.push(check_refusal("NK1193", span, format!("This pattern looks inside part {} of `{}`, which holds its own type, {}, and patterns can't look that far yet.", index, owner, why), vec![String::from("A part that holds its own type is stored behind a pointer. A pattern can look inside one such part per arm, outside an `|`.")], Some(String::from("Bind the part to a name here, and `match` on that name inside the arm."))));
                         }
                     }
@@ -55,7 +55,7 @@ impl CheckState {
                 for at in 0..parts.len() as i64 {
                     let part = nikaia_std::index::get(&parts, nikaia_std::index::at(at));
                     match part {
-                        MatchPattern::Path(one) => { if one.len() == 1 && self.boxed_part(world, path, at) { out.push(world.words.resolve(*nikaia_std::index::get(&one, 0)).to_string()); } },
+                        MatchPattern::Path(one) => { if one.len() == 1 && self.boxed_part(world, path, at) { out.push(nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&one, 0)).to_string())); } },
                         MatchPattern::Tuple { .. } => { if !self.boxed_part(world, path, at) { for name in self.boxed_names(world, &part) { out.push(name); } } },
                         _ => { },
                     }
@@ -75,14 +75,14 @@ impl CheckState {
                     if self.boxed_part(world, path, at) && !binds_a_part(&part) {
                         let mut owner: String = String::from("");
                         match part {
-                            MatchPattern::Tuple { path, .. } => { if path.len() >= 2 { owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string(); } },
-                            MatchPattern::Named { path, .. } => { if path.len() >= 2 { owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string(); } },
+                            MatchPattern::Tuple { path, .. } => { if path.len() >= 2 { owner = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string()); } },
+                            MatchPattern::Named { path, .. } => { if path.len() >= 2 { owner = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string()); } },
                             _ => { },
                         }
                         if !owner.is_empty() {
                             let on = Ty::Named { name: owner, args: vec![], view: false };
                             let typed = self.pattern_parts(world, &part, &on);
-                            for (name, ty) in typed.iter() { out.insert(name.to_string(), ty.clone()); }
+                            for (name, ty) in typed.iter() { out.insert(nikaia_std::block::Text::from(name.to_string()), ty.clone()); }
                         }
                     } else { self.typed_inside_boxes(world, &part, out); }
                 }
@@ -109,8 +109,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn boxed_part(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
         if path.len() < 2 { return false; }
-        let owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string();
-        let variant = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_string();
+        let owner = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string());
+        let variant = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_string());
         if !self.facts.boxed_members.contains_key(&owner) { return false; }
         let members = nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.boxed_members, &owner) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -170,7 +170,7 @@ impl CheckState {
                     self.a_closed_set_that_misses_a_case(world, args, arms, span);
                     return;
                 }
-                name = written.to_string();
+                name = nikaia_std::block::Text::from(written.to_string());
             },
             _ => { return; },
         }
@@ -196,7 +196,7 @@ impl CheckState {
                 let mut missing: Vec<&'static str> = vec![];
                 if !has_true { missing.push("true"); }
                 if !has_false { missing.push("false"); }
-                let text = missing.join("`, `");
+                let text = nikaia_std::block::Text::from(missing.join("`, `"));
                 self.a_case_is_missing(&text, span);
             }
             return;
@@ -212,27 +212,27 @@ impl CheckState {
         }, || collections::BTreeSet::new().into());
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         for arm in arms.iter() { if arm.guard.is_none() && !self.looks_inside_a_box(world, &arm.pattern) { variants_named(world, &arm.pattern, &mut named); } }
-        let mut missing: Vec<String> = vec![];
+        let mut missing: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for variant in variants.iter() { if !named.contains(variant) { missing.push(format!("{}::{}", name, variant)); } }
         if !missing.is_empty() {
-            let text = missing.join("`, `");
+            let text = nikaia_std::block::Text::from(missing.join("`, `"));
             self.a_case_is_missing(&text, span);
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_type_named_whole(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<String> {
-        let mut parts: Vec<String> = vec![];
+        let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         match pattern {
             MatchPattern::Path(path) => {
                 for symbol in path.iter() {
                     let symbol = *symbol;
-                    parts.push(world.words.resolve(symbol).to_string());
+                    parts.push(nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()));
                 }
             },
             _ => { return None; },
         }
-        let written = parts.join("::");
+        let written = nikaia_std::block::Text::from(parts.join("::"));
         if self.structs.contains_key(&written) || self.enums.contains_key(&written) { return Some(written); }
         if parts.len() >= 2 && (world.library.types.contains_key(&written) || world.own.types.contains_key(&written)) { return Some(written); }
         None
@@ -242,15 +242,15 @@ impl CheckState {
     pub(crate) fn a_closed_set_that_misses_a_case(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, members: &[Ty], arms: &[MatchArm], span: &Span) {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         for arm in arms.iter() { if arm.guard.is_none() { check_boxes_qualified(world, &arm.pattern, &mut named); } }
-        let mut missing: Vec<String> = vec![];
+        let mut missing: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for member in members.iter() {
             let name: String = match member {
-                Ty::Named { name, .. } => name.to_string(),
+                Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
                 _ => continue,
             };
             if named.contains(&name) { continue; }
             if !self.enums.contains_key(&name) {
-                missing.push(name.to_string());
+                missing.push(nikaia_std::block::Text::from(name.to_string()));
                 continue;
             }
             let variants = nikaia_std::index::or(match *nikaia_std::index::get(&self.enums, &name) {
@@ -260,7 +260,7 @@ impl CheckState {
             for variant in variants.iter() { if !named.contains(&format!("{}::{}", name, variant)) { missing.push(format!("{}::{}", name, variant)); } }
         }
         if !missing.is_empty() {
-            let text = missing.join("`, `");
+            let text = nikaia_std::block::Text::from(missing.join("`, `"));
             self.a_case_is_missing(&text, span);
         }
     }
@@ -282,14 +282,14 @@ pub(crate) fn check_boxes_qualified(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 // this was written - see `contracts::sync`.
 pub(crate) fn check_boxes_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) {
     let n = path.len() as i64;
-    if n == 1 { out.insert(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string()); } else if n >= 2 {
+    if n == 1 { out.insert(nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string())); } else if n >= 2 {
         out.insert(format!("{}::{}", world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 2))), world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 1)))));
-        let mut whole: Vec<String> = vec![];
+        let mut whole: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for symbol in path.iter() {
             let symbol = *symbol;
-            whole.push(world.words.resolve(symbol).to_string());
+            whole.push(nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()));
         }
-        out.insert(whole.join("::"));
+        out.insert(nikaia_std::block::Text::from(whole.join("::")));
     }
 }
 

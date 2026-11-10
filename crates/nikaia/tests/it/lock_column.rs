@@ -22,6 +22,8 @@
 use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps, Lock};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// What the ledger says one function's lock property is.
 fn locks(source: &str, name: &str) -> Lock {

@@ -7,6 +7,8 @@ use crate::common;
 use nikaia::check::Finding;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 fn findings(source: &str) -> Vec<Finding> {
@@ -39,7 +41,7 @@ fn a_function_named_as_a_value_is_typed() {
         assert!(
             found
                 .iter()
-                .any(|f| f.code == "NK1103" && f.message.contains(&format!("`{ty}`"))),
+                .any(|f| f.code == "NK1103" && f.message.contains(&*format!("`{ty}`"))),
             "{value}: {found:#?}"
         );
     }

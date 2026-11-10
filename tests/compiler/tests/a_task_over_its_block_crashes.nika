@@ -1,0 +1,22 @@
+// A list a task keeps to itself is built in the task's block, 16 pages of
+// 4 KiB (ADR-327 D12), and one that outgrows it ends the task: whoever waits
+// for it gets `task::Crashed` with the budget's message (ADR-async-5 D35).
+fn fill() -> i64 {
+    let mut xs: Vec[i64] = []
+    for i in 0..<100000 {
+        xs.push(i)
+    }
+    return xs.len()
+}
+
+fn main() throws {
+    let t = spawn fn { fill() }
+    let n = t.join() catch {
+        match error {
+            task::Crashed { message, .. } => println(f"crashed: {message}"),
+            else => println(f"failed: {error}"),
+        }
+        0
+    }
+    println(f"after: {n}")
+}

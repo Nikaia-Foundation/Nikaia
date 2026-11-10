@@ -27,7 +27,7 @@ pub(crate) fn report_indented(text: &str) -> String {
 // this was written - see `contracts::sync`.
 pub(crate) fn a_named_type(ty: &Ty) -> Option<String> {
     match ty {
-        Ty::Named { name, .. } => Some(name.to_string()),
+        Ty::Named { name, .. } => Some(nikaia_std::block::Text::from(name.to_string())),
         _ => None,
     }
 }
@@ -63,7 +63,7 @@ impl CheckState {
                     if trait_name == "Enum" { article = "an"; }
                     message = format!("`{}` needs {} `{}` here, but `{}` isn't one.", key, article, trait_name, actual);
                     note = format!("`[{}: {}]` asks what a type is, not what it does, so it's answered by the declaration, not an `impl`. `{}` is {}.", parameter, trait_name, actual, self.what_shape_it_is(&actual));
-                    if of_the_caller { way_out = format!("Add it to the bound: `[{}: … + {}]`.", actual, trait_name); } else { way_out = format!("Pass a value of a type declared with `{}`, or remove the bound.", trait_name.to_lowercase()); }
+                    if of_the_caller { way_out = format!("Add it to the bound: `[{}: … + {}]`.", actual, trait_name); } else { way_out = format!("Pass a value of a type declared with `{}`, or remove the bound.", nikaia_std::block::Text::from(trait_name.to_lowercase())); }
                 } else if of_the_caller {
                     message = format!("`{}` needs a `{}` here, but `{}` isn't declared to be one.", key, trait_name, actual);
                     note = format!("`{}` is a type this function's caller picks, so it can only do what its bounds say, and `{}` isn't one of them.", actual, trait_name);
@@ -80,22 +80,22 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_changed_binding_says_mut(&mut self, name: &str, how: &str, changed_at: Span) {
-        self.changed.push(name.to_string());
+        self.changed.push(nikaia_std::block::Text::from(name.to_string()));
         let local = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return };
         let without_mut = match local.without_mut { Some(__nikaia_value) => __nikaia_value, None => return };
         let declared = without_mut.at.start as i64;
         if self.said_mut.contains(&declared) { return; }
         let mut code: String = String::from("NK1139");
         let mut message: String = format!("You're changing `{}`, but it wasn't declared as mutable.", name);
-        let mut notes: Vec<String> = vec![];
-        let mut help: String = format!("Add `mut` where it's declared: `let mut {}`.", name);
-        let mut declared_text: String = String::from("declared here without `mut`");
+        #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
+        let mut help: String = format!("Add `mut` where it's declared: `let mut {}`.", name); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
+        let mut declared_text: String = String::from("declared here without `mut`"); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
         if without_mut.kind == CheckKind::Loop {
             message = format!("You're changing `{}`, which a `for` binds, but the `for` wasn't declared `mut`.", name);
             notes.push(String::from("A `for` binding is the element of this turn, and it changes only if the head says `mut`."));
             help = format!("For a change meant for this turn only, change a copy: `let mut {}_own = {}.clone()`.", name, name);
             if without_mut.over != "" {
-                let list = without_mut.over.to_string();
+                let list = nikaia_std::block::Text::from(without_mut.over.to_string());
                 notes.push(format!("`for mut {} in {}` makes `{}` the element of `{}` itself, and a change to it reaches `{}`.", name, list, name, list, list));
                 help = format!("To change `{}`, write `for mut {} in {}`. For a change meant for this turn only, write `let mut {}_own = {}.clone()`.", list, name, list, name, name);
             }
@@ -115,8 +115,8 @@ impl CheckState {
             help = format!("Write `mut {}` in the parameter list. If the caller's value should stay as it was, change a copy instead: `let mut {}_own = {}`.", name, name, name);
         }
         self.said_mut.insert(declared);
-        let there = CheckLabel { span: without_mut.at.clone(), word: name.to_string(), text: declared_text, main: false };
-        let here = CheckLabel { span: changed_at.clone(), word: name.to_string(), text: how.to_string(), main: true };
+        let there = CheckLabel { span: without_mut.at.clone(), word: nikaia_std::block::Text::from(name.to_string()), text: declared_text, main: false };
+        let here = CheckLabel { span: changed_at.clone(), word: nikaia_std::block::Text::from(name.to_string()), text: nikaia_std::block::Text::from(how.to_string()), main: true };
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code, message, notes, help: Some(help), labels: vec![there, here] });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -151,7 +151,7 @@ impl CheckState {
     pub fn a_for_mut_over_a_list_not_mut(&mut self, list: &str, head: &str, a_parameter: bool, span: &Span) {
         let mut way_out: String = format!("Declare it `mut` where it's declared: `let mut {}`, or walk a copy of your own: `for mut {} in {}.clone()`.", list, head, list);
         if a_parameter { way_out = format!("Write `mut {}` in the parameter list, or walk a copy of your own: `for mut {} in {}.clone()`.", list, head, list); }
-        let label = CheckLabel { span: span.clone(), word: list.to_string(), text: String::from("can't be changed here"), main: true };
+        let label = CheckLabel { span: span.clone(), word: nikaia_std::block::Text::from(list.to_string()), text: String::from("can't be changed here"), main: true };
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1139"), message: format!("`for mut {}` changes the elements of `{}`, but `{}` wasn't declared as mutable.", head, list, list), notes: vec![String::from("A `for mut` binding is the element of the list itself, so a change to it reaches the list.")], help: Some(way_out), labels: vec![label] });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -204,7 +204,7 @@ impl CheckState {
         let letters: Vec<scalar> = nikaia_std::list::chars(written.chars());
         let mut help: String = String::from("");
         if letters.len() > 1 && (*nikaia_std::index::get(&letters, 1) == 'x' || *nikaia_std::index::get(&letters, 1) == 'u') { help = String::from("Write a character above `\\x7F` as `\\u{…}`, with up to six hexadecimal digits: `\\u{80}`, `\\u{1F600}`."); } else {
-            let doubled = text.replace("\\", "\\\\");
+            let doubled = nikaia_std::block::Text::from(text.replace("\\", "\\\\"));
             help = format!("If you meant a backslash, write it twice: `\"{}\"`. Otherwise use one of the escapes above.", doubled);
         }
         let sentence = format!("{}.", capitalised(why));
@@ -225,7 +225,7 @@ impl CheckState {
             self.findings.push(check_refusal("NK1123", span, format!("This is already a `{}`, so wrapping it in `{}` adds nothing.", inner, handle), vec![String::from("A shared handle is copied by passing it on, never by wrapping it again.")], Some(format!("Pass the `{}` on as it is.", inner))));
             return held;
         }
-        Ty::Named { name: handle.to_string(), args: vec![held], view: false }
+        Ty::Named { name: nikaia_std::block::Text::from(handle.to_string()), args: vec![held], view: false }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -234,13 +234,13 @@ impl CheckState {
         let known = self.binding(name).is_some() || resolve_call(world, name).is_some() || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || name == "access_all" || name == "update_all" || is_hull(name);
         if known { return; }
         let suffix = format!("::{}", name);
-        let mut keys: Vec<String> = vec![];
-        for (key, _) in world.library.functions.iter() { if key.ends_with(&suffix) { keys.push(key.to_string()); } }
+        let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for (key, _) in world.library.functions.iter() { if key.ends_with(AsRef::<str>::as_ref(&suffix)) { keys.push(nikaia_std::block::Text::from(key.to_string())); } }
         if keys.len() != 1 { return; }
-        let key = (*nikaia_std::index::get(&keys, 0)).to_string();
+        let key = nikaia_std::block::Text::from((*nikaia_std::index::get(&keys, 0)).to_string());
         let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
         if parts.len() < 2 { return; }
-        let module = (*nikaia_std::index::get(&parts, 0)).to_string();
+        let module = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string()); ::core::mem::drop(parts);
         if !self.std_modules.contains(&module) { return; }
         self.findings.push(check_refusal("NK1117", span, format!("`{}` isn't available without its module.", name), vec![format!("`std` has `{}`, and it's reached through its module.", key), String::from("Only a few names are always available; the rest live in a module.")], Some(format!("Write `use std::{}` at the top of the file, and `{}(…)` here.", module, key))));
     }
@@ -251,12 +251,12 @@ impl CheckState {
         if at >= 0 {
             let place = Span { start: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
             labels.push(CheckLabel { span: place, word: String::from(""), text: String::from("it stopped here"), main: true });
-            labels.push(CheckLabel { span: span.clone(), word: bound.to_string(), text: String::from("computed while the program is built"), main: false });
+            labels.push(CheckLabel { span: span.clone(), word: nikaia_std::block::Text::from(bound.to_string()), text: String::from("computed while the program is built"), main: false });
         }
-        let mut notes: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
         if function.is_some() { notes.push(format!("It stopped in `{}`, in another file of the program.", nikaia_std::index::or(function, || ""))); }
         notes.push(String::from("The code a `comptime` runs is the program's own, and it stops where the program would stop when it runs."));
-        let mut help: String = String::from("Fix it as you would fix the program stopping there, or compute the value while the program runs, with `let` instead of `comptime`.");
+        let mut help: String = String::from("Fix it as you would fix the program stopping there, or compute the value while the program runs, with `let` instead of `comptime`."); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
         if self.computing_default { help = String::from("Fix it as you would fix the program stopping there, or make the option a `T?` and compute the value in the body."); }
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1244"), message: format!("`{}` stopped while the program was built: {}.", bound, why), notes, help: Some(help), labels });
     }

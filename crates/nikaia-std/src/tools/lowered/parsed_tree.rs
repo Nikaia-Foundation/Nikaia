@@ -10,7 +10,7 @@ pub fn aliases_of(items: &[Spanned<Item>], words: &winnow_grammar::InternerConte
                 if path.len() == 1 && alias.is_some() {
                     let package = *nikaia_std::index::get(&path, 0);
                     let name = nikaia_std::index::or(alias, || package.into());
-                    out.insert(words.resolve(name).to_string(), words.resolve(package).to_string());
+                    out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()), nikaia_std::block::Text::from(words.resolve(package).to_string()));
                 }
             },
             _ => { },
@@ -43,7 +43,7 @@ pub fn grown_items(items: &[Spanned<Item>], vec: winnow_grammar::Symbol) -> Vec<
             Item::Struct { name, generics, fields, is_public, is_extern, rules } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
                 let copy = item.clone();
-                out.push(Spanned { node: Item::Struct { name, generics: generics.to_owned(), fields: grown_fields(fields, vec), is_public, is_extern, rules: rules.to_owned() }, ..copy });
+                out.push(Spanned { node: Item::Struct { name, generics: generics.copy_owned(), fields: grown_fields(fields, vec), is_public, is_extern, rules: rules.copy_owned() }, ..copy });
             },
             Item::Enum { name, variants, is_public, is_extern } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
@@ -80,8 +80,8 @@ pub fn parsed_span_of(spans: &collections::BTreeMap<u32, Span>, id: u32) -> Opti
 
 pub fn parsed_kept_function_text(func: &Expr, words: &winnow_grammar::InternerContext) -> String {
     match func {
-        Expr::Path(segments, _) => segments.iter().map(|s| { words.resolve(*s).to_string() }).collect::<Vec<_>>().join("::"),
-        Expr::Variable(name, _) => { let name = *name; words.resolve(name).to_string() },
+        Expr::Path(segments, _) => nikaia_std::block::Text::from(segments.iter().map(|s| { nikaia_std::block::Text::from(words.resolve(*s).to_string()) }).collect::<Vec<_>>().join("::")),
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(words.resolve(name).to_string()) },
         _ => panic("a kept function is a name or a path"),
     }
 }

@@ -3,6 +3,8 @@
 //! a read (`*index::get(…)`) cannot be changed.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 #[test]
 fn a_field_of_an_element_is_changed_in_place() {

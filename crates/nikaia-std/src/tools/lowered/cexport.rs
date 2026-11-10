@@ -34,15 +34,15 @@ pub struct CxBuild {
 }
 
 pub(crate) fn cx_sum_name(members: &[String]) -> String {
-    let mut parts: Vec<String> = vec![];
-    for member in members.iter() { parts.push(member.replace("::", "_")); }
-    format!("__NikaiaThrows_{}", parts.join("__"))
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for member in members.iter() { parts.push(nikaia_std::block::Text::from(member.replace("::", "_"))); }
+    format!("__NikaiaThrows_{}", nikaia_std::block::Text::from(parts.join("__")))
 }
 
 pub(crate) fn cx_replace_first(text: &str, from: &str, to: &str) -> String {
-    let pieces: Vec<&str> = text.split(from).collect::<Vec<_>>();
-    if pieces.len() < 2 { return text.to_string(); }
-    let mut out = (*nikaia_std::index::get(&pieces, 0)).to_string();
+    let pieces: Vec<&str> = text.split(AsRef::<str>::as_ref(from)).collect::<Vec<_>>();
+    if pieces.len() < 2 { return nikaia_std::block::Text::from(text.to_string()); }
+    let mut out = nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).to_string());
     out.push_str(to);
     let mut at: i64 = 1;
     while ((at) as usize) < pieces.len() {
@@ -66,14 +66,14 @@ pub(crate) fn cx_lent(contracts: &Ledger, key: &str, position: i64) -> bool {
 
 pub(crate) fn cx_fails_with(contracts: &Ledger, key: &str) -> Vec<String> {
     let contract = match *nikaia_std::index::get(&contracts.functions, key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-    contract.fails_with.to_owned()
+    contract.fails_with.copy_owned()
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>], found: &[CxEntry], contracts: &Ledger, prefix: &str, package: &str, concurrent: bool, target: &str) -> Result<Option<CxExported>, nikaia_std::error::Thrown<CxRefused>> {
     let mut user_code: String = String::from("Sequential");
     if concurrent { user_code = String::from("Concurrent"); }
-    let upper = prefix.to_uppercase();
+    let upper = nikaia_std::block::Text::from(prefix.to_uppercase());
     let mut rust = cx_preamble();
     rust.push_str(&cx_library_functions(prefix, &user_code));
     let codes = cx_variant_codes(words, items, &found, contracts, target);
@@ -84,8 +84,8 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
     for handle in handles.iter() {
         if handle.is_enum() {
             let mut names: Vec<String> = vec![];
-            for variant in handle.variants.iter() { names.push(variant.name.to_string()); }
-            plains.push(CxPlain { name: format!("{}_Kind", handle.name), variants: names, stem: handle.name.to_uppercase() });
+            for variant in handle.variants.iter() { names.push(nikaia_std::block::Text::from(variant.name.to_string())); }
+            plains.push(CxPlain { name: format!("{}_Kind", handle.name), variants: names, stem: nikaia_std::block::Text::from(handle.name.to_uppercase()) });
             kinds.push(Some(plains.len() as i64 - 1));
         } else { kinds.push(None); }
     }
@@ -103,7 +103,7 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
             let at = cx_handle_named(&handles, &name);
             if at.is_some() { { let __nikaia_stored = true; nikaia_std::index::set(&mut held, nikaia_std::index::at(nikaia_std::index::or(at, || 0)), __nikaia_stored); } } else if !cx_record_named(&records, &name) { return Err(nikaia_std::error::throwing(CxRefused::Because(cx_not_yet(&entry.written(), "type, which is no `pub struct` of the entry file,")), &"cx_export")); }
         }
-        let mut types: Vec<Type> = entry.arg_types.to_owned();
+        let mut types: Vec<Type> = entry.arg_types.copy_owned();
         let ret = match entry.ret_type.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -114,7 +114,7 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
             if at.is_some() { { let __nikaia_stored = true; nikaia_std::index::set(&mut held, nikaia_std::index::at(nikaia_std::index::or(at, || 0)), __nikaia_stored); } }
         }
     }
-    let mut all: Vec<CxEntry> = found.to_owned();
+    let mut all: Vec<CxEntry> = found.copy_owned();
     let mut index: i64 = 0;
     while ((index) as usize) < handles.len() {
         if !*nikaia_std::index::get(&held, (index) as usize) {
@@ -122,22 +122,22 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
             continue;
         }
         let handle = nikaia_std::index::get(&handles, (index) as usize);
-        for (field, ty) in handle.fields.iter() { all.push(CxEntry { owner: Some(handle.name.to_string()), name: field.to_string(), receiver: Some(CxHold::Shared), exclusive: false, arg_names: vec![], arg_types: vec![], ret_type: Some(ty.clone()), getter: true, of_variant: None, kind_of: None }); }
+        for (field, ty) in handle.fields.iter() { all.push(CxEntry { owner: Some(nikaia_std::block::Text::from(handle.name.to_string())), name: nikaia_std::block::Text::from(field.to_string()), receiver: Some(CxHold::Shared), exclusive: false, arg_names: vec![], arg_types: vec![], ret_type: Some(ty.clone()), getter: true, of_variant: None, kind_of: None }); }
         let kind = *nikaia_std::index::get(&kinds, (index) as usize);
         if kind.is_none() {
             index += 1;
             continue;
         }
-        let ty = handle.name.to_string();
-        let mut arms: Vec<String> = vec![];
-        let mut names: Vec<String> = vec![];
+        let ty = nikaia_std::block::Text::from(handle.name.to_string());
+        #[allow(unused_mut)] let mut arms: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut arms = arms;
         for variant in handle.variants.iter() {
             arms.push(format!("{} => ({}_Kind::{}, \"{}\"),", variant.pattern, ty, cx_escaped(&variant.name), variant.name));
             names.push(cx_escaped(&variant.name));
         }
-        rust.push_str(&format!("\n/// The kinds of `{}`, as `{}_{}_kind` writes them (ADR-284 D31).\n#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone, Copy)]\nenum {}_Kind {{ {} }}\n\n#[allow(non_snake_case, dead_code)]\nfn __nikaia_kind_{}(value: &{}) -> ({}_Kind, &'static str) {{\n    match value {{ {} }}\n}}\n", ty, prefix, ty, ty, names.join(", "), ty, ty, ty, arms.join(" ")));
-        all.push(CxEntry { owner: Some(ty.to_string()), name: String::from("kind"), receiver: Some(CxHold::Shared), exclusive: false, arg_names: vec![], arg_types: vec![], ret_type: None, getter: true, of_variant: None, kind_of: std::convert::identity(kind) });
-        for variant in handle.variants.iter() { for (getter, pattern, field) in variant.fields.iter() { all.push(CxEntry { owner: Some(ty.to_string()), name: getter.to_string(), receiver: Some(CxHold::Shared), exclusive: false, arg_names: vec![], arg_types: vec![], ret_type: Some(field.clone()), getter: true, of_variant: Some(CxVariantOf { variant: variant.name.to_string(), pattern: pattern.to_string() }), kind_of: None }); } }
+        rust.push_str(&format!("\n/// The kinds of `{}`, as `{}_{}_kind` writes them (ADR-284 D31).\n#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone, Copy)]\nenum {}_Kind {{ {} }}\n\n#[allow(non_snake_case, dead_code)]\nfn __nikaia_kind_{}(value: &{}) -> ({}_Kind, &'static str) {{\n    match value {{ {} }}\n}}\n", ty, prefix, ty, ty, nikaia_std::block::Text::from(names.join(", ")), ty, ty, ty, nikaia_std::block::Text::from(arms.join(" "))));
+        all.push(CxEntry { owner: Some(nikaia_std::block::Text::from(ty.to_string())), name: String::from("kind"), receiver: Some(CxHold::Shared), exclusive: false, arg_names: vec![], arg_types: vec![], ret_type: None, getter: true, of_variant: None, kind_of: std::convert::identity(kind) });
+        for variant in handle.variants.iter() { for (getter, pattern, field) in variant.fields.iter() { all.push(CxEntry { owner: Some(nikaia_std::block::Text::from(ty.to_string())), name: nikaia_std::block::Text::from(getter.to_string()), receiver: Some(CxHold::Shared), exclusive: false, arg_names: vec![], arg_types: vec![], ret_type: Some(field.clone()), getter: true, of_variant: Some(CxVariantOf { variant: nikaia_std::block::Text::from(variant.name.to_string()), pattern: nikaia_std::block::Text::from(pattern.to_string()) }), kind_of: None }); } }
         index += 1;
     }
     for record in records.iter() {
@@ -152,7 +152,7 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
     let mut constants: String = String::from("");
     for raising in codes.iter() {
         for code in raising.codes.iter() {
-            let mut what = raising.error.to_string();
+            let mut what = nikaia_std::block::Text::from(raising.error.to_string());
             let variant = match code.variant.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
@@ -167,14 +167,14 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
             constants.push_str(&format!("#define {}_E_{} {} /* {}{} */\n", upper, code.constant, code.number, what, errno));
         }
     }
-    let ctx = CxCtx { plains: plains.to_owned(), handles: handles.to_owned(), records: records.to_owned(), codes: codes.to_owned(), prefix: prefix.to_string(), upper: upper.to_string(), user_code: user_code.to_string() };
+    let ctx = CxCtx { plains: plains.copy_owned(), handles: handles.copy_owned(), records: records.copy_owned(), codes: codes.copy_owned(), prefix: nikaia_std::block::Text::from(prefix.to_string()), upper: nikaia_std::block::Text::from(upper.to_string()), user_code: nikaia_std::block::Text::from(user_code.to_string()) };
     let mut symbols: collections::BTreeSet<String> = collections::BTreeSet::new();
     for own in ["last_error", "init", "shutdown", "set_allocator", "alloc_fn", "free_fn"] { symbols.insert(format!("{}_{}", prefix, own)); }
     let mut build = CxBuild { rust, declarations: String::from(""), crossing, symbols, any_pause: false, python: CxPython::empty(), node: CxNode::empty() };
     let mut at: i64 = 0;
     while at < handles.len() as i64 {
         if *nikaia_std::index::get(&held, nikaia_std::index::at(at)) {
-            let ty = nikaia_std::index::get(&handles, nikaia_std::index::at(at)).name.to_string();
+            let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&handles, nikaia_std::index::at(at)).name.to_string());
             let symbol = format!("{}_{}_free", prefix, ty);
             cx_claim(&mut build.symbols, &symbol, &ty)?;
             build.rust.push_str(&format!("\n#[unsafe(no_mangle)]\npub extern \"C\" fn {}(handle: *mut nikaia_std::c_boundary::Handle<{}>) -> std::ffi::c_int {{\n    if let Err(status) = __nikaia_enter() {{\n        return status;\n    }}\n    // SAFETY: the C caller hands a handle this library made, or NULL, and uses it no more (ADR-284 D6).\n    unsafe {{ nikaia_std::c_boundary::free(handle) }}\n}}\n", symbol, ty));
@@ -193,7 +193,7 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
     at = 0;
     while at < handles.len() as i64 {
         if *nikaia_std::index::get(&held, nikaia_std::index::at(at)) {
-            let name = nikaia_std::index::get(&handles, nikaia_std::index::at(at)).name.to_string();
+            let name = nikaia_std::block::Text::from(nikaia_std::index::get(&handles, nikaia_std::index::at(at)).name.to_string());
             types.push_str(&format!("typedef struct {}_{} {}_{};\n\n", prefix, name, prefix, name));
         }
         at += 1;
@@ -202,13 +202,13 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
     while at < plains.len() as i64 {
         if *nikaia_std::index::get(&build.crossing, nikaia_std::index::at(at)) {
             let plain = nikaia_std::index::get(&plains, nikaia_std::index::at(at));
-            let mut values: Vec<String> = vec![];
-            let mut number = 0;
+            #[allow(unused_mut)] let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            let mut number = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut values = values;
             for variant in plain.variants.iter() {
-                values.push(format!("    {}_{}_{} = {}", upper, plain.stem, variant.to_uppercase(), number));
+                values.push(format!("    {}_{}_{} = {}", upper, plain.stem, nikaia_std::block::Text::from(variant.to_uppercase()), number));
                 number += 1;
             }
-            types.push_str(&format!("typedef enum {{\n{}\n}} {}_{};\n\n", values.join(",\n"), prefix, plain.name));
+            types.push_str(&format!("typedef enum {{\n{}\n}} {}_{};\n\n", nikaia_std::block::Text::from(values.join(",\n")), prefix, plain.name));
         }
         at += 1;
     }
@@ -237,40 +237,40 @@ pub(crate) fn cx_record_named(records: &[CxRecord], name: &str) -> bool {
 
 pub(crate) fn cx_claim(symbols: &mut collections::BTreeSet<String>, symbol: &str, written: &str) -> Result<(), nikaia_std::error::Thrown<CxRefused>> {
     if symbols.contains(symbol) { return Err(nikaia_std::error::throwing(CxRefused::Because(format!("`{}` would be exported as `{}`, which another entry point, a getter, `_free` or the library's own `init`, `shutdown`, `set_allocator` or `last_error` is already: rename it (ADR-284 D13).", written, symbol)), &"cx_claim")); }
-    symbols.insert(symbol.to_string());
+    symbols.insert(nikaia_std::block::Text::from(symbol.to_string()));
     Ok(())
 }
 
 pub(crate) fn cx_record_type(record: &CxRecord, ctx: &CxCtx) -> String {
-    let prefix = ctx.prefix.to_string();
-    let upper = ctx.upper.to_string();
+    let prefix = nikaia_std::block::Text::from(ctx.prefix.to_string());
+    let upper = nikaia_std::block::Text::from(ctx.upper.to_string());
     if record.is_enum() {
-        let ty = record.name.to_string();
-        let mut tags: Vec<String> = vec![];
-        let mut tag = 0;
+        let ty = nikaia_std::block::Text::from(record.name.to_string());
+        #[allow(unused_mut)] let mut tags: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut tag = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut tags = tags;
         for variant in record.variants.iter() {
-            tags.push(format!("    {}_{}_{} = {}", upper, ty.to_uppercase(), variant.name.to_uppercase(), tag));
+            tags.push(format!("    {}_{}_{} = {}", upper, nikaia_std::block::Text::from(ty.to_uppercase()), nikaia_std::block::Text::from(variant.name.to_uppercase()), tag));
             tag += 1;
         }
-        let mut members: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for variant in record.variants.iter() {
             if variant.fields.is_empty() { continue; }
-            let mut fields: Vec<String> = vec![];
+            let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for (field, part) in variant.fields.iter() { fields.push(cx_c_field(field, part, ctx)); }
-            members.push(format!("        struct {{ {} }} {};", fields.join(" "), variant.member));
+            members.push(format!("        struct {{ {} }} {};", nikaia_std::block::Text::from(fields.join(" ")), variant.member));
         }
-        let mut union: String = String::from("");
-        if !members.is_empty() { union = format!("    union {{\n{}\n    }};\n", members.join("\n")); }
-        return format!("typedef enum {{\n{}\n}} {}_{}_Tag;\n\ntypedef struct {{\n    {}_{}_Tag tag;\n{}}} {}_{};\n\n", tags.join(",\n"), prefix, ty, prefix, ty, union, prefix, ty);
+        let mut union: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut tags = tags; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
+        if !members.is_empty() { union = format!("    union {{\n{}\n    }};\n", nikaia_std::block::Text::from(members.join("\n"))); }
+        return format!("typedef enum {{\n{}\n}} {}_{}_Tag;\n\ntypedef struct {{\n    {}_{}_Tag tag;\n{}}} {}_{};\n\n", nikaia_std::block::Text::from(tags.join(",\n")), prefix, ty, prefix, ty, union, prefix, ty);
     }
-    let mut fields: Vec<String> = vec![];
+    let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (field, part) in record.fields.iter() { fields.push(format!("    {}", cx_c_field(field, part, ctx))); }
-    format!("typedef struct {{\n{}\n}} {}_{};\n\n", fields.join("\n"), prefix, record.name)
+    format!("typedef struct {{\n{}\n}} {}_{};\n\n", nikaia_std::block::Text::from(fields.join("\n")), prefix, record.name)
 }
 
 pub(crate) fn cx_c_name(part: &CxPart, ctx: &CxCtx) -> String {
     match part {
-        CxPart::Value(shape) => shape.c.to_string(),
+        CxPart::Value(shape) => nikaia_std::block::Text::from(shape.c.to_string()),
         CxPart::Choice(at) => { let at = *at; format!("{}_{}", ctx.prefix, nikaia_std::index::get(&ctx.plains, nikaia_std::index::at(at)).name) },
         CxPart::Record(at) => { let at = *at; format!("{}_{}", ctx.prefix, nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name) },
         CxPart::Array(_, _) => String::from(""),
@@ -327,10 +327,10 @@ fn __nikaia_failed(said: String) {
 /// A handle the call could not hold, said for `<prefix>_last_error` (ADR-284 D7, D11).
 #[allow(dead_code)]
 fn __nikaia_refused(status: std::ffi::c_int) -> std::ffi::c_int {
-    __nikaia_failed(match status {
+    __nikaia_failed(String::from(match status {
         -5 => \"a call on a handle this thread holds already, from a callback of a call on it\",
         _ => \"no handle where one is needed, or one that is closed\",
-    }.to_string());
+    }));
     status
 }
 ")
@@ -341,29 +341,29 @@ pub(crate) fn cx_library_functions(prefix: &str, user_code: &str) -> String { fo
 pub(crate) fn cx_ticket(prefix: &str) -> String { format!("\n/// An `_async` call's ticket (ADR-284 D19).\n#[derive(Default)]\npub struct __NikaiaTicket {{\n    cancelled: std::sync::atomic::AtomicBool,\n    done: std::sync::atomic::AtomicBool,\n    waker: std::sync::Mutex<Option<std::task::Waker>>,\n}}\n\nimpl __NikaiaTicket {{\n    fn cancel(&self) {{\n        self.cancelled.store(true, std::sync::atomic::Ordering::SeqCst);\n        let waker = self.waker.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take();\n        if let Some(waker) = waker {{\n            waker.wake();\n        }}\n    }}\n}}\n\nstd::thread_local! {{\n    /// The ticket of the `_async` call this library thread runs.\n    static __NIKAIA_TICKET: std::cell::RefCell<Option<std::sync::Arc<__NikaiaTicket>>> = const {{ std::cell::RefCell::new(None) }};\n}}\n\n/// `work`, or `None` once its ticket is cancelled: at the next pause point (ADR-284 D19).\nasync fn __nikaia_cancellable<T>(work: impl std::future::Future<Output = T>) -> Option<T> {{\n    let ticket = __NIKAIA_TICKET.with(|current| current.borrow().clone());\n    let mut work = std::pin::pin!(work);\n    std::future::poll_fn(|context| {{\n        if let Some(ticket) = &ticket {{\n            *ticket.waker.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(context.waker().clone());\n            if ticket.cancelled.load(std::sync::atomic::Ordering::SeqCst) {{\n                return std::task::Poll::Ready(None);\n            }}\n        }}\n        work.as_mut().poll(context).map(Some)\n    }})\n    .await\n}}\n\n/// Cancels an `_async` call at its next pause point; after `done`, or twice, it is `OK` (ADR-284 D19).\n#[unsafe(no_mangle)]\npub extern \"C\" fn {}_cancel(op: *const nikaia_std::c_boundary::Handle<std::sync::Arc<__NikaiaTicket>>) -> std::ffi::c_int {{\n    // SAFETY: the C caller hands a ticket this library made and has not freed, or NULL (ADR-284 D19).\n    match unsafe {{ nikaia_std::c_boundary::shared(op) }} {{\n        Ok(ticket) => {{\n            ticket.cancel();\n            0\n        }}\n        Err(status) => status,\n    }}\n}}\n\n/// Frees a ticket after `done`; before it, `E_ARGUMENT`, and the ticket is kept (ADR-284 D19).\n#[unsafe(no_mangle)]\npub extern \"C\" fn {}_op_free(op: *mut nikaia_std::c_boundary::Handle<std::sync::Arc<__NikaiaTicket>>) -> std::ffi::c_int {{\n    if op.is_null() {{\n        return 0;\n    }}\n    // SAFETY: as `cancel`'s.\n    let finished = match unsafe {{ nikaia_std::c_boundary::shared(op) }} {{\n        Ok(ticket) => ticket.done.load(std::sync::atomic::Ordering::SeqCst),\n        Err(status) => return status,\n    }};\n    if !finished {{\n        return -1;\n    }}\n    // SAFETY: the C caller uses the ticket no more (ADR-284 D19).\n    unsafe {{ nikaia_std::c_boundary::free(op) }}\n}}\n", prefix, prefix) }
 
 pub(crate) fn cx_arms(raising: &CxRaising) -> String {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for code in raising.codes.iter() { parts.push(format!("{} => {},", code.pattern(&raising.error), code.number)); }
-    parts.join(" ")
+    nikaia_std::block::Text::from(parts.join(" "))
 }
 
 pub(crate) fn cx_choice_arms_in(plain: &CxPlain) -> String {
-    let mut arms: Vec<String> = vec![];
-    let mut number = 0;
+    #[allow(unused_mut)] let mut arms: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut number = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut arms = arms;
     for variant in plain.variants.iter() {
         arms.push(format!("{} => {}::{},", number, plain.name, variant));
         number += 1;
     }
-    arms.join(" ")
+    nikaia_std::block::Text::from(arms.join(" "))
 }
 
 pub(crate) fn cx_choice_arms_out(plain: &CxPlain) -> String {
-    let mut arms: Vec<String> = vec![];
-    let mut number = 0;
+    #[allow(unused_mut)] let mut arms: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut number = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut arms = arms;
     for variant in plain.variants.iter() {
         arms.push(format!("{}::{} => {},", plain.name, variant, number));
         number += 1;
     }
-    arms.join(" ")
+    nikaia_std::block::Text::from(arms.join(" "))
 }
 
 pub(crate) fn cx_value_of(shape: &CxByValue) -> &'static str {
@@ -393,12 +393,12 @@ pub(crate) fn cx_handed_back_out(out: &CxOut, ctx: &CxCtx) -> String {
         CxOut::Handle(_) => String::from("Ok(value) => {\n            if !out.is_null() {\n                // SAFETY: the C caller hands a place for one handle (ADR-284 D7).\n                unsafe { nikaia_std::c_boundary::put(out, nikaia_std::c_boundary::handle(value)) };\n            }\n            0\n        }"),
         CxOut::Records(at) => {
             let at = *at;
-            let name = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string();
+            let name = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string());
             format!("Ok(value) => {{\n            let values: Vec<__nikaia_c_{}> = value.into_iter().map(__nikaia_c_{}::from_nikaia).collect();\n            // SAFETY: the C caller hands room for `cap` structs at `out` and a place for the count, or NULL (ADR-284 D16).\n            unsafe {{ nikaia_std::c_boundary::hand_back_run(&values, out, cap, written) }}\n        }}", name, name)
         },
         CxOut::Record(at) => {
             let at = *at;
-            let name = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string();
+            let name = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string());
             format!("Ok(value) => {{\n            // SAFETY: the C caller hands a place for one value, or NULL (ADR-284 D7).\n            unsafe {{ nikaia_std::c_boundary::put(out, __nikaia_c_{}::from_nikaia(value)) }};\n            0\n        }}", name)
         },
         CxOut::AbsentHandle(_) => String::from("Ok(value) => {\n            if !out.is_null() {\n                let made = value.map_or(std::ptr::null_mut(), nikaia_std::c_boundary::handle);\n                // SAFETY: the C caller hands a place for one handle (ADR-284 D7).\n                unsafe { nikaia_std::c_boundary::put(out, made) };\n            }\n            0\n        }"),
@@ -408,7 +408,7 @@ pub(crate) fn cx_handed_back_out(out: &CxOut, ctx: &CxCtx) -> String {
         },
         CxOut::AbsentRecord(at) => {
             let at = *at;
-            let name = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string();
+            let name = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string());
             format!("Ok(value) => {{\n            let held = value.is_some();\n            if let Some(value) = value {{\n                // SAFETY: the C caller hands a place for one value, or NULL (ADR-284 D7).\n                unsafe {{ nikaia_std::c_boundary::put(out, __nikaia_c_{}::from_nikaia(value)) }};\n            }}\n            // SAFETY: the C caller hands a place for the flag, or NULL (ADR-284 D30).\n            unsafe {{ nikaia_std::c_boundary::put(present, held) }};\n            0\n        }}", name)
         },
     }
@@ -423,7 +423,7 @@ pub(crate) struct CxParams {
 }
 
 pub(crate) fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, contracts: &Ledger, entry: &CxEntry, build: &mut CxBuild) -> Result<(), nikaia_std::error::Thrown<CxRefused>> {
-    let prefix = ctx.prefix.to_string();
+    let prefix = nikaia_std::block::Text::from(ctx.prefix.to_string());
     let written = entry.written();
     let key = entry.key();
     let mut pauses = false;
@@ -453,15 +453,15 @@ pub(crate) fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, c
     }, || "".into());
     if owner_name.is_some() { symbol = format!("{}_{}_{}", prefix, owner_text, entry.name); }
     cx_claim(&mut build.symbols, &symbol, &written)?;
-    let mut rust_params: Vec<String> = vec![];
-    let mut c_params: Vec<String> = vec![];
-    let mut checks: String = String::from("");
-    let mut call_args: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut rust_params: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut c_params: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut rust_params = rust_params;
+    let mut checks: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut rust_params = rust_params; #[allow(unused_mut, clippy::redundant_locals)] let mut c_params = c_params;
+    let mut call_args: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut rust_params = rust_params; #[allow(unused_mut, clippy::redundant_locals)] let mut c_params = c_params;
     let by_value = entry.of_a_record(&ctx.records);
     let mut exclusive = false;
     let hold = entry.receiver;
     if hold.is_some() && owner_name.is_some() {
-        let owner = owner_text.to_string();
+        let owner = nikaia_std::block::Text::from(owner_text.to_string());
         let held_exclusively = match nikaia_std::index::or(hold, || CxHold::Shared) {
             CxHold::Exclusive => true,
             CxHold::Shared => false,
@@ -494,20 +494,20 @@ pub(crate) fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, c
             checks.push_str(&format!("    // SAFETY: the C caller hands a handle this library made and has not freed, or NULL (ADR-284 D5).\n    let {}__nikaia_self = match unsafe {{ nikaia_std::c_boundary::{}(__nikaia_self) }} {{ Ok(held) => held, Err(status) => return __nikaia_refused(status) }};\n", binding, how));
         }
     }
-    let mut params = CxParams { rust_params: rust_params.to_owned(), c_params: c_params.to_owned(), checks: checks.to_string(), call_args: call_args.to_owned() };
-    let mut position: i64 = 0;
+    #[allow(unused_mut)] let mut params = CxParams { rust_params: rust_params.copy_owned(), c_params: c_params.copy_owned(), checks: nikaia_std::block::Text::from(checks.to_string()), call_args: call_args.copy_owned() };
+    let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
     while position < entry.arg_names.len() as i64 {
-        let param = (*nikaia_std::index::get(&entry.arg_names, nikaia_std::index::at(position))).to_string();
+        let param = nikaia_std::block::Text::from((*nikaia_std::index::get(&entry.arg_names, nikaia_std::index::at(position))).to_string());
         let local = cx_escaped(&param);
         let ty = (*nikaia_std::index::get(&entry.arg_types, nikaia_std::index::at(position))).clone();
         let taken = match cx_taken(words, &ctx.plains, &ctx.handles, &ctx.records, &ty) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(CxRefused::Because(cx_not_yet(&written, &format!("parameter `{}`", param))), &"cx_wrapper")) };
         cx_parameter(ctx, contracts, &key, position, &param, &local, &taken, &mut params, &mut build.crossing);
         position += 1;
     }
-    rust_params = params.rust_params.to_owned();
-    c_params = params.c_params.to_owned();
-    checks = params.checks.to_string();
-    call_args = params.call_args.to_owned();
+    rust_params = params.rust_params.copy_owned();
+    c_params = params.c_params.copy_owned();
+    checks = nikaia_std::block::Text::from(params.checks.to_string());
+    call_args = params.call_args.copy_owned();
     let result = cx_result_of(entry, words, &ctx.plains, &ctx.handles, &ctx.records);
     match result {
         CxResult::Refused => {
@@ -521,19 +521,19 @@ pub(crate) fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, c
     let name = cx_escaped(&entry.name);
     let variant_of = entry.of_variant.is_some();
     let variant: String = nikaia_std::index::or(match entry.of_variant.as_ref().map(|__nikaia_it| __nikaia_it.variant.as_str()) {
-        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
         None => None,
     }, || "".into());
     let pattern: String = nikaia_std::index::or(match entry.of_variant.as_ref().map(|__nikaia_it| __nikaia_it.pattern.as_str()) {
-        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
         None => None,
     }, || "".into());
-    let variant_pattern = pattern.to_string();
+    let variant_pattern = nikaia_std::block::Text::from(pattern.to_string());
     if variant_of && owner_name.is_some() {
-        let owner = owner_text.to_string();
+        let owner = nikaia_std::block::Text::from(owner_text.to_string());
         checks.push_str(&format!("    if !matches!(&*__nikaia_self, {}) {{\n        __nikaia_failed(format!(\"the {} holds `{{}}`, not `{}`\", __nikaia_kind_{}(&__nikaia_self).1));\n        return -1;\n    }}\n", pattern, owner, variant, owner));
     }
-    let args_text = call_args.join(", ");
+    let args_text = nikaia_std::block::Text::from(call_args.join(", "));
     let mut call = cx_call_text(entry, &owner_text, &name, &args_text, variant_of, &variant_pattern);
     if by_value && exclusive { call = format!("{{ let __nikaia_result = {}; // SAFETY: as the read above; the struct is written back as the method left it (ADR-284 D16).\nunsafe {{ nikaia_std::c_boundary::put(__nikaia_at, __nikaia_c_{}::from_nikaia(__nikaia_self)) }}; __nikaia_result }}", call, owner_text); }
     if pauses { call = format!("{{ let _ = nikaia_std::rt::start(nikaia_std::rt::UserCode::{}); nikaia_std::rt::exec::block_on(__nikaia_cancellable({})) }}", ctx.user_code, call); }
@@ -545,9 +545,9 @@ pub(crate) fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, c
         failed = format!("\n        Ok(Err(thrown)) => {{\n            __nikaia_failed(thrown.full());\n            {}\n        }}", matched);
     }
     let mut ran = format!("match std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {}))", call);
-    if pauses { ran = format!("let __nikaia_ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {}));\n    let __nikaia_ran = match __nikaia_ran {{\n        Ok(Some(value)) => Ok(value),\n        Ok(None) => {{\n            __nikaia_failed(\"the call was cancelled\".to_string());\n            return -7;\n        }}\n        Err(panic) => Err(panic),\n    }};\n    match __nikaia_ran", call); }
-    build.rust.push_str(&format!("\n#[unsafe(no_mangle)]\npub extern \"C\" fn {}({}) -> std::ffi::c_int {{\n    if let Err(status) = __nikaia_enter() {{\n        return status;\n    }}\n{}    {} {{\n        {}{}\n        Err(_) => {{\n            __NIKAIA_POISONED.store(true, std::sync::atomic::Ordering::SeqCst);\n            __nikaia_failed(\"the library panicked; it answers E_PANICKED until shutdown and init have run\".to_string());\n            -4\n        }}\n    }}\n}}\n", symbol, rust_params.join(", "), checks, ran, handed_back, failed));
-    let c_text = if c_params.is_empty() { String::from("void") } else { c_params.join(", ") };
+    if pauses { ran = format!("let __nikaia_ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {}));\n    let __nikaia_ran = match __nikaia_ran {{\n        Ok(Some(value)) => Ok(value),\n        Ok(None) => {{\n            __nikaia_failed(String::from(\"the call was cancelled\"));\n            return -7;\n        }}\n        Err(panic) => Err(panic),\n    }};\n    match __nikaia_ran", call); }
+    build.rust.push_str(&format!("\n#[unsafe(no_mangle)]\npub extern \"C\" fn {}({}) -> std::ffi::c_int {{\n    if let Err(status) = __nikaia_enter() {{\n        return status;\n    }}\n{}    {} {{\n        {}{}\n        Err(_) => {{\n            __NIKAIA_POISONED.store(true, std::sync::atomic::Ordering::SeqCst);\n            __nikaia_failed(String::from(\"the library panicked; it answers E_PANICKED until shutdown and init have run\"));\n            -4\n        }}\n    }}\n}}\n", symbol, nikaia_std::block::Text::from(rust_params.join(", ")), checks, ran, handed_back, failed));
+    let c_text = if c_params.is_empty() { String::from("void") } else { nikaia_std::block::Text::from(c_params.join(", ")) };
     build.declarations.push_str(&format!("int {}({});\n", symbol, c_text));
     let mut text_out = false;
     let returns = match entry.ret_type.as_ref() {
@@ -563,22 +563,22 @@ pub(crate) fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, c
     if pauses {
         build.any_pause = true;
         let names = cx_parameter_names(&rust_params);
-        let forwarded = names.join(", ");
-        let mut async_params = rust_params.to_owned();
+        let forwarded = nikaia_std::block::Text::from(names.join(", "));
+        #[allow(unused_mut)] let mut async_params = rust_params.copy_owned();
         async_params.push(String::from("__nikaia_done: Option<extern \"C\" fn(std::ffi::c_int, *mut std::ffi::c_void)>, __nikaia_done_ctx: *mut std::ffi::c_void, __nikaia_op: *mut *mut nikaia_std::c_boundary::Handle<std::sync::Arc<__NikaiaTicket>>"));
-        let async_symbol = format!("{}_async", symbol);
+        let async_symbol = format!("{}_async", symbol); #[allow(unused_mut, clippy::redundant_locals)] let mut async_params = async_params;
         cx_claim(&mut build.symbols, &async_symbol, &written)?;
-        build.rust.push_str(&format!("\n#[unsafe(no_mangle)]\npub extern \"C\" fn {}({}) -> std::ffi::c_int {{\n    if let Err(status) = __nikaia_enter() {{\n        return status;\n    }}\n    let Some(__nikaia_done) = __nikaia_done else {{ return -1; }};\n    let ticket = std::sync::Arc::new(__NikaiaTicket::default());\n    if !__nikaia_op.is_null() {{\n        // SAFETY: the C caller hands a place for one ticket (ADR-284 D19).\n        unsafe {{ nikaia_std::c_boundary::put(__nikaia_op, nikaia_std::c_boundary::handle(ticket.clone())) }};\n    }}\n    // SAFETY: the C caller keeps what it handed this call, and `done`'s context, until `done` (ADR-284 D9).\n    let sent = unsafe {{ nikaia_std::c_boundary::sent(({}, __nikaia_done_ctx)) }};\n    // A library thread, kept for the next call (`rt::library`).\n    nikaia_std::rt::library::run(Box::new(move || {{\n        let ({}, __nikaia_done_ctx) = sent.into_inner();\n        __NIKAIA_TICKET.with(|current| *current.borrow_mut() = Some(ticket.clone()));\n        let status = {}({});\n        __NIKAIA_TICKET.with(|current| *current.borrow_mut() = None);\n        ticket.done.store(true, std::sync::atomic::Ordering::SeqCst);\n        __nikaia_done(status, __nikaia_done_ctx);\n    }}));\n    0\n}}\n", async_symbol, async_params.join(", "), forwarded, forwarded, symbol, forwarded));
-        let mut c_async: Vec<String> = vec![];
+        build.rust.push_str(&format!("\n#[unsafe(no_mangle)]\npub extern \"C\" fn {}({}) -> std::ffi::c_int {{\n    if let Err(status) = __nikaia_enter() {{\n        return status;\n    }}\n    let Some(__nikaia_done) = __nikaia_done else {{ return -1; }};\n    let ticket = std::sync::Arc::new(__NikaiaTicket::default());\n    if !__nikaia_op.is_null() {{\n        // SAFETY: the C caller hands a place for one ticket (ADR-284 D19).\n        unsafe {{ nikaia_std::c_boundary::put(__nikaia_op, nikaia_std::c_boundary::handle(ticket.clone())) }};\n    }}\n    // SAFETY: the C caller keeps what it handed this call, and `done`'s context, until `done` (ADR-284 D9).\n    let sent = unsafe {{ nikaia_std::c_boundary::sent(({}, __nikaia_done_ctx)) }};\n    // A library thread, kept for the next call (`rt::library`).\n    nikaia_std::rt::library::run(Box::new(move || {{\n        let ({}, __nikaia_done_ctx) = sent.into_inner();\n        __NIKAIA_TICKET.with(|current| *current.borrow_mut() = Some(ticket.clone()));\n        let status = {}({});\n        __NIKAIA_TICKET.with(|current| *current.borrow_mut() = None);\n        ticket.done.store(true, std::sync::atomic::Ordering::SeqCst);\n        __nikaia_done(status, __nikaia_done_ctx);\n    }}));\n    0\n}}\n", async_symbol, nikaia_std::block::Text::from(async_params.join(", ")), forwarded, forwarded, symbol, forwarded));
+        let mut c_async: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if c_text != "void" { c_async.push(c_text); }
         c_async.push(format!("void (*done)(int status, void *ctx), void *ctx, {}_op **op", prefix));
-        build.declarations.push_str(&format!("int {}({});\n", async_symbol, c_async.join(", ")));
+        build.declarations.push_str(&format!("int {}({});\n", async_symbol, nikaia_std::block::Text::from(c_async.join(", "))));
     }
     Ok(())
 }
 
 pub(crate) fn cx_out_params(out: &CxOut, ctx: &CxCtx, rust_params: &mut Vec<String>, c_params: &mut Vec<String>, crossing: &mut Vec<bool>) {
-    let prefix = ctx.prefix.to_string();
+    let prefix = nikaia_std::block::Text::from(ctx.prefix.to_string());
     match out {
         CxOut::Value(shape) => {
             rust_params.push(format!("out: *mut {}", shape.rust));
@@ -596,25 +596,25 @@ pub(crate) fn cx_out_params(out: &CxOut, ctx: &CxCtx, rust_params: &mut Vec<Stri
         },
         CxOut::Handle(at) => {
             let at = *at;
-            let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name.to_string();
+            let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name.to_string());
             rust_params.push(format!("out: *mut *mut nikaia_std::c_boundary::Handle<{}>", ty));
             c_params.push(format!("{}_{} **out", prefix, ty));
         },
         CxOut::Records(at) => {
             let at = *at;
-            let ty = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string();
+            let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string());
             rust_params.push(format!("out: *mut __nikaia_c_{}, cap: usize, written: *mut usize", ty));
             c_params.push(format!("{}_{} *out, size_t cap, size_t *written", prefix, ty));
         },
         CxOut::Record(at) => {
             let at = *at;
-            let ty = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string();
+            let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string());
             rust_params.push(format!("out: *mut __nikaia_c_{}", ty));
             c_params.push(format!("{}_{} *out", prefix, ty));
         },
         CxOut::AbsentHandle(at) => {
             let at = *at;
-            let ty = nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name.to_string();
+            let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name.to_string());
             rust_params.push(format!("out: *mut *mut nikaia_std::c_boundary::Handle<{}>", ty));
             c_params.push(format!("{}_{} **out", prefix, ty));
         },
@@ -624,7 +624,7 @@ pub(crate) fn cx_out_params(out: &CxOut, ctx: &CxCtx, rust_params: &mut Vec<Stri
         },
         CxOut::AbsentRecord(at) => {
             let at = *at;
-            let ty = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string();
+            let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string());
             rust_params.push(format!("out: *mut __nikaia_c_{}, present: *mut bool", ty));
             c_params.push(format!("{}_{} *out, bool *present", prefix, ty));
         },
@@ -633,13 +633,13 @@ pub(crate) fn cx_out_params(out: &CxOut, ctx: &CxCtx, rust_params: &mut Vec<Stri
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position: i64, param: &str, local: &str, taken: &CxIn, params: &mut CxParams, crossing: &mut Vec<bool>) {
-    let prefix = ctx.prefix.to_string();
+    let prefix = nikaia_std::block::Text::from(ctx.prefix.to_string());
     match taken {
         CxIn::Value(shape) => {
             params.rust_params.push(format!("{}: {}", local, shape.rust));
             params.c_params.push(format!("{} {}", shape.c, param));
             if shape.scalar { params.checks.push_str(&format!("    let Some({}) = char::from_u32({}) else {{ return -1; }};\n", local, local)); }
-            params.call_args.push(local.to_string());
+            params.call_args.push(nikaia_std::block::Text::from(local.to_string()));
         },
         CxIn::Run { rust, c, as_text } => {
             let as_text = *as_text;
@@ -648,13 +648,13 @@ pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position:
             let mut read: &'static str = "run";
             if as_text { read = "text"; }
             params.checks.push_str(&format!("    // SAFETY: the C caller keeps `{}_len` values at `{}` for the call (ADR-284 D5).\n    let Some({}) = (unsafe {{ nikaia_std::c_boundary::{}({}, {}_len) }}) else {{ return -1; }};\n", param, param, local, read, local, local));
-            params.call_args.push(local.to_string());
+            params.call_args.push(nikaia_std::block::Text::from(local.to_string()));
         },
         CxIn::Bytes => {
             params.rust_params.push(format!("{}: *const u8, {}_len: usize", local, local));
             params.c_params.push(format!("const uint8_t *{}, size_t {}_len", param, param));
             params.checks.push_str(&format!("    // SAFETY: the C caller keeps `{}_len` bytes at `{}` for the call (ADR-284 D5).\n    let Some({}) = (unsafe {{ nikaia_std::c_boundary::run({}, {}_len) }}) else {{ return -1; }};\n    let {} = nikaia_std::bytes::Bytes::from({});\n", param, param, local, local, local, local, local));
-            if cx_lent(contracts, key, position) { params.call_args.push(format!("&{}", local)); } else { params.call_args.push(local.to_string()); }
+            if cx_lent(contracts, key, position) { params.call_args.push(format!("&{}", local)); } else { params.call_args.push(nikaia_std::block::Text::from(local.to_string())); }
         },
         CxIn::Choice(at) => {
             let at = *at;
@@ -664,26 +664,26 @@ pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position:
             params.c_params.push(format!("{}_{} {}", prefix, plain.name, param));
             let arms = cx_choice_arms_in(&plain);
             params.checks.push_str(&format!("    let {} = match {} {{ {} _ => return -1 }};\n", local, local, arms));
-            if cx_lent(contracts, key, position) { params.call_args.push(format!("&{}", local)); } else { params.call_args.push(local.to_string()); }
+            if cx_lent(contracts, key, position) { params.call_args.push(format!("&{}", local)); } else { params.call_args.push(nikaia_std::block::Text::from(local.to_string())); }
         },
         CxIn::Callback { lent, result } => {
-            let mut rust_args: Vec<String> = vec![];
-            let mut c_args: Vec<String> = vec![];
-            let mut closure_params: Vec<String> = vec![];
-            let mut passed: Vec<String> = vec![];
-            let mut at = 0;
+            #[allow(unused_mut)] let mut rust_args: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            #[allow(unused_mut)] let mut c_args: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args;
+            #[allow(unused_mut)] let mut closure_params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args; #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args;
+            #[allow(unused_mut)] let mut passed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args; #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args; #[allow(unused_mut, clippy::redundant_locals)] let mut closure_params = closure_params;
+            let mut at = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args; #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args; #[allow(unused_mut, clippy::redundant_locals)] let mut closure_params = closure_params; #[allow(unused_mut, clippy::redundant_locals)] let mut passed = passed;
             for part in lent.iter() {
                 let name = format!("__nikaia_{}", at);
                 match part {
                     CxLent::Value(shape) => {
-                        rust_args.push(shape.rust.to_string());
-                        c_args.push(shape.c.to_string());
+                        rust_args.push(nikaia_std::block::Text::from(shape.rust.to_string()));
+                        c_args.push(nikaia_std::block::Text::from(shape.c.to_string()));
                         if shape.scalar {
                             closure_params.push(format!("{}: char", name));
                             passed.push(format!("{} as u32", name));
                         } else {
                             closure_params.push(format!("{}: {}", name, shape.rust));
-                            passed.push(name.to_string());
+                            passed.push(nikaia_std::block::Text::from(name.to_string()));
                         }
                     },
                     CxLent::Choice(which) => {
@@ -706,44 +706,44 @@ pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position:
             }
             rust_args.push(String::from("*mut std::ffi::c_void"));
             c_args.push(String::from("void *ctx"));
-            let mut rust_result: String = String::from("");
-            let mut c_result: String = String::from("void");
+            let mut rust_result: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args; #[allow(unused_mut, clippy::redundant_locals)] let mut closure_params = closure_params; #[allow(unused_mut, clippy::redundant_locals)] let mut passed = passed;
+            let mut c_result: String = String::from("void"); #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args;
             if result.is_some() {
                 let shape = match result { Some(__nikaia_value) => __nikaia_value, None => return };
                 rust_result = format!(" -> {}", shape.rust);
-                c_result = shape.c.to_string();
+                c_result = nikaia_std::block::Text::from(shape.c.to_string());
             }
-            params.rust_params.push(format!("{}: Option<extern \"C\" fn({}){}>, {}_ctx: *mut std::ffi::c_void", local, rust_args.join(", "), rust_result, local));
-            params.c_params.push(format!("{} (*{})({}), void *{}_ctx", c_result, param, c_args.join(", "), param));
+            params.rust_params.push(format!("{}: Option<extern \"C\" fn({}){}>, {}_ctx: *mut std::ffi::c_void", local, nikaia_std::block::Text::from(rust_args.join(", ")), rust_result, local));
+            params.c_params.push(format!("{} (*{})({}), void *{}_ctx", c_result, param, nikaia_std::block::Text::from(c_args.join(", ")), param));
             passed.push(format!("{}_ctx", local));
-            params.checks.push_str(&format!("    let Some({}) = {} else {{ return -1; }};\n    let {} = move |{}|{} {{ {}({}) }};\n", local, local, local, closure_params.join(", "), rust_result, local, passed.join(", ")));
+            params.checks.push_str(&format!("    let Some({}) = {} else {{ return -1; }};\n    let {} = move |{}|{} {{ {}({}) }};\n", local, local, local, nikaia_std::block::Text::from(closure_params.join(", ")), rust_result, local, nikaia_std::block::Text::from(passed.join(", "))));
             params.call_args.push(format!("&{}", local));
         },
         CxIn::Records { record, whole } => {
             let record = *record; let whole = *whole;
-            let ty = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(record)).name.to_string();
+            let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(record)).name.to_string());
             params.rust_params.push(format!("{}: *const __nikaia_c_{}, {}_len: usize", local, ty, local));
             params.c_params.push(format!("const {}_{} *{}, size_t {}_len", prefix, ty, param, param));
             params.checks.push_str(&format!("    // SAFETY: the C caller keeps `{}_len` structs at `{}` for the call (ADR-284 D16).\n    let Some({}) = (unsafe {{ nikaia_std::c_boundary::run({}, {}_len) }}) else {{ return -1; }};\n    let Some({}) = {}.iter().map(|one| one.into_nikaia()).collect::<Option<Vec<{}>>>() else {{ return -1; }};\n", param, param, local, local, local, local, local, ty));
-            if !whole || cx_lent(contracts, key, position) { params.call_args.push(format!("&{}", local)); } else { params.call_args.push(local.to_string()); }
+            if !whole || cx_lent(contracts, key, position) { params.call_args.push(format!("&{}", local)); } else { params.call_args.push(nikaia_std::block::Text::from(local.to_string())); }
         },
         CxIn::Record(at) => {
             let at = *at;
-            let ty = nikaia_std::index::get(&ctx.records, (at) as usize).name.to_string();
+            let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, (at) as usize).name.to_string());
             params.rust_params.push(format!("{}: __nikaia_c_{}", local, ty));
             params.c_params.push(format!("{}_{} {}", prefix, ty, param));
             params.checks.push_str(&format!("    let Some({}) = {}.into_nikaia() else {{ return -1; }};\n", local, local));
-            if cx_lent(contracts, key, position) { params.call_args.push(format!("&{}", local)); } else { params.call_args.push(local.to_string()); }
+            if cx_lent(contracts, key, position) { params.call_args.push(format!("&{}", local)); } else { params.call_args.push(nikaia_std::block::Text::from(local.to_string())); }
         },
         CxIn::AbsentText => {
             params.rust_params.push(format!("{}: *const u8, {}_len: usize", local, local));
             params.c_params.push(format!("const uint8_t *{}, size_t {}_len", param, param));
             params.checks.push_str(&format!("    let {} = match {}.is_null() {{\n        true => None,\n        // SAFETY: the C caller keeps `{}_len` bytes at `{}` for the call (ADR-284 D5).\n        false => match unsafe {{ nikaia_std::c_boundary::text({}, {}_len) }} {{ Some(text) => Some(text), None => return -1 }},\n    }};\n", local, local, param, param, local, local));
-            params.call_args.push(local.to_string());
+            params.call_args.push(nikaia_std::block::Text::from(local.to_string()));
         },
         CxIn::AbsentHandle(at) => {
             let at = *at;
-            let ty = nikaia_std::index::get(&ctx.handles, (at) as usize).name.to_string();
+            let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.handles, (at) as usize).name.to_string());
             params.rust_params.push(format!("{}: *const nikaia_std::c_boundary::Handle<{}>", local, ty));
             params.c_params.push(format!("const {}_{} *{}", prefix, ty, param));
             params.checks.push_str(&format!("    let {} = match {}.is_null() {{\n        true => None,\n        // SAFETY: the C caller hands a handle this library made and has not freed (ADR-284 D5).\n        false => match unsafe {{ nikaia_std::c_boundary::shared({}) }} {{ Ok(held) => Some(held), Err(status) => return __nikaia_refused(status) }},\n    }};\n", local, local, local));
@@ -751,7 +751,7 @@ pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position:
         },
         CxIn::Handle(at) => {
             let at = *at;
-            let ty = nikaia_std::index::get(&ctx.handles, (at) as usize).name.to_string();
+            let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.handles, (at) as usize).name.to_string());
             params.rust_params.push(format!("{}: *const nikaia_std::c_boundary::Handle<{}>", local, ty));
             params.c_params.push(format!("const {}_{} *{}", prefix, ty, param));
             params.checks.push_str(&format!("    // SAFETY: the C caller hands a handle this library made and has not freed, or NULL (ADR-284 D5).\n    let {} = match unsafe {{ nikaia_std::c_boundary::shared({}) }} {{ Ok(held) => held, Err(status) => return __nikaia_refused(status) }};\n", local, local));
@@ -772,10 +772,10 @@ pub(crate) fn cx_call_text(entry: &CxEntry, owner: &str, name: &str, args_text: 
 pub(crate) fn cx_matched(thrown: &[CxRaising]) -> String {
     if thrown.len() == 1 { return format!("match thrown.split().0 {{ {} }}", cx_arms(nikaia_std::index::get(&thrown, 0))); }
     let mut members: Vec<String> = vec![];
-    for raising in thrown.iter() { members.push(raising.error.to_string()); }
+    for raising in thrown.iter() { members.push(nikaia_std::block::Text::from(raising.error.to_string())); }
     let sum = cx_sum_name(&members);
-    let mut each: Vec<String> = vec![];
-    for raising in thrown.iter() { each.push(format!("crate::{}::{}(thrown) => match thrown.split().0 {{ {} }},", sum, raising.error.replace("::", "_"), cx_arms(raising))); }
-    format!("match thrown {{ {} }}", each.join(" "))
+    let mut each: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for raising in thrown.iter() { each.push(format!("crate::{}::{}(thrown) => match thrown.split().0 {{ {} }},", sum, nikaia_std::block::Text::from(raising.error.replace("::", "_")), cx_arms(raising))); }
+    format!("match thrown {{ {} }}", nikaia_std::block::Text::from(each.join(" ")))
 }
 

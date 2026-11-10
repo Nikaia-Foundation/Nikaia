@@ -2,6 +2,8 @@
 //! `nikaia.proofs` entry is keyed by and holds.
 
 use crate::nikaia_logic;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia_logic::{
     Answer, Arena, Budget, FourierMotzkin, Normal, Query, Solver, TermId, certificate_of,

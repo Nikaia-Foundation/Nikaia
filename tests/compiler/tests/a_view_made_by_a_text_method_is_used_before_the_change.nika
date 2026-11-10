@@ -1,0 +1,36 @@
+// A view a method of text hands back may be used before the text changes,
+// and a struct literal given one may be handed back while the text stays as
+// it is (ADR-views-3 D9, #1478).
+
+struct Line {
+    text: String,
+    at: i64,
+}
+
+fn held(n: i64) -> Line {
+    let mut text = String()
+    text.push_str(" a ")
+    let l = Line { text: text.trim(), at: n }
+    return l
+}
+
+fn copied(n: i64) -> Line throws {
+    let mut text = String()
+    text.push_str(" b ")
+    let l = Line { text: text.trim().clone(), at: n }
+    text.push_str("z")
+    println(text)
+    return l
+}
+
+fn main() throws {
+    let mut s = String()
+    s.push_str(" a ")
+    let t = s.trim()
+    println(t)
+    s.push_str("!")
+    println(s)
+    let line = held(1)
+    println(f"{line.text} {line.at}")
+    println(copied(2).text)
+}

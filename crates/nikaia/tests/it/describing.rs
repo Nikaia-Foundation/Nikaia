@@ -15,6 +15,8 @@
 //! different tool.
 
 use nikaia::contracts::LedgerOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 
 use nikaia::describe::draft;
@@ -148,7 +150,7 @@ fn an_item_that_is_only_text_is_not_described_and_a_re_export_is() {
 
     for phantom in ["spectre", "phantom", "hidden", "buried"] {
         assert!(
-            !text.contains(&format!("fremd::{phantom}")),
+            !text.contains(&*format!("fremd::{phantom}")),
             "`fremd::{phantom}` is not a function of this crate:\n{text}"
         );
     }
@@ -557,11 +559,11 @@ fn a_types_fields_answer_whether_it_crosses() {
     let text = entries(&root);
     let says = |name: &str| {
         let at = text
-            .find(&format!("[type.\"fremd::{name}\"]"))
+            .find(&*format!("[type.\"fremd::{name}\"]"))
             .unwrap_or_else(|| panic!("no entry for {name}:\n{text}"));
         let rest = &text[at..];
         let end = rest[1..].find("\n[").map(|e| e + 1).unwrap_or(rest.len());
-        rest[..end].to_string()
+        rest[..end].to_text()
     };
 
     // An `Rc` and a raw pointer are what D2 names, and a field reader sees both.
@@ -616,11 +618,11 @@ fn a_derive_says_whether_a_type_copies_and_compares() {
     let text = entries(&root);
     let says = |name: &str| {
         let at = text
-            .find(&format!("[type.\"fremd::{name}\"]"))
+            .find(&*format!("[type.\"fremd::{name}\"]"))
             .unwrap_or_else(|| panic!("no entry for {name}:\n{text}"));
         let rest = &text[at..];
         let end = rest[1..].find("\n[").map(|e| e + 1).unwrap_or(rest.len());
-        rest[..end].to_string()
+        rest[..end].to_text()
     };
 
     assert!(says("Pair").contains("copies = true"), "{}", says("Pair"));
@@ -669,11 +671,11 @@ fn an_impl_by_hand_says_what_a_derive_says() {
     let text = entries(&root);
     let says = |name: &str| {
         let at = text
-            .find(&format!("[type.\"fremd::{name}\"]"))
+            .find(&*format!("[type.\"fremd::{name}\"]"))
             .unwrap_or_else(|| panic!("no entry for {name}:\n{text}"));
         let rest = &text[at..];
         let end = rest[1..].find("\n[").map(|e| e + 1).unwrap_or(rest.len());
-        rest[..end].to_string()
+        rest[..end].to_text()
     };
 
     assert!(

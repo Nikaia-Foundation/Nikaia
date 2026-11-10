@@ -21,7 +21,7 @@ pub(crate) fn print_throws_blocks(tokens: &[MigrateToken]) -> Vec<(i64, i64)> {
     let mut out: Vec<(i64, i64)> = vec![];
     let mut k: i64 = 0;
     while ((k) as usize) < tokens.len() {
-        let t = nikaia_std::index::get(&tokens, (k) as usize).text.to_string();
+        let t = nikaia_std::block::Text::from(nikaia_std::index::get(&tokens, (k) as usize).text.to_string());
         if nikaia_std::index::get(&tokens, (k) as usize).kind == MigrateKind::Word && (t == "impl" || t == "trait") {
             let mut j: i64 = k + 1;
             while j < tokens.len() as i64 && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != "{" && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != ";" {
@@ -51,7 +51,7 @@ pub(crate) fn print_throws_fns(tokens: &[MigrateToken]) -> Vec<PrintThrowsFn> {
             k += 1;
             continue;
         }
-        let name = nikaia_std::index::get(&tokens, nikaia_std::index::at(k + 1)).text.to_string();
+        let name = nikaia_std::block::Text::from(nikaia_std::index::get(&tokens, nikaia_std::index::at(k + 1)).text.to_string());
         let mut method = false;
         for (word, end) in blocks.iter() {
             let word = nikaia_std::num::value(word);let end = nikaia_std::num::value(end);
@@ -74,7 +74,7 @@ pub(crate) fn print_throws_fns(tokens: &[MigrateToken]) -> Vec<PrintThrowsFn> {
         let mut open: i64 = -1;
         let mut close: i64 = j - 1;
         while j < tokens.len() as i64 {
-            let t = nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text.to_string();
+            let t = nikaia_std::block::Text::from(nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text.to_string());
             let kind = nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind;
             if t == "{" {
                 open = j;
@@ -117,7 +117,7 @@ pub(crate) fn print_throws_paren(tokens: &[MigrateToken], k: i64) -> i64 {
 pub(crate) fn print_throws_fails_at(tokens: &[MigrateToken], k: i64, free: &collections::BTreeSet<String>, methods: &collections::BTreeSet<String>) -> bool {
     let paren = print_throws_paren(tokens, k);
     if nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind != MigrateKind::Word || paren < 0 { return false; }
-    let word = nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text.to_string();
+    let word = nikaia_std::block::Text::from(nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text.to_string());
     let before = migrate_text_at(tokens, k - 1);
     let called = if before == "." { methods.contains(&word) } else if before == "::" { methods.contains(&word) || free.contains(&word) } else if before == "fn" { false } else { print_throws_is_print(&word) || free.contains(&word) };
     called && !print_throws_caught(tokens, paren)
@@ -141,9 +141,9 @@ pub(crate) fn print_throws_names(fns: &[PrintThrowsFn], failing: &[bool], outsid
     let mut methods: collections::BTreeSet<String> = collections::BTreeSet::new();
     for name in outside.iter() {
         let bare = name.strip_prefix('.');
-        if bare.is_some() { methods.insert(nikaia_std::index::or(bare, || "").to_string()); } else { free.insert(name.to_string()); }
+        if bare.is_some() { methods.insert(nikaia_std::block::Text::from(nikaia_std::index::or(bare, || "").to_string())); } else { free.insert(nikaia_std::block::Text::from(name.to_string())); }
     }
-    for i in 0..fns.len() as i64 { if *nikaia_std::index::get(&failing, (i) as usize) { if nikaia_std::index::get(&fns, (i) as usize).method { methods.insert(nikaia_std::index::get(&fns, (i) as usize).name.to_string()); } else { free.insert(nikaia_std::index::get(&fns, (i) as usize).name.to_string()); } } }
+    for i in 0..fns.len() as i64 { if *nikaia_std::index::get(&failing, (i) as usize) { if nikaia_std::index::get(&fns, (i) as usize).method { methods.insert(nikaia_std::block::Text::from(nikaia_std::index::get(&fns, (i) as usize).name.to_string())); } else { free.insert(nikaia_std::block::Text::from(nikaia_std::index::get(&fns, (i) as usize).name.to_string())); } } }
     (free, methods)
 }
 
@@ -205,7 +205,7 @@ pub(crate) fn print_throws_failing(tokens: &[MigrateToken], fns: &[PrintThrowsFn
     let mut methods: collections::BTreeSet<String> = collections::BTreeSet::new();
     for name in outside.iter() {
         let bare = name.strip_prefix('.');
-        if bare.is_some() { methods.insert(nikaia_std::index::or(bare, || "").to_string()); } else { free.insert(name.to_string()); }
+        if bare.is_some() { methods.insert(nikaia_std::block::Text::from(nikaia_std::index::or(bare, || "").to_string())); } else { free.insert(nikaia_std::block::Text::from(name.to_string())); }
     }
     let mut failing: Vec<bool> = vec![];
     for _f in fns.iter() { failing.push(false); }
@@ -219,7 +219,7 @@ pub(crate) fn print_throws_failing(tokens: &[MigrateToken], fns: &[PrintThrowsFn
             if fails {
                 { let __nikaia_stored = true; nikaia_std::index::set(&mut failing, (i) as usize, __nikaia_stored); }
                 changed = true;
-                if f.method { methods.insert(f.name.to_string()); } else { free.insert(f.name.to_string()); }
+                if f.method { methods.insert(nikaia_std::block::Text::from(f.name.to_string())); } else { free.insert(nikaia_std::block::Text::from(f.name.to_string())); }
             }
         }
     }
@@ -241,7 +241,7 @@ pub fn migrate_print_throws_exports(source: &str, outside: &[String]) -> Vec<Str
     let fns = print_throws_fns(&tokens);
     let failing = print_throws_failing(&tokens, &fns, &outside);
     let mut out: Vec<String> = vec![];
-    for i in 0..fns.len() as i64 { if *nikaia_std::index::get(&failing, (i) as usize) && nikaia_std::index::get(&fns, (i) as usize).public { if nikaia_std::index::get(&fns, (i) as usize).method { out.push(format!(".{}", nikaia_std::index::get(&fns, (i) as usize).name)); } else { out.push(nikaia_std::index::get(&fns, (i) as usize).name.to_string()); } } }
+    for i in 0..fns.len() as i64 { if *nikaia_std::index::get(&failing, (i) as usize) && nikaia_std::index::get(&fns, (i) as usize).public { if nikaia_std::index::get(&fns, (i) as usize).method { out.push(format!(".{}", nikaia_std::index::get(&fns, (i) as usize).name)); } else { out.push(nikaia_std::block::Text::from(nikaia_std::index::get(&fns, (i) as usize).name.to_string())); } } }
     out
 }
 

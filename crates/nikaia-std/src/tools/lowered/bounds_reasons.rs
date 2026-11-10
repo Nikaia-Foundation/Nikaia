@@ -34,7 +34,7 @@ pub(crate) fn names_read(expr: &Expr, words: &winnow_grammar::InternerContext) -
             Expr::Variable(name, _) => {
                 let name = *name;
                 let text = words.resolve(name);
-                if !nikaia_std::list::contains(&names, &text) { names.push(text.to_string()); }
+                if !nikaia_std::list::contains(&names, &text) { names.push(nikaia_std::block::Text::from(text.to_string())); }
             },
             _ => { },
         }

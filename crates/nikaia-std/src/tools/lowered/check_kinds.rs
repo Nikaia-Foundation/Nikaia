@@ -163,19 +163,19 @@ pub(crate) fn kind_is_the_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, t
 
 pub(crate) fn kind_callee_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, func: &Expr) -> Option<String> {
     match func {
-        Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_string()) },
+        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string())) },
         Expr::Path(segments, _) => Some(kind_path_text(world, segments)),
         _ => None,
     }
 }
 
 pub(crate) fn kind_path_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> String {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for segment in segments.iter() {
         let segment = *segment;
-        parts.push(world.words.resolve(segment).to_string());
+        parts.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
     }
-    parts.join("::")
+    nikaia_std::block::Text::from(parts.join("::"))
 }
 
 impl CheckState {
@@ -185,7 +185,7 @@ impl CheckState {
         let mut raised = CheckRaised { steps: None, ram: None };
         let mut refused = false;
         for bound in bounds.iter() {
-            let name = world.words.resolve(bound.name).to_string();
+            let name = nikaia_std::block::Text::from(world.words.resolve(bound.name).to_string());
             if !kind_a_bound_name(&name) {
                 self.findings.push(check_refusal("NK1109", span, format!("A `comptime` has no bound called `{}`.", name), vec![String::from("Its bounds are `steps` and `ram`.")], Some(kind_unknown_bound_help(&name))));
                 refused = true;
@@ -233,7 +233,7 @@ impl CheckState {
     pub fn an_update_block_reads_what_it_writes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], body: &Block, span: &Span) {
         for param in params.iter() {
             let param = *param;
-            let name = world.words.resolve(param).to_string();
+            let name = nikaia_std::block::Text::from(world.words.resolve(param).to_string());
             if kind_an_update_only_replaces(world, &name, body) { self.findings.push(check_refusal("NK2207", span, format!("This `update` block replaces `{}` without reading it, which is what `set` is for.", name), vec![String::from("`update` is for changes that depend on the current value. Just storing a new value is what `set` does.")], Some(String::from("Use `set` if the value is computed outside, or use the old value here: `v += n`, `v.push(e)`, `if v > 100 { v = 0 }`.")))); }
         }
     }
@@ -256,7 +256,7 @@ impl CheckState {
         let mut shown: String = String::from("");
         let known = self.kind_of_the_matched(on);
         if known.is_some() {
-            kind = nikaia_std::index::or(known.as_deref(), || "").to_string();
+            kind = nikaia_std::block::Text::from(nikaia_std::index::or(known.as_deref(), || "").to_string());
             shown = format!("a `{}`", on.text());
         } else {
             kind = match kind_of_a_literal(value) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -278,11 +278,11 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_type_that_cannot_arrive(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
-        let mut members: Vec<String> = vec![];
+        let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for member in several_errors_of(on) { members.push(member.text()); }
         if members.is_empty() {
             match on {
-                Ty::Named { name, args, .. } => { if args.is_empty() { members.push(name.to_string()); } },
+                Ty::Named { name, args, .. } => { if args.is_empty() { members.push(nikaia_std::block::Text::from(name.to_string())); } },
                 _ => { },
             }
         }
@@ -291,7 +291,7 @@ impl CheckState {
             let named = match self.a_type_named_whole(world, &arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
             if nikaia_std::list::contains(&members, &named) { continue; }
             let written = written_expression(world.words, value);
-            let shown = if members.len() == 1 { format!("a `{}`", *nikaia_std::index::get(&members, 0)) } else { format!("one of `{}`", members.join("`, `")) };
+            let shown = if members.len() == 1 { format!("a `{}`", *nikaia_std::index::get(&members, 0)) } else { format!("one of `{}`", nikaia_std::block::Text::from(members.join("`, `"))) };
             self.findings.push(check_refusal("NK1103", span, format!("`{}` is {}, so the pattern `{}` can't match it.", written, shown, named), vec![String::from("Over `error`, an arm's pattern names a type that can arrive at this `catch`, or one of its variants.")], Some(String::from("Name a type that can arrive, or `else => …` for the rest."))));
             return;
         }
@@ -303,7 +303,7 @@ impl CheckState {
             Ty::Named { name, .. } => {
                 if kind_a_number_name(name) { return Some(String::from("number")); }
                 if name == "String" || name == "str" { return Some(String::from("text")); }
-                if name == "bool" || name == "char" || self.structs.contains_key(name) || self.enums.contains_key(name) { return Some(name.to_string()); }
+                if name == "bool" || name == "char" || self.structs.contains_key(name) || self.enums.contains_key(name) { return Some(nikaia_std::block::Text::from(name.to_string())); }
             },
             Ty::Pointed { item, slice, .. } => {
                 let item = nikaia_std::boxed::open(item); let slice = *slice;
@@ -331,7 +331,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn kind_a_variant_misfit(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], kind: &str) -> bool {
         if path.len() != 2 { return false; }
-        let owner = world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string();
+        let owner = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string());
         self.enums.contains_key(&owner) && owner != kind
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

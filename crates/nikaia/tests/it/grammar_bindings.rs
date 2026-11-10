@@ -6,6 +6,8 @@ use crate::common;
 use nikaia::check::Finding;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -17,7 +19,7 @@ fn findings(source: &str) -> Vec<Finding> {
 fn refused_as(source: &str, ty: &str) -> bool {
     findings(source)
         .iter()
-        .any(|f| f.code == "NK1103" && f.message.contains(&format!("`{ty}`")))
+        .any(|f| f.code == "NK1103" && f.message.contains(&*format!("`{ty}`")))
 }
 
 /// `t:term` is what `term` returns, and a list of `add_tail`s is a list of

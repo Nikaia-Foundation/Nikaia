@@ -38,7 +38,7 @@ pub enum ComptimeBundleFailed {
 impl ComptimeBundleFailed {
     pub fn message(&self) -> String {
         match self {
-            ComptimeBundleFailed::Said(text) => text.to_string(),
+            ComptimeBundleFailed::Said(text) => nikaia_std::block::Text::from(text.to_string()),
         }
     }
 }
@@ -95,7 +95,7 @@ pub fn comptime_bundle_artifacts(messages: &str, named: &[String]) -> ComptimeBu
     ComptimeBundleArtifacts { dylib, rlibs }
 }
 
-pub(crate) fn comptime_bundle_named() -> Vec<String> { COMPTIME_BUNDLE_NAMED.iter().map(|name| { name.to_string() }).collect::<Vec<_>>() }
+pub(crate) fn comptime_bundle_named() -> Vec<String> { COMPTIME_BUNDLE_NAMED.iter().map(|name| { nikaia_std::block::Text::from(name.to_string()) }).collect::<Vec<_>>() }
 
 pub(crate) fn comptime_bundle_digest(text: &str) -> String {
     let bytes: Vec<u8> = text.bytes().collect::<Vec<_>>();
@@ -129,7 +129,7 @@ pub async fn comptime_bundle_run_bundle<H: ComptimeBundleHost>(host: &H) -> Resu
 pub(crate) fn comptime_bundle_run_fingerprint<H: ComptimeBundleHost>(host: &H) -> String {
     let mut newest: i64 = 0;
     let mut count = 0;
-    let mut pending = vec![host.std_dir()];
+    let mut pending = nikaia_std::block::List::from_array_in([host.std_dir()], nikaia_std::block::Place::Block);
     loop {
         let dir = match pending.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         let names = match fs::read_dir(&dir, &fs::Root::Anywhere) {
@@ -165,7 +165,7 @@ pub(crate) fn comptime_bundle_read_record(text: &str, fingerprint: &str) -> Opti
     let libdir: fs::Path = std::path::PathBuf::from(*nikaia_std::index::get(&lines, 3));
     let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(4).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple10572| {
         let (name, rlib) = __nikaia_tuple10572;
-        (name.to_string(), comptime_bundle_path(nikaia_std::either_text::either(rlib)))
+        (nikaia_std::block::Text::from(name.to_string()), comptime_bundle_path(nikaia_std::either_text::either(rlib)))
     }).collect::<Vec<_>>();
     if (rlibs.len() as i64) != COMPTIME_BUNDLE_NAMED.len() as i64 { return None; }
     let stamp = match comptime_bundle_stamp_of(&dylib, &rlibs) {
@@ -181,12 +181,12 @@ pub(crate) fn comptime_bundle_path(text: nikaia_std::either_text::EitherText<'_>
 }
 
 pub(crate) fn comptime_bundle_bundle_text<H: ComptimeBundleHost>(flavour: &ComptimeBundleFlavour, host: &H) -> (String, String) {
-    let mut manifest = cr_bundle_manifest(&host.runtime_dependencies(&comptime_bundle_named().join(" ")));
+    let mut manifest = cr_bundle_manifest(&host.runtime_dependencies(&nikaia_std::block::Text::from(comptime_bundle_named().join(" "))));
     let source = match flavour {
         ComptimeBundleFlavour::BuildTime => cr_bundle_source(),
         ComptimeBundleFlavour::Run => {
             manifest.push_str(COMPTIME_BUNDLE_RUN_PROFILE);
-            COMPTIME_BUNDLE_RUN_SOURCE.to_string()
+            nikaia_std::block::Text::from(COMPTIME_BUNDLE_RUN_SOURCE.to_string())
         },
     };
     (manifest, source)
@@ -203,9 +203,9 @@ pub(crate) fn comptime_bundle_bundle_dir<H: ComptimeBundleHost>(flavour: &Compti
 }
 
 pub(crate) fn comptime_bundle_stamp_of(dylib: &std::path::Path, rlibs: &[(String, fs::Path)]) -> Result<String, nikaia_std::error::Thrown<ComptimeBundleFailed>> {
-    let mut files: Vec<fs::Path> = vec![nikaia_std::fs::path::clone(&(dylib))];
+    let mut files: Vec<fs::Path> = nikaia_std::block::List::from_array_in([nikaia_std::fs::path::clone(&(dylib))], nikaia_std::block::Place::Block);
     for (_, rlib) in rlibs.iter() { files.push(nikaia_std::fs::path::clone(&(rlib))); }
-    let mut lines: Vec<String> = vec![];
+    let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for file in files.iter() {
         let meta = match fs::metadata(file, &fs::Root::Anywhere) {
             Ok(value) => value,
@@ -213,7 +213,7 @@ pub(crate) fn comptime_bundle_stamp_of(dylib: &std::path::Path, rlibs: &[(String
         };
         lines.push(format!("{}:{}:{}", nikaia_std::fs::path::display(&(file)), meta.len() as i64, meta.modified().in_nanos()));
     }
-    Ok(lines.join("\n"))
+    Ok(nikaia_std::block::Text::from(lines.join("\n")))
 }
 
 pub(crate) async fn comptime_bundle_bundle_of<H: ComptimeBundleHost>(flavour: &ComptimeBundleFlavour, host: &H) -> Result<ComptimeBundle, nikaia_std::error::Thrown<ComptimeBundleFailed>> {
@@ -288,7 +288,7 @@ pub async fn comptime_bundle_run<H: ComptimeBundleHost>(at: &std::path::Path, bu
         Err(error) => { return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("{}: {}", nikaia_std::fs::path::display(&(scratch)), error) }, &"comptime_bundle_run")); },
     };
     let binary = nikaia_std::fs::path::join(&(scratch), std::path::Path::new(&("run")));
-    let mut args: Vec<String> = vec![String::from("--edition=2024"), String::from("--crate-name"), String::from("comptime"), String::from("--crate-type"), String::from("bin"), String::from("-C"), String::from("opt-level=0"), String::from("-C"), String::from("overflow-checks=on"), String::from("-C"), String::from("debug-assertions=off"), String::from("-C"), String::from("prefer-dynamic"), String::from("-A"), String::from("warnings"), String::from("--extern"), format!("nikaia_bundle={}", nikaia_std::fs::path::display(&(bundle.dylib)))];
+    #[allow(unused_mut)] let mut args: Vec<String> = vec![String::from("--edition=2024"), String::from("--crate-name"), String::from("comptime"), String::from("--crate-type"), String::from("bin"), String::from("-C"), String::from("opt-level=0"), String::from("-C"), String::from("overflow-checks=on"), String::from("-C"), String::from("debug-assertions=off"), String::from("-C"), String::from("prefer-dynamic"), String::from("-A"), String::from("warnings"), String::from("--extern"), format!("nikaia_bundle={}", nikaia_std::fs::path::display(&(bundle.dylib)))];
     for (crate_name, rlib) in bundle.rlibs.iter() {
         args.push(String::from("--extern"));
         args.push(format!("{}={}", crate_name, nikaia_std::fs::path::display(&(rlib))));
@@ -298,7 +298,7 @@ pub async fn comptime_bundle_run<H: ComptimeBundleHost>(at: &std::path::Path, bu
     args.push(String::from("-o"));
     args.push(nikaia_std::fs::path::display(&(binary)));
     args.push(nikaia_std::fs::path::display(&(source)));
-    let rustc = nikaia_std::index::or(env::var("RUSTC"), || "rustc".into());
+    let rustc = nikaia_std::index::or(env::var("RUSTC"), || "rustc".into()); #[allow(unused_mut, clippy::redundant_locals)] let mut args = args;
     let compiled = match process::run(&rustc, args, &nikaia_std::fs::path::display(&(host.where_tools_start())), vec![], vec![], false, None, process::Input::Closed, process::Stream::Captured, process::Stream::Captured).await {
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("running rustc: {}", error) }, &"comptime_bundle_run")) },
@@ -327,7 +327,7 @@ pub async fn comptime_bundle_run<H: ComptimeBundleHost>(at: &std::path::Path, bu
     };
     comptime_bundle_tidy(&binary, &dir, &scratch);
     if ran.success {
-        let answer = ran.stdout.trim().to_string();
+        let answer = nikaia_std::block::Text::from(ran.stdout.trim().to_string());
         match comptime_bundle_write_if_changed(&answered, &answer, &host.unique_beside(&answered)).await {
             Ok(_) => {},
             Err(error) => {
@@ -337,7 +337,7 @@ pub async fn comptime_bundle_run<H: ComptimeBundleHost>(at: &std::path::Path, bu
         };
         return Ok(answer);
     }
-    let mut said = ran.stderr.trim().to_string();
+    let mut said = nikaia_std::block::Text::from(ran.stderr.trim().to_string());
     if said.is_empty() { said = format!("it ended without saying why ({})", ran.status); }
     if said.contains("the program stopped") || said.contains("nikaia-build-time:") {
         match comptime_bundle_write_if_changed(&stopped, &said, &host.unique_beside(&stopped)).await {

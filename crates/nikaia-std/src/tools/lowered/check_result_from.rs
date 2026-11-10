@@ -3,14 +3,14 @@
 
 pub fn result_from_check(view: &ParsedView<'_, '_, '_, '_, '_, '_>, inferred: &[ResultSource]) -> Vec<CheckFinding> {
     let mut reached: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
-    for source in inferred.iter() { reached.insert(source.key.to_string(), source.borrows.to_owned()); }
+    for source in inferred.iter() { reached.insert(nikaia_std::block::Text::from(source.key.to_string()), source.borrows.copy_owned()); }
     let mut out: Vec<CheckFinding> = vec![];
     for item in view.items.iter() {
         match &item.node {
             Item::Fn { .. } => { result_from_of_body(view, item, None, &reached, &mut out); },
             Item::Impl { target, methods, .. } => {
                 let owner = view.text(target.name);
-                for method in methods.iter() { result_from_of_body(view, method, Some(&owner.to_string()), &reached, &mut out); }
+                for method in methods.iter() { result_from_of_body(view, method, Some(&nikaia_std::block::Text::from(owner.to_string())), &reached, &mut out); }
             },
             Item::Trait { methods, .. } => { for method in methods.iter() { result_from_of_signature(view, method, &mut out); } },
             Item::Extern { declarations, .. } => { for declared in declarations.iter() { result_from_of_signature(view, declared, &mut out); } },
@@ -26,8 +26,8 @@ pub fn result_from_as_written(names: &winnow_grammar::InternerContext, items: &[
         match &item.node {
             Item::Fn { .. } => { result_from_written_of(names, &item.node, None, &mut written); },
             Item::Impl { target, methods, .. } => {
-                let owner = names.resolve(target.name).to_string();
-                for method in methods.iter() { result_from_written_of(names, &method.node, Some(&owner.to_string()), &mut written); }
+                let owner = nikaia_std::block::Text::from(names.resolve(target.name).to_string());
+                for method in methods.iter() { result_from_written_of(names, &method.node, Some(&nikaia_std::block::Text::from(owner.to_string())), &mut written); }
             },
             _ => { },
         }
@@ -38,7 +38,7 @@ pub fn result_from_as_written(names: &winnow_grammar::InternerContext, items: &[
         (*source).borrows = named;
         (*source).returns = String::from("");
     }
-    for (key, named) in written.iter() { sources.push(ResultSource { key: key.to_string(), borrows: named.to_owned(), returns: String::from("") }); }
+    for (key, named) in written.iter() { sources.push(ResultSource { key: nikaia_std::block::Text::from(key.to_string()), borrows: named.copy_owned(), returns: String::from("") }); }
 }
 
 pub(crate) fn result_from_written_of(names: &winnow_grammar::InternerContext, item: &Item, owner: Option<&str>, written: &mut collections::BTreeMap<String, Vec<String>>) {
@@ -48,7 +48,7 @@ pub(crate) fn result_from_written_of(names: &winnow_grammar::InternerContext, it
             if ret_from.is_empty() { return; }
             let function = function_name(names, name);
             let key = rsrc_key(owner, &function);
-            written.insert(key, ret_from.iter().map(|source| { names.resolve(*source).to_string() }).collect::<Vec<_>>());
+            written.insert(key, ret_from.iter().map(|source| { nikaia_std::block::Text::from(names.resolve(*source).to_string()) }).collect::<Vec<_>>());
         },
         _ => { },
     }
@@ -80,16 +80,16 @@ pub(crate) fn result_from_note() -> String { String::from("A result's `from` nam
 pub fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &Type, span: &Span) -> Option<Finding> {
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     if code.result_from.is_empty() { return None; }
-    let mut parameters: Vec<String> = vec![];
-    let mut shown: Vec<String> = vec![];
-    let mut at: i64 = 0;
+    #[allow(unused_mut)] let mut parameters: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    #[allow(unused_mut)] let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
+    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters; #[allow(unused_mut, clippy::redundant_locals)] let mut shown = shown;
     for parameter in ty.generics.iter() {
         let mut text = written_type(names, parameter);
         let written: Option<winnow_grammar::Symbol> = if ((at) as usize) < code.param_names.len() { *nikaia_std::index::get(&code.param_names, (at) as usize) } else { None };
         match written {
             None => { },
             Some(symbol) => {
-                let name = names.resolve(symbol).to_string();
+                let name = nikaia_std::block::Text::from(names.resolve(symbol).to_string());
                 text = format!("{}: {}", name, text);
                 parameters.push(name);
             },
@@ -97,13 +97,13 @@ pub fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &Type, s
         shown.push(text);
         at += 1;
     }
-    let joined = shown.join(", ");
-    let mut function = format!("fn({})", joined);
+    let joined = nikaia_std::block::Text::from(shown.join(", "));
+    let mut function = format!("fn({})", joined); #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
     let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     function = format!("{} -> {}", function, written_type(names, result));
     for source in code.result_from.iter() {
         let source = *source;
-        let named = names.resolve(source).to_string();
+        let named = nikaia_std::block::Text::from(names.resolve(source).to_string());
         if !nikaia_std::list::contains(&parameters, &named) {
             let help = if parameters.is_empty() { String::from("Name the function type's parameters, as `fn(s: String) -> String from s`, and write the one the result points into after `from`.") } else { format!("Name one of `{}`'s parameters after `from`.", function) };
             return Some(refusal("NK1335", span.clone(), result_from_unknown(&function, &named), vec![result_from_note(), String::from("A function type names the parameters its `from` reads; the names do not change the type (ADR-views-3 D14).")], help));
@@ -122,10 +122,10 @@ pub(crate) fn result_from_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ite
             let parameters = result_from_parameters(view, (receiver).as_ref(), args);
             if result_from_names(view, &key, &item.span, ret_from, &parameters, out) { return; }
             let named: Vec<String> = ret_from.iter().map(|source| { view.text(*source) }).collect::<Vec<_>>();
-            let sources = match *nikaia_std::index::get(&reached, &key) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let sources = match *nikaia_std::index::get(&reached, &key) { Some(__nikaia_value) => __nikaia_value, None => return }; #[allow(clippy::redundant_locals)] let named = named;
             for source in sources.iter() {
                 if !nikaia_std::list::contains(&named, &source) {
-                    let written = named.join(" | ");
+                    let written = nikaia_std::block::Text::from(named.join(" | "));
                     out.push(check_refusal("NK1335", &item.span, format!("`{}` hands back a view of `{}`'s data, but its result says `from {}`.", key, source, written), vec![format!("A caller reads the signature: it keeps `{}` unchanged while the result is used, and nothing holds `{}` (ADR-views-3 D8).", written, source)], Some(format!("Write `from {} | {}`, or hand back a copy of what comes from `{}` with `.clone()`.", written, source, source))));
                     return;
                 }
@@ -150,8 +150,8 @@ pub(crate) fn result_from_of_signature(view: &ParsedView<'_, '_, '_, '_, '_, '_>
     };
     if of_subject { return; }
     let mut choices: Vec<String> = parameters.iter().map(|name| { format!("`from {}`", name) }).collect::<Vec<_>>();
-    if parameters.len() > 1 { choices.push(format!("`from {}`", parameters.join(" | "))); }
-    let help = if parameters.is_empty() { String::from("Hand back text of its own: declare the result without `ref`.") } else { format!("Write one of {} after the result type, or declare it without `ref` to hand back text of its own.", choices.join(", ")) };
+    if parameters.len() > 1 { choices.push(format!("`from {}`", nikaia_std::block::Text::from(parameters.join(" | ")))); }
+    let help = if parameters.is_empty() { String::from("Hand back text of its own: declare the result without `ref`.") } else { format!("Write one of {} after the result type, or declare it without `ref` to hand back text of its own.", nikaia_std::block::Text::from(choices.join(", "))) };
     out.push(check_refusal("NK1336", &method.span, format!("`{}` hands back a view, but has no body to tell whose data it points into, and no `from`.", function), vec![String::from("Where there is no body to infer it from - a trait's method, a foreign function - `from` alone makes the result a view of what it names, and a result without one owns its value (ADR-views-3 D8, D14).")], Some(help)));
 }
 

@@ -124,6 +124,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * NK1104's help still says "write `ref`" (`way_out_of_a_mismatch`, `check_types.nika`), and `return ref s` of a local in a trait impl with a `from` result is an NK1343 internal error. (issue-1386)
 * Under views-3, NK1131 fires only on bodies that mix a view path with an owned path, on `for`-binding roots and on `mut`-parameter roots; `from` gives NK1104 on all three, so a help must not offer it. (issue-1403)
 * A nullable result written `from self` is still NK1131, and `-> ref U?` on a method is NK1343. (issue-1403)
+* A check run over `value_leaves` after the arms are checked must not re-type a leaf with `check_core_expr` unless its root is a parameter (`a_place_of_a_lent_parameter`), or names a `match` pattern bound give NK1117 in `ast.nika` during `lower-std`. (issue-1425)
+* A `pub fn` with a mixed `String` result keeps it owned (ADR-282 D22), so a borrowed-field arm needs the per-arm NK1131; probe both the tail form and the `return if` form. (issue-1425)
 
 ### Lowering and lower-std
 
@@ -198,6 +200,9 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * In the checker, a text view's base name is "str" (shown as "ref String"), so a test on `name == "String"` misses it. (issue-1368)
 * `check_core_returns` decides `lending` before `check_core_expr` runs, so a fact recorded while checking the value must be read after `found`. (issue-1368)
 * A plain `let` over a local's field is lent by the emitter (`lent_lets`); its binding type must be a view too, or a later keeper becomes NK1343. (issue-1404)
+* A function's result lifetimes (`'static` widening, `'e`, `'r`) are chosen in `emit_function.nika` around `borrows_from_something` / `widens`; `emit_core_types.nika` only writes the `EmitLifetimes` it is handed. (issue-1420)
+* Buffers (`buffer_plans`) see only the items of one file, while the tier pass sees package facts only through `BesideFields`, so a shape that works within one file can be rustc NK1343 when the callee is in another file. (issue-1481)
+* An open number with no `let` to write its type on (map parts, list literals walked in place) has its type written as a suffix on every literal; skip `number_lets` for it, or the emitter has nowhere to put the type. (issue-1485)
 
 ### Grammar
 
@@ -349,6 +354,7 @@ build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
 * A trailing `;` does not drop a value and `let _ = x` is NK1144, so a value can't be discarded explicitly; a body's last value is dropped only where the function type hands back nothing. (issue-1321)
 * `let mut s = ""` and then assigning an owned `String` is NK1105; start it as `String()`. (issue-539)
 * A `for` over a list literal of strings binds views, so pushing the loop variable into a struct field needs `.clone()` (NK1106). (issue-1404)
+* A `T?` is matched with `x => …` and `null => …`: `if let` and `Some(x)` are refused (NK2704), so write probes that way. (issue-1417)
 #N]**: fix it or wait; **[works]**: use it, do not copy an old way around.
 
 * [design: ADR-382 D6] no `if let`: `x ?? default`, `match`, or `starts_with`

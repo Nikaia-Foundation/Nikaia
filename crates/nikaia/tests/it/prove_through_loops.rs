@@ -7,6 +7,8 @@
 //! every optimization `off`.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::Path;
 use std::process::{Command, Output};
 
@@ -68,13 +70,13 @@ fn lowered(purpose: &str, words: &str) -> String {
     );
     let rust = std::fs::read_to_string(dir.join("main.rs")).expect("the lowered program");
     let _ = std::fs::remove_dir_all(&dir);
-    rust
+    String::from(rust)
 }
 
 /// The body of the lowered function `name`.
 fn body<'a>(rust: &'a str, name: &str) -> &'a str {
     let at = rust
-        .find(&format!("fn {name}__unchecked("))
+        .find(&*format!("fn {name}__unchecked("))
         .unwrap_or_else(|| panic!("{name}: {rust}"));
     let rest = &rust[at..];
     &rest[..rest.find("\n}").expect("its end")]
@@ -111,13 +113,13 @@ fn a_loop_that_leaves_its_table_keeps_its_check_and_stops_there() {
         let out = nikaia(&dir, &args);
         let _ = std::fs::remove_dir_all(&dir);
         assert!(!out.status.success(), "the program stops");
-        let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+        let stderr = String::from_utf8_lossy(&out.stderr).to_text();
         let line = stderr
             .lines()
             .find(|l| l.contains("index out of bounds"))
             .unwrap_or_else(|| panic!("{stderr}"))
-            .to_string();
-        (String::from_utf8_lossy(&out.stdout).to_string(), line)
+            .to_text();
+        (String::from_utf8_lossy(&out.stdout).to_text(), line)
     };
     let with = stops("through-loops-run-on", &["--optimization", ALL_ON]);
     let without = stops("through-loops-run-off", &[]);
@@ -235,7 +237,7 @@ fn bounds_report(purpose: &str, source: &str) -> String {
         String::from_utf8_lossy(&out.stderr)
     );
     let _ = std::fs::remove_dir_all(&dir);
-    String::from_utf8_lossy(&out.stdout).to_string()
+    String::from_utf8_lossy(&out.stdout).to_text()
 }
 
 /// The report's line for the check written `what`.

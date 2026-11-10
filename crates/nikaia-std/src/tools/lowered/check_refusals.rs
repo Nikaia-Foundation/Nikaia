@@ -102,13 +102,13 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_struct_called_without_a_constructor(&mut self, name: &str, span: &Span) {
-        let mut fields: Vec<String> = vec![];
+        let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.structs, name) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || vec![].into());
         for field in declared.iter() { fields.push(format!("{}: …", field.name)); }
-        self.findings.push(check_refusal("NK1190", span, format!("You can't call `{}(…)`: it has no constructor.", name), vec![format!("A type is called through a constructor, `impl {} {{ pub fn(…) … }}`, and `{}` doesn't declare one.", name, name)], Some(format!("Build it with a literal: `{} {{ {} }}`.", name, fields.join(", ")))));
+        self.findings.push(check_refusal("NK1190", span, format!("You can't call `{}(…)`: it has no constructor.", name), vec![format!("A type is called through a constructor, `impl {} {{ pub fn(…) … }}`, and `{}` doesn't declare one.", name, name)], Some(format!("Build it with a literal: `{} {{ {} }}`.", name, nikaia_std::block::Text::from(fields.join(", "))))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -120,7 +120,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn nothing_declares_it(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
         let name = match expr {
-            Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_string() },
+            Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
             _ => return,
         };
         let declared = self.lookup(&name).is_some() || resolve_call(world, &name).is_some() || self.structs.contains_key(&name) || self.enums.contains_key(&name) || world.own.types.contains_key(&name) || self.modules.contains(&name) || self.grammars.contains_key(&name);
@@ -154,7 +154,7 @@ impl CheckState {
                 Item::Fn { name, receiver, args, config, spread, ret_type, .. } => {
                     let name = *name; let spread = *spread;
                     let mut written: String = String::from("");
-                    if name.is_some() { written = world.words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return }).to_string(); }
+                    if name.is_some() { written = nikaia_std::block::Text::from(world.words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return }).to_string()); }
                     let mut message: String = format!("`{}` doesn't belong in `impl Cleanup for {}`.", written, target);
                     let mut help: String = format!("Move it to `impl {}`, with the type's other methods.", target);
                     if written == "cleanup" {
@@ -171,12 +171,12 @@ impl CheckState {
                         message = format!("`drop` doesn't belong in `impl Cleanup for {}`.", target);
                         help = format!("Put it in its own `impl Drop for {} {{ fn drop(ref mut self) {{ … }} }}`, which runs after `cleanup`, or alone where `cleanup` can't run.", target);
                     }
-                    self.findings.push(check_refusal("NK2601", &method.span, message, vec![note.to_string()], Some(help)));
+                    self.findings.push(check_refusal("NK2601", &method.span, message, vec![nikaia_std::block::Text::from(note.to_string())], Some(help)));
                 },
                 _ => { },
             }
         }
-        if !wrote_cleanup { self.findings.push(check_refusal("NK2601", span, format!("`impl Cleanup for {}` is missing its `cleanup` method.", target), vec![note.to_string()], Some(String::from("Add `fn cleanup(ref mut self) { … }`.")))); }
+        if !wrote_cleanup { self.findings.push(check_refusal("NK2601", span, format!("`impl Cleanup for {}` is missing its `cleanup` method.", target), vec![nikaia_std::block::Text::from(note.to_string())], Some(String::from("Add `fn cleanup(ref mut self) { … }`.")))); }
     }
 }
 
@@ -203,8 +203,8 @@ pub(crate) fn a_known_value(ty: &Ty) -> bool {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn left_out_text(missing: &[String]) -> String {
-    let mut quoted: Vec<String> = vec![];
+    let mut quoted: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for field in missing.iter() { quoted.push(format!("`{}`", field)); }
-    quoted.join(", ")
+    nikaia_std::block::Text::from(quoted.join(", "))
 }
 

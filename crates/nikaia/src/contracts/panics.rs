@@ -10,6 +10,8 @@
 //! functions then answers "cannot panic" and has a check. A unit not proved
 //! counts each of its checks as a site.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::Ledger;
@@ -33,6 +35,7 @@ pub fn task_facts(facts: Option<&crate::check::CheckFacts>) -> PanicFacts {
         proven_indices: BTreeSet::new(),
         proven_arithmetic: BTreeSet::new(),
         proven_negations: BTreeSet::new(),
+        placed: facts.placed_in_block.clone(),
     }
 }
 
@@ -74,6 +77,7 @@ pub fn infer(
             proven_indices: proven.indices.iter().copied().collect(),
             proven_arithmetic: proven.arithmetic.iter().copied().collect(),
             proven_negations: proven.negations.iter().copied().collect(),
+            placed: facts.placed_in_block.clone(),
         }
     };
     let walk = |graph: &mut PanicsGraph, at: usize, facts: &PanicFacts, own: &Ledger| {
@@ -134,6 +138,12 @@ pub fn infer(
     for at in 0..units.len() {
         let proven = proofs.remove(&at).unwrap_or_default();
         walk(&mut graph, at, &facts_of(at, Some(proven)), ledger);
+    }
+    // **Whether it builds a list in its task's block** (ADR-327 D13).
+    for name in nika::places_of_graph(&graph, ledger) {
+        if let Some(contract) = ledger.functions.get_mut(&name) {
+            contract.places = true;
+        }
     }
     for (name, panics) in nika::panics_of_graph(&graph, ledger) {
         if let Some(contract) = ledger.functions.get_mut(&name) {

@@ -20,7 +20,7 @@ pub(crate) fn collect_names(expr: &Expr, words: &winnow_grammar::InternerContext
     match expr {
         Expr::Variable(name, _) => {
             let name = *name;
-            names.insert(words.resolve(name).to_string());
+            names.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
         },
         _ => { },
     }

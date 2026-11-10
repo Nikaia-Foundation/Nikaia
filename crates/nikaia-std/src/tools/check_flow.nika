@@ -315,6 +315,13 @@ pub struct CheckFlow {
     /// entry: `true` for the keys, and the other part's type as written, for
     /// the message.
     pub open_map_parts: collections::BTreeMap[i64, (bool, String)],
+    /// The entries of `open_numbers` that are a list literal walked in place
+    /// (#1485): no `let` stands where the type is written, so every literal
+    /// in it carries the type.
+    pub open_literal_lists: collections::BTreeSet[i64],
+    /// **A `sum` of an open number's items** (#1485): the receiver and the
+    /// entry of `open_numbers`; the call names the type the number gets.
+    pub open_sums: collections::BTreeMap[i64, i64],
     /// **A walk whose items are an open number** (ADR-285 D34, #594), by the
     /// call that makes it, and the entry of `open_numbers` it names.
     pub open_walks: collections::BTreeMap[i64, i64],
@@ -483,6 +490,8 @@ impl CheckFlow {
             open_keys: collections::BTreeMap(),
             open_parts: collections::BTreeMap(),
             open_map_parts: collections::BTreeMap(),
+            open_literal_lists: collections::BTreeSet(),
+            open_sums: collections::BTreeMap(),
             open_walks: collections::BTreeMap(),
             open_items: collections::BTreeMap(),
             open_params: collections::BTreeMap(),

@@ -51,7 +51,7 @@ impl nikaia_std::error::Joined for __NikaiaThrows_ProjectTestsRefusal__io_IoErro
 }
 impl __NikaiaThrows_ProjectTestsRefusal__io_IoError {
     #[allow(dead_code)]
-    pub(crate) fn message(&self) -> String { self.to_string() }
+    pub(crate) fn message(&self) -> String { self.to_string().into() }
 }
 impl nikaia_std::error::Full for __NikaiaThrows_ProjectTestsRefusal__io_IoError {
     fn full(&self) -> String {
@@ -147,7 +147,7 @@ pub(crate) fn project_tests_stems(dir: &std::path::Path, ending: &str, want_dir:
     };
     for name in entries.iter() {
         let text = nikaia_std::fs::path::text_of(&(name));
-        let stem: String = nikaia_std::index::or(text.strip_suffix(ending), || "").to_string();
+        let stem: String = nikaia_std::block::Text::from(nikaia_std::index::or(text.strip_suffix(AsRef::<str>::as_ref(ending)), || "").to_string());
         if stem.is_empty() { continue; }
         let path = nikaia_std::fs::path::join(&(dir), name);
         let right = match want_dir {
@@ -181,11 +181,11 @@ pub async fn output_tests(root: &std::path::Path) -> Result<Vec<OutputTest>, nik
         let listed = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.args", name))))).await?;
         if listed.is_some() {
             let bytes = nikaia_std::index::or(listed, || Bytes(vec![]).into());
-            args = bytes.text()?.lines().map(|line| { line.to_string() }).collect::<Vec<_>>();
+            args = bytes.text()?.lines().map(|line| { nikaia_std::block::Text::from(line.to_string()) }).collect::<Vec<_>>();
         }
         let stderr = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stderr", name))))).await?;
         let stops = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stops", name))))).await?;
-        tests.push(OutputTest { name: name.to_string(), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, stops, files, inputs, stdin, args });
+        tests.push(OutputTest { name: nikaia_std::block::Text::from(name.to_string()), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, stops, files, inputs, stdin, args });
     }
     Ok(tests)
 }
@@ -216,12 +216,12 @@ pub fn project_tests_is_program(file: &std::path::Path, root: &std::path::Path) 
 }
 
 pub fn project_tests_program_manifest(root: &std::path::Path, package: Option<String>) -> ProjectMembersManifest {
-    let mut keys: Vec<String> = vec![];
-    let mut paths: Vec<(String, fs::Path)> = vec![];
+    #[allow(unused_mut)] let mut keys: Vec<String> = vec![];
+    let mut paths: Vec<(String, fs::Path)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
     match package {
         None => { },
         Some(name) => {
-            keys.push(name.to_string());
+            keys.push(nikaia_std::block::Text::from(name.to_string()));
             paths.push((name, project_members_canonical(root)));
         },
     }
@@ -239,7 +239,7 @@ pub async fn program_tests(root: &std::path::Path) -> Result<Vec<ProgramTest>, _
         let asserts = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.asserts", name))))).await?;
         let stops = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stops", name))))).await?;
         let stdin = nikaia_std::index::or(project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stdin", name))))).await?, || Bytes(vec![]).into());
-        tests.push(ProgramTest { name: name.to_string(), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, stops, bounds, asserts, stdin });
+        tests.push(ProgramTest { name: nikaia_std::block::Text::from(name.to_string()), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, stops, bounds, asserts, stdin });
     }
     Ok(tests)
 }
@@ -263,7 +263,7 @@ pub fn project_tests_bounds_report(printed: &str, written: &str) -> Bytes {
             report.push_str("\n");
             continue;
         }
-        if line.starts_with(&head) {
+        if line.starts_with(&*head) {
             inside = true;
             let cut = nikaia_std::search::find(&line, &" - written without their check: ", 0);
             if cut.is_some() {
@@ -282,7 +282,7 @@ pub fn project_tests_asserts_report(printed: &str, written: &str) -> Bytes {
     let mut inside = false;
     for line in printed.lines() {
         if inside && !line.starts_with(' ') { break; }
-        if inside || line.starts_with(&head) {
+        if inside || line.starts_with(&*head) {
             inside = true;
             report.push_str(line);
             report.push_str("\n");
@@ -303,7 +303,7 @@ pub fn project_tests_bounds_outcome(program: &ProgramTest, outcome: &ProjectTest
         Some(want) => { bounds.push((format!("{}.asserts", program.name), want.copy_of(), project_tests_asserts_report(asserts, &written))); },
     }
     let right = bounds.iter().all(|entry| { entry.1 == entry.2 });
-    ProjectTestsOutcome { ended_well: outcome.ended_well, stopped: outcome.stopped, passed: outcome.passed && right, stdout: outcome.stdout.copy_of(), stderr: outcome.stderr.to_string(), files: outcome.files.to_owned(), bounds }
+    ProjectTestsOutcome { ended_well: outcome.ended_well, stopped: outcome.stopped, passed: outcome.passed && right, stdout: outcome.stdout.copy_of(), stderr: nikaia_std::block::Text::from(outcome.stderr.to_string()), files: outcome.files.copy_owned(), bounds }
 }
 
 pub fn project_tests_explain_bounds(outcome: &ProjectTestsOutcome) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
@@ -396,7 +396,7 @@ pub(crate) async fn project_tests_written(path: &std::path::Path) -> Option<Byte
 pub async fn project_tests_output_outcome(output: &OutputTest, own: &std::path::Path, code: i64, stdout: Bytes, stderr: String) -> ProjectTestsOutcome {
     let ended_well = code == 0;
     let stopped = project_tests_stopped(code);
-    let files: Vec<(String, Option<Bytes>)> = nikaia_std::seq::then(output.files.iter(), async |file| { (file.0.to_string(), project_tests_written(&nikaia_std::fs::path::join(&(own), std::path::Path::new(&(file.0)))).await) }).collect().await;
+    let files: Vec<(String, Option<Bytes>)> = nikaia_std::seq::then(output.files.iter(), async |file| { (nikaia_std::block::Text::from(file.0.to_string()), project_tests_written(&nikaia_std::fs::path::join(&(own), std::path::Path::new(&(file.0)))).await) }).collect().await;
     let printed_right = match &output.stdout {
         None => true,
         Some(want) => *want == stdout,
@@ -423,7 +423,7 @@ pub fn project_tests_refused_outcome(program: &ProgramTest, stderr: &str) -> Pro
     let broken = !is_refusal(stderr);
     let shown = match broken {
         true => format!("the program does not compile (rustc failed, not a refusal):\n{}", stderr),
-        false => stderr.to_string(),
+        false => nikaia_std::block::Text::from(stderr.to_string()),
     };
     let passed = !broken && program.stops.is_none() && match &program.stderr {
         None => false,
@@ -460,7 +460,7 @@ pub enum ProjectTestsRefusal {
 impl ProjectTestsRefusal {
     pub fn message(&self) -> String {
         match self {
-            ProjectTestsRefusal::Refused(why) => why.to_string(),
+            ProjectTestsRefusal::Refused(why) => nikaia_std::block::Text::from(why.to_string()),
         }
     }
 }
@@ -503,7 +503,7 @@ pub(crate) fn project_tests_empty_but(dir: &std::path::Path, keep: &str) -> Resu
 
 pub(crate) fn project_tests_relocated(said: &[u8], entry: &std::path::Path, written: &str, root: &std::path::Path) -> String {
     let package = format!("{}/", nikaia_std::fs::path::display(&(project_members_canonical(root))));
-    said.text_lossy().replace(&nikaia_std::fs::path::display(&(entry)), &written).replace(&nikaia_std::fs::path::display(&(project_members_canonical(entry))), &written).replace(&package, &"")
+    nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(said.text_lossy().replace(&*nikaia_std::fs::path::display(&(entry)), &*written)).replace(&*nikaia_std::fs::path::display(&(project_members_canonical(entry))), &*written)).replace(&*package, &*""))
 }
 
 pub(crate) fn project_tests_joined(first: &[u8], then: &[u8]) -> Bytes {
@@ -717,13 +717,13 @@ pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String,
     let mut failed: Vec<ProjectTestsFailed> = vec![];
     for (k, (title, path, line)) in blocks.iter().enumerate().map(|(at, item)| (at as i64, item)) {
         let mut outcomes: Vec<(String, ProjectTestsOutcome)> = vec![];
-        for (setting, binary) in test_builds.iter() { outcomes.push((setting.to_string(), host.block_outcome(binary, k)?)); }
+        for (setting, binary) in test_builds.iter() { outcomes.push((nikaia_std::block::Text::from(setting.to_string()), host.block_outcome(binary, k)?)); }
         let label = format!("test \"{}\" ({}:{})", title, shown_path(&path, root), line);
         if !project_tests_verdict(&label, &outcomes)? { failed.push(ProjectTestsFailed { label, outcomes, output: None }); }
     }
     for output in outputs.iter() {
         let mut outcomes: Vec<(String, ProjectTestsOutcome)> = vec![];
-        for (setting, binary) in programs.iter() { outcomes.push((setting.to_string(), host.output_outcome(binary, output)?)); }
+        for (setting, binary) in programs.iter() { outcomes.push((nikaia_std::block::Text::from(setting.to_string()), host.output_outcome(binary, output)?)); }
         let label = project_tests_output_label(output);
         if bless {
             let blessed = project_tests_bless(output, &outcomes).await?;
@@ -736,5 +736,5 @@ pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String,
     Ok(failed)
 }
 
-pub fn project_tests_wanted(name: &str, filters: &[String]) -> bool { filters.is_empty() || filters.iter().any(|text| { name.contains(text) }) }
+pub fn project_tests_wanted(name: &str, filters: &[String]) -> bool { filters.is_empty() || filters.iter().any(|text| { name.contains(AsRef::<str>::as_ref(text)) }) }
 

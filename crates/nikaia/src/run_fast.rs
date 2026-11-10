@@ -12,6 +12,8 @@
 //! `rustc`'s diagnostics go to the same translator, as the lines Cargo would
 //! have wrapped them in.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -60,7 +62,7 @@ pub(crate) fn compile(
     if binary.is_file() && std::fs::read_to_string(&key_file).is_ok_and(|held| held == key) {
         return Ok(Some(Built {
             binary: Some(binary),
-            messages: std::fs::read_to_string(&said).unwrap_or_default(),
+            messages: String::from(std::fs::read_to_string(&said).unwrap_or_default()),
         }));
     }
     let _ = std::fs::remove_file(&key_file);
@@ -102,9 +104,11 @@ pub(crate) fn compile(
         })
         .arg("--extern")
         .arg(format!("nikaia_bundle={}", bundle.dylib.display()))
-        .args(bundle.rlibs.iter().flat_map(|(name, rlib)| {
-            ["--extern".to_string(), format!("{name}={}", rlib.display())]
-        }))
+        .args(
+            bundle.rlibs.iter().flat_map(|(name, rlib)| {
+                ["--extern".to_text(), format!("{name}={}", rlib.display())]
+            }),
+        )
         .arg("-L")
         .arg(format!("dependency={}", bundle.deps.display()));
     // **Found where it was built**, by the path written into the program: the
@@ -166,9 +170,9 @@ pub(crate) fn cargo_sets_linker_or_flags(triple: &str) -> bool {
     let shouted = triple.to_uppercase().replace(['-', '.'], "_");
     let set = |var: &str| std::env::var_os(var).is_some_and(|v| !v.is_empty());
     let environment = [
-        "RUSTFLAGS".to_string(),
-        "CARGO_ENCODED_RUSTFLAGS".to_string(),
-        "CARGO_BUILD_RUSTFLAGS".to_string(),
+        "RUSTFLAGS".to_text(),
+        "CARGO_ENCODED_RUSTFLAGS".to_text(),
+        "CARGO_BUILD_RUSTFLAGS".to_text(),
         format!("CARGO_TARGET_{shouted}_LINKER"),
         format!("CARGO_TARGET_{shouted}_RUSTFLAGS"),
     ];

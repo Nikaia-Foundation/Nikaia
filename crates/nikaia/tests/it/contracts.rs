@@ -6,6 +6,8 @@
 //! half of "a package ships its ledger" that a reviewer cannot do by eye.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::PathBuf;
 
 use nikaia::contracts::SignatureOps;
@@ -653,7 +655,7 @@ fn a_bound_is_in_the_signature_and_reads_back() {
         .expect("the entry has one");
     assert_eq!(
         signature.bounds,
-        vec![("T".to_string(), vec!["Speaks".to_string()])]
+        vec![("T".to_text(), vec!["Speaks".to_text()])]
     );
 }
 
@@ -666,11 +668,8 @@ fn the_bound_list_carries_every_shape() {
     assert_eq!(
         signature.bounds,
         vec![
-            (
-                "H".to_string(),
-                vec!["a::One".to_string(), "b::Two".to_string()]
-            ),
-            ("U".to_string(), Vec::new()),
+            ("H".to_text(), vec!["a::One".to_text(), "b::Two".to_text()]),
+            ("U".to_text(), Vec::new()),
         ]
     );
     assert_eq!(signature.text(), "[H: a::One + b::Two, U](h: $H, u: $U)");
@@ -707,11 +706,7 @@ fn the_shipped_std_ledger_agrees_with_its_nikaia_sources() {
         if path.extension().and_then(|e| e.to_str()) != Some("nika") {
             continue;
         }
-        let module = path
-            .file_stem()
-            .expect("stem")
-            .to_string_lossy()
-            .to_string();
+        let module = path.file_stem().expect("stem").to_string_lossy().to_text();
         let source = std::fs::read_to_string(&path).expect("read the module");
         let inferred = Ledger::infer(&parse_to_ast(&source).expect("the module parses"));
         // In the shipped ledger an item is named as a caller writes it, which
@@ -776,11 +771,7 @@ fn a_toolchain_module_is_not_part_of_std() {
         if path.extension().and_then(|e| e.to_str()) != Some("nika") {
             continue;
         }
-        let module = path
-            .file_stem()
-            .expect("stem")
-            .to_string_lossy()
-            .to_string();
+        let module = path.file_stem().expect("stem").to_string_lossy().to_text();
         let source = std::fs::read_to_string(&path).expect("read the module");
         let inferred = Ledger::infer(&parse_to_ast(&source).expect("the module parses"));
 
@@ -816,7 +807,7 @@ fn every_std_module_is_in_the_shipped_ledger() {
             shipped
                 .functions
                 .keys()
-                .any(|k| k.starts_with(&format!("{module}::"))),
+                .any(|k| k.starts_with(&*format!("{module}::"))),
             "std.contracts says nothing about `{module}`"
         );
     }

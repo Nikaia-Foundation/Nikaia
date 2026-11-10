@@ -391,7 +391,13 @@ impl EmitState {
                     // No `format!` around it, so the doubled braces of the
                     // source are written once (#1099).
                     let text = format_of(parts).replace("{{", "{").replace("}}", "}")
-                    out.push(f"\"{text}\".to_string()")
+                    // On the block types (#490) the block's text is made
+                    // from the literal itself, with no Rust `String` first.
+                    if self.on_block_types() {
+                        out.push(f"nikaia_std::block::Text::from(\"{text}\")")
+                    } else {
+                        out.push(f"\"{text}\".to_string()")
+                    }
                     return
                 }
                 out.push("format!(")
@@ -565,13 +571,51 @@ impl EmitState {
         }
         if streamed {
             let rule = entered ?? return
-            if rule.args.len() > 0 || rule.config.len() > 0 || table != null {
-                throw EmitRefused { message: f"The compiler can't translate a call of `@stream` entry `{rule_name}` that hands it values or a table yet.", at: flow.statement }
-            }
             out.push("Ok::<_, nikaia_std::grammar::ParseError>({ let __wg_source = ::std::convert::AsRef::<[u8]>::as_ref(&*")
             self.emit_expr(world, walk, out, host, input, depth, flow, scope)
-            out.push(").to_vec(); let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
-            out.push(f"let __wg_parsed = {lowered}::parse_{rule_name}_reader_each(&__wg_source[..], &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &_| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ")
+            out.push(").to_vec(); ")
+            // **The values, the options and the table are taken before the
+            // reader starts** (ADR-grammar-1 D2, ADR-388 D1): each is owned,
+            // as an entry's parameter is, and moves to the reader's thread;
+            // the table is the caller's own, shared, not a copy of it.
+            let mut handed = String()
+            for i in 0..<rule.args.len() {
+                out.push(f"let __wg_value{i} = ")
+                if i < values.len() {
+                    self.emit_expr(world, walk, out, host, values[i], depth, flow, scope)
+                }
+                out.push("; ")
+                handed.push_str(f"__wg_value{i}, ")
+            }
+            let mut j = 0
+            for option in rule.config {
+                out.push(f"let __wg_option{j} = ")
+                let mut given = false
+                for c in config {
+                    if !given && c.name == option.name {
+                        self.emit_expr(world, walk, out, host, c.value, depth, flow, scope)
+                        given = true
+                    }
+                }
+                if !given {
+                    self.emit_expr(world, walk, out, host, option.default, depth, flow, scope)
+                }
+                out.push("; ")
+                handed.push_str(f"__wg_option{j}, ")
+                j += 1
+            }
+            let mut context = "winnow_grammar::ParseContext::<()>::default()"
+            match table {
+                null => {},
+                words => {
+                    out.push("let __wg_words = winnow_grammar::InternerContext::clone(&")
+                    self.emit_expr(world, walk, out, host, words, depth, flow, scope)
+                    out.push("); ")
+                    context = "winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_words)"
+                },
+            }
+            out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
+            out.push(f"let __wg_parsed = {lowered}::parse_{rule_name}_reader_each(&__wg_source[..], &mut {context}, winnow_grammar::rt::Reading::default(), {handed}|__wg_item: &_| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ")
             out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() })")
             out.push(f"{question}")
             return

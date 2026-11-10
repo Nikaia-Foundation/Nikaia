@@ -1,0 +1,34 @@
+error[NK2305]: `s` is changed here, but `t` may point into its data and is used later.
+   --> tests/a_change_after_a_view_made_by_a_text_method_is_refused.nika:15:5
+    |
+ 14 |     let t = s.trim()
+    |         - `t` is a view into `s`
+ 15 |     s.push_str("!")
+    |     ^ `s` changes here
+ 16 |     println(t)
+    |             - `t` is used here, after the change
+    |
+    = help: Use `t` before this change, or take a copy of it with `t.clone()` before the change.
+error[NK2305]: `s` is changed here, but `parts` may point into its data and is used later.
+   --> tests/a_change_after_a_view_made_by_a_text_method_is_refused.nika:23:5
+    |
+ 22 |     let parts = s.split(",")
+    |         ----- `parts` is a view into `s`
+ 23 |     s.push_str(",c")
+    |     ^ `s` changes here
+ 24 |     for p in parts {
+    |              ----- `parts` is used here, after the change
+    |
+    = help: Use `parts` before this change, or take a copy of it with `parts.clone()` before the change.
+error[NK2305]: `text` is changed here, but `l` may point into its data and is used later.
+   --> tests/a_change_after_a_view_made_by_a_text_method_is_refused.nika:33:5
+    |
+ 32 |     let l = Line { text: text.trim(), at: n }
+    |         - `l` is a view into `text`
+ 33 |     text.push_str("z")
+    |     ^^^^ `text` changes here
+ 34 |     return l
+    |            - `l` is used here, after the change
+    |
+    = help: Use `l` before this change, or take a copy of it with `l.clone()` before the change.
+3 changes to data a view still to be used may point into

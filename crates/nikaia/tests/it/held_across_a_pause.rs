@@ -22,6 +22,8 @@
 //! it* is a computation, and a computation nothing can see the answer of is one
 //! nothing can check. `Checked::held_across_a_pause` is that answer.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::{BTreeMap, BTreeSet};
 
 use nikaia::contracts::send::held_across_a_pause;
@@ -45,31 +47,31 @@ fn held(source: &str) -> BTreeSet<String> {
 /// The rule itself, in the four arrangements that are the whole of it.
 #[test]
 fn bound_before_a_pause_and_named_after_it() {
-    let named: BTreeMap<String, usize> = [("x".to_string(), 30)].into_iter().collect();
+    let named: BTreeMap<String, usize> = [("x".to_text(), 30)].into_iter().collect();
 
     // Bound at 10, pause at 20, last named at 30: held.
     assert_eq!(
-        held_across_a_pause(&[("x".to_string(), 10)], &[20], &named),
-        ["x".to_string()].into_iter().collect::<BTreeSet<_>>()
+        held_across_a_pause(&[("x".to_text(), 10)], &[20], &named),
+        ["x".to_text()].into_iter().collect::<BTreeSet<_>>()
     );
 
     // **Bound after the pause**: the future was already suspended once without
     // it, and nothing holds it over one.
-    assert!(held_across_a_pause(&[("x".to_string(), 25)], &[20], &named).is_empty());
+    assert!(held_across_a_pause(&[("x".to_text(), 25)], &[20], &named).is_empty());
 
     // **Last named before the pause**: it is done with, so the future does not
     // carry it. This is the half that says the walk reads the *last* mention
     // and not any mention.
-    let early: BTreeMap<String, usize> = [("x".to_string(), 15)].into_iter().collect();
-    assert!(held_across_a_pause(&[("x".to_string(), 10)], &[20], &early).is_empty());
+    let early: BTreeMap<String, usize> = [("x".to_text(), 15)].into_iter().collect();
+    assert!(held_across_a_pause(&[("x".to_text(), 10)], &[20], &early).is_empty());
 
     // **No pause at all**: a body that never suspends holds nothing over
     // anything, whatever it binds.
-    assert!(held_across_a_pause(&[("x".to_string(), 10)], &[], &named).is_empty());
+    assert!(held_across_a_pause(&[("x".to_text(), 10)], &[], &named).is_empty());
 
     // **A name nothing mentions again** is not held either - `named` has no
     // entry for it, and an absent last use is not a late one.
-    assert!(held_across_a_pause(&[("y".to_string(), 10)], &[20], &named).is_empty());
+    assert!(held_across_a_pause(&[("y".to_text(), 10)], &[20], &named).is_empty());
 }
 
 /// **And the walk that feeds it**, on a program: the value is bound, the task
@@ -87,7 +89,7 @@ fn a_value_used_after_a_pause_is_held() {
              \x20   }\n\
              }\n"
         ),
-        ["n".to_string()].into_iter().collect::<BTreeSet<_>>(),
+        ["n".to_text()].into_iter().collect::<BTreeSet<_>>(),
         "`n` is bound before the read and printed after it"
     );
 }
@@ -169,7 +171,7 @@ fn a_call_nothing_describes_counts_as_a_pause() {
              \x20   }\n\
              }\n"
         ),
-        ["n".to_string()].into_iter().collect::<BTreeSet<_>>()
+        ["n".to_text()].into_iter().collect::<BTreeSet<_>>()
     );
 }
 

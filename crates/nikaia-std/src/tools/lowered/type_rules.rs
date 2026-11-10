@@ -54,7 +54,7 @@ pub(crate) fn tr_is_self(e: &Expr, words: &winnow_grammar::InternerContext) -> b
 
 pub fn tr_binding_of(type_name: &str, fields: &collections::BTreeSet<String>) -> String {
     let mut small: String = String::from("");
-    for c in type_name.chars() { if small == "" { small = format!("{}", c).to_lowercase(); } else { small = format!("{}{}", small, c); } }
+    for c in type_name.chars() { if small == "" { small = nikaia_std::block::Text::from(format!("{}", c).to_lowercase()); } else { small = format!("{}{}", small, c); } }
     if fields.contains(&small) || small == type_name { small = format!("{}_value", small); }
     small
 }
@@ -105,11 +105,11 @@ pub fn tr_on(words: &winnow_grammar::InternerContext, claim: &Expr, base: &Expr,
             if fields.contains(words.resolve(name)) { return Some(Expr::Field { base: Box::new(tr_renumbered(base, &renew)), name, id: node_id::NodeId::fresh() }); }
             return Some(Expr::Variable(name, node_id::NodeId::fresh()));
         },
-        Expr::Path(segments, _) => Some(Expr::Path(segments.to_owned(), node_id::NodeId::fresh())),
+        Expr::Path(segments, _) => Some(Expr::Path(segments.copy_owned(), node_id::NodeId::fresh())),
         Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; Some(Expr::LitInt { value, negative, id: node_id::NodeId::fresh() }) },
         Expr::LitBool(b, _) => { let b = *b; Some(Expr::LitBool(b, node_id::NodeId::fresh())) },
-        Expr::LitChar(c, _) => Some(Expr::LitChar(c.to_string(), node_id::NodeId::fresh())),
-        Expr::LitFloat(f, _) => Some(Expr::LitFloat(f.to_string(), node_id::NodeId::fresh())),
+        Expr::LitChar(c, _) => Some(Expr::LitChar(nikaia_std::block::Text::from(c.to_string()), node_id::NodeId::fresh())),
+        Expr::LitFloat(f, _) => Some(Expr::LitFloat(nikaia_std::block::Text::from(f.to_string()), node_id::NodeId::fresh())),
         Expr::LitNull(_) => Some(Expr::LitNull(node_id::NodeId::fresh())),
         Expr::Binary { op, lhs, rhs, span, grouped, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); let grouped = *grouped;
@@ -149,7 +149,7 @@ pub fn tr_asserts_as(words: &winnow_grammar::InternerContext, intern: &impl Fn(&
     for rule in ruled.rules.iter() {
         let condition = match tr_on(words, &rule.claim, base, &ruled.fields, renew) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let mut config: Vec<ConfigArg> = vec![];
-        if given { config.push(ConfigArg { name: intern(&tr_given()), value: Expr::LitStr { text: type_name.to_string(), id: node_id::NodeId::fresh() } }); }
+        if given { config.push(ConfigArg { name: intern(&tr_given()), value: Expr::LitStr { text: nikaia_std::block::Text::from(type_name.to_string()), id: node_id::NodeId::fresh() } }); }
         if said {
             let mut shown = Expr::LitStr { text: format!("the rule of `{}`", type_name), id: node_id::NodeId::fresh() };
             match &rule.message {
@@ -183,7 +183,7 @@ pub fn tr_part(ruled: &TrRuled, taken: &[bool]) -> TrRuled {
             }, span: tr_span(&rule.span) });
         }
     }
-    TrRuled { fields: ruled.fields.to_owned(), rules, binding: ruled.binding }
+    TrRuled { fields: ruled.fields.copy_owned(), rules, binding: ruled.binding }
 }
 
 pub fn tr_collect(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, items: &[Spanned<Item>]) -> TrFound {
@@ -193,9 +193,9 @@ pub fn tr_collect(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str
             Item::Struct { name, fields, rules, generics, .. } => {
                 let name = *name;
                 if rules.is_empty() { continue; }
-                let type_name = words.resolve(name).to_string();
+                let type_name = nikaia_std::block::Text::from(words.resolve(name).to_string());
                 let mut field_names: collections::BTreeSet<String> = collections::BTreeSet::new();
-                for f in fields.iter() { field_names.insert(words.resolve(f.name).to_string()); }
+                for f in fields.iter() { field_names.insert(nikaia_std::block::Text::from(words.resolve(f.name).to_string())); }
                 let mut read: Vec<TrRule> = vec![];
                 for rule in rules.iter() {
                     let found = tr_a_rule(words, &rule.node, tr_span(&rule.span));
@@ -208,7 +208,7 @@ pub fn tr_collect(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str
                     read.push(one);
                 }
                 let binding = intern(&tr_binding_of(&type_name, &field_names));
-                ruled.insert(type_name.to_string(), TrRuled { fields: field_names, rules: read, binding });
+                ruled.insert(nikaia_std::block::Text::from(type_name.to_string()), TrRuled { fields: field_names, rules: read, binding });
             },
             _ => { },
         }
@@ -221,7 +221,7 @@ pub fn tr_methods_of(words: &winnow_grammar::InternerContext, items: &[Spanned<I
     for item in items.iter() {
         match &item.node {
             Item::Impl { target, methods, .. } => {
-                let owner = words.resolve(target.name).to_string();
+                let owner = nikaia_std::block::Text::from(words.resolve(target.name).to_string());
                 let mut all: collections::BTreeSet<String> = collections::BTreeSet::new();
                 let mut changing: collections::BTreeSet<String> = collections::BTreeSet::new();
                 for method in methods.iter() {
@@ -230,8 +230,8 @@ pub fn tr_methods_of(words: &winnow_grammar::InternerContext, items: &[Spanned<I
                             let name = *name;
                             let how = match receiver { Some(__nikaia_value) => __nikaia_value, None => continue };
                             let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                            let text = words.resolve(called).to_string();
-                            if how.is_mut { changing.insert(text.to_string()); }
+                            let text = nikaia_std::block::Text::from(words.resolve(called).to_string());
+                            if how.is_mut { changing.insert(nikaia_std::block::Text::from(text.to_string())); }
                             all.insert(text);
                         },
                         _ => { },
@@ -256,7 +256,7 @@ pub fn tr_fails_changed(words: &winnow_grammar::InternerContext, ruled: &collect
     for item in items.iter() {
         match &item.node {
             Item::Impl { target, methods, .. } => {
-                let owner = words.resolve(target.name).to_string();
+                let owner = nikaia_std::block::Text::from(words.resolve(target.name).to_string());
                 if !ruled.contains_key(&owner) { continue; }
                 let mut fails = false;
                 for m in methods.iter() {
@@ -433,7 +433,7 @@ pub(crate) fn tr_reader(name: &str) -> bool { matches!(name, "len" | "is_empty" 
 
 pub(crate) fn tr_mark(words: &winnow_grammar::InternerContext, ruled: &collections::BTreeMap<String, collections::BTreeSet<String>>, field: winnow_grammar::Symbol, changed: &mut collections::BTreeSet<String>) {
     let text = words.resolve(field);
-    for (name, fields) in ruled.iter() { if fields.contains(text) { changed.insert(name.to_string()); } }
+    for (name, fields) in ruled.iter() { if fields.contains(text) { changed.insert(nikaia_std::block::Text::from(name.to_string())); } }
 }
 
 pub(crate) fn tr_mark_arg(words: &winnow_grammar::InternerContext, ruled: &collections::BTreeMap<String, collections::BTreeSet<String>>, in_impl: bool, arg: &Expr, changed: &mut collections::BTreeSet<String>) {
@@ -492,7 +492,7 @@ pub fn tr_built_elsewhere(words: &winnow_grammar::InternerContext, ruled: &colle
     for item in items.iter() {
         match &item.node {
             Item::Impl { target, methods, .. } => {
-                let owner = words.resolve(target.name).to_string();
+                let owner = nikaia_std::block::Text::from(words.resolve(target.name).to_string());
                 let mut changes_self = false;
                 for m in methods.iter() {
                     match &m.node {
@@ -512,7 +512,7 @@ pub fn tr_built_elsewhere(words: &winnow_grammar::InternerContext, ruled: &colle
                 match expr {
                     Expr::StructLit { name, .. } => {
                         let name = *name;
-                        let type_name = words.resolve(name).to_string();
+                        let type_name = nikaia_std::block::Text::from(words.resolve(name).to_string());
                         if ruled.contains_key(&type_name) && !checked.contains_key(&type_name) { found.insert(type_name); }
                     },
                     _ => { },
@@ -554,7 +554,7 @@ pub(crate) fn tr_rule_reads(words: &winnow_grammar::InternerContext, claim: &Exp
                 Expr::Variable(name, _) => {
                     let name = *name;
                     if fields.contains(words.resolve(name)) && words.resolve(method) == "len" && args.is_empty() {
-                        names.insert(words.resolve(name).to_string());
+                        names.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
                         return;
                     }
                 },
@@ -566,8 +566,8 @@ pub(crate) fn tr_rule_reads(words: &winnow_grammar::InternerContext, claim: &Exp
         Expr::Variable(name, _) => {
             let name = *name;
             if fields.contains(words.resolve(name)) {
-                names.insert(words.resolve(name).to_string());
-                full.insert(words.resolve(name).to_string());
+                names.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
+                full.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
             }
         },
         Expr::Binary { lhs, rhs, .. } => {
@@ -586,7 +586,7 @@ pub(crate) fn tr_field_of_self(e: &Expr, words: &winnow_grammar::InternerContext
     match e {
         Expr::Field { base, name, .. } => {
             let base = nikaia_std::boxed::open(base); let name = *name;
-            if tr_is_self(base, words) { return Some(words.resolve(name).to_string()); }
+            if tr_is_self(base, words) { return Some(nikaia_std::block::Text::from(words.resolve(name).to_string())); }
             return None;
         },
         _ => None,
@@ -639,8 +639,8 @@ pub fn tr_declared_rules(words: &winnow_grammar::InternerContext, items: &[Spann
                 let mut all: collections::BTreeSet<String> = collections::BTreeSet::new();
                 let mut buildable = is_public;
                 for f in fields.iter() {
-                    all.insert(words.resolve(f.name).to_string());
-                    if f.is_public { public.insert(words.resolve(f.name).to_string()); } else if f.default.is_none() { buildable = false; }
+                    all.insert(nikaia_std::block::Text::from(words.resolve(f.name).to_string()));
+                    if f.is_public { public.insert(nikaia_std::block::Text::from(words.resolve(f.name).to_string())); } else if f.default.is_none() { buildable = false; }
                 }
                 let mut reads_public = false;
                 let mut written: Vec<String> = vec![];
@@ -652,7 +652,7 @@ pub fn tr_declared_rules(words: &winnow_grammar::InternerContext, items: &[Spann
                     }
                     written.push(written_at(&rule.span));
                 }
-                out.insert(words.resolve(name).to_string(), TrDeclared { fields: all, rules: written, open: buildable || reads_public });
+                out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()), TrDeclared { fields: all, rules: written, open: buildable || reads_public });
             },
             _ => { },
         }
@@ -678,7 +678,7 @@ pub fn tr_expand(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str)
     if found.refusal.is_some() { return std::convert::identity(found.refusal); }
     let ruled = &found.ruled;
     if ruled.is_empty() { return None; }
-    let fields: collections::BTreeMap<String, collections::BTreeSet<String>> = ruled.iter().map(|pair| { (pair.0.to_string(), pair.1.fields.to_owned()) }).collect();
+    let fields: collections::BTreeMap<String, collections::BTreeSet<String>> = ruled.iter().map(|pair| { (nikaia_std::block::Text::from(pair.0.to_string()), pair.1.fields.copy_owned()) }).collect();
     let mut changed = tr_changed_outside(words, &fields, &items);
     changed.extend(tr_fails_changed(words, &ruled, &items));
     let own = tr_methods_of(words, &items);
@@ -693,7 +693,7 @@ pub(crate) fn tr_rewrite_item(words: &winnow_grammar::InternerContext, intern: &
     let span = tr_span(&item.span);
     match item.node {
         Item::Impl { ref target, ref mut methods, .. } => {
-            let owner: Option<String> = Some(words.resolve(target.name).to_string());
+            let owner: Option<String> = Some(nikaia_std::block::Text::from(words.resolve(target.name).to_string()));
             for method in methods.iter_mut() {
                 let at = tr_span(&(*method).span);
                 tr_rewrite_fn(words, intern, renew, ruled, changed, own, spans, &mut (*method).node, (owner).as_deref(), &at);
@@ -721,7 +721,7 @@ pub(crate) fn tr_rewrite_fn(words: &winnow_grammar::InternerContext, intern: &im
 pub(crate) fn tr_rewrite_body(words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol, renew: &impl Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, changed: &collections::BTreeSet<String>, own: &collections::BTreeMap<String, TrMethods>, spans: &collections::BTreeMap<u32, Span>, receiver: Option<&Receiver>, args: &[FnArg], returns: bool, body: &mut Block, owner: Option<&str>, span: &Span) {
     tr_check_literals(words, intern, renew, ruled, spans, body, span);
     let type_name: String = nikaia_std::index::or(match owner {
-        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
         None => None,
     }, || "".into());
     let has_self = receiver.is_some() && ruled.contains_key(&type_name);
@@ -747,7 +747,7 @@ pub(crate) fn tr_rewrite_body(words: &winnow_grammar::InternerContext, intern: &
                 _ => { },
             }
         }
-        let leaving = TrJob::Leaving { checked: checked.clone(), kept: kept.clone(), type_name: type_name.to_string(), base: base.clone(), in_lambdas };
+        let leaving = TrJob::Leaving { checked: checked.clone(), kept: kept.clone(), type_name: nikaia_std::block::Text::from(type_name.to_string()), base: base.clone(), in_lambdas };
         tr_walk_block(body, words, intern, renew, ruled, spans, span, &leaving);
         tr_before_returns(words, intern, renew, &checked, &type_name, &base, false, body);
         tr_before_returns(words, intern, renew, &kept, &type_name, &base, true, body);
@@ -771,7 +771,7 @@ pub(crate) fn tr_rewrite_body(words: &winnow_grammar::InternerContext, intern: &
         given.extend(tr_asserts(words, intern, renew, rules, &type_name, &base, &entry, true));
     }
     for arg in args.iter() {
-        let named = words.resolve(arg.ty.name).to_string();
+        let named = nikaia_std::block::Text::from(words.resolve(arg.ty.name).to_string());
         let of_arg = match ruled.get(&named) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if changed.contains(&named) || !arg.ty.generics.is_empty() || arg.ty.is_tuple { continue; }
         let base = Expr::Variable(arg.name, node_id::NodeId::fresh());
@@ -838,7 +838,7 @@ pub(crate) fn tr_plain_fields(fields: &[FieldInit], words: &winnow_grammar::Inte
                 _ => return None,
             },
         };
-        out.insert(words.resolve(field.name).to_string(), value);
+        out.insert(nikaia_std::block::Text::from(words.resolve(field.name).to_string()), value);
     }
     Some(out)
 }
@@ -997,7 +997,7 @@ pub(crate) fn tr_drop_given_in(words: &winnow_grammar::InternerContext, intern: 
     tr_drop_in(body, words, changed);
     let ruled: collections::BTreeMap<String, TrRuled> = collections::BTreeMap::new();
     let spans: collections::BTreeMap<u32, Span> = collections::BTreeMap::new();
-    let job = TrJob::Dropping { changed: changed.to_owned() };
+    let job = TrJob::Dropping { changed: changed.copy_owned() };
     tr_walk_block(body, words, intern, renew, &ruled, &spans, &Span { start: 0, end: 0 }, &job);
 }
 
@@ -1243,7 +1243,7 @@ pub(crate) fn tr_leaving(expr: &mut Expr, words: &winnow_grammar::InternerContex
 // this was written - see `contracts::sync`.
 pub(crate) fn tr_literal(expr: &mut Expr, words: &winnow_grammar::InternerContext, intern: &dyn Fn(&str) -> winnow_grammar::Symbol, renew: &dyn Fn(&Expr) -> Expr, ruled: &collections::BTreeMap<String, TrRuled>, spans: &collections::BTreeMap<u32, Span>, span: &Span) {
     let type_name: String = match expr {
-        Expr::StructLit { name, .. } => { let name = *name; words.resolve(name).to_string() },
+        Expr::StructLit { name, .. } => { let name = *name; nikaia_std::block::Text::from(words.resolve(name).to_string()) },
         _ => return,
     };
     let rules = match ruled.get(&type_name) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -1267,7 +1267,7 @@ pub(crate) fn tr_literal(expr: &mut Expr, words: &winnow_grammar::InternerContex
 pub(crate) fn tr_field_read(expr: &mut Expr, words: &winnow_grammar::InternerContext, renew: &impl Fn(&Expr) -> Expr, binding: &winnow_grammar::Symbol, values: &collections::BTreeMap<String, Expr>) {
     let field: String = match expr {
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; match base {
-            Expr::Variable(b, _) => { let b = *b; if b == *binding { words.resolve(name).to_string() } else { return; } },
+            Expr::Variable(b, _) => { let b = *b; if b == *binding { nikaia_std::block::Text::from(words.resolve(name).to_string()) } else { return; } },
             _ => return,
         } },
         _ => return,

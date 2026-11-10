@@ -10,13 +10,15 @@
 
 use crate::common;
 use nikaia::contracts::LedgerOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use nikaia::parser::parse_to_ast;
 
 fn named(names: &[&str]) -> BTreeSet<String> {
-    names.iter().map(|n| n.to_string()).collect()
+    names.iter().map(|n| n.to_text()).collect()
 }
 
 fn refusals(source: &str, declared: &[&str], described: &[&str]) -> Vec<nikaia::check::Finding> {

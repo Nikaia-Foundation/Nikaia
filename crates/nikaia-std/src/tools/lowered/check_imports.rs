@@ -31,16 +31,16 @@ impl CheckState {
         let mut segments: Vec<String> = vec![];
         for part in path.iter() {
             let part = *part;
-            segments.push(world.words.resolve(part).to_string());
+            segments.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
         }
         if segments.len() < 2 || *nikaia_std::index::get(&segments, 0) != "std" { return; }
-        let last = (*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_string();
+        let last = nikaia_std::block::Text::from((*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_string());
         let mut a_type = false;
         for (entry_name, _) in world.library.types.iter() { if a_type_base(entry_name) == last { a_type = true; } }
         if !a_type {
             let prefix = format!("{}::", last);
             for (entry_name, entry_value) in world.library.functions.iter() {
-                let rest = match entry_name.strip_prefix(&prefix) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let rest = match entry_name.strip_prefix(AsRef::<str>::as_ref(&prefix)) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if rest.contains("::") { continue; }
                 if has_a_self_parameter(entry_value) { a_type = true; }
             }
@@ -52,26 +52,26 @@ impl CheckState {
         let mut help: String = format!("Remove the line: `{}` is always available, no `use` needed.", last);
         let tail = format!("::{}", last);
         for (entry_name, _) in world.library.types.iter() {
-            if entry_name.ends_with(&tail) {
-                let module = nikaia_std::index::or(entry_name.strip_suffix(&tail), || "");
+            if entry_name.ends_with(AsRef::<str>::as_ref(&tail)) {
+                let module = nikaia_std::index::or(entry_name.strip_suffix(AsRef::<str>::as_ref(&tail)), || "");
                 help = format!("Write `use std::{}`, and then `{}::{}` where you need it.", module, module, last);
                 break;
             }
         }
-        self.findings.push(check_refusal("NK1156", span, format!("`use {}` does nothing: `{}` is a type, and `use` brings in modules.", segments.join("::"), last), vec![String::from("A `use` line names a module, never a single type or function inside one.")], Some(help)));
+        self.findings.push(check_refusal("NK1156", span, format!("`use {}` does nothing: `{}` is a type, and `use` brings in modules.", nikaia_std::block::Text::from(segments.join("::")), last), vec![String::from("A `use` line names a module, never a single type or function inside one.")], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_std_module_nobody_declared(&mut self, module: &str, segments: &[String], span: &Span) {
         let mut offered: Vec<String> = vec![];
-        for name in self.std_modules.iter() { if !starts_with_a_capital(name) && !not_a_module(name) { offered.push(name.to_string()); } }
+        for name in self.std_modules.iter() { if !starts_with_a_capital(name) && !not_a_module(name) { offered.push(nikaia_std::block::Text::from(name.to_string())); } }
         offered.sort();
         if nikaia_std::list::contains(&offered, &module) || is_promised(module) { return; }
-        let written = segments.join("::");
+        let written = nikaia_std::block::Text::from(segments.join("::"));
         let near = nearest_name(module, &offered);
         let mut why: String = format!("`{}` is not one of the modules `std` offers.", module);
         if module == "tools" { why = String::from("`tools` is the toolchain's own, not `std`'s: it holds the compiler's Rust-signature grammar, which `nikaia describe` calls and a program cannot reach"); }
-        let mut help: String = format!("`std` offers: {}.", offered.join(", "));
+        let mut help: String = format!("`std` offers: {}.", nikaia_std::block::Text::from(offered.join(", ")));
         if near.is_some() { help = format!("Did you mean `use std::{}`?", nikaia_std::index::or(near.as_deref(), || "")); }
         self.findings.push(check_refusal("NK1186", span, format!("`std` has no module called `{}`.", written), vec![why], Some(help)));
     }
@@ -81,7 +81,7 @@ impl CheckState {
         match &pattern.node {
             Pattern::Ref { name, args, .. } => {
                 let name = *name;
-                let written = world.words.resolve(name).to_string();
+                let written = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
                 if written == "tag" { self.findings.push(check_refusal("NK1187", &pattern.span, format!("`{}` is not something a grammar can use.", written), vec![capitalised("a literal is written as itself")], Some(String::from("Write `\"x\"` instead.")))); }
                 if written == "digit1" { self.findings.push(check_refusal("NK1187", &pattern.span, format!("`{}` is not something a grammar can use.", written), vec![capitalised("one or more characters of a class are written as the class and a `+`, which gives the text it matched")], Some(String::from("Write `digit+` instead.")))); }
                 for arg in args.iter() { self.a_name_the_page_does_not_have(world, arg); }

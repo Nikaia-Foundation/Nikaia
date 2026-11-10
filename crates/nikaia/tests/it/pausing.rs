@@ -14,6 +14,8 @@
 //! because `io::read` can pause. Neither writes the word.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::Path;
 use std::process::Command;
 
@@ -34,7 +36,7 @@ fn lower(dir: &Path, source: &str) -> String {
         "lowering failed:\n{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    std::fs::read_to_string(&output).expect("the emitted Rust")
+    String::from(std::fs::read_to_string(&output).expect("the emitted Rust"))
 }
 
 /// One function that can pause and one that cannot, and nothing saying so.

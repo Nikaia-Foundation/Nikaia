@@ -46,11 +46,16 @@
 // target/gate-tests-compiler.log of the tree the gate runs in (the driver's QA
 // input quotes it). The test
 // runs get `NIKAIA_CACHE_LIMIT=4G` (`--full`'s keep 2G): the package tests'
-// cache, target/nikaia-project-tests, holds about 3.6 GB after a suite, and a
-// smaller limit evicts trees the next run builds again; 5G would leave the
-// shared disk under 8 GB free (2026-10-31: 9.5 GB free).
+// cache, target/nikaia-project-tests, holds what the limit allows: every
+// entry counts, the rust-library tests' Cargo directories too (#1521:
+// rust-library-user/<key> 0.7 GB, rust-library-splice/<key> 0.6 GB; before,
+// 5.6 GB of them went uncounted and the cache stood at 11 GB). Measured
+// 2026-11-09 with those tests run once: 2.7 GB, all of it in entries (the
+// figure after a whole suite is still to be taken). A smaller limit evicts trees the next run builds again; the driver
+// cleans up after each batch and below 6 GB free (scripts/drive.nika).
 
 use std::cli
+use std::env
 use std::fs
 use std::process
 use std::text
@@ -285,12 +290,30 @@ fn gate_package_suite(exe: String, cache: String) -> String throws {
     return gate_nikaia_failed(out.code == 0, out.stdout + "\n" + out.stderr, "target/gate-tests-compiler.log")
 }
 
+// Removes each sandbox `nikaia-test-<pid>-<n>` of `nikaia test` in the temp
+// directory whose process is gone: a killed run never removes its own
+// (#1521; scripts/drive.nika's drive_sweep does the same).
+fn gate_sweep() throws {
+    let tmp = env::var("TMPDIR") ?? "/tmp"
+    for entry in fs::read_dir(tmp.clone(), fs::Root::Anywhere) {
+        let path = entry.to_text()
+        let parts: Vec[String] = path.split("/").collect()
+        let name = parts[parts.len() - 1].clone()
+        let rest = name.strip_prefix("nikaia-test-") ?? ""
+        let pid = rest.split("-").collect()[0].clone()
+        if pid == "" || (text::parse_i64(pid.clone()) ?? 0) <= 0 { continue }
+        if fs::exists(f"/proc/{pid}", fs::Root::Anywhere) { continue }
+        process::run("rm", ["-rf", f"{tmp}/{name}"])
+    }
+}
+
 // The complete suite (`--all`): the workspace's tests with tests/compiler run
 // beside them (one serial test of 16-19 minutes, which libtest starts only
-// halfway through).
+// halfway through). Sandboxes of dead `nikaia test` runs are removed first.
 fn gate_test_all(dry: bool) -> String throws {
     let skip = gate_package_test()
     if dry { return f"would run: cargo test --workspace --profile fast --no-fail-fast -- --skip {skip}, and beside it target/fast/nikaia test --both-settings --project tests/compiler" }
+    gate_sweep()
     let mut red: Vec[String] = []
     let exe = process::run("realpath", ["target/fast/nikaia"]).stdout.trim().clone()
     process::run("mkdir", ["-p", "target/nikaia-project-tests"])

@@ -296,7 +296,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -720,7 +720,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -838,6 +838,9 @@ name = "task-block"
 version = "0.1.0"
 dependencies = [
  "allocator-api2",
+ "rayon",
+ "tether",
+ "winnow-grammar",
 ]
 
 [[package]]
@@ -851,7 +854,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1079,8 +1082,8 @@ dependencies = [
 
 [[package]]
 name = "winnow-grammar"
-version = "0.1.0"
-source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=75724911#75724911b124626c05eb07efecf43b3f168de53e"
+version = "0.2.0"
+source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=2eb219c#2eb219c4e0350a3e7266f2de3c034a0083d91ee0"
 dependencies = [
  "ahash",
  "lasso",
@@ -1095,8 +1098,8 @@ dependencies = [
 
 [[package]]
 name = "winnow-grammar-macros"
-version = "0.1.0"
-source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=75724911#75724911b124626c05eb07efecf43b3f168de53e"
+version = "0.2.0"
+source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=2eb219c#2eb219c4e0350a3e7266f2de3c034a0083d91ee0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1106,8 +1109,8 @@ dependencies = [
 
 [[package]]
 name = "winnow-grammar-model"
-version = "0.1.0"
-source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=75724911#75724911b124626c05eb07efecf43b3f168de53e"
+version = "0.2.0"
+source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=2eb219c#2eb219c4e0350a3e7266f2de3c034a0083d91ee0"
 dependencies = [
  "proc-macro2",
  "quote",

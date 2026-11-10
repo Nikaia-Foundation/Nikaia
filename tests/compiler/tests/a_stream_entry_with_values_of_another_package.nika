@@ -1,0 +1,32 @@
+// #1512: a program walks another package's `@stream` entry that takes
+// values and options (ADR-grammar-1 D2, ADR-grammar-2 D7): the values go to
+// the walk the package writes beside its `pub grammar`, each option as given
+// or left to the default the package declares, which the caller cannot see.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/words/src", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/words/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"words\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/words/src/main.nika", fs::Root::Anywhere, "pub struct Item {\n\tpub word: String,\n}\n\npub struct Limits {\n\tpub most: i64,\n}\n\npub grammar Words {\n\t@stream entry rule items(n: i64) -> Item = item{n}\n\t@stream entry rule some(lim: Limits; least: i64 = 1) -> Item = item{least, lim.most} until(\"!\") \"!\"\n\trule item -> Item = w:until(\";\") \";\" -> { Item { word: w.clone() } }\n}\n")
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nwords = { path = \"../words\" }\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use words\n\nfn least_two(text: String) -> i64 throws {\n\tlet mut seen = 0\n\tfor it in words::Words::some(text, words::Limits { most: 3 }; least: 2) {\n\t\tprintln(f\"least two: {it.word}\")\n\t\tseen += 1\n\t}\n\treturn seen\n}\n\nfn main() throws {\n\tlet n = 1\n\tfor it in words::Words::items(\"x;y;\", n + 1) {\n\t\tprintln(it.word)\n\t}\n\tfor it in words::Words::some(\"a;b;c;!\", words::Limits { most: 2 }) {\n\t\tprintln(f\"most two: {it.word}\")\n\t}\n\tlet short = least_two(\"a;!\") catch { -1 }\n\tprintln(f\"short: {short}\")\n\tprintln(least_two(\"a;b;!\"))\n}\n")
+    let out = process::run(toolchain(), ["run", "src/main.nika"]; dir: f"{tmp}/app")
+    let mut shown: Vec[String] = []
+    for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+        let text = line.trim()
+        if !text.starts_with("Compiling") && !text.starts_with("Finished") && !text.starts_with("Running") {
+            shown.push(line.clone())
+        }
+    }
+    println(shown.join("\n"))
+    println(f"exit {out.code}")
+    process::run("rm", ["-rf", tmp])
+}

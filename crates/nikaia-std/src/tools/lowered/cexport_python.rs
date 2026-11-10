@@ -16,7 +16,7 @@ pub(crate) fn cx_python_name(name: &str) -> String {
         let word = *word;
         if word == name { return format!("{}_", name); }
     }
-    name.to_string()
+    nikaia_std::block::Text::from(name.to_string())
 }
 
 pub(crate) fn cx_python_scalar(shape: &CxByValue) -> String {
@@ -34,36 +34,36 @@ pub(crate) fn cx_indent(lines: &[String], by: &str) -> String {
     out
 }
 
-pub(crate) fn cx_call(symbol: &str, args: &[String]) -> String { format!("_lib.{}({})", symbol, args.join(", ")) }
+pub(crate) fn cx_call(symbol: &str, args: &[String]) -> String { format!("_lib.{}({})", symbol, nikaia_std::block::Text::from(args.join(", "))) }
 
 impl CxPython {
     pub(crate) fn add_class(&mut self, owner: &str, text: String) {
-        let mut list: Vec<String> = vec![];
-        let before = *nikaia_std::index::get(&self.classes, owner);
+        #[allow(unused_mut)] let mut list: Vec<String> = vec![];
+        let before = *nikaia_std::index::get(&self.classes, owner); #[allow(unused_mut, clippy::redundant_locals)] let mut list = list;
         if before.is_some() {
             let held = match before { Some(__nikaia_value) => __nikaia_value, None => return };
-            for one in held.iter() { list.push(one.to_string()); }
+            for one in held.iter() { list.push(nikaia_std::block::Text::from(one.to_string())); }
         }
         list.push(text);
-        self.classes.insert(owner.to_string(), list);
+        self.classes.insert(nikaia_std::block::Text::from(owner.to_string()), list);
     }
     pub fn empty() -> CxPython { CxPython { functions: vec![], classes: collections::BTreeMap::new(), signatures: vec![], any_async: false, any_stream: false } }
     pub fn entry(&mut self, words: &winnow_grammar::InternerContext, ctx: &CxCtx, entry: &CxEntry, symbol: &str, text_out: bool, pauses: bool) {
-        let mut def_params: Vec<String> = vec![];
-        let mut argtypes: Vec<String> = vec![];
-        let mut before: Vec<String> = vec![];
-        let mut args: Vec<String> = vec![];
-        let mut keep: Vec<String> = vec![];
-        let mut raising: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut def_params: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut argtypes: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params;
+        #[allow(unused_mut)] let mut before: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut argtypes = argtypes;
+        #[allow(unused_mut)] let mut args: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut argtypes = argtypes; #[allow(unused_mut, clippy::redundant_locals)] let mut before = before;
+        #[allow(unused_mut)] let mut keep: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut argtypes = argtypes; #[allow(unused_mut, clippy::redundant_locals)] let mut before = before; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args;
+        #[allow(unused_mut)] let mut raising: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut argtypes = argtypes; #[allow(unused_mut, clippy::redundant_locals)] let mut before = before; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut keep = keep;
         let by_value = entry.of_a_record(&ctx.records);
         let owner_name = match entry.owner.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        };
+        }; #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut argtypes = argtypes; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args;
         let owner_text: String = nikaia_std::index::or(match entry.owner.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || "".into());
+        }, || "".into()); #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut argtypes = argtypes; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args;
         if entry.receiver.is_some() {
             if by_value && owner_name.is_some() {
                 argtypes.push(format!("ctypes.POINTER({})", owner_text));
@@ -73,19 +73,19 @@ impl CxPython {
                 args.push(String::from("self._live()"));
             }
         }
-        let mut position: i64 = 0;
+        let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut argtypes = argtypes; #[allow(unused_mut, clippy::redundant_locals)] let mut before = before; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut keep = keep; #[allow(unused_mut, clippy::redundant_locals)] let mut raising = raising;
         while position < entry.arg_names.len() as i64 {
             let name = cx_python_name(nikaia_std::index::get(&entry.arg_names, nikaia_std::index::at(position)));
             let ty = (*nikaia_std::index::get(&entry.arg_types, nikaia_std::index::at(position))).clone();
             position += 1;
-            def_params.push(name.to_string());
+            def_params.push(nikaia_std::block::Text::from(name.to_string()));
             let taken = cx_taken(words, &ctx.plains, &ctx.handles, &ctx.records, &ty);
             if taken.is_none() { continue; }
             let kind_taken = match taken { Some(__nikaia_value) => __nikaia_value, None => continue };
             match kind_taken {
                 CxIn::Value(ref shape) => {
                     argtypes.push(cx_python_scalar(shape));
-                    if shape.scalar { args.push(format!("ord({})", name)); } else { args.push(name.to_string()); }
+                    if shape.scalar { args.push(format!("ord({})", name)); } else { args.push(nikaia_std::block::Text::from(name.to_string())); }
                 },
                 CxIn::Run { ref rust, as_text, .. } => {
                     let mut element: &'static str = "ctypes.c_bool";
@@ -108,11 +108,11 @@ impl CxPython {
                     args.push(format!("int({}({}))", nikaia_std::index::get(&ctx.plains, (at) as usize).name, name));
                 },
                 CxIn::Record(at) => {
-                    argtypes.push(nikaia_std::index::get(&ctx.records, (at) as usize).name.to_string());
-                    args.push(name.to_string());
+                    argtypes.push(nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, (at) as usize).name.to_string()));
+                    args.push(nikaia_std::block::Text::from(name.to_string()));
                 },
                 CxIn::Records { record, .. } => {
-                    let record_name = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(record)).name.to_string();
+                    let record_name = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(record)).name.to_string());
                     argtypes.push(format!("ctypes.POINTER({})", record_name));
                     argtypes.push(String::from("ctypes.c_size_t"));
                     before.push(format!("{}_at, {}_len = _run({}, {})", name, name, record_name, name));
@@ -135,10 +135,10 @@ impl CxPython {
                     args.push(format!("{}_len", name));
                 },
                 CxIn::Callback { ref lent, result } => {
-                    let mut c_args: Vec<String> = vec![];
-                    let mut params: Vec<String> = vec![];
-                    let mut handed: Vec<String> = vec![];
-                    let mut at = 0;
+                    #[allow(unused_mut)] let mut c_args: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                    #[allow(unused_mut)] let mut params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args;
+                    #[allow(unused_mut)] let mut handed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+                    let mut at = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut handed = handed;
                     for part in lent.iter() {
                         match part {
                             CxLent::Value(shape) => {
@@ -163,17 +163,17 @@ impl CxPython {
                     }
                     c_args.push(String::from("ctypes.c_void_p"));
                     params.push(String::from("ctx"));
-                    let mut restype: String = String::from("None");
-                    let mut default: &'static str = "None";
+                    let mut restype: String = String::from("None"); #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args;
+                    let mut default: &'static str = "None"; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut handed = handed;
                     if result.is_some() {
                         restype = cx_python_scalar(&match result { Some(__nikaia_value) => __nikaia_value, None => continue });
                         default = "0";
                     }
-                    let kind = format!("ctypes.CFUNCTYPE({}, {})", restype, c_args.join(", "));
-                    argtypes.push(kind.to_string());
+                    let kind = format!("ctypes.CFUNCTYPE({}, {})", restype, nikaia_std::block::Text::from(c_args.join(", "))); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut handed = handed;
+                    argtypes.push(nikaia_std::block::Text::from(kind.to_string()));
                     argtypes.push(String::from("ctypes.c_void_p"));
                     before.push(format!("{}_raised = []", name));
-                    before.push(format!("{}_c = {}(lambda {}: _calling({}_raised, {}, {}, {}))", name, kind, params.join(", "), name, default, name, handed.join(", ")));
+                    before.push(format!("{}_c = {}(lambda {}: _calling({}_raised, {}, {}, {}))", name, kind, nikaia_std::block::Text::from(params.join(", ")), name, default, name, nikaia_std::block::Text::from(handed.join(", "))));
                     raising.push(format!("{}_raised", name));
                     keep.push(format!("{}_c", name));
                     args.push(format!("{}_c", name));
@@ -181,9 +181,9 @@ impl CxPython {
                 },
             }
         }
-        let mut after: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut after: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut argtypes = argtypes; #[allow(unused_mut, clippy::redundant_locals)] let mut before = before; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args;
         let found = cx_result_of(entry, words, &ctx.plains, &ctx.handles, &ctx.records);
-        let mut body_call: String = format!("_check({})", cx_call(symbol, &args));
+        let mut body_call: String = format!("_check({})", cx_call(symbol, &args)); #[allow(unused_mut, clippy::redundant_locals)] let mut argtypes = argtypes; #[allow(unused_mut, clippy::redundant_locals)] let mut before = before; #[allow(unused_mut, clippy::redundant_locals)] let mut raising = raising; #[allow(unused_mut, clippy::redundant_locals)] let mut after = after;
         let mut has_result = false;
         let mut buffered = false;
         let mut flagged = false;
@@ -196,7 +196,7 @@ impl CxPython {
                         argtypes.push(String::from("ctypes.POINTER(ctypes.c_uint8)"));
                         argtypes.push(String::from("ctypes.c_size_t"));
                         argtypes.push(String::from("ctypes.POINTER(ctypes.c_size_t)"));
-                        let mut asked = args.to_owned();
+                        let mut asked = args.copy_owned();
                         asked.push(String::from("out"));
                         asked.push(String::from("cap"));
                         asked.push(String::from("written"));
@@ -205,11 +205,11 @@ impl CxPython {
                     },
                     CxOut::Records(_) => {
                         buffered = true;
-                        let record = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(cx_out_index(out))).name.to_string();
+                        let record = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(cx_out_index(out))).name.to_string());
                         argtypes.push(format!("ctypes.POINTER({})", record));
                         argtypes.push(String::from("ctypes.c_size_t"));
                         argtypes.push(String::from("ctypes.POINTER(ctypes.c_size_t)"));
-                        let mut asked = args.to_owned();
+                        let mut asked = args.copy_owned();
                         asked.push(String::from("out"));
                         asked.push(String::from("cap"));
                         asked.push(String::from("written"));
@@ -221,7 +221,7 @@ impl CxPython {
                         let (ctype, back) = cx_python_back(out, ctx);
                         argtypes.push(format!("ctypes.POINTER({})", ctype));
                         before.push(format!("out = {}()", ctype));
-                        let mut asked = args.to_owned();
+                        let mut asked = args.copy_owned();
                         asked.push(String::from("ctypes.byref(out)"));
                         if flagged {
                             argtypes.push(String::from("ctypes.POINTER(ctypes.c_bool)"));
@@ -235,28 +235,28 @@ impl CxPython {
             },
             _ => { },
         }
-        self.signatures.push(format!("_lib.{}.argtypes = [{}]\n_lib.{}.restype = ctypes.c_int", symbol, argtypes.join(", "), symbol));
+        self.signatures.push(format!("_lib.{}.argtypes = [{}]\n_lib.{}.restype = ctypes.c_int", symbol, nikaia_std::block::Text::from(argtypes.join(", ")), symbol));
         let asyncable = pauses && raising.is_empty() && !buffered;
-        let mut async_lines: Vec<String> = vec![];
+        let mut async_lines: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut argtypes = argtypes; #[allow(unused_mut, clippy::redundant_locals)] let mut before = before; #[allow(unused_mut, clippy::redundant_locals)] let mut after = after;
         if asyncable {
             self.any_async = true;
-            let mut async_types = argtypes.to_owned();
+            let mut async_types = argtypes.copy_owned();
             async_types.push(String::from("_DONE"));
             async_types.push(String::from("ctypes.c_void_p"));
             async_types.push(String::from("ctypes.POINTER(ctypes.c_void_p)"));
-            self.signatures.push(format!("_lib.{}_async.argtypes = [{}]\n_lib.{}_async.restype = ctypes.c_int", symbol, async_types.join(", "), symbol));
-            async_lines = before.to_owned();
-            let mut handed_args = args.to_owned();
+            self.signatures.push(format!("_lib.{}_async.argtypes = [{}]\n_lib.{}_async.restype = ctypes.c_int", symbol, nikaia_std::block::Text::from(async_types.join(", ")), symbol));
+            async_lines = before.copy_owned();
+            let mut handed_args = args.copy_owned();
             if has_result { handed_args.push(String::from("ctypes.byref(out)")); }
             if flagged { handed_args.push(String::from("ctypes.byref(present)")); }
             async_lines.push(String::from("def finish(status):"));
             async_lines.push(String::from("    if status != 0:"));
             async_lines.push(String::from("        return _ERRORS.get(status, Error)(_said())"));
             if !after.is_empty() { async_lines.push(format!("    {}", *nikaia_std::index::get(&after, 0))); } else { async_lines.push(String::from("    return None")); }
-            async_lines.push(format!("return _start(_lib.{}_async, [{}], finish, done)", symbol, handed_args.join(", ")));
+            async_lines.push(format!("return _start(_lib.{}_async, [{}], finish, done)", symbol, nikaia_std::block::Text::from(handed_args.join(", "))));
         }
-        let mut lines: Vec<String> = before.to_owned();
-        if raising.is_empty() { lines.push(body_call.to_string()); } else {
+        #[allow(unused_mut)] let mut lines: Vec<String> = before.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut keep = keep; #[allow(unused_mut, clippy::redundant_locals)] let mut raising = raising; #[allow(unused_mut, clippy::redundant_locals)] let mut after = after;
+        if raising.is_empty() { lines.push(nikaia_std::block::Text::from(body_call.to_string())); } else {
             lines.push(String::from("try:"));
             lines.push(format!("    {}", body_call));
             lines.push(String::from("finally:"));
@@ -267,7 +267,7 @@ impl CxPython {
         }
         for kept in keep.iter() { lines.push(format!("del {}", kept)); }
         lines.extend(after);
-        let mut streams: Vec<i64> = vec![];
+        let mut streams: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         position = 0;
         while position < entry.arg_names.len() as i64 {
             let taken = cx_taken(words, &ctx.plains, &ctx.handles, &ctx.records, nikaia_std::index::get(&entry.arg_types, nikaia_std::index::at(position)));
@@ -287,81 +287,81 @@ impl CxPython {
         }
         if streams.len() == 1 && owner_name.is_none() {
             self.any_stream = true;
-            let mut others: Vec<String> = vec![];
-            let mut forwarded: Vec<String> = vec![];
-            let mut place: i64 = 0;
+            #[allow(unused_mut)] let mut others: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            #[allow(unused_mut)] let mut forwarded: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut others = others;
+            let mut place: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut others = others; #[allow(unused_mut, clippy::redundant_locals)] let mut forwarded = forwarded;
             while ((place) as usize) < def_params.len() {
                 if place != *nikaia_std::index::get(&streams, 0) {
-                    others.push((*nikaia_std::index::get(&def_params, (place) as usize)).to_string());
-                    forwarded.push((*nikaia_std::index::get(&def_params, (place) as usize)).to_string());
+                    others.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&def_params, (place) as usize)).to_string()));
+                    forwarded.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&def_params, (place) as usize)).to_string()));
                 } else { forwarded.push(String::from("each")); }
                 place += 1;
             }
-            self.functions.push(format!("def {}_iter({}):\n    return _stream(lambda each: {}({}))\n", entry.name, others.join(", "), cx_python_name(&entry.name), forwarded.join(", ")));
+            self.functions.push(format!("def {}_iter({}):\n    return _stream(lambda each: {}({}))\n", entry.name, nikaia_std::block::Text::from(others.join(", ")), cx_python_name(&entry.name), nikaia_std::block::Text::from(forwarded.join(", "))));
         }
         if !async_lines.is_empty() {
-            let mut params = def_params.to_owned();
+            let mut params = def_params.copy_owned();
             params.push(String::from("done=None"));
-            if owner_name.is_none() { self.functions.push(format!("def {}_async({}):\n{}", entry.name, params.join(", "), cx_indent(&async_lines, "    "))); } else if entry.receiver.is_some() {
+            if owner_name.is_none() { self.functions.push(format!("def {}_async({}):\n{}", entry.name, nikaia_std::block::Text::from(params.join(", ")), cx_indent(&async_lines, "    "))); } else if entry.receiver.is_some() {
                 params.insert(0, String::from("self"));
-                self.add_class(&owner_text, format!("    def {}_async({}):\n{}", entry.name, params.join(", "), cx_indent(&async_lines, "        ")));
+                self.add_class(&owner_text, format!("    def {}_async({}):\n{}", entry.name, nikaia_std::block::Text::from(params.join(", ")), cx_indent(&async_lines, "        ")));
             }
         }
-        let python = cx_python_name(&entry.name);
-        if owner_name.is_none() { self.functions.push(format!("def {}({}):\n{}", python, def_params.join(", "), cx_indent(&lines, "    "))); } else {
-            let owner = owner_text.to_string();
+        let python = cx_python_name(&entry.name); #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
+        if owner_name.is_none() { self.functions.push(format!("def {}({}):\n{}", python, nikaia_std::block::Text::from(def_params.join(", ")), cx_indent(&lines, "    "))); } else {
+            let owner = nikaia_std::block::Text::from(owner_text.to_string());
             if entry.getter { self.add_class(&owner, format!("    @property\n    def {}(self):\n{}", python, cx_indent(&lines, "        "))); } else if entry.receiver.is_some() {
-                let mut params: Vec<String> = vec![String::from("self")];
+                let mut params: Vec<String> = nikaia_std::block::List::from_array_in([String::from("self")], nikaia_std::block::Place::Block);
                 params.extend(def_params);
-                self.add_class(&owner, format!("    def {}({}):\n{}", python, params.join(", "), cx_indent(&lines, "        ")));
+                self.add_class(&owner, format!("    def {}({}):\n{}", python, nikaia_std::block::Text::from(params.join(", ")), cx_indent(&lines, "        ")));
             } else if entry.name == "new" {
-                let mut params: Vec<String> = vec![String::from("self")];
+                #[allow(unused_mut)] let mut params: Vec<String> = nikaia_std::block::List::from_array_in([String::from("self")], nikaia_std::block::Place::Block);
                 params.extend(def_params);
-                let mut made = lines.to_owned();
+                let mut made = lines.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                 if !made.is_empty() {
                     let last = made.len() as i64 - 1;
                     { let __nikaia_stored = String::from("self._ptr = out.value"); nikaia_std::index::set(&mut made, nikaia_std::index::at(last), __nikaia_stored); }
                 }
-                self.add_class(&owner, format!("    def __init__({}):\n{}", params.join(", "), cx_indent(&made, "        ")));
-            } else { self.add_class(&owner, format!("    @staticmethod\n    def {}({}):\n{}", python, def_params.join(", "), cx_indent(&lines, "        "))); }
+                self.add_class(&owner, format!("    def __init__({}):\n{}", nikaia_std::block::Text::from(params.join(", ")), cx_indent(&made, "        ")));
+            } else { self.add_class(&owner, format!("    @staticmethod\n    def {}({}):\n{}", python, nikaia_std::block::Text::from(def_params.join(", ")), cx_indent(&lines, "        "))); }
         }
     }
     pub fn module(&self, package: &str, prefix: &str, ctx: &CxCtx, held: &[bool], any_pause: bool) -> String {
-        let library = package.replace('-', "_");
+        let library = nikaia_std::block::Text::from(package.replace('-', "_"));
         let digest = CX_LEDGER_DIGEST;
         let mut out = format!("\"\"\"{} - GENERATED by `nikaia bind python` from {}'s ledger. Do not edit.\n\nledger: {}\n\"\"\"\n\nimport ctypes\nimport enum\nimport os\nimport sys\n\n_here = os.path.dirname(os.path.abspath(__file__))\nif sys.platform == \"darwin\":\n    _file = \"lib{}.dylib\"\nelif sys.platform == \"win32\":\n    _file = \"{}.dll\"\nelse:\n    _file = \"lib{}.so\"\n_lib = ctypes.CDLL(os.path.join(_here, \"..\", _file))\n\n\nclass Error(Exception):\n    \"\"\"A status other than OK, with what `{}_last_error` said.\"\"\"\n    code = None\n\n\nclass BoundaryError(Error):\n    \"\"\"One of the seven statuses the boundary owns.\"\"\"\n\n\n", package, package, digest, library, library, library, prefix);
         let boundary_names: [&str; 7] = ["ArgumentError", "TooSmallError", "NotRunningError", "PanickedError", "ReentrantError", "CleanupError", "CancelledError"];
-        let mut errors: Vec<(String, i64)> = vec![];
+        let mut errors: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut taken: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut number = 0;
         for name in boundary_names.iter() {
             let name = *name;
             number -= 1;
             out.push_str(&format!("class {}(BoundaryError):\n    code = {}\n\n\n", name, number));
-            errors.push((name.to_string(), number));
-            taken.insert(name.to_string());
+            errors.push((nikaia_std::block::Text::from(name.to_string()), number));
+            taken.insert(nikaia_std::block::Text::from(name.to_string()));
         }
         for raising in ctx.codes.iter() {
-            let error = raising.error.to_string();
-            let spelled = error.replace("::", "");
+            let error = nikaia_std::block::Text::from(raising.error.to_string());
+            let spelled = nikaia_std::block::Text::from(error.replace("::", ""));
             for code in raising.codes.iter() {
                 let word: String = nikaia_std::index::or(match code.variant.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, || "".into());
-                let mut what = error.to_string();
+                let mut what = nikaia_std::block::Text::from(error.to_string());
                 let mut name: String = format!("{}{}", spelled, word);
                 if code.variant.is_some() {
                     what = format!("{}::{}", error, word);
                     if !taken.contains(&word) {
-                        taken.insert(word.to_string());
-                        name = word.to_string();
+                        taken.insert(nikaia_std::block::Text::from(word.to_string()));
+                        name = nikaia_std::block::Text::from(word.to_string());
                     }
                 } else {
                     let mut capital: String = String::from("");
-                    for c in spelled.chars() { if capital == "" { capital = format!("{}", c).to_uppercase(); } else { capital = format!("{}{}", capital, c); } }
+                    for c in spelled.chars() { if capital == "" { capital = nikaia_std::block::Text::from(format!("{}", c).to_uppercase()); } else { capital = format!("{}{}", capital, c); } }
                     name = capital;
-                    taken.insert(name.to_string());
+                    taken.insert(nikaia_std::block::Text::from(name.to_string()));
                 }
                 let code_number = code.number;
                 let errno = match code.errno.as_ref() {
@@ -377,12 +377,12 @@ impl CxPython {
                 errors.push((name, code_number));
             }
         }
-        let mut table: Vec<String> = vec![];
+        let mut table: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (name, code) in errors.iter() {
             let code = nikaia_std::num::value(code);
             table.push(format!("{}: {}", code, name));
         }
-        out.push_str(&cx_python_helpers(prefix, &table.join(", ")));
+        out.push_str(&cx_python_helpers(prefix, &nikaia_std::block::Text::from(table.join(", "))));
         if self.any_stream { out.push_str(cx_python_stream()); }
         if any_pause && self.any_async { out.push_str(&cx_python_ticket(prefix)); }
         for plain in ctx.plains.iter() {
@@ -397,20 +397,20 @@ impl CxPython {
         for place in cx_records_in_order(&ctx.records) {
             let record = nikaia_std::index::get(&ctx.records, nikaia_std::index::at(place));
             if record.is_enum() {
-                let ty = record.name.to_string();
-                let mut members: Vec<String> = vec![];
+                let ty = nikaia_std::block::Text::from(record.name.to_string());
+                #[allow(unused_mut)] let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for variant in record.variants.iter() {
                     if variant.fields.is_empty() { continue; }
                     out.push_str(&format!("class _{}_{}(ctypes.Structure):\n    _fields_ = [{}]\n\n\n", ty, variant.name, cx_python_laid_out(&variant.fields, ctx)));
                     members.push(format!("(\"{}\", _{}_{})", variant.member, ty, variant.name));
                 }
-                let mut tags: String = String::from("");
+                let mut tags: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
                 let mut tag = 0;
                 for variant in record.variants.iter() {
                     tags.push_str(&format!("    {} = {}\n", variant.name, tag));
                     tag += 1;
                 }
-                if members.is_empty() { out.push_str(&format!("class {}(ctypes.Structure):\n    _fields_ = [(\"tag\", ctypes.c_int)]\n{}\n", ty, tags)); } else { out.push_str(&format!("class _{}_Union(ctypes.Union):\n    _fields_ = [{}]\n\n\nclass {}(ctypes.Structure):\n    _anonymous_ = (\"_u\",)\n    _fields_ = [(\"tag\", ctypes.c_int), (\"_u\", _{}_Union)]\n{}\n", ty, members.join(", "), ty, ty, tags)); }
+                if members.is_empty() { out.push_str(&format!("class {}(ctypes.Structure):\n    _fields_ = [(\"tag\", ctypes.c_int)]\n{}\n", ty, tags)); } else { out.push_str(&format!("class _{}_Union(ctypes.Union):\n    _fields_ = [{}]\n\n\nclass {}(ctypes.Structure):\n    _anonymous_ = (\"_u\",)\n    _fields_ = [(\"tag\", ctypes.c_int), (\"_u\", _{}_Union)]\n{}\n", ty, nikaia_std::block::Text::from(members.join(", ")), ty, ty, tags)); }
             } else { out.push_str(&format!("class {}(ctypes.Structure):\n    _fields_ = [{}]\n\n", record.name, cx_python_laid_out(&record.fields, ctx))); }
             let own = *nikaia_std::index::get(&self.classes, &record.name);
             if own.is_some() {
@@ -425,7 +425,7 @@ impl CxPython {
         let mut at: i64 = 0;
         while ((at) as usize) < ctx.handles.len() {
             if *nikaia_std::index::get(&held, (at) as usize) {
-                let ty = nikaia_std::index::get(&ctx.handles, (at) as usize).name.to_string();
+                let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.handles, (at) as usize).name.to_string());
                 out.push_str(&format!("_lib.{}_{}_free.argtypes = [ctypes.c_void_p]\n_lib.{}_{}_free.restype = ctypes.c_int\n\n\nclass {}:\n    \"\"\"A handle (ADR-284 D5): `close()` frees it, as leaving a `with` does.\"\"\"\n\n    _ptr = None\n\n    @classmethod\n    def _from(cls, ptr):\n        made = cls.__new__(cls)\n        made._ptr = ptr\n        return made\n\n    def _live(self):\n        if not self._ptr:\n            raise ArgumentError(\"the handle is closed\")\n        return self._ptr\n\n    def close(self):\n        if self._ptr:\n            ptr, self._ptr = self._ptr, None\n            _check(_lib.{}_{}_free(ptr))\n\n    def __enter__(self):\n        return self\n\n    def __exit__(self, *_):\n        self.close()\n\n    def __del__(self):\n        try:\n            self.close()\n        except Exception:\n            pass\n\n", prefix, ty, prefix, ty, ty, prefix, ty));
                 let own = *nikaia_std::index::get(&self.classes, &ty);
                 if own.is_some() {
@@ -456,27 +456,27 @@ pub(crate) fn cx_python_field_type(part: &CxPart, ctx: &CxCtx) -> String {
     match part {
         CxPart::Value(shape) => cx_python_scalar(shape),
         CxPart::Choice(_) => String::from("ctypes.c_int"),
-        CxPart::Record(at) => { let at = *at; nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string() },
+        CxPart::Record(at) => { let at = *at; nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string()) },
         CxPart::Array(element, count) => { let element = nikaia_std::boxed::open(element); let count = *count; format!("{} * {}", cx_python_field_type(element, ctx), count) },
     }
 }
 
 pub(crate) fn cx_python_laid_out(fields: &[(String, CxPart)], ctx: &CxCtx) -> String {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (field, part) in fields.iter() { parts.push(format!("(\"{}\", {})", field, cx_python_field_type(part, ctx))); }
-    parts.join(", ")
+    nikaia_std::block::Text::from(parts.join(", "))
 }
 
 pub(crate) fn cx_python_back(out: &CxOut, ctx: &CxCtx) -> (String, String) {
     match out {
         CxOut::Value(shape) => (cx_python_scalar(shape), cx_python_value(shape)),
         CxOut::AbsentValue(shape) => (cx_python_scalar(shape), format!("{} if present.value else None", cx_python_value(shape))),
-        CxOut::AbsentRecord(at) => { let at = *at; (nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string(), "out if present.value else None".to_string()) },
-        CxOut::Choice(at) => { let at = *at; ("ctypes.c_int".to_string(), format!("{}(out.value)", nikaia_std::index::get(&ctx.plains, nikaia_std::index::at(at)).name)) },
-        CxOut::Record(at) => { let at = *at; (nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string(), "out".to_string()) },
-        CxOut::Handle(at) => { let at = *at; ("ctypes.c_void_p".to_string(), format!("{}._from(out.value)", nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name)) },
-        CxOut::AbsentHandle(at) => { let at = *at; ("ctypes.c_void_p".to_string(), format!("None if not out.value else {}._from(out.value)", nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name)) },
-        _ => ("".to_string(), "".to_string()),
+        CxOut::AbsentRecord(at) => { let at = *at; (nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string()), nikaia_std::block::Text::from("out if present.value else None")) },
+        CxOut::Choice(at) => { let at = *at; (nikaia_std::block::Text::from("ctypes.c_int"), format!("{}(out.value)", nikaia_std::index::get(&ctx.plains, nikaia_std::index::at(at)).name)) },
+        CxOut::Record(at) => { let at = *at; (nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string()), nikaia_std::block::Text::from("out")) },
+        CxOut::Handle(at) => { let at = *at; (nikaia_std::block::Text::from("ctypes.c_void_p"), format!("{}._from(out.value)", nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name)) },
+        CxOut::AbsentHandle(at) => { let at = *at; (nikaia_std::block::Text::from("ctypes.c_void_p"), format!("None if not out.value else {}._from(out.value)", nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name)) },
+        _ => (nikaia_std::block::Text::from(""), nikaia_std::block::Text::from("")),
     }
 }
 

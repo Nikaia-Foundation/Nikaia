@@ -9,6 +9,8 @@
 use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn codes(source: &str) -> Vec<String> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -17,7 +19,7 @@ fn codes(source: &str) -> Vec<String> {
     common::checked(&parsed, &own, &library)
         .findings
         .into_iter()
-        .map(|f| f.code.to_string())
+        .map(|f| f.code.to_text())
         .collect()
 }
 
@@ -39,7 +41,7 @@ fn a_field_without_a_default_may_not_be_left_out() {
          \x20   println(f\"{{p.size}}\")\n\
          }}\n"
     );
-    assert_eq!(codes(&source), vec!["NK1234".to_string()]);
+    assert_eq!(codes(&source), vec!["NK1234".to_text()]);
 }
 
 /// A default of the wrong type is refused at the default, as a `comptime` of
@@ -55,7 +57,7 @@ fn a_default_of_the_wrong_type_is_refused() {
          \x20   let p = Page { label: \"a\" }\n\
          \x20   println(f\"{p.size}\")\n\
          }\n";
-    assert_eq!(codes(source), vec!["NK1166".to_string()]);
+    assert_eq!(codes(source), vec!["NK1166".to_text()]);
 }
 
 /// A variant is built whole: its fields take no default.
@@ -69,9 +71,7 @@ fn a_variant_field_takes_no_default() {
          }\n";
     let refused = parse_to_ast(source).expect_err("the parse refuses it");
     assert!(
-        refused
-            .to_string()
-            .contains("variant's field has no default"),
+        refused.to_text().contains("variant's field has no default"),
         "{refused}"
     );
 }
@@ -132,8 +132,8 @@ fn a_default_reaches_another_package() {
         .arg("run")
         .output()
         .expect("the nikaia binary runs");
-    let stdout = String::from_utf8_lossy(&run.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&run.stderr).to_string();
+    let stdout = String::from_utf8_lossy(&run.stdout).to_text();
+    let stderr = String::from_utf8_lossy(&run.stderr).to_text();
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(stdout, "50\n", "{stderr}");
 }

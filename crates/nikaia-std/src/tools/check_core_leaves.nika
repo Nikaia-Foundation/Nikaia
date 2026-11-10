@@ -73,6 +73,29 @@ pub fn check_core_a_field_of_a_lent_place_handed_back[H: CheckHost](mut state: C
     check_core_a_lent_place_given_away(state, world, host, value, span, true, true)
 }
 
+/// **Each arm of a choice handed back is asked as `return arm` is** (#1425):
+/// `pub fn pick(h: ref H, c: bool) -> String { if c { h.name } else {
+/// own(h.name) } }` keeps its text of its own at the published position
+/// (ADR-282 D22, D29), so the arm `h.name` gives away a field of a borrowed
+/// parameter: `NK1131`, as `if c { return h.name }` is (was an internal
+/// compiler error). A result both kinds flow into lends such an arm instead
+/// (`lent_arms_handed_back`), and a view takes it as it is.
+pub fn check_core_lent_places_in_arms_handed_back[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span) sync {
+    if !is_a_choice(value) || state.flow.expected_either {
+        return
+    }
+    // Only a place read through a lent parameter or a borrowed `self`: an
+    // arm's other values may name what its pattern bound, which is out of
+    // scope here.
+    for leaf in state.value_leaves(world, value) {
+        if state.a_place_of_a_lent_parameter(world, leaf) {
+            let at = check_span_at(world, leaf, span)
+            check_core_a_field_of_a_borrowed_subject(state, world, host, leaf, at, "handed back")
+            check_core_a_field_of_a_lent_place_handed_back(state, world, host, leaf, at)
+        }
+    }
+}
+
 /// **`NK1131` for a place that is lent here, passed to a parameter that owns
 /// its value** (#792): `k(v[0])` or `k(v[0].u)` out of `v: ref Vec[T]`.
 /// Text is `NK1102`'s, which says what it views.
@@ -685,6 +708,22 @@ fn check_core_lambda_a_unit(ty: ref Ty) -> bool {
     }
 }
 
+/// Whether an expression reads a field.
+pub fn check_core_a_field(value: ref Expr) -> bool {
+    return match value {
+        Expr::Field { .. } => true,
+        else => false,
+    }
+}
+
+/// Whether a type is nullable.
+pub fn check_core_a_nullable(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+}
+
 /// What a nullable type holds, or the type itself.
 fn check_core_lambda_held(ty: ref Ty) -> Ty {
     return match ty {
@@ -752,6 +791,13 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
             lending = true
             state.facts.lent_returns.insert(span.start as i64)
         }
+        // **A `T?` lent into a `ref T?` result is the option of a view**
+        // (ADR-views-3 D7, D8, #1486): `self.o.as_ref()`, not `&self.o`. A
+        // map read is the option of a view already.
+        if lending && check_core_a_field(given) && check_core_a_nullable(found) && !found.is_a_view() && check_core_a_nullable(state.expected?.clone() ?? Ty::Unknown) {
+            state.facts.lent_returns.remove(span.start as i64)
+            state.facts.lent_option_results.insert(node_key(given))
+        }
     }
     state.flow.lambda_expected = null
     // **A lambda's `return` is the lambda's** (#758): recorded, and checked
@@ -788,6 +834,8 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
         let given = value ?? return
         if state.lent_arms_handed_back(world, given, check_function_is_nullable(expected)) {
             found = view_of_type(found)
+        } else {
+            check_core_lent_places_in_arms_handed_back(state, world, host, given, span)
         }
     }
     if value != null {

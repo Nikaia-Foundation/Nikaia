@@ -4,6 +4,8 @@
 //! level and then the other, so a cached answer of the first level would show.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 const HAS: &str = "use std::target\n\n\
      comptime CRC: bool = target::has(target::Instruction::Crc32c)\n\
@@ -65,8 +67,8 @@ fn has_answers_for_the_level_built_for() {
             .output()
             .expect("the nikaia binary runs");
         (
-            String::from_utf8_lossy(&out.stdout).to_string(),
-            String::from_utf8_lossy(&out.stderr).to_string(),
+            String::from_utf8_lossy(&out.stdout).to_text(),
+            String::from_utf8_lossy(&out.stderr).to_text(),
         )
     };
     let (baseline, said) = run("--cpu=x86-64");

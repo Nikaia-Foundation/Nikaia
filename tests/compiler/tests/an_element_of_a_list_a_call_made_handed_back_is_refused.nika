@@ -1,16 +1,36 @@
-// An element of a list a call made, without a type, handed back as text:
-// the tether cannot lower it, and says so with NK2304 rather than leave it
-// to rustc (#1368).
-fn words(a: String) -> Vec[String] {
-	let xs: Vec[String] = [a + " word"]
-	return xs
+// An element of a list a method's call handed back, where two types declare
+// a method of that name, handed back as text: the tether cannot tell which
+// list it is, and says so with NK2304 rather than leave it to rustc (#1368,
+// #1481). A function's call, or a method its name alone finds, is handed
+// back (`an_element_of_a_list_a_call_made_is_handed_back`).
+struct Maker {
+	tag: String,
 }
 
-fn first(a: String) -> String {
-	let xs = words(a)
+struct Other {
+	tag: String,
+}
+
+impl Maker {
+	fn words(self, a: String) -> Vec[String] {
+		let xs: Vec[String] = [a + self.tag]
+		return xs
+	}
+}
+
+impl Other {
+	fn words(self, a: String) -> Vec[String] {
+		let xs: Vec[String] = [self.tag + a]
+		return xs
+	}
+}
+
+fn first(m: Maker, a: String) -> String {
+	let xs = m.words(a)
 	return xs[0]
 }
 
 fn main() throws {
-	println(first("a"))
+	println(first(Maker { tag: "!" }, "a"))
+	println(Other { tag: "?" }.words("b")[0].clone())
 }

@@ -11,6 +11,7 @@ pub struct PanicFacts {
     pub proven_indices: collections::BTreeSet<i64>,
     pub proven_arithmetic: collections::BTreeSet<i64>,
     pub proven_negations: collections::BTreeSet<i64>,
+    pub placed: collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,6 +19,7 @@ pub struct PanicReach {
     pub sure: bool,
     pub unknown: bool,
     pub checks: bool,
+    pub places: bool,
     pub calls: collections::BTreeSet<String>,
 }
 
@@ -38,7 +40,7 @@ pub fn unit_panics(program: &Program, names: &winnow_grammar::InternerContext, h
                 walked.push(key);
             },
             Item::Impl { target, methods, .. } => {
-                let owner = names.resolve(target.name).to_string();
+                let owner = nikaia_std::block::Text::from(names.resolve(target.name).to_string());
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, body, .. } => {
@@ -59,7 +61,7 @@ pub fn unit_panics(program: &Program, names: &winnow_grammar::InternerContext, h
 
 pub fn panics_of_graph(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeMap<String, Panics> {
     let mut answers: collections::BTreeMap<String, Panics> = collections::BTreeMap::new();
-    for (name, reach) in graph.reaches.iter() { answers.insert(name.to_string(), panics_own(reach)); }
+    for (name, reach) in graph.reaches.iter() { answers.insert(nikaia_std::block::Text::from(name.to_string()), panics_own(reach)); }
     let mut changed = true;
     while changed {
         changed = false;
@@ -75,18 +77,39 @@ pub fn panics_of_graph(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeM
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, || nikaia_std::index::or(match (*nikaia_std::index::get(&own.functions, callee)).as_ref().map(|__nikaia_it| &__nikaia_it.panics) {
-                    Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                    Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                     None => None,
                 }, || Panics::Unknown).into());
                 after = after.or(&theirs);
             }
             if after != before {
-                answers.insert(name.to_string(), after);
+                answers.insert(nikaia_std::block::Text::from(name.to_string()), after);
                 changed = true;
             }
         }
     }
     answers
+}
+
+pub fn places_of_graph(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeSet<String> {
+    let mut placing: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (name, reach) in graph.reaches.iter() { if reach.places { placing.insert(nikaia_std::block::Text::from(name.to_string())); } }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (name, reach) in graph.reaches.iter() {
+            if placing.contains(name) { continue; }
+            for callee in reach.calls.iter() {
+                let theirs = if graph.reaches.contains_key(callee) { placing.contains(callee) } else { nikaia_std::index::or((*nikaia_std::index::get(&own.functions, callee)).as_ref().map(|__nikaia_it| __nikaia_it.places), || false) };
+                if theirs {
+                    placing.insert(nikaia_std::block::Text::from(name.to_string()));
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+    placing
 }
 
 pub fn panics_worth_proving(graph: &PanicsGraph, answers: &collections::BTreeMap<String, Panics>, walked: &[String]) -> bool {
@@ -102,7 +125,7 @@ pub fn panics_worth_proving(graph: &PanicsGraph, answers: &collections::BTreeMap
 }
 
 pub fn panics_of_task(task: &Expr, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger) -> bool {
-    let mut reach = PanicReach { sure: false, unknown: false, checks: false, calls: collections::BTreeSet::new() };
+    let mut reach = PanicReach { sure: false, unknown: false, checks: false, places: false, calls: collections::BTreeSet::new() };
     match task {
         Expr::Closure { body, .. } => { panics_block(body, items, names, holes_of, facts, own, library, &mut reach); },
         _ => { panics_expr(task, items, names, holes_of, facts, own, library, &mut reach); },
@@ -110,11 +133,22 @@ pub fn panics_of_task(task: &Expr, items: &[Spanned<Item>], names: &winnow_gramm
     if reach.sure || reach.unknown || reach.checks { return true; }
     for callee in reach.calls.iter() {
         let theirs: Panics = nikaia_std::index::or(match (*nikaia_std::index::get(&own.functions, callee)).as_ref().map(|__nikaia_it| &__nikaia_it.panics) {
-            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
             None => None,
         }, || Panics::Unknown);
         if theirs != Panics::No { return true; }
     }
+    false
+}
+
+pub fn places_of_task(task: &Expr, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger) -> bool {
+    let mut reach = PanicReach { sure: false, unknown: false, checks: false, places: false, calls: collections::BTreeSet::new() };
+    match task {
+        Expr::Closure { body, .. } => { panics_block(body, items, names, holes_of, facts, own, library, &mut reach); },
+        _ => { panics_expr(task, items, names, holes_of, facts, own, library, &mut reach); },
+    }
+    if reach.places { return true; }
+    for callee in reach.calls.iter() { if nikaia_std::index::or((*nikaia_std::index::get(&own.functions, callee)).as_ref().map(|__nikaia_it| __nikaia_it.places), || false) { return true; } }
     false
 }
 
@@ -126,21 +160,22 @@ pub(crate) fn panics_own(reach: &PanicReach) -> Panics {
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn panics_function(key: &str, body: &Block, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger, graph: &mut PanicsGraph) {
-    let mut reach = PanicReach { sure: false, unknown: false, checks: false, calls: collections::BTreeSet::new() };
+    let mut reach = PanicReach { sure: false, unknown: false, checks: false, places: false, calls: collections::BTreeSet::new() };
     panics_block(body, items, names, holes_of, facts, own, library, &mut reach);
     panics_methods(*nikaia_std::index::get(&graph.methods, key), own, library, &mut reach);
-    graph.reaches.insert(key.to_string(), reach);
+    graph.reaches.insert(nikaia_std::block::Text::from(key.to_string()), reach);
 }
 
 pub(crate) fn panics_methods(resolved: Option<&MethodsCalled>, own: &Ledger, library: &Ledger, reach: &mut PanicReach) {
     let known = match resolved { Some(__nikaia_value) => __nikaia_value, None => return };
     if known.unseen || !known.fields.is_empty() { reach.unknown = true; }
     for callee in known.resolved.iter() {
-        if own.functions.contains_key(callee) { reach.calls.insert(callee.to_string()); } else {
+        if own.functions.contains_key(callee) { reach.calls.insert(nikaia_std::block::Text::from(callee.to_string())); } else {
             panics_absorb(&nikaia_std::index::or(match (*nikaia_std::index::get(&library.functions, callee)).as_ref().map(|__nikaia_it| &__nikaia_it.panics) {
-                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
             }, || Panics::Unknown), reach);
+            if nikaia_std::index::or((*nikaia_std::index::get(&library.functions, callee)).as_ref().map(|__nikaia_it| __nikaia_it.places), || false) { reach.places = true; }
         }
     }
 }
@@ -208,6 +243,7 @@ pub(crate) fn panics_division(divisor: &Expr, reach: &mut PanicReach) {
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn panics_expr(expr: &Expr, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger, reach: &mut PanicReach) {
+    if facts.placed.contains(&node_key(expr)) { reach.places = true; }
     match expr {
         Expr::Async(_, _, within, _) => {
             let within = nikaia_std::boxed::open(within);
@@ -279,11 +315,14 @@ pub(crate) fn panics_call(expr: &Expr, func: &Expr, items: &[Spanned<Item>], nam
     }
     let callee = match callee_of(names, expr, own, library, items) { Some(__nikaia_value) => __nikaia_value, None => return };
     match callee {
-        Callee::Own(ref name) => { reach.calls.insert(name.to_string()); },
-        Callee::Library { ref key, .. } => { panics_absorb(&nikaia_std::index::or(match (*nikaia_std::index::get(&library.functions, key)).as_ref().map(|__nikaia_it| &__nikaia_it.panics) {
-            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
-            None => None,
-        }, || Panics::Unknown), reach); },
+        Callee::Own(ref name) => { reach.calls.insert(nikaia_std::block::Text::from(name.to_string())); },
+        Callee::Library { ref key, .. } => {
+            panics_absorb(&nikaia_std::index::or(match (*nikaia_std::index::get(&library.functions, key)).as_ref().map(|__nikaia_it| &__nikaia_it.panics) {
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+                None => None,
+            }, || Panics::Unknown), reach);
+            if nikaia_std::index::or((*nikaia_std::index::get(&library.functions, key)).as_ref().map(|__nikaia_it| __nikaia_it.places), || false) { reach.places = true; }
+        },
         Callee::Opaque(_) => { reach.unknown = true; },
         Callee::Method => { },
     }

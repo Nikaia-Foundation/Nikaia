@@ -27,6 +27,8 @@
 use nikaia::contracts::sharing::{self, Count, Fallback};
 use nikaia::contracts::{Ledger, LedgerOps, STD, TypeContract};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// A parsed program with the two ledgers every analysis here needs.
 fn ledgers(source: &str) -> (nikaia::parser::Parsed, Ledger, Ledger) {
@@ -304,7 +306,7 @@ fn a_struct_field_is_decided_whatever_order_the_functions_are_written_in() {
 fn a_type_whose_fields_are_rust_hides_what_it_holds() {
     let mut own = Ledger::empty();
     own.types.insert(
-        "Opaque".to_string(),
+        "Opaque".to_text(),
         TypeContract {
             fields: Vec::new(),
             ..TypeContract::empty()
@@ -364,7 +366,7 @@ fn the_one_shared_in_the_repository_comes_out_atomic_undecided() {
             };
             let own = Ledger::infer(&parsed);
             for decision in sharing::analyse(&parsed, &own, &library) {
-                let name = path.file_name().unwrap().to_string_lossy().to_string();
+                let name = path.file_name().unwrap().to_string_lossy().to_text();
                 found.push((name, decision));
             }
             checked += 1;
@@ -765,13 +767,13 @@ fn every_fallback_is_enumerated_with_a_remedy() {
     let report = sharing::report(&parsed, &own, &library, true);
     for fallback in sharing::every_fallback() {
         assert!(
-            report.contains(&fallback.as_str()),
+            report.contains(&*fallback.as_str()),
             "{fallback:?} in:\n{report}"
         );
     }
     // The one this program hit is marked, and the ones it did not are not.
     assert!(
-        report.contains(&format!("* {}", Fallback::PublicSignature.as_str())),
+        report.contains(&*format!("* {}", Fallback::PublicSignature.as_str())),
         "{report}"
     );
     assert!(
@@ -901,7 +903,7 @@ fn a_handle_handed_on_by_value_is_a_duplication_site() {
     );
     assert_eq!(
         decision.duplications,
-        vec!["handed to `behalte` as `db`, which takes a handle of its own".to_string()],
+        vec!["handed to `behalte` as `db`, which takes a handle of its own".to_text()],
         "{decision:#?}"
     );
 }

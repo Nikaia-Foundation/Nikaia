@@ -4,6 +4,8 @@
 //! (D2), and a fact wherever a value of the type is read (D3).
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::bounds::BoundsChecks;
@@ -82,7 +84,7 @@ fn lowered(source: &str) -> String {
 /// The lowered body of the function or method `name`, up to the next `fn`.
 fn body<'a>(rust: &'a str, name: &str) -> &'a str {
     let from = rust
-        .find(&format!("fn {name}("))
+        .find(&*format!("fn {name}("))
         .unwrap_or_else(|| panic!("no `{name}` in:\n{rust}"));
     let rest = &rust[from + 3..];
     let to = rest.find("fn ").unwrap_or(rest.len());
@@ -124,8 +126,8 @@ fn run(purpose: &str, source: &str) -> (bool, String, String) {
     std::fs::remove_dir_all(&dir).ok();
     (
         out.status.success(),
-        String::from_utf8_lossy(&out.stdout).to_string(),
-        String::from_utf8_lossy(&out.stderr).to_string(),
+        String::from_utf8_lossy(&out.stdout).to_text(),
+        String::from_utf8_lossy(&out.stderr).to_text(),
     )
 }
 
@@ -336,8 +338,8 @@ fn run_package(purpose: &str, main: &str) -> (bool, String, String) {
     std::fs::remove_dir_all(&dir).ok();
     (
         out.status.success(),
-        String::from_utf8_lossy(&out.stdout).to_string(),
-        String::from_utf8_lossy(&out.stderr).to_string(),
+        String::from_utf8_lossy(&out.stdout).to_text(),
+        String::from_utf8_lossy(&out.stderr).to_text(),
     )
 }
 
@@ -393,13 +395,13 @@ fn a_rule_over_a_pub_field_is_no_fact_in_a_dependency() {
             "lib",
             "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n",
             "lib.nika",
-            RING_FILE.to_string(),
+            RING_FILE.to_text(),
         ),
         (
             "app",
             "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n",
             "main.nika",
-            "use lib\n\nfn main() throws {\n    let mut r = lib::ring()\n    let gone = r.slots.pop() ?? 0\n    print(f\"{gone} {r.at(3)}\")\n}\n".to_string(),
+            "use lib\n\nfn main() throws {\n    let mut r = lib::ring()\n    let gone = r.slots.pop() ?? 0\n    print(f\"{gone} {r.at(3)}\")\n}\n".to_text(),
         ),
     ] {
         std::fs::create_dir_all(dir.join(name).join("src")).expect("make src");

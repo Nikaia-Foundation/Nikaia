@@ -1,4 +1,5 @@
-//! `from_str` (ADR-yaml-1 D10): serde's `Deserializer` over the native
+//! `from_str`, `from_slice`, `from_reader` and the document-iterating
+//! `Deserializer` (ADR-yaml-1 D10): serde's `Deserializer` over the native
 //! parser's events, as serde_yaml 0.9 reads libyaml's. Aliases are followed
 //! here, not expanded by the parser, so the repetition limit of serde_yaml
 //! holds; plain scalars are resolved serde_yaml's way.
@@ -7,58 +8,283 @@ use crate::error::{self, Error, ErrorImpl, Mark, Result};
 use crate::native;
 use crate::path::Path;
 use serde::de::value::StrDeserializer;
-use serde::de::{self, Deserialize, DeserializeSeed, Expected, IgnoredAny, Unexpected, Visitor};
+use serde::de::{
+    self, Deserialize, DeserializeOwned, DeserializeSeed, Expected, IgnoredAny, Unexpected, Visitor,
+};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::io;
+use std::mem;
 use std::num::ParseIntError;
+use std::sync::Arc;
 
 const BOOL: &str = "tag:yaml.org,2002:bool";
 const INT: &str = "tag:yaml.org,2002:int";
 const FLOAT: &str = "tag:yaml.org,2002:float";
 const NULL: &str = "tag:yaml.org,2002:null";
 
-/// Reads a `T` from a stream of exactly one YAML document.
+/// A structure that reads YAML into Rust values: one document, or, as an
+/// iterator, each document of the stream in turn.
+pub struct Deserializer<'de> {
+    progress: Progress<'de>,
+}
+
+enum Progress<'de> {
+    Str(&'de str),
+    Slice(&'de [u8]),
+    Read(Box<dyn io::Read + 'de>),
+    Iterable(Loader<'de>),
+    Document(Document<'de>),
+    Fail(Arc<ErrorImpl>),
+}
+
+impl<'de> Deserializer<'de> {
+    /// Creates a YAML deserializer from a `&str`.
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &'de str) -> Self {
+        let progress = Progress::Str(s);
+        Deserializer { progress }
+    }
+
+    /// Creates a YAML deserializer from a `&[u8]`.
+    pub fn from_slice(v: &'de [u8]) -> Self {
+        let progress = Progress::Slice(v);
+        Deserializer { progress }
+    }
+
+    /// Creates a YAML deserializer from an `io::Read`.
+    ///
+    /// Reader-based deserializers do not support deserializing borrowed types
+    /// like `&str`, since the `std::io::Read` trait has no non-copying methods
+    /// -- everything it does involves copying bytes out of the data source.
+    pub fn from_reader<R>(rdr: R) -> Self
+    where
+        R: io::Read + 'de,
+    {
+        let progress = Progress::Read(Box::new(rdr));
+        Deserializer { progress }
+    }
+
+    fn de<T>(
+        self,
+        f: impl for<'document> FnOnce(&mut DeserializerFromEvents<'de, 'document>) -> Result<T>,
+    ) -> Result<T> {
+        let mut pos = 0;
+        let mut jumpcount = 0;
+
+        match self.progress {
+            Progress::Iterable(_) => return Err(error::new(ErrorImpl::MoreThanOneDocument)),
+            Progress::Document(document) => {
+                let t = f(&mut DeserializerFromEvents {
+                    document: &document,
+                    pos: &mut pos,
+                    jumpcount: &mut jumpcount,
+                    path: Path::Root,
+                    remaining_depth: 128,
+                    current_enum: None,
+                })?;
+                if let Some(mark) = document.error {
+                    return Err(error::new(ErrorImpl::UnknownAnchor(mark)));
+                }
+                return Ok(t);
+            }
+            _ => {}
+        }
+
+        let mut loader = Loader::new(self.progress)?;
+        let document = match loader.next_document() {
+            Some(document) => document,
+            None => return Err(error::new(ErrorImpl::EndOfStream)),
+        };
+        let t = f(&mut DeserializerFromEvents {
+            document: &document,
+            pos: &mut pos,
+            jumpcount: &mut jumpcount,
+            path: Path::Root,
+            remaining_depth: 128,
+            current_enum: None,
+        })?;
+        if let Some(mark) = document.error {
+            return Err(error::new(ErrorImpl::UnknownAnchor(mark)));
+        }
+        if loader.next_document().is_none() {
+            Ok(t)
+        } else {
+            Err(error::new(ErrorImpl::MoreThanOneDocument))
+        }
+    }
+}
+
+impl<'de> Iterator for Deserializer<'de> {
+    type Item = Self;
+
+    fn next(&mut self) -> Option<Self> {
+        match &mut self.progress {
+            Progress::Iterable(loader) => {
+                let document = loader.next_document()?;
+                return Some(Deserializer {
+                    progress: Progress::Document(document),
+                });
+            }
+            Progress::Document(_) => return None,
+            Progress::Fail(err) => {
+                return Some(Deserializer {
+                    progress: Progress::Fail(Arc::clone(err)),
+                });
+            }
+            _ => {}
+        }
+
+        let dummy = Progress::Str("");
+        let input = mem::replace(&mut self.progress, dummy);
+        match Loader::new(input) {
+            Ok(loader) => {
+                self.progress = Progress::Iterable(loader);
+                self.next()
+            }
+            Err(err) => {
+                let fail = err.shared();
+                self.progress = Progress::Fail(Arc::clone(&fail));
+                Some(Deserializer {
+                    progress: Progress::Fail(fail),
+                })
+            }
+        }
+    }
+}
+
+macro_rules! forward_to_events {
+    ($($method:ident)*) => {
+        $(
+            fn $method<V>(self, visitor: V) -> Result<V::Value>
+            where
+                V: Visitor<'de>,
+            {
+                self.de(|state| state.$method(visitor))
+            }
+        )*
+    };
+}
+
+impl<'de> de::Deserializer<'de> for Deserializer<'de> {
+    type Error = Error;
+
+    forward_to_events! {
+        deserialize_any deserialize_bool deserialize_i8 deserialize_i16
+        deserialize_i32 deserialize_i64 deserialize_i128 deserialize_u8
+        deserialize_u16 deserialize_u32 deserialize_u64 deserialize_u128
+        deserialize_f32 deserialize_f64 deserialize_char deserialize_str
+        deserialize_string deserialize_bytes deserialize_byte_buf
+        deserialize_option deserialize_unit deserialize_seq deserialize_map
+        deserialize_identifier deserialize_ignored_any
+    }
+
+    fn deserialize_unit_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        self.de(|state| state.deserialize_unit_struct(name, visitor))
+    }
+
+    fn deserialize_newtype_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        self.de(|state| state.deserialize_newtype_struct(name, visitor))
+    }
+
+    fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        self.de(|state| state.deserialize_tuple(len, visitor))
+    }
+
+    fn deserialize_tuple_struct<V>(
+        self,
+        name: &'static str,
+        len: usize,
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        self.de(|state| state.deserialize_tuple_struct(name, len, visitor))
+    }
+
+    fn deserialize_struct<V>(
+        self,
+        name: &'static str,
+        fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        self.de(|state| state.deserialize_struct(name, fields, visitor))
+    }
+
+    fn deserialize_enum<V>(
+        self,
+        name: &'static str,
+        variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        self.de(|state| state.deserialize_enum(name, variants, visitor))
+    }
+}
+
+/// Deserialize an instance of type `T` from a string of YAML text.
 ///
-/// # Errors
-///
-/// Where the input is no YAML, holds more than one document, or does not
-/// fit `T`.
+/// This conversion can fail if the structure of the Value does not match the
+/// structure expected by `T`, for example if `T` is a struct type but the Value
+/// contains something other than a YAML map. It can also fail if the structure
+/// is correct but `T`'s implementation of `Deserialize` decides that something
+/// is wrong with the data, for example required struct fields are missing from
+/// the YAML map or some number is too big to fit in the expected primitive
+/// type.
 pub fn from_str<'de, T>(s: &'de str) -> Result<T>
 where
     T: Deserialize<'de>,
 {
-    from_slice(s.as_bytes())
+    T::deserialize(Deserializer::from_str(s))
 }
 
-/// Reads a `T` from a stream of exactly one YAML document, as bytes.
+/// Deserialize an instance of type `T` from an IO stream of YAML.
 ///
-/// # Errors
+/// This conversion can fail if the structure of the Value does not match the
+/// structure expected by `T`, for example if `T` is a struct type but the Value
+/// contains something other than a YAML map. It can also fail if the structure
+/// is correct but `T`'s implementation of `Deserialize` decides that something
+/// is wrong with the data, for example required struct fields are missing from
+/// the YAML map or some number is too big to fit in the expected primitive
+/// type.
+pub fn from_reader<R, T>(rdr: R) -> Result<T>
+where
+    R: io::Read,
+    T: DeserializeOwned,
+{
+    T::deserialize(Deserializer::from_reader(rdr))
+}
+
+/// Deserialize an instance of type `T` from bytes of YAML text.
 ///
-/// As `from_str`.
+/// This conversion can fail if the structure of the Value does not match the
+/// structure expected by `T`, for example if `T` is a struct type but the Value
+/// contains something other than a YAML map. It can also fail if the structure
+/// is correct but `T`'s implementation of `Deserialize` decides that something
+/// is wrong with the data, for example required struct fields are missing from
+/// the YAML map or some number is too big to fit in the expected primitive
+/// type.
 pub fn from_slice<'de, T>(v: &'de [u8]) -> Result<T>
 where
     T: Deserialize<'de>,
 {
-    let (document, more) = load(v)?;
-    let mut pos = 0;
-    let mut jumpcount = 0;
-    let t = T::deserialize(&mut DeserializerFromEvents {
-        document: &document,
-        pos: &mut pos,
-        jumpcount: &mut jumpcount,
-        path: Path::Root,
-        remaining_depth: 128,
-        current_enum: None,
-    })?;
-    if let Some(mark) = document.error {
-        return Err(error::new(ErrorImpl::UnknownAnchor(mark)));
-    }
-    if more {
-        Err(error::new(ErrorImpl::MoreThanOneDocument))
-    } else {
-        Ok(t)
-    }
+    T::deserialize(Deserializer::from_slice(v))
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -94,46 +320,123 @@ struct Document<'de> {
     aliases: BTreeMap<usize, usize>,
 }
 
-/// The first document's events, and whether another document follows, as
-/// serde_yaml's loader gives them: no document is one `Void` event.
-fn load(input: &[u8]) -> Result<(Document<'_>, bool)> {
+/// The documents of the stream, in turn, as serde_yaml's loader gives them.
+struct Loader<'de> {
+    documents: std::vec::IntoIter<Document<'de>>,
+}
+
+impl<'de> Loader<'de> {
+    fn new(progress: Progress<'de>) -> Result<Self> {
+        let documents = match progress {
+            Progress::Str(s) => load(s.as_bytes())?,
+            Progress::Slice(bytes) => load(bytes)?,
+            Progress::Read(mut rdr) => {
+                let mut buffer = Vec::new();
+                if let Err(io_error) = rdr.read_to_end(&mut buffer) {
+                    return Err(error::new(ErrorImpl::Io(io_error)));
+                }
+                // Nothing outlives the buffer: each scalar owns its text.
+                load(&buffer)?
+                    .into_iter()
+                    .map(Document::into_owned)
+                    .collect()
+            }
+            Progress::Iterable(_) | Progress::Document(_) => unreachable!(),
+            Progress::Fail(err) => return Err(error::shared(err)),
+        };
+        Ok(Loader {
+            documents: documents.into_iter(),
+        })
+    }
+
+    fn next_document(&mut self) -> Option<Document<'de>> {
+        self.documents.next()
+    }
+}
+
+impl Document<'_> {
+    fn into_owned(self) -> Document<'static> {
+        let events = self
+            .events
+            .into_iter()
+            .map(|(event, mark)| {
+                let event = match event {
+                    Event::Alias(id) => Event::Alias(id),
+                    Event::Scalar(scalar) => Event::Scalar(Scalar {
+                        tag: scalar.tag,
+                        value: Cow::Owned(scalar.value.into_owned()),
+                        style: scalar.style,
+                        literal: scalar.literal,
+                    }),
+                    Event::SequenceStart(tag) => Event::SequenceStart(tag),
+                    Event::SequenceEnd => Event::SequenceEnd,
+                    Event::MappingStart(tag) => Event::MappingStart(tag),
+                    Event::MappingEnd => Event::MappingEnd,
+                    Event::Void => Event::Void,
+                };
+                (event, mark)
+            })
+            .collect();
+        Document {
+            events,
+            error: self.error,
+            aliases: self.aliases,
+        }
+    }
+}
+
+/// Each document's events, as serde_yaml's loader gives them: no document
+/// at all is one document of one `Void` event, and an anchor is the
+/// document's own.
+fn load(input: &[u8]) -> Result<Vec<Document<'_>>> {
     let docs = native::documents(input, native::default_limits())
         .map_err(|thrown| error::parse(thrown.held()))?;
     let lines = Lines::new(input);
-    let mut document = Document {
-        events: Vec::new(),
-        error: None,
-        aliases: BTreeMap::new(),
-    };
+    let mut documents = Vec::new();
     let mut anchors: BTreeMap<&str, usize> = BTreeMap::new();
-    let mut count = 0;
-    let mut more = false;
     for event in native::events(&docs) {
         let mark = lines.mark(event.start as usize);
         let converted = match event.kind {
             native::EventKind::StreamStart | native::EventKind::StreamEnd => continue,
             native::EventKind::DocumentStart => {
-                count += 1;
-                if count > 1 {
-                    more = true;
-                    break;
-                }
+                anchors.clear();
+                documents.push(Document {
+                    events: Vec::new(),
+                    error: None,
+                    aliases: BTreeMap::new(),
+                });
                 continue;
             }
             native::EventKind::DocumentEnd => continue,
-            _ if document.error.is_some() => continue,
-            native::EventKind::Alias => match anchors.get(event.value) {
-                Some(id) => Event::Alias(*id),
-                None => {
-                    document.error = Some(mark);
+            _ => {
+                let Some(document) = documents.last_mut() else {
+                    continue;
+                };
+                if document.error.is_some() {
                     continue;
                 }
-            },
-            native::EventKind::Scalar => Event::Scalar(scalar(&event)),
-            native::EventKind::SequenceStart => Event::SequenceStart(event.tag.clone()),
-            native::EventKind::SequenceEnd => Event::SequenceEnd,
-            native::EventKind::MappingStart => Event::MappingStart(event.tag.clone()),
-            native::EventKind::MappingEnd => Event::MappingEnd,
+                match event.kind {
+                    native::EventKind::Alias => match anchors.get(event.value) {
+                        Some(id) => Event::Alias(*id),
+                        None => {
+                            document.error = Some(mark);
+                            continue;
+                        }
+                    },
+                    native::EventKind::Scalar => Event::Scalar(scalar(&event)),
+                    native::EventKind::SequenceStart => {
+                        Event::SequenceStart(event.tag.as_deref().map(String::from))
+                    }
+                    native::EventKind::SequenceEnd => Event::SequenceEnd,
+                    native::EventKind::MappingStart => {
+                        Event::MappingStart(event.tag.as_deref().map(String::from))
+                    }
+                    _ => Event::MappingEnd,
+                }
+            }
+        };
+        let Some(document) = documents.last_mut() else {
+            continue;
         };
         if let Some(anchor) = event.anchor {
             let id = anchors.len();
@@ -142,10 +445,14 @@ fn load(input: &[u8]) -> Result<(Document<'_>, bool)> {
         }
         document.events.push((converted, mark));
     }
-    if count == 0 {
-        document.events.push((Event::Void, lines.mark(input.len())));
+    if documents.is_empty() {
+        documents.push(Document {
+            events: vec![(Event::Void, lines.mark(input.len()))],
+            error: None,
+            aliases: BTreeMap::new(),
+        });
     }
-    Ok((document, more))
+    Ok(documents)
 }
 
 /// A scalar event: its text decoded, borrowed where the input holds it as
@@ -161,17 +468,17 @@ fn scalar<'de>(event: &native::Event<'de, 'de>) -> Scalar<'de> {
     let value = match &event.text {
         // A block scalar's text is folded and chomped; one a core tag reads
         // as a number, a `bool` or null has no text, and is its trimmed raw.
-        Some(text) if style == Style::Block => Cow::Owned(text.clone()),
+        Some(text) if style == Style::Block => Cow::Owned(text.as_str().to_owned()),
         None if style == Style::Block => Cow::Borrowed(raw.trim()),
         None => Cow::Borrowed(raw),
         Some(text) if text == raw => Cow::Borrowed(raw),
         Some(text) => match borrowed_inside(raw, text, style) {
             Some(borrowed) => Cow::Borrowed(borrowed),
-            None => Cow::Owned(text.clone()),
+            None => Cow::Owned(text.as_str().to_owned()),
         },
     };
     Scalar {
-        tag: event.tag.clone(),
+        tag: event.tag.as_deref().map(String::from),
         value,
         style,
         literal,

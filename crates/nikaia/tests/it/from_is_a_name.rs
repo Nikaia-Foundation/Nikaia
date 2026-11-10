@@ -16,6 +16,8 @@
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -120,7 +122,7 @@ fn the_page_and_the_table_list_the_same_words() {
 
     let mut printed: Vec<&str> = block.split_whitespace().collect();
     printed.sort_unstable();
-    let mut enforced: Vec<&str> = nikaia::parser::RESERVED_WORDS.to_vec();
+    let mut enforced: Vec<&str> = Vec::from(nikaia::parser::RESERVED_WORDS);
     enforced.sort_unstable();
     assert_eq!(
         printed, enforced,

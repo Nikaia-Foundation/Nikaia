@@ -19,11 +19,11 @@ pub(crate) fn check_core_comptime_shape(evaluated: Option<&BuildValue>) -> i64 {
 pub(crate) fn check_core_comptime_tuple_parts(found: &Ty, evaluated: Option<&BuildValue>) -> Ty {
     let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return found.clone() };
     let parts: Vec<BuildValue> = match value {
-        BuildValue::Tuple(each) => each.to_owned(),
+        BuildValue::Tuple(each) => each.copy_owned(),
         _ => return found.clone(),
     };
     let tys: Vec<Ty> = match found {
-        Ty::Tuple(each) => each.to_owned(),
+        Ty::Tuple(each) => each.copy_owned(),
         _ => return found.clone(),
     };
     if (tys.len() as i64) != parts.len() as i64 { return found.clone(); }
@@ -76,7 +76,7 @@ pub(crate) fn check_core_comptime_struct_named(want: &Ty, evaluated: Option<&Bui
     let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut named: String = String::from("");
     match value {
-        BuildValue::Struct { name, .. } => { named = name.to_string(); },
+        BuildValue::Struct { name, .. } => { named = nikaia_std::block::Text::from(name.to_string()); },
         _ => { },
     }
     if named == "" { return None; }
@@ -111,11 +111,11 @@ pub(crate) fn check_core_comptime_value_below(world: &CheckWorld<'_, '_, '_, '_,
         BuildValue::Text(_) => { return Some(String::from("&str")); },
         BuildValue::Tuple(parts) => {
             let declared: Vec<Ty> = match found {
-                Ty::Tuple(each) => each.to_owned(),
+                Ty::Tuple(each) => each.copy_owned(),
                 _ => vec![],
             };
-            let mut each: Vec<String> = vec![];
-            let mut at: i64 = 0;
+            #[allow(unused_mut)] let mut each: Vec<String> = vec![];
+            let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
             for part in parts.iter() {
                 let part_found: Ty = nikaia_std::index::or(nth_type(&declared, at), || Ty::Unknown).clone();
                 let one: Option<BuildValue> = Some(part.clone());
@@ -125,8 +125,8 @@ pub(crate) fn check_core_comptime_value_below(world: &CheckWorld<'_, '_, '_, '_,
             }
             return Some(tuple_spelled(&each));
         },
-        BuildValue::Struct { name, .. } => { return Some(name.to_string()); },
-        BuildValue::Variant { ty, .. } => { return Some(ty.to_string()); },
+        BuildValue::Struct { name, .. } => { return Some(nikaia_std::block::Text::from(name.to_string())); },
+        BuildValue::Variant { ty, .. } => { return Some(nikaia_std::block::Text::from(ty.to_string())); },
         BuildValue::Constant { constructor, .. } => { return constructed(constructor); },
     }
     None
@@ -135,7 +135,7 @@ pub(crate) fn check_core_comptime_value_below(world: &CheckWorld<'_, '_, '_, '_,
 pub(crate) fn check_core_comptime_items(evaluated: Option<&BuildValue>) -> Vec<BuildValue> {
     let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     match value {
-        BuildValue::List(items) => items.to_owned(),
+        BuildValue::List(items) => items.copy_owned(),
         _ => vec![],
     }
 }
@@ -192,7 +192,7 @@ pub(crate) fn check_core_comptime_field_local(state: &CheckState, world: &CheckW
         match read {
             Expr::Variable(name, _) => {
                 let name = *name;
-                if check_core_comptime_a_field_local(state, world, read) { return Some(world.words.resolve(name).to_string()); }
+                if check_core_comptime_a_field_local(state, world, read) { return Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string())); }
             },
             Expr::LitInterpolated { parts, .. } => {
                 for part in parts.iter() {
@@ -215,10 +215,10 @@ pub(crate) fn check_core_comptime_turned(state: &CheckState, world: &CheckWorld<
     match value {
         Expr::Field { base, name, id } => {
             let base = nikaia_std::boxed::open(base); let id = *id; let name = *name;
-            if world.words.resolve(name) == "name" && check_core_comptime_a_field_local(state, world, base) { Expr::LitStr { text: field.to_string(), id: fresh_id() } } else { Expr::Field { base: Box::new(check_core_comptime_turned(state, world, base, field)), name, id } }
+            if world.words.resolve(name) == "name" && check_core_comptime_a_field_local(state, world, base) { Expr::LitStr { text: nikaia_std::block::Text::from(field.to_string()), id: fresh_id() } } else { Expr::Field { base: Box::new(check_core_comptime_turned(state, world, base, field)), name, id } }
         },
-        Expr::Call { func, args, config, id } => { let func = nikaia_std::boxed::open(func); let id = *id; Expr::Call { func: Box::new(func.clone()), args: check_core_comptime_all_turned(state, world, args, field), config: config.to_owned(), id } },
-        Expr::MethodCall { receiver, method, args, config, id } => { let receiver = nikaia_std::boxed::open(receiver); let id = *id; let method = *method; Expr::MethodCall { receiver: Box::new(check_core_comptime_turned(state, world, receiver, field)), method, args: check_core_comptime_all_turned(state, world, args, field), config: config.to_owned(), id } },
+        Expr::Call { func, args, config, id } => { let func = nikaia_std::boxed::open(func); let id = *id; Expr::Call { func: Box::new(func.clone()), args: check_core_comptime_all_turned(state, world, args, field), config: config.copy_owned(), id } },
+        Expr::MethodCall { receiver, method, args, config, id } => { let receiver = nikaia_std::boxed::open(receiver); let id = *id; let method = *method; Expr::MethodCall { receiver: Box::new(check_core_comptime_turned(state, world, receiver, field)), method, args: check_core_comptime_all_turned(state, world, args, field), config: config.copy_owned(), id } },
         Expr::Binary { op, lhs, rhs, span, grouped, id } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); let grouped = *grouped; let id = *id; Expr::Binary { op: op.clone(), lhs: Box::new(check_core_comptime_turned(state, world, lhs, field)), rhs: Box::new(check_core_comptime_turned(state, world, rhs, field)), span: span.clone(), grouped, id } },
         Expr::Unary { op, expr, id } => { let expr = nikaia_std::boxed::open(expr); let id = *id; Expr::Unary { op: op.clone(), expr: Box::new(check_core_comptime_turned(state, world, expr, field)), id } },
         Expr::Coalesce { value: inner, fallback, id } => { let inner = nikaia_std::boxed::open(inner); let fallback = nikaia_std::boxed::open(fallback); let id = *id; Expr::Coalesce { value: Box::new(check_core_comptime_turned(state, world, inner, field)), fallback: Box::new(check_core_comptime_turned(state, world, fallback, field)), id } },
@@ -230,12 +230,12 @@ pub(crate) fn check_core_comptime_turned(state: &CheckState, world: &CheckWorld<
                     FPart::Hole { expr, spec, at } => {
                         let at = *at;
                         let written: Option<String> = match spec {
-                            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                            Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                             None => None,
                         };
                         kept.push(FPart::Hole { expr: check_core_comptime_turned(state, world, expr, field), spec: written, at });
                     },
-                    FPart::Text(text) => { kept.push(FPart::Text(text.to_string())); },
+                    FPart::Text(text) => { kept.push(FPart::Text(nikaia_std::block::Text::from(text.to_string()))); },
                 }
             }
             Expr::LitInterpolated { parts: kept, id }
@@ -264,7 +264,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
         match read {
             Expr::Variable(read_name, _) => {
                 let read_name = *read_name;
-                state.facts.folded_comptimes.insert(world.words.resolve(read_name).to_string());
+                state.facts.folded_comptimes.insert(nikaia_std::block::Text::from(world.words.resolve(read_name).to_string()));
             },
             _ => { },
         }
@@ -275,7 +275,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
         if nikaia_std::index::get(&state.findings, nikaia_std::index::at(at)).code == "NK1117" && nikaia_std::index::get(&state.findings, nikaia_std::index::at(at)).message.ends_with("` isn't declared anywhere.") { said_a_name = true; }
         at = at + 1;
     }
-    let bound = world.words.resolve(name).to_string();
+    let bound = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
     state.nameable(&bound, span, "a `comptime`");
     let mut want: Option<Ty> = None;
     if ty.is_some() {
@@ -371,8 +371,8 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
             let table = state.a_table_that_crosses(world, &bound, &wanted, &pairs, span, &|of, variant| { check_walked_payload_of(world, of, variant) }, &|number| { host.float_text(number) });
             if table.found {
                 crossed = true;
-                table_below = table.below.to_string();
-                table_written = table.written.to_string();
+                table_below = nikaia_std::block::Text::from(table.below.to_string());
+                table_written = nikaia_std::block::Text::from(table.written.to_string());
             } else { said_a_table = table.said; }
         }
     }
@@ -442,13 +442,13 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_core_a_block_over_a_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Expr, target: winnow_grammar::Symbol, content: &str, span: &Span) -> Ty {
-    let owner = world.words.resolve(target).to_string();
+    let owner = nikaia_std::block::Text::from(world.words.resolve(target).to_string());
     let mut entry: String = String::from("");
     let mut any = false;
     let entries = match state.grammars.get(&owner) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     for one in entries.iter() {
         if !any {
-            entry = one.to_string();
+            entry = nikaia_std::block::Text::from(one.to_string());
             any = true;
         }
     }

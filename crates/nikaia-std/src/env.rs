@@ -3,8 +3,11 @@
 /// **The value of the environment variable `name`**, or nothing where it is
 /// unset, not Unicode, or empty: the toolchain treats an empty variable as an
 /// unset one, so a program never has to test for both.
-pub fn var(name: &str) -> Option<String> {
-    std::env::var(name).ok().filter(|value| !value.is_empty())
+pub fn var(name: &str) -> Option<crate::block::Text> {
+    std::env::var(name)
+        .ok()
+        .filter(|value| !value.is_empty())
+        .map(crate::block::Text::from)
 }
 
 /// The directory for temporary files, as the system names it

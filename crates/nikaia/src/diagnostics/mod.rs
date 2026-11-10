@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/diagnostics/mod.rs
 //
 // Where an error is reported.
@@ -187,7 +189,7 @@ pub fn render_refusal(message: &str, at: usize, path: &str, source: &str) -> Str
         severity: crate::check::Severity::Error,
         span: crate::ast::Span::new(at, at),
         code: String::new(),
-        message: message.to_string(),
+        message: message.to_text(),
         notes: Vec::new(),
         help: None,
         labels: Vec::new(),
@@ -352,7 +354,7 @@ pub fn a_stale_boundary(
         .location
         .as_ref()
         .and_then(|at| source.get(at.span.bytes()))
-        .map(str::to_string);
+        .map(str::to_text);
     let Some(restated) = nikaia_std::tools::boundaries::restated(
         &reported,
         on_the_line.as_deref(),
@@ -415,7 +417,7 @@ pub fn render(diagnostic: &Diagnostic, path: &str, source: &str, generated_path:
                 .lines()
                 .next()
                 .unwrap_or_default()
-                .to_string(),
+                .to_text(),
         ),
         None => (false, Span::from(0..0), String::new()),
     };
@@ -510,7 +512,7 @@ pub fn is_collecting() -> bool {
 pub fn collect(path: &str, shown: nikaia_std::tools::render::Shown) {
     COLLECTED.with(|kept| {
         if let Some(kept) = kept.borrow_mut().as_mut() {
-            kept.push((path.to_string(), shown));
+            kept.push((path.to_text(), shown));
         }
     });
 }
@@ -535,7 +537,7 @@ pub fn refusal_shown(message: &str, at: usize) -> nikaia_std::tools::render::Sho
     nikaia_std::tools::render::Shown {
         warning: false,
         code: String::new(),
-        message: message.to_string(),
+        message: message.to_text(),
         notes: Vec::new(),
         help: None,
         span: Span::new(at, at),
@@ -547,7 +549,7 @@ fn shown(finding: &crate::check::Finding) -> nikaia_std::tools::render::Shown {
     use nikaia_std::tools::render::{Marked, Shown};
     Shown {
         warning: matches!(finding.severity, crate::check::Severity::Warning),
-        code: finding.code.to_string(),
+        code: finding.code.to_text(),
         message: finding.message.clone(),
         notes: finding.notes.clone(),
         help: finding.help.clone(),
@@ -576,12 +578,14 @@ pub fn said(text: &str) -> String {
 #[cfg(test)]
 mod stale_boundaries {
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{format, vec};
 
     fn an_error(message: &str, span: std::ops::Range<usize>) -> Diagnostic {
         let span = Span::from(span);
         Diagnostic {
-            level: "error".to_string(),
-            message: message.to_string(),
+            level: "error".to_text(),
+            message: message.to_text(),
             location: Some(Location {
                 line: 1,
                 column: 1,
@@ -598,7 +602,7 @@ mod stale_boundaries {
 
     fn boundary(word: &str, described: bool) -> Boundary {
         Boundary {
-            word: word.to_string(),
+            word: word.to_text(),
             described,
             moved: Vec::new(),
         }
@@ -637,7 +641,7 @@ mod stale_boundaries {
     fn off_the_line_the_moved_or_the_only_boundary() {
         let source = "let n = util::count()\nlet m = fremd::drei()\nlet k = n + m\n";
         let mut moved = boundary("fremd", true);
-        moved.moved = vec!["src/lib.rs".to_string()];
+        moved.moved = vec!["src/lib.rs".to_text()];
         let boundaries = [boundary("util", false), moved];
         let mut off = an_error("cannot add `{integer}` to `Result<i64, String>`", 44..49);
         assert!(a_stale_boundary(&mut off, source, &boundaries));

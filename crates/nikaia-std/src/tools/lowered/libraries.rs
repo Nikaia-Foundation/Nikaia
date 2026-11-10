@@ -14,7 +14,7 @@ pub fn filtered(said: &str, on_macos: bool) -> Flags {
         if framework {
             out.push(format!("-framework {}", word));
             framework = false;
-        } else if on_macos && AsRef::<str>::as_ref(&(word)) == AsRef::<str>::as_ref(&("-framework")) { framework = true; } else if word.starts_with("-l") && word.len() > 2 || word.starts_with("-L") && word.len() > 2 || AsRef::<str>::as_ref(&(word)) == AsRef::<str>::as_ref(&("-pthread")) || on_macos && word.starts_with("-F") && word.len() > 2 { out.push(word.to_string()); } else { return Flags::Refused { word: word.to_string() }; }
+        } else if on_macos && AsRef::<str>::as_ref(&(word)) == AsRef::<str>::as_ref(&("-framework")) { framework = true; } else if word.starts_with("-l") && word.len() > 2 || word.starts_with("-L") && word.len() > 2 || AsRef::<str>::as_ref(&(word)) == AsRef::<str>::as_ref(&("-pthread")) || on_macos && word.starts_with("-F") && word.len() > 2 { out.push(nikaia_std::block::Text::from(word.to_string())); } else { return Flags::Refused { word: nikaia_std::block::Text::from(word.to_string()) }; }
     }
     if framework { return Flags::Refused { word: String::from("-framework") }; }
     Flags::Taken { flags: out }

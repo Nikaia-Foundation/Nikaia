@@ -55,6 +55,15 @@ fn emit_flow_compared(op: BinaryOp) -> String {
     }
 }
 
+/// The receiver of a method call, by its node, which `compared_receiver`
+/// names; `-1` for any other expression.
+fn emit_flow_called_on(node: ref Expr) -> i64 {
+    return match node {
+        Expr::MethodCall { receiver, .. } => node_key(receiver),
+        else => -1,
+    }
+}
+
 /// Whether an expression is a cut, `x[i..<j]`.
 fn emit_flow_is_cut(node: ref Expr) -> bool {
     return match node {
@@ -511,11 +520,11 @@ impl EmitState {
         // **A `+` that joins text is a call** (ADR-081 D2), only where the checker
         // said so, by the operator's own span.
         if self.facts.concatenations.contains(site) {
-            out.push("nikaia_std::concat::plus(")
+            out.push(f"{block_text_open(self.on_block_types())}nikaia_std::concat::plus(")
             self.emit_core_concatenated(world, walk, out, host, lhs, depth, wide, scope)
             out.push(", ")
             self.emit_core_concatenated(world, walk, out, host, rhs, depth, wide, scope)
-            out.push(")")
+            out.push(f"){block_text_close(self.on_block_types())}")
             return
         }
         // **`x == null` asks whether there is one** (0.0.250): `x.is_none()`, which
@@ -662,15 +671,28 @@ impl EmitState {
         if cast_before_a_shift {
             out.push("(")
         }
+        // **Text a side makes only to be compared is compared as Rust's**
+        // (#490): `x.replace(..) != y` needs no block's text around it.
+        let equality = op == BinaryOp::Eq || op == BinaryOp::Ne
+        let around = walk.compared_receiver
+        if equality && !deref_left {
+            walk.compared_receiver = emit_flow_called_on(lhs)
+        }
         self.emit_core_nested(world, walk, out, host, lhs, here, depth, wide, scope)
+        walk.compared_receiver = around
         if cast_before_a_shift {
             out.push(")")
         }
         out.push(f" {symbol} ")
-        if self.facts.compared_views.contains((site, "rhs")) {
+        let deref_right = self.facts.compared_views.contains((site, "rhs"))
+        if deref_right {
             out.push("*")
         }
+        if equality && !deref_right {
+            walk.compared_receiver = emit_flow_called_on(rhs)
+        }
         self.emit_core_nested(world, walk, out, host, rhs, here + 1, depth, wide, scope)
+        walk.compared_receiver = around
     }
 
     /// Whether a declared type or a constructor of one stands as the fallback of
@@ -890,14 +912,16 @@ impl EmitState {
         // fallback: `Or` for both `Option<&String>` and `Option<String>` left
         // `"none".into()` ambiguous in rustc.
         if !bare && emit_flow_a_lit_str(fallback) && emit_flow_an_iterator_answer(world, value) {
-            out.push(".map(|__nikaia_found| __nikaia_found.to_string())")
+            let (open, close) = (block_text_open(self.on_block_types()), block_text_close(self.on_block_types()))
+            out.push(f".map(|__nikaia_found| {open}__nikaia_found.to_string(){close})")
         }
         // **A split's two views beside a fallback of text** (#908): a part
         // that is a name, a field or its clone is lent as a view; any other
         // owned part makes both halves owned.
         let split = if bare { 0 } else { emit_flow_split_fallback(world, value, fallback) }
         if split == 2 {
-            out.push(".map(|(__nikaia_head, __nikaia_tail)| (__nikaia_head.to_string(), __nikaia_tail.to_string()))")
+            let (open, close) = (block_text_open(self.on_block_types()), block_text_close(self.on_block_types()))
+            out.push(f".map(|(__nikaia_head, __nikaia_tail)| ({open}__nikaia_head.to_string(){close}, {open}__nikaia_tail.to_string(){close}))")
         }
         out.push(", || ")
         // **An empty list beside a view of a list** (#812): `&[][..]`, a slice
@@ -1142,6 +1166,10 @@ impl EmitState {
         let mut opening: String? = null
         if named {
             opening = "let (error, __nikaia_site) = error.split();"
+        } else if boxed && fallback {
+            // **A task over its block is handed as `task::OverBudget`**
+            // (ADR-327 D13), and not as the crash that carried it.
+            opening = "let error: Box<dyn std::error::Error> = nikaia_std::task::handed(error.into());"
         } else if boxed {
             // A handle whose body cannot fail hands `Crashed` or `Late` bare.
             opening = "let error: Box<dyn std::error::Error> = error.into();"
@@ -1152,7 +1180,10 @@ impl EmitState {
             // **A `null` from the handler widens the value to `T?`** (#884).
             out.push(f" {{\n{pad}Ok(value) => Some(value),\n")
         } else if self.facts.owned_catches.contains(node_key(guarded_expr)) {
-            out.push(f" {{\n{pad}Ok(value) => value.to_owned(),\n")
+            // On the block types (#490) a view's copy is a block's text or
+            // list (`CopyOwned`), as the handler's arm is.
+            let copy = if self.on_block_types() { "copy_owned" } else { "to_owned" }
+            out.push(f" {{\n{pad}Ok(value) => value.{copy}(),\n")
         } else {
             out.push(f" {{\n{pad}Ok(value) => value,\n")
         }

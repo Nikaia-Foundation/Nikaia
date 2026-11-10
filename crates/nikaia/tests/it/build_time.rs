@@ -19,6 +19,8 @@
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::Build;
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// **Where a `comptime`'s program is compiled and run** (ADR-321 D1): one
 /// workshop for the file, as a build keeps one beside its cache.

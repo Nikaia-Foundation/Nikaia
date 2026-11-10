@@ -50,7 +50,7 @@ pub struct SvReading {
 pub(crate) fn sv_reading(row: &SvRow, rel: &SvRel) -> Option<SvReading> {
     let g = match sv_row_content(row) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let scale = if *nikaia_std::index::get(&row.ks, 0) < 0 { match g.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return None } } else { g };
-    let mut form = SvRow { cols: row.cols.to_owned(), ks: vec![], constant: 0 };
+    let mut form = SvRow { cols: row.cols.copy_owned(), ks: vec![], constant: 0 };
     for k in row.ks.iter() {
         let k = nikaia_std::num::value(k);
         form.ks.push(k / scale);
@@ -104,8 +104,8 @@ pub(crate) fn sv_simplex(names: Vec<String>) -> SvSimplex { SvSimplex { names, c
 
 pub(crate) fn sv_sx_lemma(parts: &[SvPart], book: &mut SvBook) -> Option<SvClause> {
     let mult = match sv_sx_multipliers(parts) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let sources = mult.sources.to_owned();
-    let ms = mult.ms.to_owned();
+    let sources = mult.sources.copy_owned();
+    let ms = mult.ms.copy_owned();
     let mut row = sv_row_constant(0);
     let mut equality = true;
     let mut strict = false;
@@ -133,7 +133,7 @@ pub(crate) fn sv_sx_lemma(parts: &[SvPart], book: &mut SvBook) -> Option<SvClaus
         lits.push(sv_sx_not(l));
     }
     lits.sort();
-    let id = book.log.farkas(lits.to_owned(), sources, ms, 1);
+    let id = book.log.farkas(lits.copy_owned(), sources, ms, 1);
     Some(SvClause { id, lits })
 }
 
@@ -203,7 +203,7 @@ impl SvSimplex {
     pub(crate) fn form_var(&mut self, form: &SvRow) -> Option<i64> {
         if form.cols.len() == 1 && *nikaia_std::index::get(&form.ks, 0) == 1 { return Some(self.column_var(*nikaia_std::index::get(&form.cols, 0))); }
         let key = sv_row_text(form);
-        let known: Option<i64> = self.slack_of.get(&key.to_string()).copied();
+        let known: Option<i64> = self.slack_of.get(&nikaia_std::block::Text::from(key.to_string())).copied();
         if known.is_some() { return Some(nikaia_std::index::or(known, || 0)); }
         let mut terms: Vec<SvTerm> = vec![];
         let mut i: i64 = 0;
@@ -216,7 +216,7 @@ impl SvSimplex {
         { let __nikaia_stored = form.clone(); nikaia_std::index::set(&mut self.var_form, nikaia_std::index::at(s), __nikaia_stored); }
         terms.push(SvTerm { col: match u32::try_from(s).ok() { Some(__nikaia_value) => __nikaia_value, None => return None }, k: -1 });
         let mut row = match sv_row_of(terms, 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let cols = row.cols.to_owned();
+        let cols = row.cols.copy_owned();
         for c in cols.iter() {
             let c = nikaia_std::num::value(c);
             let at = *nikaia_std::index::get(&self.row_of, nikaia_std::index::at(c as i64));
@@ -358,8 +358,8 @@ impl SvSimplex {
         let col = match u32::try_from(j).ok() { Some(__nikaia_value) => __nikaia_value, None => return false };
         let mut pr = (*nikaia_std::index::get(&self.rows, nikaia_std::index::at(r))).clone();
         if sv_row_coef(&pr, col) > 0 { pr = match sv_row_scale(&pr, -1) { Some(__nikaia_value) => __nikaia_value, None => return false }; }
-        let mut changed: Vec<i64> = vec![];
-        let mut made: Vec<SvRow> = vec![];
+        let mut changed: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut made: Vec<SvRow> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut t: i64 = 0;
         while t < self.rows.len() as i64 {
             if t != r && sv_row_coef(nikaia_std::index::get(&self.rows, nikaia_std::index::at(t)), col) != 0 {
@@ -395,7 +395,7 @@ impl SvSimplex {
     pub(crate) fn entering(&self, r: i64, below: bool, bland: bool) -> Vec<i64> {
         let b = *nikaia_std::index::get(&self.basic, nikaia_std::index::at(r));
         let mut out: Vec<i64> = vec![];
-        let mut cost: Vec<i64> = vec![];
+        let mut cost: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut i: i64 = 0;
         while ((i) as usize) < nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)).cols.len() {
             let v = *nikaia_std::index::get(&nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)).cols, (i) as usize) as i64;
@@ -570,7 +570,7 @@ impl SvTh for SvSimplex {
         let ge = SvRow { cols: vec![match u32::try_from(col).ok() { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() }], ks: vec![-1], constant: match k.checked_add(1) { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() } };
         let split = match book.split(le, ge) { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() };
         if !self.branching { return SvChecked::Lemmas(vec![split]); }
-        let mut refuted: Vec<SvClause> = vec![];
+        let mut refuted: Vec<SvClause> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for side in split.lits.iter() {
             let side = nikaia_std::num::value(side);
             let level = self.level();
@@ -598,7 +598,7 @@ impl SvTh for SvSimplex {
             }
         }
         lits.sort();
-        let id = book.learn(lits.to_owned(), vec![nikaia_std::index::get(&refuted, 0).id, nikaia_std::index::get(&refuted, 1).id, split.id]);
+        let id = book.learn(lits.copy_owned(), vec![nikaia_std::index::get(&refuted, 0).id, nikaia_std::index::get(&refuted, 1).id, split.id]);
         SvChecked::Conflict(SvClause { id, lits })
     }
     fn propagate(&mut self, book: &SvBook) -> Vec<u32> {
@@ -648,7 +648,7 @@ impl SvTh for SvSimplex {
             let negation = sv_sx_not(lit);
             let b = match book.lit_bound(negation) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let reading = match sv_reading(&b.row, &b.rel) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let mut parts = i.parts.to_owned();
+            let mut parts = i.parts.copy_owned();
             parts.push(SvPart { src: SvSrc::Lit(negation), num: i.d, scale: reading.scale, neg: !reading.upper });
             return sv_sx_lemma(&parts, book);
         }
@@ -668,8 +668,8 @@ impl SvTh for SvSimplex {
         for i in self.implied.iter() { if i.level <= level { kept.push(i.clone()); } }
         self.implied = kept;
     }
-    fn model(&self) -> collections::BTreeMap<String, i64> { self.found.to_owned() }
-    fn real_values(&self) -> collections::BTreeMap<String, SvRat> { self.found_real.to_owned() }
+    fn model(&self) -> collections::BTreeMap<String, i64> { self.found.copy_owned() }
+    fn real_values(&self) -> collections::BTreeMap<String, SvRat> { self.found_real.copy_owned() }
     fn shared(&self) -> Vec<u32> { vec![] }
 }
 
@@ -846,7 +846,7 @@ impl SvSimplex {
             i += 1;
         }
         let mut cut_cols: Vec<u32> = vec![];
-        let mut cut_ks: Vec<SvRat> = vec![];
+        let mut cut_ks: Vec<SvRat> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut cut_c = sv_int(1);
         let mut side1: Vec<SvRat> = vec![];
         let mut side2: Vec<SvRat> = vec![];
@@ -914,7 +914,7 @@ impl SvSimplex {
         let s2 = *nikaia_std::index::get(&split_l.lits, 1);
         let a_hold = *nikaia_std::index::get(&split_c.lits, 0);
         let a_fail = *nikaia_std::index::get(&split_c.lits, 1);
-        let mut clauses: Vec<SvClause> = vec![];
+        let mut clauses: Vec<SvClause> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (side, f, weights) in [(s1, f0.clone(), side1), (s2, rest.clone(), side2)] {
             let mut parts: Vec<SvPart> = vec![SvPart { src: SvSrc::Lit(a_fail), num: f.num, scale: match f.den.checked_mul(den) { Some(__nikaia_value) => __nikaia_value, None => return None }, neg: false }, SvPart { src: SvSrc::Lit(side), num: 1, scale: 1, neg: false }];
             let mut n: i64 = 0;
@@ -926,9 +926,9 @@ impl SvSimplex {
         }
         let both = sv_lits_union(&nikaia_std::index::get(&clauses, 0).lits, &nikaia_std::index::get(&clauses, 1).lits);
         let failing = sv_sx_relit(&both, &vec![sv_sx_not(s1), sv_sx_not(s2)], &vec![]);
-        let c3 = book.learn(failing.to_owned(), vec![nikaia_std::index::get(&clauses, 0).id, nikaia_std::index::get(&clauses, 1).id, split_l.id]);
+        let c3 = book.learn(failing.copy_owned(), vec![nikaia_std::index::get(&clauses, 0).id, nikaia_std::index::get(&clauses, 1).id, split_l.id]);
         let holding = sv_sx_relit(&failing, &vec![sv_sx_not(a_fail)], &vec![a_hold]);
-        let c4 = book.learn(holding.to_owned(), vec![split_c.id, c3]);
+        let c4 = book.learn(holding.copy_owned(), vec![split_c.id, c3]);
         Some(SvGmi { lit: a_hold, clause: SvClause { id: c4, lits: holding } })
     }
     pub(crate) fn cut_check(&mut self, b: i64, limit: &LgBudget, book: &mut SvBook) -> Option<SvChecked> {
@@ -969,7 +969,7 @@ impl SvSimplex {
                 if !k.lits.contains(&not_hold) { return Some(got); }
                 let open = sv_sx_relit(&made.clause.lits, &vec![made.lit], &vec![]);
                 let lits = sv_sx_relit(&k.lits, &vec![not_hold], &open);
-                let id = book.learn(lits.to_owned(), vec![made.clause.id, k.id]);
+                let id = book.learn(lits.copy_owned(), vec![made.clause.id, k.id]);
                 SvChecked::Conflict(SvClause { id, lits })
             },
             _ => got,

@@ -11,14 +11,14 @@ pub struct SyncReach {
 
 pub fn sync_holds(graph: &collections::BTreeMap<String, SyncReach>) -> collections::BTreeMap<String, bool> {
     let mut holds: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
-    for (name, reach) in graph.iter() { holds.insert(name.to_string(), !reach.blocked && reach.through_code.is_empty()); }
+    for (name, reach) in graph.iter() { holds.insert(nikaia_std::block::Text::from(name.to_string()), !reach.blocked && reach.through_code.is_empty()); }
     let mut changed = true;
     while changed {
         changed = false;
         for (name, reach) in graph.iter() {
             if !held(&holds, name) { continue; }
             if reaches_one_that_pauses(&reach.calls, &holds) {
-                holds.insert(name.to_string(), false);
+                holds.insert(nikaia_std::block::Text::from(name.to_string()), false);
                 changed = true;
             }
         }
@@ -32,28 +32,28 @@ pub fn paused_only_by_code(graph: &collections::BTreeMap<String, SyncReach>, hol
         if held(holds, name) || reach.blocked || reach.through_code.is_empty() { continue; }
         if reaches_one_that_pauses(&reach.calls, holds) { continue; }
         let mut parameters: Vec<String> = vec![];
-        for parameter in reach.through_code.iter() { parameters.push(parameter.to_string()); }
-        out.insert(name.to_string(), parameters);
+        for parameter in reach.through_code.iter() { parameters.push(nikaia_std::block::Text::from(parameter.to_string())); }
+        out.insert(nikaia_std::block::Text::from(name.to_string()), parameters);
     }
     out
 }
 
 pub fn pause_chain(graph: &collections::BTreeMap<String, SyncReach>, holds: &collections::BTreeMap<String, bool>, start: &str) -> Vec<String> {
-    let mut queue: Vec<String> = vec![start.to_string()];
-    let mut came_from: collections::BTreeMap<String, String> = collections::BTreeMap::new();
-    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-    seen.insert(start.to_string());
-    let mut next: i64 = 0;
+    #[allow(unused_mut)] let mut queue: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(start.to_string())], nikaia_std::block::Place::Block);
+    let mut came_from: collections::BTreeMap<String, String> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
+    seen.insert(nikaia_std::block::Text::from(start.to_string()));
+    let mut next: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     while ((next) as usize) < queue.len() {
-        let at = (*nikaia_std::index::get(&queue, (next) as usize)).to_string();
+        let at = nikaia_std::block::Text::from((*nikaia_std::index::get(&queue, (next) as usize)).to_string());
         next += 1;
         let reach = match *nikaia_std::index::get(&graph, &at) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if reach.pauses_here || reach.blocked { return chain_back_to(&came_from, &at); }
         for callee in reach.calls.iter() {
             if graph.contains_key(callee) && !held(holds, callee) && !seen.contains(callee) {
-                seen.insert(callee.to_string());
-                came_from.insert(callee.to_string(), at.to_string());
-                queue.push(callee.to_string());
+                seen.insert(nikaia_std::block::Text::from(callee.to_string()));
+                came_from.insert(nikaia_std::block::Text::from(callee.to_string()), nikaia_std::block::Text::from(at.to_string()));
+                queue.push(nikaia_std::block::Text::from(callee.to_string()));
             }
         }
     }
@@ -61,20 +61,20 @@ pub fn pause_chain(graph: &collections::BTreeMap<String, SyncReach>, holds: &col
 }
 
 pub(crate) fn chain_back_to(came_from: &collections::BTreeMap<String, String>, at: &str) -> Vec<String> {
-    let mut backwards: Vec<String> = vec![at.to_string()];
-    let mut back = at.to_string();
+    #[allow(unused_mut)] let mut backwards: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(at.to_string())], nikaia_std::block::Place::Block);
+    let mut back = nikaia_std::block::Text::from(at.to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut backwards = backwards;
     while came_from.contains_key(&back) {
         back = nikaia_std::index::or(match *nikaia_std::index::get(&came_from, &back) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || "".into());
-        backwards.push(back.to_string());
+        backwards.push(nikaia_std::block::Text::from(back.to_string()));
     }
-    let mut chain: Vec<String> = vec![];
+    let mut chain: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut backwards = backwards;
     let mut i = backwards.len() as i64;
     while i > 0 {
         i -= 1;
-        chain.push((*nikaia_std::index::get(&backwards, nikaia_std::index::at(i))).to_string());
+        chain.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&backwards, nikaia_std::index::at(i))).to_string()));
     }
     chain
 }
@@ -119,7 +119,7 @@ pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, una
             },
             Item::Impl { trait_name, target, methods, .. } => {
                 let trait_name = *trait_name;
-                let owner = names.resolve(target.name).to_string();
+                let owner = nikaia_std::block::Text::from(names.resolve(target.name).to_string());
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, args, body, is_sync, sync_by, .. } => {
@@ -137,14 +137,14 @@ pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, una
             },
             Item::Trait { name, methods, .. } => {
                 let name = *name;
-                let declaring = names.resolve(name).to_string();
+                let declaring = nikaia_std::block::Text::from(names.resolve(name).to_string());
                 for method in methods.iter() {
                     let key = format!("{}::{}", declaring, names.resolve(method.node.name));
                     graph.nodes.insert(key, leaf(!method.node.is_sync));
                 }
             },
             Item::Grammar(def) => {
-                let named = names.resolve(def.name).to_string();
+                let named = nikaia_std::block::Text::from(names.resolve(def.name).to_string());
                 for rule in def.rules.iter() { if rule.is_entry { graph.nodes.insert(format!("{}::{}", named, names.resolve(rule.name)), leaf(false)); } }
             },
             _ => { },
@@ -177,7 +177,7 @@ pub(crate) fn code_of(args: &[FnArg], body: &Block, names: &winnow_grammar::Inte
     let mut code: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
     for arg in args.iter() {
         let declared = match (*arg.ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        code.insert(names.resolve(arg.name).to_string(), !declared.is_sync);
+        code.insert(nikaia_std::block::Text::from(names.resolve(arg.name).to_string()), !declared.is_sync);
     }
     code_bound_in(body, names, &mut code);
     code
@@ -188,7 +188,7 @@ pub(crate) fn code_bound_in(block: &Block, names: &winnow_grammar::InternerConte
         match &stmt.node {
             Stmt::Let { names: bound, ty, value, .. } => {
                 if bound.len() == 1 {
-                    let name = names.resolve(*nikaia_std::index::get(&bound, 0)).to_string();
+                    let name = nikaia_std::block::Text::from(names.resolve(*nikaia_std::index::get(&bound, 0)).to_string());
                     let written = code_written((ty).as_ref());
                     if written.is_some() { code.insert(name, nikaia_std::index::or(written, || false)); } else {
                         let from = code_source(value, names, &code);
@@ -205,7 +205,7 @@ pub(crate) fn code_bound_in(block: &Block, names: &winnow_grammar::InternerConte
                     let from = match code_source(value, names, &code) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     for arm in arms.iter() {
                         match &arm.pattern {
-                            MatchPattern::Path(segments) => { if segments.len() == 1 { code.insert(names.resolve(*nikaia_std::index::get(&segments, 0)).to_string(), from); } },
+                            MatchPattern::Path(segments) => { if segments.len() == 1 { code.insert(nikaia_std::block::Text::from(names.resolve(*nikaia_std::index::get(&segments, 0)).to_string()), from); } },
                             _ => { },
                         }
                     }
@@ -239,7 +239,7 @@ pub(crate) fn sync_node(seen: &[Seen], program: &Program, code: &collections::BT
                 node.reach.blocked = true;
                 first_site(span, &format!("an `{}` block", construct), &mut node);
             },
-            Seen::Call { name, span, .. } => { sync_call((callee_named(names, name.to_string(), own, library, &program.items)).as_ref(), span, code, &mut node); },
+            Seen::Call { name, span, .. } => { sync_call((callee_named(names, nikaia_std::block::Text::from(name.to_string()), own, library, &program.items)).as_ref(), span, code, &mut node); },
             Seen::Spawn { span } => { sync_call(Some(&Callee::Opaque(None)), span, code, &mut node); },
             Seen::Opaque { span } => { sync_call(Some(&Callee::Opaque(None)), span, code, &mut node); },
             _ => { },
@@ -252,7 +252,7 @@ pub(crate) fn sync_node(seen: &[Seen], program: &Program, code: &collections::BT
 pub(crate) fn sync_call(callee: Option<&Callee>, span: &Span, code: &collections::BTreeMap<String, bool>, node: &mut SyncNode) {
     let known = match callee { Some(__nikaia_value) => __nikaia_value, None => return };
     match known {
-        Callee::Own(name) => { node.reach.calls.insert(name.to_string()); },
+        Callee::Own(name) => { node.reach.calls.insert(nikaia_std::block::Text::from(name.to_string())); },
         Callee::Library { key, never_pauses } => {
             let never_pauses = *never_pauses;
             if !never_pauses {
@@ -276,7 +276,7 @@ pub(crate) fn opaque_call(name: Option<&str>, span: &Span, code: &collections::B
     if code.contains_key(called) {
         if nikaia_std::index::or(*nikaia_std::index::get(&code, called), || false) {
             first_site(span, &format!("`{}`", called), node);
-            node.reach.through_code.insert(called.to_string());
+            node.reach.through_code.insert(nikaia_std::block::Text::from(called.to_string()));
         }
         return;
     }
@@ -284,12 +284,12 @@ pub(crate) fn opaque_call(name: Option<&str>, span: &Span, code: &collections::B
     first_site(span, &format!("`{}`", called), node);
 }
 
-pub(crate) fn first_site(span: &Span, what: &str, node: &mut SyncNode) { if node.site.is_none() { node.site = Some(Site { span: span.clone(), what: what.to_string() }); } }
+pub(crate) fn first_site(span: &Span, what: &str, node: &mut SyncNode) { if node.site.is_none() { node.site = Some(Site { span: span.clone(), what: nikaia_std::block::Text::from(what.to_string()) }); } }
 
 pub(crate) fn sync_methods(resolved: Option<&MethodsCalled>, own: &Ledger, library: &Ledger, node: &mut SyncNode) {
     let known = match resolved { Some(__nikaia_value) => __nikaia_value, None => return };
     if known.unseen { node.reach.blocked = true; }
-    for callee in known.resolved.iter() { if own.functions.contains_key(callee) { node.reach.calls.insert(callee.to_string()); } else if !never_pauses_in(library, callee) { node.reach.blocked = true; } }
+    for callee in known.resolved.iter() { if own.functions.contains_key(callee) { node.reach.calls.insert(nikaia_std::block::Text::from(callee.to_string())); } else if !never_pauses_in(library, callee) { node.reach.blocked = true; } }
 }
 
 pub(crate) fn never_pauses_in(library: &Ledger, callee: &str) -> bool {
@@ -325,7 +325,7 @@ pub fn unit_violations(program: &Program, names: &winnow_grammar::InternerContex
                 violations_in(&seen_in(body, names, unaliased, holes_of, &no_root, false), &promise, program, names, own, library, &mut found);
             },
             Item::Impl { target, methods, .. } => {
-                let owner = names.resolve(target.name).to_string();
+                let owner = nikaia_std::block::Text::from(names.resolve(target.name).to_string());
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, args, body, is_sync, sync_by, .. } => {
@@ -348,28 +348,28 @@ pub(crate) fn promise_of(caller: &str, args: &[FnArg], body: &Block, is_sync: bo
     let mut allowed: collections::BTreeSet<String> = collections::BTreeSet::new();
     for arg in args.iter() {
         let declared = match (*arg.ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if declared.is_sync { allowed.insert(names.resolve(arg.name).to_string()); }
+        if declared.is_sync { allowed.insert(nikaia_std::block::Text::from(names.resolve(arg.name).to_string())); }
     }
-    let mut named: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for one in sync_by.iter() {
         let one = *one;
-        let parameter = names.resolve(one).to_string();
-        allowed.insert(parameter.to_string());
+        let parameter = nikaia_std::block::Text::from(names.resolve(one).to_string());
+        allowed.insert(nikaia_std::block::Text::from(parameter.to_string()));
         named.push(parameter);
     }
     let mut kept: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
-    for parameter in allowed.iter() { kept.insert(parameter.to_string(), false); }
+    for parameter in allowed.iter() { kept.insert(nikaia_std::block::Text::from(parameter.to_string()), false); }
     code_bound_in(body, names, &mut kept);
     for (local, pauses) in kept.iter() {
         let pauses = nikaia_std::num::value(pauses);
-        if !pauses { allowed.insert(local.to_string()); }
+        if !pauses { allowed.insert(nikaia_std::block::Text::from(local.to_string())); }
     }
-    let mut promise: String = String::from("sync");
+    let mut promise: String = String::from("sync"); #[allow(unused_mut, clippy::redundant_locals)] let mut named = named;
     if !named.is_empty() {
-        let joined = named.join(", ");
+        let joined = nikaia_std::block::Text::from(named.join(", "));
         promise = format!("sync({})", joined);
     }
-    Some(Promise { caller: caller.to_string(), promise, allowed })
+    Some(Promise { caller: nikaia_std::block::Text::from(caller.to_string()), promise, allowed })
 }
 
 pub(crate) fn violations_in(seen: &[Seen], promise: &Promise, program: &Program, names: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, found: &mut Vec<Violation>) {
@@ -378,7 +378,7 @@ pub(crate) fn violations_in(seen: &[Seen], promise: &Promise, program: &Program,
             Seen::Joins { construct, span } => { found.push(violation(promise, span, construct, false, false, true)); },
             Seen::Call { name, span, .. } => {
                 if !name.contains("::") && promise.allowed.contains(name) { continue; }
-                pausing_call((callee_named(names, name.to_string(), own, library, &program.items)).as_ref(), span, promise, own, found);
+                pausing_call((callee_named(names, nikaia_std::block::Text::from(name.to_string()), own, library, &program.items)).as_ref(), span, promise, own, found);
             },
             Seen::Spawn { span } => { pausing_call(Some(&Callee::Opaque(None)), span, promise, own, found); },
             Seen::Opaque { span } => { pausing_call(Some(&Callee::Opaque(None)), span, promise, own, found); },
@@ -401,7 +401,7 @@ pub(crate) fn pausing_call(callee: Option<&Callee>, span: &Span, promise: &Promi
         Callee::Opaque(name) => {
             if a_stop((name).as_deref()) { return; }
             let called = nikaia_std::index::or(match name {
-                Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                 None => None,
             }, || "something this compiler cannot resolve".into());
             found.push(violation(promise, span, &called, false, false, false));
@@ -417,5 +417,5 @@ pub(crate) fn a_stop(name: Option<&str>) -> bool {
 
 pub(crate) fn unpromised(claim: &Sync) -> bool { claim.is_unpromised() }
 
-pub(crate) fn violation(promise: &Promise, span: &Span, callee: &str, from_library: bool, unpromised: bool, construct: bool) -> Violation { Violation { span: span.clone(), caller: promise.caller.to_string(), promise: promise.promise.to_string(), callee: callee.to_string(), from_library, unpromised, construct } }
+pub(crate) fn violation(promise: &Promise, span: &Span, callee: &str, from_library: bool, unpromised: bool, construct: bool) -> Violation { Violation { span: span.clone(), caller: nikaia_std::block::Text::from(promise.caller.to_string()), promise: nikaia_std::block::Text::from(promise.promise.to_string()), callee: nikaia_std::block::Text::from(callee.to_string()), from_library, unpromised, construct } }
 

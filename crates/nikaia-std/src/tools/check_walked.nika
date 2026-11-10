@@ -375,7 +375,7 @@ pub trait CheckWalkedPasses {
     fn view_findings(ref self) -> Vec[CheckFinding] sync
     /// A change in place of data a view still to be used may point into
     /// (`NK2305`, ADR-views-3 D9).
-    fn view_change_findings(ref self, lent: ref collections::BTreeSet[i64], coalesced: ref collections::BTreeSet[i64], mut_viewed: ref collections::BTreeSet[i64]) -> Vec[CheckFinding] sync
+    fn view_change_findings(ref self, lent: ref collections::BTreeSet[i64], coalesced: ref collections::BTreeSet[i64], mut_viewed: ref collections::BTreeSet[i64], receiver_views: ref collections::BTreeSet[i64]) -> Vec[CheckFinding] sync
     /// The buffer plans, kept for the emitter where they are made against
     /// `std` alone, as it makes them (#727), and the tether's refusals
     /// (`NK2303`, ADR-283 D9).
@@ -430,7 +430,7 @@ pub fn check_walked_walk[H: CheckHost, P: CheckWalkedPasses](mut state: CheckSta
         // Where a view points and when it is used (`NK2305`).
         let coalesced = vc_coalesced(state.facts)
         let mut_viewed = vc_mut_viewed(state.facts)
-        state.findings.extend(passes.view_change_findings(state.facts.lent_lets, coalesced, mut_viewed))
+        state.findings.extend(passes.view_change_findings(state.facts.lent_lets, coalesced, mut_viewed, state.facts.receiver_views))
         // A view handed back that points into a buffer the body owns (`NK2303`).
         let (plans, refused) = passes.tethered()
         if plans != null {

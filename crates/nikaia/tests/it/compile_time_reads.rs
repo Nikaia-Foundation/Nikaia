@@ -21,6 +21,8 @@ use nikaia::assets::{Allowlist, Reads};
 use nikaia::check::{self, Finding};
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -293,7 +295,7 @@ fn an_entry_nothing_read_is_named() {
     );
     let reads = reads(&dir);
     assert!(findings_reading(READS_IT, &reads).is_empty());
-    assert_eq!(reads.unused(), vec!["never.txt".to_string()]);
+    assert_eq!(reads.unused(), vec!["never.txt".to_text()]);
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -315,9 +317,9 @@ fn the_list_is_lines_and_comments_and_nothing_else() {
     assert_eq!(
         entries.iter().cloned().collect::<Vec<_>>(),
         vec![
-            "*.toml".to_string(),
-            "config/linux.toml".to_string(),
-            "schema.sql".to_string(),
+            "*.toml".to_text(),
+            "config/linux.toml".to_text(),
+            "schema.sql".to_text(),
         ]
     );
 }

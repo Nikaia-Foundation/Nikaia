@@ -8,6 +8,8 @@
 
 use nikaia::contracts::{Ledger, LedgerOps, Sync};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn written(source: &str) -> (Ledger, String) {
     let ledger = Ledger::infer(&parse_to_ast(source).expect("the source parses"));
@@ -121,7 +123,7 @@ fn stds_ledger_is_written_in_nikaias_spelling() {
         .find(|(_, c)| matches!(c.sync_claim, Sync::From(_)))
         .expect("std has a function whose lambda decides");
     assert!(
-        nikaia::contracts::STD.contains(&format!("[fn.\"{}\"]", map.0)),
+        nikaia::contracts::STD.contains(&*format!("[fn.\"{}\"]", map.0)),
         "the entry is there"
     );
     assert!(nikaia::contracts::STD.contains("sync = \"sync(f)\""));
@@ -166,7 +168,7 @@ fn the_list_reader_splits_outside_quotes_only() {
     assert!(
         list("\"a\"")
             .expect_err("not a list")
-            .to_string()
+            .to_text()
             .contains("expected a list")
     );
 }

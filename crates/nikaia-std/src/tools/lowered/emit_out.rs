@@ -11,7 +11,7 @@ pub struct EmitMapEntry {
 
 pub fn emit_out_locate(entries: &[EmitMapEntry], offset: i64) -> Option<EmitMapEntry> {
     match entries.iter().find(|&entry| { entry.start <= offset && offset < entry.end }) {
-        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
     }
 }

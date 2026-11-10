@@ -129,7 +129,7 @@ pub struct SvBook {
 
 pub(crate) fn sv_book(query: &SvQuery) -> Option<SvBook> {
     let log = match sv_log(query) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(SvBook { log, atoms: query.atoms.to_owned(), bounds: collections::BTreeMap::new(), pre: collections::BTreeMap::new(), reals: query.reals.to_owned() })
+    Some(SvBook { log, atoms: query.atoms.copy_owned(), bounds: collections::BTreeMap::new(), pre: collections::BTreeMap::new(), reals: query.reals.copy_owned() })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -139,7 +139,7 @@ pub struct SvClause {
 }
 
 pub(crate) fn sv_lits_union(a: &[u32], b: &[u32]) -> Vec<u32> {
-    let mut out = a.to_owned();
+    let mut out = a.copy_owned();
     for l in b.iter() {
         let l = nikaia_std::num::value(l);
         if !out.contains(&l) { out.push(l); }
@@ -234,7 +234,7 @@ impl SvBook {
             lits.push(negation);
         }
         lits.sort();
-        let id = self.log.farkas(lits.to_owned(), sources, multipliers, 1);
+        let id = self.log.farkas(lits.copy_owned(), sources, multipliers, 1);
         Some(SvClause { id, lits })
     }
     pub(crate) fn split(&mut self, le: SvRow, ge: SvRow) -> Option<SvClause> {
@@ -295,7 +295,7 @@ pub(crate) fn sv_rounded(b: &SvBound, d: i64) -> Option<SvBound> {
             }
         },
     }
-    let cols = if ks.is_empty() { vec![] } else { b.row.cols.to_owned() };
-    Some(SvBound { row: SvRow { cols, ks, constant }, rel, assumed: b.assumed.to_owned() })
+    let cols = if ks.is_empty() { vec![] } else { b.row.cols.copy_owned() };
+    Some(SvBound { row: SvRow { cols, ks, constant }, rel, assumed: b.assumed.copy_owned() })
 }
 

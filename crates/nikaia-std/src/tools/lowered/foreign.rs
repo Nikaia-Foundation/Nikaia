@@ -102,7 +102,7 @@ pub(crate) fn expression_paths(expr: &Expr, span: &Span, names: &winnow_grammar:
         Expr::Path(segments, _) => { if !segments.is_empty() { found.seen.push(named_at(path_name(segments, names, &unaliased), span)); } },
         Expr::Variable(name, _) => {
             let name = *name;
-            if found.with_names { found.seen.push(Seen::Name(names.resolve(name).to_string())); }
+            if found.with_names { found.seen.push(Seen::Name(nikaia_std::block::Text::from(names.resolve(name).to_string()))); }
         },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -304,10 +304,10 @@ pub(crate) fn named_at(name: String, span: &Span) -> Seen { Seen::Path { name, s
 
 pub(crate) fn a_named_call(func: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span, names: &winnow_grammar::InternerContext, root_at: &impl Fn(&str) -> i64, found: &mut Walked) {
     let name = match func {
-        Expr::Variable(name, _) => { let name = *name; names.resolve(name).to_string() },
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(names.resolve(name).to_string()) },
         Expr::Path(segments, _) => written_path(names, segments),
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); match base {
-            Expr::Variable(name, _) => { let name = *name; names.resolve(name).to_string() },
+            Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(names.resolve(name).to_string()) },
             Expr::Path(segments, _) => written_path(names, segments),
             _ => String::from(""),
         } },
@@ -323,7 +323,7 @@ pub(crate) fn a_named_call(func: &Expr, args: &[Expr], config: &[ConfigArg], spa
     let mut literals: Vec<Option<String>> = vec![];
     for arg in args.iter() {
         literals.push(match arg {
-            Expr::LitStr { text, .. } => Some(text.to_string()),
+            Expr::LitStr { text, .. } => Some(nikaia_std::block::Text::from(text.to_string())),
             _ => None,
         });
     }

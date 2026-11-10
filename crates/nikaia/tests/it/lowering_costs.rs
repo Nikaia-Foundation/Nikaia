@@ -8,6 +8,8 @@
 //! a test block is not.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::emit::{Build, emit_program};
@@ -82,7 +84,10 @@ fn main() {
 }
 ";
     let rust = lowered(source);
-    assert!(rust.contains("= vec![7; "), "{rust}");
+    assert!(
+        rust.contains("= nikaia_std::block::List::from_elem_in(7, "),
+        "{rust}"
+    );
     assert!(!rust.contains(".resize("), "{rust}");
 }
 

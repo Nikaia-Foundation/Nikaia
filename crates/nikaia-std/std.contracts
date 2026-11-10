@@ -5485,6 +5485,15 @@ pub = true
 crosses = true
 compares = true
 
+# **What a task that ran over its memory budget hands its joiner**
+# ([ADR-327](../../docs/specification/adr/adr-327.md) D13, D19): its block was
+# full. Its cleanups ran, the panic hook did not, and in a group it fails only
+# its own task.
+[type."task::OverBudget"]
+pub = true
+crosses = true
+compares = true
+
 # **What a task that panicked hands its joiner**
 # ([ADR-328](../../docs/specification/adr/adr-328.md) D8): what the panic said,
 # and where, as `src/main.nika:4` - empty where no line of the program is known.

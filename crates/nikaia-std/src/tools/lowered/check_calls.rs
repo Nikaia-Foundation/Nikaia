@@ -10,7 +10,7 @@ pub fn call_arguments(signature: &Signature) -> Vec<(String, Ty)> {
             continue;
         }
         first = false;
-        out.push((name.to_string(), ty.clone()));
+        out.push((nikaia_std::block::Text::from(name.to_string()), ty.clone()));
     }
     out
 }

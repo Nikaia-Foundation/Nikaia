@@ -174,10 +174,7 @@ impl<F: std::future::Future<Output = T>, T, Q: crate::cleanup::Queue> Cancellabl
             Ok(polled) => polled,
             Err(payload) => {
                 self.body = None;
-                self.slot.fail(Crashed {
-                    message: panic_message(payload.as_ref()),
-                    site: SITE.with(|held| std::mem::take(&mut *held.borrow_mut())),
-                });
+                self.slot.fail(Crashed::of(payload));
                 return std::task::Poll::Ready(());
             }
         };
@@ -207,6 +204,85 @@ impl<F: std::future::Future<Output = T>, T, Q: crate::cleanup::Queue> Cancellabl
 pub struct Crashed {
     pub message: String,
     pub site: String,
+    /// The task did not panic, its block was full (ADR-327 D13): a channel
+    /// that names `task::OverBudget` takes it as that.
+    pub(crate) over_budget: bool,
+}
+
+impl Crashed {
+    /// **The crash a caught unwind is**: what the panic said and where, or a
+    /// full block, which unwound past the hook and has no site.
+    pub(crate) fn of(payload: Box<dyn std::any::Any + Send>) -> Crashed {
+        let site = SITE.with(|held| std::mem::take(&mut *held.borrow_mut()));
+        match payload.is::<task_block::OverBudget>() {
+            true => Crashed {
+                message: OverBudget.to_string(),
+                site: String::new(),
+                over_budget: true,
+            },
+            false => Crashed {
+                message: panic_message(payload.as_ref()),
+                site,
+                over_budget: false,
+            },
+        }
+    }
+
+    /// A crash that says only `message`, nowhere in the program.
+    pub(crate) fn said(message: &str) -> Crashed {
+        Crashed {
+            message: message.to_string(),
+            site: String::new(),
+            over_budget: false,
+        }
+    }
+
+    /// **Whether the task ran over its memory budget** rather than panicked
+    /// (ADR-327 D13): what a channel naming `task::OverBudget` routes by.
+    pub fn over_budget(&self) -> bool {
+        self.over_budget
+    }
+}
+
+/// **What a task that ran over its memory budget hands its joiner**
+/// (ADR-327 D13, ADR-async-5 D19): its block was full. The task's cleanups ran, the panic
+/// hook did not, and in a group it fails only its own task.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OverBudget;
+
+impl std::fmt::Display for OverBudget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the task is over its memory budget")
+    }
+}
+
+impl std::error::Error for OverBudget {}
+
+impl From<Crashed> for OverBudget {
+    /// Only a crash that is a full block reaches a channel of this alone.
+    fn from(crash: Crashed) -> OverBudget {
+        match crash.over_budget {
+            true => OverBudget,
+            false => std::panic::resume_unwind(Box::new(crash.message)),
+        }
+    }
+}
+
+/// The same, for a channel that holds it in its envelope (ADR-280 D13).
+/// **What a task's fallback is handed** (ADR-327 D13): a crash because the
+/// task's block was full is handed as `OverBudget`, everything else as it came.
+pub fn handed(error: Box<dyn std::error::Error>) -> Box<dyn std::error::Error> {
+    match error.downcast::<Crashed>() {
+        Ok(crash) if crash.over_budget => Box::new(OverBudget),
+        Ok(crash) => crash,
+        Err(error) => error,
+    }
+}
+
+impl From<Crashed> for crate::error::Thrown<OverBudget> {
+    fn from(crash: Crashed) -> crate::error::Thrown<OverBudget> {
+        crate::error::Thrown::from(OverBudget::from(crash))
+    }
 }
 
 impl std::fmt::Display for Crashed {
@@ -1335,6 +1411,21 @@ impl crate::error::Joined for Crashed {
     fn joined_by(&mut self, _later: Crashed) {}
 }
 
+impl Crosses for OverBudget {
+    type Sent = OverBudget;
+    fn sent(self) -> OverBudget {
+        self
+    }
+    fn back(sent: OverBudget) -> Self {
+        sent
+    }
+}
+
+/// Neither has a full block anything to join.
+impl crate::error::Joined for OverBudget {
+    fn joined_by(&mut self, _later: OverBudget) {}
+}
+
 /// **How a scope ends** (D7, as `overlap` does, ADR-292 D5): the first failure
 /// in start order is thrown, every later one joins it in that order.
 /// **The scope's own function failed** (ADR-346 D7): its error is the scope's
@@ -2203,7 +2294,7 @@ pub async fn scope_paused_on_pool<'scope, T, E: Crosses + From<Crashed> + crate:
         |crash| {
             let mut seen = locked(&scope.seen);
             let at = seen.started;
-            seen.crashed = true;
+            seen.crashed |= !crash.over_budget();
             seen.failed.push((at, E::from(crash).sent()));
         },
     )
@@ -2255,10 +2346,14 @@ async fn polled<T, F: std::future::Future<Output = ()> + ?Sized>(
                 Ok(std::task::Poll::Ready(())) => drop(running.swap_remove(at)),
                 Ok(std::task::Poll::Pending) => at += 1,
                 Err(payload) => {
-                    crashed(Crashed {
-                        message: panic_message(payload.as_ref()),
-                        site: SITE.with(|held| std::mem::take(&mut *held.borrow_mut())),
-                    });
+                    let crash = Crashed::of(payload);
+                    // A full block fails only its own task (ADR-async-5 D19).
+                    if crash.over_budget() {
+                        crashed(crash);
+                        drop(running.swap_remove(at));
+                        continue;
+                    }
+                    crashed(crash);
                     // Dropped, so each one's cleanup runs (D8).
                     running.clear();
                     drop(arrived());
@@ -2279,10 +2374,7 @@ async fn polled<T, F: std::future::Future<Output = ()> + ?Sized>(
 /// One task of a scope, its panic caught at its edge as a task's is (ADR-326 D4).
 fn caught(body: impl FnOnce()) -> Result<(), Crashed> {
     let _inside = InATask::enter();
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)).map_err(|payload| Crashed {
-        message: panic_message(payload.as_ref()),
-        site: SITE.with(|held| std::mem::take(&mut *held.borrow_mut())),
-    })
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)).map_err(Crashed::of)
 }
 
 #[cfg(test)]

@@ -22,7 +22,7 @@ pub fn check_accepted_dump_name(binary: String, source: &str, in_a_package: bool
 
 pub(crate) fn check_test_binary_name(binary: String) -> String {
     let (name, hash) = match binary.rsplit_once("-") { Some(__nikaia_value) => __nikaia_value, None => return binary };
-    if hash.chars().all(|c| { c.is_ascii_hexdigit() }) { return name.to_string(); }
+    if hash.chars().all(|c| { c.is_ascii_hexdigit() }) { return nikaia_std::block::Text::from(name.to_string()); }
     binary
 }
 

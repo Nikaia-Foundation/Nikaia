@@ -654,9 +654,6 @@ impl EmitState {
                     self.emit_core_grammar_entry(world, walk, out, host, segments[0], segments[1], args[0], values, config, parallelism, depth, flow, scope)
                     return true
                 }
-                if args.len() != 1 {
-                    return false
-                }
                 if segments.len() != 3 {
                     return false
                 }
@@ -673,10 +670,72 @@ impl EmitState {
                 // **A `par_fold` entry is driven in pieces** (#521), as its own file
                 // drives it, with this build's parallelism.
                 let mut pieces = false
+                let mut streamed = false
+                let mut options: Vec[String] = []
                 let contract = self.own_contracts.functions.get(f"{package}::{book}::{rule}")
                 if contract != null {
                     let held = contract ?? return false
                     pieces = held.pieces
+                    // **A `@stream` entry's call is a sequence** (ADR-grammar-2
+                    // D7, #1505), walked through the function its package
+                    // writes beside the grammar (`emit_stream_walk`).
+                    match held.signature {
+                        signature => {
+                            match signature.result {
+                                result => { streamed = a_sequence_type(result) },
+                                null => {},
+                            }
+                            for option in signature.config {
+                                options.push(option.name.clone())
+                            }
+                        },
+                        null => {},
+                    }
+                }
+                if streamed {
+                    // **The values, then each option the entry declares, in
+                    // its order** (ADR-grammar-1 D2, #1512): one the call leaves
+                    // out is `None`, and the walk takes its default where it is
+                    // declared; last the caller's `words:` table (ADR-388 D1),
+                    // which is no option the rule declares.
+                    out.push(f"Ok::<_, nikaia_std::grammar::ParseError>({package}::{emit_stream_walk_name(book, rule)}(::std::convert::AsRef::<[u8]>::as_ref(&*")
+                    self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
+                    out.push(").to_vec()")
+                    for i in 1..<args.len() {
+                        out.push(", ")
+                        self.emit_expr(world, walk, out, host, args[i], depth, flow, scope)
+                    }
+                    for option in options {
+                        let mut given = false
+                        for c in config {
+                            if !given && emit_text(world, c.name) == option {
+                                out.push(", ::std::option::Option::Some(")
+                                self.emit_expr(world, walk, out, host, c.value, depth, flow, scope)
+                                out.push(")")
+                                given = true
+                            }
+                        }
+                        if !given {
+                            out.push(", ::std::option::Option::None")
+                        }
+                    }
+                    let mut table = false
+                    for c in config {
+                        if !table && emit_text(world, c.name) == "words" && !options.contains("words") {
+                            out.push(", ::std::option::Option::Some(nikaia_std::winnow_grammar::InternerContext::clone(&")
+                            self.emit_expr(world, walk, out, host, c.value, depth, flow, scope)
+                            out.push("))")
+                            table = true
+                        }
+                    }
+                    if !table {
+                        out.push(", ::std::option::Option::None")
+                    }
+                    out.push(f")){question}")
+                    return true
+                }
+                if args.len() != 1 {
+                    return false
                 }
                 if pieces {
                     out.push("nikaia_std::grammar::parse_pieces(&*")
@@ -973,19 +1032,86 @@ impl EmitState {
         }
         // **Owned text is lent to a pattern** (D28, `owned_patterns`): `&` in
         // front of it, as for any `ref String` parameter. `replace`'s
-        // replacement is lent the same way (#877).
+        // replacement is lent the same way (#877). A block's text is lent as
+        // the `str` it holds, `&*`: Rust's `Pattern` is a trait no other
+        // crate may give a type (#490).
         let lent_pattern = args.len() == 1 || (name == "replace" && args.len() == 2)
         if receiver != null && lent_pattern && self.facts.owned_patterns.contains(node_key(args[0])) {
             let text = receiver ?? return
+            let lend = if self.on_block_types() { "&*" } else { "&" }
+            // `replace` answers Rust's `String`, made a block's text.
+            let made = name == "replace"
+            if made {
+                out.push(block_text_open(self.on_block_types()))
+            }
             self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
-            out.push(f".{name}(&")
+            out.push(f".{name}({lend}")
             self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
             if args.len() == 2 {
-                out.push(", &")
+                out.push(f", {lend}")
                 self.emit_expr(world, walk, out, host, args[1], depth, flow, scope)
             }
             out.push(")")
+            if made {
+                out.push(block_text_close(self.on_block_types()))
+            }
             return
+        }
+        // **A view of text handed to a pattern of `str`** (#490,
+        // `view_patterns`): on the block types it may be a `&Text`, lent
+        // as the `str` it holds, and so is `replace`'s replacement, whatever
+        // text it is.
+        if receiver != null && lent_pattern && self.on_block_types() && self.facts.view_patterns.contains(node_key(args[0])) {
+            let text = receiver ?? return
+            let made = name == "replace"
+            if made {
+                out.push(block_text_open(true))
+            }
+            self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
+            out.push(f".{name}(AsRef::<str>::as_ref(")
+            self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
+            out.push(")")
+            if args.len() == 2 {
+                out.push(", AsRef::<str>::as_ref(&(")
+                self.emit_expr(world, walk, out, host, args[1], depth, flow, scope)
+                out.push("))")
+            }
+            out.push(")")
+            if made {
+                out.push(block_text_close(true))
+            }
+            return
+        }
+        // **A text lent with `ref` to a pattern of `str`** (#490): on the
+        // block types `ref t` of a block's text is a `&Text`, which Rust's
+        // `Pattern` does not take; `&*` lends the `str` it holds.
+        if receiver != null && lent_pattern && self.on_block_types() && (self.facts.method_callees[on_node]?.starts_with("str::") ?? false) {
+            let lent = match args[0] {
+                Expr::Unary { op: UnaryOp::Ref, expr, .. } => expr,
+                else => null,
+            }
+            match lent {
+                text_arg => {
+                    let text = receiver ?? return
+                    let made = name == "replace"
+                    if made {
+                        out.push(block_text_open(true))
+                    }
+                    self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
+                    out.push(f".{name}(&*")
+                    self.emit_core_nested(world, walk, out, host, text_arg, 255, depth, flow, scope)
+                    if args.len() == 2 {
+                        out.push(", ")
+                        self.emit_expr(world, walk, out, host, args[1], depth, flow, scope)
+                    }
+                    out.push(")")
+                    if made {
+                        out.push(block_text_close(true))
+                    }
+                    return
+                },
+                null => {},
+            }
         }
         // **Where the container stays the caller's, `drain` empties it** (#564,
         // ADR-094 D3, D4): `drain(..)` neither takes the elements away nor hands
@@ -1031,7 +1157,7 @@ impl EmitState {
             self.emit_core_postfix_base(world, walk, out, host, target, depth, flow, scope)
             out.push(".extend(")
             self.emit_core_postfix_base(world, walk, out, host, args[0], depth, flow, scope)
-            out.push(".iter().map(|item| item.to_string()))")
+            out.push(f".iter().map(|item| {block_text_open(self.on_block_types())}item.to_string(){block_text_close(self.on_block_types())}))")
             return
         }
         // **A copy of a tuple with view parts is owned** (ADR-293 D24,
@@ -1071,6 +1197,11 @@ impl EmitState {
             // or a `&[T]` is the reference, and a read-only `String` parameter
             // *is* a `&str` (ADR-282 D5).
             written = "to_owned"
+            // On the block types the copy is a block's list or text
+            // (`CopyOwned`, #490): `to_owned` answers Rust's `Vec`.
+            if self.on_block_types() {
+                written = "copy_owned"
+            }
             // **A copy of text is `to_string`**, as a reached one is: an element
             // lent out of a list of static text (ADR-282 D29) is `&&'static
             // str`, and `to_owned` of it is the view again.
@@ -1245,6 +1376,13 @@ impl EmitState {
             out.push("nikaia_std::par::ended(")
         }
         let (kind, entry) = emit_call_pausing_entry(self.facts, args)
+        // **On the block types, Rust's `String` answer is made a block's
+        // text** (#490): around the plain call, which is all these are.
+        // Not where the call is only compared (`compared_receiver`).
+        let rust_text = kind == 0 && !timed && !boxed && answers_rust_text(written, args.len()) && emit_callee_is_std_text(self.facts.method_callees[on_node]) && self.on_block_types() && !self.method_pauses(on_node) && !self.method_can_fail(on_node) && walk.compared_receiver != on_node
+        if rust_text {
+            out.push(block_text_open(self.on_block_types()))
+        }
         if kind == 1 {
             out.push(f"nikaia_std::seq::{entry}(")
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
@@ -1352,6 +1490,9 @@ impl EmitState {
             self.emit_core_method_options(world, walk, out, host, method, on_node, args.len(), config, depth, flow, scope)
         }
         out.push(")")
+        if rust_text {
+            out.push(block_text_close(self.on_block_types()))
+        }
         // **What hands back an element of a held list reads it through its
         // handle** (ADR-283 D17), as the brackets and a `for` do.
         if (name == "iter" || name == "first" || name == "last" || name == "get") && receiver != null {
@@ -1665,9 +1806,17 @@ fn emit_pure_place(expr: ref Expr) -> bool {
 
 /// The copy of a tuple bound as `__nikaia_tuple`, part by part with the words
 /// the checker chose (`tuple_copies`, ADR-293 D24, #1184): `(t.0.to_string(),
-/// t.1.clone())`.
+/// t.1.clone())`. Rust's `String` a `to_string` answers is made a block's
+/// text (#490).
+fn emit_tuple_part_copy(i: i64, word: ref String) -> String {
+    if word == "to_string" {
+        return f"{block_text_open(true)}__nikaia_tuple.{i}.to_string(){block_text_close(true)}"
+    }
+    return f"__nikaia_tuple.{i}.{word}()"
+}
+
 pub fn emit_tuple_part_copies(parts: ref Vec[String]) -> String {
-    let copies: Vec[String] = parts.iter().enumerate().map(fn((i, word)) { f"__nikaia_tuple.{i}.{word}()" }).collect()
+    let copies: Vec[String] = parts.iter().enumerate().map(fn((i, word)) { emit_tuple_part_copy(i, word) }).collect()
     if copies.len() == 1 {
         return f"({copies[0]},)"
     }

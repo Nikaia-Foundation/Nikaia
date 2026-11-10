@@ -13,6 +13,8 @@
 //! that one count serves both. The tests here hold the same programs' lowerings.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::Path;
 use std::process::Command;
 
@@ -62,7 +64,7 @@ fn lower(dir: &Path, source: &str, flags: &[&str]) -> String {
         String::from_utf8_lossy(&run.stdout),
         String::from_utf8_lossy(&run.stderr)
     );
-    std::fs::read_to_string(&output).expect("the emitted Rust")
+    String::from(std::fs::read_to_string(&output).expect("the emitted Rust"))
 }
 
 /// Lower in a scratch directory, and hand back the emitted Rust.
@@ -260,16 +262,16 @@ fn main() throws {
         "a handle handed on by value is duplicated:\n{rust}"
     );
     // Two borrows and one lent handle, and not one step of the count between
-    // them. D1's correction is exactly this line. The two duplications are the
-    // handover and the handle stored into `Pool`'s field (#1411).
-    assert!(
-        rust.contains("Pool { db: db.clone() }"),
-        "a handle stored in a field is duplicated:\n{rust}"
-    );
+    // them. D1's correction is exactly this line. The handle stored in the
+    // `Pool` literal inside `keep` is the second duplicate (#1411).
     assert_eq!(
         rust.matches(".clone()").count(),
         2,
         "only the by-value handover and the stored handle duplicate:\n{rust}"
+    );
+    assert!(
+        rust.contains("db: db.clone()"),
+        "a handle stored in a field is duplicated:\n{rust}"
     );
     assert!(
         rust.contains("serve(&db)") && rust.contains("peek(&db)"),
@@ -398,7 +400,7 @@ fn report(source: &str) -> String {
         .env("NIKAIA_CACHE_DIR", dir.join("cache"))
         .output()
         .expect("the nikaia binary runs");
-    let printed = String::from_utf8_lossy(&run.stdout).into_owned();
+    let printed = String::from_utf8_lossy(&run.stdout);
     assert!(run.status.success(), "{printed}");
     let _ = std::fs::remove_dir_all(&dir);
     printed
@@ -483,11 +485,11 @@ fn the_counter_of_part_ii_12_2_lowers_at_both_settings() {
         let (count, lock) = ("std::rc::Rc", "lock::Local");
         let _ = setting;
         assert!(
-            rust.contains(&format!("{count}::new(nikaia_std::{lock}::new(")),
+            rust.contains(&*format!("{count}::new(nikaia_std::{lock}::new(")),
             "the constructor writes both hulls at `{setting}`:\n{rust}"
         );
         assert!(
-            rust.contains(&format!(
+            rust.contains(&*format!(
                 "fn zaehle(counter: {count}<nikaia_std::{lock}<i64>>)"
             )),
             "and the parameter agrees with it at `{setting}`:\n{rust}"
@@ -518,7 +520,7 @@ fn a_shared_around_a_lock_is_refused_and_names_the_short_form() {
         .env("NIKAIA_CACHE_DIR", dir.join("cache"))
         .output()
         .expect("the compiler runs");
-    let said = String::from_utf8_lossy(&run.stderr).into_owned();
+    let said = String::from_utf8_lossy(&run.stderr);
     assert!(!run.status.success(), "it must be refused: {said}");
     assert!(said.contains("NK1123"), "{said}");
     assert!(said.contains("`SharedMut[i64]`"), "{said}");
@@ -696,7 +698,7 @@ fn a_door_over_several_locks_refuses_what_is_not_one() {
             .output()
             .expect("the compiler runs");
         assert!(!run.status.success(), "it must be refused");
-        let said = String::from_utf8_lossy(&run.stderr).into_owned();
+        let said = String::from_utf8_lossy(&run.stderr);
         let _ = std::fs::remove_dir_all(&dir);
         said
     };

@@ -102,11 +102,11 @@ pub fn rust_constant_type(library: &Ledger, ty: &Ty) -> Option<String> {
 // this was written - see `contracts::sync`.
 pub(crate) fn a_named_constant_type(library: &Ledger, name: &str, args: &[Ty], view: bool) -> Option<String> {
     if args.is_empty() && !view {
-        if name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" { return Some(name.to_string()); }
+        if name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" { return Some(nikaia_std::block::Text::from(name.to_string())); }
         let entry = *nikaia_std::index::get(&library.types, name);
         if entry.is_some() {
             let held = match entry { Some(__nikaia_value) => __nikaia_value, None => return None };
-            if !held.constant.is_empty() { return Some(name.to_string()); }
+            if !held.constant.is_empty() { return Some(nikaia_std::block::Text::from(name.to_string())); }
         }
         return None;
     }
@@ -180,13 +180,13 @@ pub fn is_growable(ty: &Ty) -> bool {
 pub fn constructed(constructor: &str) -> Option<String> {
     let parts: Vec<&str> = constructor.split("::").collect::<Vec<_>>();
     if parts.len() < 2 { return None; }
-    let mut kept: Vec<String> = vec![];
-    let mut at: i64 = 0;
+    #[allow(unused_mut)] let mut kept: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let parts = parts;
+    let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let parts = parts; #[allow(unused_mut, clippy::redundant_locals)] let mut kept = kept;
     while at < parts.len() as i64 - 1 {
-        kept.push((*nikaia_std::index::get(&parts, nikaia_std::index::at(at))).to_string());
+        kept.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(at))).to_string()));
         at = at + 1;
     }
-    Some(kept.join("::"))
+    Some(nikaia_std::block::Text::from(kept.join("::")))
 }
 
 impl CheckState {

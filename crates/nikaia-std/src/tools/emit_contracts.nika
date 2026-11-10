@@ -170,6 +170,7 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
         kept_calls: collections::BTreeMap(),
         uses_std: tables.uses_std,
         is_std: false,
+        package_grammar: units.iter().any(fn(unit) { unit.items.iter().any(fn(item) { match item.node { Item::Grammar(_) => true, else => false } }) }),
         crate_root: build.crate_root.clone(),
         offered_to_rust: build.offered_to_rust,
         fails: tables.fails,
@@ -224,6 +225,7 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
         refused: refused,
         viewed: units[0].viewed_arms,
         mut_viewed: mut_viewed,
+        receiver_views: state.facts.receiver_views,
     }
     // The give-ups read the state, so they are worked out before it moves.
     return EmitContractsMade { give_ups: vc_analyse(ask, fn(e) { emit_holes_literal(parsed, words, e) }).give_ups, state: state, order_proofs: order_proofs }

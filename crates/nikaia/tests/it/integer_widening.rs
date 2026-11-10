@@ -7,6 +7,8 @@
 //! refusals, the lowering and what needs a build of its own.
 use crate::common;
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use std::process::Command;
 
@@ -303,7 +305,7 @@ fn the_help_says_when_a_number_widens() {
         vec![
             "Two integer types mix where one holds every value of both, and no type holds \
              every `u64` and every `i64`."
-                .to_string()
+                .to_text()
         ]
     );
 }

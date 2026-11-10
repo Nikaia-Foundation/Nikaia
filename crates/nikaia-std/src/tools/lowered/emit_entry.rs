@@ -46,7 +46,7 @@ impl EmitState {
                     let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
                     if receiver.is_some() || world.words.resolve(called) != "main" { continue; }
                     if args.is_empty() && config.is_empty() { return (String::from(""), String::from("")); }
-                    let about = nikaia_std::index::or(item.doc.as_deref(), || "").to_string();
+                    let about = nikaia_std::block::Text::from(nikaia_std::index::or(item.doc.as_deref(), || "").to_string());
                     return self.main_words_of(world, args, config, &about, types, passing);
                 },
                 _ => { },
@@ -56,26 +56,26 @@ impl EmitState {
     }
     pub(crate) fn main_words_of(&self, world: &EmitWorld<'_, '_, '_, '_>, args: &[FnArg], config: &[ConfigParam], about: &str, types: &[String], passing: &[String]) -> (String, String) {
         let mut checks: Vec<PreconditionCheck> = vec![];
-        if self.facts.entries.contains_key("main") { checks = match self.facts.entries.get("main") { Some(__nikaia_value) => __nikaia_value, None => return (String::from(""), String::from("")) }.to_owned(); }
-        let mut options: Vec<ConfigContract> = vec![];
+        if self.facts.entries.contains_key("main") { checks = match self.facts.entries.get("main") { Some(__nikaia_value) => __nikaia_value, None => return (String::from(""), String::from("")) }.copy_owned(); }
+        let mut options: Vec<ConfigContract> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if self.own_contracts.functions.contains_key("main") {
             let contract = match self.own_contracts.functions.get("main") { Some(__nikaia_value) => __nikaia_value, None => return (String::from(""), String::from("")) };
             let signature = nikaia_std::index::or(match contract.signature.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || Signature::empty());
-            options = signature.config.to_owned();
+            options = signature.config.copy_owned();
         }
-        let mut params: Vec<String> = vec![];
-        let mut reads: String = String::from("");
-        let mut passed: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut reads: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+        #[allow(unused_mut)] let mut passed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
         for index in 0..args.len() as i64 {
             let arg = nikaia_std::index::get(&args, (index) as usize);
-            let param = world.words.resolve(arg.name).to_string();
+            let param = nikaia_std::block::Text::from(world.words.resolve(arg.name).to_string());
             let local = escaped_name(&param);
             let ty = main_written_type(&arg.ty, world.words);
             let mut rust: String = String::from("_");
-            if ((index) as usize) < types.len() { rust = (*nikaia_std::index::get(&types, (index) as usize)).to_string(); }
+            if ((index) as usize) < types.len() { rust = nikaia_std::block::Text::from((*nikaia_std::index::get(&types, (index) as usize)).to_string()); }
             let mut kind: &'static str = "Subject";
             let mut read: &'static str = "subject";
             if words_vec(&arg.ty, world.words) {
@@ -89,41 +89,41 @@ impl EmitState {
             if arg.mutable {
                 binding = "mut ";
                 passed.push(format!("&mut {}", local));
-            } else if ((index) as usize) < passing.len() { passed.push((*nikaia_std::index::get(&passing, (index) as usize)).replace("{}", &local)); } else { passed.push(local.to_string()); }
+            } else if ((index) as usize) < passing.len() { passed.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&passing, (index) as usize)).replace("{}", &local))); } else { passed.push(nikaia_std::block::Text::from(local.to_string())); }
             reads = format!("{}    let {}{}: {} = __nikaia_words.{}({});\n", reads, binding, local, rust, read, index);
             params.push(format!("nikaia_std::cli::Param {{ name: {}, ty: {}, kind: nikaia_std::cli::Kind::{}, default: \"\", pre: &[{}] }}", rust_string(&param), rust_string(&ty), kind, main_claims_of(&checks, &param)));
         }
         for k in 0..config.len() as i64 {
             let option = nikaia_std::index::get(&config, (k) as usize);
             let at = args.len() as i64 + k;
-            let param = world.words.resolve(option.name).to_string();
+            let param = nikaia_std::block::Text::from(world.words.resolve(option.name).to_string());
             let local = escaped_name(&param);
             let ty = main_written_type(&option.ty, world.words);
             let mut rust: String = String::from("_");
-            if at < types.len() as i64 { rust = (*nikaia_std::index::get(&types, nikaia_std::index::at(at))).to_string(); }
+            if at < types.len() as i64 { rust = nikaia_std::block::Text::from((*nikaia_std::index::get(&types, nikaia_std::index::at(at))).to_string()); }
             let mut default: String = String::from("");
             let mut shown: String = String::from("");
             for declared in options.iter() {
                 if declared.name == param {
                     default = held_literal(&declared.default, &declared.ty);
-                    shown = declared.default.to_string();
+                    shown = nikaia_std::block::Text::from(declared.default.to_string());
                     if shown == "None" { shown = String::from("null"); }
                 }
             }
             let mut kind: &'static str = "Option";
             if ty == "bool" { kind = "Flag"; }
             reads = format!("{}    let {}: {} = match __nikaia_words.option({}) {{ Some(__nikaia_word) => __nikaia_word, None => {} }};\n", reads, local, rust, at, default);
-            if at < passing.len() as i64 { passed.push((*nikaia_std::index::get(&passing, nikaia_std::index::at(at))).replace("{}", &local)); } else { passed.push(local.to_string()); }
+            if at < passing.len() as i64 { passed.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&passing, nikaia_std::index::at(at))).replace("{}", &local))); } else { passed.push(nikaia_std::block::Text::from(local.to_string())); }
             params.push(format!("nikaia_std::cli::Param {{ name: {}, ty: {}, kind: nikaia_std::cli::Kind::{}, default: {}, pre: &[{}] }}", rust_string(&param), rust_string(&ty), kind, rust_string(&shown), main_claims_of(&checks, &param)));
         }
-        let mut text: String = format!("    static __NIKAIA_INTERFACE: nikaia_std::cli::Interface = nikaia_std::cli::Interface {{ about: {}, params: &[{}] }};\n", rust_string(about), params.join(", "));
+        let mut text: String = format!("    static __NIKAIA_INTERFACE: nikaia_std::cli::Interface = nikaia_std::cli::Interface {{ about: {}, params: &[{}] }};\n", rust_string(about), nikaia_std::block::Text::from(params.join(", "))); #[allow(unused_mut, clippy::redundant_locals)] let mut passed = passed;
         text = format!("{}    let __nikaia_words = nikaia_std::cli::Words::read(&__NIKAIA_INTERFACE);\n{}", text, reads);
         for check in checks.iter() {
             let mut operands: String = String::from("");
             for (name, value) in check.operands.iter() { operands.push_str(&format!("({}, (&&nikaia_std::abort::Operand(&{})).shown()), ", rust_string(name), value)); }
             text = format!("{}    if !{} {{ __nikaia_words.breach({}, &[{}]) }}\n", text, check.rust, rust_string(&main_claim(&check.written)), operands);
         }
-        (text, passed.join(", "))
+        (text, nikaia_std::block::Text::from(passed.join(", ")))
     }
     pub(crate) fn fatal_registrations(&self, world: &EmitWorld<'_, '_, '_, '_>) -> String {
         let fatal = match self.own_contracts.implementations.get("Fatal") { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
@@ -162,11 +162,11 @@ impl EmitState {
             match &item.node {
                 Item::Struct { name, generics, .. } => {
                     let name = *name;
-                    if generics.is_empty() { bare = world.words.resolve(name).to_string(); }
+                    if generics.is_empty() { bare = nikaia_std::block::Text::from(world.words.resolve(name).to_string()); }
                 },
                 Item::Enum { name, .. } => {
                     let name = *name;
-                    bare = world.words.resolve(name).to_string();
+                    bare = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
                 },
                 _ => { },
             }
@@ -193,12 +193,12 @@ impl EmitState {
     }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_held_struct(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &str, a: &str, any: &str, long: &str, short: &str, fields: &[FieldDef]) -> String {
-        let mut parts: Vec<String> = vec![];
+        let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for field in fields.iter() {
             let field_name = escaped_name(world.words.resolve(field.name));
             if holds_view(&field.ty) || self.names_borrowing(world, &field.ty) { parts.push(format!("{}: nikaia_std::tether::Rebase::rebase(self.{}, keeps)", field_name, field_name)); } else { parts.push(format!("{}: self.{}", field_name, field_name)); }
         }
-        let rebased = parts.join(", ");
+        let rebased = nikaia_std::block::Text::from(parts.join(", "));
         let mut text: String = format!("\n/// `{}` held one handle per buffer (ADR-283).\n", ty);
         text = format!("{}#[allow(non_camel_case_types)]\nenum __Views_{} {{}}\n\n", text, ty);
         text = format!("{}impl nikaia_std::tether::Views for __Views_{} {{\n    type Of<'a> = {}<{}>;\n", text, ty, ty, a);
@@ -218,11 +218,11 @@ pub(crate) fn main_exits(own: &Ledger) -> bool {
 }
 
 pub(crate) fn main_written_type(ty: &Type, words: &winnow_grammar::InternerContext) -> String {
-    let mut text = words.resolve(ty.name).to_string();
+    let mut text = nikaia_std::block::Text::from(words.resolve(ty.name).to_string());
     if !ty.generics.is_empty() {
-        let mut inner: Vec<String> = vec![];
+        let mut inner: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for arg in ty.generics.iter() { inner.push(main_written_type(arg, words)); }
-        text = format!("{}[{}]", text, inner.join(", "));
+        text = format!("{}[{}]", text, nikaia_std::block::Text::from(inner.join(", ")));
     }
     if ty.is_nullable { text = format!("{}?", text); }
     text
@@ -230,16 +230,16 @@ pub(crate) fn main_written_type(ty: &Type, words: &winnow_grammar::InternerConte
 
 pub(crate) fn words_vec(ty: &Type, words: &winnow_grammar::InternerContext) -> bool { words.resolve(ty.name) == "Vec" && !ty.is_nullable }
 
-pub(crate) fn main_claim(written: &str) -> String { nikaia_std::index::or(written.strip_prefix("precondition of `main`: "), || std::convert::AsRef::<str>::as_ref(written)).to_string() }
+pub(crate) fn main_claim(written: &str) -> String { nikaia_std::block::Text::from(nikaia_std::index::or(written.strip_prefix("precondition of `main`: "), || std::convert::AsRef::<str>::as_ref(written)).to_string()) }
 
 pub(crate) fn main_claims_of(checks: &[PreconditionCheck], param: &str) -> String {
-    let mut claims: Vec<String> = vec![];
-    let length = format!("{}.", param);
+    #[allow(unused_mut)] let mut claims: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let length = format!("{}.", param); #[allow(unused_mut, clippy::redundant_locals)] let mut claims = claims;
     for check in checks.iter() {
         let mut reads = false;
-        for (name, _) in check.operands.iter() { if name == param || name.starts_with(&length) { reads = true; } }
+        for (name, _) in check.operands.iter() { if name == param || name.starts_with(&*length) { reads = true; } }
         if reads { claims.push(rust_string(&main_claim(&check.written))); }
     }
-    claims.join(", ")
+    nikaia_std::block::Text::from(claims.join(", "))
 }
 

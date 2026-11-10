@@ -151,7 +151,7 @@ pub(crate) fn sv_fast_interval(book: &mut SvBook, cnf: &SvCnf, ids: &[u32]) -> S
         }
         let value = if has_lo { lo } else if has_hi { hi } else { 0 };
         let at = col as i64;
-        if at < cnf.names.len() as i64 { values.insert((*nikaia_std::index::get(&cnf.names, nikaia_std::index::at(at))).to_string(), value); }
+        if at < cnf.names.len() as i64 { values.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&cnf.names, nikaia_std::index::at(at))).to_string()), value); }
         col += 1;
     }
     SvFastEnd::Sat(values)
@@ -237,7 +237,7 @@ pub(crate) fn sv_fast_difference<T: SvDist>(book: &mut SvBook, cnf: &SvCnf, ids:
         let mut col: i64 = 0;
         while col < zero && col < cnf.names.len() as i64 {
             let v = match d.dist(col).checked_sub(d.dist(zero)) { Some(__nikaia_value) => __nikaia_value, None => return sv_fast_skip() };
-            values.insert((*nikaia_std::index::get(&cnf.names, nikaia_std::index::at(col))).to_string(), v);
+            values.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&cnf.names, nikaia_std::index::at(col))).to_string()), v);
             col += 1;
         }
         return SvFastRun { end: SvFastEnd::Sat(values), work: round, path: String::from("difference") };

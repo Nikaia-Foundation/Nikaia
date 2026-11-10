@@ -43,9 +43,9 @@ pub struct Output {
     /// Whether the program says it succeeded: an exit code of `0`.
     pub ok: bool,
     /// Everything it wrote to standard output.
-    pub stdout: String,
+    pub stdout: crate::block::Text,
     /// Everything it wrote to standard error.
-    pub stderr: String,
+    pub stderr: crate::block::Text,
     /// From just before it started to just after it was waited for, on the
     /// monotonic clock.
     pub elapsed: Duration,
@@ -86,7 +86,7 @@ pub enum Input {
     /// The caller's own standard input, shared with the child.
     Inherited,
     /// This text, written on a thread of its own, then closed.
-    Text(String),
+    Text(crate::block::Text),
 }
 
 impl Stream {
@@ -228,16 +228,24 @@ fn started(
 #[allow(clippy::too_many_arguments)]
 pub async fn run(
     program: &str,
-    args: Vec<String>,
+    args: crate::block::List<crate::block::Text>,
     dir: &str,
-    env: Vec<(String, String)>,
-    env_remove: Vec<String>,
+    env: crate::block::List<(crate::block::Text, crate::block::Text)>,
+    env_remove: crate::block::List<crate::block::Text>,
     env_clear: bool,
     within: Option<Duration>,
     stdin: Input,
     stdout: Stream,
     stderr: Stream,
 ) -> Result<Output, IoError> {
+    // Toward the operating system's process the program's lists cross as
+    // Rust's (D8): the same memory, outside every block.
+    let args: Vec<String> = args.into_iter().map(String::from).collect();
+    let env: Vec<(String, String)> = env
+        .into_iter()
+        .map(|(name, value)| (String::from(name), String::from(value)))
+        .collect();
+    let env_remove: Vec<String> = env_remove.into_iter().map(String::from).collect();
     let invalid = invalid_entries(&env, &env_remove);
     if !invalid.is_empty() {
         return Err(IoError::Other(format!(
@@ -264,6 +272,12 @@ pub async fn run(
         )
     });
     let dir = dir.to_string();
+    // The input text goes to the thread beside the task, so it crosses as
+    // Rust's (D8): a block's text never leaves its task (D9).
+    let stdin = match stdin {
+        Input::Text(text) => Input::Text(crate::block::Text::from(String::from(text))),
+        other => other,
+    };
     let streams = Streams {
         stdin,
         stdout,
@@ -281,8 +295,8 @@ pub async fn run(
     Ok(Output {
         code: status.code().map(i64::from).unwrap_or(-1),
         ok: status.success(),
-        stdout,
-        stderr,
+        stdout: crate::block::Text::from(stdout),
+        stderr: crate::block::Text::from(stderr),
         elapsed: finished.elapsed,
         user_time: finished.waited.user_time,
         system_time: finished.waited.system_time,
@@ -464,7 +478,10 @@ fn drained<R: Read + Send + 'static>(pipe: Option<R>) -> std::thread::JoinHandle
 /// own. `program` is looked for on the caller's `PATH` as `run` looks for it
 /// (ADR-243 D6). It fails with `IoError::NotFound(program)` where nothing is
 /// there and `IoError::PermissionDenied(program)` where it may not be run.
-pub fn spawn(program: &str, args: Vec<String>) -> Result<Child, IoError> {
+pub fn spawn(
+    program: &str,
+    args: crate::block::List<crate::block::Text>,
+) -> Result<Child, IoError> {
     let named = program.to_string();
     let found = found_on_path(
         program,
@@ -569,8 +586,8 @@ impl Child {
         Ok(Output {
             code: code_of(status),
             ok: status.success(),
-            stdout: String::from_utf8_lossy(&stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&stderr).into_owned(),
+            stdout: crate::block::Text::from(String::from_utf8_lossy(&stdout).into_owned()),
+            stderr: crate::block::Text::from(String::from_utf8_lossy(&stderr).into_owned()),
             elapsed,
             user_time: waited.map_or(Duration::ZERO, |w| w.user_time),
             system_time: waited.map_or(Duration::ZERO, |w| w.system_time),

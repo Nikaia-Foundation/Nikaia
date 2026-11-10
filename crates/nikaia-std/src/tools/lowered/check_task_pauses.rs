@@ -10,17 +10,17 @@ impl CheckState {
         let mut named: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
         self.walk_the_body(world, host, body, &mut pauses, &mut named);
         let mut places: Vec<(String, i64)> = vec![];
-        for each in bound.iter() { places.push((each.0.to_string(), each.2)); }
+        for each in bound.iter() { places.push((nikaia_std::block::Text::from(each.0.to_string()), each.2)); }
         let held = held_across_a_pause(&places, &pauses, &named);
         let at = span.start as i64;
-        for name in held.iter() { self.facts.held_across_a_pause.insert((at, name.to_string())); }
+        for name in held.iter() { self.facts.held_across_a_pause.insert((at, nikaia_std::block::Text::from(name.to_string()))); }
         for each in bound.iter() {
             if held.contains(&each.0) {
                 let verdict = crossing(&each.1, &Walking { own: world.own, library: world.library, into: Going::Ours });
                 if verdict.refused_part().is_some() {
-                    let name = each.0.to_string();
-                    let mut notes: Vec<String> = vec![String::from("A value a task still needs after a pause is kept inside the task, and the task can move to another thread.")];
-                    let note = verdict.note();
+                    let name = nikaia_std::block::Text::from(each.0.to_string());
+                    #[allow(unused_mut)] let mut notes: Vec<String> = vec![String::from("A value a task still needs after a pause is kept inside the task, and the task can move to another thread.")];
+                    let note = verdict.note(); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
                     if note.is_some() { notes.push(nikaia_std::index::or(note, || "".into())); }
                     notes.push(same_at_both());
                     self.findings.push(check_refusal("NK2501", span, format!("This task keeps `{}` while it pauses, and `{}` can't be passed to a task.", name, name), notes, verdict.way_out()));
@@ -45,7 +45,7 @@ impl CheckState {
         names_in(expr, world.words, &mut used);
         for name in used.iter() {
             let before = nikaia_std::index::or(*nikaia_std::index::get(&named, name), || at.into());
-            named.insert(name.to_string(), if before > at { before } else { at });
+            named.insert(nikaia_std::block::Text::from(name.to_string()), if before > at { before } else { at });
         }
         if check_visit_has_holes(expr) { for hole in host.literal_holes(expr) { for inner in check_visit_preorder(&hole) { self.a_task_looks_at(world, host, inner, at, pauses, named); } } }
     }
@@ -60,7 +60,7 @@ impl CheckState {
                 _ => false,
             },
             Callee::Own(ref name) => {
-                let key = name.to_string();
+                let key = nikaia_std::block::Text::from(name.to_string());
                 let found: Option<FnContract> = match *nikaia_std::index::get(&world.own.functions, &key) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,

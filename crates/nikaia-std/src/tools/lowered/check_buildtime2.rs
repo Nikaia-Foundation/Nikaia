@@ -7,7 +7,7 @@ impl CheckState {
     pub fn a_body_that_may_not_run_at_build_time(&mut self, callee: &str, because: &str, span: &Span) {
         let mut help: String = format!("Call it while the program runs, with `let` instead of `comptime`, or make `{}` `sync` so it touches nothing outside the program.", callee);
         if self.computing_default { help = format!("Make `{}` `sync` so it touches nothing outside the program, or make the option a `T?` and call it in the body.", callee); }
-        self.findings.push(check_refusal("NK1152", span, format!("You can't call `{}` while the program is built.", callee), vec![because.to_string(), String::from("At build time only functions that never pause and touch nothing outside the program can run.")], Some(help)));
+        self.findings.push(check_refusal("NK1152", span, format!("You can't call `{}` while the program is built.", callee), vec![nikaia_std::block::Text::from(because.to_string()), String::from("At build time only functions that never pause and touch nothing outside the program can run.")], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -20,13 +20,13 @@ impl CheckState {
             what = nikaia_std::index::get(&over, nikaia_std::index::at(0..at)).trim();
             path = nikaia_std::index::get(&over, nikaia_std::index::at(at + "|".len() as i64..)).trim();
         }
-        let mut kind: String = what.to_string();
+        let mut kind: String = nikaia_std::block::Text::from(what.to_string());
         let mut limit: String = String::from("");
         let space = nikaia_std::search::find(&what, &" ", 0);
         if space.is_some() {
             let at = nikaia_std::index::or(space, || 0);
-            kind = nikaia_std::index::get(&what, nikaia_std::index::at(0..at)).to_string();
-            limit = nikaia_std::index::get(&what, nikaia_std::index::at(at + " ".len() as i64..)).to_string();
+            kind = nikaia_std::block::Text::from(nikaia_std::index::get(&what, nikaia_std::index::at(0..at)).to_string());
+            limit = nikaia_std::block::Text::from(nikaia_std::index::get(&what, nikaia_std::index::at(at + " ".len() as i64..)).to_string());
         }
         let mut message: String = format!("`{}` took more than {} steps while the program was built.", bound, limit);
         let mut note: String = String::from("Each turn of a loop and each call is a step, and the count is the same on every machine.");
@@ -34,29 +34,29 @@ impl CheckState {
             message = format!("`{}` held more than {} bytes at once while the program was built.", bound, limit);
             note = String::from("What it holds is counted as it asks for it, the same on every machine.");
         } else if kind == "depth" { message = format!("`{}` went more than {} calls deep while the program was built.", bound, limit); }
-        let mut notes: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
         if !path.is_empty() {
-            let mut shown: Vec<String> = vec![];
-            for step in path.split(" > ").collect::<Vec<_>>() { if AsRef::<str>::as_ref(&(step)) == AsRef::<str>::as_ref(&("…")) { shown.push(step.to_string()); } else if AsRef::<str>::as_ref(&(step)) == AsRef::<str>::as_ref(&(value_fn)) { shown.push(format!("`{}`", bound)); } else { shown.push(format!("`{}`", step)); } }
-            notes.push(format!("It was in {}.", shown.join(" > ")));
+            let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            for step in path.split(" > ").collect::<Vec<_>>() { if AsRef::<str>::as_ref(&(step)) == AsRef::<str>::as_ref(&("…")) { shown.push(nikaia_std::block::Text::from(step.to_string())); } else if AsRef::<str>::as_ref(&(step)) == AsRef::<str>::as_ref(&(value_fn)) { shown.push(format!("`{}`", bound)); } else { shown.push(format!("`{}`", step)); } }
+            notes.push(format!("It was in {}.", nikaia_std::block::Text::from(shown.join(" > "))));
         }
         notes.push(note);
-        let mut help: String = String::from("Look for a loop or a recursion that does not end, or compute the value while the program runs, with `let` instead of `comptime`.");
+        let mut help: String = String::from("Look for a loop or a recursion that does not end, or compute the value while the program runs, with `let` instead of `comptime`."); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
         if self.computing_default { help = String::from("Look for a loop or a recursion that does not end, or make the option a `T?` and compute the value in the body."); }
         self.findings.push(check_refusal("NK1152", span, message, notes, Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_constant_built_from_itself(&mut self, bound: &str, ring: &[String], span: &Span) {
-        let mut sorted: Vec<String> = ring.to_owned();
+        #[allow(unused_mut)] let mut sorted: Vec<String> = ring.copy_owned();
         sorted.sort();
-        let mut unique: Vec<String> = vec![];
-        for name in sorted.iter() { if unique.is_empty() || *nikaia_std::index::get(&unique, nikaia_std::index::at(unique.len() as i64 - 1)) != *name { unique.push(name.to_string()); } }
+        let mut unique: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut sorted = sorted;
+        for name in sorted.iter() { if unique.is_empty() || *nikaia_std::index::get(&unique, nikaia_std::index::at(unique.len() as i64 - 1)) != *name { unique.push(nikaia_std::block::Text::from(name.to_string())); } }
         if self.said_rings.contains(&unique) { return; }
         self.said_rings.insert(unique);
-        let mut named: Vec<String> = vec![];
+        let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for name in ring.iter() { named.push(format!("`{}`", name)); }
-        self.findings.push(check_refusal("NK1168", span, format!("`{}` depends on itself.", bound), vec![format!("The chain is {}, and a `comptime` has to be computable while the program is built.", named.join(" → "))], Some(String::from("Give one of them a value that doesn't depend on the others, or make it a `let` so it's computed while the program runs."))));
+        self.findings.push(check_refusal("NK1168", span, format!("`{}` depends on itself.", bound), vec![format!("The chain is {}, and a `comptime` has to be computable while the program is built.", nikaia_std::block::Text::from(named.join(" → ")))], Some(String::from("Give one of them a value that doesn't depend on the others, or make it a `let` so it's computed while the program runs."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

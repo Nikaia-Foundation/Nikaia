@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/foreign.rs
 //
 // A crate is described before it is called - `NK2504`
@@ -83,9 +85,9 @@ pub fn check(
             continue;
         }
         if !described.contains(crate_name) {
-            first.entry(crate_name.to_string()).or_insert(span);
+            first.entry(crate_name.to_text()).or_insert(span);
         } else if moved.contains_key(crate_name) {
-            stale.entry(crate_name.to_string()).or_insert(span);
+            stale.entry(crate_name.to_text()).or_insert(span);
         }
     }
     first
@@ -123,7 +125,7 @@ fn has_moved(crate_name: &str, files: &[String], span: &Span) -> Finding {
     Finding {
         severity: Severity::Error,
         span: *span,
-        code: "NK2505".to_string(),
+        code: "NK2505".to_text(),
         message: format!("`{crate_name}` has changed since its description was reviewed."),
         notes: vec![
             format!(
@@ -132,7 +134,7 @@ fn has_moved(crate_name: &str, files: &[String], span: &Span) -> Finding {
             ),
             "A description is written by a person, so it has to be reviewed again, not \
              just regenerated."
-                .to_string(),
+                .to_text(),
         ],
         help: Some(format!(
             "Run `nikaia describe {crate_name}` and review the diff before committing it."
@@ -146,15 +148,15 @@ fn undescribed(crate_name: &str, span: &Span) -> Finding {
     Finding {
         severity: Severity::Error,
         span: *span,
-        code: "NK2504".to_string(),
+        code: "NK2504".to_text(),
         message: format!("`{crate_name}` has no description yet."),
         notes: vec![
             "Nikaia needs to know what a Rust crate's functions do: whether they pause, \
              can fail, reach locks, or move values between threads."
-                .to_string(),
+                .to_text(),
             "`nikaia describe` drafts a description from the crate's `pub` signatures into \
              `contracts/<crate>.contracts`, for you to review and commit like code."
-                .to_string(),
+                .to_text(),
         ],
         help: Some(format!("Run `nikaia describe {crate_name}`.")),
         labels: Vec::new(),

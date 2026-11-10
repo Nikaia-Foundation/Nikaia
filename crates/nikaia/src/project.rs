@@ -21,6 +21,8 @@
 //! switches were chosen, and what the lowering does.
 
 use crate::contracts::LedgerOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
@@ -109,7 +111,7 @@ struct SettingsHost;
 
 impl project_settings::ProjectSettingsHost for SettingsHost {
     fn env_var(&self, name: &str) -> Option<String> {
-        std::env::var(name).ok()
+        std::env::var(name).ok().map(String::from)
     }
 
     fn native_cpu(&self, triple: &str) -> std::result::Result<String, Box<dyn std::error::Error>> {
@@ -149,7 +151,7 @@ fn symbol_prefix(word: &str) -> Result<String> {
              letters, digits and `_`, not beginning with a digit."
         ));
     }
-    Ok(word.to_string())
+    Ok(word.to_text())
 }
 
 impl Settings {
@@ -167,10 +169,10 @@ impl Settings {
     ) -> Result<Settings> {
         Settings::of(
             project_settings::project_settings_resolve(
-                &|key, default| manifest.setting(key, None, default).to_string(),
+                &|key, default| manifest.setting(key, None, default).to_text(),
                 manifest.package_name(),
-                target.map(str::to_string),
-                user_parallelism.map(str::to_string),
+                target.map(str::to_text),
+                user_parallelism.map(str::to_text),
                 crate::emit::default_target().name(),
             )
             .map_err(|e| anyhow!("{e}"))?,
@@ -221,12 +223,9 @@ impl Settings {
         };
         let target = self.build.target;
         let levels = crate::sysroot::cpu_levels(target.triple())?;
-        self.words.cpu = project_settings::project_settings_chosen_cpu(
-            level.to_string(),
-            &levels,
-            target.name(),
-        )
-        .map_err(refused)?;
+        self.words.cpu =
+            project_settings::project_settings_chosen_cpu(level.to_text(), &levels, target.name())
+                .map_err(refused)?;
         Ok(())
     }
 
@@ -265,7 +264,7 @@ impl Settings {
         if flags.is_empty() {
             return Ok(());
         }
-        let words = flags.join(",");
+        let words = String::from(flags.join(","));
         (self.build.bounds, self.build.overflow) = optimizations(&words)?;
         self.build.skip_free_at_exit = skip_free_at_exit(&words);
         self.build.prove_through_loops = prove_through_loops(&words);
@@ -337,7 +336,7 @@ impl Settings {
         let kept = match roots.iter().find(|root| **root == crate_root) {
             Some(root) => *root,
             None => {
-                let root: &'static str = Box::leak(crate_root.to_string().into_boxed_str());
+                let root: &'static str = Box::leak(Box::<str>::from(crate_root));
                 roots.push(root);
                 root
             }
@@ -416,7 +415,7 @@ fn packages_of_view(
 /// and `toml` stay Rust.
 fn manifest_view(manifest: &Manifest) -> ProjectMembersManifest {
     ProjectMembersManifest {
-        name: manifest.package_name().map(str::to_string),
+        name: manifest.package_name().map(str::to_text),
         keys: manifest.dependencies().keys().cloned().collect(),
         paths: manifest
             .dependencies()
@@ -657,7 +656,7 @@ pub fn packages_of_file(input: &Path) -> Result<Vec<modules::Dependency>> {
         true => packages_of_view(
             &project_tests::project_tests_program_manifest(
                 &layout.root,
-                manifest.package_name().map(str::to_string),
+                manifest.package_name().map(str::to_text),
             ),
             &layout.root,
             false,
@@ -791,17 +790,20 @@ pub fn lower_reading(
             Some(
                 exported
                     .header
-                    .replace(crate::cexport::LEDGER_DIGEST, &digest),
+                    .replace(crate::cexport::LEDGER_DIGEST, &digest)
+                    .into(),
             ),
             Some(
                 exported
                     .python
-                    .replace(crate::cexport::LEDGER_DIGEST, &digest),
+                    .replace(crate::cexport::LEDGER_DIGEST, &digest)
+                    .into(),
             ),
             Some(
                 exported
                     .node
-                    .replace(crate::cexport::LEDGER_DIGEST, &digest),
+                    .replace(crate::cexport::LEDGER_DIGEST, &digest)
+                    .into(),
             ),
         ),
         None => (rust, None, None, None),
@@ -860,7 +862,7 @@ pub fn diagnose(
         && !found.iter().any(|(_, shown)| !shown.warning)
     {
         found.push((
-            input.display().to_string(),
+            input.display().to_text(),
             diagnostics::refusal_shown(&format!("{error:#}"), 0),
         ));
     }
@@ -913,7 +915,7 @@ pub fn definition(
                         &views, at as i64, facts, offset,
                     )?;
                     Some((
-                        program.units[file as usize].path.display().to_string(),
+                        program.units[file as usize].path.display().to_text(),
                         span,
                         name,
                     ))
@@ -974,7 +976,7 @@ fn with_lower_host<R>(
         true => Layout::alone(input),
         false => layout,
     };
-    let unit = layout.unit_name(input);
+    let unit = String::from(layout.unit_name(input));
     // **What this build may read, resolved before anything is read**
     // ([ADR-310](../../docs/specification/adr/adr-310.md) D4, D5).
     let reads = reads_for(&layout, allowlist)?;
@@ -1087,7 +1089,7 @@ impl LowerHost<'_> {
         }
         let package = manifest
             .package_name()
-            .map(str::to_string)
+            .map(str::to_text)
             .unwrap_or_else(|| settings.words.symbol_prefix.clone());
         let kept = nikaia_std::tools::project_features::features_kept(
             rust,
@@ -1166,7 +1168,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             });
         let mut program = self.held(program)?;
         program.entry_shown_as = SHOWN_AS.with(|cell| cell.borrow().clone());
-        *self.key_source.borrow_mut() = program.sources().join("\n// --- unit ---\n");
+        *self.key_source.borrow_mut() = String::from(program.sources().join("\n// --- unit ---\n"));
         // **What the output names is part of the key** (0.0.239): the abort table
         // names each file as it was handed to the compiler (ADR-300 D9), so a
         // lowering cached for `/abs/one.nika` and reused for `one.nika` named the
@@ -1226,7 +1228,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         }
         let package = Manifest::read(&self.layout.root.join("nikaia.toml"))
             .ok()
-            .and_then(|m| m.package_name().map(str::to_string))
+            .and_then(|m| m.package_name().map(str::to_text))
             .unwrap_or_else(|| settings.words.symbol_prefix.clone());
         let exported = crate::cexport::export(
             &self.program(),
@@ -1251,7 +1253,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                 &self.layout.root,
             )
             .filter(|artifacts| artifacts.has_all(&[RUST, CONTRACTS, DERIVED, WARNINGS]))?;
-        let get = |name| artifacts.get(name).expect("checked above").to_string();
+        let get = |name| artifacts.get(name).expect("checked above").to_text();
         Some(project_lower::ProjectLowerArtifacts {
             rust: get(RUST),
             ledger: get(CONTRACTS),
@@ -1276,7 +1278,11 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             .record(
                 &self.unit,
                 &self.key_source.borrow(),
-                self.reads.taken(),
+                self.reads
+                    .taken()
+                    .into_iter()
+                    .map(|(read, digest)| (read.into(), digest.into()))
+                    .collect(),
                 &self.choices(),
                 &artifacts,
             )
@@ -1635,7 +1641,7 @@ pub fn check(
     };
     let said = project_check::project_check_check(
         &host,
-        &path.display().to_string(),
+        &path.display().to_text(),
         source,
         user_parallelism,
         refuted_claims,
@@ -1938,7 +1944,7 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
     }
 
     fn unit_path(&self, at: i64) -> String {
-        self.program.units[at as usize].path.display().to_string()
+        self.program.units[at as usize].path.display().to_text()
     }
 
     fn unrolling_report(&self) -> String {
@@ -1975,7 +1981,7 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
             "asserts" => crate::check::claims_report(
                 &unit.parsed,
                 &unit.source,
-                &unit.path.display().to_string(),
+                &unit.path.display().to_text(),
                 &program
                     .units
                     .iter()
@@ -2008,7 +2014,7 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                     .map(|(_, u)| &u.parsed)
                     .collect::<Vec<_>>(),
                 &unit.source,
-                &unit.path.display().to_string(),
+                &unit.path.display().to_text(),
                 &program.contracts,
                 library,
                 settings.build.bounds,
@@ -2026,7 +2032,7 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                         .collect::<Vec<_>>(),
                     library,
                 ),
-                &unit.path.display().to_string(),
+                &unit.path.display().to_text(),
                 &unit.source,
             ),
             other => unreachable!("no `--explain` report `{other}`"),
@@ -2198,7 +2204,8 @@ impl Project {
                 // absolute; `version`, `git`, `tag`, `features` and the rest
                 // still travel untouched.
                 Dependency::Rust(value) => {
-                    dependencies.insert(dependency.clone(), rooted(value, &member.root));
+                    dependencies
+                        .insert(dependency.as_str().to_string(), rooted(value, &member.root));
                 }
                 // **Cargo's renaming form** (ADR-286 D20): the package is named
                 // by its identity, the key is the name *this* crate uses for
@@ -2221,15 +2228,18 @@ impl Project {
                     };
                     let named = self.crate_named(&root)?;
                     let mut table = toml::value::Table::new();
-                    table.insert("package".to_string(), toml::Value::String(named.clone()));
+                    table.insert(
+                        "package".to_string(),
+                        toml::Value::String(named.as_str().to_string()),
+                    );
                     // Beside this member, under the generated build directory:
                     // every crate of the build is written there, one directory
                     // each, named by the same name.
                     table.insert(
                         "path".to_string(),
-                        toml::Value::String(format!("../{named}")),
+                        toml::Value::String(std::format!("../{named}")),
                     );
-                    dependencies.insert(dependency.clone(), toml::Value::Table(table));
+                    dependencies.insert(dependency.as_str().to_string(), toml::Value::Table(table));
                 }
             }
         }
@@ -2242,17 +2252,20 @@ impl Project {
             }
             let named = self.crate_named(&canonical(&taken.root))?;
             let mut table = toml::value::Table::new();
-            table.insert("package".to_string(), toml::Value::String(named.clone()));
+            table.insert(
+                "package".to_string(),
+                toml::Value::String(named.as_str().to_string()),
+            );
             table.insert(
                 "path".to_string(),
-                toml::Value::String(format!("../{named}")),
+                toml::Value::String(std::format!("../{named}")),
             );
-            dependencies.insert(taken.name.clone(), toml::Value::Table(table));
+            dependencies.insert(taken.name.as_str().to_string(), toml::Value::Table(table));
         }
 
         Ok(CargoProject {
             package: Package {
-                name: member.name.clone(),
+                name: member.name.as_str().to_string(),
                 version: member.manifest.package_version().to_string(),
                 // What the emitter writes, and what the tests compile it as.
                 edition: "2024".to_string(),
@@ -2269,7 +2282,7 @@ impl Project {
             // projects of one name built there at once would replace each
             // other's. [`Self::own_copy`] gives it its own name back.
             bin_name: match kind {
-                CrateKind::Bin => self.program_name(&member.name),
+                CrateKind::Bin => self.program_name(&member.name).into(),
                 CrateKind::Lib | CrateKind::CLibrary => member.name.replace('-', "_"),
             },
             bin_path: member.entry.clone(),
@@ -2309,7 +2322,7 @@ impl Project {
     ///
     /// `rust` is each member as this build lowered it, in `members`' order.
     pub fn cargo_workspace(&self, members: &[Member], rust: &[String]) -> Result<Workspace> {
-        let mut out = Vec::new();
+        let mut out = std::vec::Vec::new();
         for (at, member) in members.iter().enumerate() {
             // The entry package is the program; everything it reaches is a
             // library beside it.
@@ -2319,7 +2332,10 @@ impl Project {
                 _ => CrateKind::Lib,
             };
             let rust = rust.get(at).map(String::as_str).unwrap_or("");
-            out.push((member.name.clone(), self.cargo_member(member, rust, kind)?));
+            out.push((
+                member.name.as_str().to_string(),
+                self.cargo_member(member, rust, kind)?,
+            ));
         }
 
         let codegen = self.manifest.codegen_for(&self.settings.words.target);
@@ -2336,7 +2352,7 @@ impl Project {
                 codegen_units: codegen.get("codegen-units").cloned(),
                 incremental: codegen.get("incremental").cloned(),
                 debug: codegen.get("debug").cloned(),
-                panic: Some(self.settings.panic_strategy().to_string()),
+                panic: Some(self.settings.panic_strategy().into()),
             },
         })
     }
@@ -2348,7 +2364,7 @@ impl Project {
         Ok(manifest
             .package_name()
             .ok_or_else(|| refused!("{}", project_members::project_members_unnamed(root)))?
-            .to_string())
+            .to_text())
     }
 
     /// What this build asked the code generator for, as the compiled-`std` cache
@@ -2473,11 +2489,11 @@ impl Project {
             .units
             .iter()
             .map(|unit| match &self.written {
-                Some(written) if canonical(&unit.path) == entry => written.display().to_string(),
-                _ => unit.path.display().to_string(),
+                Some(written) if canonical(&unit.path) == entry => written.display().to_text(),
+                _ => unit.path.display().to_text(),
             })
             .collect();
-        let generated = self.gen_dir().display().to_string();
+        let generated = self.gen_dir().display().to_text();
 
         let mut translated: Vec<_> = diagnostics::translate_units(messages, &lowered.map, &sources)
             .into_iter()
@@ -2577,7 +2593,7 @@ impl Project {
         project_settings::project_settings_program_name(
             &self.root,
             self.variant.as_deref(),
-            package.to_string(),
+            package.to_text(),
             &SettingsHost,
         )
     }
@@ -2764,11 +2780,11 @@ impl project_tests::ProjectTestsHost for TestsHost<'_> {
         // `fs::scratch()`, inside `own`.
         self.held((|| {
             let own = Sandbox::new()?;
-            let out = outcome_of(binary, &[k.to_string()], &[], self.suite.root, &own.0)?;
+            let out = outcome_of(binary, &[k.to_text()], &[], self.suite.root, &own.0)?;
             Ok(project_tests::project_tests_block_outcome(
                 exit_code(&out.status),
                 out.stdout.into(),
-                String::from_utf8_lossy(&out.stderr).into_owned(),
+                String::from_utf8_lossy(&out.stderr),
             ))
         })())
     }
@@ -2785,7 +2801,7 @@ impl project_tests::ProjectTestsHost for TestsHost<'_> {
                 &own.0,
                 exit_code(&out.status),
                 out.stdout.into(),
-                String::from_utf8_lossy(&out.stderr).into_owned(),
+                String::from_utf8_lossy(&out.stderr),
             )))
         })())
     }
@@ -2974,7 +2990,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
     fn package_name(&self, root: &Path) -> HostResult<Option<String>> {
         self.held(
             Manifest::read(&root.join("nikaia.toml"))
-                .map(|manifest| manifest.package_name().map(str::to_string)),
+                .map(|manifest| manifest.package_name().map(str::to_text)),
         )
     }
 
@@ -3152,7 +3168,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         let outer = WARNED.with(|warned| warned.replace(project.warned));
         let shown = match &project.written {
             Some(written) if canonical(&member.entry) == canonical(&project.entry()) => {
-                Some(written.display().to_string())
+                Some(written.display().to_text())
             }
             _ => None,
         };
@@ -3250,11 +3266,11 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
 
     fn choices(&self) -> (String, String) {
         let choices = self.project.settings.choices();
-        (choices.build.to_string(), choices.backend.to_string())
+        (choices.build.to_text(), choices.backend.to_text())
     }
 
     fn compiler(&self) -> String {
-        env!("NIKAIA_COMPILER").to_string()
+        env!("NIKAIA_COMPILER").to_text()
     }
 
     fn toolchain_is_new_enough(&self) -> Option<String> {
@@ -3264,11 +3280,11 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn target_triple(&self) -> String {
-        self.project.settings.build.target.triple().to_string()
+        self.project.settings.build.target.triple().to_text()
     }
 
     fn host_triple(&self) -> Option<String> {
-        crate::emit::host_target().map(|target| target.triple().to_string())
+        crate::emit::host_target().map(|target| target.triple().to_text())
     }
 
     fn toolchain_can_build_for(&self, triple: &str) -> bool {
@@ -3290,7 +3306,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         self.held(
             self.project
                 .cargo_member(&members[at as usize], rust, CrateKind::Lib)
-                .map(|member| member.render()),
+                .map(|member| String::from(member.render())),
         )
     }
 
@@ -3305,7 +3321,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     fn manifest_text(&self) -> (String, String) {
         let path = self.project.root.join("nikaia.toml");
         let text = std::fs::read_to_string(&path).unwrap_or_default();
-        (path.display().to_string(), text)
+        (path.display().to_text(), String::from(text))
     }
 
     fn runs_without_cargo(&self, link_flags: &[String]) -> bool {
@@ -3336,7 +3352,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
             .settings
             .as_env()
             .into_iter()
-            .map(|(name, value)| (name, value.to_string_lossy().into_owned()))
+            .map(|(name, value)| (name, value.to_string_lossy().to_text()))
             .collect()
     }
 
@@ -3347,8 +3363,8 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     fn shown_as(&self) -> Option<(String, String)> {
         self.project.written.as_ref().map(|written| {
             (
-                canonical(&self.project.entry()).display().to_string(),
-                written.display().to_string(),
+                canonical(&self.project.entry()).display().to_text(),
+                written.display().to_text(),
             )
         })
     }
@@ -3395,10 +3411,15 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
                 wrapper: std::env::current_exe().context("finding this compiler's own path")?,
                 env: env
                     .iter()
-                    .map(|(name, value)| (name.clone(), OsString::from(value)))
+                    .map(|(name, value)| (name.into(), OsString::from(value)))
                     .collect(),
-                config: project.settings.cpu_config(),
-                unset: unset.to_vec(),
+                config: project
+                    .settings
+                    .cpu_config()
+                    .iter()
+                    .map(std::string::String::from)
+                    .collect(),
+                unset: unset.iter().map(std::string::String::from).collect(),
             })
         })())?;
         *self.cargo.borrow_mut() = Some(cargo);
@@ -3410,7 +3431,13 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn cargo_messages(&self, verb: &str, args: &[String]) -> HostResult<(i32, String)> {
-        self.held(self.cargo().messages(verb, args))
+        let args: std::vec::Vec<std::string::String> =
+            args.iter().map(std::string::String::from).collect();
+        self.held(
+            self.cargo()
+                .messages(verb, &args)
+                .map(|(code, said)| (code, String::from(said))),
+        )
     }
 
     fn settle(&self) {
@@ -3422,7 +3449,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn package_name(&self) -> Option<String> {
-        self.project.manifest.package_name().map(str::to_string)
+        self.project.manifest.package_name().map(str::to_text)
     }
 
     fn bind(&self) -> Option<String> {
@@ -3445,7 +3472,14 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn cargo_run(&self, args: &[String]) -> HostResult<i32> {
-        self.held(self.cargo().run("run", args, self.program_args))
+        let args: std::vec::Vec<std::string::String> =
+            args.iter().map(std::string::String::from).collect();
+        let after: std::vec::Vec<std::string::String> = self
+            .program_args
+            .iter()
+            .map(std::string::String::from)
+            .collect();
+        self.held(self.cargo().run("run", &args, &after))
     }
 
     fn run_directly(&self, binary: &Path) -> HostResult<i32> {
@@ -3488,7 +3522,7 @@ pub fn runtime_dependencies_for(rust: &str) -> Vec<(String, String)> {
         .map(|table| {
             table
                 .into_iter()
-                .map(|(name, value)| (format!("{name:?}"), value.to_string()))
+                .map(|(name, value)| (format!("{name:?}"), value.to_text()))
                 .collect()
         })
         .unwrap_or_default()
@@ -3501,12 +3535,14 @@ pub fn runtime_dependencies_for(rust: &str) -> Vec<(String, String)> {
 /// value* (0.0.230, issue #163 before it). It forwards to `winnow-grammar`'s
 /// own `trace`, as `nikaia` and `nikaia-std` do, so turning it on traces the
 /// parser end to end.
-fn runtime_features(dependencies: &BTreeMap<String, toml::Value>) -> BTreeMap<String, Vec<String>> {
+fn runtime_features(
+    dependencies: &BTreeMap<std::string::String, toml::Value>,
+) -> BTreeMap<std::string::String, std::vec::Vec<std::string::String>> {
     let mut out = BTreeMap::new();
     if dependencies.contains_key("winnow-grammar") {
         out.insert(
             "trace".to_string(),
-            vec!["winnow-grammar/trace".to_string()],
+            std::vec!["winnow-grammar/trace".to_string()],
         );
     }
     out
@@ -3515,14 +3551,14 @@ fn runtime_features(dependencies: &BTreeMap<String, toml::Value>) -> BTreeMap<St
 fn runtime_dependencies(
     rust: &str,
     reentrancy_check: crate::emit::ReentrancyCheck,
-) -> Result<BTreeMap<String, toml::Value>> {
+) -> Result<BTreeMap<std::string::String, toml::Value>> {
     let mut out = BTreeMap::new();
 
     if rust.contains("nikaia_std") {
         let mut table = toml::Table::new();
         table.insert(
             "path".to_string(),
-            toml::Value::String(Sysroot::resolve().std_dir().to_string_lossy().into_owned()),
+            toml::Value::String(Sysroot::resolve().std_dir().to_string_lossy().to_string()),
         );
         // **A declined guarantee reaches the crate that carries it**
         // ([ADR-281](../../docs/specification/adr/adr-281.md) D36). The check
@@ -3614,7 +3650,11 @@ impl project_drive::ProjectDriveWrapperHost for WrapperHost {
     }
 
     fn crate_name(&self) -> Option<String> {
-        self.invocation.borrow().crate_name.clone()
+        self.invocation
+            .borrow()
+            .crate_name
+            .clone()
+            .map(String::from)
     }
 
     fn lower(
@@ -3659,7 +3699,7 @@ impl project_drive::ProjectDriveWrapperHost for WrapperHost {
         invocation
             .args
             .iter()
-            .map(|arg| arg.to_string_lossy().into_owned())
+            .map(|arg| arg.to_string_lossy().to_text())
             .collect()
     }
 
@@ -3805,7 +3845,7 @@ mod tests {
         .expect("resolves");
         assert_eq!(
             runtime_features(&with)["trace"],
-            ["winnow-grammar/trace".to_string()]
+            ["winnow-grammar/trace".to_text()]
         );
         let without = runtime_dependencies(
             "use nikaia_std::prelude;",

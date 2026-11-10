@@ -10,6 +10,8 @@ read b
 read c
 kept 1 before the stop
 p;q fails: unexpected end of input, expected `;` at line 1, column 4
+private builds: false
+error[E0603]: function `parse_items_reader` is private
 with `all = ["lines::Words"]`:
   [features]
   all = []

@@ -17,6 +17,8 @@
 //! tables `[build.<target>]`. One reader, because a manifest read twice is a
 //! manifest that can be understood two ways.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -243,12 +245,12 @@ fn item(
     machine: bool,
 ) -> decide::ManifestItem {
     decide::ManifestItem {
-        section: section.to_string(),
-        name: name.to_string(),
-        key: key.to_string(),
+        section: section.to_text(),
+        name: name.to_text(),
+        key: key.to_text(),
         table: value.is_table(),
-        text: value.to_string(),
-        word: value.as_str().map(str::to_string),
+        text: value.to_text(),
+        word: value.as_str().map(str::to_text),
         integer: value.as_integer(),
         machine,
     }
@@ -283,6 +285,8 @@ fn dependency_of(declared: &decide::ManifestDependency) -> Dependency {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{format, vec};
 
     // The other tests of this module moved to `tools/manifest.nika` (ADR-294,
     // #125). These read `toml::Value`s, a flag, or a tuple with a nullable slot

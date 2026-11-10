@@ -9,7 +9,7 @@ pub fn foreign_params(words: &winnow_grammar::InternerContext, items: &[Spanned<
                 for declaration in declarations.iter() {
                     let mut types: Vec<Type> = vec![];
                     for arg in declaration.node.args.iter() { types.push(arg.ty.clone()); }
-                    out.insert(words.resolve(declaration.node.name).to_string(), types);
+                    out.insert(nikaia_std::block::Text::from(words.resolve(declaration.node.name).to_string()), types);
                 }
             },
             _ => { },
@@ -22,7 +22,7 @@ pub fn opaque_handles(words: &winnow_grammar::InternerContext, items: &[Spanned<
     let mut out: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     for item in items.iter() {
         match &item.node {
-            Item::Extern { opaque, .. } => { for handle in opaque.iter() { out.insert(words.resolve(handle.node.name).to_string(), words.resolve(handle.node.released_by).to_string()); } },
+            Item::Extern { opaque, .. } => { for handle in opaque.iter() { out.insert(nikaia_std::block::Text::from(words.resolve(handle.node.name).to_string()), nikaia_std::block::Text::from(words.resolve(handle.node.released_by).to_string())); } },
             _ => { },
         }
     }
@@ -39,7 +39,7 @@ pub fn foreign_results(words: &winnow_grammar::InternerContext, items: &[Spanned
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     } { Some(__nikaia_value) => __nikaia_value, None => continue };
-                    out.insert(words.resolve(declaration.node.name).to_string(), ret);
+                    out.insert(nikaia_std::block::Text::from(words.resolve(declaration.node.name).to_string()), ret);
                 }
             },
             _ => { },
@@ -55,7 +55,7 @@ pub fn foreign_traits(words: &winnow_grammar::InternerContext, items: &[Spanned<
             Item::Impl { trait_name, .. } => {
                 let trait_name = *trait_name;
                 let held = match trait_name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                let name = words.resolve(held).to_string();
+                let name = nikaia_std::block::Text::from(words.resolve(held).to_string());
                 if name.contains("::") { out.insert(name); }
             },
             _ => { },
@@ -71,7 +71,7 @@ pub fn declared_errors(words: &winnow_grammar::InternerContext, items: &[Spanned
             Item::Impl { trait_name, target, .. } => {
                 let trait_name = *trait_name;
                 let held = match trait_name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                if words.resolve(held) == "Error" { out.insert(words.resolve(target.name).to_string()); }
+                if words.resolve(held) == "Error" { out.insert(nikaia_std::block::Text::from(words.resolve(target.name).to_string())); }
             },
             _ => { },
         }
@@ -80,17 +80,17 @@ pub fn declared_errors(words: &winnow_grammar::InternerContext, items: &[Spanned
 }
 
 pub fn sum_name(members: &[String]) -> String {
-    let mut spelled: Vec<String> = vec![];
-    for member in members.iter() { spelled.push(member.replace("::", "_")); }
-    format!("__NikaiaThrows_{}", spelled.join("__"))
+    let mut spelled: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for member in members.iter() { spelled.push(nikaia_std::block::Text::from(member.replace("::", "_"))); }
+    format!("__NikaiaThrows_{}", nikaia_std::block::Text::from(spelled.join("__")))
 }
 
-pub fn sum_variant(member: &str) -> String { member.replace("::", "_") }
+pub fn sum_variant(member: &str) -> String { nikaia_std::block::Text::from(member.replace("::", "_")) }
 
 pub fn variant_slot(owner: &str, variant: &str, at: i64) -> String { format!("{}.{}#{}", owner, variant, at) }
 
 pub fn dsl_name(words: &winnow_grammar::InternerContext, package: Option<winnow_grammar::Symbol>, target: winnow_grammar::Symbol) -> String {
-    let held = match package { Some(__nikaia_value) => __nikaia_value, None => return words.resolve(target).to_string() };
+    let held = match package { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(words.resolve(target).to_string()) };
     format!("{}::{}", words.resolve(held), words.resolve(target))
 }
 
@@ -102,43 +102,43 @@ pub fn error_kind(declared: &collections::BTreeSet<String>, library: &Ledger, na
 }
 
 pub fn sum_member_type(kind: i64, name: &str, params: &str, is_std: bool) -> String {
-    if kind == 0 { return name.to_string(); }
+    if kind == 0 { return nikaia_std::block::Text::from(name.to_string()); }
     if kind == 2 { return format!("nikaia_std::error::Thrown<{}{}>", library_error_path(name, is_std), params); }
     format!("nikaia_std::error::Thrown<{}{}>", name, params)
 }
 
 pub fn library_error_path(name: &str, is_std: bool) -> String {
     if is_std && name.contains("::") && !name.starts_with("nikaia_std::") { return format!("nikaia_std::{}", name); }
-    name.to_string()
+    nikaia_std::block::Text::from(name.to_string())
 }
 
 pub fn member_of(words: &winnow_grammar::InternerContext, declared: &collections::BTreeSet<String>, library: &Ledger, pattern: &MatchPattern) -> Option<String> {
     let path = match match_path(pattern) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if path.len() == 1 {
-        let bare = words.resolve(*nikaia_std::index::get(&path, 0)).to_string();
+        let bare = nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&path, 0)).to_string());
         if error_kind(declared, library, &bare) == 1 { return Some(bare); }
         return None;
     }
     if path.len() < 2 { return None; }
-    let mut whole: Vec<String> = vec![];
+    let mut whole: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for symbol in path.iter() {
         let symbol = *symbol;
-        whole.push(words.resolve(symbol).to_string());
+        whole.push(nikaia_std::block::Text::from(words.resolve(symbol).to_string()));
     }
-    let written = whole.join("::");
+    let written = nikaia_std::block::Text::from(whole.join("::"));
     if error_kind(declared, library, &written) != 0 { return Some(written); }
-    let mut parts: Vec<String> = vec![];
-    for at in 0..path.len() as i64 - 1 { parts.push(words.resolve(*nikaia_std::index::get(&path, (at) as usize)).to_string()); }
-    let member = parts.join("::");
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for at in 0..path.len() as i64 - 1 { parts.push(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&path, (at) as usize)).to_string())); }
+    let member = nikaia_std::block::Text::from(parts.join("::"));
     if error_kind(declared, library, &member) == 0 { return None; }
     Some(member)
 }
 
 pub(crate) fn match_path(pattern: &MatchPattern) -> Option<Vec<winnow_grammar::Symbol>> {
     match pattern {
-        MatchPattern::Path(path) => { return Some(path.to_owned()); },
-        MatchPattern::Tuple { path, .. } => { return Some(path.to_owned()); },
-        MatchPattern::Named { path, .. } => { return Some(path.to_owned()); },
+        MatchPattern::Path(path) => { return Some(path.copy_owned()); },
+        MatchPattern::Tuple { path, .. } => { return Some(path.copy_owned()); },
+        MatchPattern::Named { path, .. } => { return Some(path.copy_owned()); },
         _ => { },
     }
     None

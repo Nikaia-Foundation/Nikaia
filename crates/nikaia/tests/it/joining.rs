@@ -25,6 +25,8 @@ use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn lowered(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -276,7 +278,7 @@ fn the_block_keeps_every_failure_and_the_first_still_wins() {
     let ran = std::process::Command::new(&binary)
         .output()
         .expect("the program runs");
-    let said = String::from_utf8_lossy(&ran.stderr).into_owned();
+    let said = String::from_utf8_lossy(&ran.stderr);
     let _ = std::fs::remove_dir_all(&dir);
 
     assert!(!ran.status.success(), "a failing block fails the program");
@@ -406,7 +408,7 @@ fn rustc_says_nothing_about_the_generated_file() {
          \x20   let got = always() catch { return }\n\
          \x20   println(f\"{got}\")\n\
          }\n"
-        .to_string(),
+        .to_text(),
     ];
     for (at, source) in programs.iter().enumerate() {
         let rust = lowered(source);
@@ -414,7 +416,7 @@ fn rustc_says_nothing_about_the_generated_file() {
         let file = dir.join("main.rs");
         std::fs::write(&file, &rust).expect("write the Rust");
         let out = common::compile(&file, &["-o", dir.join("program").to_str().expect("path")]);
-        let said = String::from_utf8_lossy(&out.stderr).into_owned();
+        let said = String::from_utf8_lossy(&out.stderr);
         assert!(out.status.success(), "{said}\n--- the Rust ---\n{rust}");
         assert!(
             said.trim().is_empty(),

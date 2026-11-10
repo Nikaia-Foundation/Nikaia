@@ -5,6 +5,8 @@
 //! `rust-toolchain.toml` are never read, and the user's `CARGO_HOME` still is.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -65,7 +67,7 @@ fn host() -> String {
         .lines()
         .find_map(|line| line.strip_prefix("host: "))
         .expect("rustc names its host")
-        .to_string()
+        .to_text()
 }
 
 /// **D1, the reproduction of #480**: a linker the project's

@@ -7,6 +7,8 @@
 //! whose teardown does something, each call that hands it a name is told once.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeSet;
 use std::process::Command;
 
@@ -22,15 +24,11 @@ fn findings(source: &str, moved: &[(&str, &str, bool)]) -> Vec<Finding> {
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
     let mut newly = Newly::new();
     for (callee, param, now) in moved {
-        newly
-            .keeps
-            .entry(callee.to_string())
-            .or_default()
-            .push(Kept {
-                param: param.to_string(),
-                now: *now,
-                ty: "Handle".to_string(),
-            });
+        newly.keeps.entry(callee.to_text()).or_default().push(Kept {
+            param: param.to_text(),
+            now: *now,
+            ty: "Handle".to_text(),
+        });
     }
     check::check_against(
         &parsed,
@@ -139,7 +137,7 @@ fn a_parameter_put_into_a_list_literal_is_kept() {
     let parsed = parse_to_ast(PROGRAM).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let look = own.functions.get("look").expect("look is in the ledger");
-    assert!(look.keeps.contains(&"h".to_string()), "{look:#?}");
+    assert!(look.keeps.contains(&"h".to_text()), "{look:#?}");
 
     for how in [Build::default(), Build::parallel()] {
         let rust = emit_program(&parsed, how).expect("the source lowers").rust;

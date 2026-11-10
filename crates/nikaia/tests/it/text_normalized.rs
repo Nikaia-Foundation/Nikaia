@@ -4,6 +4,8 @@
 //! editor stored decomposed is the one scalar NFC composes it to.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// The status, the standard output and the standard error of `nikaia <verb>`.
 fn nikaia(name: &str, verb: &str, source: &str) -> (bool, String, String) {
@@ -18,8 +20,8 @@ fn nikaia(name: &str, verb: &str, source: &str) -> (bool, String, String) {
     let _ = std::fs::remove_dir_all(&dir);
     (
         run.status.success(),
-        String::from_utf8_lossy(&run.stdout).into_owned(),
-        String::from_utf8_lossy(&run.stderr).into_owned(),
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr),
     )
 }
 
@@ -94,8 +96,8 @@ fn main() throws {
 #[test]
 fn a_decomposed_char_literal_is_the_composed_scalar() {
     for (name, written) in [
-        ("normalized_char_escape", "e\\u{301}".to_string()),
-        ("normalized_char_source", "e\u{301}".to_string()),
+        ("normalized_char_escape", "e\\u{301}".to_text()),
+        ("normalized_char_source", "e\u{301}".to_text()),
     ] {
         let source = format!(
             "fn main() throws {{\n    let c = '{written}'\n    println(f\"{{c}}\")\n    println(f\"{{c == 'é'}}\")\n    println(f\"{{c as i64}}\")\n}}\n"

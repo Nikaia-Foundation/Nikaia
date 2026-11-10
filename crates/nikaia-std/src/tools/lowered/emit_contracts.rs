@@ -52,7 +52,7 @@ pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, pa
     };
     let published_contracts = prove_with_published(&own_contracts, &propagation.published);
     let proven = host.proven(&propagation, &published_contracts);
-    let order_proofs = EmitOrderProofs { indices: propagation.list_indices.to_owned(), proved_indices: proven.indices.to_owned(), operations: propagation.arithmetic.keys().copied().chain(propagation.shifts.keys().copied()).collect(), proved_operations: proven.arithmetic.to_owned(), negations: propagation.negations.keys().copied().collect(), proved_negations: proven.negations.to_owned() };
+    let order_proofs = EmitOrderProofs { indices: propagation.list_indices.copy_owned(), proved_indices: proven.indices.copy_owned(), operations: propagation.arithmetic.keys().copied().chain(propagation.shifts.keys().copied()).collect(), proved_operations: proven.arithmetic.copy_owned(), negations: propagation.negations.keys().copied().collect(), proved_negations: proven.negations.copy_owned() };
     let shared = host.shared(&own_contracts);
     let made_graphs = nikaia_std::index::or(graphs, || emit_contracts_package_graphs(units, &own_contracts).into());
     let plan = match build.trusted {
@@ -62,27 +62,27 @@ pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, pa
     let package_wide = emit_tables_package_borrowing(units);
     let unchecked = build.bounds_removed || build.overflow_removed;
     let fold_callees = emit_holes_fold_callees(parsed, words, &tables.grammars);
-    let keep_plans: collections::BTreeMap<String, BufferPlan> = nikaia_std::index::or(checked_plans, || host.buffer_plans(&own_contracts).into()).into_iter().map(|plan| { (plan.key.to_string(), plan) }).collect();
+    let keep_plans: collections::BTreeMap<String, BufferPlan> = nikaia_std::index::or(checked_plans, || host.buffer_plans(&own_contracts).into()).into_iter().map(|plan| { (nikaia_std::block::Text::from(plan.key.to_string()), plan) }).collect();
     let proven_indices: collections::BTreeSet<i64> = propagation.list_indices.iter().copied().filter(|&node| { build.bounds_removed && proven.indices.contains(&node) }).collect();
     let proven_arithmetic: collections::BTreeMap<i64, String> = propagation.arithmetic.iter().chain(propagation.shifts.iter()).filter(|&__nikaia_tuple8325| {
         let (at, _) = __nikaia_tuple8325; let at = nikaia_std::num::value(at);
         build.overflow_removed && proven.arithmetic.contains(&at)
     }).map(|__nikaia_tuple8403| {
         let (at, ty) = __nikaia_tuple8403; let at = nikaia_std::num::value(at);
-        (at, ty.to_string())
+        (at, nikaia_std::block::Text::from(ty.to_string()))
     }).collect();
     let proven_negations: collections::BTreeMap<i64, String> = propagation.negations.iter().filter(|&__nikaia_tuple8547| {
         let (at, _) = __nikaia_tuple8547; let at = nikaia_std::num::value(at);
         build.overflow_removed && proven.negations.contains(&at)
     }).map(|__nikaia_tuple8624| {
         let (at, ty) = __nikaia_tuple8624; let at = nikaia_std::num::value(at);
-        (at, ty.to_string())
+        (at, nikaia_std::block::Text::from(ty.to_string()))
     }).collect();
-    let believed_arithmetic: collections::BTreeMap<i64, String> = if unchecked { propagation.arithmetic.to_owned() } else { collections::BTreeMap::new() };
+    let believed_arithmetic: collections::BTreeMap<i64, String> = if unchecked { propagation.arithmetic.copy_owned() } else { collections::BTreeMap::new() };
     let mut state = EmitState { described: described.clone(), view_slots: emit_tables_read_view_slots(&own_contracts).into_iter().filter(|__nikaia_tuple9377| {
         let (name, _) = __nikaia_tuple9377;
         name.contains("::")
-    }).chain(units.iter().flat_map(|unit| { emit_tables_view_slots(unit.words, unit.items, &package_wide) })).chain(emit_tables_read_view_slots(described).into_iter()).collect(), borrowing: emit_tables_borrowing_structs_beside(words, items, &package_wide).iter().map(|s| { words.resolve(*s).to_string() }).chain(package_wide.iter().cloned()).collect(), tethered: emit_tables_tethered(&own_contracts, beside), declared_errors: emit_tables_declared_errors(units), carries_input: host.carries_input(&own_contracts), fold_callees, by_name: tables.by_name, grammars: tables.grammars, methods: tables.methods, keep_plans, structs: tables.structs, structs_beside: emit_tables_structs_beside(beside), template_holes: collections::BTreeMap::new(), template_errors: collections::BTreeMap::new(), hole_wraps: host.hole_wraps(), kept_calls: collections::BTreeMap::new(), uses_std: tables.uses_std, is_std: false, crate_root: build.crate_root.to_string(), offered_to_rust: build.offered_to_rust, fails: tables.fails, trusted_input: build.trusted, unchecked_assumes: unchecked, believed_arithmetic, trusted_lets: plan.lets, escaped_lets: plan.escaped, fast_slots: plan.slots, seeded_calls: host.seeded_calls(), seeds: host.seeds(), proven_indices, proven_arithmetic, proven_negations, proven_calls: proven.calls, facts: propagation, cleaned_types: nikaia_std::index::or(match own_contracts.implementations.get("Cleanup") {
+    }).chain(units.iter().flat_map(|unit| { emit_tables_view_slots(unit.words, unit.items, &package_wide) })).chain(emit_tables_read_view_slots(described).into_iter()).collect(), borrowing: emit_tables_borrowing_structs_beside(words, items, &package_wide).iter().map(|s| { nikaia_std::block::Text::from(words.resolve(*s).to_string()) }).chain(package_wide.iter().cloned()).collect(), tethered: emit_tables_tethered(&own_contracts, beside), declared_errors: emit_tables_declared_errors(units), carries_input: host.carries_input(&own_contracts), fold_callees, by_name: tables.by_name, grammars: tables.grammars, methods: tables.methods, keep_plans, structs: tables.structs, structs_beside: emit_tables_structs_beside(beside), template_holes: collections::BTreeMap::new(), template_errors: collections::BTreeMap::new(), hole_wraps: host.hole_wraps(), kept_calls: collections::BTreeMap::new(), uses_std: tables.uses_std, is_std: false, package_grammar: units.iter().any(|unit| { unit.items.iter().any(|item| { matches!(item.node, Item::Grammar(_)) }) }), crate_root: nikaia_std::block::Text::from(build.crate_root.to_string()), offered_to_rust: build.offered_to_rust, fails: tables.fails, trusted_input: build.trusted, unchecked_assumes: unchecked, believed_arithmetic, trusted_lets: plan.lets, escaped_lets: plan.escaped, fast_slots: plan.slots, seeded_calls: host.seeded_calls(), seeds: host.seeds(), proven_indices, proven_arithmetic, proven_negations, proven_calls: proven.calls, facts: propagation, cleaned_types: nikaia_std::index::or(match own_contracts.implementations.get("Cleanup") {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || collections::BTreeSet::new().into()), shared, built_at_build_time: emit_holes_built_at_build_time(parsed, words, items), pausing_reach: made_graphs.pausing_reach, code_cycle_graph: made_graphs.code_cycle_graph, own_methods: method_index(&own_contracts), library_methods: method_index(library), own_contracts, dsl_drivers: drivers(words, items).into_iter().collect(), foreign_params: foreign_params(words, items), opaque_handles: opaque_handles(words, items), foreign_results: foreign_results(words, items), entry: true, sums: collections::BTreeMap::new(), sums_written: collections::BTreeSet::new() };
@@ -95,7 +95,7 @@ pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, pa
     state.sums_written = emit_sums_written(&state.sums, units, &state.sums_used_here(&world));
     let coalesced = vc_coalesced(&state.facts);
     let mut_viewed = vc_mut_viewed(&state.facts);
-    let ask = VcAsk { names: words, items, own: &state.own_contracts, library, lent: &state.facts.lent_lets, coalesced: &coalesced, refused, viewed: nikaia_std::index::get(&units, 0).viewed_arms, mut_viewed: &mut_viewed };
+    let ask = VcAsk { names: words, items, own: &state.own_contracts, library, lent: &state.facts.lent_lets, coalesced: &coalesced, refused, viewed: nikaia_std::index::get(&units, 0).viewed_arms, mut_viewed: &mut_viewed, receiver_views: &state.facts.receiver_views };
     EmitContractsMade { give_ups: vc_analyse(&ask, &|e| { emit_holes_literal(parsed, words, e) }).give_ups, state, order_proofs }
 }
 

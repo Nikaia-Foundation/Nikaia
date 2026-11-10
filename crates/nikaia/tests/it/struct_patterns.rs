@@ -7,6 +7,8 @@
 //! is compared.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::contracts::{Ledger, LedgerOps, STD};
@@ -135,7 +137,7 @@ fn size(s: Shape) -> i64 {
 fn main() throws { println(f\"{size(Shape::Circle { r: 1 })}\") }
 ";
     let codes: Vec<String> = findings(source).iter().map(|f| f.code.clone()).collect();
-    assert!(codes.contains(&"NK1155".to_string()), "{codes:?}");
+    assert!(codes.contains(&"NK1155".to_text()), "{codes:?}");
 }
 
 /// **A struct pattern that names some of a struct's fields and not `..` is

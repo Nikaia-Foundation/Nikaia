@@ -1,0 +1,39 @@
+// An `@stream` entry walks `list(item, sep)` item by item (ADR-grammar-2 D7,
+// #1459): the separator is taken between two items, and a separator not
+// followed by an item is left to what follows. Counted repeats walk the same
+// way, and a stream shorter than the count fails.
+
+struct Item {
+	word: String,
+}
+
+grammar Commas {
+	@stream entry rule items -> Item = list(item, ",")
+	rule item -> Item = w:text(("a" | "b" | "c")+) -> { Item { word: w.clone() } }
+}
+
+grammar Bracketed {
+	@stream entry rule items -> Item = "[" item{2,3} "]"
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
+}
+
+fn bracketed(text: String) -> i64 throws {
+	let mut seen = 0
+	for it in Bracketed::items(text) {
+		println(f"bracketed {it.word}")
+		seen += 1
+	}
+	return seen
+}
+
+fn main() throws {
+	let mut seen = 0
+	for it in Commas::items("a,b,c") {
+		println(it.word)
+		seen += 1
+	}
+	println(f"{seen} items")
+	println(f"{bracketed("[p;q;]")} between the brackets")
+	let short = bracketed("[p;]") catch { -1 }
+	println(f"one item for two: {short}")
+}

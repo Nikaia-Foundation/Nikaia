@@ -16,7 +16,7 @@ pub fn check_claims_unproved(findings: &[CheckFinding], claims: &collections::BT
             ClaimHeld::Precondition(ref f, n) => {
                 if f == "main" { continue; }
                 let mut broken: i64 = 0;
-                for r in findings.iter() { if r.code == "NK1207" && r.message.contains(&format!("`{}`'s precondition", f)) { broken += 1; } }
+                for r in findings.iter() { if r.code == "NK1207" && r.message.contains(&*format!("`{}`'s precondition", f)) { broken += 1; } }
                 let left = n - broken;
                 if left <= 0 { continue; }
                 let mut calls = String::from("one call does");

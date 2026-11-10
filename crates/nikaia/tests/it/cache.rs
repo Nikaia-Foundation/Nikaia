@@ -9,6 +9,8 @@
 //! `the_profiles_agree_on_every_example`.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::Command;
@@ -56,7 +58,7 @@ fn a_switch_sensitive_example() -> String {
          if that changed, pick another example rather than deleting the check",
         path.display()
     );
-    source
+    String::from(source)
 }
 
 #[test]
@@ -358,7 +360,7 @@ fn the_cache_is_on_by_default_and_writes_nothing_beside_the_source() {
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
-        String::from_utf8_lossy(&out.stdout).into_owned()
+        String::from_utf8_lossy(&out.stdout)
     };
 
     assert!(
@@ -381,7 +383,7 @@ fn the_cache_is_on_by_default_and_writes_nothing_beside_the_source() {
     // *cache* may appear there when no project owns a lockfile.
     let mut left: Vec<String> = std::fs::read_dir(&src)
         .expect("read src")
-        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .map(|e| e.unwrap().file_name().to_string_lossy().to_text())
         .collect();
     left.sort();
     assert_eq!(
@@ -492,21 +494,21 @@ fn a_file_named_another_way_is_not_served_the_other_name() {
             "{}",
             String::from_utf8_lossy(&run.stderr)
         );
-        let said = String::from_utf8_lossy(&run.stdout).to_string();
+        let said = String::from_utf8_lossy(&run.stdout).to_text();
         let rust = std::fs::read_to_string(dir.join("one.rs")).expect("the Rust");
         (said.contains("from cache"), rust)
     };
-    let absolute = dir.join("one.nika").to_string_lossy().to_string();
+    let absolute = dir.join("one.nika").to_string_lossy().to_text();
     let (hit, rust) = lower(&absolute);
     assert!(!hit);
-    assert!(rust.contains(&format!("{absolute:?}")), "{rust}");
+    assert!(rust.contains(&*format!("{absolute:?}")), "{rust}");
     let (hit, rust) = lower("one.nika");
     assert!(
         !hit,
         "the relative name was served the absolute one's lowering"
     );
     assert!(
-        rust.contains("\"one.nika\"") && !rust.contains(&absolute),
+        rust.contains("\"one.nika\"") && !rust.contains(&*absolute),
         "{rust}"
     );
     let (hit, _) = lower("one.nika");
@@ -536,9 +538,9 @@ fn a_hit_says_the_warnings_of_the_check_again() {
             command.env("NIKAIA_CACHE_DIR", cache);
         }
         let out = command.output().expect("the nikaia binary runs");
-        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        let err = String::from_utf8_lossy(&out.stderr);
         assert!(out.status.success(), "{verb}: {err}");
-        (String::from_utf8_lossy(&out.stdout).into_owned(), err)
+        (String::from_utf8_lossy(&out.stdout), err)
     };
 
     let (first, warned) = said("lower", Some(&home));

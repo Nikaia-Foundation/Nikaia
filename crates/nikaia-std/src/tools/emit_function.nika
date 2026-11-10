@@ -850,11 +850,14 @@ impl EmitState {
                         } else {
                             // **A parameter lowered as a view counts too**
                             // (ADR-283 D24): a view handed back through it
-                            // borrows from the caller's argument.
+                            // borrows from the caller's argument. A view of
+                            // static text (ADR-282 D29) borrows nothing, so
+                            // the result is `'static` beside it (#1420).
                             let mut borrows_from_something = receiver != null
                             let mut index = 0
                             for each in args {
-                                if self.carries_a_view(world, each.ty) || self.emit_fn_lowered_as_a_view(world, key, recv, index, each) {
+                                let lasting_text = each.ty.is_view && each.ty.lasting
+                                if !lasting_text && (self.carries_a_view(world, each.ty) || self.emit_fn_lowered_as_a_view(world, key, recv, index, each)) {
                                     borrows_from_something = true
                                 }
                                 index += 1

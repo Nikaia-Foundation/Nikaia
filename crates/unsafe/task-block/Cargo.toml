@@ -11,6 +11,23 @@ publish = false
 # `Vec<T, A>` on stable Rust, with an allocator that may refuse. Only `alloc`,
 # as `nikaia-std`'s hashbrown has it.
 allocator-api2 = { version = "0.2", default-features = false, features = ["alloc"] }
+# `collect`: a grammar's repetitions collect into a `List` (`collect L;`,
+# winnow-grammar 0.2). Optional, so the checks of this crate need none of it;
+# the same pin as Nikaia's workspace, no default features (the seed source
+# stays the choice of whoever builds `nikaia-std`).
+winnow-grammar = { git = "https://github.com/keywan-ghadami/winnow-grammar", rev = "2eb219c", version = "0.2.0", default-features = false, optional = true }
+
+# `tether`: a block's text is a buffer views are cut from (`tether::Viewed`),
+# so a keep holds it as it holds a `String` (#490). Optional, as `collect`.
+tether = { path = "../tether", optional = true }
+# `rayon`: a parallel walk collects into a `List` (`FromParallelIterator`),
+# as into a `Vec` (#490). Optional, as `collect`; the pin is `nikaia-std`'s.
+rayon = { version = "1.10", optional = true }
+
+[features]
+collect = ["dep:winnow-grammar"]
+tether = ["dep:tether"]
+rayon = ["dep:rayon"]
 
 # Its own workspace: its own lock file, its own checks, its own toolchain for
 # them (see README.md). Nikaia's workspace reaches it as a path dependency.

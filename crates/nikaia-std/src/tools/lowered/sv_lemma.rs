@@ -38,12 +38,12 @@ pub(crate) fn sv_rat_abs(b: &SvRat) -> Option<SvRat> {
 pub fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma) -> Option<i64> {
     if l.def < 0 || l.def >= defs.len() as i64 { return None; }
     let t = (*nikaia_std::index::get(&defs, nikaia_std::index::at(l.def))).clone();
-    let m = t.name.to_string();
-    let x = t.a.to_string();
-    let y = t.b.to_string();
+    let m = nikaia_std::block::Text::from(t.name.to_string());
+    let x = nikaia_std::block::Text::from(t.a.to_string());
+    let y = nikaia_std::block::Text::from(t.b.to_string());
     let zero = sv_int(0);
     let one = sv_int(1);
-    let s = l.schema.to_string();
+    let s = nikaia_std::block::Text::from(l.schema.to_string());
     if s == "mono" || s == "pow2-mono" || s == "congruence" {
         if l.other < 0 || l.other >= defs.len() as i64 || nikaia_std::index::get(&defs, nikaia_std::index::at(l.other)).op != t.op { return None; }
         let u = (*nikaia_std::index::get(&defs, nikaia_std::index::at(l.other))).clone();
@@ -112,7 +112,7 @@ pub fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma) -> Op
             return Some(arena.or(vec![xs, ys, ts]));
         }
         if s == "point" && (l.sa == 1 || l.sa == 2) {
-            let fixed = if l.sa == 1 { x.to_string() } else { y.to_string() };
+            let fixed = if l.sa == 1 { nikaia_std::block::Text::from(x.to_string()) } else { nikaia_std::block::Text::from(y.to_string()) };
             let free = if l.sa == 1 { &y } else { &x };
             let off = match sv_lv(arena, "distinct", &fixed, &l.a) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let na = match sv_rat_neg(&l.a) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -135,7 +135,7 @@ pub fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma) -> Op
         let size = match sv_rat_abs(&l.b) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let top = match sv_rat_sub(&size, &one) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let nb = match sv_rat_neg(&l.b) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let q = if t.op == "div" { m.to_string() } else { t.partner.to_string() };
+        let q = if t.op == "div" { nikaia_std::block::Text::from(m.to_string()) } else { nikaia_std::block::Text::from(t.partner.to_string()) };
         if q == "" { return None; }
         let r = match sv_lin_add(&sv_lin_var(&x), &match sv_lm(&nb, &q) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if t.op == "div" {
@@ -144,7 +144,7 @@ pub fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma) -> Op
             let on = arena.and(vec![low, high]);
             return Some(arena.or(vec![off, on]));
         }
-        let is = match sv_la(arena, "=", &match sv_lin_sub(&r, &sv_lin_var(&m.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let is = match sv_la(arena, "=", &match sv_lin_sub(&r, &sv_lin_var(&nikaia_std::block::Text::from(m.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let low = match sv_lv(arena, ">=", &m, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let high = match sv_lv(arena, "<=", &m, &top) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let on = arena.and(vec![is, low, high]);
@@ -232,7 +232,7 @@ pub(crate) fn sv_nl_same_place(t: &SvNl, u: &SvNl, values: &collections::BTreeMa
 
 pub fn sv_lemma_query(arena: &TermArena, facts: &[i64], goal: i64, reals: &collections::BTreeSet<String>, defs: &[SvNl], lemmas: &[SvLemma]) -> Option<SvCnf> {
     let mut work = arena.clone();
-    let mut all = facts.to_owned();
+    let mut all = facts.copy_owned();
     for l in lemmas.iter() { all.push(match sv_lemma_formula(&mut work, defs, l) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
     let mut why = lg_why();
     sv_cnf_sorted(&work, &all, goal, reals, &mut why)

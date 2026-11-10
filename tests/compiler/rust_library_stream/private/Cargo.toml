@@ -1,0 +1,13 @@
+# A Rust crate that takes `../lines` with its feature `stream` and calls the
+# engine's `parse_items_reader`, which is private to the grammar's module
+# (ADR-grammar-2 D7, #1464): its build fails with E0603, by
+# `tests/a_rust_library_reads_a_stream_entry.nika`.
+[package]
+name = "private"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nikaia_lines = { path = "../lines/target/rust-library/nikaia_lines", features = ["stream"] }
+
+[workspace]

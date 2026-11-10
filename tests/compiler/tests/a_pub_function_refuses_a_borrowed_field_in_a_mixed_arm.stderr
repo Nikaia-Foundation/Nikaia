@@ -1,0 +1,41 @@
+error[NK1131]: You can't give away `h.name` here: `h` is only borrowed.
+   --> tests/a_pub_function_refuses_a_borrowed_field_in_a_mixed_arm.nika:10:52
+    |
+ 10 | pub fn by_if(h: ref H, c: bool) -> String { if c { h.name } else { own(h.name) } }
+    |                                                    ^^^^^^
+    |
+    = note: `h` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `h.name` is a `String`. Giving it away would take a piece out of something this function doesn't own.
+    = help: Write `h.name.clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark.
+error[NK1131]: You can't give away `h.name` here: `h` is only borrowed.
+   --> tests/a_pub_function_refuses_a_borrowed_field_in_a_mixed_arm.nika:14:17
+    |
+ 14 |         true => h.name,
+    |                 ^^^^^^
+    |
+    = note: `h` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `h.name` is a `String`. Giving it away would take a piece out of something this function doesn't own.
+    = help: Write `h.name.clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark.
+error[NK1131]: You can't give away `h.name` here: `h` is only borrowed.
+   --> tests/a_pub_function_refuses_a_borrowed_field_in_a_mixed_arm.nika:20:19
+    |
+ 20 |     return if c { h.name } else { own(h.name) }
+    |                   ^^^^^^
+    |
+    = note: `h` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `h.name` is a `String`. Giving it away would take a piece out of something this function doesn't own.
+    = help: Write `h.name.clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark.
+error[NK1131]: You can't give away `v[…]` here: `v` is only borrowed.
+   --> tests/a_pub_function_refuses_a_borrowed_field_in_a_mixed_arm.nika:23:67
+    |
+ 23 | pub fn by_element(v: ref Vec[String], c: bool) -> String { if c { v[0] } else { own(v[0]) } }
+    |                                                                   ^^^^
+    |
+    = note: `v` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `v[…]` is a `String`. Giving it away would take a piece out of something this function doesn't own.
+    = help: Write `v[…].clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark.
+error[NK1131]: You can't give away `self.name` here: this method only borrows `self`.
+   --> tests/a_pub_function_refuses_a_borrowed_field_in_a_mixed_arm.nika:26:54
+    |
+ 26 |     pub fn by_self(self, c: bool) -> String { if c { self.name } else { own(self.name) } }
+    |                                                      ^^^^^^^^^
+    |
+    = note: `self` and `mut self` borrow the value, and `name` is a `String`. Giving it away would take a piece out of something this method doesn't own.
+    = help: Write `self.name.clone()` for a copy, or take `keep self` if the method is meant to use up its value. A result that is a view of `self` on every way out is handed back as it is, with no mark.
+5 type errors

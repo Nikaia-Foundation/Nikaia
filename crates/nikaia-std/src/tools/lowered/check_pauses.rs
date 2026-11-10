@@ -15,7 +15,7 @@ impl CheckState {
     pub fn a_call_that_may_pause(&mut self, callee: &str, pauses: bool, unpromised: bool, span: &Span) {
         if !pauses { return; }
         let mut because: Option<String> = None;
-        if unpromised { because = Some(callee.to_string()); }
+        if unpromised { because = Some(nikaia_std::block::Text::from(callee.to_string())); }
         let pause = CheckPause { what: format!("`{}`", callee), unpromised: because, before_walk: format!("Call `{}` before the walk and pass the values in, or walk with `iter()`, whose lambda may pause.", callee), before_door: format!("Call `{}` before taking the lock and pass its value in, or after it with what the block returned.", callee) };
         self.a_pause(&pause, span);
     }
@@ -27,8 +27,8 @@ impl CheckState {
     }
     pub(crate) fn a_pause(&mut self, pause: &CheckPause, span: &Span) {
         let mut pauses: &'static str = "can pause";
-        let mut notes: Vec<String> = vec![];
-        let mut why: String = String::from("");
+        #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
+        let mut why: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
         if pause.unpromised.is_some() {
             pauses = "doesn't promise that it never pauses";
             why = not_promised_note(nikaia_std::index::or(pause.unpromised.as_deref(), || ""));
@@ -36,13 +36,13 @@ impl CheckState {
         self.note_a_pause();
         if self.in_parallel.is_some() && !self.scoped_task {
             let mut parallel: Vec<String> = vec![String::from("A `par_iter()` lambda runs on every core at once, and a core that waits holds up its share of the work, so the lambda must never pause.")];
-            if pause.unpromised.is_some() { parallel.push(why.to_string()); }
-            self.findings.push(check_refusal("NK2209", span, format!("{} {}, but this runs on several cores at once.", capitalised(&pause.what), pauses), parallel, Some(pause.before_walk.to_string())));
+            if pause.unpromised.is_some() { parallel.push(nikaia_std::block::Text::from(why.to_string())); }
+            self.findings.push(check_refusal("NK2209", span, format!("{} {}, but this runs on several cores at once.", capitalised(&pause.what), pauses), parallel, Some(nikaia_std::block::Text::from(pause.before_walk.to_string()))));
         }
         if !self.inside_a_door { return; }
         notes.push(String::from("While the lock is held, every other task that needs the value waits, so a pause here makes all of them wait too."));
         if pause.unpromised.is_some() { notes.push(why); }
-        self.findings.push(check_refusal("NK2202", span, format!("{} {}, but you're holding a lock here.", capitalised(&pause.what), pauses), notes, Some(pause.before_door.to_string())));
+        self.findings.push(check_refusal("NK2202", span, format!("{} {}, but you're holding a lock here.", capitalised(&pause.what), pauses), notes, Some(nikaia_std::block::Text::from(pause.before_door.to_string()))));
     }
     pub(crate) fn note_a_pause(&mut self) {
         if self.handed_over.is_some() {
@@ -62,8 +62,8 @@ impl CheckState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return };
-        let mut notes: Vec<String> = vec![String::from("A grammar's actions may never pause: a parser works on text that's already there, which is what lets `@frame` parse in parallel.")];
-        let mut pauses: &'static str = "can pause";
+        #[allow(unused_mut)] let mut notes: Vec<String> = vec![String::from("A grammar's actions may never pause: a parser works on text that's already there, which is what lets `@frame` parse in parallel.")];
+        let mut pauses: &'static str = "can pause"; #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
         if contract.sync_claim == Sync::Unpromised {
             pauses = "doesn't promise that it never pauses";
             notes.push(not_promised_note(callee));

@@ -14,6 +14,8 @@
 //! needs a file.
 use crate::common;
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::check;
 use nikaia::contracts::ty::TyOps;
@@ -114,7 +116,7 @@ fn ran(purpose: &str, source: &str) -> String {
         "{purpose} failed: {}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    let printed = String::from_utf8_lossy(&ran.stdout).into_owned();
+    let printed = String::from_utf8_lossy(&ran.stdout);
     let _ = std::fs::remove_dir_all(&dir);
     printed
 }
@@ -357,7 +359,7 @@ fn main() throws {
     // **The one line option A migrated** ([ADR-278](../../../docs/specification/adr/adr-278.md)
     // D2). `u.home` roots in a binding, so `?.city` is a view of it, and the
     // fallback is a text literal - which is already a view, reads the same and
-    // costs nothing. The `.to_string()` that stood here was only ever matching
+    // costs nothing. The `.to_text()` that stood here was only ever matching
     // a left side that used to be owned.
     assert!(
         rust.contains("__nikaia_it.city.as_str()"),
@@ -966,7 +968,7 @@ fn a_view_out_of_a_temporary_on_the_lazy_side_is_refused() {
         nikaia::emit::emit_program(&parsed, nikaia::emit::Build::default()).expect_err("refused");
     assert!(
         refused
-            .to_string()
+            .to_text()
             .contains("Put the value in a `let` on the line before"),
         "{refused}"
     );
@@ -1420,12 +1422,12 @@ fn main() throws {
     assert!(found.iter().all(|f| f.code != "NK2106"), "{found:#?}");
 }
 
-/// **`.to_string()` of text is the text itself, so it is no copy beside `??`**
+/// **`.to_text()` of text is the text itself, so it is no copy beside `??`**
 /// ([ADR-282](../../../docs/specification/adr/adr-282.md) D8, Part I 2.3).
 ///
-/// `?? "nobody".to_string()` is the literal and `?? who.to_string()` of a
+/// `?? "nobody".to_text()` is the literal and `?? who.to_text()` of a
 /// `ref String` is the view - both join the view on the left, and both run.
-/// Owned text stays owned text handed over, so `?? nobody.to_string()` of a
+/// Owned text stays owned text handed over, so `?? nobody.to_text()` of a
 /// `String` name is refused exactly as `?? nobody` is.
 #[test]
 fn the_text_form_of_text_beside_a_view_is_the_text_itself() {

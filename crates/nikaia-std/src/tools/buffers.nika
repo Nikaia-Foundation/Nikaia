@@ -2582,7 +2582,8 @@ fn untethered_let(name: String, value: ref Expr, ty: ref Type?, span: Span, aske
     }
     // A list literal of text made there, without a type, is one too
     // (`own_text_items_written` in `text_tiers.nika`, #1368).
-    if untethered_made_list(value, ty, ask) || (ty == null && own_text_items_written(value)) {
+    // So is a list a call handed back, bound without a type (#1481).
+    if untethered_made_list(value, ty, ask) || (ty == null && (own_text_items_written(value) || untethered_called_list(value, ask, true))) {
         walk.lets.insert(name.clone(), Source::Buffer { at: span.start as i64, name: name.clone(), ty: "", span: span.clone() })
         walk.lists.insert(name.clone())
     }
@@ -2656,11 +2657,22 @@ fn untethered_owned_items(value: ref Expr, ty: ref Type?, ask: ref BufferAsk) ->
     if own_text_items_written(value) {
         return true
     }
+    return untethered_called_list(value, ask, false)
+}
+
+// The call of a function of this unit declared to hand back a list of text
+// of its own, `words(a)`, or of a method, `m.words(a)` (#1481): a list the
+// body owns, as `made_list_local` in `text_tiers.nika` reads one a `let`
+// without a type binds to a call. With `sure`, only a method its name alone
+// finds, as `method_result` there does; without it, any of that name, so an
+// element handed back from the others is refused (`untethered_unplaced`).
+fn untethered_called_list(value: ref Expr, ask: ref BufferAsk, sure: bool) -> bool {
     let called = match value {
         Expr::Call { func, .. } => match func {
             Expr::Variable(name, _) => ask.names.resolve(name).clone(),
             else => return false,
         },
+        Expr::MethodCall { method, .. } => return untethered_method_list(ask.names.resolve(method), ask, sure),
         else => return false,
     }
     for item in ask.items {
@@ -2675,6 +2687,37 @@ fn untethered_owned_items(value: ref Expr, ty: ref Type?, ask: ref BufferAsk) ->
         }
     }
     return false
+}
+
+// A method of this unit named `method`, declared to hand back a list of text
+// of its own (#1481); with `sure`, the only one of that name.
+fn untethered_method_list(method: ref String, ask: ref BufferAsk, sure: bool) -> bool {
+    let mut found: Vec[bool] = []
+    for item in ask.items {
+        match item.node {
+            Item::Impl { methods, .. } => {
+                for each in methods {
+                    match each.node {
+                        Item::Fn { name, ret_type, .. } => {
+                            if name != null && ask.names.resolve(name ?? continue) == method {
+                                let owned = match ret_type {
+                                    null => false,
+                                    returned => untethered_owned_list(returned, ask),
+                                }
+                                found.push(owned)
+                            }
+                        }
+                        else => {}
+                    }
+                }
+            }
+            else => {}
+        }
+    }
+    if sure {
+        return found.len() == 1 && found[0]
+    }
+    return found.contains(true)
 }
 
 // A list type of text of its own: `Vec[String]`.
@@ -2868,8 +2911,9 @@ fn untethered_returned_one(value: ref Expr, at: ref Span, asked: ref UntetheredA
 
 // **An element of a made local handed back as text of its own** (#1368):
 // the tier pass makes such an element a view only out of a list declared
-// with its type or a list literal of text, and the list then moves into the
-// caller's keep (ADR-283 D23); any other is refused here, not left to rustc.
+// with its type, a list literal of text or a list a call handed back (#1481),
+// and the list then moves into the caller's keep (ADR-283 D23); any other is
+// refused here, not left to rustc.
 fn untethered_unplaced(value: ref Expr, at: ref Span, asked: ref UntetheredAsk, ask: ref BufferAsk, mut walk: UntetheredWalk) {
     if asked.owned_text || asked.text {
         let list = untethered_element(value, ask, walk)
@@ -2907,5 +2951,5 @@ fn untethered_unplaced(value: ref Expr, at: ref Span, asked: ref UntetheredAsk, 
 }
 
 fn untethered_refusal(list: ref String, at: ref Span) -> Finding {
-    return refusal("NK2304", at.clone(), f"An element of `{list}`, a list this function made, is handed back as text of its own, which the tether cannot lower.", ["An element is handed back as a view, with its list moved into the caller's keep, only out of a list declared with its type or a list literal of text made there."], f"Hand back a copy of the element with `.clone()`, or declare the list's type: `let {list}: Vec[String] = …`.")
+    return refusal("NK2304", at.clone(), f"An element of `{list}`, a list this function made, is handed back as text of its own, which the tether cannot lower.", ["An element is handed back as a view, with its list moved into the caller's keep, only out of a list declared with its type, a list literal of text made there, or a list a call hands back whose function or method its name alone finds."], f"Hand back a copy of the element with `.clone()`, or declare the list's type: `let {list}: Vec[String] = …`.")
 }

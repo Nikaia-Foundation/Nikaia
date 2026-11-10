@@ -6,7 +6,7 @@
 pub(crate) fn check_walked_unknown_last(state: &mut CheckState) {
     let mut other_error = false;
     let mut untold = false;
-    for f in state.findings.to_owned() {
+    for f in state.findings.copy_owned() {
         match f.severity {
             CheckSeverity::Error => { if f.code == "NK1245" { untold = true; } else if f.code != "NK1342" { other_error = true; } },
             _ => { },
@@ -14,7 +14,7 @@ pub(crate) fn check_walked_unknown_last(state: &mut CheckState) {
     }
     if !other_error && !untold { return; }
     let mut kept: Vec<CheckFinding> = vec![];
-    for f in state.findings.to_owned() {
+    for f in state.findings.copy_owned() {
         let dropped = f.code == "NK1342" || other_error && f.code == "NK1245";
         if !dropped { kept.push(f); }
     }
@@ -25,7 +25,7 @@ pub(crate) fn check_walked_unknown_last(state: &mut CheckState) {
 // this was written - see `contracts::sync`.
 pub(crate) fn check_walked_articles(state: &mut CheckState) {
     let mut said: Vec<CheckFinding> = vec![];
-    for f in state.findings.to_owned() {
+    for f in state.findings.copy_owned() {
         let mut one = f;
         one.message = articles(&one.message);
         let mut notes: Vec<String> = vec![];
@@ -54,9 +54,9 @@ pub(crate) fn check_walked_articles(state: &mut CheckState) {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_walked_method_facts(state: &mut CheckState) {
-    for at in state.flow.fallible_methods.to_owned() { if !state.flow.opaque_methods.contains(&at) { state.facts.fallible_methods.insert(at); } }
-    for at in state.flow.pausing_methods.to_owned() { if !state.flow.settled_methods.contains(&at) { state.facts.pausing_methods.insert(at); } }
-    for at in state.flow.widening_casts.to_owned() { state.facts.narrowing_casts.remove(&at); }
+    for at in state.flow.fallible_methods.copy_owned() { if !state.flow.opaque_methods.contains(&at) { state.facts.fallible_methods.insert(at); } }
+    for at in state.flow.pausing_methods.copy_owned() { if !state.flow.settled_methods.contains(&at) { state.facts.pausing_methods.insert(at); } }
+    for at in state.flow.widening_casts.copy_owned() { state.facts.narrowing_casts.remove(&at); }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -85,7 +85,7 @@ pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &
             if receiver && !args.is_empty() {
                 let first = args.remove(0);
                 Expr::MethodCall { receiver: Box::new(first), method: *nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1)), args, config: vec![], id: fresh_id() }
-            } else { Expr::Call { func: Box::new(Expr::Path(segments.to_owned(), fresh_id())), args, config: vec![], id: fresh_id() } }
+            } else { Expr::Call { func: Box::new(Expr::Path(segments.copy_owned(), fresh_id())), args, config: vec![], id: fresh_id() } }
         },
         Expr::Variable(name, _) => { let name = *name; Expr::Call { func: Box::new(Expr::Variable(name, fresh_id())), args, config: vec![], id: fresh_id() } },
         _ => panic("a kept function is a name or a path"),
@@ -97,11 +97,11 @@ pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &
 // this was written - see `contracts::sync`.
 pub fn check_walked_unsigned_slots(state: &mut CheckState, proven: &impl Fn(&CheckFacts, &collections::BTreeSet<i64>) -> collections::BTreeSet<i64>) {
     let mut slots: Vec<CheckUnsignedSlot> = vec![];
-    for (_, held) in state.flow.unsigned_slots.to_owned() { for slot in held.iter() { slots.push(slot.clone()); } }
+    for (_, held) in state.flow.unsigned_slots.copy_owned() { for slot in held.iter() { slots.push(slot.clone()); } }
     state.flow.unsigned_slots = collections::BTreeMap::new();
     if slots.is_empty() { return; }
     let mut nodes: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    for slot in slots.to_owned() { nodes.insert(slot.node); }
+    for slot in slots.copy_owned() { nodes.insert(slot.node); }
     let held = proven(&state.facts, &nodes);
     for slot in slots.iter() { if !held.contains(&slot.node) { state.findings.push(check_unsigned_slot_refused(slot)); } }
 }
@@ -126,7 +126,7 @@ pub fn check_walked_written(value: &Expr, words: &winnow_grammar::InternerContex
         Expr::LitInt { value: n, negative, .. } => { let n = *n; let negative = *negative; if negative && n != 0u64 { format!("-{}", n) } else { format!("{}", n) } },
         Expr::LitBool(yes, _) => { let yes = *yes; format!("{}", yes) },
         Expr::LitStr { text: s, .. } => s.quoted(),
-        Expr::Variable(name, _) => { let name = *name; words.resolve(name).to_string() },
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(words.resolve(name).to_string()) },
         Expr::Unary { op: UnaryOp::Neg, expr, .. } => { let expr = nikaia_std::boxed::open(expr); format!("-{}", check_walked_written(expr, words)) },
         _ => String::from("…"),
     }
@@ -153,12 +153,12 @@ pub fn check_walked_seed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, 
     let mut prefixes: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (key, _) in world.library.functions.iter() { check_walked_prefix_into(key, &mut prefixes); }
     for (key, _) in world.library.types.iter() { check_walked_prefix_into(key, &mut prefixes); }
-    for prefix in prefixes.iter() { if !world.library.types.contains_key(prefix) && !world.library.functions.contains_key(&format!("{}::new", prefix)) && prefix != "scalar" && !check_numeric(prefix) { state.std_modules.insert(prefix.to_string()); } }
+    for prefix in prefixes.iter() { if !world.library.types.contains_key(prefix) && !world.library.functions.contains_key(&format!("{}::new", prefix)) && prefix != "scalar" && !check_numeric(prefix) { state.std_modules.insert(nikaia_std::block::Text::from(prefix.to_string())); } }
 }
 
 pub(crate) fn check_walked_prefix_into(key: &str, prefixes: &mut collections::BTreeSet<String>) {
     let cut = match nikaia_std::search::find(&key, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
-    prefixes.insert(nikaia_std::index::get(&key, nikaia_std::index::at(0..cut)).to_string());
+    prefixes.insert(nikaia_std::block::Text::from(nikaia_std::index::get(&key, nikaia_std::index::at(0..cut)).to_string()));
 }
 
 pub fn check_walked_payload_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
@@ -173,7 +173,7 @@ pub fn check_walked_payload_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, t
 
 pub fn check_walked_place_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, place: &str, here: i64) -> CheckPlace {
     let none = CheckPlace { at: -1, function: None };
-    let rest = match place.strip_prefix('@') { Some(__nikaia_value) => __nikaia_value, None => return none }.to_string();
+    let rest = nikaia_std::block::Text::from(match place.strip_prefix('@') { Some(__nikaia_value) => __nikaia_value, None => return none }.to_string());
     let colon = match nikaia_std::search::find(&rest, &":", 0) { Some(__nikaia_value) => __nikaia_value, None => return none };
     let unit = match text::parse_i64(nikaia_std::index::get(&rest, nikaia_std::index::at(0..colon))) { Some(__nikaia_value) => __nikaia_value, None => return none };
     let byte = match text::parse_i64(nikaia_std::index::get(&rest, nikaia_std::index::at(colon + 1..))) { Some(__nikaia_value) => __nikaia_value, None => return none };
@@ -214,7 +214,7 @@ pub fn check_walked_proved(state: &mut CheckState, entries: collections::BTreeMa
     state.facts.entries = entries;
     state.facts.reaches = reaches;
     state.facts.published = published;
-    for (key, written) in std_claims.iter() { state.facts.claims.insert(key.clone(), FactClaim { held: None, written: written.to_string(), left: None, right: None, assumed: false }); }
+    for (key, written) in std_claims.iter() { state.facts.claims.insert(key.clone(), FactClaim { held: None, written: nikaia_std::block::Text::from(written.to_string()), left: None, right: None, assumed: false }); }
     for (key, how) in held.iter() {
         let claim = match state.facts.claims.get_mut(&key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         claim.held = Some(how.clone());
@@ -236,7 +236,7 @@ pub trait CheckWalkedPasses {
     fn nonnegative(&self, facts: &CheckFacts, nodes: &collections::BTreeSet<i64>) -> collections::BTreeSet<i64>;
     fn proved(&self, facts: &CheckFacts) -> CheckWalkedProved;
     fn view_findings(&self) -> Vec<CheckFinding>;
-    fn view_change_findings(&self, lent: &collections::BTreeSet<i64>, coalesced: &collections::BTreeSet<i64>, mut_viewed: &collections::BTreeSet<i64>) -> Vec<CheckFinding>;
+    fn view_change_findings(&self, lent: &collections::BTreeSet<i64>, coalesced: &collections::BTreeSet<i64>, mut_viewed: &collections::BTreeSet<i64>, receiver_views: &collections::BTreeSet<i64>) -> Vec<CheckFinding>;
     fn tethered(&self) -> (Option<Vec<BufferPlan>>, Vec<CheckFinding>);
     fn trait_findings(&self) -> Vec<CheckFinding>;
     fn type_findings(&self) -> Vec<CheckFinding>;
@@ -256,7 +256,7 @@ pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckSt
     check_program_unroll(state, world, host);
     check_walked_unsigned_slots(state, &|facts, nodes| { passes.nonnegative(facts, nodes) });
     state.walls_a_refusal_explains();
-    state.facts.walks_fields = state.walks_fields.to_owned();
+    state.facts.walks_fields = state.walks_fields.copy_owned();
     state.findings.extend(passes.dsl_findings());
     if computes {
         let proved = passes.proved(&state.facts);
@@ -265,7 +265,7 @@ pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckSt
         state.findings.extend(passes.view_findings());
         let coalesced = vc_coalesced(&state.facts);
         let mut_viewed = vc_mut_viewed(&state.facts);
-        state.findings.extend(passes.view_change_findings(&state.facts.lent_lets, &coalesced, &mut_viewed));
+        state.findings.extend(passes.view_change_findings(&state.facts.lent_lets, &coalesced, &mut_viewed, &state.facts.receiver_views));
         let (plans, refused) = passes.tethered();
         if plans.is_some() { state.facts.keep_plans = std::convert::identity(plans); }
         state.findings.extend(refused);
@@ -281,8 +281,8 @@ pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckSt
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_walked_with_described(library: &mut Ledger, described: &Ledger) {
-    for (name, contract) in described.functions.iter() { library.functions.entry(name.to_string()).or_insert_with(|| { contract.clone() }); }
-    for (name, contract) in described.types.iter() { library.types.entry(name.to_string()).or_insert_with(|| { contract.clone() }); }
+    for (name, contract) in described.functions.iter() { library.functions.entry(nikaia_std::block::Text::from(name.to_string())).or_insert_with(|| { contract.clone() }); }
+    for (name, contract) in described.types.iter() { library.types.entry(nikaia_std::block::Text::from(name.to_string())).or_insert_with(|| { contract.clone() }); }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

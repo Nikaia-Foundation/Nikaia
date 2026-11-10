@@ -20,6 +20,8 @@ use nikaia::contracts::ty::TyOps;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -274,7 +276,7 @@ fn main() throws {
     std::fs::write(&file, &rust).expect("write the Rust");
     let binary = dir.join("program");
     let out = common::compile(&file, &["-o", binary.to_str().expect("utf-8 path")]);
-    let said = String::from_utf8_lossy(&out.stderr).into_owned();
+    let said = String::from_utf8_lossy(&out.stderr);
     assert!(
         out.status.success(),
         "the lowering compiles:\n{said}\n--- the Rust ---\n{rust}"
@@ -581,7 +583,7 @@ fn main() throws {
     std::fs::write(&file, &rust).expect("write the Rust");
     let binary = dir.join("program");
     let out = common::compile(&file, &["-o", binary.to_str().expect("utf-8 path")]);
-    let said = String::from_utf8_lossy(&out.stderr).into_owned();
+    let said = String::from_utf8_lossy(&out.stderr);
     assert!(
         out.status.success(),
         "the lowering compiles:\n{said}\n--- the Rust ---\n{rust}"
@@ -690,7 +692,7 @@ fn main() throws {
     std::fs::write(&file, &rust).expect("write the Rust");
     let binary = dir.join("program");
     let out = common::compile(&file, &["-o", binary.to_str().expect("utf-8 path")]);
-    let said = String::from_utf8_lossy(&out.stderr).into_owned();
+    let said = String::from_utf8_lossy(&out.stderr);
     assert!(
         out.status.success(),
         "the lowering compiles:\n{said}\n--- the Rust ---\n{rust}"
@@ -830,7 +832,7 @@ fn the_copy_fails_in_one_way() {
     // D1 it has a name for it.** The doc below has always said *the same
     // failure `fs::read_to_string` has*, and a set of one that says which is
     // stronger evidence for *one way* than a `"?"` ever was.
-    assert_eq!(copy.fails_with, vec!["io::IoError".to_string()]);
+    assert_eq!(copy.fails_with, vec!["io::IoError".to_text()]);
 }
 
 /// **Measured where it matters: the nullable runs, both ways.**
@@ -862,7 +864,7 @@ fn main() throws {
     std::fs::write(&file, &rust).expect("write the Rust");
     let binary = dir.join("program");
     let out = common::compile(&file, &["-o", binary.to_str().expect("utf-8 path")]);
-    let said = String::from_utf8_lossy(&out.stderr).into_owned();
+    let said = String::from_utf8_lossy(&out.stderr);
     assert!(
         out.status.success(),
         "the lowering compiles:\n{said}\n--- the Rust ---\n{rust}"

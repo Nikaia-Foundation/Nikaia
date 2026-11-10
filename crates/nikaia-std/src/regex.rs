@@ -152,7 +152,7 @@ impl Regex<Dynamic> {
 
     /// `s` with every match replaced by `with`, in which `$1` and `${name}`
     /// stand for a group's text (the crate's interpolation; `$$` is a `$`).
-    pub fn replace_all(&self, s: &str, with: &str) -> String {
+    pub fn replace_all(&self, s: &str, with: &str) -> crate::block::Text {
         let mut out = String::with_capacity(s.len());
         let mut last = 0;
         for caps in self.inner.captures_iter(s) {
@@ -164,7 +164,7 @@ impl Regex<Dynamic> {
             last = whole.end;
         }
         out.push_str(&s[last..]);
-        out
+        crate::block::Text::from(out)
     }
 
     /// The pieces of `s` between the matches, each a view of `s`.

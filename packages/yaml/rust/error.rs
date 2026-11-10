@@ -2,8 +2,11 @@
 //! line and column of the native error or of the node where reading stopped.
 
 use crate::native;
-use serde::de;
+use serde::{de, ser};
+use std::error::Error as StdError;
 use std::fmt::{self, Debug, Display};
+use std::io;
+use std::sync::Arc;
 
 /// An error that happened while reading YAML into a Rust value.
 pub struct Error(Box<ErrorImpl>);
@@ -43,7 +46,17 @@ pub(crate) enum ErrorImpl {
     RepetitionLimitExceeded,
     BytesUnsupported,
     UnknownAnchor(Mark),
+    Io(io::Error),
+    #[allow(dead_code)] // raised by the serializer of #1515
+    SerializeNestedEnum,
+    ScalarInMerge,
+    TaggedInMerge,
+    ScalarInMergeElement,
+    SequenceInMergeElement,
+    EmptyTag,
     FailedToParseNumber,
+
+    Shared(Arc<ErrorImpl>),
 }
 
 #[derive(Debug)]
@@ -97,6 +110,21 @@ pub(crate) fn new(inner: ErrorImpl) -> Error {
     Error(Box::new(inner))
 }
 
+pub(crate) fn shared(shared: Arc<ErrorImpl>) -> Error {
+    Error(Box::new(ErrorImpl::Shared(shared)))
+}
+
+impl Error {
+    /// The error, to hand to each document of a stream that failed.
+    pub(crate) fn shared(self) -> Arc<ErrorImpl> {
+        if let ErrorImpl::Shared(err) = *self.0 {
+            err
+        } else {
+            Arc::from(self.0)
+        }
+    }
+}
+
 /// The native parser's error: its message, and its place (line and column
 /// from 1, in characters; the byte offset).
 pub(crate) fn parse(e: &native::Error) -> Error {
@@ -105,7 +133,7 @@ pub(crate) fn parse(e: &native::Error) -> Error {
         line: (e.line - 1).max(0) as usize,
         column: (e.column - 1).max(0) as usize,
     };
-    new(ErrorImpl::Parse(e.message.clone(), mark))
+    new(ErrorImpl::Parse(e.message.as_str().to_owned(), mark))
 }
 
 /// Gives a message without a place the place and the path of the node it is
@@ -120,15 +148,20 @@ pub(crate) fn fix_mark(mut error: Error, mark: Mark, path: crate::path::Path) ->
     error
 }
 
-impl std::error::Error for Error {}
+impl StdError for Error {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        self.0.source()
+    }
+}
 
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.0.message_no_mark(f)?;
-        if let Some(mark) = self.0.mark()
-            && (mark.line != 0 || mark.column != 0)
-        {
-            write!(f, " at {}", mark)?;
+        match self.0.mark() {
+            Some(mark) if mark.line != 0 || mark.column != 0 => write!(f, " at {}", mark)?,
+            // libyaml's own errors give the offset where they know no line.
+            Some(mark) if mark.index != 0 && self.0.is_parse() => write!(f, " at {}", mark)?,
+            _ => {}
         }
         Ok(())
     }
@@ -151,6 +184,12 @@ impl Debug for Error {
     }
 }
 
+impl ser::Error for Error {
+    fn custom<T: Display>(msg: T) -> Self {
+        new(ErrorImpl::Message(msg.to_string(), None))
+    }
+}
+
 impl de::Error for Error {
     fn custom<T: Display>(msg: T) -> Self {
         new(ErrorImpl::Message(msg.to_string(), None))
@@ -158,12 +197,29 @@ impl de::Error for Error {
 }
 
 impl ErrorImpl {
+    fn is_parse(&self) -> bool {
+        match self {
+            ErrorImpl::Parse(..) => true,
+            ErrorImpl::Shared(err) => err.is_parse(),
+            _ => false,
+        }
+    }
+
     fn mark(&self) -> Option<Mark> {
         match self {
             ErrorImpl::Message(_, Some(Pos { mark, .. }))
             | ErrorImpl::Parse(_, mark)
             | ErrorImpl::RecursionLimitExceeded(mark)
             | ErrorImpl::UnknownAnchor(mark) => Some(*mark),
+            ErrorImpl::Shared(err) => err.mark(),
+            _ => None,
+        }
+    }
+
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match self {
+            ErrorImpl::Io(err) => err.source(),
+            ErrorImpl::Shared(err) => err.source(),
             _ => None,
         }
     }
@@ -188,7 +244,23 @@ impl ErrorImpl {
                 f.write_str("serialization and deserialization of bytes in YAML is not implemented")
             }
             ErrorImpl::UnknownAnchor(_) => f.write_str("unknown anchor"),
+            ErrorImpl::Io(err) => Display::fmt(err, f),
+            ErrorImpl::SerializeNestedEnum => {
+                f.write_str("serializing nested enums in YAML is not supported yet")
+            }
+            ErrorImpl::ScalarInMerge => {
+                f.write_str("expected a mapping or list of mappings for merging, but found scalar")
+            }
+            ErrorImpl::TaggedInMerge => f.write_str("unexpected tagged value in merge"),
+            ErrorImpl::ScalarInMergeElement => {
+                f.write_str("expected a mapping for merging, but found scalar")
+            }
+            ErrorImpl::SequenceInMergeElement => {
+                f.write_str("expected a mapping for merging, but found sequence")
+            }
+            ErrorImpl::EmptyTag => f.write_str("empty YAML tag is not allowed"),
             ErrorImpl::FailedToParseNumber => f.write_str("failed to parse YAML number"),
+            ErrorImpl::Shared(err) => err.message_no_mark(f),
         }
     }
 }

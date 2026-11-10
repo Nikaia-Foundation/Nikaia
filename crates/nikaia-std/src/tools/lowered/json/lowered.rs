@@ -23,6 +23,8 @@ use nikaia_std::text;
 mod main_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/main.rs");
 }
 #[allow(unused_imports)]

@@ -11,6 +11,8 @@
 //! here are the ledger, the refusals and what the lowering writes.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::emit::{Build, emit_program};
@@ -31,8 +33,8 @@ fn said(purpose: &str, source: &str) -> (bool, String, String) {
     std::fs::remove_dir_all(&dir).ok();
     (
         out.status.success(),
-        String::from_utf8_lossy(&out.stderr).into_owned(),
-        ledger,
+        String::from_utf8_lossy(&out.stderr),
+        String::from(ledger),
     )
 }
 

@@ -1,0 +1,23 @@
+// How `write` writes a string (#1515): plain where serde_yaml 0.9 writes it
+// plain; single-quoted where the plain text would read back as another kind
+// (null, a boolean, a number, digits after a leading zero) or starts with an
+// indicator; double-quoted where a character cannot stand in single quotes;
+// literal with a line break. Each case shows the value, then what `write`
+// wrote for it as a document of its own.
+use yaml
+
+fn main() throws {
+	let cases = [
+		"abc", "", "null", "~", "Null", "true", "False", "yes", "1", "-1", "+1",
+		"0x1f", "0o17", "0b101", "0b2", "1.5", ".inf", "-.Inf", ".nan", "1e3",
+		"012", "+012", "0", "a b", "a: b", "a:b", "- a", "-a", "#x", "x #y",
+		"x# y", " lead", "trail ", "tab\there", "\u{1}", "é", "'q'", "\"dq\"",
+		"[a]", "{a}", "*x", "&x", "!x", "%x", "@x", "`x", "|x", ">x", "a,b",
+		"?", "? x", ":", "-", "---", "...", "\u{feff}x", "\u{85}", "\u{2028}",
+		"a\nb", "a\nb\n", "a\n\nb\n\n", " a\nb", "a\r\nb", "a\n", "\n",
+	]
+	for c in cases.iter() {
+		let alone = yaml::write([yaml::string_node(c.clone())])
+		println(f"{c:?}\n  {alone:?}")
+	}
+}

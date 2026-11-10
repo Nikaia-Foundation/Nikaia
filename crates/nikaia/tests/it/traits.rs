@@ -16,6 +16,8 @@ use nikaia::check;
 use nikaia::contracts::{Ledger, LedgerOps, STD, Sync};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// **`check_program` and not `check`**, because the trait rules read the
 /// ledger's *finished* `sync` column and only the program-level entry point runs

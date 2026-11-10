@@ -17,16 +17,16 @@ impl CheckState {
             if contract.variants.is_empty() || self.enums.contains_key(name) { continue; }
             for variant in contract.variants.iter() {
                 let key = format!("{}::{}", name, variant.name);
-                self.variant_owner.insert(key.to_string(), name.to_string());
+                self.variant_owner.insert(nikaia_std::block::Text::from(key.to_string()), nikaia_std::block::Text::from(name.to_string()));
                 if variant.positional && !variant.holds.is_empty() {
                     let mut parts: Vec<Ty> = vec![];
                     for held in variant.holds.iter() { parts.push(held.ty.clone()); }
                     self.variant_parts.insert(key, parts);
-                } else if !variant.holds.is_empty() { self.structs.insert(key, variant.holds.to_owned()); }
+                } else if !variant.holds.is_empty() { self.structs.insert(key, variant.holds.copy_owned()); }
             }
             let mut variants: collections::BTreeSet<String> = collections::BTreeSet::new();
-            for variant in contract.variants.iter() { variants.insert(variant.name.to_string()); }
-            self.enums.insert(name.to_string(), variants);
+            for variant in contract.variants.iter() { variants.insert(nikaia_std::block::Text::from(variant.name.to_string())); }
+            self.enums.insert(nikaia_std::block::Text::from(name.to_string()), variants);
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -41,14 +41,14 @@ impl CheckState {
                     let mut traits: Vec<String> = vec![];
                     for bound in generic.bounds.iter() {
                         let bound = *bound;
-                        traits.push(world.words.resolve(bound).to_string());
+                        traits.push(nikaia_std::block::Text::from(world.words.resolve(bound).to_string()));
                     }
-                    bounds.insert(world.words.resolve(generic.name).to_string(), traits);
+                    bounds.insert(nikaia_std::block::Text::from(world.words.resolve(generic.name).to_string()), traits);
                 }
                 if bounds.is_empty() { return; }
                 let mut own: String = String::from("new");
-                if name.is_some() { own = world.words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return }).to_string(); }
-                let mut key = own.to_string();
+                if name.is_some() { own = nikaia_std::block::Text::from(world.words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return }).to_string()); }
+                let mut key = nikaia_std::block::Text::from(own.to_string());
                 if target.is_some() { key = format!("{}::{}", nikaia_std::index::or(target, || ""), own); }
                 self.declared_bounds.insert(key, bounds);
             },
@@ -82,14 +82,14 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn names_a_grammar_rule(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
-        let mut written: Vec<String> = vec![];
+        let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for part in segments.iter() {
             let part = *part;
-            written.push(world.words.resolve(part).to_string());
+            written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
         }
-        let name = written.join("::");
+        let name = nikaia_std::block::Text::from(written.join("::"));
         let at = match nikaia_std::search::find(&name, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        let owner = nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string();
+        let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string());
         self.grammars.contains_key(&owner) && !world.own.functions.contains_key(&name)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -136,12 +136,12 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn names_a_function_by_path(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
-        let mut written: Vec<String> = vec![];
+        let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for part in segments.iter() {
             let part = *part;
-            written.push(world.words.resolve(part).to_string());
+            written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
         }
-        resolve_call(world, &written.join("::")).is_some()
+        resolve_call(world, &nikaia_std::block::Text::from(written.join("::"))).is_some()
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -174,7 +174,7 @@ impl CheckState {
         if world.words.resolve(ty.name) == "Shared" && !ty.generics.is_empty() && world.words.resolve(nikaia_std::index::get(&ty.generics, 0).name) == "Locked" {
             let held = nikaia_std::index::get(&ty.generics, 0);
             let mut inside: String = String::from("T");
-            if !held.generics.is_empty() { inside = world.words.resolve(nikaia_std::index::get(&held.generics, 0).name).to_string(); }
+            if !held.generics.is_empty() { inside = nikaia_std::block::Text::from(world.words.resolve(nikaia_std::index::get(&held.generics, 0).name).to_string()); }
             self.findings.push(check_refusal("NK1123", span, format!("Write `SharedMut[{}]` instead of a `Shared` around a lock.", inside), vec![String::from("The common case has a short name, and it's the only way to write it: one type, one spelling.")], Some(format!("Write `SharedMut[{}]`.", inside))));
         }
         for inner in ty.generics.iter() { self.spelling(world, inner, span); }
@@ -192,7 +192,7 @@ pub(crate) fn any_unknown(types: &[Ty]) -> bool {
 // this was written - see `contracts::sync`.
 pub fn names_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> {
     match expr {
-        Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_string()) },
+        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string())) },
         _ => None,
     }
 }
@@ -200,21 +200,21 @@ pub fn names_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn as_this_program_says(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, trait_name: &str) -> String {
-    if world.own.traits.contains_key(trait_name) { return trait_name.to_string(); }
+    if world.own.traits.contains_key(trait_name) { return nikaia_std::block::Text::from(trait_name.to_string()); }
     let segments: Vec<&str> = key.split("::").collect::<Vec<_>>();
     let mut take = segments.len() as i64 - 1;
     while take >= 1 {
-        let mut prefix: Vec<String> = vec![];
-        let mut at: i64 = 0;
+        #[allow(unused_mut)] let mut prefix: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix;
         while at < take {
-            prefix.push((*nikaia_std::index::get(&segments, nikaia_std::index::at(at))).to_string());
+            prefix.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&segments, nikaia_std::index::at(at))).to_string()));
             at = at + 1;
         }
-        let qualified = format!("{}::{}", prefix.join("::"), trait_name);
+        let qualified = format!("{}::{}", nikaia_std::block::Text::from(prefix.join("::")), trait_name);
         if world.own.traits.contains_key(&qualified) { return qualified; }
         take = take - 1;
     }
-    trait_name.to_string()
+    nikaia_std::block::Text::from(trait_name.to_string())
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -227,7 +227,7 @@ pub fn bounds_in_a_signature(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key
         if bound.1.is_empty() { continue; }
         let mut traits: Vec<String> = vec![];
         for one in bound.1.iter() { traits.push(as_this_program_says(world, key, one)); }
-        bounds.insert(bound.0.to_string(), traits);
+        bounds.insert(nikaia_std::block::Text::from(bound.0.to_string()), traits);
     }
     if bounds.is_empty() { return None; }
     Some(bounds)
@@ -247,7 +247,7 @@ impl CheckState {
         if self.structs.contains_key(name) || world.own.types.contains_key(name) { return true; }
         if name == "Self" || self.enums.contains_key(name) { return true; }
         let suffix = format!("::{}", name);
-        for (key, _) in world.library.types.iter() { if key == name || key.ends_with(&suffix) { return true; } }
+        for (key, _) in world.library.types.iter() { if key == name || key.ends_with(AsRef::<str>::as_ref(&suffix)) { return true; } }
         false
     }
 }

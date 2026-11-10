@@ -42,10 +42,10 @@ pub fn read_items(surface: &mut Surface, relative: &str, items: &[RustItem<'_>])
 }
 
 pub fn resolve(surface: &mut Surface) {
-    let mut direct: Vec<String> = vec![];
-    for path in surface.offers.iter() { if offered(&surface, path) { direct.push(path.to_string()); } }
-    for path in surface.types.iter() { if offered(&surface, path) { direct.push(path.to_string()); } }
-    for path in direct.iter() { surface.reachable.insert(path.to_string(), path.to_string()); }
+    let mut direct: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for path in surface.offers.iter() { if offered(&surface, path) { direct.push(nikaia_std::block::Text::from(path.to_string())); } }
+    for path in surface.types.iter() { if offered(&surface, path) { direct.push(nikaia_std::block::Text::from(path.to_string())); } }
+    for path in direct.iter() { surface.reachable.insert(nikaia_std::block::Text::from(path.to_string()), nikaia_std::block::Text::from(path.to_string())); }
     let mut exports: Vec<Export> = vec![];
     for export in surface.exports.iter() { if offered(&surface, &joined(&export.at, "x")) { exports.push(export.clone()); } }
     for _ in 0..8 {
@@ -60,7 +60,7 @@ pub fn resolve(surface: &mut Surface) {
                 for candidate in candidates(export, &named.name) {
                     if surface.functions.contains_key(&candidate) || surface.types.contains(&candidate) {
                         if !surface.reachable.contains_key(&offered_as) {
-                            surface.reachable.insert(offered_as.to_string(), candidate.to_string());
+                            surface.reachable.insert(nikaia_std::block::Text::from(offered_as.to_string()), nikaia_std::block::Text::from(candidate.to_string()));
                             added = true;
                         }
                         break;
@@ -69,7 +69,7 @@ pub fn resolve(surface: &mut Surface) {
             } else {
                 for base in bases(export) {
                     let under = format!("{}::", base);
-                    let mut names: Vec<String> = vec![];
+                    let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                     for path in surface.offers.iter() {
                         let rest = directly_under(path, &under);
                         if rest.is_some() { names.push(nikaia_std::index::or(rest, || "".into())); }
@@ -81,7 +81,7 @@ pub fn resolve(surface: &mut Surface) {
                     for name in names.iter() {
                         let offered_as = joined(&export.at, name);
                         if !surface.reachable.contains_key(&offered_as) {
-                            surface.reachable.insert(offered_as.to_string(), format!("{}::{}", base, name));
+                            surface.reachable.insert(nikaia_std::block::Text::from(offered_as.to_string()), format!("{}::{}", base, name));
                             added = true;
                         }
                     }
@@ -94,9 +94,9 @@ pub fn resolve(surface: &mut Surface) {
 }
 
 pub fn offered(surface: &Surface, path: &str) -> bool {
-    let mut parts: Vec<String> = vec![];
-    for part in path.split("::") { parts.push(part.to_string()); }
-    let mut at: String = String::from("");
+    #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for part in path.split("::") { parts.push(nikaia_std::block::Text::from(part.to_string())); }
+    let mut at: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
     for k in 0..parts.len() as i64 - 1 {
         at = joined(&at, nikaia_std::index::get(&parts, (k) as usize));
         let public = nikaia_std::index::or(surface.modules.get(&at), || false);
@@ -107,7 +107,7 @@ pub fn offered(surface: &Surface, path: &str) -> bool {
 
 pub fn candidates(export: &Export, name: &str) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for base in bases(export) { if base.is_empty() { out.push(name.to_string()); } else { out.push(format!("{}::{}", base, name)); } }
+    for base in bases(export) { if base.is_empty() { out.push(nikaia_std::block::Text::from(name.to_string())); } else { out.push(format!("{}::{}", base, name)); } }
     out
 }
 
@@ -129,7 +129,7 @@ pub(crate) fn imports_of(text: &str, out: &mut collections::BTreeMap<String, Str
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || Named { name: String::from(""), alias: String::from("") });
-        if one.prefix.is_empty() { out.insert(named.alias.to_string(), named.name.to_string()); } else { out.insert(named.alias.to_string(), format!("{}::{}", one.prefix, named.name)); }
+        if one.prefix.is_empty() { out.insert(nikaia_std::block::Text::from(named.alias.to_string()), nikaia_std::block::Text::from(named.name.to_string())); } else { out.insert(nikaia_std::block::Text::from(named.alias.to_string()), format!("{}::{}", one.prefix, named.name)); }
     }
 }
 
@@ -138,7 +138,7 @@ pub(crate) fn walk(surface: &mut Surface, items: &[RustItem<'_>], at: &str, impo
         match item {
             RustItem::Fun(f) => {
                 let path = joined(at, f.name);
-                surface.offers.insert(path.to_string());
+                surface.offers.insert(nikaia_std::block::Text::from(path.to_string()));
                 surface.functions.insert(path, function_of(f, imports));
             },
             RustItem::Hidden(f) => { surface.functions.insert(joined(at, f.name), function_of(f, imports)); },
@@ -146,11 +146,11 @@ pub(crate) fn walk(surface: &mut Surface, items: &[RustItem<'_>], at: &str, impo
                 let path = joined(at, r.name);
                 if r.what == "struct" {
                     let mut types: Vec<String> = vec![];
-                    for part in r.parts.iter() { types.push(part.ty.to_string()); }
-                    surface.fields.insert(path.to_string(), types);
+                    for part in r.parts.iter() { types.push(nikaia_std::block::Text::from(part.ty.to_string())); }
+                    surface.fields.insert(nikaia_std::block::Text::from(path.to_string()), types);
                 }
                 let none: collections::BTreeSet<String> = collections::BTreeSet::new();
-                let mut derived = nikaia_std::index::or(*nikaia_std::index::get(&surface.derives, &path), || &none).to_owned();
+                let mut derived = nikaia_std::index::or(*nikaia_std::index::get(&surface.derives, &path), || &none).copy_owned();
                 for list in r.derives.iter() {
                     let list = *list;
                     for written in list.split(',') {
@@ -158,7 +158,7 @@ pub(crate) fn walk(surface: &mut Surface, items: &[RustItem<'_>], at: &str, impo
                         if !name.is_empty() { derived.insert(name); }
                     }
                 }
-                surface.derives.insert(path.to_string(), derived);
+                surface.derives.insert(nikaia_std::block::Text::from(path.to_string()), derived);
                 surface.types.insert(path);
             },
             RustItem::Export(text) => {
@@ -169,12 +169,12 @@ pub(crate) fn walk(surface: &mut Surface, items: &[RustItem<'_>], at: &str, impo
             RustItem::Group(g) => {
                 if g.what == "mod" {
                     let path = joined(at, g.name);
-                    surface.modules.insert(path.to_string(), g.visible);
+                    surface.modules.insert(nikaia_std::block::Text::from(path.to_string()), g.visible);
                     walk(surface, &g.items, &path, imports);
                 } else if g.what == "unsafe impl" && !g.via.is_empty() { surface.promises.push(format!("unsafe impl {} for {}", g.via, g.name)); } else if g.what == "impl" && !g.via.is_empty() && !g.via.contains('<') {
                     let path = joined(at, &last_segment(&before_generics(g.name)));
                     let none: collections::BTreeSet<String> = collections::BTreeSet::new();
-                    let mut derived = nikaia_std::index::or(*nikaia_std::index::get(&surface.derives, &path), || &none).to_owned();
+                    let mut derived = nikaia_std::index::or(*nikaia_std::index::get(&surface.derives, &path), || &none).copy_owned();
                     derived.insert(last_segment(g.via.trim()));
                     surface.derives.insert(path, derived);
                 }
@@ -184,25 +184,25 @@ pub(crate) fn walk(surface: &mut Surface, items: &[RustItem<'_>], at: &str, impo
 }
 
 pub(crate) fn function_of(f: &Fun<'_, '_, '_, '_, '_, '_>, imports: &collections::BTreeMap<String, String>) -> Function {
-    let mut parameters: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut parameters: Vec<String> = vec![];
     for written in split_top_level(f.generics) {
         if written.starts_with('\'') { continue; }
         let name = before_colon(&written);
         if !name.is_empty() { parameters.push(name); }
     }
     let mut args: Vec<Arg> = vec![];
-    for part in f.parts.iter() { if part.name != "self" { args.push(Arg { name: part.name.to_string(), ty: part.ty.to_string() }); } }
-    let mut calls: Vec<String> = vec![];
+    for part in f.parts.iter() { if part.name != "self" { args.push(Arg { name: nikaia_std::block::Text::from(part.name.to_string()), ty: nikaia_std::block::Text::from(part.ty.to_string()) }); } }
+    let mut calls: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
     for call in f.calls.iter() {
         let call = *call;
         let full = nikaia_std::index::or(imports.get(call), || call);
-        calls.push(full.to_string());
+        calls.push(nikaia_std::block::Text::from(full.to_string()));
     }
-    Function { parameters, args, result: f.result.to_string(), bounds: format!("{}, {}", f.generics, f.wheres), calls, pauses: f.pauses }
+    Function { parameters, args, result: nikaia_std::block::Text::from(f.result.to_string()), bounds: format!("{}, {}", f.generics, f.wheres), calls, pauses: f.pauses }
 }
 
 pub(crate) fn directly_under(path: &str, under: &str) -> Option<String> {
-    if !path.starts_with(under) { return None; }
+    if !path.starts_with(AsRef::<str>::as_ref(under)) { return None; }
     let c: Vec<scalar> = nikaia_std::list::chars(path.chars());
     let u: Vec<scalar> = nikaia_std::list::chars(under.chars());
     let rest = between(&c, u.len() as i64, c.len() as i64);
@@ -215,7 +215,7 @@ pub(crate) fn before_colon(written: &str) -> String {
     let mut end = c.len() as i64;
     for at in 0..c.len() as i64 { if *nikaia_std::index::get(&c, (at) as usize) == ':' && end == c.len() as i64 { end = at; } }
     let head = between(&c, 0, end);
-    head.trim().to_string()
+    nikaia_std::block::Text::from(head.trim().to_string())
 }
 
 pub(crate) fn before_generics(written: &str) -> String {
@@ -227,5 +227,5 @@ pub(crate) fn before_generics(written: &str) -> String {
     out
 }
 
-pub(crate) fn last_segment(written: &str) -> String { nikaia_std::index::or(written.rsplit("::").next(), || "").to_string() }
+pub(crate) fn last_segment(written: &str) -> String { nikaia_std::block::Text::from(nikaia_std::index::or(written.rsplit("::").next(), || "").to_string()) }
 

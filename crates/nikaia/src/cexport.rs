@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/cexport.rs
 //
 // **A package as a library C calls** ([ADR-284](../../docs/specification/adr/adr-284.md)):

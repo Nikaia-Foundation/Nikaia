@@ -3,6 +3,8 @@
 //! before the wrapper lowers it again. Each of those used to print it.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 const SOURCE: &str = "fn main() throws {\n    let x = 1\n    println(\"{x}\")\n}\n";

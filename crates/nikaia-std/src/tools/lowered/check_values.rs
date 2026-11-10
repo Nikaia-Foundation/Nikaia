@@ -48,7 +48,7 @@ impl CheckState {
             _ => false,
         };
         if a_list {
-            let method = nikaia_std::index::or(key.strip_prefix("str::"), || "").to_string();
+            let method = nikaia_std::block::Text::from(nikaia_std::index::or(key.strip_prefix("str::"), || "").to_string());
             self.findings.push(check_refusal("NK1102", span, format!("`{}` expects `{}` to be text or a character, but you're passing a list.", key, param), vec![String::from("What it looks for is one view of text or one character; a list of them is neither.")], Some(format!("Ask once per character: `x.{}('a') || x.{}('i')`.", method, method))));
             return;
         }
@@ -57,8 +57,13 @@ impl CheckState {
             Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
             _ => false,
         };
+        let viewed = match nikaia_std::index::get(&found, 0) {
+            Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && (name == "String" || name == "str") },
+            _ => false,
+        };
         let mut literal = false;
         if !given.is_empty() { literal = matches!(*nikaia_std::index::get(&given, 0), Expr::LitStr { .. }); }
+        if viewed && !literal && !given.is_empty() { self.facts.view_patterns.insert(node_key(nikaia_std::index::get(&given, 0))); }
         if !owned || literal { return; }
         self.facts.owned_patterns.insert(node_key(nikaia_std::index::get(&given, 0)));
     }
@@ -90,10 +95,10 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_copy_under_another_name(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], span: &Span) {
-        let written = world.words.resolve(method).to_string();
+        let written = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
         if !args.is_empty() || written != "to_owned" || !ledger_candidates(world.own, world.own_methods, &written).is_empty() { return; }
         let shown: String = match receiver {
-            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
+            Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => String::from("…"),
         };
         self.findings.push(check_refusal("NK1189", span, format!("To copy a value, write `.clone()`, not `.{}()`.", written), vec![String::from("Nikaia has one word for a copy, for text and for everything else.")], Some(format!("Write `{}.clone()`.", shown))));
@@ -101,7 +106,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_call_on_a_literal_that_adds_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], span: &Span) {
-        let written = world.words.resolve(method).to_string();
+        let written = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
         if !args.is_empty() || written != "to_string" && written != "clone" { return; }
         let plain = matches!(receiver, Expr::LitStr { .. });
         if !plain || !ledger_candidates(world.own, world.own_methods, &written).is_empty() { return; }
@@ -124,7 +129,7 @@ pub fn ledger_candidates(ledger: &Ledger, methods: &MethodIndex, method: &str) -
     let mut out: Vec<String> = vec![];
     for entry_name in method_keys(methods, method) {
         let entry_value = match *nikaia_std::index::get(&ledger.functions, &entry_name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if takes_self(entry_value) { out.push(entry_name.to_string()); }
+        if takes_self(entry_value) { out.push(nikaia_std::block::Text::from(entry_name.to_string())); }
     }
     out
 }

@@ -34,7 +34,7 @@ pub fn rendered(shown: &Shown, path: &str, source: &str) -> String {
 }
 
 pub fn rendered_in(shown: &Shown, path: &str, lines: &[&str]) -> String {
-    let mut labels: Vec<Marked> = shown.labels.to_owned();
+    let mut labels: Vec<Marked> = shown.labels.copy_owned();
     if labels.is_empty() { labels.push(Marked { span: shown.span.clone(), word: String::from(""), text: String::from(""), main: true }); }
     let mut placed: Vec<Placed> = vec![];
     for label in labels.iter() {
@@ -90,10 +90,10 @@ pub fn rendered_in(shown: &Shown, path: &str, lines: &[&str]) -> String {
             shown_line = one.line;
         }
         let mark = if one.label.main { "^" } else { "-" };
-        let mut marked = bar.to_string();
+        let mut marked = nikaia_std::block::Text::from(bar.to_string());
         marked.push(' ');
         marked.push_str(&spaces(one.column - 1));
-        marked.push_str(&mark.repeat(nikaia_std::count::of(one.width)));
+        marked.push_str(&nikaia_std::block::Text::from(mark.repeat(nikaia_std::count::of(one.width))));
         marked.push(' ');
         marked.push_str(&one.label.text);
         out.push_str(&marked.trim_end());
@@ -129,7 +129,7 @@ pub(crate) fn in_order(placed: &[Placed]) -> Vec<Placed> {
 
 pub(crate) fn line_of(lines: &[&str], line: i64) -> String {
     if line < 1 || line > lines.len() as i64 { return String::from(""); }
-    (*nikaia_std::index::get(&lines, nikaia_std::index::at(line - 1))).to_string()
+    nikaia_std::block::Text::from((*nikaia_std::index::get(&lines, nikaia_std::index::at(line - 1))).to_string())
 }
 
 pub(crate) fn line_at(lines: &[&str], offset: i64) -> (i64, i64) {
@@ -179,7 +179,7 @@ pub(crate) fn utf8_width(c: scalar) -> i64 {
     4
 }
 
-pub(crate) fn spaces(n: i64) -> String { " ".repeat(nikaia_std::count::of(n)) }
+pub(crate) fn spaces(n: i64) -> String { nikaia_std::block::Text::from(" ".repeat(nikaia_std::count::of(n))) }
 
 pub(crate) fn right_aligned(text: &str, width: i64) -> String {
     let mut out = spaces(width - text.len() as i64);
@@ -199,30 +199,30 @@ pub struct Pause {
 }
 
 pub fn paused(pause: &Pause) -> Shown {
-    let caller = pause.caller.to_string();
-    let promise = pause.promise.to_string();
-    let callee = pause.callee.to_string();
+    let caller = nikaia_std::block::Text::from(pause.caller.to_string());
+    let promise = nikaia_std::block::Text::from(pause.promise.to_string());
+    let callee = nikaia_std::block::Text::from(pause.callee.to_string());
     if pause.unpromised {
         let split = package_and_function(&callee);
         let package = &split.0;
         let function = &split.1;
-        return Shown { warning: false, code: String::from("NK2202"), message: format!("`{}` is `{}`, but it calls `{}`, which doesn't promise that it never pauses.", caller, promise, callee), notes: vec![format!("`{}` is `{}`'s, and its source doesn't say `sync`. That its body doesn't pause today is not a promise another package can rely on.", callee, package)], help: Some(format!("Write `sync` after the result of `{}` in `{}`, or remove `{}` from `{}`.", function, package, promise, caller)), span: pause.span.clone(), labels: vec![Marked { span: pause.span.clone(), word: callee.to_string(), text: String::from("doesn't promise `sync`"), main: true }] };
+        return Shown { warning: false, code: String::from("NK2202"), message: format!("`{}` is `{}`, but it calls `{}`, which doesn't promise that it never pauses.", caller, promise, callee), notes: vec![format!("`{}` is `{}`'s, and its source doesn't say `sync`. That its body doesn't pause today is not a promise another package can rely on.", callee, package)], help: Some(format!("Write `sync` after the result of `{}` in `{}`, or remove `{}` from `{}`.", function, package, promise, caller)), span: pause.span.clone(), labels: vec![Marked { span: pause.span.clone(), word: nikaia_std::block::Text::from(callee.to_string()), text: String::from("doesn't promise `sync`"), main: true }] };
     }
     let ledger = if pause.from_library { "`std`" } else { "this program" };
     let article = an_or_a(&callee);
-    let mut notes: Vec<String> = vec![String::from("A `sync` function promises that it never pauses and does no I/O.")];
+    #[allow(unused_mut)] let mut notes: Vec<String> = vec![String::from("A `sync` function promises that it never pauses and does no I/O.")];
     if pause.construct {
         let capital = said(&article);
         notes.push(format!("{} `{}` block waits for its branches to finish, which is a pause.", capital, callee));
     } else { notes.push(format!("`{}` isn't declared `sync` in {}.", callee, ledger)); }
-    let message = if pause.construct { format!("`{}` is `{}`, but it contains {} `{}` block, which can pause.", caller, promise, article, callee) } else { format!("`{}` is `{}`, but it calls `{}`, which can pause.", caller, promise, callee) };
-    Shown { warning: false, code: String::from("NK2202"), message, notes, help: Some(format!("Remove `{}` from `{}`, or move the call out of it.", promise, caller)), span: pause.span.clone(), labels: vec![Marked { span: pause.span.clone(), word: callee.to_string(), text: String::from("this can pause"), main: true }] }
+    let message = if pause.construct { format!("`{}` is `{}`, but it contains {} `{}` block, which can pause.", caller, promise, article, callee) } else { format!("`{}` is `{}`, but it calls `{}`, which can pause.", caller, promise, callee) }; #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
+    Shown { warning: false, code: String::from("NK2202"), message, notes, help: Some(format!("Remove `{}` from `{}`, or move the call out of it.", promise, caller)), span: pause.span.clone(), labels: vec![Marked { span: pause.span.clone(), word: nikaia_std::block::Text::from(callee.to_string()), text: String::from("this can pause"), main: true }] }
 }
 
 pub(crate) fn package_and_function(callee: &str) -> (String, String) {
     let parts: Vec<&str> = callee.splitn(2, "::").collect::<Vec<_>>();
-    if parts.len() < 2 { return (String::from("its package"), callee.to_string()); }
-    ((*nikaia_std::index::get(&parts, 0)).to_string(), (*nikaia_std::index::get(&parts, 1)).to_string())
+    if parts.len() < 2 { return (String::from("its package"), nikaia_std::block::Text::from(callee.to_string())); }
+    (nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string()), nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string()))
 }
 
 pub fn an_or_a(word: &str) -> String {
@@ -232,12 +232,12 @@ pub fn an_or_a(word: &str) -> String {
 }
 
 pub(crate) fn after_help(note: &str) -> String {
-    let rest = match note.strip_prefix("help: ") { Some(__nikaia_value) => __nikaia_value, None => return note.to_string() };
+    let rest = match note.strip_prefix("help: ") { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(note.to_string()) };
     after_help(rest)
 }
 
 pub(crate) fn rustc_refused(message: &Relayed, at: &str, path: &str, source: &str) -> String {
-    let mut notes: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
     match &message.internal {
         None => { notes.push(format!("rustc output: {}", message.message)); },
         Some(original) => {
@@ -245,13 +245,13 @@ pub(crate) fn rustc_refused(message: &Relayed, at: &str, path: &str, source: &st
             notes.push(format!("rustc output: {}", original));
         },
     }
-    for note in message.notes.iter() { notes.push(note.to_string()); }
-    let help: String = String::from("This is a bug in Nikaia, not in your program: the checker accepted it, and Rust refused the code it became. Please report it, with this message, at https://github.com/Nikaia-Foundation/Nikaia/issues.");
+    for note in message.notes.iter() { notes.push(nikaia_std::block::Text::from(note.to_string())); }
+    let help: String = String::from("This is a bug in Nikaia, not in your program: the checker accepted it, and Rust refused the code it became. Please report it, with this message, at https://github.com/Nikaia-Foundation/Nikaia/issues."); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     if message.located {
-        let shown = Shown { warning: false, code: String::from("NK1343"), message: String::from("internal compiler error"), notes, help: Some(help), span: message.span.clone(), labels: vec![Marked { span: message.span.clone(), word: message.word.to_string(), text: String::from(""), main: true }] };
+        let shown = Shown { warning: false, code: String::from("NK1343"), message: String::from("internal compiler error"), notes, help: Some(help), span: message.span.clone(), labels: vec![Marked { span: message.span.clone(), word: nikaia_std::block::Text::from(message.word.to_string()), text: String::from(""), main: true }] };
         return rendered(&shown, path, source);
     }
-    let mut out = format!("error[NK1343]: internal compiler error\n  --> {} (no Nikaia source maps to this)\n", at);
+    let mut out = format!("error[NK1343]: internal compiler error\n  --> {} (no Nikaia source maps to this)\n", at); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     for note in notes.iter() { out.push_str(&format!("   = note: {}\n", note)); }
     out.push_str(&format!("   = help: {}\n", help));
     out
@@ -271,7 +271,7 @@ pub struct Relayed {
 }
 
 pub fn relayed(message: &Relayed, path: &str, source: &str, generated_path: &str) -> String {
-    let mut at = generated_path.to_string();
+    let mut at = nikaia_std::block::Text::from(generated_path.to_string());
     if message.generated_line > 0 { at = format!("{}:{}", generated_path, message.generated_line); }
     if message.level == "error" && !message.about_the_program { return rustc_refused(message, &at, path, source); }
     if message.internal.is_some() {
@@ -285,10 +285,10 @@ pub fn relayed(message: &Relayed, path: &str, source: &str, generated_path: &str
         return format!("internal error: {}: This is a bug in Nikaia, not in your program. Please report it.\n   = note: The compiler generated two different types for one of yours.\n   = note: What the Rust compiler said: {}\n", at, original);
     }
     if message.located {
-        let mut notes: Vec<String> = vec![];
-        let mut help: Option<String> = None;
-        for note in message.notes.iter() { if note.starts_with("help: ") { help = Some(after_help(note)); } else { notes.push(note.to_string()); } }
-        let shown = Shown { warning: message.level == "warning", code: String::from(""), message: message.message.to_string(), notes, help, span: message.span.clone(), labels: vec![Marked { span: message.span.clone(), word: message.word.to_string(), text: String::from(""), main: true }] };
+        #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
+        let mut help: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
+        for note in message.notes.iter() { if note.starts_with("help: ") { help = Some(after_help(note)); } else { notes.push(nikaia_std::block::Text::from(note.to_string())); } }
+        let shown = Shown { warning: message.level == "warning", code: String::from(""), message: nikaia_std::block::Text::from(message.message.to_string()), notes, help, span: message.span.clone(), labels: vec![Marked { span: message.span.clone(), word: nikaia_std::block::Text::from(message.word.to_string()), text: String::from(""), main: true }] };
         return rendered(&shown, path, source);
     }
     let mut out = format!("{}: {}: {} (no Nikaia source maps to this)\n", message.level, at, message.message);

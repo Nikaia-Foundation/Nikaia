@@ -455,7 +455,7 @@ pub fn check_crossings_a_call_that_hands_its_number_back(state: &mut CheckState,
     let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let result: &Ty = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let name: String = match result {
-        Ty::Var { name, .. } => name.to_string(),
+        Ty::Var { name, .. } => nikaia_std::block::Text::from(name.to_string()),
         _ => return,
     };
     if check_crossings_known(bound, &name) { return; }

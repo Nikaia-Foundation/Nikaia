@@ -11,6 +11,8 @@
 use crate::common;
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 const PROGRAM: &str = "use std::fs\n\
      \n\
@@ -250,7 +252,7 @@ fn refusals(source: &str) -> Vec<(String, String)> {
     common::checked(&parsed, &common::infer(&parsed), &library())
         .findings
         .into_iter()
-        .map(|f| (f.code.to_string(), f.help.unwrap_or_default()))
+        .map(|f| (f.code.to_text(), f.help.unwrap_or_default()))
         .collect()
 }
 
@@ -356,7 +358,7 @@ fn to_text_throws_by_the_names_source() {
                  \x20   return p.to_text()\n\
                  }\n\nfn main() {\n}\n";
     assert!(
-        codes(given).contains(&"NK2605".to_string()),
+        codes(given).contains(&"NK2605".to_text()),
         "{:#?}",
         refusals(given)
     );
@@ -371,7 +373,7 @@ fn to_text_throws_by_the_names_source() {
     assert!(codes(walked).is_empty(), "{:#?}", refusals(walked));
     let unsaid = walked.replace(" -> String throws {", " -> String {");
     assert!(
-        codes(&unsaid).contains(&"NK2605".to_string()),
+        codes(&unsaid).contains(&"NK2605".to_text()),
         "{:#?}",
         refusals(&unsaid)
     );
