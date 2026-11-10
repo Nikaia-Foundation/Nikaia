@@ -1033,6 +1033,13 @@ pub(crate) fn bounding_remainder(x: Option<&Range>, high: i64) -> Range {
     Range { lo: Some(0), hi: Some(hi.min(high - 1)) }
 }
 
+pub(crate) fn bounding_not_negative(walk: &mut BoundsWalk, side: &Expr, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {
+    let term = match bounding_lin(walk, side, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let zero = walk.arena.int(0);
+    let goal = walk.arena.ge(term, zero);
+    bounding_proves(&walk, facts, goal, ask)
+}
+
 pub(crate) fn bounding_mask(walk: &mut BoundsWalk, side: &Expr, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
     let term = match bounding_lin(walk, side, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let c = match walk.arena.constant(term) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -1048,6 +1055,7 @@ pub(crate) fn bounding_fits(walk: &mut BoundsWalk, op: &BinaryOp, lhs: &Expr, rh
     let lo = widest_lo.max(0 - solvable());
     let hi = widest_hi.min(solvable());
     let term = bounding_lin_of(walk, op, lhs, rhs, facts, context, program, words);
+    let subtracting = matches!(op, BinaryOp::Sub);
     if term.is_some() {
         let t = nikaia_std::index::or(term, || 0);
         let low = walk.arena.int(lo);
@@ -1058,6 +1066,7 @@ pub(crate) fn bounding_fits(walk: &mut BoundsWalk, op: &BinaryOp, lhs: &Expr, rh
         let mut goal = walk.arena.and(vec![above, below]);
         if side > 0 { goal = below; } else if side < 0 { goal = above; }
         if bounding_proves(&walk, facts, goal, ask) { return true; }
+        if subtracting && widest_lo <= 0 - widest_hi && bounding_not_negative(walk, lhs, facts, context, program, words, ask) && bounding_not_negative(walk, rhs, facts, context, program, words, ask) { return true; }
         let mut relatives: Vec<i64> = vec![];
         if side != 0 { relatives = bounding_relatives(walk, t, side, &bounds, facts); }
         for relative in relatives.iter() {

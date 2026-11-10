@@ -1,4 +1,4 @@
-bounds in src/main.nika: 50 indexes, 49 proved; 85 operations, 59 proved
+bounds in src/main.nika: 50 indexes, 49 proved; 85 operations, 60 proved
   1373  depth_of(x) + 1                       checked: a call's result, which the walk knows nothing of (#382)
   1379  depth_of(e.key) + 1                   checked: a call's result, which the walk knows nothing of (#382)
   1379  depth_of(e.value) + 1                 checked: a call's result, which the walk knows nothing of (#382)
@@ -17,7 +17,6 @@ bounds in src/main.nika: 50 indexes, 49 proved; 85 operations, 59 proved
   1852  self.made += nodes                    checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
   2391  n + d                                 checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
   2415  from + (…)                            checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
-  2601  n - i                                 checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
   2610  value * radix + hex_value(cs[i])      checked: a call's result, which the walk knows nothing of (#382)
   2610  value * radix                         checked: a product of two unknowns (#386)
   2815  self.column += 1                      checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

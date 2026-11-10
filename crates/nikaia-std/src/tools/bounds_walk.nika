@@ -1870,6 +1870,22 @@ fn bounding_remainder(x: ref Range?, high: i64) -> Range {
 	return Range { lo: 0, hi: hi.min(high - 1) }
 }
 
+/// Whether the walk proves `side` is not below zero.
+fn bounding_not_negative(
+	mut walk: BoundsWalk,
+	side: ref Expr,
+	facts: ref BoundsFacts,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> bool {
+	let term = bounding_lin(walk, side, facts, context, program, words) ?? return false
+	let zero = walk.arena.int(0)
+	let goal = walk.arena.ge(term, zero)
+	return bounding_proves(walk, facts, goal, ask)
+}
+
 /// A side of `&` that is a constant not below zero: the mask.
 fn bounding_mask(
 	mut walk: BoundsWalk,
@@ -1912,6 +1928,10 @@ fn bounding_fits(
 	let lo = widest_lo.max(0 - solvable())
 	let hi = widest_hi.min(solvable())
 	let term = bounding_lin_of(walk, op, lhs, rhs, facts, context, program, words)
+	let subtracting = match op {
+		BinaryOp::Sub => true,
+		else => false,
+	}
 	if term != null {
 		let t = term ?? 0
 		let low = walk.arena.int(lo)
@@ -1931,6 +1951,14 @@ fn bounding_fits(
 		if bounding_proves(walk, facts, goal, ask) {
 			return true
 		}
+		// **A difference of two values not below zero** lies in
+		// `-hi..=hi`, inside a signed type (#1516): `n - i` after a loop
+		// whose counter stops at `n` or past its start.
+		if subtracting && widest_lo <= 0 - widest_hi
+			&& bounding_not_negative(walk, lhs, facts, context, program, words, ask)
+			&& bounding_not_negative(walk, rhs, facts, context, program, words, ask) {
+				return true
+			}
 		let mut relatives: Vec[i64] = []
 		if side != 0 {
 			relatives = bounding_relatives(walk, t, side, bounds, facts)
