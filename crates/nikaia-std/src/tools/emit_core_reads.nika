@@ -282,6 +282,7 @@ impl EmitState {
                 }
                 self.emit_core_hold_chain_base(world, walk, out, host, value, node_key(value), false, depth, flow, scope)
                 self.emit_core_hold_viewed_arguments(world, walk, out, host, value, depth, flow, scope)
+                self.emit_core_hold_indexed_call(world, walk, out, host, value, false, depth, flow, scope)
             },
             else => {}
         }
@@ -295,7 +296,13 @@ impl EmitState {
     /// position the result points into is bound first, and the call lends the
     /// binding.
     fn emit_core_hold_viewed_arguments[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
-        let args = match value {
+        // **A `catch` over the call holds the same arguments** (#1523):
+        // `let d = load(Bytes(b)) catch { [] }`.
+        let call = match value {
+            Expr::TryCatch { expr, .. } => expr,
+            else => value,
+        }
+        let args = match call {
             Expr::Call { args, .. } => args,
             Expr::Try(inner, _) => match inner {
                 Expr::Call { args, .. } => args,
@@ -303,7 +310,7 @@ impl EmitState {
             },
             else => return,
         }
-        let callee = call_callee_name(world.words, world.aliases, value) ?? return
+        let callee = call_callee_name(world.words, world.aliases, call) ?? return
         let contract = self.own_contracts.functions.get(callee) ?? return
         let borrows = contract.borrows?.clone() ?? return
         let signature = contract.signature?.clone() ?? return
@@ -331,6 +338,31 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
             out.push(f";\n{"    ".repeat(depth)}")
             walk.held.insert(key, name)
+        }
+    }
+
+    /// **An element read out of a call's result outlives the statement only
+    /// if the result does** (#1523). `let t = words(b)[0]` lowers to
+    /// `get(&words(b), 0)`, a view of a list that dies at the `;` - `rustc`'s
+    /// E0716. So the call is bound first, after the arguments its result
+    /// views, and the read goes through the binding.
+    fn emit_core_hold_indexed_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, at: ref Expr, indexed: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match at {
+            Expr::Index { base, .. } => self.emit_core_hold_indexed_call(world, walk, out, host, base, true, depth, flow, scope),
+            Expr::Field { base, .. } => self.emit_core_hold_indexed_call(world, walk, out, host, base, indexed, depth, flow, scope),
+            else => {
+                if !indexed || !emit_read_a_call(at) {
+                    return
+                }
+                self.emit_core_hold_viewed_arguments(world, walk, out, host, at, depth, flow, scope)
+                let key = node_key(at)
+                walk.held.remove(key)
+                let name = f"__nikaia_held_{walk.held.len()}"
+                out.push(f"let {name} = ")
+                self.emit_expr(world, walk, out, host, at, depth, flow, scope)
+                out.push(f";\n{"    ".repeat(depth)}")
+                walk.held.insert(key, name)
+            }
         }
     }
 
