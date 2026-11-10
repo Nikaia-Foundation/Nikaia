@@ -1,0 +1,6 @@
+bounds in tests/a_counter_a_parameter_starts_and_a_literals_characters_are_proved.nika: 2 indexes, 2 proved; 1 operations, 1 proved
+     6  cs[i]                proved
+     7  i += 1               proved
+    17  digits[v >> k & 15]  proved
+  derived  hex: 0 <= v, proved at the calls on lines 25
+  derived  skip_blanks: 0 <= from, from <= cs.len(), from < cs.len(), proved at the calls on lines 25, 25

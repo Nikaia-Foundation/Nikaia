@@ -6248,6 +6248,27 @@ fn bounding_assign(
 	bounding_relations_push(walk, facts, name, relations)
 }
 
+/// How many characters `"text".chars()` hands, for ASCII text.
+fn bounding_literal_chars(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> i64? {
+	return match expr {
+		Expr::MethodCall { receiver, method, args, .. } => {
+			if !args.is_empty() || words.resolve(method) != "chars" {
+				return null
+			}
+			match receiver {
+				Expr::LitStr { text, .. } => {
+					if text.chars().count() != text.len() {
+						return null
+					}
+					text.len() as i64
+				},
+				else => null,
+			}
+		},
+		else => null,
+	}
+}
+
 fn bounding_is_op(op: ref BinaryOp?, wanted: BinaryOp) -> bool {
 	let given = op ?? return false
 	return given == wanted
@@ -6265,7 +6286,21 @@ fn bounding_built(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String
 		},
 		// **A copy is as long as what it copies** (ADR-306 D4).
 		Expr::MethodCall { receiver, method, args, .. } => {
-			if !args.is_empty() || words.resolve(method) != "clone" {
+			if !args.is_empty() {
+				return
+			}
+			// **A literal's characters, collected**, are as many as it has
+			// (#1516); of ASCII text only, where a `String` they are
+			// collected into counts its bytes the same.
+			if words.resolve(method) == "collect" {
+				let count = bounding_literal_chars(receiver, words) ?? return
+				let len = walk.arena.var(length_of(name))
+				let n = walk.arena.int(count)
+				let fact = walk.arena.equal(len, n)
+				bounding_push(walk, facts, fact)
+				return
+			}
+			if words.resolve(method) != "clone" {
 				return
 			}
 			let from = path_of(receiver, words) ?? return

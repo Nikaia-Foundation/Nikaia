@@ -3542,6 +3542,23 @@ pub(crate) fn bounding_assign(walk: &mut BoundsWalk, facts: &mut BoundsFacts, na
     bounding_relations_push(walk, facts, name, &relations);
 }
 
+pub(crate) fn bounding_literal_chars(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<i64> {
+    match expr {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if !args.is_empty() || words.resolve(method) != "chars" { return None; }
+            match receiver {
+                Expr::LitStr { text, .. } => {
+                    if (text.chars().count() as i64) != text.len() as i64 { return None; }
+                    Some(text.len() as i64)
+                },
+                _ => None,
+            }
+        },
+        _ => None,
+    }
+}
+
 pub(crate) fn bounding_is_op(op: Option<&BinaryOp>, wanted: &BinaryOp) -> bool {
     let given = match op { Some(__nikaia_value) => __nikaia_value, None => return false };
     given == wanted
@@ -3558,7 +3575,16 @@ pub(crate) fn bounding_built(walk: &mut BoundsWalk, facts: &mut BoundsFacts, nam
         },
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-            if !args.is_empty() || words.resolve(method) != "clone" { return; }
+            if !args.is_empty() { return; }
+            if words.resolve(method) == "collect" {
+                let count = match bounding_literal_chars(receiver, words) { Some(__nikaia_value) => __nikaia_value, None => return };
+                let len = walk.arena.var(&length_of(name));
+                let n = walk.arena.int(count);
+                let fact = walk.arena.equal(len, n);
+                bounding_push(&walk, facts, fact);
+                return;
+            }
+            if words.resolve(method) != "clone" { return; }
             let from = match path_of(receiver, words) { Some(__nikaia_value) => __nikaia_value, None => return };
             if path_within(&from, name) || path_within(name, &from) { return; }
             let len = walk.arena.var(&length_of(name));
