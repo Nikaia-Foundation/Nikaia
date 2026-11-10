@@ -83,6 +83,10 @@ it, like the checks in `docs/supervisor.md`.
   in `tests/compiler/tests/` (or the package's tests), and the rows it must show
   (#1470: an issue that said `tests/compiler/` sent the builder to the wrong place).
   The order is the order to build in; an item resting on another says so.
+  A change to a default or a lowering level names where that level is set
+  (`sysroot::tools_build` for `lower-std`, not `Build::default`), the ADRs that
+  limit the crate the output lands in (ADR-218 for `nikaia-std`), and the `it`
+  tests whose helpers lower with no flag (#1474, #1475).
 * **I10. The rule that repeats**: when a fix widens or narrows a rule, the
   other functions that test the same condition are named (or the issue says
   none were found, and how it looked).
