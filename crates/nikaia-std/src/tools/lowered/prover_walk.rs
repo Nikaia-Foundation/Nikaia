@@ -22,7 +22,7 @@ pub fn prover_bodies(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
             Item::Impl { methods, target, trait_name } => {
                 let trait_name = *trait_name;
                 let owner = nikaia_std::block::Text::from(words.resolve(target.name).to_string());
-                for method in methods.iter() { prover_function(walk, method, Some(nikaia_std::block::Text::from(owner.to_string())), trait_name.is_some(), program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); }
+                for method in methods.iter() { prover_function(walk, method, Some(&nikaia_std::block::Text::from(owner.to_string())), trait_name.is_some(), program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); }
             },
             Item::Test { body, .. } => { prover_test(walk, body, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
             Item::Bench { body, .. } => { prover_test(walk, body, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
@@ -137,7 +137,7 @@ pub(crate) fn prover_test(walk: &mut ProverWalk, body: &Block, program: &Program
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner: Option<String>, of_a_trait: bool, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner: Option<&str>, of_a_trait: bool, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     match &item.node {
         Item::Fn { name, receiver, args, config, body, can_throw, .. } => {
             let can_throw = *can_throw; let name = *name;
@@ -146,7 +146,7 @@ pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner
             let plain = prover_symbol_text((name).as_ref(), words);
             if plain.is_some() {
                 let n = nikaia_std::index::or(plain, || "".into());
-                if has_owner { key = Some(format!("{}::{}", nikaia_std::index::or(owner.as_deref(), || ""), n)); } else { key = Some(n); }
+                if has_owner { key = Some(format!("{}::{}", nikaia_std::index::or(owner, || ""), n)); } else { key = Some(n); }
             }
             let was_a_test = key.is_some() && prover_a_test_function(Option::as_deref(&key));
             let mut scope = ProverScope::at_the_entry();

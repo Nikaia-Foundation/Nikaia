@@ -528,12 +528,12 @@ pub(crate) fn refs_of(items: &[Expr]) -> Vec<&Expr> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_texts_a_byte_as_a_scalar(written: &str, name: Option<String>, span: &Span) -> CheckFinding {
+pub(crate) fn check_texts_a_byte_as_a_scalar(written: &str, name: Option<&str>, span: &Span) -> CheckFinding {
     let value = nikaia_std::index::or(a_high_byte(written), || 128);
     let hex = hex_of(value);
     let note = "Above `\\x7F` a `'\\xNN'` names a byte, which is a `u8` and no `scalar`: the scalar of that number is another character, two bytes in UTF-8 (Part I 2.6).";
     let mut annotated = format!("`let b: u8 = '{}'`", written);
-    if name.is_some() { annotated = format!("`let {}: u8 = '{}'`", nikaia_std::index::or(name.as_deref(), || ""), written); }
+    if name.is_some() { annotated = format!("`let {}: u8 = '{}'`", nikaia_std::index::or(name, || ""), written); }
     check_refusal("NK1212", span, format!("`'{}'` is the byte {}, and it is used as a `scalar`.", written, value), vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("For the scalar U+00{}, write `'\\u{{{}}}'`; for the byte, declare it a `u8`: {}.", nikaia_std::block::Text::from(hex.to_uppercase()), hex, annotated)))
 }
 
@@ -561,7 +561,7 @@ impl CheckState {
                 }
                 let note = "A `'…'` takes its type from how it's used, `u8` or `scalar`, and these uses want both.";
                 self.findings.push(check_refusal("NK1200", &later, format!("You're using `{}` as {} `{}` and here as {} `{}`.", open.name, an_or_a(first), first, an_or_a(second), second), vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("Declare its type, `let {}: u8 = '{}'`, and convert with `as` where the other one is needed.", open.name, open.written))));
-            } else if first_byte.is_some() { self.facts.byte_literals.insert(open.literal); } else if a_high_byte(&open.written).is_some() { self.findings.push(check_texts_a_byte_as_a_scalar(&open.written, Some(nikaia_std::block::Text::from(open.name.to_string())), &open.at)); }
+            } else if first_byte.is_some() { self.facts.byte_literals.insert(open.literal); } else if a_high_byte(&open.written).is_some() { self.findings.push(check_texts_a_byte_as_a_scalar(&open.written, Some(&nikaia_std::block::Text::from(open.name.to_string())), &open.at)); }
         }
         self.flow.open_chars = collections::BTreeMap::new();
         for (literal, held) in self.flow.high_bytes.iter() {

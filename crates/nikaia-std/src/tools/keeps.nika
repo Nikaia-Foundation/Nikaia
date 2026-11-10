@@ -451,8 +451,14 @@ fn points_into_at(contract: ref FnContract, at: i64) -> bool {
 // the walk every derived column shares.
 fn keeps_expression(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
     classify(expr, interner, holes_of, context, own, library, walk)
+    // **A hole only reads its value** (#1523): `f"!<{tag ?? ""}>"` keeps
+    // nothing of `tag`.
     for hole in holes_of(expr) {
-        keeps_expression(hole, interner, holes_of, context, own, library, walk)
+        if a_read_option(hole, interner, context) {
+            keeps_read_option(hole, interner, holes_of, context, own, library, walk)
+        } else {
+            keeps_expression(hole, interner, holes_of, context, own, library, walk)
+        }
     }
     match expr {
         Expr::Call { func, args, config, .. } => {
@@ -474,7 +480,13 @@ fn keeps_expression(expr: ref Expr, interner: ref winnow_grammar::InternerContex
                     },
                     else => false,
                 }
-                if !lent {
+                // **`p ?? e` over an option parameter is handed to the
+                // callee as `p`** (#1523): `tag_written(tag ?? "")` keeps
+                // `tag` where the callee keeps that position, and lends it
+                // where it lends (`keeps_handed`).
+                if !lent && a_read_option(args[at], interner, context) {
+                    keeps_read_option(args[at], interner, holes_of, context, own, library, walk)
+                } else if !lent {
                     keeps_expression(args[at], interner, holes_of, context, own, library, walk)
                 }
             }
@@ -1337,6 +1349,15 @@ fn keeps_handed(expr: ref Expr, interner: ref winnow_grammar::InternerContext, c
     match expr {
         Expr::Coalesce { fallback, .. } => names.extend(keeps_handed(fallback, interner, context, own, library, walk)),
         else => {}
+    }
+    // **And its left side, an option parameter, as itself** (#1523).
+    match coalesced_option(expr, interner, context) {
+        read => {
+            if !names.contains(read) {
+                names.push(read)
+            }
+        },
+        null => {},
     }
     // **A name a `let` moved a part of a parameter into is that part** (#665):
     // handed to what keeps it, it keeps the parameter.

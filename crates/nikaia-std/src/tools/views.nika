@@ -3323,7 +3323,13 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
                         trait_from.push(asked.names.resolve(args[position].name).clone())
                     }
                 }
-                rsrc_report(asked, of, sources, declared_views, plain_ways, rsrc_plain(reach), receiver, trait_name, declared_result, trait_from, !ret_from.is_empty(), at, out)
+                let mut texts: Vec[String] = []
+                for arg in args {
+                    if rsrc_text_or_none(asked, arg.ty) {
+                        texts.push(asked.names.resolve(arg.name).clone())
+                    }
+                }
+                rsrc_report(asked, of, sources, declared_views, texts, plain_ways, rsrc_plain(reach), receiver, trait_name, declared_result, trait_from, !ret_from.is_empty(), at, out)
             }
             return changed
         }
@@ -3422,7 +3428,7 @@ fn rsrc_tail(body: ref Block, tail: ref collections::BTreeSet[String], mut flow:
     }
 }
 
-fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], declared_views: ref Vec[String], ways: ref Vec[ResultSrcWay], reach: ref collections::BTreeSet[String], receiver: ref Receiver?, trait_name: ref winnow_grammar::Symbol?, declared_result: ref RsrcTraitResult, trait_from: ref Vec[String], written_from: bool, at: ref Span, mut out: Vec[Finding]) {
+fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], declared_views: ref Vec[String], texts: ref Vec[String], ways: ref Vec[ResultSrcWay], reach: ref collections::BTreeSet[String], receiver: ref Receiver?, trait_name: ref winnow_grammar::Symbol?, declared_result: ref RsrcTraitResult, trait_from: ref Vec[String], written_from: bool, at: ref Span, mut out: Vec[Finding]) {
     for way in ways {
         for each in way.reach {
             if each.starts_with("!") {
@@ -3440,7 +3446,14 @@ fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], decla
                 }
                 let message = f"{of} hands back a view of `{owned}`, which it takes by value, so the data is gone when the call returns."
                 let note = f"`{owned}` is moved into {of} and ends with it; a view of it can't outlive the call."
-                let help: String = "Take it as `ref`, so the view is of the caller's data, or hand back a copy: declare `-> String` and write `.clone()`."
+                let mut help: String = "Take it as `ref`, so the view is of the caller's data, or hand back a copy: declare `-> String` and write `.clone()`."
+                // **Text is never written `ref`** (ADR-282 D2, NK1261, #1523):
+                // a text parameter is lent wherever the body does not keep
+                // it, so the way to a view of the caller's text is a copy
+                // where the body keeps it.
+                if texts.contains(owned) {
+                    help = f"Where the body keeps `{owned}`, keep a copy instead (`{owned}.clone()`), so `{owned}` is lent and the view points into the caller's text; or hand back text of its own: write `.clone()` on the view handed back."
+                }
                 out.push(refusal("NK2302", Span { start: way.span.start, end: way.span.end }, message, [note], help))
                 return
             }

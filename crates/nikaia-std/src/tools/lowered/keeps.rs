@@ -276,7 +276,7 @@ pub(crate) fn points_into_at(contract: &FnContract, at: i64) -> bool {
 
 pub(crate) fn keeps_expression(expr: &Expr, interner: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
     classify(expr, interner, &holes_of, context, own, library, walk);
-    for hole in holes_of(expr) { keeps_expression(&hole, interner, holes_of, context, own, library, walk); }
+    for hole in holes_of(expr) { if a_read_option(&hole, interner, context) { keeps_read_option(&hole, interner, &holes_of, context, own, library, walk); } else { keeps_expression(&hole, interner, holes_of, context, own, library, walk); } }
     match expr {
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -294,7 +294,7 @@ pub(crate) fn keeps_expression(expr: &Expr, interner: &winnow_grammar::InternerC
                     },
                     _ => false,
                 };
-                if !lent { keeps_expression(nikaia_std::index::get(&args, nikaia_std::index::at(at)), interner, holes_of, context, own, library, walk); }
+                if !lent && a_read_option(nikaia_std::index::get(&args, nikaia_std::index::at(at)), interner, context) { keeps_read_option(nikaia_std::index::get(&args, nikaia_std::index::at(at)), interner, &holes_of, context, own, library, walk); } else if !lent { keeps_expression(nikaia_std::index::get(&args, nikaia_std::index::at(at)), interner, holes_of, context, own, library, walk); }
             }
             for setting in config.iter() { keeps_expression(&setting.value, interner, holes_of, context, own, library, walk); }
         },
@@ -856,6 +856,10 @@ pub(crate) fn keeps_handed(expr: &Expr, interner: &winnow_grammar::InternerConte
         Expr::Coalesce { fallback, .. } => { let fallback = nikaia_std::boxed::open(fallback); names.extend(keeps_handed(fallback, interner, context, own, library, walk)); },
         _ => { },
     }
+    match coalesced_option(expr, interner, context) {
+        Some(read) => { if !nikaia_std::list::contains(&names, &read) { names.push(read); } },
+        None => { },
+    }
     match expr {
         Expr::Variable(ident, _) => {
             let ident = *ident;
@@ -1158,11 +1162,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple86524| {
-                            let (at, arg) = __nikaia_tuple86524; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple87508| {
+                            let (at, arg) = __nikaia_tuple87508; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple86700| {
-                            let (at, arg) = __nikaia_tuple86700;
+                        }).map(|__nikaia_tuple87684| {
+                            let (at, arg) = __nikaia_tuple87684;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);

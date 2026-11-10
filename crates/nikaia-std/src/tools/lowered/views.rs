@@ -2419,12 +2419,14 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
                 let of = of_what((owner).as_deref(), &function);
                 let mut plain_ways: Vec<ResultSrcWay> = vec![];
                 for way in flow.ways.iter() { plain_ways.push(ResultSrcWay { span: Span { start: way.span.start, end: way.span.end }, reach: rsrc_plain(&way.reach) }); }
-                let mut trait_from: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut trait_from: Vec<String> = vec![];
                 for position in declared_result.from.iter() {
                     let position = nikaia_std::num::value(position);
                     if position < 0 { trait_from.push(nikaia_std::block::Text::from(self_name.to_string())); } else if position < args.len() as i64 { trait_from.push(nikaia_std::block::Text::from(asked.names.resolve(nikaia_std::index::get(&args, nikaia_std::index::at(position)).name).to_string())); }
                 }
-                rsrc_report(asked, &of, &sources, &declared_views, &plain_ways, &rsrc_plain(&reach), (receiver).as_ref(), trait_name, declared_result, &trait_from, !ret_from.is_empty(), at, out);
+                let mut texts: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut trait_from = trait_from;
+                for arg in args.iter() { if rsrc_text_or_none(asked, &arg.ty) { texts.push(nikaia_std::block::Text::from(asked.names.resolve(arg.name).to_string())); } }
+                rsrc_report(asked, &of, &sources, &declared_views, &texts, &plain_ways, &rsrc_plain(&reach), (receiver).as_ref(), trait_name, declared_result, &trait_from, !ret_from.is_empty(), at, out);
             }
             return changed;
         },
@@ -2502,7 +2504,7 @@ pub(crate) fn rsrc_tail(body: &Block, tail: &collections::BTreeSet<String>, flow
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String], declared_views: &[String], ways: &[ResultSrcWay], reach: &collections::BTreeSet<String>, receiver: Option<&Receiver>, trait_name: Option<&winnow_grammar::Symbol>, declared_result: &RsrcTraitResult, trait_from: &[String], written_from: bool, at: &Span, out: &mut Vec<Finding>) {
+pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String], declared_views: &[String], texts: &[String], ways: &[ResultSrcWay], reach: &collections::BTreeSet<String>, receiver: Option<&Receiver>, trait_name: Option<&winnow_grammar::Symbol>, declared_result: &RsrcTraitResult, trait_from: &[String], written_from: bool, at: &Span, out: &mut Vec<Finding>) {
     for way in ways.iter() {
         for each in way.reach.iter() {
             if each.starts_with('!') {
@@ -2517,7 +2519,8 @@ pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String
                 }
                 let message = format!("{} hands back a view of `{}`, which it takes by value, so the data is gone when the call returns.", of, owned);
                 let note = format!("`{}` is moved into {} and ends with it; a view of it can't outlive the call.", owned, of);
-                let help: String = String::from("Take it as `ref`, so the view is of the caller's data, or hand back a copy: declare `-> String` and write `.clone()`.");
+                let mut help: String = String::from("Take it as `ref`, so the view is of the caller's data, or hand back a copy: declare `-> String` and write `.clone()`.");
+                if nikaia_std::list::contains(&texts, &owned) { help = format!("Where the body keeps `{}`, keep a copy instead (`{}.clone()`), so `{}` is lent and the view points into the caller's text; or hand back text of its own: write `.clone()` on the view handed back.", owned, owned, owned); }
                 out.push(refusal("NK2302", Span { start: way.span.start, end: way.span.end }, message, vec![note], help));
                 return;
             }
