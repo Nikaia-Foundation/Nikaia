@@ -1,0 +1,5 @@
+bounds in tests/what_is_known_outside_a_match_holds_in_its_arms.nika: 2 indexes, 1 proved; 2 operations, 1 proved
+    15  xs[n - 1]  proved
+    15  xs[n - 1]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    16  n - 1      proved
+    17  n - 1      checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

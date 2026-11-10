@@ -40,6 +40,12 @@ enum Ask {
     /// nor a method's receiver: no method on a whole number changes it. Both
     /// only outside a deferred body.
     Untracked(collections::BTreeSet[String]),
+    /// **What may give `name` a value other than `binding`** (ADR-361 D13,
+    /// #1516): an assignment to it that is not `name = binding`, one in a
+    /// deferred body or a `match` arm (whose pattern may bind the name
+    /// again), and the name handed to a call or a method, whose `mut`
+    /// parameter may change it.
+    Follows(String, String),
 }
 
 struct Tally {
@@ -97,6 +103,17 @@ pub fn assigned_in_expr(expr: ref Expr, words: ref winnow_grammar::InternerConte
     let mut found = tally()
     tally_expr(expr, Ask::Assigned, false, words, found)
     return found.names
+}
+
+/// **Whether `body` changes `name` only by `name = binding`** (ADR-361 D13,
+/// #1516): every assignment to it is that one, outside a deferred body and a
+/// `match` arm, it is handed to no call or method, and nothing in the body
+/// binds `binding` again, so each value it takes there is one the binding
+/// had.
+pub fn follows_only(body: ref Block, name: ref String, binding: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    let mut found = tally()
+    tally_block(body, Ask::Follows(name.clone(), binding.clone()), false, words, found)
+    return !found.found && !rebinds(body, binding, words)
 }
 
 /// **The names in `body` the prover may not follow as mutable whole
@@ -275,6 +292,19 @@ fn tally_statement(stmt: ref Stmt, ask: ref Ask, deferred: bool, words: ref winn
             },
             else => {},
         },
+        Ask::Follows(name, binding) => match stmt {
+            Stmt::Assign { target, op, value } => {
+                if (assigned_root(target, words) ?? "") == name {
+                    let plain = op == null
+                        && variable_text(target, words) != null
+                        && (variable_text(value, words) ?? "") == binding
+                    if deferred || !plain {
+                        tally.found = true
+                    }
+                }
+            },
+            else => {},
+        },
         Ask::Untracked(_) => {
             match stmt {
                 Stmt::Assign { target, .. } => {
@@ -379,6 +409,31 @@ fn tally_here(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
             else => {},
         },
         Ask::Assigned => {},
+        Ask::Follows(name, _) => match expr {
+            Expr::Call { args, .. } => {
+                if names_the(args, name, words) {
+                    tally.found = true
+                }
+            },
+            Expr::MethodCall { args, .. } => {
+                if names_the(args, name, words) {
+                    tally.found = true
+                }
+            },
+            Expr::SafeMethod { args, .. } => {
+                if names_the(args, name, words) {
+                    tally.found = true
+                }
+            },
+            Expr::Match { arms, .. } => {
+                for arm in arms {
+                    if assigned_in_expr(arm.body, words).contains(name) {
+                        tally.found = true
+                    }
+                }
+            },
+            else => {},
+        },
         Ask::Untracked(readers) => match expr {
             Expr::MethodCall { receiver, args, .. } => {
                 if deferred {

@@ -1,0 +1,65 @@
+// A name the body of `for i in low..<high` changes only by `prev = i`, and
+// that lies below `low` where the loop is reached, lies at or above where it
+// started and below `i` in each turn, and below the range's end past the
+// loop (ADR-361 D13, #1516). Any other change of it, or a call it is handed
+// to, leaves it unbounded.
+
+fn gap(lines: Vec[String]) -> i64 sync {
+    let n = lines.len() as i64
+    let mut prev = -1
+    let mut t = 0
+    for i in 0..<n {
+        if lines[i].len() == 0 {
+            continue
+        }
+        if prev >= 0 && lines[prev].len() == 0 {
+            t = i - prev
+        }
+        prev = i
+    }
+    return n - prev + t % 2
+}
+
+fn closed(lines: Vec[String]) -> i64 sync {
+    let n = lines.len() as i64
+    let mut prev = -1
+    for i in 0..n - 1 {
+        if prev >= 0 && lines[prev].len() > 0 {
+            prev = i
+        }
+    }
+    return n - prev
+}
+
+fn reset(lines: Vec[String]) -> i64 sync {
+    let n = lines.len() as i64
+    let mut prev = -1
+    for i in 0..<n {
+        if prev >= 0 && lines[prev].len() > 0 {
+            prev = n
+        }
+        prev = i
+    }
+    return n - prev
+}
+
+fn look(at: i64) sync {}
+
+fn handed(lines: Vec[String]) -> i64 sync {
+    let n = lines.len() as i64
+    let mut prev = -1
+    for i in 0..<n {
+        if prev >= 0 && lines[prev].len() > 0 {
+            look(prev)
+        }
+        prev = i
+    }
+    return n - prev
+}
+
+fn main() throws {
+    println(gap(["a", "", "b"]))
+    println(closed(["a", "", "b"]))
+    println(reset(["a", "", "b"]))
+    println(handed(["a", "", "b"]))
+}

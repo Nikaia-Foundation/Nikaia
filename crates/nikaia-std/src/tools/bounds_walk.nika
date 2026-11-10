@@ -5414,11 +5414,31 @@ fn bounding_for(
 			}
 		}
 	}
+	// **A name that only takes the binding's values follows it** (ADR-361
+	// D13, #1516): `prev = i` the one change of `prev` in the body of `for
+	// i in low..<high`, with `prev` below `low` where the loop is reached.
+	// At the head of each turn it holds its value from before the loop or
+	// one the binding had, so it lies at or above the first and below the
+	// binding; past the loop, below the range's end.
+	let followers = bounding_followers(walk, body, name, counted, low, high, changed, facts, words, ask)
+	let mut entered: Vec[(String, i64)] = []
+	for x in followers {
+		let e = bounding_rename(walk, inner, x)
+		entered.push((x.clone(), e))
+	}
 	bounding_loop_change(walk, inner, changed, cands)
 	for binding in bindings {
 		let bound = words.resolve(binding)
 		bounding_forget(walk, inner, bound)
 		inner.ints.remove(bound)
+	}
+	for (x, e) in entered {
+		let v = walk.arena.var(x)
+		let n = walk.arena.var(name)
+		let above = walk.arena.ge(v, e)
+		bounding_push(walk, inner, above)
+		let below = walk.arena.lt(v, n)
+		bounding_push(walk, inner, below)
 	}
 	for fact in invariant {
 		bounding_push(walk, inner, fact)
@@ -5599,9 +5619,27 @@ fn bounding_for(
 	if walk.through_loops && all_turns != null && !breaks(body, words) {
 		past = bounding_turn_bounds(walk, facts, steps, all_turns ?? 0)
 	}
+	let mut left: Vec[(String, i64)] = []
+	for x in followers {
+		let e = bounding_rename(walk, facts, x)
+		left.push((x.clone(), e))
+	}
 	bounding_loop_change(walk, facts, outer, cands)
 	for fact in invariant {
 		bounding_push(walk, facts, fact)
+	}
+	for (x, e) in left {
+		let v = walk.arena.var(x)
+		let above = walk.arena.ge(v, e)
+		bounding_push(walk, facts, above)
+		// Every value of the binding lies below the end, so the name does
+		// where the value it entered with does.
+		let h = high ?? 0
+		let entered_below = bounding_below(walk, e, h, closed)
+		if bounding_proves(walk, facts, entered_below, ask) {
+			let below = bounding_below(walk, v, h, closed)
+			bounding_push(walk, facts, below)
+		}
 	}
 	for fact in past {
 		bounding_push(walk, facts, fact)
@@ -5609,6 +5647,65 @@ fn bounding_for(
 	for list in filled {
 		bounding_shift(walk, facts, length_of(list), count)
 	}
+}
+
+/// **The names that follow the binding of `for name in low..<high`**
+/// (ADR-361 D13, #1516): whole numbers the body changes only by `x = name`,
+/// below `low` where the loop is reached, with both ends unchanged in it.
+fn bounding_followers(
+	mut walk: BoundsWalk,
+	body: ref Block,
+	name: ref String,
+	counted: bool,
+	low: i64?,
+	high: i64?,
+	changed: ref BoundsChanged,
+	facts: ref BoundsFacts,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> Vec[String] {
+	let mut found: Vec[String] = []
+	if !counted || low == null || high == null {
+		return found
+	}
+	let l = low ?? 0
+	let h = high ?? 0
+	if !bounding_stable(walk, l, changed, name) || !bounding_stable(walk, h, changed, name) {
+		return found
+	}
+	for x in changed.values {
+		if x == name || x.contains(".") || !facts.ints.contains(x) || walk.pinned.contains(x) {
+			continue
+		}
+		if !follows_only(body, x, name, words) {
+			continue
+		}
+		let v = walk.arena.var(x)
+		let before = walk.arena.lt(v, l)
+		if bounding_proves(walk, facts, before, ask) {
+			found.push(x.clone())
+		}
+	}
+	return found
+}
+
+/// **What is known of `name` becomes known of a fresh name for its value
+/// here**, which is handed back as a term: the facts that read `name` are
+/// kept, read of that value instead.
+fn bounding_rename(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String) -> i64 {
+	let e = walk.arena.var(f"{name}#{walk.entries}")
+	walk.entries += 1
+	let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	given.insert(name.clone(), e)
+	let mut kept: Vec[i64] = []
+	for fact in facts.facts {
+		if walk.arena.mentions(fact, name) {
+			kept.push(walk.arena.substitute(fact, given))
+		}
+		kept.push(fact)
+	}
+	facts.facts = kept
+	return e
 }
 
 /// `n <= h` where the range takes its end, `n < h` where it does not.
@@ -6022,9 +6119,15 @@ fn bounding_expr(
 			bounding_expr(walk, value, facts, context, program, words, ask)
 			let mut changed = nothing_changed()
 			for arm in arms {
-				// A pattern may bind a name that hides an outer one, so
-				// nothing known outside is carried into an arm.
-				let mut inner = BoundsFacts { ints: collections::BTreeSet(), facts: [] }
+				// **What is known outside holds in an arm** (#1516), but of
+				// no name its pattern may bind, which hides an outer one.
+				let mut inner = facts.clone()
+				let mut bound: collections::BTreeSet[String] = collections::BTreeSet()
+				prover_pattern_names(arm.pattern, words, bound)
+				for name in bound {
+					bounding_forget(walk, inner, name)
+					inner.ints.remove(name)
+				}
 				bounding_maybe_expr(walk, arm.guard, inner, context, program, words, ask)
 				bounding_expr(walk, arm.body, inner, context, program, words, ask)
 				bounding_extend(changed, bounding_changed_in_expr(arm.body, context, words))

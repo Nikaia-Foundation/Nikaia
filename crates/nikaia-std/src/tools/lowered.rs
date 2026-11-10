@@ -2985,7 +2985,7 @@ pub mod bounds_basic {
 }
 pub mod bounds_body {
     #[allow(unused_imports)]
-    pub use super::{breaks, turn_jumps, pinned_in, assigned_in_statement, assigned_in, assigned_in_expr, untracked_in, filled_once, changes_length_in_statement, changes_length_in_expr, changes_length_in};
+    pub use super::{breaks, turn_jumps, pinned_in, assigned_in_statement, assigned_in, assigned_in_expr, follows_only, untracked_in, filled_once, changes_length_in_statement, changes_length_in_expr, changes_length_in};
 }
 pub mod bounds_derived {
     #[allow(unused_imports)]
