@@ -312,6 +312,9 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * `BodyShape.bound` holds the parameters too: "the body never binds it again" is `!twice.contains(name)`. `BoundsChanged.lengths` counts growth as well as shrinking; "never shrinks" reads `falls`. (issue-1397, issue-1414)
 * The tools package is a library the Rust crate imports and writes (`emit/host.rs`), so under ADR-306 D22 its `pub` fields of `pub` types are never seen-only-by-Nikaia. Element-bound machinery: `fields_seen`, `fields_declared`, `bounds_fields`. (issue-1414)
 * Whether a body keeps a list's length is answered by `changes_length_in` plus `rebinds` (`bounds_body.nika`, `bounds_basic.nika`); parameters are registered in `prover_walk.nika`'s function walk, near `has_a_length`. (issue-1375)
+* **Generated crates are re-lowered by the rustc wrapper** (`project_drive.nika`, host `lower` in `crates/nikaia/src/project.rs`) from `Settings::from_env()`: an emit setting changed only in `lower_member` never reaches `gen/`; a per-crate choice passes through the wrapper's `lower` (as `program` does). (issue-1543)
+* **A program test links its package as a `[lib]`** next to the program, so a once-per-binary item (`#[global_allocator]`, a `main` hook) is emitted only for `--crate-type bin`. (issue-1543)
+* **A runtime panic outside the program's line table prints thread name, file line and backtrace**, which differ between the two settings: unwind with `resume_unwind` (as `OverBudget` does) or expect only stdout. (issue-1543)
 
 ## Moving Rust into Nikaia (self-hosting, ADR-294, #125)
 
