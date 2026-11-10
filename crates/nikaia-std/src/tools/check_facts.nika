@@ -285,8 +285,9 @@ pub struct CheckFacts {
     /// (`check_core_view_list_assigned`).
     pub view_list_assigns: collections::BTreeSet[i64],
     /// **The list literals placed in the running task's block** (ADR-327
-    /// D9, step 5 of #490), by the literal's node: the emitter writes
-    /// `Place::Block` there, `Place::Outside` everywhere else
+    /// D9, step 5 of #490), by the literal's node, and the texts by the
+    /// `String` of their `String()`: the emitter writes `Place::Block`
+    /// there, `Place::Outside` everywhere else
     /// (`check_core_place_in_block`).
     pub placed_in_block: collections::BTreeSet[i64],
     /// **The lists of views a `let` binds what they may view after** (#490),

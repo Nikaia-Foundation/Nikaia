@@ -1974,7 +1974,25 @@ pub(crate) fn check_core_place_in_block(state: &mut CheckState, world: &CheckWor
     let mut at: i64 = 0;
     while at < count {
         match &nikaia_std::index::get(&block.stmts, (at) as usize).node {
-            Stmt::Let { names, value, .. } => {
+            Stmt::Let { names, value, mutable, .. } => {
+                let mutable = *mutable;
+                if names.len() == 1 && mutable && check_core_placeable_text(world, value) {
+                    let name = format!("{}", world.words.resolve(*nikaia_std::index::get(&names, 0)));
+                    if check_core_a_plain_text(&state, &name) && check_core_view_list_bound_once(world, block, &name) {
+                        let mut local = true;
+                        let mut later: i64 = at + 1;
+                        while later < count && local {
+                            local = check_core_stays_in_stmt(&state, world, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(later)).node, &name);
+                            later += 1;
+                        }
+                        if local {
+                            match value {
+                                Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); state.facts.placed_in_block.insert(node_key(func)); },
+                                _ => { },
+                            }
+                        }
+                    }
+                }
                 if names.len() == 1 && check_core_placeable_literal(value) {
                     let name = format!("{}", world.words.resolve(*nikaia_std::index::get(&names, 0)));
                     if check_core_a_plain_list(&state, &name) && check_core_view_list_bound_once(world, block, &name) {
@@ -1997,6 +2015,28 @@ pub(crate) fn check_core_place_in_block(state: &mut CheckState, world: &CheckWor
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_placeable_literal(value: &Expr) -> bool { matches!(value, Expr::ListLit { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_placeable_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    match value {
+        Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); args.is_empty() && config.is_empty() && match func {
+            Expr::Variable(found, _) => { let found = *found; world.words.resolve(found) == "String" },
+            _ => false,
+        } },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_a_plain_text(state: &CheckState, name: &str) -> bool {
+    let found = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match found.ty {
+        Ty::Named { ref name, ref args, view } => !view && name == "String" && args.is_empty(),
+        _ => false,
+    }
+}
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -2024,6 +2064,10 @@ pub(crate) fn check_core_is_the_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_kept_method(method: &str) -> bool { method == "len" || method == "is_empty" || method == "push" || method == "pop" || method == "get" || method == "first" || method == "last" || method == "contains" || method == "iter" || method == "iter_mut" || method == "sort" || method == "sort_by" || method == "sort_by_key" || method == "reverse" || method == "clear" || method == "insert" || method == "remove" || method == "swap" || method == "truncate" || method == "extend" || method == "join" || method == "resize" || method == "retain" || method == "dedup" }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_kept_text_method(method: &str) -> bool { method == "len" || method == "is_empty" || method == "push" || method == "push_str" || method == "pop" || method == "contains" || method == "starts_with" || method == "ends_with" || method == "clear" || method == "truncate" || method == "insert" || method == "insert_str" || method == "remove" }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -2078,10 +2122,14 @@ pub(crate) fn check_core_stays_in(state: &CheckState, world: &CheckWorld<'_, '_,
             if !config.is_empty() { return false; }
             if check_core_is_the_name(world, receiver, name) {
                 let described = state.facts.method_callees.get(&(id_of(receiver) as i64));
-                check_core_kept_method(world.words.resolve(method)) && nikaia_std::index::or(match described {
-                    Some(__nikaia_it) => Some(__nikaia_it.starts_with("Vec::")),
-                    None => None,
-                }, || true) && check_core_stays_in_all(state, world, args, name)
+                let called = world.words.resolve(method);
+                let kept = if check_core_a_plain_text(state, name) { check_core_kept_text_method(called) } else {
+                    check_core_kept_method(called) && nikaia_std::index::or(match described {
+                        Some(__nikaia_it) => Some(__nikaia_it.starts_with("Vec::")),
+                        None => None,
+                    }, || true)
+                };
+                kept && check_core_stays_in_all(state, world, args, name)
             } else { check_core_stays_in(state, world, receiver, name) && check_core_stays_in_all(state, world, args, name) }
         },
         Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); (check_core_is_the_name(world, base, name) || check_core_stays_in(state, world, base, name)) && check_core_stays_in(state, world, index, name) },

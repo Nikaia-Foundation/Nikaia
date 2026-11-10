@@ -4,6 +4,6 @@ error[NK2605]: This function can fail, because the task started here can run ove
  12 |     let a = async fill()
     |     ^^^^^^^^^^^^^^^^^^^^
     |
-    = note: A task builds its lists in its own block; when the block is full, whoever waits for the task gets `task::OverBudget` (ADR-327 D13).
+    = note: A task builds its lists and texts in its own block; when the block is full, whoever waits for the task gets `task::OverBudget` (ADR-327 D13).
     = help: Add `throws` to `total`, or write a fallback: `async e catch { … }`.
 1 place that can fail without saying so
