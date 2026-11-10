@@ -75,6 +75,8 @@ together with the specification section and an example test.
   missing one goes under `Deviation`. A pre-flight names a commit by subject
   (`git log --grep`), never by hash: rebases change hashes (p9).
 * A script test that compares a driver's `--dry-run` text fails when `scripts/*.nika` wording changes; bless it from the project dir (`nikaia test --filter NAME --bless` in `tests/compiler`) and review the diff, since `nikaia run FILE` refuses a non-entry file. (qa-task)
+* **A build default reaches a program only through `project_settings::optimizations`**; `lower-std` lowers at `sysroot::tools_build` (`Build::default()`), so changing the program default rewrites no lowered file but the one changed, and `.bounds` expectations drop the level (`project_tests.nika`). (issue-1474)
+* **A change to a build default breaks the `it` tests whose helpers lower with no `--optimization`** (`lower()` in `overflow.rs`, `pausing.rs`, also `assume.rs`, `simd.rs`, `byte_sets.rs`, `unsafe_follows_switches.rs`, `bounds_checks.rs`, `value_bounds.rs`): find them by grep of `fn lower`, `fn lowered`, `tool(` and run only those; name the old level in the helper rather than rewriting the asserts. (issue-1474)
 * Two `qa-input.txt` files exist (`docs/briefs/` and `docs/briefs/views/`); read the one in the lane directory your task names. (qa-task)
 * Before putting back a "workaround" an issue names, check `git log -S` on that line: a later commit may have removed it on purpose. (issue-1125)
 * The tether's keep plan (`tools/buffers.nika`, `is_a_buffer` in `tether.nika`) treats only text and bytes as buffers, so a view of a list or struct local handed back is NK2304 (ADR-283 D9), never NK2303, which is not a refusal. (issue-1155)
