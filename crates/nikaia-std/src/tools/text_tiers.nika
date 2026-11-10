@@ -8287,7 +8287,11 @@ fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref 
     }
     match item {
         Item::Fn { name, receiver, args, ret_type, body, is_extern, ret_from, .. } => {
-            if is_extern || !hb_result_may_be_a_view(ret_type, words, plain) {
+            // **A nullable result is a view as well** (ADR-views-3 D7, D8,
+            // #1486): `-> U? from self`, or `-> U?` where every way out reads
+            // `self`, is `ref U?`, as a plain `U` is `ref U`.
+            let nullable = hb_nullable_may_be_a_view(ret_type, words, plain)
+            if is_extern || (!nullable && !hb_result_may_be_a_view(ret_type, words, plain)) {
                 return
             }
             let mut sources: Vec[i64] = []
@@ -8313,6 +8317,9 @@ fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref 
                 return
             }
             let roots = hb_roots(body, args, hb_plain_self(receiver), words, opted, views) ?? return
+            if nullable && (roots.is_empty() || roots.iter().any(fn(root) { root != "self" })) {
+                return
+            }
             for (at, arg) in args.iter().enumerate() {
                 if roots.contains(words.resolve(arg.name)) {
                     sources.push(at as i64)
@@ -8634,6 +8641,18 @@ fn hb_result_may_be_a_view(ty: ref Type?, words: ref winnow_grammar::InternerCon
     return !t.is_view && hb_type_may_be_a_view(t, words, plain)
 }
 
+/// A nullable result type whose held type a view can stand in, not one yet:
+/// `U?`, not `String?` nor `i64?` (#1486).
+fn hb_nullable_may_be_a_view(ty: ref Type?, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String]) -> bool {
+    let t = ty ?? return false
+    if !t.is_nullable || t.is_view {
+        return false
+    }
+    let mut held = t.clone()
+    held.is_nullable = false
+    return hb_type_may_be_a_view(held, words, plain)
+}
+
 /// A type a view of a parameter can stand in, whether or not it is one
 /// already: not text, not a word copied at a read, nothing a place cannot be.
 /// `Bytes` can: a piece of a lent `Bytes` handed back is a view of it, as a
@@ -8660,6 +8679,10 @@ fn hb_roots(body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref 
     }
     let mut roots: collections::BTreeSet[String] = collections::BTreeSet()
     for way in ways {
+        // A `null` handed back points into nothing (#1486).
+        if hb_a_null(way) {
+            continue
+        }
         if hb_place_root(way, words) != null {
             roots.insert(hb_root(way, body, args, plain_self, words, opted, false) ?? return null)
             continue
@@ -8673,6 +8696,13 @@ fn hb_roots(body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref 
         }
     }
     return roots
+}
+
+fn hb_a_null(way: ref Expr) -> bool {
+    return match way {
+        Expr::LitNull(_) => true,
+        else => false,
+    }
 }
 
 /// The parameter the place `way` hands back a view of; `null` where it is

@@ -511,11 +511,12 @@ pub(crate) fn check_function_handed_back<H: CheckHost>(state: &mut CheckState, w
 pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, expected: &Ty, tail: Ty, lending: bool, tail_view: bool, span: &Span) {
     let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
     let nullable = check_function_is_nullable(expected);
+    let tail_nullable = check_function_is_nullable(&tail) && !tail.is_a_view();
     let mut shown = tail;
     if lending || tail_view { shown = view_of_type(&shown); }
     match &last.node {
         Stmt::Expr(value) => {
-            if lending && nullable { state.facts.lent_reads.insert(id_of(value) as i64); } else if lending { state.facts.lent_returns.insert(span.start as i64); }
+            if lending && nullable && tail_nullable && check_core_a_field(value) { state.facts.lent_option_results.insert(node_key(value)); } else if lending && nullable { state.facts.lent_reads.insert(id_of(value) as i64); } else if lending { state.facts.lent_returns.insert(span.start as i64); }
             if !lending {
                 if !tail_view { state.narrowed_reads_given_back(value); }
                 let mut result: Option<Ty> = state.text_literal(world, expected, value, true);

@@ -184,6 +184,7 @@ impl EmitState {
             return Ok(());
         }
         self.emit_expr_written(world, walk, out, host, node, depth, flow, scope)?;
+        if self.facts.lent_option_results.contains(&node_key(node)) { out.push(".as_ref()"); }
         Ok(())
     }
     pub(crate) fn emit_expr_breaks_out(&self, world: &EmitWorld<'_, '_, '_, '_>, node: &Expr, flow: &EmitFlow) -> bool { flow.breaks_to >= 0 && self.emit_call_fails(world, node) }

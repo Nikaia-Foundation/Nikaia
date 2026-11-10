@@ -1,0 +1,9 @@
+error[NK1131]: You can't give away `u` here: a `mut` parameter is only borrowed.
+  --> tests/a_mut_parameter_is_told_to_take_keep.nika:7:5
+   |
+ 7 |     return u
+   |     ^^^^^^^^
+   |
+   = note: `mut u` is passed as `ref mut`, so the caller's `U` is changed in place and stays the caller's. Giving it away would take it from them.
+   = help: Write `u.clone()` for a copy to return, or, if the function is meant to use up its value, take `keep u` and change a local of its own: `let mut own = u`.
+1 type error

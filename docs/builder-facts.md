@@ -183,4 +183,12 @@ together with the specification section and an example test.
 * A report written through `cat > R <<EOF` runs every backticked snippet in it; quote the delimiter (`<<'EOF'`) and expand the paths separately. (issue-1458)
 * Limit `git log --grep=N` with `-400` or a date range: the unbounded form can pass the 120 s tool timeout in this repository. (issue-1458)
 * When an issue's probe already passes on develop, find the fixing commit with `git log -400 --oneline | grep` on the topic, pin the probe in a test program, and report fails-before as not done. (issue-1458)
+* A match arm can't be an assignment (`null => x = y` fails to parse); write `null => { x = y }`. (issue-1478)
+* `collections::BTreeMap` has no `extend` (NK1171), and from a function reached by a `sync` caller the refusal first shows as NK2202 "can pause"; mark the callee `sync` to see the real error. (issue-1478)
+* A new `VcAsk` field also needs the Rust adapters `view_changes.rs` `analyse`, `check/host.rs` `view_change_findings` and `contracts/keep.rs` `buffer_plans`, plus `emit_contracts.nika` and the `check_walked.nika` trait. (issue-1478)
+* `views_what_it_is_called_on` (`tiers.nika`) is the existing list of text methods whose result is a view of their receiver; reuse it, don't write a new list. (issue-1478)
+* A list whose items come from `split()`/`map()` is a list of views of the argument, so a probe of "owned items" must build them with `a + "…"` or `push_str`. (issue-1481)
+* Files of one package share one namespace: call a sibling file's `pub fn` by its bare name, since `mod x` is a parse error. (issue-1481)
+* A `??` whose left side reads a map value (`m[k] ?? []`) is NK1185 in tools code; write `m[k]?.clone() ?? []` behind a `contains_key` check. (issue-1485)
+* A heredoc report or edit script with backticks needs a quoted delimiter (`<<'EOF'`); unquoted, each backticked word runs as a shell command and silently drops out of the text. (issue-1485)
 
