@@ -481,6 +481,12 @@ impl EmitState {
                     self.emit_core_call_inner(world, walk, out, host, base, args, config, unchecked, depth, flow, scope)
                     return
                 }
+                // **Brackets the arguments already say** (NK1233, #1498): the
+                // plain call, unless the type picks a walking copy.
+                if self.facts.plain_bracket_calls.contains(node_key(base)) && !self.facts.unrolled_calls.contains_key(node_key(base)) {
+                    self.emit_core_call_inner(world, walk, out, host, base, args, config, unchecked, depth, flow, scope)
+                    return
+                }
             },
             else => {},
         }

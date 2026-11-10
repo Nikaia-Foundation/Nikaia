@@ -630,6 +630,14 @@ impl EmitState {
                 if self.emit_fn_lends(world, key, at) {
                     reference = "&"
                 }
+            } else if !arg.mutable && !arg.keep && !arg.ty.is_view && self.emit_fn_lends(world, key, at) {
+                // **A by-value data parameter the column runs is lent**
+                // (ADR-277 D17, #1498), as the impl's and the call's are:
+                // `text: String` is `&str`, `x: T?` the option of a view.
+                let mut viewed = arg.ty.clone()
+                viewed.is_view = true
+                viewed.either = false
+                written = a_list_read_as_a_slice(self.emit_item_ty(world, walk, host, viewed, EmitLifetimes::Elided))
             } else {
                 written = self.emit_item_ty(world, walk, host, arg.ty, EmitLifetimes::Elided)
             }

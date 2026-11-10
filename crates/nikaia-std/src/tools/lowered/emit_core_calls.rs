@@ -354,6 +354,10 @@ impl EmitState {
                     self.emit_core_call_inner(world, walk, out, host, base, args, config, unchecked, depth, flow, scope)?;
                     return Ok(());
                 }
+                if self.facts.plain_bracket_calls.contains(&node_key(base)) && !self.facts.unrolled_calls.contains_key(&node_key(base)) {
+                    self.emit_core_call_inner(world, walk, out, host, base, args, config, unchecked, depth, flow, scope)?;
+                    return Ok(());
+                }
             },
             _ => { },
         }
@@ -1212,8 +1216,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple90196| {
-        let (i, word) = __nikaia_tuple90196;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple90646| {
+        let (i, word) = __nikaia_tuple90646;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

@@ -1,0 +1,38 @@
+// A trait method's plain by-value data parameter is lent, as a code one is
+// (ADR-277 D17, #1012, #1498): no impl keeps `other`, so the column runs it,
+// and the caller's `y` is still there after a call through the impl or
+// through a bound.
+
+struct N {
+    name: String,
+}
+
+trait Same {
+    fn same(self, other: N) -> bool
+}
+
+impl Same for N {
+    fn same(self, other: N) -> bool {
+        return self.name == other.name
+    }
+}
+
+fn check[S: Same](s: S, n: N) -> bool {
+    return s.same(n)
+}
+
+fn make(s: String) -> String {
+    let mut made = String()
+    made.push_str(s)
+    return made
+}
+
+fn main() throws {
+    let x = N { name: make("a") }
+    let y = N { name: make("b") }
+    println(f"{x.same(y)}")
+    println(y.name)
+    let z = N { name: make("b") }
+    println(f"{check(y, z)}")
+    println(z.name)
+}

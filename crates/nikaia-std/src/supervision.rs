@@ -230,7 +230,7 @@ pub async fn run(children: &[Child], strategy: Strategy) -> Result<(), Stopped> 
             let body = children[at].body.clone();
             TaskHandle::start(async move { ended(body().await) })
         },
-        |at, history| children[at].policy.borrow_mut().decide(history),
+        |at, history| children[at].policy.borrow_mut().decide(&history),
     )
     .await
 }
@@ -250,7 +250,7 @@ pub async fn run_on_pool(children: &[PoolChild], strategy: Strategy) -> Result<(
                 .policy
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .decide(history)
+                .decide(&history)
         },
     )
     .await
@@ -430,7 +430,7 @@ impl Default for Backoff {
 
 impl Restart for Backoff {
     /// One failure, from the supervisor's history of the child.
-    fn decide(&mut self, history: Failures) -> Next {
+    fn decide(&mut self, history: &Failures) -> Next {
         if history.last_uptime >= self.healthy {
             self.cycle_from = (history.consecutive - 1, history.since_first);
         }
@@ -480,12 +480,12 @@ mod tests {
     fn the_default_policy_grows_and_gives_up() {
         let mut policy = Backoff::default();
         assert_eq!(
-            policy.decide(failure(1, Duration::ZERO, Duration::ZERO)),
+            policy.decide(&failure(1, Duration::ZERO, Duration::ZERO)),
             Next::Immediate
         );
         let mut last = Duration::ZERO;
         for n in 0..12 {
-            match policy.decide(failure(
+            match policy.decide(&failure(
                 n + 2,
                 Duration::ZERO,
                 Duration::from_secs(n as u64),
@@ -504,7 +504,7 @@ mod tests {
             }
         }
         assert_eq!(
-            policy.decide(failure(14, Duration::ZERO, Duration::from_secs(301))),
+            policy.decide(&failure(14, Duration::ZERO, Duration::from_secs(301))),
             Next::Escalate
         );
     }
@@ -514,15 +514,15 @@ mod tests {
     fn a_healthy_run_starts_a_new_cycle() {
         let mut policy = Backoff::default();
         assert_eq!(
-            policy.decide(failure(1, Duration::ZERO, Duration::ZERO)),
+            policy.decide(&failure(1, Duration::ZERO, Duration::ZERO)),
             Next::Immediate
         );
         assert!(matches!(
-            policy.decide(failure(2, Duration::ZERO, Duration::ZERO)),
+            policy.decide(&failure(2, Duration::ZERO, Duration::ZERO)),
             Next::Delay(_)
         ));
         assert_eq!(
-            policy.decide(failure(
+            policy.decide(&failure(
                 3,
                 Duration::from_secs(61),
                 Duration::from_secs(400)
@@ -530,7 +530,7 @@ mod tests {
             Next::Immediate
         );
         assert!(matches!(
-            policy.decide(failure(4, Duration::ZERO, Duration::from_secs(401))),
+            policy.decide(&failure(4, Duration::ZERO, Duration::from_secs(401))),
             Next::Delay(_)
         ));
     }
@@ -538,7 +538,7 @@ mod tests {
     /// One policy, asked for every child, as `run` asks each child's own.
     fn asking(policy: Backoff) -> impl Fn(usize, Failures) -> Next {
         let held = std::cell::RefCell::new(policy);
-        move |_, history| held.borrow_mut().decide(history)
+        move |_, history| held.borrow_mut().decide(&history)
     }
 
     fn crashing(times: usize) -> impl Fn(usize) -> TaskHandle<Ended> {

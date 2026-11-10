@@ -113,7 +113,7 @@ impl Phase {
                 consecutive: phase.failures,
                 since_first: now.duration_since(*phase.first.get_or_insert(now)),
             };
-            match phase.policy.decide(history) {
+            match phase.policy.decide(&history) {
                 crate::supervisor::Next::Immediate => {}
                 crate::supervisor::Next::Delay(span) => phase.waiting_until = Some(now + span),
                 crate::supervisor::Next::Escalate => {
@@ -699,7 +699,7 @@ mod tests {
     fn a_supervised_value_whose_policy_gives_up_stays_poisoned() {
         struct Never;
         impl crate::supervisor::Restart for Never {
-            fn decide(&mut self, _: crate::supervisor::Failures) -> crate::supervisor::Next {
+            fn decide(&mut self, _: &crate::supervisor::Failures) -> crate::supervisor::Next {
                 crate::supervisor::Next::Escalate
             }
         }

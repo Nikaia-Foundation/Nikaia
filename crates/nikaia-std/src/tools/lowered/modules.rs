@@ -589,7 +589,7 @@ pub(crate) fn modules_note(names: &winnow_grammar::InternerContext, e: &Expr, ou
 }
 
 pub trait ModulesHost {
-    fn parse_unit(&self, path: &std::path::Path, source: &str, package: Option<String>) -> Option<i64>;
+    fn parse_unit(&self, path: &std::path::Path, source: &str, package: Option<&str>) -> Option<i64>;
     fn declared(&self, unit: i64) -> Vec<(String, Span)>;
     fn use_refused(&self, unit: i64, at: &std::path::Path, reachable: &collections::BTreeSet<String>, alone: bool) -> Option<Finding>;
     fn foreign_crates(&self, path: &std::path::Path) -> Vec<String>;
@@ -737,10 +737,10 @@ pub(crate) async fn modules_read_unit<H: ModulesHost>(path: &std::path::Path, pa
         },
         Some(text) => nikaia_std::block::Text::from(text.to_string()),
     };
-    let parsed = match host.parse_unit(path, &source, match package.as_ref() {
+    let parsed = match host.parse_unit(path, &source, (match package.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    }) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ModulesRefusal::Parse, &"modules_read_unit")) };
+    }).as_deref()) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ModulesRefusal::Parse, &"modules_read_unit")) };
     modules_check_imports(parsed, path, &source, reachable, &standing, host)?;
     Ok(ModulesUnit { path: nikaia_std::fs::path::clone(&(path)), source, parsed, package, renames: renames.copy_owned() })
 }
@@ -856,7 +856,7 @@ pub trait ModulesEmitHost {
     fn own_names(&self) -> collections::BTreeSet<String>;
     fn barrier_names(&self, all: bool) -> collections::BTreeSet<String>;
     fn preamble(&self) -> String;
-    fn emit_unit(&self, at: i64, provenance: Provenance, offset: i64) -> Result<String, Box<dyn std::error::Error>>;
+    fn emit_unit(&self, at: i64, provenance: &Provenance, offset: i64) -> Result<String, Box<dyn std::error::Error>>;
     fn has_main(&self) -> bool;
     fn map_rows(&self) -> Vec<(i64, i64, i64)>;
 }
@@ -898,7 +898,7 @@ pub fn modules_emit_reading<H: ModulesEmitHost>(host: &H, packages: &[Option<Str
     rust.push_str("\n");
     for at in 0..packages.len() as i64 {
         if (*nikaia_std::index::get(&packages, nikaia_std::index::at(at))).is_some() { continue; }
-        let body = host.emit_unit(at, provenance, rust.len() as i64)?;
+        let body = host.emit_unit(at, &provenance, rust.len() as i64)?;
         rust.push_str(&body);
         rust.push_str("\n");
     }

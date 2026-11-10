@@ -352,6 +352,7 @@ impl EmitState {
             if change && self.facts.reborrowed_args.contains(&node) { out.push("&mut *"); } else if change { out.push("&mut "); } else {
                 let keep = if lend && made_in_the_call(arg) { nikaia_std::index::or(self.argument_keep(&walk, &scope.function, flow.statement, callee, i), || "".into()) } else { String::from("") };
                 if lend && keep != "" {
+                    if self.facts.lent_text_views.contains(&node) { out.push("&"); }
                     out.push(&format!("({}).put(", keep));
                     kept_here = true;
                 } else if self.facts.lent_arms.contains(&node) { out.push("&*"); } else if lend && !self.facts.views_handed_on.contains(&node) && !emit_stmt_a_kept_name(world, &walk, arg) {
@@ -382,6 +383,7 @@ impl EmitState {
         if has_how && how != "" { out.push(&how); }
         if count { out.push(")"); }
         if kept_here { out.push(")"); }
+        if lend && self.facts.lent_text_views.contains(&node) { out.push(".as_str()"); }
         if keeps_bytes { out.push(")"); }
         if either { out.push(")"); }
         if copy_in { out.push(".clone()"); }
@@ -1375,6 +1377,7 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || "".into());
+        if written == "" && self.facts.plain_bracket_calls.contains(&node_key(base)) { return Ok(false); }
         if written == "" {
             let mut types: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let parts: Vec<Expr> = match index {

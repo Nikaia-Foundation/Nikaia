@@ -1,8 +1,8 @@
-// An `impl` of a trait whose result writes `from a` hands back the parameter
-// `b` it takes by value: NK2302 refuses it in the trait's words (ADR-views-3
-// D14), and the checker adds no NK1104 asking for `ref`, which left the
-// language (D4) (#1386). A type with no text in it is no view source, so
-// handing it back where a view is declared stays an NK1104.
+// An `impl` of a trait whose result writes `from a` hands back the plain
+// parameter `b`: refused once, in the trait's words (ADR-views-3 D14), and
+// the checker adds no NK1104 asking for `ref`, which left the language (D4)
+// (#1386). `b` is lent (ADR-277 D17, #1498), so it is NK1335's view outside
+// the `from`, for a type of any kind (D12), one with no text in it too.
 
 trait Pick {
     fn pick(self, a: String, b: String) -> String from a

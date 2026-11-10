@@ -5,7 +5,8 @@ struct P { name: String }
 struct H { p: P }
 
 fn keep(p: P) -> P {
-    return p
+    let h = H { p: p }
+    return h.p
 }
 
 fn by_if(t: P, c: bool) throws {

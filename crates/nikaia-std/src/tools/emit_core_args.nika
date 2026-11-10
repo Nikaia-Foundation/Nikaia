@@ -569,6 +569,10 @@ impl EmitState {
                 // place, which a second call of the callee there shares (#678).
                 let keep = if lend && made_in_the_call(arg) { self.argument_keep(walk, scope.function, flow.statement, callee, i) ?? "" } else { "" }
                 if lend && keep != "" {
+                    // Text of its own lent as a view (#1498): `&(k).put(t).as_str()`.
+                    if self.facts.lent_text_views.contains(node) {
+                        out.push("&")
+                    }
                     out.push(f"({keep}).put(")
                     kept_here = true
                 } else if self.facts.lent_arms.contains(node) {
@@ -655,6 +659,12 @@ impl EmitState {
         }
         if kept_here {
             out.push(")")
+        }
+        // **Text of its own lent where a type variable holds a view of text**
+        // (ADR-views-3 D12, #1498): `&o.as_str()`, the `&str` beside the
+        // literal's `&"p"`.
+        if lend && self.facts.lent_text_views.contains(node) {
+            out.push(".as_str()")
         }
         if keeps_bytes {
             out.push(")")
@@ -2152,6 +2162,9 @@ impl EmitState {
             return false
         }
         let mut written: String = self.facts.unrolled_calls.get(node_key(base))?.clone() ?? ""
+        if written == "" && self.facts.plain_bracket_calls.contains(node_key(base)) {
+            return false
+        }
         if written == "" {
             let mut types: Vec[String] = []
             let parts: Vec[Expr] = match index {
