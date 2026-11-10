@@ -140,7 +140,7 @@ pub(crate) fn compared(op: &BinaryOp, lhs: &Expr, rhs: &Expr, words: &winnow_gra
 
 pub(crate) fn built(node: SolverTerm, out: &mut Vec<SolverTerm>) -> i64 {
     out.push(node);
-    out.len() as i64 - 1
+    unsafe { nikaia_std::proven::sub::<i64>(out.len() as i64, 1) }
 }
 
 pub(crate) fn constant_at(at: i64, out: &[SolverTerm]) -> Option<i64> {
@@ -181,7 +181,7 @@ pub(crate) fn constant_at(at: i64, out: &[SolverTerm]) -> Option<i64> {
 pub(crate) fn literal_value(value: u64, negative: bool) -> Option<i64> {
     if value <= 9223372036854775807u64 {
         let n = i64::try_from(value).unwrap_or_else(|_| panic!("the value does not fit in an `i64`"));
-        if negative { return Some(-n); }
+        if negative { return Some(unsafe { nikaia_std::proven::neg::<i64>(n) }); }
         return Some(n);
     }
     if negative && value == 9223372036854775808u64 { return Some(-9223372036854775808i64); }

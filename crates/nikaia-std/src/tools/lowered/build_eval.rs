@@ -102,8 +102,8 @@ pub(crate) fn bt_expr<H: BtHost>(expr: &Expr, host: &H, state: &mut BtState) -> 
         Expr::LitInterpolated { parts, .. } => bt_interpolated(parts, host, state)?,
         Expr::Path(path, _) => {
             if path.len() != 2 { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_expr")); }
-            let ty = host.text(state.unit, *nikaia_std::index::get(&path, 0));
-            let variant = host.text(state.unit, *nikaia_std::index::get(&path, 1));
+            let ty = host.text(state.unit, *unsafe { nikaia_std::proven::read(&path, (0) as usize) });
+            let variant = host.text(state.unit, *unsafe { nikaia_std::proven::read(&path, (1) as usize) });
             if !host.variant_of(state.unit, &ty, &variant) { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_expr")); }
             BuildValue::Variant { ty, variant, payload: vec![] }
         },
@@ -201,7 +201,7 @@ pub(crate) fn bt_if_value<H: BtHost>(cond: &Expr, then_branch: &Block, else_bran
 // this was written - see `contracts::sync`.
 pub(crate) fn bt_branch<H: BtHost>(block: &Block, host: &H, state: &mut BtState) -> Result<BuildValue, nikaia_std::error::Thrown<BtRefusal>> {
     if block.stmts.len() != 1 { return Err(nikaia_std::error::throwing(bt_not_folded(String::from("{ … }")), &"bt_branch")); }
-    Ok(match &nikaia_std::index::get(&block.stmts, 0).node {
+    Ok(match &unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.node {
         Stmt::Expr(inner) => bt_expr(inner, host, state)?,
         _ => { return Err(nikaia_std::error::throwing(bt_not_folded(String::from("{ … }")), &"bt_branch")) },
     })
@@ -239,15 +239,15 @@ pub(crate) fn bt_call_expr<H: BtHost>(func: &Expr, args: &[Expr], config: &[Conf
     Ok(match func {
         Expr::Path(path, _) => {
             if !config.is_empty() || path.len() != 2 { return Err(nikaia_std::error::throwing(bt_not_folded(String::from("a call")), &"bt_call_expr")); }
-            let parser = host.text(state.unit, *nikaia_std::index::get(&path, 0));
-            let rule = host.text(state.unit, *nikaia_std::index::get(&path, 1));
+            let parser = host.text(state.unit, *unsafe { nikaia_std::proven::read(&path, (0) as usize) });
+            let rule = host.text(state.unit, *unsafe { nikaia_std::proven::read(&path, (1) as usize) });
             if host.variant_of(state.unit, &parser, &rule) {
                 let mut payload: Vec<BuildValue> = vec![];
                 for arg in args.iter() { payload.push(bt_expr(arg, host, state)?); }
                 return Ok(BuildValue::Variant { ty: parser, variant: rule, payload });
             }
             if args.len() != 1 { return Err(nikaia_std::error::throwing(bt_not_folded(format!("{}::{}(…)", parser, rule)), &"bt_call_expr")); }
-            let input = match bt_expr(nikaia_std::index::get(&args, 0), host, state)? {
+            let input = match bt_expr(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, host, state)? {
                 BuildValue::Text(held) => held,
                 _ => { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_call_expr")) },
             };
@@ -326,45 +326,45 @@ pub(crate) fn bt_interpolated<H: BtHost>(parts: &[FPart], host: &H, state: &mut 
     let chars: Vec<scalar> = nikaia_std::list::chars(format.chars());
     let mut at: i64 = 0;
     while ((at) as usize) < chars.len() {
-        let c = *nikaia_std::index::get(&chars, (at) as usize);
-        at += 1;
+        let c = *unsafe { nikaia_std::proven::read(&chars, (at) as usize) };
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         if c == '\\' {
             chunk.push('\\');
             if ((at) as usize) >= chars.len() { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_interpolated")); }
-            let escape = *nikaia_std::index::get(&chars, (at) as usize);
-            at += 1;
+            let escape = *unsafe { nikaia_std::proven::read(&chars, (at) as usize) };
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             chunk.push(escape);
-            if escape == 'u' && ((at) as usize) < chars.len() && *nikaia_std::index::get(&chars, (at) as usize) == '{' {
+            if escape == 'u' && ((at) as usize) < chars.len() && *unsafe { nikaia_std::proven::read(&chars, (at) as usize) } == '{' {
                 while ((at) as usize) < chars.len() {
-                    let inner = *nikaia_std::index::get(&chars, (at) as usize);
-                    at += 1;
+                    let inner = *unsafe { nikaia_std::proven::read(&chars, (at) as usize) };
+                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                     chunk.push(inner);
                     if inner == '}' { break; }
                 }
             }
-        } else if c == '{' && ((at) as usize) < chars.len() && *nikaia_std::index::get(&chars, (at) as usize) == '{' {
-            at += 1;
+        } else if c == '{' && ((at) as usize) < chars.len() && *unsafe { nikaia_std::proven::read(&chars, (at) as usize) } == '{' {
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             bt_flush(&chunk, &mut out, host)?;
             chunk = nikaia_std::block::Text::from("");
             out.push('{');
-        } else if c == '}' && ((at) as usize) < chars.len() && *nikaia_std::index::get(&chars, (at) as usize) == '}' {
-            at += 1;
+        } else if c == '}' && ((at) as usize) < chars.len() && *unsafe { nikaia_std::proven::read(&chars, (at) as usize) } == '}' {
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             bt_flush(&chunk, &mut out, host)?;
             chunk = nikaia_std::block::Text::from("");
             out.push('}');
         } else if c == '{' {
-            if ((at) as usize) >= chars.len() || *nikaia_std::index::get(&chars, (at) as usize) != '}' { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_interpolated")); }
-            at += 1;
+            if ((at) as usize) >= chars.len() || *unsafe { nikaia_std::proven::read(&chars, (at) as usize) } != '}' { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_interpolated")); }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             bt_flush(&chunk, &mut out, host)?;
             chunk = nikaia_std::block::Text::from("");
             if ((taken) as usize) >= values.len() { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_interpolated")); }
-            match (*nikaia_std::index::get(&values, (taken) as usize)).clone() {
+            match (*unsafe { nikaia_std::proven::read(&values, (taken) as usize) }).clone() {
                 BuildValue::Int(n) => { out.push_str(&integer_text(&n)); },
                 BuildValue::Bool(yes) => { if yes { out.push_str("true"); } else { out.push_str("false"); } },
                 BuildValue::Text(ref held) => { out.push_str(held); },
                 _ => { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_interpolated")); },
             }
-            taken += 1;
+            taken = unsafe { nikaia_std::proven::add::<i64>(taken, 1) };
         } else { chunk.push(c); }
     }
     bt_flush(&chunk, &mut out, host)?;
@@ -402,7 +402,7 @@ pub(crate) fn bt_constant_item<H: BtHost>(name: &str, host: &H, state: &mut BtSt
 // this was written - see `contracts::sync`.
 pub(crate) fn bt_asset<H: BtHost>(args: &[Expr], host: &H) -> Result<BuildValue, nikaia_std::error::Thrown<BtRefusal>> {
     if args.len() != 1 { return Err(nikaia_std::error::throwing(BtRefusal::PathIsComputed, &"bt_asset")); }
-    let written = match nikaia_std::index::get(&args, 0) {
+    let written = match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
         Expr::LitStr { text, .. } => nikaia_std::block::Text::from(text.to_string()),
         _ => { return Err(nikaia_std::error::throwing(BtRefusal::PathIsComputed, &"bt_asset")) },
     };

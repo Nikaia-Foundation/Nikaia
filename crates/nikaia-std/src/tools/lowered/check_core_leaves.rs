@@ -173,7 +173,7 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
             let held = match dotted_path(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
             let mut shown: String = String::from("");
             if args.len() == 1 {
-                shown = match nikaia_std::index::get(&args, 0) {
+                shown = match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
                     Expr::Variable(arg, _) => { let arg = *arg; nikaia_std::block::Text::from(world.words.resolve(arg).to_string()) },
                     Expr::LitInt { value: at, negative, .. } => { let at = *at; let negative = *negative; if negative { format!("-{}", at) } else { format!("{}", at) } },
                     _ => return,
@@ -247,7 +247,7 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
                 match value {
                     Expr::ListLit { items, .. } => {
                         if !args.is_empty() {
-                            for item in items.iter() { check_core_a_kept_lambda(state, world, host, nikaia_std::index::get(&args, 0), item, span); }
+                            for item in items.iter() { check_core_a_kept_lambda(state, world, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, item, span); }
                             return;
                         }
                     },
@@ -314,13 +314,13 @@ pub(crate) fn check_core_a_kept_function<H: CheckHost>(state: &mut CheckState, w
         let n = *n;
         if ((at) as usize) < params.len() {
             let id = state.a_new_binding();
-            let changed: Option<Ty> = lent_mut(nikaia_std::index::get(&params, (at) as usize));
+            let changed: Option<Ty> = lent_mut(unsafe { nikaia_std::proven::read(&params, (at) as usize) });
             let changes = changed.is_some();
-            let mut local = CheckLocal::free(nikaia_std::block::Text::from(world.words.resolve(n).to_string()), nikaia_std::index::or(changed, || (*nikaia_std::index::get(&params, (at) as usize)).clone().into()), id);
+            let mut local = CheckLocal::free(nikaia_std::block::Text::from(world.words.resolve(n).to_string()), nikaia_std::index::or(changed, || (*unsafe { nikaia_std::proven::read(&params, (at) as usize) }).clone().into()), id);
             local.changing = changes;
             frame.push(local);
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     state.scope.push(frame);
     let was_caught = state.flow.caught;
@@ -359,7 +359,7 @@ pub(crate) fn check_core_is_a_path(ty: &Ty) -> bool {
 pub(crate) fn check_core_element_of(held: Option<&Ty>) -> Ty {
     let ty = match held { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     match ty {
-        Ty::Named { name, args, .. } => if (name == "Vec" || name == "Array") && args.len() == 1 { view_of_type(nikaia_std::index::get(&args, 0)) } else { Ty::Unknown },
+        Ty::Named { name, args, .. } => if (name == "Vec" || name == "Array") && args.len() == 1 { view_of_type(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) } else { Ty::Unknown },
         _ => Ty::Unknown,
     }
 }
@@ -415,9 +415,9 @@ pub fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
             state.a_maybe_in_a_hole(&held, span);
         }
         state.scope.pop();
-        if ((index) as usize) < specs.len() { state.a_collection_in_a_hole(world, hole, &held, (*nikaia_std::index::get(&specs, (index) as usize)).as_deref(), span); }
+        if ((index) as usize) < specs.len() { state.a_collection_in_a_hole(world, hole, &held, (*unsafe { nikaia_std::proven::read(&specs, (index) as usize) }).as_deref(), span); }
         names.push(check_core_is_a_path(&held));
-        index += 1;
+        index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     if interpolated && names.contains(&true) { state.facts.path_holes.insert(id_of(literal) as i64, names); }
 }
@@ -431,16 +431,16 @@ pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
     for p in params.iter() {
         let p = *p;
         let mut ty: Ty = Ty::Unknown;
-        if ((at) as usize) < given.len() { ty = (*nikaia_std::index::get(&given, (at) as usize)).clone(); }
+        if ((at) as usize) < given.len() { ty = (*unsafe { nikaia_std::proven::read(&given, (at) as usize) }).clone(); }
         let local = state.lambda_parameter(world, p, mutable, ty, span);
         if local.ty.is_unknown() {
             state.flow.unknown_bound.insert(local.id);
             if local.open_number.is_none() { state.flow.unknown_lambda_params.insert(local.id); }
         }
         frame.push(local);
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
-    let first = if !frame.is_empty() { nikaia_std::index::get(&frame, 0).id } else { -1 };
+    let first = if !frame.is_empty() { unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.id } else { -1 };
     let depth = state.scope.len() as i64;
     state.repeats.push(CheckRepeats::a_lambda(depth));
     state.scope.push(frame);
@@ -490,7 +490,7 @@ pub fn check_core_lambda_leave(state: &mut CheckState, outer: Option<&Ty>, tail:
     let returns: Vec<CheckLambdaReturn> = nikaia_std::index::or(state.flow.lambda_returns.pop(), || vec![].into());
     state.flow.last_lambda_returns = returns.copy_owned();
     let mut ends_in_a_return = false;
-    if !body.stmts.is_empty() { ends_in_a_return = matches!(nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).node, Stmt::Return(_)); }
+    if !body.stmts.is_empty() { ends_in_a_return = matches!(unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) }.node, Stmt::Return(_)); }
     let mut first: Option<Ty> = None;
     let mut seen: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if !ends_in_a_return { seen.push(tail.clone()); }
@@ -620,7 +620,7 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
             let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
             written.push(given.clone());
         }
-        state.flow.lambda_returns[nikaia_std::index::at(inside - 1)].push(CheckLambdaReturn { ty: found, at: Span { start: span.start, end: span.end }, value: written });
+        (*unsafe { nikaia_std::proven::slot(&mut state.flow.lambda_returns, (nikaia_std::proven::sub::<i64>(inside, 1)) as usize) }).push(CheckLambdaReturn { ty: found, at: Span { start: span.start, end: span.end }, value: written });
         return;
     }
     let expected: Ty = match match state.expected.as_ref() {
@@ -631,7 +631,7 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
         if state.a_get_off_a_lent_parameter(world, given) { found = view_of_type(&found); } else if state.a_from_call_of_a_parameter(world, given) {
             let owned = viewed_from_type(&found);
-            if owned.len() == 1 { found = (*nikaia_std::index::get(&owned, 0)).clone(); }
+            if owned.len() == 1 { found = (*unsafe { nikaia_std::proven::read(&owned, (0) as usize) }).clone(); }
         }
     }
     if !lending && value.is_some() {
@@ -690,7 +690,7 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
         for arg in args.iter() { check_core_expr(state, world, host, arg, span); }
         return unit;
     }
-    let condition = nikaia_std::index::get(&args, 0);
+    let condition = unsafe { nikaia_std::proven::read(&args, (0) as usize) };
     state.stored_frames.push(CheckStoredCode::empty());
     let found = check_core_expr(state, world, host, &condition, span);
     let frame: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
@@ -705,12 +705,12 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
         let name = nikaia_std::block::Text::from(world.words.resolve(option.name).to_string());
         let given = check_core_expr(state, world, host, &option.value, span);
         if name == "rule of the type" {
-            index += 1;
+            index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
             continue;
         }
         if name != "message" {
             state.an_assert_of_another_shape(format!("`assert` has no option called `{}`. Its only option is `message:`.", name), span);
-            index += 1;
+            index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
             continue;
         }
         let not_text = is_a_literal_other_than(&option.value, "text") || !given.is_unknown() && !given.fits(&owned) && !given.fits(&viewed);
@@ -720,7 +720,7 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
             state.an_assert_of_another_shape(said, span);
         }
         message = index;
-        index += 1;
+        index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     let mut not_pure: Vec<String> = vec![];
     if frame.unresolved { not_pure.push(String::from("It calls a method the compiler knows nothing about, so it might change something.")); }

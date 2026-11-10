@@ -12,16 +12,16 @@ pub(crate) fn emit_match_is_otherwise(pattern: &MatchPattern) -> bool { matches!
 
 pub(crate) fn emit_match_else_unreachable(world: &EmitWorld<'_, '_, '_, '_>, arms: &[MatchArm]) -> bool {
     let count = arms.len() as i64;
-    if count < 2 || !emit_match_is_otherwise(&nikaia_std::index::get(&arms, nikaia_std::index::at(count - 1)).pattern) { return false; }
+    if count < 2 || !emit_match_is_otherwise(&unsafe { nikaia_std::proven::read(&arms, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }.pattern) { return false; }
     let mut owner: String = String::from("");
     let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for arm in arms.iter() {
         if arm.guard.is_some() || emit_match_is_otherwise(&arm.pattern) { continue; }
         let path = match emit_match_whole_variant(&arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if path.len() != 2 { continue; }
-        let first = emit_text(world, *nikaia_std::index::get(&path, 0));
+        let first = emit_text(world, *unsafe { nikaia_std::proven::read(&path, (0) as usize) });
         if owner == "" { owner = nikaia_std::block::Text::from(first.to_string()); } else if owner != first { return false; }
-        let variant = emit_text(world, *nikaia_std::index::get(&path, 1));
+        let variant = emit_text(world, *unsafe { nikaia_std::proven::read(&path, (1) as usize) });
         if !nikaia_std::list::contains(&named, &variant) { named.push(variant); }
     }
     if owner == "" { return false; }
@@ -87,7 +87,7 @@ pub(crate) fn emit_match_yes_or_no(arms: &[MatchArm]) -> Option<bool> {
     let mut otherwise = false;
     let mut k: i64 = 0;
     for arm in arms.iter() {
-        k += 1;
+        k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
         if arm.guard.is_some() { any_guard = true; }
         if k == count {
             last_otherwise = emit_match_is_otherwise(&arm.pattern);
@@ -98,7 +98,7 @@ pub(crate) fn emit_match_yes_or_no(arms: &[MatchArm]) -> Option<bool> {
     if !last_otherwise || any_guard { return None; }
     k = 0;
     for arm in arms.iter() {
-        k += 1;
+        k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
         if k < count {
             let said = match emit_match_bool(&arm.body) { Some(__nikaia_value) => __nikaia_value, None => return None };
             if said == otherwise { return None; }
@@ -161,8 +161,8 @@ pub(crate) fn emit_match_list_positions(pattern: &MatchPattern, sliced: &mut Vec
             if path.is_empty() && (parts.len() as i64) == sliced.len() as i64 {
                 let mut k: i64 = 0;
                 for part in parts.iter() {
-                    if emit_match_is_list(part) { { let __nikaia_stored = true; nikaia_std::index::set(&mut *sliced, (k) as usize, __nikaia_stored); } }
-                    k += 1;
+                    if emit_match_is_list(part) { { let __nikaia_stored = true; unsafe { nikaia_std::proven::write(&mut *sliced, (k) as usize, __nikaia_stored) }; } }
+                    k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
                 }
             }
         },
@@ -252,7 +252,7 @@ impl EmitState {
                 for part in parts.iter() {
                     if i > 0 { out.push(", "); }
                     let nests = collect && self.boxed_part(world, path, i) && !binds_a_part(part);
-                    i += 1;
+                    i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
                     if nests {
                         out.push(&format!("__nikaia_box{}", n));
                         n += 1;
@@ -325,8 +325,8 @@ impl EmitState {
                     let mut i: i64 = 0;
                     for alternative in alternatives.iter() {
                         if i > 0 { out.push(" | "); }
-                        let own = (*nikaia_std::index::get(&sets, nikaia_std::index::at(i))).copy_owned();
-                        i += 1;
+                        let own = (*unsafe { nikaia_std::proven::read(&sets, (i) as usize) }).copy_owned();
+                        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
                         if !own.is_empty() {
                             let written: Option<i64> = self.emit_core_set_pattern_written(world, walk, out, host, alternative, &own, wild, lent_key, collect, n, depth, flow, scope)?;
                             if written.is_some() {
@@ -359,13 +359,13 @@ impl EmitState {
                     if !path.is_empty() && collect && self.boxed_part(world, path, i) && !binds_a_part(part) {
                         out.push(&format!("__nikaia_box{}", n));
                         n += 1;
-                        i += 1;
+                        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
                         continue;
                     }
                     if some { out.push("Some("); }
                     n = self.emit_core_pattern_written(world, walk, out, host, part, wild, lent_key, collect, n, depth, flow, scope)?;
                     if some { out.push(")"); }
-                    i += 1;
+                    i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
                 }
                 out.push(")");
                 return Ok(Some(n));
@@ -379,7 +379,7 @@ impl EmitState {
                 let mut i: i64 = 0;
                 for field in fields.iter() {
                     let some = set.contains(&i);
-                    i += 1;
+                    i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
                     let shorthand = emit_match_shorthand(world, field);
                     if shorthand && wild && !some {
                         open = true;
@@ -416,7 +416,7 @@ impl EmitState {
                 let mut i: i64 = 0;
                 for part in parts.iter() {
                     let nests = self.boxed_part(world, path, i) && !binds_a_part(part);
-                    i += 1;
+                    i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
                     if nests {
                         if n == wanted { self.emit_core_pattern_written(world, walk, out, host, part, wild, -1, false, 0, depth, flow, scope)?; }
                         n += 1;
@@ -447,7 +447,7 @@ impl EmitState {
             }, || vec![].into());
             let mut held: Vec<(String, Option<String>)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let parts = parts;
             for at in 0..names.len() as i64 {
-                let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(at))).to_string());
+                let name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (at) as usize) }).to_string());
                 if name == "_" { continue; }
                 held.push((nikaia_std::block::Text::from(name.to_string()), match walk.type_names.get(&name) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -599,13 +599,13 @@ impl EmitState {
                 let mut k: i64 = 0;
                 for each in members.iter() {
                     if *each == named && at < 0 { at = k; }
-                    k += 1;
+                    k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
                 }
             }
             if at < 0 { catch_all += 1; }
             home.push(at);
         }
-        if catch_all == 0 { for at in 0..members.len() as i64 { if !home.contains(&at) { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("This `match error` doesn't handle `{}`: add an arm for it, or `else => …` for everything else.", *nikaia_std::index::get(&members, nikaia_std::index::at(at))), at: Some(flow.statement) }, &"emit_core_match_over_a_sum")); } } }
+        if catch_all == 0 { for at in 0..members.len() as i64 { if !home.contains(&at) { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("This `match error` doesn't handle `{}`: add an arm for it, or `else => …` for everything else.", *unsafe { nikaia_std::proven::read(&members, (at) as usize) }), at: Some(flow.statement) }, &"emit_core_match_over_a_sum")); } } }
         let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1))); #[allow(clippy::redundant_locals)] let members = members;
         let inner = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 2))); #[allow(clippy::redundant_locals)] let members = members;
         let close = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
@@ -620,8 +620,8 @@ impl EmitState {
             if own && member == "supervisor::Handed" {
                 let mut k: i64 = 0;
                 for arm in arms.iter() {
-                    let at = *nikaia_std::index::get(&home, (k) as usize);
-                    k += 1;
+                    let at = *unsafe { nikaia_std::proven::read(&home, (k) as usize) };
+                    k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
                     let foreign = member_of(world.words, &self.declared_errors, world.library, &arm.pattern);
                     if at >= 0 || foreign.is_none() || arm.guard.is_some() { continue; }
                     let ty = nikaia_std::block::Text::from(nikaia_std::index::or(foreign.as_deref(), || "").to_string());
@@ -641,8 +641,8 @@ impl EmitState {
             for pass in 0..2 {
                 let mut k: i64 = 0;
                 for arm in arms.iter() {
-                    let mine = if pass == 0 { *nikaia_std::index::get(&home, (k) as usize) == m } else { *nikaia_std::index::get(&home, (k) as usize) < 0 };
-                    k += 1;
+                    let mine = if pass == 0 { *unsafe { nikaia_std::proven::read(&home, (k) as usize) } == m } else { *unsafe { nikaia_std::proven::read(&home, (k) as usize) } < 0 };
+                    k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
                     if !mine { continue; }
                     if pass == 1 && arm.guard.is_none() && member_of(world.words, &self.declared_errors, world.library, &arm.pattern).is_some() { continue; }
                     out.push(&inner);
@@ -659,7 +659,7 @@ impl EmitState {
                 }
             }
             if own { out.push(&format!("{}}} }},\n", pad)); } else { out.push(&format!("{}}},\n", pad)); }
-            m += 1;
+            m = unsafe { nikaia_std::proven::add::<i64>(m, 1) };
         }
         out.push(&format!("{}}}", close));
         Ok(())
@@ -679,7 +679,7 @@ impl EmitState {
                 let mut k: i64 = 0;
                 for each in members.iter() {
                     if *each == named && at < 0 { at = k; }
-                    k += 1;
+                    k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
                 }
                 if at < 0 {
                     at = k;
@@ -694,13 +694,13 @@ impl EmitState {
         let close = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
         let count = members.len() as i64;
         out.push("match error {\n");
-        let mut blocks = count + 1;
+        let mut blocks = unsafe { nikaia_std::proven::add::<i64>(count, 1) };
         if catch_all == 0 { blocks = count; }
         for m in 0..blocks {
             let mut inside = flow;
             let mut inside_scope = scope.clone();
             if m < count {
-                let member = nikaia_std::block::Text::from((*nikaia_std::index::get(&members, (m) as usize)).to_string());
+                let member = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&members, (m) as usize) }).to_string());
                 let own = self.name_of_error(world, &member) != 0;
                 let held = self.sum_member_held(world, &member, "");
                 let mut bare = nikaia_std::block::Text::from(held.to_string());
@@ -718,8 +718,8 @@ impl EmitState {
             for pass in 0..2 {
                 let mut k: i64 = 0;
                 for arm in arms.iter() {
-                    let mine = if pass == 0 { *nikaia_std::index::get(&home, (k) as usize) == m && m < count } else { *nikaia_std::index::get(&home, (k) as usize) < 0 };
-                    k += 1;
+                    let mine = if pass == 0 { *unsafe { nikaia_std::proven::read(&home, (k) as usize) } == m && m < count } else { *unsafe { nikaia_std::proven::read(&home, (k) as usize) } < 0 };
+                    k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
                     if !mine { continue; }
                     out.push(&inner);
                     if pass == 1 && m < count { out.push("#[allow(unreachable_patterns)] "); }
@@ -772,11 +772,11 @@ impl EmitState {
                 out.push(", ");
                 let mut i: i64 = 0;
                 for arm in arms.iter() {
-                    if ((i + 1) as usize) < arms.len() {
+                    if ((unsafe { nikaia_std::proven::add::<i64>(i, 1) }) as usize) < arms.len() {
                         if i > 0 { out.push(" | "); }
                         self.emit_core_arm_pattern_written(world, walk, out, host, arm, false, node_key(&arm.body), false, depth + 1, flow, scope)?;
                     }
-                    i += 1;
+                    i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
                 }
                 out.push(")");
                 return Ok(());
@@ -877,7 +877,7 @@ impl EmitState {
 
 pub(crate) fn emit_match_shorthand(world: &EmitWorld<'_, '_, '_, '_>, field: &PatternField) -> bool {
     match &field.pat {
-        MatchPattern::Path(one) => one.len() == 1 && emit_text(world, *nikaia_std::index::get(&one, 0)) == emit_text(world, field.name),
+        MatchPattern::Path(one) => one.len() == 1 && emit_text(world, *unsafe { nikaia_std::proven::read(&one, (0) as usize) }) == emit_text(world, field.name),
         _ => false,
     }
 }

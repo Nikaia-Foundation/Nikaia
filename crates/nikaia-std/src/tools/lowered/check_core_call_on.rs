@@ -6,8 +6,8 @@ pub(crate) fn check_core_call_on_named(name: &str) -> Ty { Ty::Named { name: nik
 pub(crate) fn check_core_call_on_base(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
     if parts.is_empty() { return nikaia_std::block::Text::from(name.to_string()); }
-    let last = parts.len() as i64 - 1;
-    format!("{}", *nikaia_std::index::get(&parts, nikaia_std::index::at(last)))
+    let last = unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) };
+    format!("{}", *unsafe { nikaia_std::proven::read(&parts, (last) as usize) })
 }
 
 pub(crate) fn check_core_call_on_task_handle(ty: &Ty) -> bool {
@@ -43,8 +43,8 @@ pub fn check_core_call_on_reached(state: &mut CheckState, key: Option<&str>) {
     }
     let mut i: i64 = 0;
     while i < state.stored_frames.len() as i64 {
-        if have { state.stored_frames[nikaia_std::index::at(i)].resolved.insert(nikaia_std::block::Text::from(written.to_string())); } else { state.stored_frames[nikaia_std::index::at(i)].unresolved = true; }
-        i += 1;
+        if have { (*unsafe { nikaia_std::proven::slot(&mut state.stored_frames, (i) as usize) }).resolved.insert(nikaia_std::block::Text::from(written.to_string())); } else { (*unsafe { nikaia_std::proven::slot(&mut state.stored_frames, (i) as usize) }).unresolved = true; }
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     if state.current.is_none() { return; }
     let current: String = nikaia_std::index::or(match state.current.as_ref() {
@@ -234,7 +234,7 @@ pub(crate) fn check_core_call_on_compares(beside: &collections::BTreeMap<String,
 
 pub(crate) fn check_core_call_on_seen(on: &Ty) -> Option<Ty> {
     match on {
-        Ty::Named { name, args, .. } => { if name == "Seen" && args.len() == 1 { return Some((*nikaia_std::index::get(&args, 0)).clone()); } },
+        Ty::Named { name, args, .. } => { if name == "Seen" && args.len() == 1 { return Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone()); } },
         _ => { },
     }
     None
@@ -265,7 +265,7 @@ pub(crate) fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckStat
     if (entry == "compare" || entry == "eq") && args.len() == 1 {
         let wants_order = entry == "compare";
         if check_core_call_on_comparable(&state, world, on, wants_order) {
-            let given = check_core_expr(state, world, host, nikaia_std::index::get(&args, 0), span);
+            let given = check_core_expr(state, world, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span);
             let code = check_core_call_on_view(on) + check_core_call_on_view(&given) * 2;
             state.facts.standard_compares.insert(id_of(receiver) as i64, code);
             if wants_order { check_core_call_on_reached(state, Some("Ord::compare")); } else { check_core_call_on_reached(state, Some("Eq::eq")); }
@@ -359,10 +359,10 @@ pub fn check_core_call_on_map_written(state: &mut CheckState, world: &CheckWorld
     if !is_a_map { return; }
     if parts.is_empty() { parts = vec![Ty::Unknown, Ty::Unknown]; }
     if parts.len() != 2 { return; }
-    let other_of_key: String = check_core_call_on_part_text(nikaia_std::index::get(&parts, 1), value_ty);
-    let other_of_value: String = check_core_call_on_part_text(nikaia_std::index::get(&parts, 0), key_ty);
-    let keys = check_core_call_on_map_part(state, world, map_name, id, true, other_of_key, nikaia_std::index::get(&parts, 0), key, key_ty, !entry_key, entry_key, span);
-    let values = check_core_call_on_map_part(state, world, map_name, id, false, other_of_value, nikaia_std::index::get(&parts, 1), value, value_ty, give_value, false, span);
+    let other_of_key: String = check_core_call_on_part_text(unsafe { nikaia_std::proven::read(&parts, (1) as usize) }, value_ty);
+    let other_of_value: String = check_core_call_on_part_text(unsafe { nikaia_std::proven::read(&parts, (0) as usize) }, key_ty);
+    let keys = check_core_call_on_map_part(state, world, map_name, id, true, other_of_key, unsafe { nikaia_std::proven::read(&parts, (0) as usize) }, key, key_ty, !entry_key, entry_key, span);
+    let values = check_core_call_on_map_part(state, world, map_name, id, false, other_of_value, unsafe { nikaia_std::proven::read(&parts, (1) as usize) }, value, value_ty, give_value, false, span);
     check_core_call_on_retyped(state, map_name, vec![keys, values]);
 }
 
@@ -436,8 +436,8 @@ pub(crate) fn check_core_call_on_now_expected(state: &CheckState, world: &CheckW
     if parts.len() != 2 { return expected; }
     if entry == "or_insert_with" {
         let wrapped: Ty = match *nikaia_std::index::get(&expected, 0) {
-            Ty::Fn { ref params, ref result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); if result.is_none() && !(*nikaia_std::index::get(&parts, 1)).is_unknown() { Ty::Fn { params: params.copy_owned(), result: Box::new(Some((*nikaia_std::index::get(&parts, 1)).clone())), is_sync, can_throw } } else { (*nikaia_std::index::get(&expected, 0)).clone() } },
-            _ => (*nikaia_std::index::get(&expected, 0)).clone(),
+            Ty::Fn { ref params, ref result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); if result.is_none() && !(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).is_unknown() { Ty::Fn { params: params.copy_owned(), result: Box::new(Some((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).clone())), is_sync, can_throw } } else { (*unsafe { nikaia_std::proven::read(&expected, (0) as usize) }).clone() } },
+            _ => (*unsafe { nikaia_std::proven::read(&expected, (0) as usize) }).clone(),
         };
         return vec![wrapped];
     }
@@ -446,7 +446,7 @@ pub(crate) fn check_core_call_on_now_expected(state: &CheckState, world: &CheckW
     for ty in expected.iter() {
         let unsaid = matches!(ty, Ty::Unknown | Ty::Var { .. });
         if unsaid && !(*nikaia_std::index::get(&parts, (from + at) as usize)).is_unknown() { out.push((*nikaia_std::index::get(&parts, (from + at) as usize)).clone()); } else { out.push(ty.clone()); }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     out
 }
@@ -468,21 +468,21 @@ pub fn check_core_call_on_key_read(state: &mut CheckState, world: &CheckWorld<'_
 pub fn check_core_call_on_retyped(state: &mut CheckState, bound_name: &str, parts: Vec<Ty>) {
     let mut frame = state.scope.len() as i64;
     while frame > 0 {
-        frame = frame - 1;
-        let mut at = (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame))).len() as i64;
+        frame = unsafe { nikaia_std::proven::sub::<i64>(frame, 1) };
+        let mut at = (*unsafe { nikaia_std::proven::read(&state.scope, (frame) as usize) }).len() as i64;
         while at > 0 {
-            at = at - 1;
-            if nikaia_std::index::get(nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame)), nikaia_std::index::at(at)).name == bound_name {
+            at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
+            if nikaia_std::index::get(unsafe { nikaia_std::proven::read(&state.scope, (frame) as usize) }, nikaia_std::index::at(at)).name == bound_name {
                 let mut new_name: String = String::from("");
                 let mut new_view = false;
-                match nikaia_std::index::get(nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame)), nikaia_std::index::at(at)).ty {
+                match nikaia_std::index::get(unsafe { nikaia_std::proven::read(&state.scope, (frame) as usize) }, nikaia_std::index::at(at)).ty {
                     Ty::Named { ref name, view, .. } => {
                         new_name = nikaia_std::block::Text::from(name.to_string());
                         new_view = view;
                     },
                     _ => { },
                 }
-                if !new_name.is_empty() { state.scope[nikaia_std::index::at(frame)][nikaia_std::index::at(at)].ty = Ty::Named { name: new_name, args: parts, view: new_view }; }
+                if !new_name.is_empty() { (*unsafe { nikaia_std::proven::slot(&mut state.scope, (frame) as usize) })[nikaia_std::index::at(at)].ty = Ty::Named { name: new_name, args: parts, view: new_view }; }
                 return;
             }
         }
@@ -495,7 +495,7 @@ pub(crate) fn check_core_call_on_entry_key(world: &CheckWorld<'_, '_, '_, '_, '_
     match receiver {
         Expr::MethodCall { method, args, .. } => {
             let method = *method;
-            if world.words.resolve(method) == "entry" && args.len() == 1 { Some((*nikaia_std::index::get(&args, 0)).clone()) } else { None }
+            if world.words.resolve(method) == "entry" && args.len() == 1 { Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone()) } else { None }
         },
         _ => None,
     }
@@ -534,7 +534,7 @@ pub(crate) fn check_core_call_on_hands_back_a_sequence(contract: &FnContract) ->
 pub(crate) fn check_core_call_on_empty_list(state: &CheckState, bound_name: &str) -> bool {
     let local = match state.binding(bound_name) { Some(__nikaia_value) => __nikaia_value, None => return false };
     match local.ty {
-        Ty::Named { ref name, ref args, .. } => name == "Vec" && (args.is_empty() || args.len() == 1 && (*nikaia_std::index::get(&args, 0)).is_unknown()),
+        Ty::Named { ref name, ref args, .. } => name == "Vec" && (args.is_empty() || args.len() == 1 && (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).is_unknown()),
         _ => false,
     }
 }
@@ -567,13 +567,13 @@ pub(crate) fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWor
     }, || "".into());
     state.flow.pushed_into = None;
     if entry == "insert" && args.len() == 2 && found.len() == 2 {
-        check_core_call_on_map_written(state, world, &pushed_name, nikaia_std::index::get(&args, 0), nikaia_std::index::get(&found, 0), false, nikaia_std::index::get(&args, 1), nikaia_std::index::get(&found, 1), true, span);
+        check_core_call_on_map_written(state, world, &pushed_name, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, unsafe { nikaia_std::proven::read(&found, (0) as usize) }, false, unsafe { nikaia_std::proven::read(&args, (1) as usize) }, unsafe { nikaia_std::proven::read(&found, (1) as usize) }, true, span);
         return;
     }
     if entry == "or_insert" && args.len() == 1 && found.len() == 1 {
         let key: Expr = match check_core_call_on_entry_key(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
         let key_ty = index_key_type(&state, world, &key);
-        check_core_call_on_map_written(state, world, &pushed_name, &key, &key_ty, true, nikaia_std::index::get(&args, 0), nikaia_std::index::get(&found, 0), true, span);
+        check_core_call_on_map_written(state, world, &pushed_name, &key, &key_ty, true, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, unsafe { nikaia_std::proven::read(&found, (0) as usize) }, true, span);
         return;
     }
     let open = check_core_call_on_open(&state, &pushed_name);
@@ -587,28 +587,28 @@ pub(crate) fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWor
         state.flow.open_elements.insert(id, at);
     } else if open >= 0 && one_pushed {
         let ty: Option<String> = integer_named(&value_of_a_copy(&(*nikaia_std::index::get(&found, 0)).unseen()));
-        if ty.is_some() { if state.flow.open_numbers.contains_key(&open) { check_core_call_on_ask(state, open, nikaia_std::index::or(ty, || "".into()), span); } } else if state.number_shaped(world, nikaia_std::index::get(&args, 0)) { state.open_number_given(world, open, nikaia_std::index::get(&args, 0), span); }
+        if ty.is_some() { if state.flow.open_numbers.contains_key(&open) { check_core_call_on_ask(state, open, nikaia_std::index::or(ty, || "".into()), span); } } else if state.number_shaped(world, nikaia_std::index::get(&args, 0)) { state.open_number_given(world, open, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span); }
     }
     let mut have = false;
     let mut kind: Option<String> = None;
     let mut elements: Vec<Ty> = vec![];
-    if entry == "push" && found.len() == 1 && !(*nikaia_std::index::get(&found, 0)).is_unknown() {
+    if entry == "push" && found.len() == 1 && !(*unsafe { nikaia_std::proven::read(&found, (0) as usize) }).is_unknown() {
         have = true;
         kind = Some(String::from("Vec"));
-        elements = vec![value_of_a_copy(nikaia_std::index::get(&found, 0))];
+        elements = vec![value_of_a_copy(unsafe { nikaia_std::proven::read(&found, (0) as usize) })];
     }
     if !have { return; }
     let mut frame = state.scope.len() as i64;
     while frame > 0 {
-        frame = frame - 1;
-        let mut at = (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame))).len() as i64;
+        frame = unsafe { nikaia_std::proven::sub::<i64>(frame, 1) };
+        let mut at = (*unsafe { nikaia_std::proven::read(&state.scope, (frame) as usize) }).len() as i64;
         while at > 0 {
-            at = at - 1;
-            if nikaia_std::index::get(nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame)), nikaia_std::index::at(at)).name == pushed_name {
+            at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
+            if nikaia_std::index::get(unsafe { nikaia_std::proven::read(&state.scope, (frame) as usize) }, nikaia_std::index::at(at)).name == pushed_name {
                 let mut is_named = false;
                 let mut new_name: String = String::from("");
                 let mut new_view = false;
-                match nikaia_std::index::get(nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame)), nikaia_std::index::at(at)).ty {
+                match nikaia_std::index::get(unsafe { nikaia_std::proven::read(&state.scope, (frame) as usize) }, nikaia_std::index::at(at)).ty {
                     Ty::Named { ref name, view, .. } => {
                         is_named = true;
                         new_name = nikaia_std::block::Text::from(name.to_string());
@@ -618,7 +618,7 @@ pub(crate) fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWor
                 }
                 if is_named {
                     let renamed: String = nikaia_std::index::or(kind, || new_name.into());
-                    state.scope[nikaia_std::index::at(frame)][nikaia_std::index::at(at)].ty = Ty::Named { name: renamed, args: elements, view: new_view };
+                    (*unsafe { nikaia_std::proven::slot(&mut state.scope, (frame) as usize) })[nikaia_std::index::at(at)].ty = Ty::Named { name: renamed, args: elements, view: new_view };
                 }
                 return;
             }
@@ -642,12 +642,12 @@ pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, wor
     let mut i: i64 = 0;
     for given in args.iter() {
         if i >= expected.len() as i64 || i >= found.len() as i64 {
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             continue;
         }
-        let want = nikaia_std::index::get(&expected, (i) as usize);
-        let have = nikaia_std::index::get(&found, (i) as usize);
-        i += 1;
+        let want = unsafe { nikaia_std::proven::read(&expected, (i) as usize) };
+        let have = unsafe { nikaia_std::proven::read(&found, (i) as usize) };
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         state.a_map_read_kept(world, &have, &want, given, span);
         if check_overflow_a_nullable(&want) && !check_overflow_a_nullable(&have) && check_core_stmt_element_view(&state, world, given, &have, &want) == 1 {
             state.facts.lent_reads.insert(node_key(given));
@@ -659,7 +659,7 @@ pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, wor
             state.facts.nullable_args.insert(id_of(given) as i64, match how { Some(__nikaia_value) => __nikaia_value, None => continue });
             continue;
         }
-        let lent_here = own && lends_in_own(contract, i - 1 + offset, &vec![world.library]);
+        let lent_here = own && lends_in_own(contract, unsafe { nikaia_std::proven::sub::<i64>(i, 1) } + offset, &vec![world.library]);
         if !lent_here && state.a_view_copied_out(world, &have, &want, Some(given)) { continue; }
         if !is_a_literal(given) && an_integer_that_does_not_widen(&have, &want) {
             let at = check_span_at(world, given, span);
@@ -677,7 +677,7 @@ pub(crate) fn check_core_call_on_extended(state: &mut CheckState, world: &CheckW
         None => None,
     }, || Ty::Unknown));
     let want: Ty = if held.text() == "str" { Ty::Named { name: String::from("String"), args: vec![], view: false } } else { held };
-    let walked: Ty = unviewed_type(&element_walked(nikaia_std::index::get(&found, 0), 1));
+    let walked: Ty = unviewed_type(&element_walked(unsafe { nikaia_std::proven::read(&found, (0) as usize) }, 1));
     let have: Ty = if walked.text() == "str" { Ty::Named { name: String::from("String"), args: vec![], view: false } } else { walked };
     let numbers = match have {
         Ty::Named { ref name, .. } => a_number_name(name),
@@ -687,7 +687,7 @@ pub(crate) fn check_core_call_on_extended(state: &mut CheckState, world: &CheckW
         _ => false,
     };
     if numbers || have.fits(&want) { return; }
-    let at = check_span_at(world, nikaia_std::index::get(&args, 0), span);
+    let at = check_span_at(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span);
     state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: format!("`{}` expects elements of `{}` here, but you're passing elements of `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![] });
 }
 
@@ -751,7 +751,7 @@ pub(crate) fn check_core_call_on_names_fit(name: &str, args: &[Ty], wanted: &str
     let lists = (name == "Vec" || name == "Array") && (wanted == "Vec" || wanted == "Array");
     if lists {
         if args.is_empty() || wanted_args.is_empty() { return true; }
-        return check_core_call_on_may_fit(nikaia_std::index::get(&args, 0), nikaia_std::index::get(&wanted_args, 0));
+        return check_core_call_on_may_fit(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, unsafe { nikaia_std::proven::read(&wanted_args, (0) as usize) });
     }
     if name != wanted && !(check_core_call_on_built_in(name) && check_core_call_on_built_in(wanted)) { return true; }
     if name != wanted || (args.len() as i64) != wanted_args.len() as i64 { return false; }
@@ -782,30 +782,30 @@ pub(crate) fn check_core_call_on_member_one(state: &mut CheckState, world: &Chec
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || Ty::Unknown));
-    state.number_asked(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), &want, span, true);
-    let have: Ty = check_core_call_on_written(nikaia_std::index::get(&found, nikaia_std::index::at(at)));
-    if have.is_unknown() && !want.is_unknown() && state.number_shaped(world, nikaia_std::index::get(&args, nikaia_std::index::at(at))) && state.no_integer_is(world, &want) {
+    state.number_asked(world, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, &want, span, true);
+    let have: Ty = check_core_call_on_written(unsafe { nikaia_std::proven::read(&found, (at) as usize) });
+    if have.is_unknown() && !want.is_unknown() && state.number_shaped(world, unsafe { nikaia_std::proven::read(&args, (at) as usize) }) && state.no_integer_is(world, &want) {
         let wanted = want.text();
-        let number_at = check_span_at(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), span);
+        let number_at = check_span_at(world, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, span);
         let message: String = format!("`{}` expects `{}` here, but you're passing a number.", key, wanted);
         let help: String = format!("Make it a `{}`, or give the number to a place that holds one.", wanted);
         state.findings.push(check_refusal("NK1102", &number_at, message, vec![String::from("A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.")], Some(help)));
         return;
     }
     if check_core_call_on_may_fit(&have, &want) { return; }
-    let at_span = check_span_at(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), span);
+    let at_span = check_span_at(world, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, span);
     state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![] });
 }
 
 pub(crate) fn check_core_call_on_extend_literal(key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], expected: &mut Vec<Ty>) {
     let extends = key == "Vec::extend" || key == "collections::HashSet::extend" || key == "collections::BTreeSet::extend";
     if !extends || args.len() != 1 || expected.len() != 1 { return; }
-    let literal = matches!(*nikaia_std::index::get(&args, 0), Expr::ListLit { .. });
+    let literal = matches!(*unsafe { nikaia_std::proven::read(&args, (0) as usize) }, Expr::ListLit { .. });
     let element: Ty = match match bound.get("T") {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
-    if literal { { let __nikaia_stored = Ty::Named { name: String::from("Vec"), args: vec![element], view: false }; nikaia_std::index::set(&mut *expected, 0usize, __nikaia_stored); } }
+    if literal { { let __nikaia_stored = Ty::Named { name: String::from("Vec"), args: vec![element], view: false }; unsafe { nikaia_std::proven::write(&mut *expected, (0) as usize, __nikaia_stored) }; } }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -887,8 +887,8 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
             let a_mut_local = state.binding(&root).and_then(|__nikaia_it| __nikaia_it.without_mut).is_none();
             let callers = root == "self" && state.borrowing_self || nikaia_std::index::or(state.binding(&root).as_ref().map(|__nikaia_it| __nikaia_it.changing), || false) || root != drained && key != "Vec::drain" && a_mut_local;
             if callers { state.facts.kept_drains.insert(id_of(receiver) as i64); } else {
-                let last = state.changed.len() as i64 - 1;
-                if root == drained && last >= 0 && *nikaia_std::index::get(&state.changed, nikaia_std::index::at(last)) == drained { state.drained.insert(last); }
+                let last = unsafe { nikaia_std::proven::sub::<i64>(state.changed.len() as i64, 1) };
+                if root == drained && last >= 0 && *unsafe { nikaia_std::proven::read(&state.changed, (last) as usize) } == drained { state.drained.insert(last); }
                 state.hands_over_path(world, &drained, on, state.read_seq, "taken away by `drain`", span);
             }
         }
@@ -957,16 +957,16 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let outer_lent = state.flow.lent_params.copy_owned();
     state.flow.lent_params = state.lent_walk_params(world, contract, entry, receiver, args);
     if key == "Entry::and_modify" && args.len() == 1 && expected.len() == 1 {
-        let copied: Option<Ty> = check_core_call_on_copied_entry(nikaia_std::index::get(&expected, 0), nikaia_std::index::get(&args, 0));
+        let copied: Option<Ty> = check_core_call_on_copied_entry(unsafe { nikaia_std::proven::read(&expected, (0) as usize) }, unsafe { nikaia_std::proven::read(&args, (0) as usize) });
         if copied.is_some() {
-            { let __nikaia_stored = nikaia_std::index::or(copied, || Ty::Unknown); nikaia_std::index::set(&mut expected, 0usize, __nikaia_stored); }
-            state.facts.copied_entry_lambdas.insert(id_of(nikaia_std::index::get(&args, 0)) as i64);
+            { let __nikaia_stored = nikaia_std::index::or(copied, || Ty::Unknown); unsafe { nikaia_std::proven::write(&mut expected, (0) as usize, __nikaia_stored) }; }
+            state.facts.copied_entry_lambdas.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64);
         } else {
             let values = check_core_call_on_entry_values(&state, world, receiver);
-            let lambda_param: Option<String> = check_core_call_on_one_param(world, nikaia_std::index::get(&args, 0));
+            let lambda_param: Option<String> = check_core_call_on_one_param(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) });
             if values >= 0 && lambda_param.is_some() {
-                { let __nikaia_stored = check_core_call_on_unviewed_fn(nikaia_std::index::get(&expected, 0)); nikaia_std::index::set(&mut expected, 0usize, __nikaia_stored); }
-                state.facts.copied_entry_lambdas.insert(id_of(nikaia_std::index::get(&args, 0)) as i64);
+                { let __nikaia_stored = check_core_call_on_unviewed_fn(unsafe { nikaia_std::proven::read(&expected, (0) as usize) }); unsafe { nikaia_std::proven::write(&mut expected, (0) as usize, __nikaia_stored) }; }
+                state.facts.copied_entry_lambdas.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64);
                 state.flow.open_params.insert(nikaia_std::block::Text::from(nikaia_std::index::or(lambda_param.as_deref(), || "").to_string()), values);
             }
         }
@@ -983,8 +983,8 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || Ty::Unknown);
-        check_core_fold_form(state, world, nikaia_std::index::get(&args, 1), nikaia_std::index::get(&found, 1), &acc, "Par::fold", "step", span);
-        check_core_fold_form(state, world, nikaia_std::index::get(&args, 2), nikaia_std::index::get(&found, 2), &acc, "Par::fold", "merge", span);
+        check_core_fold_form(state, world, unsafe { nikaia_std::proven::read(&args, (1) as usize) }, unsafe { nikaia_std::proven::read(&found, (1) as usize) }, &acc, "Par::fold", "step", span);
+        check_core_fold_form(state, world, unsafe { nikaia_std::proven::read(&args, (2) as usize) }, unsafe { nikaia_std::proven::read(&found, (2) as usize) }, &acc, "Par::fold", "merge", span);
     }
     state.flow.open_params = outer_params;
     state.flow.lent_params = outer_lent;
@@ -992,7 +992,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     state.flow.walk_lent = state.a_walk_that_lends(contract, receiver);
     state.in_parallel = outer_parallel;
     state.scoped_task = outer_scoped;
-    if (entry == "get" || entry == "contains_key" || entry == "remove" || entry == "entry") && args.len() == 1 { check_core_call_on_key_read(state, world, receiver, nikaia_std::index::get(&args, 0), span); }
+    if (entry == "get" || entry == "contains_key" || entry == "remove" || entry == "entry") && args.len() == 1 { check_core_call_on_key_read(state, world, receiver, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span); }
     check_core_call_on_pushed(state, world, receiver, entry, args, &found, span);
     expected = check_core_call_on_now_expected(&state, world, receiver, entry, expected);
     let paused_here: Vec<i64> = state.flow.paused_args.copy_owned();
@@ -1002,13 +1002,13 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     for arg in args.iter() {
         let is_lambda = matches!(arg, Expr::Closure { .. });
         if lambda_at < 0 && is_lambda && paused_here.contains(&(id_of(arg) as i64)) { lambda_at = i; }
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     state.a_set_that_reads_what_it_writes(on, entry, &found, span);
     i = 0;
     for given in args.iter() {
-        if entry == "or_insert_with" && i < expected.len() as i64 { state.a_lambdas_text_is_its_own(world, nikaia_std::index::get(&expected, (i) as usize), given); }
-        if i < expected.len() as i64 && state.text_literal(world, nikaia_std::index::get(&expected, (i) as usize), given, true).is_none() && i < found.len() as i64 {
+        if entry == "or_insert_with" && i < expected.len() as i64 { state.a_lambdas_text_is_its_own(world, unsafe { nikaia_std::proven::read(&expected, (i) as usize) }, given); }
+        if i < expected.len() as i64 && state.text_literal(world, unsafe { nikaia_std::proven::read(&expected, (i) as usize) }, given, true).is_none() && i < found.len() as i64 {
             let by_map: Ty = nikaia_std::index::or(match bound.get("K") {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
@@ -1017,10 +1017,10 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || Ty::Unknown);
-            let wanted: Ty = if !is_a_lookup(key) { (*nikaia_std::index::get(&expected, (i) as usize)).clone() } else if by_map != Ty::Unknown { by_map } else if by_item != Ty::Unknown { by_item } else { (*nikaia_std::index::get(&expected, (i) as usize)).clone() };
-            if state.tuple_literal(world, nikaia_std::index::get(&found, (i) as usize), &wanted, given).is_none() { state.list_of_tuple_literals(world, nikaia_std::index::get(&found, (i) as usize), &wanted, given); }
+            let wanted: Ty = if !is_a_lookup(key) { (*unsafe { nikaia_std::proven::read(&expected, (i) as usize) }).clone() } else if by_map != Ty::Unknown { by_map } else if by_item != Ty::Unknown { by_item } else { (*unsafe { nikaia_std::proven::read(&expected, (i) as usize) }).clone() };
+            if state.tuple_literal(world, unsafe { nikaia_std::proven::read(&found, (i) as usize) }, &wanted, given).is_none() { state.list_of_tuple_literals(world, unsafe { nikaia_std::proven::read(&found, (i) as usize) }, &wanted, given); }
         }
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     state.a_sequence_that_cannot_do_this(world, on, method, contract, &found, span);
     state.counts_in_usize(key, args);
@@ -1046,15 +1046,15 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     }, || Ty::Unknown);
     let mut slot: i64 = 0;
     while ((slot) as usize) < args.len() && ((slot) as usize) < expected.len() {
-        if (*nikaia_std::index::get(&expected, (slot) as usize)).is_a_view() || an_entry && slot == 0 && map_keys.is_a_view() { state.facts.kept_text_bytes.remove(&node_key(nikaia_std::index::get(&args, (slot) as usize))); }
-        slot += 1;
+        if (*unsafe { nikaia_std::proven::read(&expected, (slot) as usize) }).is_a_view() || an_entry && slot == 0 && map_keys.is_a_view() { state.facts.kept_text_bytes.remove(&node_key(unsafe { nikaia_std::proven::read(&args, (slot) as usize) })); }
+        slot = unsafe { nikaia_std::proven::add::<i64>(slot, 1) };
     }
     if (key == "collections::HashMap::entry" || key == "collections::BTreeMap::entry") && args.len() == 1 && found.len() == 1 {
         let keys: Ty = nikaia_std::index::or(match bound.get("K") {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || Ty::Unknown);
-        if check_core_call_on_owned_text(&keys) && check_core_call_on_text_to_build(world, nikaia_std::index::get(&args, 0), nikaia_std::index::get(&found, 0)) { state.facts.owned_entry_keys.insert(id_of(nikaia_std::index::get(&args, 0)) as i64); }
+        if check_core_call_on_owned_text(&keys) && check_core_call_on_text_to_build(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, unsafe { nikaia_std::proven::read(&found, (0) as usize) }) { state.facts.owned_entry_keys.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64); }
     }
     state.a_view_kept_where_the_receiver_says_text(world, key, contract, args, &found, &expected, span);
     check_core_call_on_given(state, world, host, key, contract, args, &found, &expected, span);
@@ -1152,7 +1152,7 @@ pub fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world: &Chec
     if door {
         state.the_witness_takes_no_reference(&nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span);
         state.facts.witnessed_sets.insert(span.start as i64);
-        given.push(nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value.clone());
+        given.push(unsafe { nikaia_std::proven::read(&config, (witness) as usize) }.value.clone());
         written = String::from("set(after)");
     } else if within {
         given.push(nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value.clone());
@@ -1215,8 +1215,8 @@ pub(crate) fn check_core_call_on_copied_entry(want: &Ty, arg: &Expr) -> Option<T
     match want {
         Ty::Fn { params, result, is_sync, can_throw } => {
             let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
-            if params.len() == 1 && (*nikaia_std::index::get(&params, 0)).is_a_view() && copies_plainly(&unviewed_type(nikaia_std::index::get(&params, 0))) {
-                Some(Ty::Fn { params: vec![unviewed_type(nikaia_std::index::get(&params, 0))], result: Box::new(match result {
+            if params.len() == 1 && (*unsafe { nikaia_std::proven::read(&params, (0) as usize) }).is_a_view() && copies_plainly(&unviewed_type(unsafe { nikaia_std::proven::read(&params, (0) as usize) })) {
+                Some(Ty::Fn { params: vec![unviewed_type(unsafe { nikaia_std::proven::read(&params, (0) as usize) })], result: Box::new(match result {
                     Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                     None => None,
                 }), is_sync, can_throw })
@@ -1230,7 +1230,7 @@ pub(crate) fn check_core_call_on_copied_entry(want: &Ty, arg: &Expr) -> Option<T
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_call_on_one_param(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr) -> Option<String> {
     match arg {
-        Expr::Closure { params, .. } => { if params.len() == 1 { Some(nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&params, 0)).to_string())) } else { None } },
+        Expr::Closure { params, .. } => { if params.len() == 1 { Some(nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&params, (0) as usize) }).to_string())) } else { None } },
         _ => None,
     }
 }

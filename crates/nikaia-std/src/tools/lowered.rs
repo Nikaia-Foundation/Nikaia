@@ -37,6 +37,7 @@ use nikaia_std::text;
 #[allow(unused_imports)]
 use nikaia_std::time;
 
+#[allow(unsafe_code)]
 mod assets_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -47,6 +48,7 @@ mod assets_lowered {
 #[allow(unused_imports)]
 pub use assets_lowered::*;
 
+#[allow(unsafe_code)]
 mod ast_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -57,6 +59,7 @@ mod ast_lowered {
 #[allow(unused_imports)]
 pub use ast_lowered::*;
 
+#[allow(unsafe_code)]
 mod boundaries_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -67,6 +70,7 @@ mod boundaries_lowered {
 #[allow(unused_imports)]
 pub use boundaries_lowered::*;
 
+#[allow(unsafe_code)]
 mod bounds_basic_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -77,6 +81,7 @@ mod bounds_basic_lowered {
 #[allow(unused_imports)]
 pub use bounds_basic_lowered::*;
 
+#[allow(unsafe_code)]
 mod bounds_body_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -87,6 +92,7 @@ mod bounds_body_lowered {
 #[allow(unused_imports)]
 pub use bounds_body_lowered::*;
 
+#[allow(unsafe_code)]
 mod bounds_derived_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -97,6 +103,7 @@ mod bounds_derived_lowered {
 #[allow(unused_imports)]
 pub use bounds_derived_lowered::*;
 
+#[allow(unsafe_code)]
 mod bounds_frame_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -107,6 +114,7 @@ mod bounds_frame_lowered {
 #[allow(unused_imports)]
 pub use bounds_frame_lowered::*;
 
+#[allow(unsafe_code)]
 mod bounds_interval_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -117,6 +125,7 @@ mod bounds_interval_lowered {
 #[allow(unused_imports)]
 pub use bounds_interval_lowered::*;
 
+#[allow(unsafe_code)]
 mod bounds_matched_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -127,6 +136,7 @@ mod bounds_matched_lowered {
 #[allow(unused_imports)]
 pub use bounds_matched_lowered::*;
 
+#[allow(unsafe_code)]
 mod bounds_proven_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -137,6 +147,7 @@ mod bounds_proven_lowered {
 #[allow(unused_imports)]
 pub use bounds_proven_lowered::*;
 
+#[allow(unsafe_code)]
 mod bounds_reasons_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -147,6 +158,7 @@ mod bounds_reasons_lowered {
 #[allow(unused_imports)]
 pub use bounds_reasons_lowered::*;
 
+#[allow(unsafe_code)]
 mod bounds_report_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -157,6 +169,7 @@ mod bounds_report_lowered {
 #[allow(unused_imports)]
 pub use bounds_report_lowered::*;
 
+#[allow(unsafe_code)]
 mod bounds_rules_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -167,6 +180,7 @@ mod bounds_rules_lowered {
 #[allow(unused_imports)]
 pub use bounds_rules_lowered::*;
 
+#[allow(unsafe_code)]
 mod bounds_shape_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -177,6 +191,7 @@ mod bounds_shape_lowered {
 #[allow(unused_imports)]
 pub use bounds_shape_lowered::*;
 
+#[allow(unsafe_code)]
 mod bounds_walk_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -187,6 +202,7 @@ mod bounds_walk_lowered {
 #[allow(unused_imports)]
 pub use bounds_walk_lowered::*;
 
+#[allow(unsafe_code)]
 mod buffers_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -197,6 +213,7 @@ mod buffers_lowered {
 #[allow(unused_imports)]
 pub use buffers_lowered::*;
 
+#[allow(unsafe_code)]
 mod build_eval_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -207,6 +224,7 @@ mod build_eval_lowered {
 #[allow(unused_imports)]
 pub use build_eval_lowered::*;
 
+#[allow(unsafe_code)]
 mod build_values_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -217,6 +235,7 @@ mod build_values_lowered {
 #[allow(unused_imports)]
 pub use build_values_lowered::*;
 
+#[allow(unsafe_code)]
 mod calls_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -227,6 +246,7 @@ mod calls_lowered {
 #[allow(unused_imports)]
 pub use calls_lowered::*;
 
+#[allow(unsafe_code)]
 mod cargo_json_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -237,6 +257,7 @@ mod cargo_json_lowered {
 #[allow(unused_imports)]
 pub use cargo_json_lowered::*;
 
+#[allow(unsafe_code)]
 mod cexport_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -247,6 +268,7 @@ mod cexport_lowered {
 #[allow(unused_imports)]
 pub use cexport_lowered::*;
 
+#[allow(unsafe_code)]
 mod cexport_mirror_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -257,6 +279,7 @@ mod cexport_mirror_lowered {
 #[allow(unused_imports)]
 pub use cexport_mirror_lowered::*;
 
+#[allow(unsafe_code)]
 mod cexport_model_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -267,6 +290,7 @@ mod cexport_model_lowered {
 #[allow(unused_imports)]
 pub use cexport_model_lowered::*;
 
+#[allow(unsafe_code)]
 mod cexport_node_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -277,6 +301,7 @@ mod cexport_node_lowered {
 #[allow(unused_imports)]
 pub use cexport_node_lowered::*;
 
+#[allow(unsafe_code)]
 mod cexport_node_text_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -287,6 +312,7 @@ mod cexport_node_text_lowered {
 #[allow(unused_imports)]
 pub use cexport_node_text_lowered::*;
 
+#[allow(unsafe_code)]
 mod cexport_python_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -297,6 +323,7 @@ mod cexport_python_lowered {
 #[allow(unused_imports)]
 pub use cexport_python_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_access_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -307,6 +334,7 @@ mod check_access_lowered {
 #[allow(unused_imports)]
 pub use check_access_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_arguments_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -317,6 +345,7 @@ mod check_arguments_lowered {
 #[allow(unused_imports)]
 pub use check_arguments_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_arith_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -327,6 +356,7 @@ mod check_arith_lowered {
 #[allow(unused_imports)]
 pub use check_arith_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_arm_leaves_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -337,6 +367,7 @@ mod check_arm_leaves_lowered {
 #[allow(unused_imports)]
 pub use check_arm_leaves_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_arms_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -347,6 +378,7 @@ mod check_arms_lowered {
 #[allow(unused_imports)]
 pub use check_arms_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_attributes_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -357,6 +389,7 @@ mod check_attributes_lowered {
 #[allow(unused_imports)]
 pub use check_attributes_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_binds_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -367,6 +400,7 @@ mod check_binds_lowered {
 #[allow(unused_imports)]
 pub use check_binds_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_boundary_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -377,6 +411,7 @@ mod check_boundary_lowered {
 #[allow(unused_imports)]
 pub use check_boundary_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_boxes_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -387,6 +422,7 @@ mod check_boxes_lowered {
 #[allow(unused_imports)]
 pub use check_boxes_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_buildtime_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -397,6 +433,7 @@ mod check_buildtime_lowered {
 #[allow(unused_imports)]
 pub use check_buildtime_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_buildtime2_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -407,6 +444,7 @@ mod check_buildtime2_lowered {
 #[allow(unused_imports)]
 pub use check_buildtime2_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_calls_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -417,6 +455,7 @@ mod check_calls_lowered {
 #[allow(unused_imports)]
 pub use check_calls_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_claims_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -427,6 +466,7 @@ mod check_claims_lowered {
 #[allow(unused_imports)]
 pub use check_claims_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_collect_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -437,6 +477,7 @@ mod check_collect_lowered {
 #[allow(unused_imports)]
 pub use check_collect_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_compare_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -447,6 +488,7 @@ mod check_compare_lowered {
 #[allow(unused_imports)]
 pub use check_compare_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_consts_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -457,6 +499,7 @@ mod check_consts_lowered {
 #[allow(unused_imports)]
 pub use check_consts_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_copies_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -467,6 +510,7 @@ mod check_copies_lowered {
 #[allow(unused_imports)]
 pub use check_copies_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_core_args_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -477,6 +521,7 @@ mod check_core_args_lowered {
 #[allow(unused_imports)]
 pub use check_core_args_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_core_call_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -487,6 +532,7 @@ mod check_core_call_lowered {
 #[allow(unused_imports)]
 pub use check_core_call_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_core_call_on_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -497,6 +543,7 @@ mod check_core_call_on_lowered {
 #[allow(unused_imports)]
 pub use check_core_call_on_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_core_comptime_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -507,6 +554,7 @@ mod check_core_comptime_lowered {
 #[allow(unused_imports)]
 pub use check_core_comptime_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_core_expr_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -517,6 +565,7 @@ mod check_core_expr_lowered {
 #[allow(unused_imports)]
 pub use check_core_expr_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_core_flow_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -527,6 +576,7 @@ mod check_core_flow_lowered {
 #[allow(unused_imports)]
 pub use check_core_flow_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_core_leaves_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -537,6 +587,7 @@ mod check_core_leaves_lowered {
 #[allow(unused_imports)]
 pub use check_core_leaves_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_core_method_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -547,6 +598,7 @@ mod check_core_method_lowered {
 #[allow(unused_imports)]
 pub use check_core_method_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_core_ops_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -557,6 +609,7 @@ mod check_core_ops_lowered {
 #[allow(unused_imports)]
 pub use check_core_ops_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_core_pilot_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -567,6 +620,7 @@ mod check_core_pilot_lowered {
 #[allow(unused_imports)]
 pub use check_core_pilot_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_core_places_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -577,6 +631,7 @@ mod check_core_places_lowered {
 #[allow(unused_imports)]
 pub use check_core_places_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_core_stmt_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -587,6 +642,7 @@ mod check_core_stmt_lowered {
 #[allow(unused_imports)]
 pub use check_core_stmt_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_crossings_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -597,6 +653,7 @@ mod check_crossings_lowered {
 #[allow(unused_imports)]
 pub use check_crossings_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_declared_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -607,6 +664,7 @@ mod check_declared_lowered {
 #[allow(unused_imports)]
 pub use check_declared_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_decls_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -617,6 +675,7 @@ mod check_decls_lowered {
 #[allow(unused_imports)]
 pub use check_decls_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_defaults_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -627,6 +686,7 @@ mod check_defaults_lowered {
 #[allow(unused_imports)]
 pub use check_defaults_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_doors_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -637,6 +697,7 @@ mod check_doors_lowered {
 #[allow(unused_imports)]
 pub use check_doors_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_expect_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -647,6 +708,7 @@ mod check_expect_lowered {
 #[allow(unused_imports)]
 pub use check_expect_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_exprs_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -657,6 +719,7 @@ mod check_exprs_lowered {
 #[allow(unused_imports)]
 pub use check_exprs_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_extern_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -667,6 +730,7 @@ mod check_extern_lowered {
 #[allow(unused_imports)]
 pub use check_extern_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_facts_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -677,6 +741,7 @@ mod check_facts_lowered {
 #[allow(unused_imports)]
 pub use check_facts_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_fallible_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -687,6 +752,7 @@ mod check_fallible_lowered {
 #[allow(unused_imports)]
 pub use check_fallible_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_fields_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -697,6 +763,7 @@ mod check_fields_lowered {
 #[allow(unused_imports)]
 pub use check_fields_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_flow_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -707,6 +774,7 @@ mod check_flow_lowered {
 #[allow(unused_imports)]
 pub use check_flow_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_function_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -717,6 +785,7 @@ mod check_function_lowered {
 #[allow(unused_imports)]
 pub use check_function_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_glue_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -727,6 +796,7 @@ mod check_glue_lowered {
 #[allow(unused_imports)]
 pub use check_glue_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_grammar_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -737,6 +807,7 @@ mod check_grammar_lowered {
 #[allow(unused_imports)]
 pub use check_grammar_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_host_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -747,6 +818,7 @@ mod check_host_lowered {
 #[allow(unused_imports)]
 pub use check_host_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_imports_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -757,6 +829,7 @@ mod check_imports_lowered {
 #[allow(unused_imports)]
 pub use check_imports_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_items_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -767,6 +840,7 @@ mod check_items_lowered {
 #[allow(unused_imports)]
 pub use check_items_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_keep_marks_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -777,6 +851,7 @@ mod check_keep_marks_lowered {
 #[allow(unused_imports)]
 pub use check_keep_marks_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_kinds_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -787,6 +862,7 @@ mod check_kinds_lowered {
 #[allow(unused_imports)]
 pub use check_kinds_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_lambdas_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -797,6 +873,7 @@ mod check_lambdas_lowered {
 #[allow(unused_imports)]
 pub use check_lambdas_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_literals_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -807,6 +884,7 @@ mod check_literals_lowered {
 #[allow(unused_imports)]
 pub use check_literals_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_lookups_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -817,6 +895,7 @@ mod check_lookups_lowered {
 #[allow(unused_imports)]
 pub use check_lookups_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_main_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -827,6 +906,7 @@ mod check_main_lowered {
 #[allow(unused_imports)]
 pub use check_main_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_may_fail_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -837,6 +917,7 @@ mod check_may_fail_lowered {
 #[allow(unused_imports)]
 pub use check_may_fail_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_members_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -847,6 +928,7 @@ mod check_members_lowered {
 #[allow(unused_imports)]
 pub use check_members_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_name_in_text_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -857,6 +939,7 @@ mod check_name_in_text_lowered {
 #[allow(unused_imports)]
 pub use check_name_in_text_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_names_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -867,6 +950,7 @@ mod check_names_lowered {
 #[allow(unused_imports)]
 pub use check_names_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_narrow_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -877,6 +961,7 @@ mod check_narrow_lowered {
 #[allow(unused_imports)]
 pub use check_narrow_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_notes_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -887,6 +972,7 @@ mod check_notes_lowered {
 #[allow(unused_imports)]
 pub use check_notes_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_numbers_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -897,6 +983,7 @@ mod check_numbers_lowered {
 #[allow(unused_imports)]
 pub use check_numbers_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_numbers2_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -907,6 +994,7 @@ mod check_numbers2_lowered {
 #[allow(unused_imports)]
 pub use check_numbers2_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_numbers3_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -917,6 +1005,7 @@ mod check_numbers3_lowered {
 #[allow(unused_imports)]
 pub use check_numbers3_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_numbers4_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -927,6 +1016,7 @@ mod check_numbers4_lowered {
 #[allow(unused_imports)]
 pub use check_numbers4_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_numbers5_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -937,6 +1027,7 @@ mod check_numbers5_lowered {
 #[allow(unused_imports)]
 pub use check_numbers5_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_overflow_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -947,6 +1038,7 @@ mod check_overflow_lowered {
 #[allow(unused_imports)]
 pub use check_overflow_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_parts_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -957,6 +1049,7 @@ mod check_parts_lowered {
 #[allow(unused_imports)]
 pub use check_parts_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_patterns_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -967,6 +1060,7 @@ mod check_patterns_lowered {
 #[allow(unused_imports)]
 pub use check_patterns_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_pauses_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -977,6 +1071,7 @@ mod check_pauses_lowered {
 #[allow(unused_imports)]
 pub use check_pauses_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_places_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -987,6 +1082,7 @@ mod check_places_lowered {
 #[allow(unused_imports)]
 pub use check_places_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_program_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -997,6 +1093,7 @@ mod check_program_lowered {
 #[allow(unused_imports)]
 pub use check_program_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_reads_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1007,6 +1104,7 @@ mod check_reads_lowered {
 #[allow(unused_imports)]
 pub use check_reads_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_references_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1017,6 +1115,7 @@ mod check_references_lowered {
 #[allow(unused_imports)]
 pub use check_references_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_refusals_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1027,6 +1126,7 @@ mod check_refusals_lowered {
 #[allow(unused_imports)]
 pub use check_refusals_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_reports_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1037,6 +1137,7 @@ mod check_reports_lowered {
 #[allow(unused_imports)]
 pub use check_reports_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_result_from_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1047,6 +1148,7 @@ mod check_result_from_lowered {
 #[allow(unused_imports)]
 pub use check_result_from_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_scope_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1057,6 +1159,7 @@ mod check_scope_lowered {
 #[allow(unused_imports)]
 pub use check_scope_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_send_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1067,6 +1170,7 @@ mod check_send_lowered {
 #[allow(unused_imports)]
 pub use check_send_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_shapes_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1077,6 +1181,7 @@ mod check_shapes_lowered {
 #[allow(unused_imports)]
 pub use check_shapes_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_simd_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1087,6 +1192,7 @@ mod check_simd_lowered {
 #[allow(unused_imports)]
 pub use check_simd_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_state_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1097,6 +1203,7 @@ mod check_state_lowered {
 #[allow(unused_imports)]
 pub use check_state_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_takes_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1107,6 +1214,7 @@ mod check_takes_lowered {
 #[allow(unused_imports)]
 pub use check_takes_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_task_pauses_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1117,6 +1225,7 @@ mod check_task_pauses_lowered {
 #[allow(unused_imports)]
 pub use check_task_pauses_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_texts_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1127,6 +1236,7 @@ mod check_texts_lowered {
 #[allow(unused_imports)]
 pub use check_texts_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_types_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1137,6 +1247,7 @@ mod check_types_lowered {
 #[allow(unused_imports)]
 pub use check_types_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_values_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1147,6 +1258,7 @@ mod check_values_lowered {
 #[allow(unused_imports)]
 pub use check_values_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_visit_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1157,6 +1269,7 @@ mod check_visit_lowered {
 #[allow(unused_imports)]
 pub use check_visit_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_walk_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1167,6 +1280,7 @@ mod check_walk_lowered {
 #[allow(unused_imports)]
 pub use check_walk_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_walked_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1177,6 +1291,7 @@ mod check_walked_lowered {
 #[allow(unused_imports)]
 pub use check_walked_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_walks_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1187,6 +1302,7 @@ mod check_walks_lowered {
 #[allow(unused_imports)]
 pub use check_walks_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_widen_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1197,6 +1313,7 @@ mod check_widen_lowered {
 #[allow(unused_imports)]
 pub use check_widen_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_with_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1207,6 +1324,7 @@ mod check_with_lowered {
 #[allow(unused_imports)]
 pub use check_with_lowered::*;
 
+#[allow(unsafe_code)]
 mod check_words_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1217,6 +1335,7 @@ mod check_words_lowered {
 #[allow(unused_imports)]
 pub use check_words_lowered::*;
 
+#[allow(unsafe_code)]
 mod claim_names_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1227,6 +1346,7 @@ mod claim_names_lowered {
 #[allow(unused_imports)]
 pub use claim_names_lowered::*;
 
+#[allow(unsafe_code)]
 mod cli_commands_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1237,6 +1357,7 @@ mod cli_commands_lowered {
 #[allow(unused_imports)]
 pub use cli_commands_lowered::*;
 
+#[allow(unsafe_code)]
 mod comptime_bundle_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1247,6 +1368,7 @@ mod comptime_bundle_lowered {
 #[allow(unused_imports)]
 pub use comptime_bundle_lowered::*;
 
+#[allow(unsafe_code)]
 mod comptime_driver_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1257,6 +1379,7 @@ mod comptime_driver_lowered {
 #[allow(unused_imports)]
 pub use comptime_driver_lowered::*;
 
+#[allow(unsafe_code)]
 mod comptime_tree_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1267,6 +1390,7 @@ mod comptime_tree_lowered {
 #[allow(unused_imports)]
 pub use comptime_tree_lowered::*;
 
+#[allow(unsafe_code)]
 mod contract_changes_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1277,6 +1401,7 @@ mod contract_changes_lowered {
 #[allow(unused_imports)]
 pub use contract_changes_lowered::*;
 
+#[allow(unsafe_code)]
 mod contracts_core_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1287,6 +1412,7 @@ mod contracts_core_lowered {
 #[allow(unused_imports)]
 pub use contracts_core_lowered::*;
 
+#[allow(unsafe_code)]
 mod crossing_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1297,6 +1423,7 @@ mod crossing_lowered {
 #[allow(unused_imports)]
 pub use crossing_lowered::*;
 
+#[allow(unsafe_code)]
 mod declared_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1307,6 +1434,7 @@ mod declared_lowered {
 #[allow(unused_imports)]
 pub use declared_lowered::*;
 
+#[allow(unsafe_code)]
 mod describe_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1317,6 +1445,7 @@ mod describe_lowered {
 #[allow(unused_imports)]
 pub use describe_lowered::*;
 
+#[allow(unsafe_code)]
 mod diagnostics_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1327,6 +1456,7 @@ mod diagnostics_lowered {
 #[allow(unused_imports)]
 pub use diagnostics_lowered::*;
 
+#[allow(unsafe_code)]
 mod diffs_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1337,6 +1467,7 @@ mod diffs_lowered {
 #[allow(unused_imports)]
 pub use diffs_lowered::*;
 
+#[allow(unsafe_code)]
 mod dsl_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1347,6 +1478,7 @@ mod dsl_lowered {
 #[allow(unused_imports)]
 pub use dsl_lowered::*;
 
+#[allow(unsafe_code)]
 mod dump_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1357,6 +1489,7 @@ mod dump_lowered {
 #[allow(unused_imports)]
 pub use dump_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_below_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1367,6 +1500,7 @@ mod emit_below_lowered {
 #[allow(unused_imports)]
 pub use emit_below_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_build_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1377,6 +1511,7 @@ mod emit_build_lowered {
 #[allow(unused_imports)]
 pub use emit_build_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_calls_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1387,6 +1522,7 @@ mod emit_calls_lowered {
 #[allow(unused_imports)]
 pub use emit_calls_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_contracts_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1397,6 +1533,7 @@ mod emit_contracts_lowered {
 #[allow(unused_imports)]
 pub use emit_contracts_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_core_args_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1407,6 +1544,7 @@ mod emit_core_args_lowered {
 #[allow(unused_imports)]
 pub use emit_core_args_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_core_below_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1417,6 +1555,7 @@ mod emit_core_below_lowered {
 #[allow(unused_imports)]
 pub use emit_core_below_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_core_calls_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1427,6 +1566,7 @@ mod emit_core_calls_lowered {
 #[allow(unused_imports)]
 pub use emit_core_calls_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_core_flow_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1437,6 +1577,7 @@ mod emit_core_flow_lowered {
 #[allow(unused_imports)]
 pub use emit_core_flow_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_core_leaves_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1447,6 +1588,7 @@ mod emit_core_leaves_lowered {
 #[allow(unused_imports)]
 pub use emit_core_leaves_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_core_match_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1457,6 +1599,7 @@ mod emit_core_match_lowered {
 #[allow(unused_imports)]
 pub use emit_core_match_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_core_places_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1467,6 +1610,7 @@ mod emit_core_places_lowered {
 #[allow(unused_imports)]
 pub use emit_core_places_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_core_reads_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1477,6 +1621,7 @@ mod emit_core_reads_lowered {
 #[allow(unused_imports)]
 pub use emit_core_reads_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_core_types_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1487,6 +1632,7 @@ mod emit_core_types_lowered {
 #[allow(unused_imports)]
 pub use emit_core_types_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_entry_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1497,6 +1643,7 @@ mod emit_entry_lowered {
 #[allow(unused_imports)]
 pub use emit_entry_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_expr_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1507,6 +1654,7 @@ mod emit_expr_lowered {
 #[allow(unused_imports)]
 pub use emit_expr_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_exprs_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1517,6 +1665,7 @@ mod emit_exprs_lowered {
 #[allow(unused_imports)]
 pub use emit_exprs_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_fold_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1527,6 +1676,7 @@ mod emit_fold_lowered {
 #[allow(unused_imports)]
 pub use emit_fold_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_function_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1537,6 +1687,7 @@ mod emit_function_lowered {
 #[allow(unused_imports)]
 pub use emit_function_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_function_body_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1547,6 +1698,7 @@ mod emit_function_body_lowered {
 #[allow(unused_imports)]
 pub use emit_function_body_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_grammar_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1557,6 +1709,7 @@ mod emit_grammar_lowered {
 #[allow(unused_imports)]
 pub use emit_grammar_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_holes_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1567,6 +1720,7 @@ mod emit_holes_lowered {
 #[allow(unused_imports)]
 pub use emit_holes_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_host_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1577,6 +1731,7 @@ mod emit_host_lowered {
 #[allow(unused_imports)]
 pub use emit_host_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_item_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1587,6 +1742,7 @@ mod emit_item_lowered {
 #[allow(unused_imports)]
 pub use emit_item_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_items_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1597,6 +1753,7 @@ mod emit_items_lowered {
 #[allow(unused_imports)]
 pub use emit_items_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_keeps_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1607,6 +1764,7 @@ mod emit_keeps_lowered {
 #[allow(unused_imports)]
 pub use emit_keeps_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_kinds_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1617,6 +1775,7 @@ mod emit_kinds_lowered {
 #[allow(unused_imports)]
 pub use emit_kinds_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_locals_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1627,6 +1786,7 @@ mod emit_locals_lowered {
 #[allow(unused_imports)]
 pub use emit_locals_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_misc_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1637,6 +1797,7 @@ mod emit_misc_lowered {
 #[allow(unused_imports)]
 pub use emit_misc_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_needs_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1647,6 +1808,7 @@ mod emit_needs_lowered {
 #[allow(unused_imports)]
 pub use emit_needs_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_ops_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1657,6 +1819,7 @@ mod emit_ops_lowered {
 #[allow(unused_imports)]
 pub use emit_ops_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_order_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1667,6 +1830,7 @@ mod emit_order_lowered {
 #[allow(unused_imports)]
 pub use emit_order_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_out_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1677,6 +1841,7 @@ mod emit_out_lowered {
 #[allow(unused_imports)]
 pub use emit_out_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_pattern_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1687,6 +1852,7 @@ mod emit_pattern_lowered {
 #[allow(unused_imports)]
 pub use emit_pattern_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_program_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1697,6 +1863,7 @@ mod emit_program_lowered {
 #[allow(unused_imports)]
 pub use emit_program_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_reach_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1707,6 +1874,7 @@ mod emit_reach_lowered {
 #[allow(unused_imports)]
 pub use emit_reach_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_seeds_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1717,6 +1885,7 @@ mod emit_seeds_lowered {
 #[allow(unused_imports)]
 pub use emit_seeds_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_state_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1727,6 +1896,7 @@ mod emit_state_lowered {
 #[allow(unused_imports)]
 pub use emit_state_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_stmt_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1737,6 +1907,7 @@ mod emit_stmt_lowered {
 #[allow(unused_imports)]
 pub use emit_stmt_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_sums_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1747,6 +1918,7 @@ mod emit_sums_lowered {
 #[allow(unused_imports)]
 pub use emit_sums_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_tables_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1757,6 +1929,7 @@ mod emit_tables_lowered {
 #[allow(unused_imports)]
 pub use emit_tables_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_text_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1767,6 +1940,7 @@ mod emit_text_lowered {
 #[allow(unused_imports)]
 pub use emit_text_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_types_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1777,6 +1951,7 @@ mod emit_types_lowered {
 #[allow(unused_imports)]
 pub use emit_types_lowered::*;
 
+#[allow(unsafe_code)]
 mod emit_walk_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1787,6 +1962,7 @@ mod emit_walk_lowered {
 #[allow(unused_imports)]
 pub use emit_walk_lowered::*;
 
+#[allow(unsafe_code)]
 mod escapes_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1797,6 +1973,7 @@ mod escapes_lowered {
 #[allow(unused_imports)]
 pub use escapes_lowered::*;
 
+#[allow(unsafe_code)]
 mod findings_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1807,6 +1984,7 @@ mod findings_lowered {
 #[allow(unused_imports)]
 pub use findings_lowered::*;
 
+#[allow(unsafe_code)]
 mod fixed_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1817,6 +1995,7 @@ mod fixed_lowered {
 #[allow(unused_imports)]
 pub use fixed_lowered::*;
 
+#[allow(unsafe_code)]
 mod fmt_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1827,6 +2006,7 @@ mod fmt_lowered {
 #[allow(unused_imports)]
 pub use fmt_lowered::*;
 
+#[allow(unsafe_code)]
 mod fold_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1837,6 +2017,7 @@ mod fold_lowered {
 #[allow(unused_imports)]
 pub use fold_lowered::*;
 
+#[allow(unsafe_code)]
 mod fold_bound_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1847,6 +2028,7 @@ mod fold_bound_lowered {
 #[allow(unused_imports)]
 pub use fold_bound_lowered::*;
 
+#[allow(unsafe_code)]
 mod foreign_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1857,6 +2039,7 @@ mod foreign_lowered {
 #[allow(unused_imports)]
 pub use foreign_lowered::*;
 
+#[allow(unsafe_code)]
 mod grammar_decode_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1867,6 +2050,7 @@ mod grammar_decode_lowered {
 #[allow(unused_imports)]
 pub use grammar_decode_lowered::*;
 
+#[allow(unsafe_code)]
 mod grammar_run_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1877,6 +2061,7 @@ mod grammar_run_lowered {
 #[allow(unused_imports)]
 pub use grammar_run_lowered::*;
 
+#[allow(unsafe_code)]
 mod grammar_types_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1887,6 +2072,7 @@ mod grammar_types_lowered {
 #[allow(unused_imports)]
 pub use grammar_types_lowered::*;
 
+#[allow(unsafe_code)]
 mod integers_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1897,6 +2083,7 @@ mod integers_lowered {
 #[allow(unused_imports)]
 pub use integers_lowered::*;
 
+#[allow(unsafe_code)]
 mod interpreter_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1907,6 +2094,7 @@ mod interpreter_lowered {
 #[allow(unused_imports)]
 pub use interpreter_lowered::*;
 
+#[allow(unsafe_code)]
 mod keep_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1917,6 +2105,7 @@ mod keep_lowered {
 #[allow(unused_imports)]
 pub use keep_lowered::*;
 
+#[allow(unsafe_code)]
 mod keeps_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1927,6 +2116,7 @@ mod keeps_lowered {
 #[allow(unused_imports)]
 pub use keeps_lowered::*;
 
+#[allow(unsafe_code)]
 mod leaves_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1937,6 +2127,7 @@ mod leaves_lowered {
 #[allow(unused_imports)]
 pub use leaves_lowered::*;
 
+#[allow(unsafe_code)]
 mod ledger_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1947,6 +2138,7 @@ mod ledger_lowered {
 #[allow(unused_imports)]
 pub use ledger_lowered::*;
 
+#[allow(unsafe_code)]
 mod ledger_defaults_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1957,6 +2149,7 @@ mod ledger_defaults_lowered {
 #[allow(unused_imports)]
 pub use ledger_defaults_lowered::*;
 
+#[allow(unsafe_code)]
 mod ledger_items_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1967,6 +2160,7 @@ mod ledger_items_lowered {
 #[allow(unused_imports)]
 pub use ledger_items_lowered::*;
 
+#[allow(unsafe_code)]
 mod ledger_ops_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1977,6 +2171,7 @@ mod ledger_ops_lowered {
 #[allow(unused_imports)]
 pub use ledger_ops_lowered::*;
 
+#[allow(unsafe_code)]
 mod ledger_text_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1987,6 +2182,7 @@ mod ledger_text_lowered {
 #[allow(unused_imports)]
 pub use ledger_text_lowered::*;
 
+#[allow(unsafe_code)]
 mod lends_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1997,6 +2193,7 @@ mod lends_lowered {
 #[allow(unused_imports)]
 pub use lends_lowered::*;
 
+#[allow(unsafe_code)]
 mod libraries_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2007,6 +2204,7 @@ mod libraries_lowered {
 #[allow(unused_imports)]
 pub use libraries_lowered::*;
 
+#[allow(unsafe_code)]
 mod locks_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2017,6 +2215,7 @@ mod locks_lowered {
 #[allow(unused_imports)]
 pub use locks_lowered::*;
 
+#[allow(unsafe_code)]
 mod logic_alethe_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2027,6 +2226,7 @@ mod logic_alethe_lowered {
 #[allow(unused_imports)]
 pub use logic_alethe_lowered::*;
 
+#[allow(unsafe_code)]
 mod logic_horn_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2037,6 +2237,7 @@ mod logic_horn_lowered {
 #[allow(unused_imports)]
 pub use logic_horn_lowered::*;
 
+#[allow(unsafe_code)]
 mod logic_lia_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2047,6 +2248,7 @@ mod logic_lia_lowered {
 #[allow(unused_imports)]
 pub use logic_lia_lowered::*;
 
+#[allow(unsafe_code)]
 mod logic_normal_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2057,6 +2259,7 @@ mod logic_normal_lowered {
 #[allow(unused_imports)]
 pub use logic_normal_lowered::*;
 
+#[allow(unsafe_code)]
 mod logic_search_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2067,6 +2270,7 @@ mod logic_search_lowered {
 #[allow(unused_imports)]
 pub use logic_search_lowered::*;
 
+#[allow(unsafe_code)]
 mod logic_smtlib_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2077,6 +2281,7 @@ mod logic_smtlib_lowered {
 #[allow(unused_imports)]
 pub use logic_smtlib_lowered::*;
 
+#[allow(unsafe_code)]
 mod lsp_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2087,6 +2292,7 @@ mod lsp_lowered {
 #[allow(unused_imports)]
 pub use lsp_lowered::*;
 
+#[allow(unsafe_code)]
 mod manifest_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2097,6 +2303,7 @@ mod manifest_lowered {
 #[allow(unused_imports)]
 pub use manifest_lowered::*;
 
+#[allow(unsafe_code)]
 mod maps_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2107,6 +2314,7 @@ mod maps_lowered {
 #[allow(unused_imports)]
 pub use maps_lowered::*;
 
+#[allow(unsafe_code)]
 mod migrate_print_throws_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2117,6 +2325,7 @@ mod migrate_print_throws_lowered {
 #[allow(unused_imports)]
 pub use migrate_print_throws_lowered::*;
 
+#[allow(unsafe_code)]
 mod migrate_views3_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2127,6 +2336,7 @@ mod migrate_views3_lowered {
 #[allow(unused_imports)]
 pub use migrate_views3_lowered::*;
 
+#[allow(unsafe_code)]
 mod modules_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2137,6 +2347,7 @@ mod modules_lowered {
 #[allow(unused_imports)]
 pub use modules_lowered::*;
 
+#[allow(unsafe_code)]
 mod names_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2147,6 +2358,7 @@ mod names_lowered {
 #[allow(unused_imports)]
 pub use names_lowered::*;
 
+#[allow(unsafe_code)]
 mod node_numbers_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2157,6 +2369,7 @@ mod node_numbers_lowered {
 #[allow(unused_imports)]
 pub use node_numbers_lowered::*;
 
+#[allow(unsafe_code)]
 mod order_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2167,6 +2380,7 @@ mod order_lowered {
 #[allow(unused_imports)]
 pub use order_lowered::*;
 
+#[allow(unsafe_code)]
 mod panics_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2177,6 +2391,7 @@ mod panics_lowered {
 #[allow(unused_imports)]
 pub use panics_lowered::*;
 
+#[allow(unsafe_code)]
 mod parse_errors_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2187,6 +2402,7 @@ mod parse_errors_lowered {
 #[allow(unused_imports)]
 pub use parse_errors_lowered::*;
 
+#[allow(unsafe_code)]
 mod parse_findings_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2197,6 +2413,7 @@ mod parse_findings_lowered {
 #[allow(unused_imports)]
 pub use parse_findings_lowered::*;
 
+#[allow(unsafe_code)]
 mod parse_notes_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2207,6 +2424,7 @@ mod parse_notes_lowered {
 #[allow(unused_imports)]
 pub use parse_notes_lowered::*;
 
+#[allow(unsafe_code)]
 mod parse_numbers_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2217,6 +2435,7 @@ mod parse_numbers_lowered {
 #[allow(unused_imports)]
 pub use parse_numbers_lowered::*;
 
+#[allow(unsafe_code)]
 mod parsed_tree_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2227,6 +2446,7 @@ mod parsed_tree_lowered {
 #[allow(unused_imports)]
 pub use parsed_tree_lowered::*;
 
+#[allow(unsafe_code)]
 mod parsed_view_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2237,6 +2457,7 @@ mod parsed_view_lowered {
 #[allow(unused_imports)]
 pub use parsed_view_lowered::*;
 
+#[allow(unsafe_code)]
 mod parser_grammar_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2247,6 +2468,7 @@ mod parser_grammar_lowered {
 #[allow(unused_imports)]
 pub use parser_grammar_lowered::*;
 
+#[allow(unsafe_code)]
 mod parser_leaves_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2257,6 +2479,7 @@ mod parser_leaves_lowered {
 #[allow(unused_imports)]
 pub use parser_leaves_lowered::*;
 
+#[allow(unsafe_code)]
 mod paths_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2267,6 +2490,7 @@ mod paths_lowered {
 #[allow(unused_imports)]
 pub use paths_lowered::*;
 
+#[allow(unsafe_code)]
 mod project_check_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2277,6 +2501,7 @@ mod project_check_lowered {
 #[allow(unused_imports)]
 pub use project_check_lowered::*;
 
+#[allow(unsafe_code)]
 mod project_drive_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2287,6 +2512,7 @@ mod project_drive_lowered {
 #[allow(unused_imports)]
 pub use project_drive_lowered::*;
 
+#[allow(unsafe_code)]
 mod project_features_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2297,6 +2523,7 @@ mod project_features_lowered {
 #[allow(unused_imports)]
 pub use project_features_lowered::*;
 
+#[allow(unsafe_code)]
 mod project_lower_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2307,6 +2534,7 @@ mod project_lower_lowered {
 #[allow(unused_imports)]
 pub use project_lower_lowered::*;
 
+#[allow(unsafe_code)]
 mod project_members_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2317,6 +2545,7 @@ mod project_members_lowered {
 #[allow(unused_imports)]
 pub use project_members_lowered::*;
 
+#[allow(unsafe_code)]
 mod project_settings_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2327,6 +2556,7 @@ mod project_settings_lowered {
 #[allow(unused_imports)]
 pub use project_settings_lowered::*;
 
+#[allow(unsafe_code)]
 mod project_tests_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2337,6 +2567,7 @@ mod project_tests_lowered {
 #[allow(unused_imports)]
 pub use project_tests_lowered::*;
 
+#[allow(unsafe_code)]
 mod project_write_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2347,6 +2578,7 @@ mod project_write_lowered {
 #[allow(unused_imports)]
 pub use project_write_lowered::*;
 
+#[allow(unsafe_code)]
 mod proofs_answers_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2357,6 +2589,7 @@ mod proofs_answers_lowered {
 #[allow(unused_imports)]
 pub use proofs_answers_lowered::*;
 
+#[allow(unsafe_code)]
 mod proofs_book_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2367,6 +2600,7 @@ mod proofs_book_lowered {
 #[allow(unused_imports)]
 pub use proofs_book_lowered::*;
 
+#[allow(unsafe_code)]
 mod prove_run_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2377,6 +2611,7 @@ mod prove_run_lowered {
 #[allow(unused_imports)]
 pub use prove_run_lowered::*;
 
+#[allow(unsafe_code)]
 mod prove_terms_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2387,6 +2622,7 @@ mod prove_terms_lowered {
 #[allow(unused_imports)]
 pub use prove_terms_lowered::*;
 
+#[allow(unsafe_code)]
 mod prove_text_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2397,6 +2633,7 @@ mod prove_text_lowered {
 #[allow(unused_imports)]
 pub use prove_text_lowered::*;
 
+#[allow(unsafe_code)]
 mod prover_arena_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2407,6 +2644,7 @@ mod prover_arena_lowered {
 #[allow(unused_imports)]
 pub use prover_arena_lowered::*;
 
+#[allow(unsafe_code)]
 mod prover_calls_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2417,6 +2655,7 @@ mod prover_calls_lowered {
 #[allow(unused_imports)]
 pub use prover_calls_lowered::*;
 
+#[allow(unsafe_code)]
 mod prover_claims_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2427,6 +2666,7 @@ mod prover_claims_lowered {
 #[allow(unused_imports)]
 pub use prover_claims_lowered::*;
 
+#[allow(unsafe_code)]
 mod prover_loops_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2437,6 +2677,7 @@ mod prover_loops_lowered {
 #[allow(unused_imports)]
 pub use prover_loops_lowered::*;
 
+#[allow(unsafe_code)]
 mod prover_passes_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2447,6 +2688,7 @@ mod prover_passes_lowered {
 #[allow(unused_imports)]
 pub use prover_passes_lowered::*;
 
+#[allow(unsafe_code)]
 mod prover_results_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2457,6 +2699,7 @@ mod prover_results_lowered {
 #[allow(unused_imports)]
 pub use prover_results_lowered::*;
 
+#[allow(unsafe_code)]
 mod prover_scope_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2467,6 +2710,7 @@ mod prover_scope_lowered {
 #[allow(unused_imports)]
 pub use prover_scope_lowered::*;
 
+#[allow(unsafe_code)]
 mod prover_solver_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2477,6 +2721,7 @@ mod prover_solver_lowered {
 #[allow(unused_imports)]
 pub use prover_solver_lowered::*;
 
+#[allow(unsafe_code)]
 mod prover_state_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2487,6 +2732,7 @@ mod prover_state_lowered {
 #[allow(unused_imports)]
 pub use prover_state_lowered::*;
 
+#[allow(unsafe_code)]
 mod prover_walk_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2497,6 +2743,7 @@ mod prover_walk_lowered {
 #[allow(unused_imports)]
 pub use prover_walk_lowered::*;
 
+#[allow(unsafe_code)]
 mod render_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2507,6 +2754,7 @@ mod render_lowered {
 #[allow(unused_imports)]
 pub use render_lowered::*;
 
+#[allow(unsafe_code)]
 mod rust_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2517,6 +2765,7 @@ mod rust_lowered {
 #[allow(unused_imports)]
 pub use rust_lowered::*;
 
+#[allow(unsafe_code)]
 mod rustc_words_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2527,6 +2776,7 @@ mod rustc_words_lowered {
 #[allow(unused_imports)]
 pub use rustc_words_lowered::*;
 
+#[allow(unsafe_code)]
 mod sharing_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2537,6 +2787,7 @@ mod sharing_lowered {
 #[allow(unused_imports)]
 pub use sharing_lowered::*;
 
+#[allow(unsafe_code)]
 mod signature_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2547,6 +2798,7 @@ mod signature_lowered {
 #[allow(unused_imports)]
 pub use signature_lowered::*;
 
+#[allow(unsafe_code)]
 mod solver_terms_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2557,6 +2809,7 @@ mod solver_terms_lowered {
 #[allow(unused_imports)]
 pub use solver_terms_lowered::*;
 
+#[allow(unsafe_code)]
 mod sources_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2567,6 +2820,7 @@ mod sources_lowered {
 #[allow(unused_imports)]
 pub use sources_lowered::*;
 
+#[allow(unsafe_code)]
 mod specbook_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2577,6 +2831,7 @@ mod specbook_lowered {
 #[allow(unused_imports)]
 pub use specbook_lowered::*;
 
+#[allow(unsafe_code)]
 mod spelling_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2587,6 +2842,7 @@ mod spelling_lowered {
 #[allow(unused_imports)]
 pub use spelling_lowered::*;
 
+#[allow(unsafe_code)]
 mod surface_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2597,6 +2853,7 @@ mod surface_lowered {
 #[allow(unused_imports)]
 pub use surface_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_ask_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2607,6 +2864,7 @@ mod sv_ask_lowered {
 #[allow(unused_imports)]
 pub use sv_ask_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_check_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2617,6 +2875,7 @@ mod sv_check_lowered {
 #[allow(unused_imports)]
 pub use sv_check_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_cnf_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2627,6 +2886,7 @@ mod sv_cnf_lowered {
 #[allow(unused_imports)]
 pub use sv_cnf_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_elim_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2637,6 +2897,7 @@ mod sv_elim_lowered {
 #[allow(unused_imports)]
 pub use sv_elim_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_fast_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2647,6 +2908,7 @@ mod sv_fast_lowered {
 #[allow(unused_imports)]
 pub use sv_fast_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_lemma_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2657,6 +2919,7 @@ mod sv_lemma_lowered {
 #[allow(unused_imports)]
 pub use sv_lemma_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_nl_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2667,6 +2930,7 @@ mod sv_nl_lowered {
 #[allow(unused_imports)]
 pub use sv_nl_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_num_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2677,6 +2941,7 @@ mod sv_num_lowered {
 #[allow(unused_imports)]
 pub use sv_num_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_pre_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2687,6 +2952,7 @@ mod sv_pre_lowered {
 #[allow(unused_imports)]
 pub use sv_pre_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_proof_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2697,6 +2963,7 @@ mod sv_proof_lowered {
 #[allow(unused_imports)]
 pub use sv_proof_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_row_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2707,6 +2974,7 @@ mod sv_row_lowered {
 #[allow(unused_imports)]
 pub use sv_row_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_sat_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2717,6 +2985,7 @@ mod sv_sat_lowered {
 #[allow(unused_imports)]
 pub use sv_sat_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_simplex_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2727,6 +2996,7 @@ mod sv_simplex_lowered {
 #[allow(unused_imports)]
 pub use sv_simplex_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_smt_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2737,6 +3007,7 @@ mod sv_smt_lowered {
 #[allow(unused_imports)]
 pub use sv_smt_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_smtlib_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2747,6 +3018,7 @@ mod sv_smtlib_lowered {
 #[allow(unused_imports)]
 pub use sv_smtlib_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_strategy_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2757,6 +3029,7 @@ mod sv_strategy_lowered {
 #[allow(unused_imports)]
 pub use sv_strategy_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_theory_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2767,6 +3040,7 @@ mod sv_theory_lowered {
 #[allow(unused_imports)]
 pub use sv_theory_lowered::*;
 
+#[allow(unsafe_code)]
 mod sv_walk_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2777,6 +3051,7 @@ mod sv_walk_lowered {
 #[allow(unused_imports)]
 pub use sv_walk_lowered::*;
 
+#[allow(unsafe_code)]
 mod sync_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2787,6 +3062,7 @@ mod sync_lowered {
 #[allow(unused_imports)]
 pub use sync_lowered::*;
 
+#[allow(unsafe_code)]
 mod sysroot_cache_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2797,6 +3073,7 @@ mod sysroot_cache_lowered {
 #[allow(unused_imports)]
 pub use sysroot_cache_lowered::*;
 
+#[allow(unsafe_code)]
 mod sysroot_package_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2807,6 +3084,7 @@ mod sysroot_package_lowered {
 #[allow(unused_imports)]
 pub use sysroot_package_lowered::*;
 
+#[allow(unsafe_code)]
 mod template_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2817,6 +3095,7 @@ mod template_lowered {
 #[allow(unused_imports)]
 pub use template_lowered::*;
 
+#[allow(unsafe_code)]
 mod tether_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2827,6 +3106,7 @@ mod tether_lowered {
 #[allow(unused_imports)]
 pub use tether_lowered::*;
 
+#[allow(unsafe_code)]
 mod text_tiers_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2837,6 +3117,7 @@ mod text_tiers_lowered {
 #[allow(unused_imports)]
 pub use text_tiers_lowered::*;
 
+#[allow(unsafe_code)]
 mod threads_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2847,6 +3128,7 @@ mod threads_lowered {
 #[allow(unused_imports)]
 pub use threads_lowered::*;
 
+#[allow(unsafe_code)]
 mod throws_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2857,6 +3139,7 @@ mod throws_lowered {
 #[allow(unused_imports)]
 pub use throws_lowered::*;
 
+#[allow(unsafe_code)]
 mod tiers_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2867,6 +3150,7 @@ mod tiers_lowered {
 #[allow(unused_imports)]
 pub use tiers_lowered::*;
 
+#[allow(unsafe_code)]
 mod touch_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2877,6 +3161,7 @@ mod touch_lowered {
 #[allow(unused_imports)]
 pub use touch_lowered::*;
 
+#[allow(unsafe_code)]
 mod traits_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2887,6 +3172,7 @@ mod traits_lowered {
 #[allow(unused_imports)]
 pub use traits_lowered::*;
 
+#[allow(unsafe_code)]
 mod tree_build_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2897,6 +3183,7 @@ mod tree_build_lowered {
 #[allow(unused_imports)]
 pub use tree_build_lowered::*;
 
+#[allow(unsafe_code)]
 mod trust_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2907,6 +3194,7 @@ mod trust_lowered {
 #[allow(unused_imports)]
 pub use trust_lowered::*;
 
+#[allow(unsafe_code)]
 mod ty_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2917,6 +3205,7 @@ mod ty_lowered {
 #[allow(unused_imports)]
 pub use ty_lowered::*;
 
+#[allow(unsafe_code)]
 mod type_rules_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2927,6 +3216,7 @@ mod type_rules_lowered {
 #[allow(unused_imports)]
 pub use type_rules_lowered::*;
 
+#[allow(unsafe_code)]
 mod types_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2937,6 +3227,7 @@ mod types_lowered {
 #[allow(unused_imports)]
 pub use types_lowered::*;
 
+#[allow(unsafe_code)]
 mod view_changes_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2947,6 +3238,7 @@ mod view_changes_lowered {
 #[allow(unused_imports)]
 pub use view_changes_lowered::*;
 
+#[allow(unsafe_code)]
 mod views_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2957,6 +3249,7 @@ mod views_lowered {
 #[allow(unused_imports)]
 pub use views_lowered::*;
 
+#[allow(unsafe_code)]
 mod written_lowered {
     #[allow(unused_imports)]
     use super::*;

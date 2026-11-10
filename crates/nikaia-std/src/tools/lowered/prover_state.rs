@@ -75,7 +75,7 @@ impl ProverState {
             if unshadowed && returned.is_some() {
                 let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
                 given.insert(result_name(), nikaia_std::index::or(returned, || 0));
-                let goal = arena.substitute(nikaia_std::index::get(&posts, (index) as usize).term, &given);
+                let goal = arena.substitute(unsafe { nikaia_std::proven::read(&posts, (index) as usize) }.term, &given);
                 shown = matches!(ask(&arena, &scope.facts, goal), SolverAnswer::Proved);
             }
             if !shown { self.broken.insert((nikaia_std::block::Text::from(owner.to_string()), index)); }
@@ -308,17 +308,17 @@ impl ProverState {
     pub fn precondition_call(&mut self, arena: &mut TermArena, words: &winnow_grammar::InternerContext, callee: &str, params: &[String], claims: &[PreClaim], args: &[Expr], of_std: bool, span: Span, scope: &ProverScope, at: &ProverWhere, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String) -> CallOutcome {
         let mut outcome = CallOutcome { reach: CallReach::Proved, findings: vec![], held: vec![] };
         for index in 0..claims.len() as i64 {
-            let pre = nikaia_std::index::get(&claims, (index) as usize);
+            let pre = unsafe { nikaia_std::proven::read(&claims, (index) as usize) };
             let mut given_by: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
             let mut k: i64 = 0;
             for arg in args.iter() {
                 if ((k) as usize) >= params.len() { break; }
-                let param = nikaia_std::index::get(&params, (k) as usize);
+                let param = unsafe { nikaia_std::proven::read(&params, (k) as usize) };
                 let term = lin_term(arg, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&self.pinned, scope, name) }, &mut arena.nodes);
                 if term.is_some() { given_by.insert(nikaia_std::block::Text::from(param.to_string()), nikaia_std::index::or(term, || 0)); }
                 let given_length = length_given(arena, words, arg, scope, &self.pinned);
                 if given_length.is_some() { given_by.insert(length_of(param), nikaia_std::index::or(given_length, || 0)); }
-                k += 1;
+                k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
             }
             let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
             arena.variables(pre.term, &mut read);
@@ -421,7 +421,7 @@ pub fn postconditions_for(arena: &mut TermArena, posts: &[PostClaim], params: &[
     let mut k: i64 = 0;
     for arg in args.iter() {
         if ((k) as usize) >= params.len() { break; }
-        let param = nikaia_std::index::get(&params, (k) as usize);
+        let param = unsafe { nikaia_std::proven::read(&params, (k) as usize) };
         let term = lin_term(arg, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(pinned, scope, name) }, &mut arena.nodes);
         if term.is_some() { args_given.insert(nikaia_std::block::Text::from(param.to_string()), nikaia_std::index::or(term, || 0)); }
         match arg {
@@ -435,7 +435,7 @@ pub fn postconditions_for(arena: &mut TermArena, posts: &[PostClaim], params: &[
             },
             _ => { },
         }
-        k += 1;
+        k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
     }
     let mut read_all: collections::BTreeSet<String> = collections::BTreeSet::new();
     for post in posts.iter() { arena.variables(post.term, &mut read_all); }
@@ -584,7 +584,7 @@ pub fn length_given(arena: &mut TermArena, words: &winnow_grammar::InternerConte
                 Expr::Variable(callee, _) => {
                     let callee = *callee;
                     let named = words.resolve(callee);
-                    if named == "Bytes" && !scope.locals.contains(named) { return length_given(arena, words, nikaia_std::index::get(&args, 0), scope, pinned); }
+                    if named == "Bytes" && !scope.locals.contains(named) { return length_given(arena, words, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, scope, pinned); }
                 },
                 _ => { },
             }
@@ -604,9 +604,9 @@ pub(crate) fn given_paths(arena: &mut TermArena, words: &winnow_grammar::Interne
     for v in read.iter() {
         if given_by.contains_key(v) { continue; }
         for k in 0..params.len() as i64 {
-            if ((k) as usize) < args.len() && v.starts_with(&*format!("{}.", *nikaia_std::index::get(&params, (k) as usize))) {
-                let rest = nikaia_std::block::Text::from(nikaia_std::index::or(v.strip_prefix(&*format!("{}.", *nikaia_std::index::get(&params, (k) as usize))), || "").to_string());
-                let term = given_path(arena, words, nikaia_std::index::get(&args, (k) as usize), &rest, scope, pinned);
+            if ((k) as usize) < args.len() && v.starts_with(&*format!("{}.", *unsafe { nikaia_std::proven::read(&params, (k) as usize) })) {
+                let rest = nikaia_std::block::Text::from(nikaia_std::index::or(v.strip_prefix(&*format!("{}.", *unsafe { nikaia_std::proven::read(&params, (k) as usize) })), || "").to_string());
+                let term = given_path(arena, words, unsafe { nikaia_std::proven::read(&args, (k) as usize) }, &rest, scope, pinned);
                 if term.is_some() { given_by.insert(nikaia_std::block::Text::from(v.to_string()), nikaia_std::index::or(term, || 0)); }
             }
         }
@@ -714,9 +714,9 @@ pub(crate) fn returned_before(before_return: &collections::BTreeMap<i64, String>
 pub(crate) fn without_full_stops(text: &str) -> String {
     let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
     let mut end = c.len() as i64;
-    while end > 0 && *nikaia_std::index::get(&c, nikaia_std::index::at(end - 1)) == '.' { end -= 1; }
+    while end > 0 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::sub::<i64>(end, 1)) as usize) } == '.' { end = unsafe { nikaia_std::proven::sub::<i64>(end, 1) }; }
     let mut out: String = String::from("");
-    for k in 0..end { out.push(*nikaia_std::index::get(&c, (k) as usize)); }
+    for k in 0..end { out.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }
     out
 }
 

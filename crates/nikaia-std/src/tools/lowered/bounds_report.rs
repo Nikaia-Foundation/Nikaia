@@ -104,8 +104,8 @@ pub fn bounds_report_derived(derived: &[String], source: &str) -> Vec<String> {
         let parts: Vec<&str> = row.split("\t").map(|p| { p }).collect::<Vec<_>>();
         if parts.len() != 3 { continue; }
         let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let parts = parts;
-        for byte in (*nikaia_std::index::get(&parts, 2)).split(' ') { lines.push(nikaia_std::block::Text::from(bounds_report_line(source, nikaia_std::index::or(text::parse_i64(byte), || 0)).to_string())); }
-        out.push(format!("{}: {}, proved at the calls on lines {}", *nikaia_std::index::get(&parts, 0), *nikaia_std::index::get(&parts, 1), nikaia_std::block::Text::from(lines.join(", "))));
+        for byte in (*unsafe { nikaia_std::proven::read(&parts, (2) as usize) }).split(' ') { lines.push(nikaia_std::block::Text::from(bounds_report_line(source, nikaia_std::index::or(text::parse_i64(byte), || 0)).to_string())); }
+        out.push(format!("{}: {}, proved at the calls on lines {}", *unsafe { nikaia_std::proven::read(&parts, (0) as usize) }, *unsafe { nikaia_std::proven::read(&parts, (1) as usize) }, nikaia_std::block::Text::from(lines.join(", "))));
     }
     out
 }
@@ -140,12 +140,12 @@ pub fn bounds_report_trace(source: &str, path: &str, asked: &str) -> Vec<i64> {
     if wanted == 1 { from = 0; }
     let mut at: i64 = 0;
     while ((at) as usize) < source.as_bytes().len() {
-        if *nikaia_std::index::get(&source.as_bytes(), (at) as usize) == 10 {
-            if seen == wanted { return vec![from, at + 1]; }
-            seen += 1;
-            if seen == wanted { from = at + 1; }
+        if *unsafe { nikaia_std::proven::read(&source.as_bytes(), (at) as usize) } == 10 {
+            if seen == wanted { return vec![from, unsafe { nikaia_std::proven::add::<i64>(at, 1) }]; }
+            seen = unsafe { nikaia_std::proven::add::<i64>(seen, 1) };
+            if seen == wanted { from = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     if from < 0 { return vec![]; }
     vec![from, source.as_bytes().len() as i64]
@@ -250,7 +250,7 @@ pub(crate) fn bounds_report_site(expr: &Expr, line: i64, args: &[FnArg], body: &
                 walk.seen.insert(key);
                 let proved = facts.proven_indices.contains(&key);
                 let mut blocked: Option<String> = None;
-                if !proved { blocked = Some(blocked_index(receiver, nikaia_std::index::get(&given, 0), args, body, words, walk.callers)); }
+                if !proved { blocked = Some(blocked_index(receiver, unsafe { nikaia_std::proven::read(&given, (0) as usize) }, args, body, words, walk.callers)); }
                 walk.sites.push(BoundsReportSite { line, text: written_expression(words, expr), index: true, proved, blocked });
             }
         },

@@ -26,7 +26,7 @@ pub(crate) fn bm_class(words: &winnow_grammar::InternerContext, rules: &collecti
         Pattern::Literal(text) => {
             let chars: Vec<scalar> = nikaia_std::list::chars(text.chars());
             if chars.len() != 1 { return None; }
-            let code = *nikaia_std::index::get(&chars, 0) as i64;
+            let code = *unsafe { nikaia_std::proven::read(&chars, (0) as usize) } as i64;
             Some(bm_range(code, code))
         },
         _ => None,
@@ -73,21 +73,21 @@ pub(crate) fn bm_bound(words: &winnow_grammar::InternerContext, rules: &collecti
             if words.resolve(name) != "dec" || rules.contains("dec") || generics.len() != 1 { return; }
             if args.len() != 1 { return; }
             let mut digits: i64 = 1;
-            match &nikaia_std::index::get(&args, 0).node {
+            match &unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node {
                 Pattern::Repeat { pat, rep } => {
                     let pat = nikaia_std::boxed::open(pat);
                     if !bm_is_digit((bm_class(words, rules, &pat.node)).as_ref()) { return; }
                     digits = nikaia_std::index::or(bm_most(rep), || 0);
                     if bm_most(rep).is_none() { return; }
                 },
-                _ => { if !bm_is_digit((bm_class(words, rules, &nikaia_std::index::get(&args, 0).node)).as_ref()) { return; } },
+                _ => { if !bm_is_digit((bm_class(words, rules, &unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node)).as_ref()) { return; } },
             }
             if digits > 18 { return; }
             let mut top: i64 = 1;
             let mut times: i64 = 0;
             while times < digits {
                 top = top * 10;
-                times += 1;
+                times = unsafe { nikaia_std::proven::add::<i64>(times, 1) };
             }
             found.given.insert(nikaia_std::block::Text::from(bound_name.to_string()), bm_range(0, top - 1));
         },

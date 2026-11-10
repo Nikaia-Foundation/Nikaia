@@ -8,8 +8,8 @@ pub(crate) fn check_core_ops_view(name: &str) -> Ty { Ty::Named { name: nikaia_s
 pub(crate) fn check_core_ops_base(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
     if parts.is_empty() { return nikaia_std::block::Text::from(name.to_string()); }
-    let last = parts.len() as i64 - 1;
-    format!("{}", *nikaia_std::index::get(&parts, nikaia_std::index::at(last)))
+    let last = unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) };
+    format!("{}", *unsafe { nikaia_std::proven::read(&parts, (last) as usize) })
 }
 
 pub(crate) fn check_core_ops_a_lent_copy(ty: &Ty) -> bool {
@@ -744,7 +744,7 @@ pub(crate) fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckW
         _ => vec![],
     };
     if handed.len() != 1 { return; }
-    let parts = match *nikaia_std::index::get(&handed, 0) {
+    let parts = match *unsafe { nikaia_std::proven::read(&handed, (0) as usize) } {
         Ty::Tuple(ref items) => items.len() as i64,
         _ => 0,
     };
@@ -756,7 +756,7 @@ pub(crate) fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckW
         names.push(if name.starts_with("__nikaia_tuple") { String::from("(…)") } else { nikaia_std::block::Text::from(name.to_string()) });
     }
     let joined = nikaia_std::block::Text::from(names.join(", "));
-    let notes: Vec<String> = vec![nikaia_std::block::Text::from(format!("The place hands it one value, a `{}`, and a lambda takes what it is handed.", (*nikaia_std::index::get(&handed, 0)).text()).to_string())];
+    let notes: Vec<String> = vec![nikaia_std::block::Text::from(format!("The place hands it one value, a `{}`, and a lambda takes what it is handed.", (*unsafe { nikaia_std::proven::read(&handed, (0) as usize) }).text()).to_string())];
     let help: String = format!("Take the tuple apart in the parameter, with brackets around the names: `fn(({})) {{ … }}`.", joined); #[allow(clippy::redundant_locals)] let notes = notes;
     state.findings.push(check_refusal("NK1101", span, format!("This lambda takes {} arguments, but it is handed one tuple.", names.len() as i64), notes, Some(help)));
 }
@@ -811,12 +811,12 @@ pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &Chec
     for p in params.iter() {
         let p = *p;
         let mut ty: Ty = Ty::Unknown;
-        if at < given.len() as i64 { ty = (*nikaia_std::index::get(&given, (at) as usize)).clone(); }
+        if at < given.len() as i64 { ty = (*unsafe { nikaia_std::proven::read(&given, (at) as usize) }).clone(); }
         let local = state.lambda_parameter(world, p, mutable, ty, span);
         if local.ty.is_unknown() { state.flow.unknown_bound.insert(local.id); }
         names.push(nikaia_std::block::Text::from(local.name.to_string()));
         frame.push(local);
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     for name in names.iter() { state.nameable(name, span, "a lambda's argument"); }
     let depth = state.scope.len() as i64;
@@ -855,7 +855,7 @@ pub(crate) fn check_core_ops_lambda_tail_wrapped<H: CheckHost>(state: &mut Check
     };
     let nullable = matches!(want, Ty::Nullable(_));
     if !nullable || body.stmts.is_empty() || a_body_never_ends(body) { return; }
-    let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
+    let last = unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) };
     let at = Span { start: last.span.start, end: last.span.end };
     match &last.node {
         Stmt::Expr(value) => { check_function_wrap_tail(state, world, host, tail, &want, value, &at); },

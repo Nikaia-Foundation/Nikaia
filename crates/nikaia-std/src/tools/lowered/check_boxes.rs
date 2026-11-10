@@ -23,7 +23,7 @@ impl CheckState {
                     written.push(nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()));
                 }
                 for index in 0..parts.len() as i64 {
-                    let part = nikaia_std::index::get(&parts, nikaia_std::index::at(index));
+                    let part = unsafe { nikaia_std::proven::read(&parts, (index) as usize) };
                     if !self.boxed_part(world, path, index) || binds_a_part(&part) { self.a_pattern_inside_a_box_at(world, &part, span, &at); } else {
                         let mut why: &'static str = "";
                         let mut reported = true;
@@ -53,9 +53,9 @@ impl CheckState {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..parts.len() as i64 {
-                    let part = nikaia_std::index::get(&parts, nikaia_std::index::at(at));
+                    let part = unsafe { nikaia_std::proven::read(&parts, (at) as usize) };
                     match part {
-                        MatchPattern::Path(one) => { if one.len() == 1 && self.boxed_part(world, path, at) { out.push(nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&one, 0)).to_string())); } },
+                        MatchPattern::Path(one) => { if one.len() == 1 && self.boxed_part(world, path, at) { out.push(nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&one, (0) as usize) }).to_string())); } },
                         MatchPattern::Tuple { .. } => { if !self.boxed_part(world, path, at) { for name in self.boxed_names(world, &part) { out.push(name); } } },
                         _ => { },
                     }
@@ -71,12 +71,12 @@ impl CheckState {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..parts.len() as i64 {
-                    let part = nikaia_std::index::get(&parts, nikaia_std::index::at(at));
+                    let part = unsafe { nikaia_std::proven::read(&parts, (at) as usize) };
                     if self.boxed_part(world, path, at) && !binds_a_part(&part) {
                         let mut owner: String = String::from("");
                         match part {
-                            MatchPattern::Tuple { path, .. } => { if path.len() >= 2 { owner = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string()); } },
-                            MatchPattern::Named { path, .. } => { if path.len() >= 2 { owner = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string()); } },
+                            MatchPattern::Tuple { path, .. } => { if path.len() >= 2 { owner = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 2)) as usize) }).to_string()); } },
+                            MatchPattern::Named { path, .. } => { if path.len() >= 2 { owner = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 2)) as usize) }).to_string()); } },
                             _ => { },
                         }
                         if !owner.is_empty() {
@@ -97,7 +97,7 @@ impl CheckState {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..parts.len() as i64 {
-                    let part = nikaia_std::index::get(&parts, nikaia_std::index::at(at));
+                    let part = unsafe { nikaia_std::proven::read(&parts, (at) as usize) };
                     if self.boxed_part(world, path, at) && !binds_a_part(&part) { for name in pattern_names(world, &part) { out.push(name); } } else { self.names_inside_boxes(world, &part, out); }
                 }
             },
@@ -109,8 +109,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn boxed_part(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
         if path.len() < 2 { return false; }
-        let owner = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string());
-        let variant = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_string());
+        let owner = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 2)) as usize) }).to_string());
+        let variant = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 1)) as usize) }).to_string());
         if !self.facts.boxed_members.contains_key(&owner) { return false; }
         let members = nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.boxed_members, &owner) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -124,7 +124,7 @@ impl CheckState {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..parts.len() as i64 {
-                    let part = nikaia_std::index::get(&parts, nikaia_std::index::at(at));
+                    let part = unsafe { nikaia_std::proven::read(&parts, (at) as usize) };
                     if self.boxed_part(world, path, at) && !binds_a_part(&part) { return true; }
                     if self.looks_inside_a_box(world, &part) { return true; }
                 }
@@ -282,8 +282,8 @@ pub(crate) fn check_boxes_qualified(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 // this was written - see `contracts::sync`.
 pub(crate) fn check_boxes_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) {
     let n = path.len() as i64;
-    if n == 1 { out.insert(nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string())); } else if n >= 2 {
-        out.insert(format!("{}::{}", world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 2))), world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 1)))));
+    if n == 1 { out.insert(nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string())); } else if n >= 2 {
+        out.insert(format!("{}::{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) }), world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) })));
         let mut whole: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for symbol in path.iter() {
             let symbol = *symbol;
@@ -298,7 +298,7 @@ pub(crate) fn check_boxes_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, p
 pub(crate) fn check_boxes_a_whole_struct(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, name: &str) -> bool {
     match pattern {
         MatchPattern::Named { path, fields, .. } => {
-            if path.len() != 1 || format!("{}", world.words.resolve(*nikaia_std::index::get(&path, 0))) != name { return false; }
+            if path.len() != 1 || format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) })) != name { return false; }
             for field in fields.iter() { if !catches_everything(&field.pat) { return false; } }
             true
         },

@@ -43,8 +43,8 @@ impl EmitState {
     pub fn is_boxed_field(&self, owner: &str, field: &str) -> bool {
         let parts: Vec<&str> = owner.split("::").collect::<Vec<_>>();
         if parts.len() >= 2 {
-            let ty = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 2))).to_string());
-            let variant = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
+            let ty = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 2)) as usize) }).to_string());
+            let variant = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string());
             if self.facts.boxed_members.contains_key(&ty) { return self.is_boxed(&ty, &boxed_member(&variant, -1, field)); }
         } ::core::mem::drop(parts);
         self.is_boxed(owner, field)
@@ -56,8 +56,8 @@ impl EmitState {
     pub fn boxed_part(&self, world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
         if path.len() < 2 { return false; }
         let names = emit_segments(world, path);
-        let owner = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 2))).to_string());
-        let variant = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 1))).to_string());
+        let owner = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(names.len() as i64, 2) }))).to_string());
+        let variant = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (nikaia_std::proven::sub::<i64>(names.len() as i64, 1)) as usize) }).to_string());
         self.facts.boxed_members.contains_key(&owner) && self.is_boxed(&owner, &boxed_member(&variant, at, ""))
     }
     pub fn looks_inside_a_box(&self, world: &EmitWorld<'_, '_, '_, '_>, pattern: &MatchPattern) -> bool {
@@ -69,8 +69,8 @@ impl EmitState {
     }
     pub(crate) fn looks_inside_parts(&self, world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol], parts: &[MatchPattern]) -> bool {
         for at in 0..parts.len() as i64 {
-            if self.boxed_part(world, path, at) && !binds_a_part(nikaia_std::index::get(&parts, nikaia_std::index::at(at))) { return true; }
-            if self.looks_inside_a_box(world, nikaia_std::index::get(&parts, nikaia_std::index::at(at))) { return true; }
+            if self.boxed_part(world, path, at) && !binds_a_part(unsafe { nikaia_std::proven::read(&parts, (at) as usize) }) { return true; }
+            if self.looks_inside_a_box(world, unsafe { nikaia_std::proven::read(&parts, (at) as usize) }) { return true; }
         }
         false
     }
@@ -103,7 +103,7 @@ impl EmitState {
         if !ledger.functions.contains_key(callee) {
             let ends = method_keys(index, callee);
             if ends.is_empty() { return None; }
-            found = nikaia_std::block::Text::from((*nikaia_std::index::get(&ends, 0)).to_string());
+            found = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&ends, (0) as usize) }).to_string());
         }
         let held = match ledger.functions.get(&found) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let signature = match match held.signature.as_ref() {
@@ -122,7 +122,7 @@ impl EmitState {
     pub fn takes_a_size(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, at: i64) -> bool {
         let params = match self.foreign_params.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false };
         if at < 0 || at >= params.len() as i64 { return false; }
-        let ty = (*nikaia_std::index::get(&params, nikaia_std::index::at(at))).clone();
+        let ty = (*unsafe { nikaia_std::proven::read(&params, (at) as usize) }).clone();
         !ty.is_view && !ty.is_slice && world.words.resolve(ty.name) == "usize"
     }
     pub fn handle_named(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> Option<String> {

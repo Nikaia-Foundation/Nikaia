@@ -19,10 +19,10 @@ pub fn check_float_literal_fits(value: &Expr, want: &Ty) -> bool {
                 return match check_peeled(value) {
                     Expr::ListLit { items, .. } => {
                         let mut all = !items.is_empty();
-                        for item in items.iter() { if !check_float_literal_fits(item, nikaia_std::index::get(&args, 0)) { all = false; } }
+                        for item in items.iter() { if !check_float_literal_fits(item, unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { all = false; } }
                         all
                     },
-                    Expr::ListRepeat { value: repeated, .. } => { let repeated = nikaia_std::boxed::open(repeated); check_float_literal_fits(repeated, nikaia_std::index::get(&args, 0)) },
+                    Expr::ListRepeat { value: repeated, .. } => { let repeated = nikaia_std::boxed::open(repeated); check_float_literal_fits(repeated, unsafe { nikaia_std::proven::read(&args, (0) as usize) }) },
                     _ => false,
                 };
             }
@@ -50,10 +50,10 @@ pub(crate) fn check_floats_beyond_f32(value: &Expr, want: &Ty) -> bool {
                 return match check_peeled(value) {
                     Expr::ListLit { items, .. } => {
                         let mut any = false;
-                        for item in items.iter() { if check_floats_beyond_f32(item, nikaia_std::index::get(&args, 0)) { any = true; } }
+                        for item in items.iter() { if check_floats_beyond_f32(item, unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { any = true; } }
                         any
                     },
-                    Expr::ListRepeat { value: repeated, .. } => { let repeated = nikaia_std::boxed::open(repeated); check_floats_beyond_f32(repeated, nikaia_std::index::get(&args, 0)) },
+                    Expr::ListRepeat { value: repeated, .. } => { let repeated = nikaia_std::boxed::open(repeated); check_floats_beyond_f32(repeated, unsafe { nikaia_std::proven::read(&args, (0) as usize) }) },
                     _ => false,
                 };
             }
@@ -97,7 +97,7 @@ impl CheckState {
             let mut index: i64 = 0;
             for slot in slots.iter() {
                 if waiting < 0 && slot.refusal.is_none() && slot.found == *found && slot.want == *want { waiting = index; }
-                index = index + 1;
+                index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
             }
         }
         let code = expect_code(what);
@@ -132,12 +132,12 @@ impl CheckState {
         let mut at = before;
         while at < self.findings.len() as i64 {
             let message = nikaia_std::block::Text::from(nikaia_std::index::get(&self.findings, nikaia_std::index::at(at)).message.replace(&*shown, &*said));
-            self.findings[nikaia_std::index::at(at)].message = message;
-            if nikaia_std::index::get(&self.findings, nikaia_std::index::at(at)).help.is_some() {
-                let help = nikaia_std::block::Text::from(nikaia_std::index::or(nikaia_std::index::get(&self.findings, nikaia_std::index::at(at)).help.as_deref(), || "").replace(&*shown, &*said));
-                self.findings[nikaia_std::index::at(at)].help = Some(help);
+            (*unsafe { nikaia_std::proven::slot(&mut self.findings, (at) as usize) }).message = message;
+            if unsafe { nikaia_std::proven::read(&self.findings, (at) as usize) }.help.is_some() {
+                let help = nikaia_std::block::Text::from(nikaia_std::index::or(unsafe { nikaia_std::proven::read(&self.findings, (at) as usize) }.help.as_deref(), || "").replace(&*shown, &*said));
+                (*unsafe { nikaia_std::proven::slot(&mut self.findings, (at) as usize) }).help = Some(help);
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -220,7 +220,7 @@ impl CheckState {
             }
         }
         let kept = match self.a_view_kept(found, want, (named).as_deref(), keeper) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let last = self.findings.len() as i64 - 1;
+        let last = unsafe { nikaia_std::proven::sub::<i64>(self.findings.len() as i64, 1) };
         for note in kept.notes.iter() { self.findings[nikaia_std::index::at(last)].notes.push(nikaia_std::block::Text::from(note.to_string())); }
         self.findings[nikaia_std::index::at(last)].help = Some(nikaia_std::block::Text::from(kept.help.to_string()));
     }

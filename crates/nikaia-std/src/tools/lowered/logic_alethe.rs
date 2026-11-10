@@ -99,7 +99,7 @@ pub(crate) fn lg_inserted(rest: &[LgPart], at: i64, part: LgPart) -> Vec<LgPart>
         let one = *one;
         if index == place { parts.push(LgPart { id: part.id, positive: part.positive }); }
         parts.push(LgPart { id: one.id, positive: one.positive });
-        index += 1;
+        index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     if place >= rest.len() as i64 { parts.push(part); }
     parts
@@ -107,13 +107,13 @@ pub(crate) fn lg_inserted(rest: &[LgPart], at: i64, part: LgPart) -> Vec<LgPart>
 
 pub(crate) fn lg_opened(arena: &mut TermArena, proof: &mut LgProof, clause: &LgClause, at: i64) -> Option<Vec<LgClause>> {
     let id = nikaia_std::index::get(&clause.parts, nikaia_std::index::at(at)).id;
-    let positive = nikaia_std::index::get(&clause.parts, nikaia_std::index::at(at)).positive;
+    let positive = unsafe { nikaia_std::proven::read(&clause.parts, (at) as usize) }.positive;
     let mut rest: Vec<LgPart> = vec![];
     let mut index: i64 = 0;
     for one in clause.parts.iter() {
         let one = *one;
         if index != at { rest.push(LgPart { id: one.id, positive: one.positive }); }
-        index += 1;
+        index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     let written = lg_literal(&arena, &LgPart { id, positive });
     let node = arena.at(id);
@@ -253,7 +253,7 @@ pub(crate) fn lg_atom(lin: &LgLin) -> String {
         if k == 1 { items.push(lg_symbol(name)); } else { items.push(format!("(* {} {})", lg_alethe_number(k), lg_symbol(name))); }
     }
     if lin.constant != 0 || items.is_empty() { items.push(lg_alethe_number(lin.constant)); }
-    if items.len() == 1 { return format!("(<= {} 0)", *nikaia_std::index::get(&items, 0)); }
+    if items.len() == 1 { return format!("(<= {} 0)", *unsafe { nikaia_std::proven::read(&items, (0) as usize) }); }
     format!("(<= (+ {}) 0)", nikaia_std::block::Text::from(items.join(" ")))
 }
 
@@ -325,8 +325,8 @@ pub(crate) fn lg_choice(arena: &mut TermArena, proof: &mut LgProof, chosen: &[Lg
         made_lin.push(made.bound.clone());
     }
     if made_lin.is_empty() { return None; }
-    let last = (*nikaia_std::index::get(&made_lin, nikaia_std::index::at(made_lin.len() as i64 - 1))).clone();
-    let last_atom = nikaia_std::block::Text::from((*nikaia_std::index::get(&made_atom, nikaia_std::index::at(made_atom.len() as i64 - 1))).to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut lemmas = lemmas;
+    let last = (*unsafe { nikaia_std::proven::read(&made_lin, (nikaia_std::proven::sub::<i64>(made_lin.len() as i64, 1)) as usize) }).clone();
+    let last_atom = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&made_atom, (nikaia_std::proven::sub::<i64>(made_atom.len() as i64, 1)) as usize) }).to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut lemmas = lemmas;
     if !last.terms.is_empty() || last.constant <= 0 { return None; }
     lemmas.push(proof.step(&format!("(cl (not {})) :rule la_generic :args (1)", last_atom)));
     let step = proof.step(&format!("(cl{}) :rule resolution :premises ({})", lg_spaced(&used), nikaia_std::block::Text::from(lemmas.join(" "))));
@@ -416,7 +416,7 @@ pub(crate) fn lg_hulled(arena: &mut TermArena, proof: &mut LgProof, clause: &LgC
         let mut premises: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(clause.step.to_string())], nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut lemmas = lemmas; #[allow(unused_mut, clippy::redundant_locals)] let mut lits = lits;
         for lemma in lemmas.iter() { premises.push(nikaia_std::block::Text::from(lemma.to_string())); }
         let step = proof.step(&format!("(cl{}) :rule resolution :premises ({})", lg_spaced(&lits), nikaia_std::block::Text::from(premises.join(" "))));
-        if lits.len() == 1 && *nikaia_std::index::get(&lits, 0) == lg_term(&arena, hull) { out.push(LgClause { step, parts: vec![LgPart { id: hull, positive: true }] }); }
+        if lits.len() == 1 && *unsafe { nikaia_std::proven::read(&lits, (0) as usize) } == lg_term(&arena, hull) { out.push(LgClause { step, parts: vec![LgPart { id: hull, positive: true }] }); }
     }
     out
 }
@@ -435,13 +435,13 @@ pub(crate) fn lg_below(search: &mut LgSearch, depth: i64, chosen: &mut Vec<LgPar
     let refuted = lg_choice(&mut search.arena, &mut search.proof, &chosen);
     if refuted.is_some() { return std::convert::identity(refuted); }
     if depth >= search.clauses.len() as i64 { return None; }
-    let clause = LgClause { step: nikaia_std::block::Text::from(nikaia_std::index::get(&search.clauses, nikaia_std::index::at(depth)).step.to_string()), parts: nikaia_std::index::get(&search.clauses, nikaia_std::index::at(depth)).parts.copy_owned() };
+    let clause = LgClause { step: nikaia_std::block::Text::from(nikaia_std::index::get(&search.clauses, nikaia_std::index::at(depth)).step.to_string()), parts: unsafe { nikaia_std::proven::read(&search.clauses, (depth) as usize) }.parts.copy_owned() };
     #[allow(unused_mut)] let mut steps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut all_lits: Vec<Vec<String>> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps;
     for part in clause.parts.iter() {
         let part = *part;
         chosen.push(LgPart { id: part.id, positive: part.positive });
-        let found = lg_below(search, depth + 1, chosen);
+        let found = lg_below(search, unsafe { nikaia_std::proven::add::<i64>(depth, 1) }, chosen);
         chosen.pop();
         let here = match found { Some(__nikaia_value) => __nikaia_value, None => return None };
         let pivot = lg_negation(&lg_literal(&search.arena, &part)); #[allow(clippy::redundant_locals)] let here = here;
@@ -454,8 +454,8 @@ pub(crate) fn lg_below(search: &mut LgSearch, depth: i64, chosen: &mut Vec<LgPar
     for part in clause.parts.iter() {
         let part = *part;
         let pivot = lg_negation(&lg_literal(&search.arena, &part));
-        for lit in (*nikaia_std::index::get(&all_lits, (at) as usize)).iter() { if *lit != pivot && !lg_has(&lits, lit) { lits.push(nikaia_std::block::Text::from(lit.to_string())); } }
-        at += 1;
+        for lit in (*unsafe { nikaia_std::proven::read(&all_lits, (at) as usize) }).iter() { if *lit != pivot && !lg_has(&lits, lit) { lits.push(nikaia_std::block::Text::from(lit.to_string())); } }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     let mut premises: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(clause.step.to_string())], nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut lits = lits;
     for one in steps.iter() { premises.push(nikaia_std::block::Text::from(one.to_string())); }
@@ -476,14 +476,14 @@ pub fn lg_alethe_write(source: &TermArena, facts: &[i64], goal: i64) -> Option<S
     pending.push(LgClause { step, parts: vec![LgPart { id: goal, positive: false }] });
     let mut clauses: Vec<LgClause> = vec![];
     while !pending.is_empty() {
-        let clause = (*nikaia_std::index::get(&pending, nikaia_std::index::at(pending.len() as i64 - 1))).clone();
+        let clause = (*unsafe { nikaia_std::proven::read(&pending, (nikaia_std::proven::sub::<i64>(pending.len() as i64, 1)) as usize) }).clone();
         pending.pop();
         let mut open: i64 = -1;
         let mut index: i64 = 0;
         for part in clause.parts.iter() {
             let part = *part;
             if open < 0 && !lg_is_literal(&arena, &part) { open = index; }
-            index += 1;
+            index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
         }
         if open < 0 { clauses.push(clause); } else {
             let more = match lg_opened(&mut arena, &mut proof, &clause, open) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -494,8 +494,8 @@ pub fn lg_alethe_write(source: &TermArena, facts: &[i64], goal: i64) -> Option<S
     let mut reversed: Vec<LgClause> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut back = clauses.len() as i64;
     while back > 0 {
-        back -= 1;
-        reversed.push((*nikaia_std::index::get(&clauses, nikaia_std::index::at(back))).clone());
+        back = unsafe { nikaia_std::proven::sub::<i64>(back, 1) };
+        reversed.push((*unsafe { nikaia_std::proven::read(&clauses, (back) as usize) }).clone());
     }
     let mut hulls: Vec<LgClause> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for clause in reversed.iter() { if clause.parts.len() > 1 { hulls.extend(lg_hulled(&mut arena, &mut proof, clause)); } }
@@ -503,7 +503,7 @@ pub fn lg_alethe_write(source: &TermArena, facts: &[i64], goal: i64) -> Option<S
     let mut ordered: Vec<LgClause> = vec![];
     for clause in reversed.iter() {
         let mut at = ordered.len() as i64;
-        while at > 0 && (clause.parts.len() as i64) < nikaia_std::index::get(&ordered, nikaia_std::index::at(at - 1)).parts.len() as i64 { at -= 1; }
+        while at > 0 && (clause.parts.len() as i64) < unsafe { nikaia_std::proven::read(&ordered, (nikaia_std::proven::sub::<i64>(at, 1)) as usize) }.parts.len() as i64 { at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) }; }
         ordered.insert(nikaia_std::count::of(at), clause.clone());
     }
     let mut search = LgSearch { arena, proof, clauses: ordered, work: 0 };

@@ -185,7 +185,7 @@ impl CheckState {
         let base = type_last_segment(&from);
         if !(base == "Vec" || base == "List" || base == "Array") || from != into { return None; }
         if from_args.is_empty() || into_args.is_empty() || !is_a_list_literal(value) { return None; }
-        let widened = match widened_into(nikaia_std::index::get(&from_args, 0), nikaia_std::index::get(&into_args, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let widened = match widened_into(unsafe { nikaia_std::proven::read(&from_args, (0) as usize) }, unsafe { nikaia_std::proven::read(&into_args, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
         for item in items.iter() {
             let item = *item;
             if is_a_literal(item) { continue; }
@@ -206,14 +206,14 @@ impl CheckState {
         let mut has_count = false;
         let mut count: i64 = 0; #[allow(clippy::redundant_locals)] let items = items;
         if name == "Array" && wanted.len() == 2 {
-            match *nikaia_std::index::get(&wanted, 1) {
+            match *unsafe { nikaia_std::proven::read(&wanted, (1) as usize) } {
                 Ty::Count(n) => {
                     has_count = true;
                     count = n;
                 },
                 _ => { return None; },
             }
-        } else if name == "Vec" && wanted.len() == 1 && holds_an_array(nikaia_std::index::get(&wanted, 0)) { has_count = false; } else { return None; }
+        } else if name == "Vec" && wanted.len() == 1 && holds_an_array(unsafe { nikaia_std::proven::read(&wanted, (0) as usize) }) { has_count = false; } else { return None; }
         if has_count {
             let repeated: Option<Expr> = repeat_count_of(value);
             if repeated.is_some() {
@@ -236,7 +236,7 @@ impl CheckState {
         }
         let mut held = Ty::Unknown;
         let found_args = named_arguments_of(found);
-        if !found_args.is_empty() { held = (*nikaia_std::index::get(&found_args, 0)).clone(); }
+        if !found_args.is_empty() { held = (*unsafe { nikaia_std::proven::read(&found_args, (0) as usize) }).clone(); }
         let mut agreed: Option<Ty> = None;
         for item in items.iter() {
             let item = *item;
@@ -258,11 +258,11 @@ impl CheckState {
             _ => return None,
         };
         if made.len() != 1 || type_last_segment(&found_name) != "Vec" { return None; }
-        let mut item = (*nikaia_std::index::get(&made, 0)).clone();
+        let mut item = (*unsafe { nikaia_std::proven::read(&made, (0) as usize) }).clone();
         let mut into = want.clone();
         let mut optional = false;
         match want {
-            Ty::Nullable(whole) => { let whole = nikaia_std::boxed::open(whole); match *nikaia_std::index::get(&made, 0) {
+            Ty::Nullable(whole) => { let whole = nikaia_std::boxed::open(whole); match *unsafe { nikaia_std::proven::read(&made, (0) as usize) } {
                 Ty::Nullable(ref each) => {
                     let each = nikaia_std::boxed::open(each);
                     item = each.clone();
@@ -280,9 +280,9 @@ impl CheckState {
         let parts = named_arguments_of(&into);
         let base = type_last_segment(&wanted_name);
         let mut fits = false;
-        if optional && base == "Vec" && parts.len() == 1 { fits = item.fits(nikaia_std::index::get(&parts, 0)); } else if (base == "HashMap" || base == "BTreeMap" || base == "TrustedMap") && parts.len() == 2 { fits = { let __nikaia_value = item.fits(&Ty::Tuple(vec![(*nikaia_std::index::get(&parts, 0)).clone(), (*nikaia_std::index::get(&parts, 1)).clone()])); __nikaia_value }; } else if (base == "HashSet" || base == "BTreeSet" || base == "TrustedSet") && parts.len() == 1 { fits = item.fits(nikaia_std::index::get(&parts, 0)); } else if base == "String" && parts.is_empty() { fits = a_type_named(&item, "char", false) || a_type_named(&item, "scalar", false) || a_type_named(&item, "str", true) || a_type_named(&item, "String", false); }
+        if optional && base == "Vec" && parts.len() == 1 { fits = item.fits(unsafe { nikaia_std::proven::read(&parts, (0) as usize) }); } else if (base == "HashMap" || base == "BTreeMap" || base == "TrustedMap") && parts.len() == 2 { fits = { let __nikaia_value = item.fits(&Ty::Tuple(vec![(*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).clone(), (*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).clone()])); __nikaia_value }; } else if (base == "HashSet" || base == "BTreeSet" || base == "TrustedSet") && parts.len() == 1 { fits = item.fits(unsafe { nikaia_std::proven::read(&parts, (0) as usize) }); } else if base == "String" && parts.is_empty() { fits = a_type_named(&item, "char", false) || a_type_named(&item, "scalar", false) || a_type_named(&item, "str", true) || a_type_named(&item, "String", false); }
         if !fits { return None; }
-        self.facts.collected_into.insert(number_key(*nikaia_std::index::get(&receiver, 0)));
+        self.facts.collected_into.insert(number_key(*unsafe { nikaia_std::proven::read(&receiver, (0) as usize) }));
         Some(want.clone())
     }
 }
@@ -297,7 +297,7 @@ pub fn a_collect_into_an_option(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
         _ => return false,
     };
     if made.len() != 1 || type_last_segment(&found_name) != "Vec" { return false; }
-    let item_optional = matches!(*nikaia_std::index::get(&made, 0), Ty::Nullable(_));
+    let item_optional = matches!(*unsafe { nikaia_std::proven::read(&made, (0) as usize) }, Ty::Nullable(_));
     item_optional && matches!(want, Ty::Nullable(_))
 }
 

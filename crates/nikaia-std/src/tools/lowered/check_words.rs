@@ -63,10 +63,10 @@ pub fn counted(n: i64, what: &str) -> String {
 
 pub fn names_listed(names: &[String]) -> String {
     if names.is_empty() { return String::from("no fields"); }
-    if names.len() == 1 { return format!("`{}`", *nikaia_std::index::get(&names, 0)); }
+    if names.len() == 1 { return format!("`{}`", *unsafe { nikaia_std::proven::read(&names, (0) as usize) }); }
     let mut rest: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for k in 0..names.len() as i64 - 1 { rest.push(format!("`{}`", *nikaia_std::index::get(&names, (k) as usize))); }
-    format!("{} and `{}`", nikaia_std::block::Text::from(rest.join(", ")), *nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 1)))
+    for k in 0..unsafe { nikaia_std::proven::sub::<i64>(names.len() as i64, 1) } { rest.push(format!("`{}`", *unsafe { nikaia_std::proven::read(&names, (k) as usize) })); }
+    format!("{} and `{}`", nikaia_std::block::Text::from(rest.join(", ")), *unsafe { nikaia_std::proven::read(&names, (nikaia_std::proven::sub::<i64>(names.len() as i64, 1)) as usize) })
 }
 
 pub fn indented_text(text: &str) -> String {
@@ -80,26 +80,26 @@ pub fn brace_groups(text: &str) -> Vec<String> {
     #[allow(unused_mut)] let mut found: Vec<String> = vec![];
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut found = found;
     while ((at) as usize) < c.len() {
-        if *nikaia_std::index::get(&c, (at) as usize) == '\\' {
-            at += 1;
-            if ((at) as usize) < c.len() && *nikaia_std::index::get(&c, (at) as usize) == 'u' && ((at + 1) as usize) < c.len() && *nikaia_std::index::get(&c, (at + 1) as usize) == '{' {
-                at += 1;
-                while ((at) as usize) < c.len() && *nikaia_std::index::get(&c, (at) as usize) != '}' { at += 1; }
+        if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '\\' {
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+            if ((at) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == 'u' && ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '{' {
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+                while ((at) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } != '}' { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
             }
             at += 1;
             continue;
         }
-        if *nikaia_std::index::get(&c, (at) as usize) == '{' {
+        if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '{' {
             let mut group: String = String::from("");
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             let mut closed = false;
             while ((at) as usize) < c.len() {
-                if *nikaia_std::index::get(&c, (at) as usize) == '}' {
+                if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '}' {
                     closed = true;
                     break;
                 }
-                group.push(*nikaia_std::index::get(&c, (at) as usize));
-                at += 1;
+                group.push(*unsafe { nikaia_std::proven::read(&c, (at) as usize) });
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
             if closed && !group.trim().is_empty() { found.push(group); }
         }
@@ -115,33 +115,33 @@ pub fn collapsed_doubled_braces(text: &str) -> Option<String> {
     let mut open = 0;
     let mut at: i64 = 0;
     while ((at) as usize) < c.len() {
-        if *nikaia_std::index::get(&c, (at) as usize) == '\\' {
-            out.push(*nikaia_std::index::get(&c, (at) as usize));
-            at += 1;
-            if ((at) as usize) < c.len() && *nikaia_std::index::get(&c, (at) as usize) == 'u' && ((at + 1) as usize) < c.len() && *nikaia_std::index::get(&c, (at + 1) as usize) == '{' {
-                while ((at) as usize) < c.len() && *nikaia_std::index::get(&c, (at) as usize) != '}' {
-                    out.push(*nikaia_std::index::get(&c, (at) as usize));
-                    at += 1;
+        if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '\\' {
+            out.push(*unsafe { nikaia_std::proven::read(&c, (at) as usize) });
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+            if ((at) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == 'u' && ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '{' {
+                while ((at) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } != '}' {
+                    out.push(*unsafe { nikaia_std::proven::read(&c, (at) as usize) });
+                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 }
             }
-            if ((at) as usize) < c.len() { out.push(*nikaia_std::index::get(&c, (at) as usize)); }
+            if ((at) as usize) < c.len() { out.push(*unsafe { nikaia_std::proven::read(&c, (at) as usize) }); }
             at += 1;
             continue;
         }
-        if *nikaia_std::index::get(&c, (at) as usize) == '{' && ((at + 1) as usize) < c.len() && *nikaia_std::index::get(&c, (at + 1) as usize) == '{' {
+        if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '{' && ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '{' {
             out.push('{');
             doubled = true;
-            at += 2;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
             continue;
         }
-        if *nikaia_std::index::get(&c, (at) as usize) == '{' { open += 1; } else if *nikaia_std::index::get(&c, (at) as usize) == '}' && open > 0 { open -= 1; } else if *nikaia_std::index::get(&c, (at) as usize) == '}' && ((at + 1) as usize) < c.len() && *nikaia_std::index::get(&c, (at + 1) as usize) == '}' {
+        if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '{' { open += 1; } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '}' && open > 0 { open -= 1; } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '}' && ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '}' {
             out.push('}');
             doubled = true;
-            at += 2;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
             continue;
         }
         out.push(*nikaia_std::index::get(&c, (at) as usize));
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     if !doubled { return None; }
     Some(out)
@@ -152,8 +152,8 @@ pub fn not_promised_note(callee: &str) -> String {
     let mut package: String = String::from("its package"); #[allow(clippy::redundant_locals)] let parts = parts;
     let mut function = nikaia_std::block::Text::from(callee.to_string()); #[allow(clippy::redundant_locals)] let parts = parts;
     if parts.len() == 2 {
-        package = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string());
-        function = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string());
+        package = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string());
+        function = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).to_string());
     } ::core::mem::drop(parts);
     format!("`{}` is `{}`'s, and its source doesn't say `sync`. That its body doesn't pause today is not a promise another package can rely on: write `sync` after the result of `{}` in `{}` to make it.", callee, package, function, package)
 }
@@ -180,24 +180,24 @@ pub fn articles(text: &str) -> String {
     let mut at: i64 = 0;
     while at < c.len() as i64 {
         if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) != '`' {
-            before.push(*nikaia_std::index::get(&c, nikaia_std::index::at(at)));
-            at += 1;
+            before.push(*unsafe { nikaia_std::proven::read(&c, (at) as usize) });
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }
         let mut word: String = String::from("");
-        let mut end: i64 = at + 1;
-        while end < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(end)) != '`' {
-            word.push(*nikaia_std::index::get(&c, nikaia_std::index::at(end)));
-            end += 1;
+        let mut end: i64 = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+        while end < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (end) as usize) } != '`' {
+            word.push(*unsafe { nikaia_std::proven::read(&c, (end) as usize) });
+            end = unsafe { nikaia_std::proven::add::<i64>(end, 1) };
         }
-        let close = if end < c.len() as i64 { end + 1 } else { c.len() as i64 };
+        let close = if end < c.len() as i64 { unsafe { nikaia_std::proven::add::<i64>(end, 1) } } else { c.len() as i64 };
         let written = article_written_before(&before);
         let mut kept = before.len() as i64;
-        if written > 0 && at + 1 < c.len() as i64 && (*nikaia_std::index::get(&c, nikaia_std::index::at(at + 1))).is_alphanumeric() { kept = before.len() as i64 - written; }
+        if written > 0 && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && (*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) }).is_alphanumeric() { kept = before.len() as i64 - written; }
         let mut i: i64 = 0;
         while i < kept {
             out.push(*nikaia_std::index::get(&before, (i) as usize));
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         if kept < before.len() as i64 {
             let right = article(&word);
@@ -208,7 +208,7 @@ pub fn articles(text: &str) -> String {
         let mut j: i64 = at;
         while j < close {
             out.push(*nikaia_std::index::get(&c, nikaia_std::index::at(j)));
-            j += 1;
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
         }
         at = close;
     }
@@ -221,9 +221,9 @@ pub fn articles(text: &str) -> String {
 
 pub(crate) fn article_written_before(b: &[scalar]) -> i64 {
     let n = b.len() as i64;
-    if n < 2 || *nikaia_std::index::get(&b, nikaia_std::index::at(n - 1)) != ' ' { return 0; }
+    if n < 2 || *unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) } != ' ' { return 0; }
     let mut written: i64 = 0;
-    if *nikaia_std::index::get(&b, nikaia_std::index::at(n - 2)) == 'a' || *nikaia_std::index::get(&b, nikaia_std::index::at(n - 2)) == 'A' { written = 2; } else if n >= 3 && *nikaia_std::index::get(&b, nikaia_std::index::at(n - 2)) == 'n' && (*nikaia_std::index::get(&b, nikaia_std::index::at(n - 3)) == 'a' || *nikaia_std::index::get(&b, nikaia_std::index::at(n - 3)) == 'A') { written = 3; }
+    if *unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) } == 'a' || *unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) } == 'A' { written = 2; } else if n >= 3 && *unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) } == 'n' && (*unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 3)) as usize) } == 'a' || *unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 3)) as usize) } == 'A') { written = 3; }
     if written == 0 || n == written { return written; }
     let last = *nikaia_std::index::get(&b, nikaia_std::index::at(n - written - 1));
     if last.is_alphanumeric() || last == '`' || last == '_' { return 0; }

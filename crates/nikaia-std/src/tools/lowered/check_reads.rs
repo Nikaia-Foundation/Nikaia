@@ -11,7 +11,7 @@ pub(crate) fn check_owned_text(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, .. } => {
             let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
-            let last = *nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1));
+            let last = *nikaia_std::index::get(&parts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) }));
             last == "String" || last == "str"
         },
         _ => false,
@@ -48,8 +48,8 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn counts_in_usize(&mut self, key: &str, args: &[Expr]) {
-        if check_counts_first(key) && !args.is_empty() { let added = self.facts.count_args.insert(id_of(nikaia_std::index::get(&args, 0)) as i64); }
-        if check_counts_second(key) && args.len() > 1 { let second = self.facts.count_args.insert(id_of(nikaia_std::index::get(&args, 1)) as i64); }
+        if check_counts_first(key) && !args.is_empty() { let added = self.facts.count_args.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64); }
+        if check_counts_second(key) && args.len() > 1 { let second = self.facts.count_args.insert(id_of(unsafe { nikaia_std::proven::read(&args, (1) as usize) }) as i64); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -220,8 +220,8 @@ impl CheckState {
     pub fn a_lookup_key_lent(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, on: &Ty, args: &[Expr], found: &[Ty]) {
         if !is_a_lookup(key) || !world.library.functions.contains_key(key) { return; }
         if args.len() != 1 || found.len() != 1 { return; }
-        let given = nikaia_std::index::get(&args, 0);
-        let ty = nikaia_std::index::get(&found, 0);
+        let given = unsafe { nikaia_std::proven::read(&args, (0) as usize) };
+        let ty = unsafe { nikaia_std::proven::read(&found, (0) as usize) };
         let a_string = matches!(given, Expr::LitStr { .. });
         if !a_string && names_text(&ty) && check_reads_keyed_by_views(on) {
             self.facts.map_keys.insert((id_of(&given) as i64, false), FactKeyForm::Viewed);
@@ -266,7 +266,7 @@ impl CheckState {
     pub fn parts_taken_out_of_a_mut_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &str, body: &Expr, subject: &Ty, parts: &collections::BTreeMap<String, Ty>, handed_from: i64, from: i64) {
         for repeat in self.repeats.iter() { if repeat.what == "lambda" { return; } }
         if self.scope.is_empty() { return; }
-        let frame = (*nikaia_std::index::get(&self.scope, nikaia_std::index::at(self.scope.len() as i64 - 1))).copy_owned();
+        let frame = (*unsafe { nikaia_std::proven::read(&self.scope, (nikaia_std::proven::sub::<i64>(self.scope.len() as i64, 1)) as usize) }).copy_owned();
         let mut found: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (name, _) in parts.iter() {
             for local in frame.iter() {
@@ -282,7 +282,7 @@ impl CheckState {
             let mut at = handed_from;
             while at < self.handed.len() as i64 {
                 if nikaia_std::index::or(nikaia_std::index::get(&self.handed, nikaia_std::index::at(at)).binding, || -1) == binding { break; }
-                at = at + 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
             if at >= self.handed.len() as i64 { continue; }
             any = true;
@@ -334,7 +334,7 @@ pub(crate) fn check_reads_keyed_by_text(on: &Ty) -> bool {
         Ty::Named { name, args, .. } => {
             let base = type_last_segment(name);
             let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set";
-            keyed && !args.is_empty() && names_text(nikaia_std::index::get(&args, 0))
+            keyed && !args.is_empty() && names_text(unsafe { nikaia_std::proven::read(&args, (0) as usize) })
         },
         _ => false,
     }
@@ -347,7 +347,7 @@ pub(crate) fn check_reads_keyed_by_views(on: &Ty) -> bool {
         Ty::Named { name, args, .. } => {
             let base = type_last_segment(name);
             let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set";
-            keyed && !args.is_empty() && (*nikaia_std::index::get(&args, 0)).is_a_view() && names_text(nikaia_std::index::get(&args, 0))
+            keyed && !args.is_empty() && (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).is_a_view() && names_text(unsafe { nikaia_std::proven::read(&args, (0) as usize) })
         },
         _ => false,
     }
@@ -360,7 +360,7 @@ pub(crate) fn check_reads_keyed_by_numbers(on: &Ty) -> bool {
         Ty::Named { name, args, .. } => {
             let base = type_last_segment(name);
             let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set";
-            keyed && !args.is_empty() && check_copied(nikaia_std::index::get(&args, 0))
+            keyed && !args.is_empty() && check_copied(unsafe { nikaia_std::proven::read(&args, (0) as usize) })
         },
         _ => false,
     }

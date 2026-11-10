@@ -31,7 +31,7 @@ pub fn check_simd_bits_of(name: &str) -> i64 {
 pub(crate) fn check_simd_lane_of(ty: &Ty) -> String {
     match ty {
         Ty::Named { args, .. } => if !args.is_empty() {
-            match nikaia_std::index::get(&args, 0) {
+            match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
                 Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
                 _ => String::from(""),
             }
@@ -45,7 +45,7 @@ pub(crate) fn check_simd_lane_of(ty: &Ty) -> String {
 pub fn check_simd_count_of(ty: &Ty) -> i64 {
     match ty {
         Ty::Named { args, .. } => if args.len() == 2 {
-            match nikaia_std::index::get(&args, 1) {
+            match unsafe { nikaia_std::proven::read(&args, (1) as usize) } {
                 Ty::Count(n) => { let n = *n; n },
                 _ => 0,
             }
@@ -147,7 +147,7 @@ pub(crate) fn check_simd_constant_indices(world: &CheckWorld<'_, '_, '_, '_, '_,
     }
     let path = nikaia_std::block::Text::from(written.join("::"));
     if path != "simd::Fixed::from" || args.len() != 1 { return None; }
-    let items = match nikaia_std::index::get(&args, 0) {
+    let items = match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
         Expr::ListLit { items, .. } => items,
         _ => return None,
     };
@@ -168,7 +168,7 @@ pub fn check_simd_a_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: 
         _ => return false,
     };
     match func {
-        Expr::Path(parts, _) => parts.len() > 1 && world.words.resolve(*nikaia_std::index::get(&parts, 0)) == "simd",
+        Expr::Path(parts, _) => parts.len() > 1 && world.words.resolve(*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }) == "simd",
         _ => false,
     }
 }
@@ -182,7 +182,7 @@ pub fn check_simd_made(wanted: Option<&Ty>, name: &str, args: &[Expr]) -> Ty {
     }, || Ty::Unknown);
     if !check_simd_kind(&given).is_empty() { return given; }
     if name == "simd::Fixed::from" && args.len() == 1 {
-        return match nikaia_std::index::get(&args, 0) {
+        return match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
             Expr::ListLit { items, .. } => Ty::Named { name: String::from("simd::Fixed"), args: vec![Ty::Unknown, Ty::Count(items.len() as i64)], view: false },
             _ => Ty::Unknown,
         };
@@ -233,14 +233,14 @@ impl CheckState {
     pub fn a_shuffle_out_of_lanes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, method: &str, args: &[Expr], span: &Span) {
         if method != "shuffle" || args.len() != 1 || check_simd_kind(on) != "Fixed" { return; }
         let count = check_simd_count_of(on);
-        let indices = check_simd_constant_indices(world, nikaia_std::index::get(&args, 0));
+        let indices = check_simd_constant_indices(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) });
         if indices.is_none() {
             self.findings.push(check_refusal("NK1298", span, String::from("A shuffle's indices are written as constants."), vec![String::from("The indices of a shuffle become part of the instruction: a `pshufb` takes them as a constant table, and the checker proves each within the lanes.")], Some(String::from("Write them as `simd::Fixed::from([…])` of literals, each below the lane count."))));
             return;
         }
         for index in nikaia_std::index::or(indices, || vec![].into()) {
             if count > 0 && index >= count {
-                self.findings.push(check_refusal("NK1298", span, format!("The shuffle index {} is outside the {} lanes of a `{}`.", index, count, on.text()), vec![nikaia_std::block::Text::from(format!("Each index names a lane, from 0 to {}.", count - 1).to_string())], Some(nikaia_std::block::Text::from(format!("Write an index below {}.", count).to_string()))));
+                self.findings.push(check_refusal("NK1298", span, format!("The shuffle index {} is outside the {} lanes of a `{}`.", index, count, on.text()), vec![nikaia_std::block::Text::from(format!("Each index names a lane, from 0 to {}.", unsafe { nikaia_std::proven::sub::<i64>(count, 1) }).to_string())], Some(nikaia_std::block::Text::from(format!("Write an index below {}.", count).to_string()))));
                 return;
             }
         }
@@ -254,8 +254,8 @@ pub fn simd_written(names: &winnow_grammar::InternerContext, name: &str, ty: &Ty
         out.push(refusal("NK1297", span.clone(), format!("`{}` needs its lane type.", name), vec![String::from("A vector holds lanes of one integer type (ADR-377 D1, D2).")], help));
         return;
     }
-    let lane = nikaia_std::block::Text::from(names.resolve(nikaia_std::index::get(&ty.generics, 0).name).to_string());
-    if nikaia_std::index::get(&ty.generics, 0).count.is_some() || check_simd_bits_of(&lane) == 0 {
+    let lane = nikaia_std::block::Text::from(names.resolve(unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }.name).to_string());
+    if unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }.count.is_some() || check_simd_bits_of(&lane) == 0 {
         out.push(refusal("NK1297", span.clone(), format!("`{}` can't hold lanes of `{}`.", name, lane), vec![String::from("A lane is an integer of 8, 16, 32 or 64 bits (ADR-377 D1).")], help));
         return;
     }
@@ -266,7 +266,7 @@ pub fn simd_written(names: &winnow_grammar::InternerContext, name: &str, ty: &Ty
         return;
     }
     if ty.generics.len() == 2 {
-        let n = nikaia_std::index::or(nikaia_std::index::get(&ty.generics, 1).count, || -1);
+        let n = nikaia_std::index::or(unsafe { nikaia_std::proven::read(&ty.generics, (1) as usize) }.count, || -1);
         let mut power = n >= 2 && n <= 64;
         let mut k = n;
         while power && k > 1 {
@@ -274,7 +274,7 @@ pub fn simd_written(names: &winnow_grammar::InternerContext, name: &str, ty: &Ty
             k = k / 2;
         }
         if !power {
-            let written = if n < 0 { nikaia_std::block::Text::from(names.resolve(nikaia_std::index::get(&ty.generics, 1).name).to_string()) } else { format!("{}", n) };
+            let written = if n < 0 { nikaia_std::block::Text::from(names.resolve(unsafe { nikaia_std::proven::read(&ty.generics, (1) as usize) }.name).to_string()) } else { format!("{}", n) };
             out.push(refusal("NK1297", span.clone(), format!("`{}` can't hold {} lanes.", name, written), vec![String::from("A fixed vector's count is a literal power of two from 2 to 64, which a target narrower than it runs in several registers (ADR-377 D2).")], help));
         }
     }

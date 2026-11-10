@@ -7,7 +7,7 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
             let name = *name;
             out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
         },
-        Expr::Path(segments, _) => { if !segments.is_empty() { out.insert(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&segments, 0)).to_string())); } },
+        Expr::Path(segments, _) => { if !segments.is_empty() { out.insert(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string())); } },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             names_in(func, words, out);

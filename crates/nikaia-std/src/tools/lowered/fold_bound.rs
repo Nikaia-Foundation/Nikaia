@@ -20,20 +20,20 @@ pub fn fb_literal_bytes(written: &str) -> u64 {
     let mut bytes: u64 = 0u64;
     let mut i: i64 = 0;
     while ((i) as usize) < chars.len() {
-        let c = *nikaia_std::index::get(&chars, (i) as usize);
-        i += 1;
+        let c = *unsafe { nikaia_std::proven::read(&chars, (i) as usize) };
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         if c != '\\' {
             bytes += fb_utf8_len(c as i64);
             continue;
         }
         bytes += 1;
         if ((i) as usize) < chars.len() {
-            let next = *nikaia_std::index::get(&chars, (i) as usize);
-            i += 1;
+            let next = *unsafe { nikaia_std::proven::read(&chars, (i) as usize) };
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             if next == 'u' {
                 while ((i) as usize) < chars.len() {
-                    let d = *nikaia_std::index::get(&chars, (i) as usize);
-                    i += 1;
+                    let d = *unsafe { nikaia_std::proven::read(&chars, (i) as usize) };
+                    i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
                     if d == '}' { break; }
                 }
             }
@@ -136,7 +136,7 @@ impl<'a> FbWidths<'a> {
                     if called == "digit" || called == "hex_digit" || called == "any" || called == "char" || called == "alpha1" || called == "multispace1" { return 1u64; }
                     if called == "frame_end" { return boundary; }
                 }
-                if !args.is_empty() && (called == "dec" || called == "bytes") { return self.pattern(words, &nikaia_std::index::get(&args, 0).node, boundary); }
+                if !args.is_empty() && (called == "dec" || called == "bytes") { return self.pattern(words, &unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node, boundary); }
                 return 0u64;
             },
         }
@@ -166,7 +166,7 @@ pub fn fb_rule_width(source: &FbSource<'_, '_>, def: &GrammarDef, rule: &str) ->
 
 pub fn fb_most_steps(width: u64) -> u64 {
     let bound: u64 = 1152921504606846976u64;
-    (bound - 1u64) / width.max(1u64)
+    (unsafe { nikaia_std::proven::sub::<u64>(bound, 1u64) }) / width.max(1u64)
 }
 
 pub(crate) fn fb_bound_term(a: &mut TermArena, k: i64, k0: i64, steps: i64, pieces: i64) -> i64 {
@@ -281,7 +281,7 @@ pub(crate) fn fb_range(ty: &str) -> Option<FbRange> {
     let wide: u64 = 4294967295u64;
     if ty == "i8" { return Some(FbRange { below: 128, above: 127 }); }
     if ty == "i16" { return Some(FbRange { below: 32768, above: 32767 }); }
-    if ty == "i32" { return Some(FbRange { below: small, above: small - 1u64 }); }
+    if ty == "i32" { return Some(FbRange { below: small, above: unsafe { nikaia_std::proven::sub::<u64>(small, 1u64) } }); }
     if ty == "i64" || ty == "isize" { return Some(FbRange { below: big, above: big - 1u64 }); }
     if ty == "u8" { return Some(FbRange { below: 0, above: 255 }); }
     if ty == "u16" { return Some(FbRange { below: 0, above: 65535 }); }
@@ -423,7 +423,7 @@ pub(crate) fn fb_kept_by(ix: &FbIndex<'_, '_, '_>, callees: &[i64], i: i64) -> b
         let at = nikaia_std::num::value(at);
         let fun = match ix.fns.get(&at) { Some(__nikaia_value) => __nikaia_value, None => return false };
         if i >= fun.args.len() as i64 { return false; }
-        if nikaia_std::index::get(&fun.args, nikaia_std::index::at(i)).mutable { return false; }
+        if unsafe { nikaia_std::proven::read(&fun.args, (i) as usize) }.mutable { return false; }
     }
     true
 }
@@ -523,8 +523,8 @@ impl<'a> FbIndex<'a, 'a, 'a> {
             },
             Expr::Path(segments, _) => {
                 if segments.len() < 2 { return vec![]; }
-                let ty = self.text(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 2)));
-                let name = self.text(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1)));
+                let ty = self.text(*unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(segments.len() as i64, 2)) as usize) });
+                let name = self.text(*unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(segments.len() as i64, 1)) as usize) });
                 return fb_vec_of(&self.methods, &fb_key(&ty, &name));
             },
             _ => return vec![],
@@ -712,7 +712,7 @@ impl FbWalk {
                 if names.len() == 1 {
                     let mut found: Option<FbTy> = None;
                     if ty.is_some() { found = Some(FbTy::of(ix.words, match ty { Some(__nikaia_value) => __nikaia_value, None => return env })); } else { found = self.type_of(ix, value, &env); }
-                    if found.is_some() { env.insert(ix.text(*nikaia_std::index::get(&names, 0)), match found { Some(__nikaia_value) => __nikaia_value, None => return env }); }
+                    if found.is_some() { env.insert(ix.text(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }), match found { Some(__nikaia_value) => __nikaia_value, None => return env }); }
                 }
             },
             Stmt::For { bindings, .. } => {
@@ -777,7 +777,7 @@ impl FbWalk {
     }
     pub(crate) fn arguments(&mut self, ix: &FbIndex<'_, '_, '_>, args: &[Expr], callees: &[i64]) {
         for i in 0..args.len() as i64 {
-            let name = match fb_field_name(ix.words, nikaia_std::index::get(&args, nikaia_std::index::at(i))) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let name = match fb_field_name(ix.words, unsafe { nikaia_std::proven::read(&args, (i) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
             if !fb_kept_by(ix, callees, i) { self.poison(name); }
         }
     }
@@ -865,7 +865,7 @@ impl FbWalk {
                     let mut bound: Vec<FbBound> = vec![];
                     if name == "and_modify" && params.len() == 1 {
                         let value = self.entry_value(ix, call, env);
-                        if value.is_some() { bound.push(FbBound { name: ix.text(*nikaia_std::index::get(&params, 0)), ty: match value { Some(__nikaia_value) => __nikaia_value, None => return } }); }
+                        if value.is_some() { bound.push(FbBound { name: ix.text(*unsafe { nikaia_std::proven::read(&params, (0) as usize) }), ty: match value { Some(__nikaia_value) => __nikaia_value, None => return } }); }
                     }
                     self.lambdas.entry(at).or_insert(FbLambda { once, bound });
                 },
@@ -904,7 +904,7 @@ impl FbMerge {
         let owner = match fun.owner.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return }.clone();
         self.reached.insert(at);
         self.stack.push(at);
-        let other = ix.text(nikaia_std::index::get(&fun.args, 0).name);
+        let other = ix.text(unsafe { nikaia_std::proven::read(&fun.args, (0) as usize) }.name);
         let mut summed: collections::BTreeSet<String> = collections::BTreeSet::new();
         for stmt in fun.body.stmts.iter() {
             let mut rebinds = false;
@@ -950,7 +950,7 @@ impl FbMerge {
             let mut walk = fb_new_walk();
             let mut env: collections::BTreeMap<String, FbTy> = collections::BTreeMap::new();
             env.insert(String::from("self"), owner.clone());
-            env.insert(nikaia_std::block::Text::from(other.to_string()), FbTy::of(ix.words, &nikaia_std::index::get(&fun.args, 0).ty));
+            env.insert(nikaia_std::block::Text::from(other.to_string()), FbTy::of(ix.words, &unsafe { nikaia_std::proven::read(&fun.args, (0) as usize) }.ty));
             walk.stmt(host, ix, stmt, &env, false);
             self.bad.extend(walk.touched());
             self.reached.extend(walk.reached.iter().cloned());
@@ -986,8 +986,8 @@ impl FbMerge {
         match stmt {
             Stmt::For { bindings, iter, body, .. } => {
                 if bindings.len() != 2 || body.stmts.len() != 1 { return false; }
-                let key = ix.text(*nikaia_std::index::get(&bindings, 0));
-                let value = ix.text(*nikaia_std::index::get(&bindings, 1));
+                let key = ix.text(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) });
+                let value = ix.text(*unsafe { nikaia_std::proven::read(&bindings, (1) as usize) });
                 let mut source = iter;
                 match iter {
                     Expr::MethodCall { receiver, method, args, .. } => {
@@ -1006,7 +1006,7 @@ impl FbMerge {
                     },
                     _ => { return false; },
                 }
-                return self.chain(host, ix, &nikaia_std::index::get(&body.stmts, 0).node, owner, &key, &value);
+                return self.chain(host, ix, &unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.node, owner, &key, &value);
             },
             _ => return false,
         }
@@ -1024,14 +1024,14 @@ impl FbMerge {
                             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
                             let name = ix.text(method);
                             if name == "and_modify" && modify.is_empty() && args.len() == 1 {
-                                match nikaia_std::index::get(&args, 0) {
+                                match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
                                     Expr::Closure { params, .. } => {
                                         if params.len() != 1 { return false; }
                                         modify.push(cur);
                                     },
                                     _ => { return false; },
                                 }
-                            } else if name == "or_insert" && !inserted && args.len() == 1 && fb_named(ix.words, nikaia_std::index::get(&args, 0), &nikaia_std::block::Text::from(value.to_string())) { inserted = true; } else if name == "entry" && args.len() == 1 && fb_named(ix.words, nikaia_std::index::get(&args, 0), &nikaia_std::block::Text::from(key.to_string())) { target = Some(receiver); } else { return false; }
+                            } else if name == "or_insert" && !inserted && args.len() == 1 && fb_named(ix.words, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &nikaia_std::block::Text::from(value.to_string())) { inserted = true; } else if name == "entry" && args.len() == 1 && fb_named(ix.words, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &nikaia_std::block::Text::from(key.to_string())) { target = Some(receiver); } else { return false; }
                             cur = receiver;
                         },
                         _ => { return false; },
@@ -1044,7 +1044,7 @@ impl FbMerge {
                         let map = match ix.field_type(owner, &ix.text(name)) { Some(__nikaia_value) => __nikaia_value, None => return false };
                         if !map.is_map() || !fb_named(ix.words, base, "self") { return false; }
                         if modify.is_empty() { return true; }
-                        return self.modified(host, ix, *nikaia_std::index::get(&modify, 0), &map, value);
+                        return self.modified(host, ix, *unsafe { nikaia_std::proven::read(&modify, (0) as usize) }, &map, value);
                     },
                     _ => return false,
                 }
@@ -1065,18 +1065,18 @@ impl FbMerge {
     }
     pub(crate) fn merged<H: FbHost>(&mut self, host: &H, ix: &FbIndex<'_, '_, '_>, into: &str, body: &Block, map: &FbTy, value: &str) -> bool {
         if body.stmts.len() != 1 { return false; }
-        match &nikaia_std::index::get(&body.stmts, 0).node {
+        match &unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.node {
             Stmt::Expr(call) => {
                 match call {
                     Expr::MethodCall { receiver, method, args, .. } => {
                         let receiver = nikaia_std::boxed::open(receiver); let method = *method;
                         if args.len() != 1 { return false; }
-                        let handed = fb_unref(nikaia_std::index::get(&args, 0));
+                        let handed = fb_unref(unsafe { nikaia_std::proven::read(&args, (0) as usize) });
                         if !fb_named(ix.words, receiver, into) || !fb_named(ix.words, handed, value) { return false; }
                         let inner = (*nikaia_std::index::get(&map.args, 1)).clone();
                         let callees = ix.methods_of(Some(&inner), &ix.text(method));
                         if callees.len() != 1 { return false; }
-                        self.function(host, ix, *nikaia_std::index::get(&callees, 0));
+                        self.function(host, ix, *unsafe { nikaia_std::proven::read(&callees, (0) as usize) });
                         return true;
                     },
                     _ => return false,
@@ -1195,7 +1195,7 @@ impl FbUses {
             _ => { },
         }
         for i in 0..handed.len() as i64 {
-            let name = match fb_field_name(ix.words, *nikaia_std::index::get(&handed, nikaia_std::index::at(i))) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let name = match fb_field_name(ix.words, *unsafe { nikaia_std::proven::read(&handed, (i) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
             if !fb_kept_by(ix, &callees, i) { self.touch(name, owner); }
         }
     }
@@ -1267,14 +1267,14 @@ pub(crate) fn fb_merge_callees(ix: &FbIndex<'_, '_, '_>, merging: &Expr, acc: &F
         Expr::Path(..) => return ix.callees(merging),
         Expr::Closure { params, body, .. } => {
             if params.len() != 2 || body.stmts.len() != 1 { return vec![]; }
-            match &nikaia_std::index::get(&body.stmts, 0).node {
+            match &unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.node {
                 Stmt::Expr(call) => {
                     match call {
                         Expr::MethodCall { receiver, method, args, .. } => {
                             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-                            if !fb_is_param(receiver, *nikaia_std::index::get(&params, 0)) || args.len() != 1 { return vec![]; }
-                            let handed = fb_unref(nikaia_std::index::get(&args, 0));
-                            if fb_is_param(handed, *nikaia_std::index::get(&params, 1)) { return ix.methods_of(Some(&acc.clone()), &ix.text(method)); }
+                            if !fb_is_param(receiver, *unsafe { nikaia_std::proven::read(&params, (0) as usize) }) || args.len() != 1 { return vec![]; }
+                            let handed = fb_unref(unsafe { nikaia_std::proven::read(&args, (0) as usize) });
+                            if fb_is_param(handed, *unsafe { nikaia_std::proven::read(&params, (1) as usize) }) { return ix.methods_of(Some(&acc.clone()), &ix.text(method)); }
                             return vec![];
                         },
                         _ => return vec![],
@@ -1321,7 +1321,7 @@ pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &Fb
         Expr::Closure { params, body, .. } => {
             if params.len() != 2 { return none; }
             let mut env: collections::BTreeMap<String, FbTy> = collections::BTreeMap::new();
-            env.insert(ix.text(*nikaia_std::index::get(&params, 0)), acc.clone());
+            env.insert(ix.text(*unsafe { nikaia_std::proven::read(&params, (0) as usize) }), acc.clone());
             step.block(host, ix, body, &env, false);
         },
         Expr::Path(..) => {
@@ -1338,7 +1338,7 @@ pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &Fb
     if spec.merge.is_some() {
         let callees = fb_merge_callees(ix, match spec.merge.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return none }, &acc);
         if callees.len() != 1 { return none; }
-        merge.function(host, ix, *nikaia_std::index::get(&callees, 0));
+        merge.function(host, ix, *unsafe { nikaia_std::proven::read(&callees, (0) as usize) });
     }
     if init.broken || step.broken || merge.broken { return none; }
     let mut region: collections::BTreeSet<i64> = collections::BTreeSet::new();

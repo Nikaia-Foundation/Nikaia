@@ -108,14 +108,14 @@ pub fn sharing_report(sharing: &Sharing) -> String {
         for site in decision.copied_out.iter() { out.push_str(&format!("             copied out: {} each time - `access` reads it in place\n", site)); }
         if decision.duplications.is_empty() { out.push_str("             one handle, so the count is never stepped\n"); }
         for site in decision.duplications.iter() { out.push_str(&format!("             duplicated: {}\n", site)); }
-        if decision.count != Count::Plain { atomic += 1; }
+        if decision.count != Count::Plain { atomic = unsafe { nikaia_std::proven::add::<i64>(atomic, 1) }; }
         if decision.undecided() {
             undecided += 1;
             caught.push(fallback_text((decision.fallback).as_ref()));
         }
     }
     let all = sharing.decisions.len() as i64;
-    let plain = all - atomic;
+    let plain = unsafe { nikaia_std::proven::sub::<i64>(all, atomic) };
     out.push_str(&format!("\n{} `Shared` value(s): {} plain, {} atomic, of which {} because this analysis could not decide.\n", all, plain, atomic, undecided));
     out.push_str("An atomic count is the safe default. A plain count is an optimisation, and where it isn't taken the reason is one of these:\n");
     for fallback in every_fallback() {
@@ -152,15 +152,15 @@ pub fn slot(function: &str, name: &str) -> String { format!("{}::{}", function, 
 pub fn split_slot(key: &str) -> (String, String) {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
     if parts.len() < 2 { return (String::from(""), nikaia_std::block::Text::from(key.to_string())); }
-    let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
+    let name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string());
     let mut function: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for i in 0..parts.len() as i64 - 1 { function.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (i) as usize)).to_string())); }
+    for i in 0..unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) } { function.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (i) as usize) }).to_string())); }
     (nikaia_std::block::Text::from(function.join("::")), name)
 }
 
 pub fn holds_a_word(ty: &Ty) -> bool {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; !view && name == "SharedMut" && args.len() == 1 && a_word(nikaia_std::index::get(&args, 0)) },
+        Ty::Named { name, args, view } => { let view = *view; !view && name == "SharedMut" && args.len() == 1 && a_word(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) },
         _ => false,
     }
 }
@@ -182,8 +182,8 @@ pub fn held_that_does_not_copy(ty: &Ty) -> Option<String> {
 }
 
 pub(crate) fn a_held_value(ty: &Ty, name: &str, args: &[Ty]) -> Option<String> {
-    if name != "SharedMut" || args.len() != 1 || holds_a_word(ty) || (*nikaia_std::index::get(&args, 0)).is_unknown() { return None; }
-    Some((*nikaia_std::index::get(&args, 0)).text())
+    if name != "SharedMut" || args.len() != 1 || holds_a_word(ty) || (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).is_unknown() { return None; }
+    Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).text())
 }
 
 pub fn literal_type(expr: &Expr) -> Option<String> {
@@ -317,9 +317,9 @@ impl Slots {
     pub fn root(&mut self, start: i64) -> i64 {
         let mut at = start;
         while *nikaia_std::index::get(&self.parent, nikaia_std::index::at(at)) != at {
-            let up = *nikaia_std::index::get(&self.parent, nikaia_std::index::at(at));
-            { let __nikaia_stored = *nikaia_std::index::get(&self.parent, nikaia_std::index::at(up)); nikaia_std::index::set(&mut self.parent, nikaia_std::index::at(at), __nikaia_stored); }
-            at = *nikaia_std::index::get(&self.parent, nikaia_std::index::at(at));
+            let up = *unsafe { nikaia_std::proven::read(&self.parent, (at) as usize) };
+            { let __nikaia_stored = *nikaia_std::index::get(&self.parent, nikaia_std::index::at(up)); unsafe { nikaia_std::proven::write(&mut self.parent, (at) as usize, __nikaia_stored) }; }
+            at = *unsafe { nikaia_std::proven::read(&self.parent, (at) as usize) };
         }
         at
     }
@@ -372,7 +372,7 @@ pub(crate) fn before_last(text: &str, separator: &str) -> String {
     let parts: Vec<&str> = text.split(AsRef::<str>::as_ref(separator)).collect::<Vec<_>>();
     if parts.len() < 2 { return nikaia_std::block::Text::from(text.to_string()); }
     let mut kept: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let parts = parts;
-    for i in 0..parts.len() as i64 - 1 { kept.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (i) as usize)).to_string())); } ::core::mem::drop(parts);
+    for i in 0..unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) } { kept.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (i) as usize) }).to_string())); } ::core::mem::drop(parts);
     nikaia_std::block::Text::from(kept.join(separator))
 }
 
@@ -486,7 +486,7 @@ pub(crate) fn sorted_once(members: &[String]) -> Vec<String> {
     #[allow(unused_mut)] let mut sorted = members.copy_owned();
     sorted.sort();
     let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut sorted = sorted;
-    for one in sorted.iter() { if out.is_empty() || *nikaia_std::index::get(&out, nikaia_std::index::at(out.len() as i64 - 1)) != *one { out.push(nikaia_std::block::Text::from(one.to_string())); } }
+    for one in sorted.iter() { if out.is_empty() || *unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(out.len() as i64, 1)) as usize) } != *one { out.push(nikaia_std::block::Text::from(one.to_string())); } }
     out
 }
 
@@ -494,7 +494,7 @@ pub(crate) fn in_class_order(classes: &[Class]) -> Vec<Class> {
     let mut out: Vec<Class> = vec![];
     for class in classes.iter() {
         let mut at = out.len() as i64;
-        while at > 0 && class_before(class, nikaia_std::index::get(&out, nikaia_std::index::at(at - 1))) { at -= 1; }
+        while at > 0 && class_before(class, unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(at, 1)) as usize) }) { at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) }; }
         out.insert(nikaia_std::count::of(at), class.clone());
     }
     out
@@ -632,7 +632,7 @@ pub(crate) fn a_handle_in_scope(name: &str, scope: &collections::BTreeMap<String
 
 pub(crate) fn a_handle_at_the_tail(block: &Block, names: &winnow_grammar::InternerContext, scope: &collections::BTreeMap<String, Ty>) -> Option<String> {
     if block.stmts.is_empty() { return None; }
-    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
         Stmt::Expr(tail) => named_handle(tail, names, scope),
         _ => None,
     }
@@ -754,7 +754,7 @@ pub(crate) fn sharing_statement(stmt: &Stmt, asked: &Asked<'_, '_, '_>, holes_of
     match stmt {
         Stmt::Let { names, ty, value, .. } => {
             if names.len() != 1 { return; }
-            let_binding(nikaia_std::block::Text::from(asked.names.resolve(*nikaia_std::index::get(&names, 0)).to_string()), (ty).as_ref(), value, asked, &ty_of, walk);
+            let_binding(nikaia_std::block::Text::from(asked.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), (ty).as_ref(), value, asked, &ty_of, walk);
             sharing_expression(value, asked, &holes_of, &ty_of, walk);
         },
         Stmt::Comptime { .. } => { },
@@ -828,7 +828,7 @@ pub(crate) fn hull_written(func: &Expr, args: &[Expr], asked: &Asked<'_, '_, '_>
     };
     if !is_hull(&named) { return None; }
     if args.len() == 1 {
-        let held = match literal_type(nikaia_std::index::get(&args, 0)) { Some(__nikaia_value) => __nikaia_value, None => return Some(plain_type(&named)) };
+        let held = match literal_type(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return Some(plain_type(&named)) };
         return Some(Ty::Named { name: named, args: vec![plain_type(&held)], view: false });
     }
     Some(plain_type(&named))
@@ -1044,7 +1044,7 @@ pub(crate) struct SharingCall {
 pub(crate) fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[ConfigArg], asked: &Asked<'_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, ty_of: &dyn Fn(&Type) -> Ty, walk: &mut SharingWalk) {
     let described = parameters_of((called.callee).as_deref(), asked, &mut walk.own_keys, &mut walk.library_keys);
     for at in 0..args.len() as i64 {
-        let arg = nikaia_std::index::get(&args, nikaia_std::index::at(at));
+        let arg = unsafe { nikaia_std::proven::read(&args, (at) as usize) };
         let handle = named_handle(&arg, asked.names, &walk.scope);
         if handle.is_none() {
             an_argument_that_is_not_a_handle(called, (described).as_ref(), at, &arg, asked, walk);
@@ -1083,8 +1083,8 @@ pub(crate) fn an_argument_that_is_not_a_handle(called: &SharingCall, described: 
     }
     let known = match described { Some(__nikaia_value) => __nikaia_value, None => return };
     if at >= known.params.len() as i64 { return; }
-    let param = nikaia_std::block::Text::from(nikaia_std::index::get(&known.params, nikaia_std::index::at(at)).0.to_string());
-    if !by_value_shared(&nikaia_std::index::get(&known.params, nikaia_std::index::at(at)).1) { return; }
+    let param = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&known.params, (at) as usize) }.0.to_string());
+    if !by_value_shared(&unsafe { nikaia_std::proven::read(&known.params, (at) as usize) }.1) { return; }
     let source = match slot_of(arg, asked, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     let (owner, named) = split_slot(&source);
     walk.slots.duplicates(&owner, &named, handed_on_to(&known.key, &param));
@@ -1106,8 +1106,8 @@ pub(crate) fn a_handle_handed_on(called: &SharingCall, described: Option<&Descri
         walk.slots.force(&function, handle, format!("`{}` takes it in a position no contract describes", callee), Some(Fallback::UncoveredArgument));
         return;
     }
-    let param = nikaia_std::block::Text::from(nikaia_std::index::get(&known.params, nikaia_std::index::at(at)).0.to_string());
-    if by_value_shared(&nikaia_std::index::get(&known.params, nikaia_std::index::at(at)).1) { walk.slots.duplicates(&function, handle, handed_on_to(&known.key, &param)); }
+    let param = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&known.params, (at) as usize) }.0.to_string());
+    if by_value_shared(&unsafe { nikaia_std::proven::read(&known.params, (at) as usize) }.1) { walk.slots.duplicates(&function, handle, handed_on_to(&known.key, &param)); }
     walk.slots.join(&slot(&function, handle), &slot(&known.key, &param));
 }
 

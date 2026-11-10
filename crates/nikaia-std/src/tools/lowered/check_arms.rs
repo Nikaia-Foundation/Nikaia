@@ -161,7 +161,7 @@ impl CheckState {
     pub(crate) fn a_closure_ends_in(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, result: Option<&Ty>, body: &Block) {
         let kept = match result { Some(__nikaia_value) => __nikaia_value, None => return };
         let tail = block_tail(body);
-        if tail.len() == 1 { self.text_literal(world, kept, *nikaia_std::index::get(&tail, 0), true); }
+        if tail.len() == 1 { self.text_literal(world, kept, *unsafe { nikaia_std::proven::read(&tail, (0) as usize) }, true); }
     }
 }
 
@@ -190,8 +190,8 @@ pub fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span) -> Op
     let mut alike = true;
     let mut at: i64 = 1;
     while at < known.len() as i64 {
-        if *nikaia_std::index::get(&known, nikaia_std::index::at(at)) != *nikaia_std::index::get(&known, nikaia_std::index::at(at - 1)) { alike = false; }
-        at = at + 1;
+        if *unsafe { nikaia_std::proven::read(&known, (at) as usize) } != *unsafe { nikaia_std::proven::read(&known, (nikaia_std::proven::sub::<i64>(at, 1)) as usize) } { alike = false; }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     if numbers > 0 { for ty in known.iter() { if integer_named(&value_of_a_copy(ty)).is_none() { alike = false; } } }
     if alike { return None; }
@@ -210,9 +210,9 @@ pub fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span) -> Op
     let mut listed: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut shown = shown;
     let mut index: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut shown = shown;
     while index < shown.len() as i64 {
-        let one = nikaia_std::block::Text::from((*nikaia_std::index::get(&shown, nikaia_std::index::at(index))).to_string());
-        if index + 1 == shown.len() as i64 { listed = format!("{} and `{}`", listed, one); } else if index == 0 { listed = format!("`{}`", one); } else { listed = format!("{}, `{}`", listed, one); }
-        index = index + 1;
+        let one = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&shown, (index) as usize) }).to_string());
+        if unsafe { nikaia_std::proven::add::<i64>(index, 1) } == shown.len() as i64 { listed = format!("{} and `{}`", listed, one); } else if index == 0 { listed = format!("`{}`", one); } else { listed = format!("{}, `{}`", listed, one); }
+        index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     Some(check_refusal("NK1245", span, format!("The arms of this {} are {}, so the compiler can't tell what type its value is.", article, listed), vec![format!("What is not known is not checked, so the value of a `{}` whose arms disagree is refused rather than left to the language below.", word)], Some(format!("Make the arms of the {} the same type.", article))))
 }

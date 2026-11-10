@@ -13,12 +13,12 @@ pub(crate) fn number_leaves(expr: &Expr) -> bool { matches!(expr, Expr::Return(_
 // this was written - see `contracts::sync`.
 pub(crate) fn number_branches_of_block(block: &Block) -> Option<Vec<&Expr>> {
     if !block.stmts.is_empty() {
-        let leaves = matches!(nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node, Stmt::Return(_) | Stmt::Break | Stmt::Continue);
+        let leaves = matches!(unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node, Stmt::Return(_) | Stmt::Break | Stmt::Continue);
         if leaves { return Some(vec![]); }
     }
     let tail = block_tail(block);
     if tail.is_empty() { return None; }
-    number_branches_of_value(*nikaia_std::index::get(&tail, 0))
+    number_branches_of_value(*unsafe { nikaia_std::proven::read(&tail, (0) as usize) })
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -181,7 +181,7 @@ impl CheckState {
             },
             Expr::Call { args, .. } => {
                 if !args.is_empty() {
-                    let calls = *nikaia_std::index::get(&self.flow.open_calls, &(id_of(nikaia_std::index::get(&args, 0)) as i64));
+                    let calls = *nikaia_std::index::get(&self.flow.open_calls, &(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64));
                     for at in nikaia_std::index::or(match calls {
                         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                         None => None,
@@ -277,13 +277,13 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_method_of_a_number(&self, receiver: &Expr) -> bool {
         let calls = match *nikaia_std::index::get(&self.flow.open_calls, &(id_of(receiver) as i64)) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        calls.len() == 1 && *nikaia_std::index::get(&calls, 0) == -1
+        calls.len() == 1 && *unsafe { nikaia_std::proven::read(&calls, (0) as usize) } == -1
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_call_of_numbers(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr]) -> bool {
         if args.is_empty() { return false; }
-        let calls = match *nikaia_std::index::get(&self.flow.open_calls, &(id_of(nikaia_std::index::get(&args, 0)) as i64)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let calls = match *nikaia_std::index::get(&self.flow.open_calls, &(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64)) { Some(__nikaia_value) => __nikaia_value, None => return false };
         for at in calls.iter() {
             let at = nikaia_std::num::value(at);
             if !self.number_shaped(world, nikaia_std::index::get(&args, nikaia_std::index::at(at))) { return false; }
@@ -313,7 +313,7 @@ pub(crate) fn number_list_inner(ty: &Ty, levels: i64) -> Option<Ty> {
     if levels <= 0 { return Some(ty.clone()); }
     match ty {
         Ty::Named { name, args, .. } => {
-            if (name == "Vec" || name == "Array") && !args.is_empty() { return number_list_inner(nikaia_std::index::get(&args, 0), levels - 1); }
+            if (name == "Vec" || name == "Array") && !args.is_empty() { return number_list_inner(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, unsafe { nikaia_std::proven::sub::<i64>(levels, 1) }); }
             return None;
         },
         _ => { return None; },
@@ -350,8 +350,8 @@ pub(crate) fn number_list_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, v
 pub(crate) fn number_list_element(ty: &Ty) -> Option<String> {
     match ty {
         Ty::Named { name, args, .. } => {
-            if (name == "Vec" || name == "Array") && !args.is_empty() { return integer_named(nikaia_std::index::get(&args, 0)); }
-            if a_map_type(name) && args.len() == 2 { return integer_named(&value_of_a_copy(nikaia_std::index::get(&args, 1))); }
+            if (name == "Vec" || name == "Array") && !args.is_empty() { return integer_named(unsafe { nikaia_std::proven::read(&args, (0) as usize) }); }
+            if a_map_type(name) && args.len() == 2 { return integer_named(&value_of_a_copy(unsafe { nikaia_std::proven::read(&args, (1) as usize) })); }
             return None;
         },
         _ => { return None; },
@@ -362,7 +362,7 @@ pub(crate) fn number_list_element(ty: &Ty) -> Option<String> {
 // this was written - see `contracts::sync`.
 pub(crate) fn number_map_key(ty: &Ty) -> Option<String> {
     match ty {
-        Ty::Named { name, args, .. } => { if a_map_type(name) && args.len() == 2 { integer_named(&value_of_a_copy(nikaia_std::index::get(&args, 0))) } else { None } },
+        Ty::Named { name, args, .. } => { if a_map_type(name) && args.len() == 2 { integer_named(&value_of_a_copy(unsafe { nikaia_std::proven::read(&args, (0) as usize) })) } else { None } },
         _ => None,
     }
 }
@@ -423,7 +423,7 @@ impl CheckState {
         };
         let numbers = self.open_numbers_in(world, value);
         if numbers.is_empty() { return false; }
-        let head = self.open_root(*nikaia_std::index::get(&numbers, 0));
+        let head = self.open_root(*unsafe { nikaia_std::proven::read(&numbers, (0) as usize) });
         let found = match *nikaia_std::index::get(&self.flow.open_numbers, &head) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let mut entry = found.clone();
         entry.casts.push((id_of(value) as i64, into_name));
@@ -458,9 +458,9 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn open_numbers_joined(&mut self, numbers: &[i64]) {
         if numbers.is_empty() { return; }
-        let head = self.open_root(*nikaia_std::index::get(&numbers, 0));
+        let head = self.open_root(*unsafe { nikaia_std::proven::read(&numbers, (0) as usize) });
         for at in 1..numbers.len() as i64 {
-            let other = self.open_root(*nikaia_std::index::get(&numbers, (at) as usize));
+            let other = self.open_root(*unsafe { nikaia_std::proven::read(&numbers, (at) as usize) });
             if other != head { self.join_number(other, head); }
         }
     }
@@ -473,7 +473,7 @@ impl CheckState {
             numbers.extend(self.open_numbers_in(world, value));
         }
         if numbers.is_empty() { return; }
-        let head = self.open_root(*nikaia_std::index::get(&numbers, 0));
+        let head = self.open_root(*unsafe { nikaia_std::proven::read(&numbers, (0) as usize) });
         let found = match *nikaia_std::index::get(&self.flow.open_numbers, &head) { Some(__nikaia_value) => __nikaia_value, None => return };
         let mut entry = found.clone();
         entry.sites.push(site);
@@ -546,7 +546,7 @@ pub(crate) fn open_walk_held(ty: &Ty) -> Option<Ty> {
             let item = nikaia_std::boxed::open(item);
             return Some(item.clone());
         },
-        Ty::Named { args, .. } => { if args.len() == 1 { return Some((*nikaia_std::index::get(&args, 0)).clone()); } },
+        Ty::Named { args, .. } => { if args.len() == 1 { return Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone()); } },
         _ => { },
     }
     None
@@ -615,8 +615,8 @@ pub(crate) fn open_walk_item_params(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
             let mut at: i64 = 0;
             for p in params.iter() {
                 let p = *p;
-                if at < types.len() as i64 && open_walk_the_item(nikaia_std::index::get(&types, (at) as usize), held) { out.push(nikaia_std::block::Text::from(world.words.resolve(p).to_string())); }
-                at += 1;
+                if at < types.len() as i64 && open_walk_the_item(unsafe { nikaia_std::proven::read(&types, (at) as usize) }, held) { out.push(nikaia_std::block::Text::from(world.words.resolve(p).to_string())); }
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
         },
         _ => { },
@@ -672,8 +672,8 @@ impl CheckState {
         let arguments = call_arguments(signature);
         let mut at: i64 = 0;
         for arg in args.iter() {
-            if at < arguments.len() as i64 { for name in open_walk_item_params(world, arg, &nikaia_std::index::get(&arguments, (at) as usize).1, &held) { out.insert(name, number); } }
-            at += 1;
+            if at < arguments.len() as i64 { for name in open_walk_item_params(world, arg, &unsafe { nikaia_std::proven::read(&arguments, (at) as usize) }.1, &held) { out.insert(name, number); } }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         out
     }
@@ -705,15 +705,15 @@ impl CheckState {
         let arguments = call_arguments(signature);
         let mut at: i64 = 0;
         for arg in args.iter() {
-            if at < arguments.len() as i64 && open_walk_hands_back(&nikaia_std::index::get(&arguments, (at) as usize).1, &name) {
-                let names = open_walk_item_params(world, arg, &nikaia_std::index::get(&arguments, (at) as usize).1, &held);
+            if at < arguments.len() as i64 && open_walk_hands_back(&unsafe { nikaia_std::proven::read(&arguments, (at) as usize) }.1, &name) {
+                let names = open_walk_item_params(world, arg, &unsafe { nikaia_std::proven::read(&arguments, (at) as usize) }.1, &held);
                 let value = self.open_lambda_value(world, arg, &names, number);
                 if value.is_some() {
                     self.open_walk_found(nikaia_std::index::or(value, || 0), view);
                     return;
                 }
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -737,7 +737,7 @@ impl CheckState {
             Expr::Closure { body, .. } => {
                 for tail in block_tail(body) {
                     let numbers = self.open_numbers_in(world, tail);
-                    if !numbers.is_empty() { found = Some(self.open_root(*nikaia_std::index::get(&numbers, 0))); }
+                    if !numbers.is_empty() { found = Some(self.open_root(*unsafe { nikaia_std::proven::read(&numbers, (0) as usize) })); }
                 }
             },
             _ => { },

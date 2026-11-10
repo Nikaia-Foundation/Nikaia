@@ -128,8 +128,8 @@ impl EmitState {
         let mut i: i64 = 0;
         for part in parts.iter() {
             if i > 0 { out.push(", "); }
-            i += 1;
-            if ((i) as usize) <= sliced.len() && *nikaia_std::index::get(&sliced, nikaia_std::index::at(i - 1)) {
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+            if ((i) as usize) <= sliced.len() && *unsafe { nikaia_std::proven::read(&sliced, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) } {
                 out.push("&(");
                 self.emit_expr(world, walk, out, host, part, depth, flow, scope)?;
                 out.push(")[..]");

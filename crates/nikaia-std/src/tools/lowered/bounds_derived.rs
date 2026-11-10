@@ -75,7 +75,7 @@ pub fn derived_of(program: &Program, beside: &[&Program], beside_words: &[&winno
     for k in 0..beside.len() as i64 {
         if ((k) as usize) >= beside_words.len() { return derived; }
         let mut there = derived_scan();
-        for item in nikaia_std::index::get(&beside, (k) as usize).items.iter() { derived_item_names(&item.node, *nikaia_std::index::get(&beside_words, (k) as usize), &mut there.values); }
+        for item in unsafe { nikaia_std::proven::read(&beside, (k) as usize) }.items.iter() { derived_item_names(&item.node, *unsafe { nikaia_std::proven::read(&beside_words, (k) as usize) }, &mut there.values); }
         for (name, _) in there.calls.iter() { everywhere.values.insert(nikaia_std::block::Text::from(name.to_string())); }
         for name in there.values.iter() { everywhere.values.insert(nikaia_std::block::Text::from(name.to_string())); }
     }
@@ -144,13 +144,13 @@ pub(crate) fn derived_callers_first(derived: &Derived, called: &[collections::BT
     let mut waiting: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for _k in 0..called.len() as i64 { waiting.push(0); }
     for k in 0..called.len() as i64 {
-        for name in (*nikaia_std::index::get(&called, nikaia_std::index::at(k))).iter() {
+        for name in (*unsafe { nikaia_std::proven::read(&called, (k) as usize) }).iter() {
             let callee = match *nikaia_std::index::get(&derived.functions, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
             waiting[nikaia_std::index::at(callee.position)] += 1;
         }
     }
     let mut ready: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    for k in 0..called.len() as i64 { if *nikaia_std::index::get(&waiting, nikaia_std::index::at(k)) == 0 { ready.insert(k); } }
+    for k in 0..called.len() as i64 { if *unsafe { nikaia_std::proven::read(&waiting, (k) as usize) } == 0 { ready.insert(k); } }
     let mut placed: collections::BTreeSet<i64> = collections::BTreeSet::new();
     let mut order: Vec<i64> = vec![];
     while !ready.is_empty() {
@@ -310,7 +310,7 @@ pub(crate) fn derived_element_lets(block: &Block, words: &winnow_grammar::Intern
                         Expr::Index { base, .. } => {
                             let base = nikaia_std::boxed::open(base);
                             let list = match path_of(base, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                            read.insert(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 0)).to_string()), list);
+                            read.insert(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), list);
                         },
                         _ => { },
                     }
@@ -364,7 +364,7 @@ pub fn derived_note(around: &mut Around, walked: &BoundsProven) {
                     break;
                 }
             }
-            if everywhere { held.push((*nikaia_std::index::get(&function.claims, nikaia_std::index::at(k))).clone()); }
+            if everywhere { held.push((*unsafe { nikaia_std::proven::read(&function.claims, (k) as usize) }).clone()); }
         }
         if !held.is_empty() { around.derived.entry.insert(function.key, held); }
         return;

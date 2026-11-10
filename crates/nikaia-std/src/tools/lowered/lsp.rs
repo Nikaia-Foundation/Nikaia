@@ -166,8 +166,8 @@ pub async fn lsp_serve<H: LspHost>(host: &H) -> Result<i64, __NikaiaThrows_LspRe
                 } else if method == "textDocument/didChange" {
                     let changes = cargo_json_items((cargo_json_member((params).as_ref(), "contentChanges")).as_ref());
                     if !changes.is_empty() {
-                        let last = changes.len() as i64 - 1;
-                        let changed: Option<json::Value> = Some((*nikaia_std::index::get(&changes, nikaia_std::index::at(last))).clone());
+                        let last = unsafe { nikaia_std::proven::sub::<i64>(changes.len() as i64, 1) };
+                        let changed: Option<json::Value> = Some((*unsafe { nikaia_std::proven::read(&changes, (last) as usize) }).clone());
                         open.insert(nikaia_std::block::Text::from(path.to_string()), nikaia_std::index::or(cargo_json_text((cargo_json_member((changed).as_ref(), "text")).as_ref()), || "".into()));
                     }
                     marked = lsp_publish(host, &path, &open, &uris, &marked, alone).await?;
@@ -201,13 +201,13 @@ pub fn lsp_uri_path(uri: &str) -> Option<String> {
     let mut decoded: Vec<u8> = vec![];
     let mut i: i64 = 0;
     while i < given.len() as i64 {
-        let b = *nikaia_std::index::get(&given, (i) as usize);
-        if b == 37 && i + 2 < given.len() as i64 {
-            let high = lsp_hex(*nikaia_std::index::get(&given, (i + 1) as usize));
-            let low = lsp_hex(*nikaia_std::index::get(&given, (i + 2) as usize));
+        let b = *unsafe { nikaia_std::proven::read(&given, (i) as usize) };
+        if b == 37 && unsafe { nikaia_std::proven::add::<i64>(i, 2) } < given.len() as i64 {
+            let high = lsp_hex(*unsafe { nikaia_std::proven::read(&given, (nikaia_std::proven::add::<i64>(i, 1)) as usize) });
+            let low = lsp_hex(*unsafe { nikaia_std::proven::read(&given, (nikaia_std::proven::add::<i64>(i, 2)) as usize) });
             if high >= 0 && low >= 0 {
                 decoded.push(u8::try_from(high * 16 + low).unwrap_or_else(|_| panic!("the value does not fit in an `u8`")));
-                i += 3;
+                i = unsafe { nikaia_std::proven::add::<i64>(i, 3) };
                 continue;
             }
         }
@@ -224,9 +224,9 @@ pub fn lsp_uri_path(uri: &str) -> Option<String> {
 
 pub(crate) fn lsp_hex(b: u8) -> i64 {
     let d = b as i64;
-    if d >= 48 && d <= 57 { return d - 48; }
-    if d >= 65 && d <= 70 { return d - 55; }
-    if d >= 97 && d <= 102 { return d - 87; }
+    if d >= 48 && d <= 57 { return unsafe { nikaia_std::proven::sub::<i64>(d, 48) }; }
+    if d >= 65 && d <= 70 { return unsafe { nikaia_std::proven::sub::<i64>(d, 55) }; }
+    if d >= 97 && d <= 102 { return unsafe { nikaia_std::proven::sub::<i64>(d, 87) }; }
     -1
 }
 
@@ -398,9 +398,9 @@ pub fn lsp_range(source: &str, span: &Span, word: &str) -> json::Value {
     let end = span.end as i64;
     let mut line: i64 = 0; #[allow(clippy::redundant_locals)] let lines = lines;
     let mut start: i64 = 0; #[allow(clippy::redundant_locals)] let lines = lines;
-    while line + 1 < lines.len() as i64 && (start + (*nikaia_std::index::get(&lines, nikaia_std::index::at(line))).len() as i64) < at {
-        start += (*nikaia_std::index::get(&lines, nikaia_std::index::at(line))).len() as i64 + 1;
-        line += 1;
+    while line + 1 < lines.len() as i64 && (start + (*unsafe { nikaia_std::proven::read(&lines, (line) as usize) }).len() as i64) < at {
+        start += (*unsafe { nikaia_std::proven::read(&lines, (line) as usize) }).len() as i64 + 1;
+        line = unsafe { nikaia_std::proven::add::<i64>(line, 1) };
     }
     let text = *nikaia_std::index::get(&lines, nikaia_std::index::at(line));
     let mut column: i64 = 1;
@@ -429,7 +429,7 @@ pub(crate) fn lsp_units(line: &str, count: i64) -> i64 {
     for c in line.chars() {
         if seen >= count { break; }
         units += if (c as i64) < 65536 { 1 } else { 2 };
-        seen += 1;
+        seen = unsafe { nikaia_std::proven::add::<i64>(seen, 1) };
     }
     units
 }

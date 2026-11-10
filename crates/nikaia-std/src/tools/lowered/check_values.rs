@@ -43,7 +43,7 @@ impl CheckState {
         if key == "str::starts_with" { param = "prefix"; } else if key == "str::ends_with" { param = "suffix"; } else if key == "str::contains" { param = "part"; } else if key == "str::strip_prefix" { param = "prefix"; } else if key == "str::strip_suffix" { param = "suffix"; } else if key == "str::split" || key == "str::rsplit" || key == "str::split_once" || key == "str::rsplit_once" || key == "str::matches" || key == "str::trim_start_matches" || key == "str::trim_end_matches" { param = "sep"; } else if key == "str::find" || key == "str::rfind" { param = "needle"; } else if key == "str::replace" || key == "str::replacen" { param = "from"; } else { return; }
         let routed = param == "needle" || key == "str::replacen";
         if found.is_empty() { return; }
-        let a_list = match nikaia_std::index::get(&found, 0) {
+        let a_list = match unsafe { nikaia_std::proven::read(&found, (0) as usize) } {
             Ty::Named { name, .. } => name == "Vec" || name == "Array",
             _ => false,
         };
@@ -53,17 +53,17 @@ impl CheckState {
             return;
         }
         if routed { return; }
-        let owned = match nikaia_std::index::get(&found, 0) {
+        let owned = match unsafe { nikaia_std::proven::read(&found, (0) as usize) } {
             Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
             _ => false,
         };
-        let viewed = match nikaia_std::index::get(&found, 0) {
+        let viewed = match unsafe { nikaia_std::proven::read(&found, (0) as usize) } {
             Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && (name == "String" || name == "str") },
             _ => false,
         };
         let mut literal = false;
-        if !given.is_empty() { literal = matches!(*nikaia_std::index::get(&given, 0), Expr::LitStr { .. }); }
-        if viewed && !literal && !given.is_empty() { self.facts.view_patterns.insert(node_key(nikaia_std::index::get(&given, 0))); }
+        if !given.is_empty() { literal = matches!(*unsafe { nikaia_std::proven::read(&given, (0) as usize) }, Expr::LitStr { .. }); }
+        if viewed && !literal && !given.is_empty() { self.facts.view_patterns.insert(node_key(unsafe { nikaia_std::proven::read(&given, (0) as usize) })); }
         if !owned || literal { return; }
         self.facts.owned_patterns.insert(node_key(nikaia_std::index::get(&given, 0)));
     }

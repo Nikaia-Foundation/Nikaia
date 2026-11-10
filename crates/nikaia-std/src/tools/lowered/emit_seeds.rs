@@ -400,7 +400,7 @@ pub(crate) fn emit_seeds_calls_of(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, bod
 pub(crate) fn emit_seeds_callee(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, func: &Expr) -> Option<String> {
     let mut out: Option<String> = None;
     match func {
-        Expr::Path(segments, _) => { if !segments.is_empty() { out = Some(unit.text(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1)))); } },
+        Expr::Path(segments, _) => { if !segments.is_empty() { out = Some(unit.text(*unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(segments.len() as i64, 1)) as usize) })); } },
         Expr::Variable(one, _) => {
             let one = *one;
             out = Some(unit.text(one));
@@ -515,7 +515,7 @@ pub fn emit_seeds_declare_fn(place: &mut EmitSeedsPlace, base: i64, groups: &[i6
         names.push(String::from(""));
     }
     for at in 0..within.len() as i64 {
-        let j = *nikaia_std::index::get(&within, (at) as usize);
+        let j = *unsafe { nikaia_std::proven::read(&within, (at) as usize) };
         if j >= 0 { { let __nikaia_stored = format!("__S{}", j); nikaia_std::index::set(&mut names, nikaia_std::index::at(*nikaia_std::index::get(&groups, (at) as usize)), __nikaia_stored); } }
     }
     place.has_shape = true;
@@ -641,10 +641,10 @@ pub(crate) fn emit_seeds_last_start(c: &[scalar]) -> i64 {
     let mut from: i64 = 0;
     let mut at: i64 = 0;
     while ((at + 1) as usize) < c.len() {
-        if *nikaia_std::index::get(&c, (at) as usize) == ':' && *nikaia_std::index::get(&c, (at + 1) as usize) == ':' {
-            from = at + 2;
-            at += 2;
-        } else { at += 1; }
+        if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ':' && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == ':' {
+            from = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
+        } else { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
     }
     from
 }
@@ -690,9 +690,9 @@ pub(crate) fn emit_seeds_closing(c: &[scalar], open: i64) -> i64 {
     let mut depth = 0;
     let mut at = open;
     while at < c.len() as i64 {
-        if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '<' { depth += 1; } else if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '-' && at + 1 < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1)) == '>' { at += 1; } else if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '>' {
+        if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '<' { depth += 1; } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '-' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '>' { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '>' {
             depth -= 1;
-            if depth == 0 { return at + 1; }
+            if depth == 0 { return unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
         }
         at += 1;
     }
@@ -716,18 +716,18 @@ pub(crate) fn emit_seeds_run(run: &mut EmitSeedsRun, place: &mut EmitSeedsPlace,
     while run.at < run.c.len() as i64 {
         let ch = *nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at));
         if inside && ch == '>' { return; }
-        if ch == '-' && run.at + 1 < run.c.len() as i64 && *nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at + 1)) == '>' {
+        if ch == '-' && unsafe { nikaia_std::proven::add::<i64>(run.at, 1) } < run.c.len() as i64 && *unsafe { nikaia_std::proven::read(&run.c, (nikaia_std::proven::add::<i64>(run.at, 1)) as usize) } == '>' {
             run.out.push('-');
             run.out.push('>');
-            run.at += 2;
+            run.at = unsafe { nikaia_std::proven::add::<i64>(run.at, 2) };
             continue;
         }
         if ch == '\'' {
             run.out.push(ch);
-            run.at += 1;
-            while run.at < run.c.len() as i64 && ((*nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at))).is_alphanumeric() || *nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at)) == '_') {
-                run.out.push(*nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at)));
-                run.at += 1;
+            run.at = unsafe { nikaia_std::proven::add::<i64>(run.at, 1) };
+            while run.at < run.c.len() as i64 && ((*unsafe { nikaia_std::proven::read(&run.c, (run.at) as usize) }).is_alphanumeric() || *unsafe { nikaia_std::proven::read(&run.c, (run.at) as usize) } == '_') {
+                run.out.push(*unsafe { nikaia_std::proven::read(&run.c, (run.at) as usize) });
+                run.at = unsafe { nikaia_std::proven::add::<i64>(run.at, 1) };
             }
             continue;
         }
@@ -735,15 +735,15 @@ pub(crate) fn emit_seeds_run(run: &mut EmitSeedsRun, place: &mut EmitSeedsPlace,
             let start = run.at;
             let mut more = true;
             while more && run.at < run.c.len() as i64 {
-                let b = *nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at));
-                if b.is_alphanumeric() || b == '_' { run.at += 1; } else if b == ':' && run.at + 2 < run.c.len() as i64 && *nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at + 1)) == ':' && ((*nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at + 2))).is_alphanumeric() || *nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at + 2)) == '_') { run.at += 2; } else { more = false; }
+                let b = *unsafe { nikaia_std::proven::read(&run.c, (run.at) as usize) };
+                if b.is_alphanumeric() || b == '_' { run.at = unsafe { nikaia_std::proven::add::<i64>(run.at, 1) }; } else if b == ':' && unsafe { nikaia_std::proven::add::<i64>(run.at, 2) } < run.c.len() as i64 && *unsafe { nikaia_std::proven::read(&run.c, (nikaia_std::proven::add::<i64>(run.at, 1)) as usize) } == ':' && ((*unsafe { nikaia_std::proven::read(&run.c, (nikaia_std::proven::add::<i64>(run.at, 2)) as usize) }).is_alphanumeric() || *unsafe { nikaia_std::proven::read(&run.c, (nikaia_std::proven::add::<i64>(run.at, 2)) as usize) } == '_') { run.at = unsafe { nikaia_std::proven::add::<i64>(run.at, 2) }; } else { more = false; }
             }
             let path = emit_seeds_between(&run.c, start, run.at);
             emit_seeds_mention(run, &path, place, fast, tables);
             continue;
         }
         run.out.push(ch);
-        run.at += 1;
+        run.at = unsafe { nikaia_std::proven::add::<i64>(run.at, 1) };
     }
 }
 
@@ -797,7 +797,7 @@ pub(crate) fn emit_seeds_mention(run: &mut EmitSeedsRun, path: &str, place: &mut
         }
         if run.at < run.c.len() as i64 && *nikaia_std::index::get(&run.c, nikaia_std::index::at(run.at)) == '>' {
             run.out.push('>');
-            run.at += 1;
+            run.at = unsafe { nikaia_std::proven::add::<i64>(run.at, 1) };
         }
     } else if !added.is_empty() {
         run.out.push('<');

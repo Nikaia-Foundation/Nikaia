@@ -47,7 +47,7 @@ pub(crate) struct MpStruct {
 pub(crate) fn mp_structs(held: &MpHeld<'_, '_>) -> collections::BTreeMap<String, MpStruct> {
     let mut by_name: collections::BTreeMap<String, MpStruct> = collections::BTreeMap::new();
     for u in 0..held.units.len() as i64 {
-        for item in nikaia_std::index::get(&held.units, (u) as usize).items.iter() {
+        for item in unsafe { nikaia_std::proven::read(&held.units, (u) as usize) }.items.iter() {
             match &item.node {
                 Item::Struct { name, fields, .. } => {
                     let name = *name;
@@ -81,7 +81,7 @@ pub(crate) struct MpAt {
 pub(crate) fn mp_ordinal(g: &mut MpGather, at: &MpAt) -> Option<i64> {
     if at.within < 0 { return None; }
     let n = *nikaia_std::index::get(&g.counters, nikaia_std::index::at(at.within));
-    { let __nikaia_stored = n + 1; nikaia_std::index::set(&mut g.counters, nikaia_std::index::at(at.within), __nikaia_stored); }
+    { let __nikaia_stored = n + 1; unsafe { nikaia_std::proven::write(&mut g.counters, (at.within) as usize, __nikaia_stored) }; }
     Some(n)
 }
 
@@ -94,7 +94,7 @@ pub(crate) fn mp_of(g: &mut MpGather, held: &MpHeld<'_, '_>, structs: &collectio
         let within = mp_ordinal(g, at);
         out.push(MpPosition { label: nikaia_std::block::Text::from(at.label.to_string()), owner: nikaia_std::block::Text::from(at.owner.to_string()), path: nikaia_std::block::Text::from(at.path.to_string()), group: format!("{}|{}|{}", at.scope, seed, at.path), within });
         let before = out.len() as i64;
-        for generic in ty.generics.iter() { mp_of(g, held, structs, key, arity, unit, generic, at, out, depth + 1); }
+        for generic in ty.generics.iter() { mp_of(g, held, structs, key, arity, unit, generic, at, out, unsafe { nikaia_std::proven::add::<i64>(depth, 1) }); }
         if (out.len() as i64) > before { g.nested = true; }
         return;
     }
@@ -108,15 +108,15 @@ pub(crate) fn mp_of(g: &mut MpGather, held: &MpHeld<'_, '_>, structs: &collectio
             let mut within = at.within;
             if enters {
                 g.counters.push(0);
-                within = g.counters.len() as i64 - 1;
+                within = unsafe { nikaia_std::proven::sub::<i64>(g.counters.len() as i64, 1) };
             }
             for field in st.fields.iter() {
                 let inner = MpAt { owner: nikaia_std::block::Text::from(at.owner.to_string()), label: format!("{}.{}", at.label, field.name), scope: nikaia_std::block::Text::from(scope_here.to_string()), path: format!("{}.{}", at.path, field.name), within };
-                mp_of(g, held, structs, key, arity, st.unit, &field.ty, &inner, out, depth + 1);
+                mp_of(g, held, structs, key, arity, st.unit, &field.ty, &inner, out, unsafe { nikaia_std::proven::add::<i64>(depth, 1) });
             }
         }
     }
-    for generic in ty.generics.iter() { mp_of(g, held, structs, key, arity, unit, generic, at, out, depth + 1); }
+    for generic in ty.generics.iter() { mp_of(g, held, structs, key, arity, unit, generic, at, out, unsafe { nikaia_std::proven::add::<i64>(depth, 1) }); }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -166,16 +166,16 @@ impl<'a> MpBody<'a> {
     pub(crate) fn find(&mut self, start: i64) -> i64 {
         let mut at = start;
         while *nikaia_std::index::get(&self.parent, nikaia_std::index::at(at)) != at {
-            let up = *nikaia_std::index::get(&self.parent, nikaia_std::index::at(at));
-            { let __nikaia_stored = *nikaia_std::index::get(&self.parent, nikaia_std::index::at(up)); nikaia_std::index::set(&mut self.parent, nikaia_std::index::at(at), __nikaia_stored); }
-            at = *nikaia_std::index::get(&self.parent, nikaia_std::index::at(at));
+            let up = *unsafe { nikaia_std::proven::read(&self.parent, (at) as usize) };
+            { let __nikaia_stored = *unsafe { nikaia_std::proven::read(&self.parent, (up) as usize) }; unsafe { nikaia_std::proven::write(&mut self.parent, (at) as usize, __nikaia_stored) }; }
+            at = *unsafe { nikaia_std::proven::read(&self.parent, (at) as usize) };
         }
         at
     }
     pub(crate) fn union(&mut self, a: i64, b: i64) {
         let one = self.find(a);
         let other = self.find(b);
-        if one != other { { let __nikaia_stored = other; nikaia_std::index::set(&mut self.parent, nikaia_std::index::at(one), __nikaia_stored); } }
+        if one != other { { let __nikaia_stored = other; unsafe { nikaia_std::proven::write(&mut self.parent, (one) as usize, __nikaia_stored) }; } }
     }
     pub(crate) fn new_root(&mut self, name: String) -> i64 {
         let id = self.parent.len() as i64;
@@ -187,7 +187,7 @@ impl<'a> MpBody<'a> {
     pub(crate) fn doubt(&mut self) { self.all_keyed = true; }
     pub(crate) fn add(&mut self, root: i64, dep: &MpDep) {
         let joined = mp_join(nikaia_std::index::get(&self.adds, nikaia_std::index::at(root)), dep);
-        { let __nikaia_stored = joined; nikaia_std::index::set(&mut self.adds, nikaia_std::index::at(root), __nikaia_stored); }
+        { let __nikaia_stored = joined; unsafe { nikaia_std::proven::write(&mut self.adds, (root) as usize, __nikaia_stored) }; }
     }
     pub(crate) fn locate(&mut self, e: &Expr) -> Option<(String, String)> {
         match e {
@@ -278,7 +278,7 @@ impl<'a> MpBody<'a> {
     }
     pub(crate) fn ends_in_a_map(&self, segments: &[winnow_grammar::Symbol]) -> bool {
         if segments.is_empty() { return false; }
-        mp_made_name(self.words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))))
+        mp_made_name(self.words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) }))))
     }
     pub(crate) fn deps(&self, e: &Expr) -> MpDep {
         match e {
@@ -341,18 +341,18 @@ impl<'a> MpBody<'a> {
         self.locals.insert(name, mp_join(&before, dep));
     }
     pub(crate) fn block(&mut self, block: &Block, tail_is_the_result: bool) {
-        let last = block.stmts.len() as i64 - 1;
+        let last = unsafe { nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1) };
         let mut at: i64 = 0;
         for stmt in block.stmts.iter() {
             self.stmt(&stmt.node, tail_is_the_result && at == last);
-            at = at + 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     }
     pub(crate) fn stmt(&mut self, stmt: &Stmt, is_the_result: bool) {
         match stmt {
             Stmt::Let { names, value, .. } => {
                 if names.len() == 1 && self.map_made(value) {
-                    let name = mp_text(self.words, *nikaia_std::index::get(&names, 0));
+                    let name = mp_text(self.words, *unsafe { nikaia_std::proven::read(&names, (0) as usize) });
                     if self.params.contains(&name) || self.roots.contains_key(&name) { self.doubt(); } else {
                         let root = self.new_root(String::from(""));
                         self.roots.insert(name, vec![(String::from(""), root)]);
@@ -445,7 +445,7 @@ impl<'a> MpBody<'a> {
         }
         targets
     }
-    pub(crate) fn join_all(&mut self, from: &[i64], targets: &[i64]) { if (from.len() as i64) == targets.len() as i64 { for i in 0..from.len() as i64 { self.union(*nikaia_std::index::get(&from, (i) as usize), *nikaia_std::index::get(&targets, (i) as usize)); } } else { self.doubt(); } }
+    pub(crate) fn join_all(&mut self, from: &[i64], targets: &[i64]) { if (from.len() as i64) == targets.len() as i64 { for i in 0..from.len() as i64 { self.union(*unsafe { nikaia_std::proven::read(&from, (i) as usize) }, *unsafe { nikaia_std::proven::read(&targets, (i) as usize) }); } } else { self.doubt(); } }
     pub(crate) fn flows(&mut self, e: &Expr, under: &str) {
         let targets = self.targets_of(&nikaia_std::block::Text::from(under.to_string()));
         if targets.is_empty() {
@@ -479,8 +479,8 @@ impl<'a> MpBody<'a> {
                             let h = nikaia_std::index::or(held, || vec![].into());
                             if (h.len() as i64) == ours.len() as i64 {
                                 for i in 0..h.len() as i64 {
-                                    let (_, a) = nikaia_std::index::get(&h, (i) as usize); let a = nikaia_std::num::value(a);
-                                    self.union(a, *nikaia_std::index::get(&ours, (i) as usize));
+                                    let (_, a) = unsafe { nikaia_std::proven::read(&h, (i) as usize) }; let a = nikaia_std::num::value(a);
+                                    self.union(a, *unsafe { nikaia_std::proven::read(&ours, (i) as usize) });
                                 }
                             } else { self.doubt(); }
                         }
@@ -581,7 +581,7 @@ impl<'a> MpBody<'a> {
                 if left.is_some() && right.is_some() {
                     let a = nikaia_std::index::or(left, || vec![].into());
                     let b = nikaia_std::index::or(right, || vec![].into());
-                    if (a.len() as i64) == b.len() as i64 { for i in 0..a.len() as i64 { self.union(*nikaia_std::index::get(&a, nikaia_std::index::at(i)), *nikaia_std::index::get(&b, nikaia_std::index::at(i))); } } else { self.doubt(); }
+                    if (a.len() as i64) == b.len() as i64 { for i in 0..a.len() as i64 { self.union(*unsafe { nikaia_std::proven::read(&a, (i) as usize) }, *unsafe { nikaia_std::proven::read(&b, (i) as usize) }); } } else { self.doubt(); }
                 } else if left.is_some() {
                     if !self.map_made(rhs) { self.doubt(); }
                     self.expr(rhs);
@@ -647,7 +647,7 @@ impl<'a> MpBody<'a> {
         let mut todo: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for n in dep.names.iter() { todo.push(nikaia_std::block::Text::from(n.to_string())); }
         while !todo.is_empty() {
-            let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&todo, nikaia_std::index::at(todo.len() as i64 - 1))).to_string());
+            let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&todo, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(todo.len() as i64, 1) }))).to_string());
             todo.pop();
             if seen.contains(&name) { continue; }
             seen.insert(nikaia_std::block::Text::from(name.to_string()));
@@ -767,7 +767,7 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || vec![].into());
-        labels.push(nikaia_std::block::Text::from(nikaia_std::index::get(&positions, nikaia_std::index::at(at)).label.to_string()));
+        labels.push(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&positions, (at) as usize) }.label.to_string()));
         classes.insert(class, labels);
     }
     let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut b = b;
@@ -776,7 +776,7 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
         #[allow(unused_mut)] let mut labels = found.copy_owned();
         labels.sort();
         #[allow(unused_mut)] let mut distinct: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut labels = labels;
-        for l in labels.iter() { if distinct.is_empty() || *nikaia_std::index::get(&distinct, nikaia_std::index::at(distinct.len() as i64 - 1)) != *l { distinct.push(nikaia_std::block::Text::from(l.to_string())); } }
+        for l in labels.iter() { if distinct.is_empty() || *nikaia_std::index::get(&distinct, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(distinct.len() as i64, 1) })) != *l { distinct.push(nikaia_std::block::Text::from(l.to_string())); } }
         let mut said: String = String::from("keyed"); #[allow(unused_mut, clippy::redundant_locals)] let mut distinct = distinct;
         let entry = match *nikaia_std::index::get(&how, &class) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -794,24 +794,24 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
     }
     out.sort();
     #[allow(unused_mut)] let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut b = b;
-    for at in 0..positions.len() as i64 { if exact { keys.push(format!("{}", b.find(at))); } else { keys.push(nikaia_std::block::Text::from(nikaia_std::index::get(&positions, nikaia_std::index::at(at)).group.to_string())); } }
+    for at in 0..positions.len() as i64 { if exact { keys.push(format!("{}", b.find(at))); } else { keys.push(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&positions, (at) as usize) }.group.to_string())); } }
     let mut first: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
     let mut conflict = false;
     for at in 0..keys.len() as i64 {
-        let k = nikaia_std::block::Text::from((*nikaia_std::index::get(&keys, nikaia_std::index::at(at))).to_string());
+        let k = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&keys, (at) as usize) }).to_string());
         let canon = *nikaia_std::index::get(&first, &k);
         if canon.is_none() { first.insert(k, at); } else {
             let c = nikaia_std::index::or(canon, || 0);
             let old = nikaia_std::index::get(&positions, nikaia_std::index::at(c)).within;
-            let new = nikaia_std::index::get(&positions, nikaia_std::index::at(at)).within;
+            let new = unsafe { nikaia_std::proven::read(&positions, (at) as usize) }.within;
             if old.is_none() && new.is_some() { first.insert(k, at); } else if old.is_some() && new.is_some() && old.unwrap() != new.unwrap() { conflict = true; }
         }
     }
     let mut groups: Vec<i64> = vec![];
     let mut within: Vec<Option<i64>> = vec![];
     for at in 0..keys.len() as i64 {
-        groups.push(nikaia_std::index::or(*nikaia_std::index::get(&first, &(*nikaia_std::index::get(&keys, nikaia_std::index::at(at)))), || 0));
-        within.push(nikaia_std::index::get(&positions, nikaia_std::index::at(at)).within);
+        groups.push(nikaia_std::index::or(*nikaia_std::index::get(&first, &(*unsafe { nikaia_std::proven::read(&keys, (at) as usize) })), || 0));
+        within.push(unsafe { nikaia_std::proven::read(&positions, (at) as usize) }.within);
     }
     Some(MpFnMaps { key: fname, lines: out, shape: MpShape { groups, within, start, of_params, exact, conflict } })
 }
@@ -820,14 +820,14 @@ pub fn mp_analyse(held: &MpHeld<'_, '_>, key: &impl Fn(i64, &Type) -> String, ar
     let structs = mp_structs(held);
     let mut out: Vec<MpFnMaps> = vec![];
     for u in 0..held.units.len() as i64 {
-        for item in nikaia_std::index::get(&held.units, nikaia_std::index::at(u)).items.iter() {
+        for item in unsafe { nikaia_std::proven::read(&held.units, (u) as usize) }.items.iter() {
             match &item.node {
                 Item::Fn { name, args, ret_type, body, is_public, receiver, .. } => {
                     let is_public = *is_public; let name = *name;
                     if !is_public || receiver.is_some() || name.is_none() { continue; }
                     let fname = nikaia_std::block::Text::from((*nikaia_std::index::get(&held.words, nikaia_std::index::at(u))).resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }).to_string());
                     let mut params: Vec<MpParam> = vec![];
-                    for a in args.iter() { params.push(MpParam { name: nikaia_std::block::Text::from((*nikaia_std::index::get(&held.words, nikaia_std::index::at(u))).resolve(a.name).to_string()), ty: a.ty.clone() }); }
+                    for a in args.iter() { params.push(MpParam { name: nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&held.words, (u) as usize) }).resolve(a.name).to_string()), ty: a.ty.clone() }); }
                     let found = mp_lines(held, &structs, key, arity, u, fname, None, &params, (ret_type).as_ref(), body, true);
                     if found.is_some() { out.push(match found { Some(__nikaia_value) => __nikaia_value, None => continue }); }
                 },
@@ -839,10 +839,10 @@ pub fn mp_analyse(held: &MpHeld<'_, '_>, key: &impl Fn(i64, &Type) -> String, ar
                             Item::Fn { name, args, ret_type, body, is_public, receiver, .. } => {
                                 let is_public = *is_public; let name = *name;
                                 if !is_public || name.is_none() { continue; }
-                                let fname = format!("{}::{}", target_name, (*nikaia_std::index::get(&held.words, nikaia_std::index::at(u))).resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }));
+                                let fname = format!("{}::{}", target_name, (*unsafe { nikaia_std::proven::read(&held.words, (u) as usize) }).resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }));
                                 let mut params: Vec<MpParam> = vec![];
                                 if receiver.is_some() { params.push(MpParam { name: mp_self(), ty: target.clone() }); }
-                                for a in args.iter() { params.push(MpParam { name: nikaia_std::block::Text::from((*nikaia_std::index::get(&held.words, nikaia_std::index::at(u))).resolve(a.name).to_string()), ty: a.ty.clone() }); }
+                                for a in args.iter() { params.push(MpParam { name: nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&held.words, (u) as usize) }).resolve(a.name).to_string()), ty: a.ty.clone() }); }
                                 let found = mp_lines(held, &structs, key, arity, u, fname, Some(target), &params, (ret_type).as_ref(), body, trait_name.is_none());
                                 if found.is_some() { out.push(match found { Some(__nikaia_value) => __nikaia_value, None => continue }); }
                             },

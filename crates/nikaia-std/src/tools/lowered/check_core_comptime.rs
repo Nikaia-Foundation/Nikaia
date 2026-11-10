@@ -32,13 +32,13 @@ pub(crate) fn check_core_comptime_tuple_parts(found: &Ty, evaluated: Option<&Bui
     for t in tys.iter() {
         let mut one = t.clone();
         if t.is_unknown() {
-            match *nikaia_std::index::get(&parts, nikaia_std::index::at(at)) {
+            match *unsafe { nikaia_std::proven::read(&parts, (at) as usize) } {
                 BuildValue::Int(n) => { one = Ty::Named { name: check_core_comptime_first_type(&n, false), args: vec![], view: false }; },
                 _ => { },
             }
         }
         out.push(one);
-        at = at + 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     Ty::Tuple(out)
 }
@@ -142,7 +142,7 @@ pub(crate) fn check_core_comptime_items(evaluated: Option<&BuildValue>) -> Vec<B
 
 pub(crate) fn check_core_comptime_unsized_array(want: &Ty) -> Option<String> {
     match want {
-        Ty::Named { name, args, .. } => { if name == "Array" && args.len() == 1 { return Some((*nikaia_std::index::get(&args, 0)).text()); } },
+        Ty::Named { name, args, .. } => { if name == "Array" && args.len() == 1 { return Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).text()); } },
         _ => { },
     }
     None
@@ -155,7 +155,7 @@ pub(crate) fn check_core_comptime_other(state: &mut CheckState, world: &CheckWor
     if shape == 7 {
         let field = state.unwritable_field(world, want);
         if field.len() == 2 {
-            state.a_field_that_owns_memory(bound, nikaia_std::index::get(&field, 0), nikaia_std::index::get(&field, 1), "a `comptime`", span);
+            state.a_field_that_owns_memory(bound, unsafe { nikaia_std::proven::read(&field, (0) as usize) }, unsafe { nikaia_std::proven::read(&field, (1) as usize) }, "a `comptime`", span);
             return;
         }
     }
@@ -272,8 +272,8 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
     let mut said_a_name = false;
     let mut at = walked_from;
     while at < state.findings.len() as i64 {
-        if nikaia_std::index::get(&state.findings, nikaia_std::index::at(at)).code == "NK1117" && nikaia_std::index::get(&state.findings, nikaia_std::index::at(at)).message.ends_with("` isn't declared anywhere.") { said_a_name = true; }
-        at = at + 1;
+        if nikaia_std::index::get(&state.findings, nikaia_std::index::at(at)).code == "NK1117" && unsafe { nikaia_std::proven::read(&state.findings, (at) as usize) }.message.ends_with("` isn't declared anywhere.") { said_a_name = true; }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     let bound = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
     state.nameable(&bound, span, "a `comptime`");
@@ -404,7 +404,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
         } { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         let part = unwritable_in(&state, world, &computed, &|of, variant| { check_walked_payload_of(world, of, variant) });
         if part.len() == 2 {
-            state.a_field_that_owns_memory(&bound, nikaia_std::index::get(&part, 0), nikaia_std::index::get(&part, 1), "a `comptime`", span);
+            state.a_field_that_owns_memory(&bound, unsafe { nikaia_std::proven::read(&part, (0) as usize) }, unsafe { nikaia_std::proven::read(&part, (1) as usize) }, "a `comptime`", span);
             said_a_part = true;
         }
     }

@@ -19,11 +19,11 @@ pub fn types_checked(names: &winnow_grammar::InternerContext, items: &[Spanned<I
     let plain = types_plain_enums(names, items);
     for k in 0..items.len() as i64 {
         let mut here = known.copy_owned();
-        here.extend(generic_names(names, &nikaia_std::index::get(&items, (k) as usize).node));
+        here.extend(generic_names(names, &unsafe { nikaia_std::proven::read(&items, (k) as usize) }.node));
         here.extend((*nikaia_std::index::get(&impl_parameters, (k) as usize)).iter().cloned());
-        bounds_of(names, &nikaia_std::index::get(&items, (k) as usize).node, &traits, &nikaia_std::index::get(&items, (k) as usize).span, &mut found);
-        item_types(names, &nikaia_std::index::get(&items, (k) as usize).node, &here, &plain, views, "", &nikaia_std::index::get(&items, (k) as usize).span, &mut found);
-        inherent_at_home(names, &nikaia_std::index::get(&items, (k) as usize).node, library, declared, &nikaia_std::index::get(&items, (k) as usize).span, &mut found);
+        bounds_of(names, &unsafe { nikaia_std::proven::read(&items, (k) as usize) }.node, &traits, &unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span, &mut found);
+        item_types(names, &unsafe { nikaia_std::proven::read(&items, (k) as usize) }.node, &here, &plain, views, "", &unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span, &mut found);
+        inherent_at_home(names, &unsafe { nikaia_std::proven::read(&items, (k) as usize) }.node, library, declared, &unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span, &mut found);
     }
     found
 }
@@ -61,7 +61,7 @@ pub(crate) fn with_its_last_segment(key: &str, known: &mut collections::BTreeSet
     known.insert(nikaia_std::block::Text::from(key.to_string()));
     let c: Vec<scalar> = nikaia_std::list::chars(key.chars());
     let mut last: i64 = -1;
-    for at in 0..c.len() as i64 { if ((at + 1) as usize) < c.len() && *nikaia_std::index::get(&c, (at) as usize) == ':' && *nikaia_std::index::get(&c, (at + 1) as usize) == ':' { last = at; } }
+    for at in 0..c.len() as i64 { if ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ':' && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == ':' { last = at; } }
     if last >= 0 { known.insert(slice(&c, last + 2, c.len() as i64)); }
 }
 
@@ -408,7 +408,7 @@ pub(crate) fn blocks_types(names: &winnow_grammar::InternerContext, expr: &Expr,
 
 pub(crate) fn written_foreign(names: &winnow_grammar::InternerContext, ty: &Type, known: &collections::BTreeSet<String>, a_parameter: bool, span: &Span, out: &mut Vec<Finding>) {
     if ty.is_slice && !ty.generics.is_empty() {
-        written_at(names, nikaia_std::index::get(&ty.generics, 0), known, false, span, out);
+        written_at(names, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, known, false, span, out);
         return;
     }
     written_at_the_boundary(names, ty, known, a_parameter, true, span, out);
@@ -428,7 +428,7 @@ pub(crate) fn written_at_the_boundary(names: &winnow_grammar::InternerContext, t
     }
     simd_written(names, &name, ty, span, out);
     if !a_parameter && !ty.is_view && !ty.is_slice && ty.count.is_none() && ty.generics.len() == 1 && name == "Array" {
-        let element = nikaia_std::block::Text::from(names.resolve(nikaia_std::index::get(&ty.generics, 0).name).to_string());
+        let element = nikaia_std::block::Text::from(names.resolve(unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }.name).to_string());
         out.push(refusal("NK1182", span.clone(), format!("`Array[{}]` needs a length here.", element), vec![format!("`Array[{}]` without a length only works for a parameter, where each call supplies the length. A field or a result has no call to take it from.", element)], format!("Use `Vec[{}]` for a list that can grow, or `Array[{}, N]` to write the length down.", element, element)));
         return;
     }
@@ -456,7 +456,7 @@ pub fn nobody_knows(name: &str, own: &Ledger, library: &Ledger) -> bool {
     if nikaia_std::list::contains(&BUILT_IN, &name) || own.types.contains_key(name) || library.types.contains_key(name) { return false; }
     let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
     let mut last: i64 = -1;
-    for at in 0..c.len() as i64 { if ((at + 1) as usize) < c.len() && *nikaia_std::index::get(&c, (at) as usize) == ':' && *nikaia_std::index::get(&c, (at + 1) as usize) == ':' { last = at; } }
+    for at in 0..c.len() as i64 { if ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ':' && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == ':' { last = at; } }
     let wanted = if last < 0 { format!("::{}", name) } else { format!("{}::", slice(&c, 0, last)) };
     for ledger in [own, library] {
         for (key, _) in ledger.types.iter() { if last < 0 && key.ends_with(AsRef::<str>::as_ref(&wanted)) || last >= 0 && key.starts_with(AsRef::<str>::as_ref(&wanted)) { return false; } }

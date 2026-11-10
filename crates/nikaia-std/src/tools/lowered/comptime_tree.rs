@@ -397,8 +397,8 @@ pub(crate) fn comptime_held_named(name: String, args: Vec<Ty>, view: bool, held:
         BuildValue::List(items) => {
             if name == "Vec" && args.len() == 1 {
                 let element = match items.is_empty() {
-                    true => (*nikaia_std::index::get(&args, 0)).clone(),
-                    false => match comptime_held_as((*nikaia_std::index::get(&args, 0)).clone(), nikaia_std::index::get(&items, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None },
+                    true => (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone(),
+                    false => match comptime_held_as((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone(), nikaia_std::index::get(&items, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None },
                 };
                 return Some(Ty::Named { name: String::from("Array"), args: vec![element, Ty::Count(items.len() as i64)], view });
             }

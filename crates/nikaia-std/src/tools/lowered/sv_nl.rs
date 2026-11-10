@@ -173,7 +173,7 @@ pub(crate) fn sv_nl_repair(arena: &TermArena, facts: &[i64], goal: i64, reals: &
         }
         for i in 0..names.len() as i64 {
             let mut tried = values.copy_owned();
-            tried.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&names, (i) as usize)).to_string()), (*nikaia_std::index::get(&moved, (i) as usize)).clone());
+            tried.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (i) as usize) }).to_string()), (*nikaia_std::index::get(&moved, (i) as usize)).clone());
             match sv_nl_settled(defs, &tried) {
                 None => { },
                 Some(ref s) => { if sv_nl_answers(arena, facts, goal, reals, defs, s) { return Some(s.copy_owned()); } },
@@ -192,8 +192,8 @@ pub(crate) fn sv_nl_root(v: &SvRat) -> Option<SvRat> {
 
 pub(crate) fn sv_nl_isqrt(n: i64) -> Option<i64> {
     let mut r: i64 = 0;
-    while r <= 3037000499i64 && r * r < n {
-        r += 1;
+    while r <= 3037000499i64 && unsafe { nikaia_std::proven::mul::<i64>(r, r) } < n {
+        r = unsafe { nikaia_std::proven::add::<i64>(r, 1) };
         if r > 100000 { return None; }
     }
     if r * r == n { Some(r) } else { None }
@@ -202,11 +202,11 @@ pub(crate) fn sv_nl_isqrt(n: i64) -> Option<i64> {
 pub(crate) fn sv_nl_candidates(defs: &[SvNl], values: &collections::BTreeMap<String, SvRat>) -> Vec<SvLemma> {
     let mut out: Vec<SvLemma> = vec![];
     for i in 0..defs.len() as i64 {
-        let t = (*nikaia_std::index::get(&defs, nikaia_std::index::at(i))).clone();
+        let t = (*unsafe { nikaia_std::proven::read(&defs, (i) as usize) }).clone();
         let a = sv_real_named(values, &t.a);
         let b = sv_real_named(values, &t.b);
         for j in 0..defs.len() as i64 {
-            if j != i && nikaia_std::index::get(&defs, (j) as usize).op == t.op {
+            if j != i && unsafe { nikaia_std::proven::read(&defs, (j) as usize) }.op == t.op {
                 let mut c = sv_lemma(String::from("congruence"), i);
                 c.other = j;
                 out.push(c.clone());

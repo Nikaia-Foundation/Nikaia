@@ -51,15 +51,15 @@ pub(crate) fn the_boundary(on_the_line: Option<&str>, source: &str, boundaries: 
     let line = written_or_nothing(on_the_line);
     let mut in_the_file: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for at in 0..boundaries.len() as i64 {
-        let called = format!("{}::", nikaia_std::index::get(&boundaries, nikaia_std::index::at(at)).word);
+        let called = format!("{}::", unsafe { nikaia_std::proven::read(&boundaries, (at) as usize) }.word);
         if on_the_line.is_some() && line.contains(AsRef::<str>::as_ref(&called)) { return at; }
         if source.contains(AsRef::<str>::as_ref(&called)) { in_the_file.push(at); }
     }
     for at in in_the_file.iter() {
         let at = nikaia_std::num::value(at);
-        if !nikaia_std::index::get(&boundaries, nikaia_std::index::at(at)).moved.is_empty() { return at; }
+        if !unsafe { nikaia_std::proven::read(&boundaries, (at) as usize) }.moved.is_empty() { return at; }
     }
-    if in_the_file.len() == 1 { return *nikaia_std::index::get(&in_the_file, 0); }
+    if in_the_file.len() == 1 { return *unsafe { nikaia_std::proven::read(&in_the_file, (0) as usize) }; }
     -1
 }
 

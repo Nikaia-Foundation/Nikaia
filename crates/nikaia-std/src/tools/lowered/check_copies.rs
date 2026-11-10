@@ -6,7 +6,7 @@ pub fn check_parts_beside(beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], here_at
     let mut at: i64 = 0;
     for other in beside.iter() {
         if at != here_at { for item in other.items.iter() { copies_parts_of(other, &item.node, &mut parts); } }
-        at = at + 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     parts
 }
@@ -74,7 +74,7 @@ impl CheckState {
         let mut at: i64 = 0;
         for other in world.beside.iter() {
             if at != world.here_at { for name in copies_declared_in(other) { if !nikaia_std::list::contains(&declared, &name) { package.push(name); } } }
-            at = at + 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut package = package;
         copies_dropped_in(&world.here, &mut dropped);

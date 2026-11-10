@@ -16,7 +16,7 @@ pub struct Scale {
 
 pub(crate) fn digit_of(ch: scalar, radix: i64) -> i64 {
     let mut d: i64 = -1;
-    if ch >= '0' && ch <= '9' { d = ch as i64 - '0' as i64; } else if ch >= 'a' && ch <= 'f' { d = ch as i64 - 'a' as i64 + 10; } else if ch >= 'A' && ch <= 'F' { d = ch as i64 - 'A' as i64 + 10; }
+    if ch >= '0' && ch <= '9' { d = unsafe { nikaia_std::proven::sub::<i64>(ch as i64, '0' as i64) }; } else if ch >= 'a' && ch <= 'f' { d = unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::sub::<i64>(ch as i64, 'a' as i64), 10) }; } else if ch >= 'A' && ch <= 'F' { d = unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::sub::<i64>(ch as i64, 'A' as i64), 10) }; }
     if d >= radix { return -1; }
     d
 }
@@ -38,15 +38,15 @@ pub(crate) fn scale_power(ch: scalar) -> i64 {
 
 pub(crate) fn scale_at(c: &[scalar], from: i64) -> Option<Scale> {
     if from >= c.len() as i64 { return None; }
-    let power = scale_power(*nikaia_std::index::get(&c, nikaia_std::index::at(from)));
+    let power = scale_power(*unsafe { nikaia_std::proven::read(&c, (from) as usize) });
     if power == 0 { return None; }
     let mut base: u64 = 1000u64;
     let mut len: i64 = 1;
-    if from + 1 < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(from + 1)) == 'i' {
+    if unsafe { nikaia_std::proven::add::<i64>(from, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(from, 1)) as usize) } == 'i' {
         base = 1024;
         len = 2;
     }
-    if from + len < c.len() as i64 && an_ascii_word(*nikaia_std::index::get(&c, nikaia_std::index::at(from + len))) { return None; }
+    if from + len < c.len() as i64 && an_ascii_word(*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(from, len)) as usize) }) { return None; }
     let mut by: u64 = 1u64;
     let mut turns: i64 = 0;
     while turns < power {
@@ -57,11 +57,11 @@ pub(crate) fn scale_at(c: &[scalar], from: i64) -> Option<Scale> {
 }
 
 pub(crate) fn upper_exponent(c: &[scalar], from: i64) -> i64 {
-    if from >= c.len() as i64 || *nikaia_std::index::get(&c, nikaia_std::index::at(from)) != 'E' { return 0; }
+    if from >= c.len() as i64 || *unsafe { nikaia_std::proven::read(&c, (from) as usize) } != 'E' { return 0; }
     let mut sign: i64 = 0;
-    if from + 1 < c.len() as i64 && (*nikaia_std::index::get(&c, nikaia_std::index::at(from + 1)) == '+' || *nikaia_std::index::get(&c, nikaia_std::index::at(from + 1)) == '-') { sign = 1; }
+    if unsafe { nikaia_std::proven::add::<i64>(from, 1) } < c.len() as i64 && (*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(from, 1)) as usize) } == '+' || *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(from, 1)) as usize) } == '-') { sign = 1; }
     let mut digits: i64 = 0;
-    while from + 1 + sign + digits < c.len() as i64 && an_ascii_digit(*nikaia_std::index::get(&c, nikaia_std::index::at(from + 1 + sign + digits))) { digits += 1; }
+    while unsafe { nikaia_std::proven::add::<i64>(from, 1) } + sign + digits < c.len() as i64 && an_ascii_digit(*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(from, 1), sign), digits)) as usize) }) { digits = unsafe { nikaia_std::proven::add::<i64>(digits, 1) }; }
     if digits == 0 { return 0; }
     1 + sign + digits
 }
@@ -84,8 +84,8 @@ pub(crate) fn times(digits: &str, by: u64) -> String {
     let mut carry: u64 = 0u64;
     let mut k = d.len() as i64;
     while k > 0 {
-        k -= 1;
-        let here = u64::try_from(digit_of(*nikaia_std::index::get(&d, nikaia_std::index::at(k)), 10)).unwrap_or_else(|_| panic!("the value does not fit in an `u64`")) * by + carry;
+        k = unsafe { nikaia_std::proven::sub::<i64>(k, 1) };
+        let here = u64::try_from(digit_of(*unsafe { nikaia_std::proven::read(&d, (k) as usize) }, 10)).unwrap_or_else(|_| panic!("the value does not fit in an `u64`")) * by + carry;
         out.push(here % 10u64);
         carry = here / 10u64;
     }
@@ -96,9 +96,9 @@ pub(crate) fn times(digits: &str, by: u64) -> String {
     let mut text: String = String::from("");
     let mut at = out.len() as i64;
     while at > 0 {
-        at -= 1;
-        if text.is_empty() && *nikaia_std::index::get(&out, nikaia_std::index::at(at)) == 0u64 { continue; }
-        text.push((u8::try_from(*nikaia_std::index::get(&out, nikaia_std::index::at(at)) + '0' as u64).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as scalar);
+        at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
+        if text.is_empty() && *unsafe { nikaia_std::proven::read(&out, (at) as usize) } == 0u64 { continue; }
+        text.push((u8::try_from(*unsafe { nikaia_std::proven::read(&out, (at) as usize) } + '0' as u64).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as scalar);
     }
     if text.is_empty() { return String::from("0"); }
     text
@@ -108,14 +108,14 @@ pub(crate) fn past(digits: &str, limit: &str) -> bool {
     if (digits.len() as i64) != limit.len() as i64 { return (digits.len() as i64) > limit.len() as i64; }
     let a: Vec<scalar> = nikaia_std::list::chars(digits.chars());
     let b: Vec<scalar> = nikaia_std::list::chars(limit.chars());
-    for k in 0..a.len() as i64 { if *nikaia_std::index::get(&a, (k) as usize) != *nikaia_std::index::get(&b, (k) as usize) { return *nikaia_std::index::get(&a, (k) as usize) > *nikaia_std::index::get(&b, (k) as usize); } }
+    for k in 0..a.len() as i64 { if *unsafe { nikaia_std::proven::read(&a, (k) as usize) } != *nikaia_std::index::get(&b, (k) as usize) { return *unsafe { nikaia_std::proven::read(&a, (k) as usize) } > *unsafe { nikaia_std::proven::read(&b, (k) as usize) }; } }
     false
 }
 
 pub(crate) fn without_leading_zeros(digits: &str) -> String {
     let d: Vec<scalar> = nikaia_std::list::chars(digits.chars());
     let mut at: i64 = 0;
-    while at + 1 < d.len() as i64 && *nikaia_std::index::get(&d, nikaia_std::index::at(at)) == '0' { at += 1; }
+    while at + 1 < d.len() as i64 && *unsafe { nikaia_std::proven::read(&d, (at) as usize) } == '0' { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
     slice(&d, at, d.len() as i64)
 }
 
@@ -132,20 +132,20 @@ pub fn number_at(text: &str, signed: bool) -> Number {
     let mut c: Vec<scalar> = vec![];
     let mut first: i64 = 0;
     if signed {
-        if all.len() < 2 || *nikaia_std::index::get(&all, 0) != '-' || !an_ascii_digit(*nikaia_std::index::get(&all, 1)) { return Number::Not; }
+        if all.len() < 2 || *unsafe { nikaia_std::proven::read(&all, (0) as usize) } != '-' || !an_ascii_digit(*unsafe { nikaia_std::proven::read(&all, (1) as usize) }) { return Number::Not; }
         first = 1;
     }
-    for k in first..all.len() as i64 { c.push(*nikaia_std::index::get(&all, nikaia_std::index::at(k))); }
+    for k in first..all.len() as i64 { c.push(*unsafe { nikaia_std::proven::read(&all, (k) as usize) }); }
     let mut radix: i64 = 10;
     let mut prefix: i64 = 0;
-    if c.len() >= 2 && *nikaia_std::index::get(&c, 0) == '0' {
-        if *nikaia_std::index::get(&c, 1) == 'x' {
+    if c.len() >= 2 && *unsafe { nikaia_std::proven::read(&c, (0) as usize) } == '0' {
+        if *unsafe { nikaia_std::proven::read(&c, (1) as usize) } == 'x' {
             radix = 16;
             prefix = 2;
-        } else if *nikaia_std::index::get(&c, 1) == 'b' {
+        } else if *unsafe { nikaia_std::proven::read(&c, (1) as usize) } == 'b' {
             radix = 2;
             prefix = 2;
-        } else if *nikaia_std::index::get(&c, 1) == 'o' {
+        } else if *unsafe { nikaia_std::proven::read(&c, (1) as usize) } == 'o' {
             radix = 8;
             prefix = 2;
         }
@@ -155,19 +155,19 @@ pub fn number_at(text: &str, signed: bool) -> Number {
     let mut after_separator = false;
     let mut wrong: String = String::from("");
     while at < c.len() as i64 {
-        if digit_of(*nikaia_std::index::get(&c, nikaia_std::index::at(at)), radix) >= 0 {
-            value.push(*nikaia_std::index::get(&c, nikaia_std::index::at(at)));
+        if digit_of(*unsafe { nikaia_std::proven::read(&c, (at) as usize) }, radix) >= 0 {
+            value.push(*unsafe { nikaia_std::proven::read(&c, (at) as usize) });
             after_separator = false;
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }
-        if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '_' {
+        if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '_' {
             if value.is_empty() || after_separator {
                 wrong = String::from("an underscore in a number goes between two digits, like `1_000_000`");
                 break;
             }
             after_separator = true;
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }
         break;
@@ -176,13 +176,13 @@ pub fn number_at(text: &str, signed: bool) -> Number {
         if value.is_empty() {
             if prefix == 0 { return Number::Not; }
             wrong = String::from("a number needs at least one digit after its prefix");
-        } else if after_separator { wrong = String::from("a number can't end in an underscore"); } else if prefix > 0 && at < c.len() as i64 && an_ascii_alphanumeric(*nikaia_std::index::get(&c, nikaia_std::index::at(at))) { if radix == 2 { wrong = String::from("a `0b` number only has the digits `0` and `1`"); } else if radix == 8 { wrong = String::from("a `0o` number only has the digits `0` to `7`"); } else { wrong = String::from("a `0x` number only has the digits `0` to `9` and `a` to `f`"); } }
+        } else if after_separator { wrong = String::from("a number can't end in an underscore"); } else if prefix > 0 && at < c.len() as i64 && an_ascii_alphanumeric(*unsafe { nikaia_std::proven::read(&c, (at) as usize) }) { if radix == 2 { wrong = String::from("a `0b` number only has the digits `0` and `1`"); } else if radix == 8 { wrong = String::from("a `0o` number only has the digits `0` to `7`"); } else { wrong = String::from("a `0x` number only has the digits `0` to `9` and `a` to `f`"); } }
     }
-    if signed && radix == 10 && at < c.len() as i64 && (*nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '.' || *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == 'e' || *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == 'E') { return Number::Not; }
+    if signed && radix == 10 && at < c.len() as i64 && (*unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '.' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == 'e' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == 'E') { return Number::Not; }
     let mut scale: Option<Scale> = None;
     if wrong.is_empty() && radix == 10 {
         let mut fraction: i64 = 0;
-        if at < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '.' { while at + 1 + fraction < c.len() as i64 && (an_ascii_digit(*nikaia_std::index::get(&c, nikaia_std::index::at(at + 1 + fraction))) || *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1 + fraction)) == '_') { fraction += 1; } }
+        if at < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '.' { while unsafe { nikaia_std::proven::add::<i64>(at, 1) } + fraction < c.len() as i64 && (an_ascii_digit(*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(at, 1), fraction)) as usize) }) || *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(at, 1), fraction)) as usize) } == '_') { fraction = unsafe { nikaia_std::proven::add::<i64>(fraction, 1) }; } }
         let after: i64 = at + 1 + fraction;
         if fraction > 0 && (scale_at(&c, after).is_some() || upper_exponent(&c, after) > 0) { wrong = String::from("a float takes no scale and writes its exponent `e`"); } else if scale_at(&c, at).is_some() { scale = scale_at(&c, at); } else if upper_exponent(&c, at) > 0 {
             let len = upper_exponent(&c, at);

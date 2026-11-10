@@ -476,11 +476,11 @@ pub(crate) fn project_drive_rust_library<H: ProjectDriveHost>(host: &H, members:
     let features = host.features();
     let mut checked: Option<FeaturesMade> = None;
     for at in 0..members.len() as i64 {
-        let crate_name = project_drive_rust_crate(&nikaia_std::index::get(&members, nikaia_std::index::at(at)).name);
+        let crate_name = project_drive_rust_crate(&unsafe { nikaia_std::proven::read(&members, (at) as usize) }.name);
         let mut manifest = project_drive_rust_manifest(&host.member_manifest(at, nikaia_std::index::get(&rust, nikaia_std::index::at(at)))?, &crate_name, members);
-        let mut lowered = features_readers_dropped(nikaia_std::index::get(&rust, nikaia_std::index::at(at)));
+        let mut lowered = features_readers_dropped(unsafe { nikaia_std::proven::read(&rust, (at) as usize) });
         if at == 0 && !features.is_empty() {
-            let applied = match features_applied(nikaia_std::index::get(&rust, nikaia_std::index::at(at)), &manifest, &features, &nikaia_std::index::get(&members, 0).name) {
+            let applied = match features_applied(unsafe { nikaia_std::proven::read(&rust, (at) as usize) }, &manifest, &features, &unsafe { nikaia_std::proven::read(&members, (0) as usize) }.name) {
                 Ok(value) => value,
                 Err(error) => {
                     let (error, __nikaia_site) = error.split();
@@ -522,7 +522,7 @@ pub(crate) fn project_drive_rust_library<H: ProjectDriveHost>(host: &H, members:
         let blamed = if !run.0.is_empty() && run.0 != "*" { nikaia_std::block::Text::from(run.0.to_string()) } else { features_blamed(&said, &applied, "") };
         let alone = if run.0.is_empty() { String::from("the core alone") } else if run.0 == "*" { String::from("all the features together") } else { format!("the feature `{}` alone", run.0) };
         let mut entry: String = String::from("");
-        for feature in features.iter() { if feature.name == blamed && !feature.entries.is_empty() { entry = nikaia_std::block::Text::from((*nikaia_std::index::get(&feature.entries, 0)).to_string()); } }
+        for feature in features.iter() { if feature.name == blamed && !feature.entries.is_empty() { entry = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&feature.entries, (0) as usize) }).to_string()); } }
         let help = if !blamed.is_empty() { format!("What `{}` reaches is derived from its roots, and rustc found something the derivation missed: name the item it lacks as a root of `{}`.", blamed, blamed) } else { String::from("The items no root reaches are the core, and rustc refuses them before any feature is added: fix the core first.") };
         let refusal = FeaturesRefusal { code: String::from("NK1345"), feature: nikaia_std::block::Text::from(blamed.to_string()), entry, message: format!("The crate does not build with {}. rustc says: {}", alone, features_first_error(&said)), help: Some(help) };
         return Ok(project_drive_features_refused(host, &refusal));
@@ -585,7 +585,7 @@ pub fn project_drive_splice_span(toml: &str, key: &str) -> Span {
                 return Span { start: u32::try_from(start).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(start + key.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
             }
         }
-        offset += line.len() as i64 + 1;
+        offset += unsafe { nikaia_std::proven::add::<i64>(line.len() as i64, 1) };
     }
     Span { start: u32::try_from(header).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(header + 14).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }
 }

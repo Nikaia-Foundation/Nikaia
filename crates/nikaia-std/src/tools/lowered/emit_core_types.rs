@@ -176,7 +176,7 @@ impl EmitState {
             return format!("impl Fn({}) -> std::pin::Pin<Box<dyn std::future::Future<Output = {}>>>", nikaia_std::block::Text::from(params.join(", ")), outcome);
         }
         if name == "Seen" && ty.generics.len() == 1 {
-            let mut inner: Type = (*nikaia_std::index::get(&ty.generics, 0)).clone();
+            let mut inner: Type = (*unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }).clone();
             inner.is_nullable = ty.is_nullable || inner.is_nullable;
             inner.is_view = ty.is_view || inner.is_view;
             return self.emit_core_ty_counted(world, walk, crossings, overlaps, &inner, &lifetimes, &count);
@@ -189,7 +189,7 @@ impl EmitState {
         }
         if self.writes_a_run(world, ty) {
             let mut element: String = String::from("u8");
-            if !ty.generics.is_empty() { element = self.emit_core_ty_counted(world, walk, crossings, overlaps, nikaia_std::index::get(&ty.generics, 0), &lifetimes, &count); }
+            if !ty.generics.is_empty() { element = self.emit_core_ty_counted(world, walk, crossings, overlaps, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, &lifetimes, &count); }
             let reference = lifetimes.reference();
             return format!("{}[{}]", reference, element);
         }
@@ -215,18 +215,18 @@ impl EmitState {
         if name == "SharedMut" && !ty.generics.is_empty() {
             let shared = self.written_name(world, crossings, walk.trusting, "Shared", &count);
             let locked = self.written_name(world, crossings, walk.trusting, "Locked", &count);
-            let held = self.emit_core_ty_counted(world, walk, crossings, overlaps, nikaia_std::index::get(&ty.generics, 0), &lifetimes, &count);
+            let held = self.emit_core_ty_counted(world, walk, crossings, overlaps, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, &lifetimes, &count);
             out.push_str(&format!("{}<{}<{}>>", shared, locked, held));
             return out;
         }
         if name == "simd::Mask" && ty.generics.len() == 1 {
-            let lane = self.emit_core_ty_counted(world, walk, crossings, overlaps, nikaia_std::index::get(&ty.generics, 0), &lifetimes, &count);
+            let lane = self.emit_core_ty_counted(world, walk, crossings, overlaps, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, &lifetimes, &count);
             out.push_str(&format!("simd::LanesMask<{}>", lane));
             return out;
         }
-        if name == "Array" && ty.generics.len() == 2 && nikaia_std::index::get(&ty.generics, 1).count.is_some() {
-            let n = nikaia_std::index::or(nikaia_std::index::get(&ty.generics, 1).count, || 0);
-            let element = self.emit_core_ty_counted(world, walk, crossings, overlaps, nikaia_std::index::get(&ty.generics, 0), &lifetimes, &count);
+        if name == "Array" && ty.generics.len() == 2 && unsafe { nikaia_std::proven::read(&ty.generics, (1) as usize) }.count.is_some() {
+            let n = nikaia_std::index::or(unsafe { nikaia_std::proven::read(&ty.generics, (1) as usize) }.count, || 0);
+            let element = self.emit_core_ty_counted(world, walk, crossings, overlaps, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, &lifetimes, &count);
             out.push_str(&format!("[{}; {}]", element, n));
             return out;
         }
@@ -253,7 +253,7 @@ impl EmitState {
         let shortened = self.emit_core_ty(world, walk, crossings, overlaps, ty, &EmitLifetimes::Shortened);
         let needle = format!("type Of<'a> = {};", any);
         let mut found: i64 = -1;
-        for at in 0..walk.wrappers.len() as i64 { if found < 0 && (*nikaia_std::index::get(&walk.wrappers, (at) as usize)).contains(AsRef::<str>::as_ref(&needle)) { found = at; } }
+        for at in 0..walk.wrappers.len() as i64 { if found < 0 && (*unsafe { nikaia_std::proven::read(&walk.wrappers, (at) as usize) }).contains(AsRef::<str>::as_ref(&needle)) { found = at; } }
         if found >= 0 { return format!("__Tethered{}", found); }
         let n = walk.wrappers.len() as i64;
         let text = format!("/// A value that carries the keep its views point into (ADR-283 D11), as a `Holding` over it.\n#[allow(non_camel_case_types)]\nenum __Tethered{} {{}}\n\nimpl nikaia_std::tether::Views for __Tethered{} {{\n    type Of<'a> = {};\n    fn shorten<'long: 's, 's>(x: &'s {}) -> &'s {} {{\n        x\n    }}\n}}\n", n, n, any, long, shortened);

@@ -108,7 +108,7 @@ pub(crate) fn emit_needs_abort_rows(rust: &str, rows: &[(i64, i64, i64)], paths:
         let generated_at = nikaia_std::num::value(generated_at);let source_at = nikaia_std::num::value(source_at);let unit = nikaia_std::num::value(unit);
         let generated = emit_needs_line_at(&starts, generated_at);
         if unit < 0 || unit >= nika.len() as i64 { continue; }
-        let line = emit_needs_line_at(nikaia_std::index::get(&nika, nikaia_std::index::at(unit)), source_at);
+        let line = emit_needs_line_at(unsafe { nikaia_std::proven::read(&nika, (unit) as usize) }, source_at);
         lines.entry(generated).or_insert((unit, line));
     }
     let mut out: String = String::from("");

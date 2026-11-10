@@ -21,7 +21,7 @@ pub fn emit_slot_in(world: &EmitWorld<'_, '_, '_, '_>, item: &Item) -> i64 {
             let mut at: i64 = 0;
             for each in args.iter() {
                 if emit_text(world, each.name) == "" { return at; }
-                at += 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
         },
         _ => { },
@@ -49,7 +49,7 @@ pub fn emit_field_slot_in(world: &EmitWorld<'_, '_, '_, '_>, item: &Item) -> i64
             let mut at: i64 = 0;
             for each in args.iter() {
                 if emit_text(world, each.ty.name) == "meta::Field" { return at; }
-                at += 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
         },
         _ => { },
@@ -160,12 +160,12 @@ impl EmitState {
     }
     pub fn a_package_grammar_entry(&self, key: &str) -> bool {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        if contract.fails_with.len() != 1 || *nikaia_std::index::get(&contract.fails_with, 0) != "ParseError" { return false; }
+        if contract.fails_with.len() != 1 || *unsafe { nikaia_std::proven::read(&contract.fails_with, (0) as usize) } != "ParseError" { return false; }
         let signature = match match contract.signature.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return false };
-        !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "input"
+        !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "input"
     }
     pub fn copy_substitutes(&self, on: &str) -> bool {
         let kind = match self.facts.type_kinds.get(on) { Some(__nikaia_value) => __nikaia_value, None => return true };
@@ -196,7 +196,7 @@ impl EmitState {
                 }, || "Opaque".into()).to_string());
             },
             Expr::Path(segments, _) => {
-                if segments.len() == 3 { return emit_text(world, *nikaia_std::index::get(&segments, 2)); }
+                if segments.len() == 3 { return emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (2) as usize) }); }
                 let ty = self.type_named(world, walk, &emit_text(world, *nikaia_std::index::get(&segments, 0)));
                 return nikaia_std::block::Text::from(nikaia_std::index::or(match self.facts.type_kinds.get(&ty) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -243,8 +243,8 @@ impl EmitState {
             },
             Expr::Path(segments, _) => {
                 if segments.len() != 2 { return None; }
-                let parameter = world.words.resolve(*nikaia_std::index::get(&segments, 0));
-                let member = world.words.resolve(*nikaia_std::index::get(&segments, 1));
+                let parameter = world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) });
+                let member = world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) });
                 if member != "fields" && member != "variants" { return None; }
                 let bound = walk.type_names.get(parameter);
                 if bound.is_some() {
@@ -271,7 +271,7 @@ impl EmitState {
                 let (owner, variant) = self.boxed_owner(world, path);
                 for at in 0..parts.len() as i64 {
                     let boxed = !variant.is_empty() && self.is_boxed(&owner, &boxed_member(&variant, at, ""));
-                    if boxed && self.binds_one_name(nikaia_std::index::get(&parts, nikaia_std::index::at(at))) { out.extend(self.single_binding(world, nikaia_std::index::get(&parts, nikaia_std::index::at(at)))); } else { out.extend(self.boxed_bindings(world, nikaia_std::index::get(&parts, nikaia_std::index::at(at)))); }
+                    if boxed && self.binds_one_name(unsafe { nikaia_std::proven::read(&parts, (at) as usize) }) { out.extend(self.single_binding(world, unsafe { nikaia_std::proven::read(&parts, (at) as usize) })); } else { out.extend(self.boxed_bindings(world, unsafe { nikaia_std::proven::read(&parts, (at) as usize) })); }
                 }
             },
             MatchPattern::Named { path, fields, .. } => {
@@ -284,7 +284,7 @@ impl EmitState {
                     if self.is_boxed(&owner, &member) && self.binds_one_name(&each.pat) { out.extend(self.single_binding(world, &each.pat)); } else { out.extend(self.boxed_bindings(world, &each.pat)); }
                 }
             },
-            MatchPattern::Or(alternatives) => { if !alternatives.is_empty() { out.extend(self.boxed_bindings(world, nikaia_std::index::get(&alternatives, 0))); } },
+            MatchPattern::Or(alternatives) => { if !alternatives.is_empty() { out.extend(self.boxed_bindings(world, unsafe { nikaia_std::proven::read(&alternatives, (0) as usize) })); } },
             _ => { },
         }
         out
@@ -308,9 +308,9 @@ impl EmitState {
     }
     pub(crate) fn boxed_owner(&self, world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol]) -> (String, String) {
         if path.is_empty() { return (String::from(""), String::from("")); }
-        let last = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_string());
+        let last = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 1)) as usize) }).to_string());
         if path.len() >= 2 {
-            let owner = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string());
+            let owner = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 2)) as usize) }).to_string());
             if self.facts.boxed_members.contains_key(&owner) { return (owner, last); }
         }
         (last, String::from(""))
@@ -326,7 +326,7 @@ impl EmitState {
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return false };
         for at in 0..signature.params.len() as i64 {
-            let param = (*nikaia_std::index::get(&signature.params, nikaia_std::index::at(at))).clone();
+            let param = (*unsafe { nikaia_std::proven::read(&signature.params, (at) as usize) }).clone();
             if param.0 != name { continue; }
             let is_code = matches!(param.1, Ty::Fn { .. });
             if !is_code || nikaia_std::list::contains(&contract.keeps, &name) { continue; }
@@ -340,7 +340,7 @@ impl EmitState {
         let mut inside: String = String::from("");
         if pieces.len() > 1 {
             let mut rest: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for at in 1..pieces.len() as i64 { rest.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, (at) as usize)).to_string())); }
+            for at in 1..pieces.len() as i64 { rest.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (at) as usize) }).to_string())); }
             let joined = nikaia_std::block::Text::from(rest.join(" { "));
             let stripped = joined.strip_suffix(" }");
             if stripped.is_some() { inside = nikaia_std::block::Text::from(nikaia_std::index::or(stripped, || "").to_string()); } else { inside = nikaia_std::block::Text::from(joined.to_string()); }
@@ -349,9 +349,9 @@ impl EmitState {
         for part in top_level_parts(&inside) {
             let halves: Vec<&str> = part.split(": ").collect::<Vec<_>>();
             if halves.len() < 2 { continue; }
-            let field = nikaia_std::block::Text::from((*nikaia_std::index::get(&halves, 0)).to_string());
+            let field = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&halves, (0) as usize) }).to_string());
             let mut value_parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for at in 1..halves.len() as i64 { value_parts.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&halves, (at) as usize)).to_string())); }
+            for at in 1..halves.len() as i64 { value_parts.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&halves, (at) as usize) }).to_string())); }
             let value = nikaia_std::block::Text::from(value_parts.join(": "));
             let ty = emit_field_type((self.field_contract(world, &name, &field)).as_ref());
             fields.push(format!("{}: {}", escaped_name(&field), held_literal(&value, &ty)));

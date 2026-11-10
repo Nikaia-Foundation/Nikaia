@@ -44,7 +44,7 @@ pub trait EmitContractsHost {
 #[allow(clippy::too_many_arguments)]
 pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, parsed: &P, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], program: &Program, own_contracts: Ledger, described: &Ledger, library: &Ledger, checked: Option<CheckFacts>, checked_plans: Option<Vec<BufferPlan>>, refused: &collections::BTreeMap<i64, TierRefusal>, build: &EmitContractsBuild, graphs: Option<EmitReachGraphs>) -> EmitContractsMade {
     let words = nikaia_std::index::get(&units, 0).words;
-    let items = nikaia_std::index::get(&units, 0).items;
+    let items = unsafe { nikaia_std::proven::read(&units, (0) as usize) }.items;
     let tables = emit_tables_items(words, items);
     let propagation = match build.leaves_values {
         true => host.propagation_leaving_values(&own_contracts),

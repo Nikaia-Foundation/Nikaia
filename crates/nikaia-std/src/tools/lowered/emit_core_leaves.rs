@@ -197,7 +197,7 @@ impl EmitState {
                 },
                 FPart::Hole { expr, at, .. } => {
                     let at = *at;
-                    let named = ((hole) as usize) < names.len() && *nikaia_std::index::get(&names, (hole) as usize);
+                    let named = ((hole) as usize) < names.len() && *unsafe { nikaia_std::proven::read(&names, (hole) as usize) };
                     if named { out.push("std::convert::AsRef::<std::ffi::OsStr>::as_ref(&("); } else { out.push("std::ffi::OsStr::new(&std::string::ToString::to_string(&("); }
                     self.emit_core_hole(world, walk, out, host, at as i64, expr, depth, flow, scope)?;
                     if named { out.push("))"); } else { out.push(")))"); }
@@ -406,7 +406,7 @@ impl EmitState {
             let mut handed = String::new();
             for i in 0..rule.args.len() as i64 {
                 out.push(&format!("let __wg_value{} = ", i));
-                if ((i) as usize) < values.len() { self.emit_expr(world, walk, out, host, nikaia_std::index::get(&values, (i) as usize), depth, flow, scope)?; }
+                if ((i) as usize) < values.len() { self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&values, (i) as usize) }, depth, flow, scope)?; }
                 out.push("; ");
                 handed.push_str(&format!("__wg_value{}, ", i));
             }
@@ -460,7 +460,7 @@ impl EmitState {
                 for i in 0..rule.args.len() as i64 {
                     if !first { out.push(", "); }
                     first = false;
-                    if ((i) as usize) < values.len() { self.emit_expr(world, walk, out, host, nikaia_std::index::get(&values, (i) as usize), depth, flow, scope)?; }
+                    if ((i) as usize) < values.len() { self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&values, (i) as usize) }, depth, flow, scope)?; }
                 }
                 for option in rule.config.iter() {
                     if !first { out.push(", "); }

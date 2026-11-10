@@ -101,12 +101,12 @@ pub(crate) fn fields<'r>(lines: Vec<Line<'r>>) -> Vec<Field<'r, 'r>> {
 // this was written - see `contracts::sync`.
 pub fn read_head<'a>(written: &Written<'a, 'a>) -> Read<'a, 'a, 'a, 'a> {
     if written.words.len() < 3 { return refused("400 a request line that is not three words"); }
-    let method = *nikaia_std::index::get(&written.words, 0);
-    let target = *nikaia_std::index::get(&written.words, 1);
-    if !(*nikaia_std::index::get(&written.words, 2)).starts_with("HTTP/1.") { return refused("400 a version this does not speak"); }
+    let method = *unsafe { nikaia_std::proven::read(&written.words, (0) as usize) };
+    let target = *unsafe { nikaia_std::proven::read(&written.words, (1) as usize) };
+    if !(*unsafe { nikaia_std::proven::read(&written.words, (2) as usize) }).starts_with("HTTP/1.") { return refused("400 a version this does not speak"); }
     if method != "GET" && method != "POST" { return refused("400 a method this does not answer"); }
     let mut length: i64 = 0;
-    let mut keep_alive = *nikaia_std::index::get(&written.words, 2) != "HTTP/1.0";
+    let mut keep_alive = *unsafe { nikaia_std::proven::read(&written.words, (2) as usize) } != "HTTP/1.0";
     let mut headers: Vec<Header<'_>> = vec![];
     for field in written.fields.iter() {
         let name = nikaia_std::block::Text::from(field.name.trim().to_lowercase());

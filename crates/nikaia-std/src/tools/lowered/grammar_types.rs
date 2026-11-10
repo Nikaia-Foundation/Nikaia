@@ -160,7 +160,7 @@ pub(crate) fn grammar_types_def(def: &GrammarDef, calls: &[GrammarTypesCall], wo
             let first = format!("{}::{}", words.resolve(owner), grammar_types_called(words, words.resolve(call.rule), &call.types));
             work.queue.push(GrammarTypesWanted { call: call.clone(), from: index, path: vec![first] });
         }
-        index += 1;
+        index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     let mut rules: Vec<GrammarRule> = vec![];
     let none: collections::BTreeMap<String, Type> = collections::BTreeMap::new();
@@ -174,8 +174,8 @@ pub(crate) fn grammar_types_def(def: &GrammarDef, calls: &[GrammarTypesCall], wo
     let mut done: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut at: i64 = 0;
     while at < work.queue.len() as i64 {
-        let wanted = (*nikaia_std::index::get(&work.queue, nikaia_std::index::at(at))).clone();
-        at += 1;
+        let wanted = (*unsafe { nikaia_std::proven::read(&work.queue, (at) as usize) }).clone();
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         let call = &wanted.call;
         let copy = grammar_types_copy_name(words, words.resolve(call.rule), &call.types);
         if done.contains(&copy) { continue; }
@@ -190,11 +190,11 @@ pub(crate) fn grammar_types_def(def: &GrammarDef, calls: &[GrammarTypesCall], wo
         let mut index: i64 = 0;
         for parameter in rule.generics.iter() {
             if index < call.types.len() as i64 {
-                let given = (*nikaia_std::index::get(&call.types, nikaia_std::index::at(index))).clone();
+                let given = (*unsafe { nikaia_std::proven::read(&call.types, (index) as usize) }).clone();
                 grammar_types_bounds(parameter, &given, words, work);
                 bound.insert(format!("{}", words.resolve(parameter.name)), given);
             }
-            index += 1;
+            index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
         }
         rules.push(grammar_types_rule(&rule, &bound, intern(&copy), &generic, owner, words, intern, work));
     }
@@ -314,7 +314,7 @@ pub(crate) fn grammar_types_choose(value: &Expr, arms: &[GrammarArm], span: &Spa
                 parts.push(format!("{}", words.resolve(segment)));
             }
             written = nikaia_std::block::Text::from(parts.join("::"));
-            if segments.len() == 2 && *nikaia_std::index::get(&parts, 1) == "kind" { subject = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string()); }
+            if segments.len() == 2 && *unsafe { nikaia_std::proven::read(&parts, (1) as usize) } == "kind" { subject = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string()); }
         },
         Expr::Variable(name, _) => {
             let name = *name;
@@ -344,8 +344,8 @@ pub(crate) fn grammar_types_choose(value: &Expr, arms: &[GrammarArm], span: &Spa
         let parts = grammar_types_parts(&ty, &kind);
         let mut index: i64 = 0;
         for name in names.iter() {
-            if index < parts.len() as i64 && name != "_" { inner.insert(nikaia_std::block::Text::from(name.to_string()), (*nikaia_std::index::get(&parts, nikaia_std::index::at(index))).clone()); }
-            index += 1;
+            if index < parts.len() as i64 && name != "_" { inner.insert(nikaia_std::block::Text::from(name.to_string()), (*unsafe { nikaia_std::proven::read(&parts, (index) as usize) }).clone()); }
+            index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
         }
         let reason: Option<String> = grammar_types_refused_why(&arm.alts, words);
         if reason.is_some() {
@@ -362,12 +362,12 @@ pub(crate) fn grammar_types_choose(value: &Expr, arms: &[GrammarArm], span: &Spa
 }
 
 pub(crate) fn grammar_types_refused_why(alts: &[GrammarAlt], words: &winnow_grammar::InternerContext) -> Option<String> {
-    if alts.len() != 1 || nikaia_std::index::get(&alts, 0).action.is_some() { return None; }
-    match &nikaia_std::index::get(&alts, 0).pattern.node {
+    if alts.len() != 1 || unsafe { nikaia_std::proven::read(&alts, (0) as usize) }.action.is_some() { return None; }
+    match &unsafe { nikaia_std::proven::read(&alts, (0) as usize) }.pattern.node {
         Pattern::Call { name, args, .. } => {
             let name = *name;
             if words.resolve(name) != "refuse" || args.len() != 1 { return None; }
-            match nikaia_std::index::get(&args, 0) {
+            match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
                 Expr::LitStr { text, .. } => { return Some(nikaia_std::block::Text::from(text.to_string())); },
                 _ => { },
             }
@@ -407,8 +407,8 @@ pub(crate) fn grammar_types_members(built: &Type, value: winnow_grammar::Symbol,
     let mut inner: collections::BTreeMap<String, Type> = collections::BTreeMap::new();
     let mut index: i64 = 0;
     for parameter in params.iter() {
-        if index < built.generics.len() as i64 { inner.insert(format!("{}", words.resolve(parameter.name)), (*nikaia_std::index::get(&built.generics, nikaia_std::index::at(index))).clone()); }
-        index += 1;
+        if index < built.generics.len() as i64 { inner.insert(format!("{}", words.resolve(parameter.name)), (*unsafe { nikaia_std::proven::read(&built.generics, (index) as usize) }).clone()); }
+        index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     let called = words.resolve(value);
     for field in fields.iter() {
@@ -563,9 +563,9 @@ pub fn grammar_types_asked(expr: &Expr, generic: &collections::BTreeSet<(winnow_
 }
 
 pub(crate) fn grammar_types_asked_of(segments: &[winnow_grammar::Symbol], index: &Expr, generic: &collections::BTreeSet<(winnow_grammar::Symbol, winnow_grammar::Symbol)>, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Option<GrammarTypesAsked> {
-    if segments.len() != 2 || !generic.contains(&(*nikaia_std::index::get(&segments, 0), *nikaia_std::index::get(&segments, 1))) { return None; }
-    let owner = *nikaia_std::index::get(&segments, 0);
-    let rule = *nikaia_std::index::get(&segments, 1);
+    if segments.len() != 2 || !generic.contains(&(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }, *unsafe { nikaia_std::proven::read(&segments, (1) as usize) })) { return None; }
+    let owner = *unsafe { nikaia_std::proven::read(&segments, (0) as usize) };
+    let rule = *unsafe { nikaia_std::proven::read(&segments, (1) as usize) };
     let bracket = grammar_types_bracket(index, words, intern);
     match bracket.value {
         None => { },
@@ -649,7 +649,7 @@ pub fn grammar_types_whole(items: Vec<Spanned<Item>>, spans: &collections::BTree
         return GrammarTypesExpanded { items: all, refused: vec![grammar_types_value_refused(&walk.refused_callee, &at)] };
     }
     let mut expanded = grammar_types_expand(&mut all, &walk.calls, words, intern);
-    if !expanded.refused.is_empty() { grammar_types_placed(&mut expanded.refused[0], &walk.call_ids, spans); }
+    if !expanded.refused.is_empty() { grammar_types_placed(&mut (*unsafe { nikaia_std::proven::slot(&mut expanded.refused, (0) as usize) }), &walk.call_ids, spans); }
     expanded
 }
 
@@ -857,7 +857,7 @@ pub(crate) fn grammar_types_put_in(expr: &mut Expr, words: &winnow_grammar::Inte
 pub(crate) fn grammar_types_head(expr: &Expr, bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext) -> Option<winnow_grammar::Symbol> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; grammar_types_plain(name, bound, words) },
-        Expr::Path(segments, _) => if !segments.is_empty() { grammar_types_plain(*nikaia_std::index::get(&segments, 0), bound, words) } else { None },
+        Expr::Path(segments, _) => if !segments.is_empty() { grammar_types_plain(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }, bound, words) } else { None },
         _ => None,
     }
 }

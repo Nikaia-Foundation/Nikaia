@@ -376,19 +376,19 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
         }, || Published::nothing());
         for k in 0..entry.requires.len() as i64 {
             if ((k) as usize) >= entry.from.len() { continue; }
-            let from = nikaia_std::index::get(&entry.from, (k) as usize);
+            let from = unsafe { nikaia_std::proven::read(&entry.from, (k) as usize) };
             if mains.contains(from) { continue; }
-            arrives.push(format!("  {}  {}  precondition of `main` carried back from `{}`, checked where the words arrive", path, *nikaia_std::index::get(&entry.requires, (k) as usize), from));
+            arrives.push(format!("  {}  {}  precondition of `main` carried back from `{}`, checked where the words arrive", path, *unsafe { nikaia_std::proven::read(&entry.requires, (k) as usize) }, from));
         }
     }
-    let unproved = refused.len() as i64 + at_run_time.len() as i64 + by_the_test.len() as i64;
-    let done = proved.len() as i64 + preconditions.len() as i64;
+    let unproved = unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(refused.len() as i64, at_run_time.len() as i64), by_the_test.len() as i64) };
+    let done = unsafe { nikaia_std::proven::add::<i64>(proved.len() as i64, preconditions.len() as i64) };
     let mut looped: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions;
     if through_loops > 0 { looped = format!(", through a loop {}", through_loops); }
     let mut vouched: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions; #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
     if !assumed.is_empty() { vouched = format!("; assumed {}", assumed.len() as i64); }
     if !derived.is_empty() { vouched = format!("{}; derived from the callers {}", vouched, derived.len() as i64); }
-    let mut out: String = format!("asserts in {}: {} - not proved {} (refused {}, checked at run time {}, checked by a test {}); checked where the words arrive {}; proved {} (proved {}{}, preconditions proved at every call {}){}\n", path, unproved + arrives.len() as i64 + done, unproved, refused.len() as i64, at_run_time.len() as i64, by_the_test.len() as i64, arrives.len() as i64, done, proved.len() as i64, looped, preconditions.len() as i64, vouched); #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
+    let mut out: String = format!("asserts in {}: {} - not proved {} (refused {}, checked at run time {}, checked by a test {}); checked where the words arrive {}; proved {} (proved {}{}, preconditions proved at every call {}){}\n", path, unsafe { nikaia_std::proven::add::<i64>(unproved, arrives.len() as i64) } + done, unproved, refused.len() as i64, at_run_time.len() as i64, by_the_test.len() as i64, arrives.len() as i64, done, proved.len() as i64, looped, preconditions.len() as i64, vouched); #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
     let mut red: Vec<String> = vec![];
     red.extend(refused);
     red.extend(at_run_time);

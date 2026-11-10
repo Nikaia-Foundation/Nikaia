@@ -3,7 +3,7 @@
 
 pub(crate) fn check_exprs_part_name(index: i64) -> String {
     let letters = vec!["a", "b", "c", "d", "e", "f", "g", "h"];
-    if index < 8 { return nikaia_std::block::Text::from((*nikaia_std::index::get(&letters, nikaia_std::index::at(index))).to_string()); }
+    if index < 8 { return nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&letters, (index) as usize) }).to_string()); }
     format!("p{}", index)
 }
 
@@ -63,7 +63,7 @@ impl CheckState {
     pub fn narrow_by_width(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str, span: &Span) -> bool {
         let found = width_dependent(world, value, into);
         if found.is_empty() { return false; }
-        let what = nikaia_std::block::Text::from((*nikaia_std::index::get(&found, 0)).to_string());
+        let what = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&found, (0) as usize) }).to_string());
         let before = nikaia_std::block::Text::from((*nikaia_std::index::get(&found, 1)).to_string());
         let whole = written_expression(world.words, value);
         let message = format!("This {} is computed in a narrower type than the `{}` it is put into.", what, into);
@@ -154,7 +154,7 @@ impl CheckState {
                     let letter = check_exprs_part_name(index);
                     holes.push(format!("`{{{}}}`", letter));
                     names.push(letter);
-                    index += 1;
+                    index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
                 }
                 let pattern = nikaia_std::block::Text::from(names.join(", "));
                 let listed = nikaia_std::block::Text::from(holes.join(" and "));
@@ -383,7 +383,7 @@ pub(crate) fn a_parameter_binding(local: &CheckLocal) -> bool {
 
 pub(crate) fn a_variant_path(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
     if segments.len() != 2 { return false; }
-    state.is_variant(world.words.resolve(*nikaia_std::index::get(&segments, 0)), world.words.resolve(*nikaia_std::index::get(&segments, 1)))
+    state.is_variant(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }), world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }))
 }
 
 impl CheckState {

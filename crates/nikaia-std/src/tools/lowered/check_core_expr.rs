@@ -37,7 +37,7 @@ pub(crate) fn check_core_expr_char_scalars<H: CheckHost>(state: &mut CheckState,
     let composed = host.composed(&value);
     let scalars: Vec<scalar> = nikaia_std::list::chars(composed.chars());
     if scalars.len() == 1 {
-        let one = *nikaia_std::index::get(&scalars, 0);
+        let one = *unsafe { nikaia_std::proven::read(&scalars, (0) as usize) };
         let hex = hex_of(one as i64);
         let note = format!("Your editor stored this character decomposed, as {} scalars; composed (NFC) they are the one scalar `'{}'`, and that is what the literal is.", count, one);
         state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1213"), message: format!("This `'…'` is written as {} scalars that compose to one, `'{}'`.", count, one), notes: vec![note], help: Some(format!("Write the composed character, `'{}'`, or `'\\u{{{}}}'`.", one, hex)), labels: vec![] });
@@ -511,8 +511,8 @@ pub(crate) fn check_core_expr_path(state: &mut CheckState, world: &CheckWorld<'_
     }
     state.a_constructor_written_as_new(world, &nikaia_std::block::Text::from(names.join("::")), span);
     if names.len() == 2 {
-        let ty = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, 0)).to_string());
-        let member = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, 1)).to_string());
+        let ty = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string());
+        let member = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (1) as usize) }).to_string());
         if state.is_variant(&ty, &member) { return check_core_expr_named(&ty); }
         let as_value: Option<Ty> = state.function_as_a_value(world, &format!("{}::{}", ty, member));
         if as_value.is_some() { return nikaia_std::index::or(as_value, || Ty::Unknown); }
@@ -530,8 +530,8 @@ pub(crate) fn check_core_expr_path(state: &mut CheckState, world: &CheckWorld<'_
         return Ty::Unknown;
     }
     if names.len() == 3 {
-        let owner = world.here.unaliased(&format!("{}::{}", *nikaia_std::index::get(&names, 0), *nikaia_std::index::get(&names, 1)));
-        if check_core_expr_a_bare_case(world.library, &owner, nikaia_std::index::get(&names, 2)) || check_core_expr_a_bare_case(world.own, &owner, nikaia_std::index::get(&names, 2)) { return check_core_expr_named(&owner); }
+        let owner = world.here.unaliased(&format!("{}::{}", *unsafe { nikaia_std::proven::read(&names, (0) as usize) }, *unsafe { nikaia_std::proven::read(&names, (1) as usize) }));
+        if check_core_expr_a_bare_case(world.library, &owner, unsafe { nikaia_std::proven::read(&names, (2) as usize) }) || check_core_expr_a_bare_case(world.own, &owner, unsafe { nikaia_std::proven::read(&names, (2) as usize) }) { return check_core_expr_named(&owner); }
     }
     Ty::Unknown
 }

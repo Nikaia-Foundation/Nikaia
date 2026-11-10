@@ -75,7 +75,7 @@ pub fn jumps_at_the_end(expr: &Expr) -> bool {
 
 pub(crate) fn block_jumps_at_the_end(block: &Block) -> bool {
     if block.stmts.is_empty() { return false; }
-    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
         Stmt::Return(_) => true,
         Stmt::Break => true,
         Stmt::Continue => true,
@@ -100,7 +100,7 @@ pub fn never_a_value(expr: &Expr) -> bool {
 
 pub(crate) fn block_never_a_value(block: &Block) -> bool {
     if block.stmts.is_empty() { return false; }
-    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
         Stmt::Return(_) => true,
         Stmt::Break => true,
         Stmt::Continue => true,

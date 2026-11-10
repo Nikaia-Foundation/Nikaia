@@ -129,7 +129,7 @@ pub(crate) fn open_scope(walk: &mut BufferWalk) { walk.frames.push(vec![]); }
 
 pub(crate) fn close_scope(walk: &mut BufferWalk) {
     if walk.frames.is_empty() { return; }
-    let names = (*nikaia_std::index::get(&walk.frames, nikaia_std::index::at(walk.frames.len() as i64 - 1))).copy_owned();
+    let names = (*unsafe { nikaia_std::proven::read(&walk.frames, (nikaia_std::proven::sub::<i64>(walk.frames.len() as i64, 1)) as usize) }).copy_owned();
     for name in names.iter() {
         let mut stack = match match *nikaia_std::index::get(&walk.locals, name) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -144,7 +144,7 @@ pub(crate) fn close_scope(walk: &mut BufferWalk) {
 pub(crate) fn local_of(name: &str, walk: &BufferWalk) -> Option<Local> {
     let stack = match *nikaia_std::index::get(&walk.locals, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if stack.is_empty() { return None; }
-    Some((*nikaia_std::index::get(&stack, nikaia_std::index::at(stack.len() as i64 - 1))).clone())
+    Some((*unsafe { nikaia_std::proven::read(&stack, (nikaia_std::proven::sub::<i64>(stack.len() as i64, 1)) as usize) }).clone())
 }
 
 pub(crate) fn set_local(name: &str, local: Local, walk: &mut BufferWalk) {
@@ -153,8 +153,8 @@ pub(crate) fn set_local(name: &str, local: Local, walk: &mut BufferWalk) {
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
     if stack.is_empty() { return; }
-    let last = stack.len() as i64 - 1;
-    { let __nikaia_stored = local; nikaia_std::index::set(&mut stack, nikaia_std::index::at(last), __nikaia_stored); }
+    let last = unsafe { nikaia_std::proven::sub::<i64>(stack.len() as i64, 1) };
+    { let __nikaia_stored = local; unsafe { nikaia_std::proven::write(&mut stack, (last) as usize, __nikaia_stored) }; }
     walk.locals.insert(nikaia_std::block::Text::from(name.to_string()), stack);
 }
 
@@ -167,8 +167,8 @@ pub(crate) fn bind_local(name: String, local: Local, walk: &mut BufferWalk) {
     stack.push(local);
     walk.locals.insert(nikaia_std::block::Text::from(name.to_string()), stack);
     if !walk.frames.is_empty() {
-        let last = walk.frames.len() as i64 - 1;
-        walk.frames[nikaia_std::index::at(last)].push(name);
+        let last = unsafe { nikaia_std::proven::sub::<i64>(walk.frames.len() as i64, 1) };
+        (*unsafe { nikaia_std::proven::slot(&mut walk.frames, (last) as usize) }).push(name);
     }
 }
 
@@ -221,13 +221,13 @@ pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '
         walk.path = vec![];
         open_scope(&mut walk);
         walk.value_tail = -1;
-        if walk.result_carries && !body.stmts.is_empty() { walk.value_tail = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).span.start as i64; }
+        if walk.result_carries && !body.stmts.is_empty() { walk.value_tail = unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) }.span.start as i64; }
         for stmt in body.stmts.iter() {
             walk.statement = stmt.span.start as i64;
             buffer_statement(&stmt.node, &stmt.span, ask, holes_of, unaliased, &mut walk);
         }
         if walk.result_carries && !body.stmts.is_empty() {
-            let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
+            let last = unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) };
             match &last.node {
                 Stmt::Expr(value) => {
                     walk.statement = last.span.start as i64;
@@ -282,7 +282,7 @@ pub(crate) fn note_change(root: &str, at: i64, walk: &mut BufferWalk) {
     if local.parameter || local.at <= 0 { return; }
     let depth = local.path.len() as i64;
     let mut after = at;
-    if (walk.path.len() as i64) > depth { after = nikaia_std::index::get(&walk.path, nikaia_std::index::at(depth)).0; }
+    if (walk.path.len() as i64) > depth { after = unsafe { nikaia_std::proven::read(&walk.path, (depth) as usize) }.0; }
     walk.mutated.insert(local.at, Mutated { after, last: at, name: nikaia_std::block::Text::from(root.to_string()) });
 }
 
@@ -409,7 +409,7 @@ pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_
     }
     if names.len() == 1 {
         let from = taken_from(ask.names, value);
-        if from.is_some() { walk.taken.insert(nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string()), nikaia_std::index::or(from, || "".into())); }
+        if from.is_some() { walk.taken.insert(nikaia_std::block::Text::from(ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), nikaia_std::index::or(from, || "".into())); }
     }
     let text = ty.is_none() && (names.len() == 1 && copies_text(value, ask, &walk) || names.len() == 2 && cuts_text(value, ask, &walk));
     let is_buffer = a_named_buffer(&made) || is_the_buffer(value, ask, &walk);
@@ -433,7 +433,7 @@ pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_
                     let no_callee: String = String::from("");
                     let id = (at, no_callee);
                     if !walk.sources.contains_key(&id) {
-                        let source = Source::Buffer { at, name: nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string()), ty: nikaia_std::index::or(match held.as_ref() {
+                        let source = Source::Buffer { at, name: nikaia_std::block::Text::from(ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), ty: nikaia_std::index::or(match held.as_ref() {
                             Some(__nikaia_it) => Some(__nikaia_it.clone()),
                             None => None,
                         }, || "".into()), span: span.clone() };
@@ -650,7 +650,7 @@ pub(crate) fn cuts_text(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_
 
 pub(crate) fn texts_pair(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match value {
-        Expr::Tuple(items, _) => items.len() == 2 && copies_text(nikaia_std::index::get(&items, 0), ask, walk) && copies_text(nikaia_std::index::get(&items, 1), ask, walk),
+        Expr::Tuple(items, _) => items.len() == 2 && copies_text(unsafe { nikaia_std::proven::read(&items, (0) as usize) }, ask, walk) && copies_text(unsafe { nikaia_std::proven::read(&items, (1) as usize) }, ask, walk),
         _ => cuts_text(value, ask, walk),
     }
 }
@@ -693,7 +693,7 @@ pub(crate) fn formats_a_tuple_number(base: &Expr, field: &str, ask: &BufferAsk<'
             let name = *name;
             let local = match local_of(ask.names.resolve(name), walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
             let index = check_core_places_position(field);
-            index >= 0 && index < local.parts.len() as i64 && *nikaia_std::index::get(&local.parts, nikaia_std::index::at(index))
+            index >= 0 && index < local.parts.len() as i64 && *unsafe { nikaia_std::proven::read(&local.parts, (index) as usize) }
         },
         _ => false,
     }
@@ -758,15 +758,15 @@ pub(crate) fn written_type_of(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_
 pub(crate) fn a_variant(callee: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
     let segments: Vec<&str> = callee.split("::").collect::<Vec<_>>();
     if segments.len() < 2 { return false; }
-    let variant = *nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1));
+    let variant = *unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(segments.len() as i64, 1)) as usize) };
     let mut owner: String = String::from("");
     let mut k: i64 = 0;
     for segment in segments.iter() {
         let segment = *segment;
-        if k == segments.len() as i64 - 1 { break; }
+        if k == unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) } { break; }
         if k > 0 { owner.push_str("::"); }
         owner.push_str(segment);
-        k += 1;
+        k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
     }
     for item in ask.items.iter() {
         match &item.node {
@@ -806,7 +806,7 @@ pub(crate) fn given_up_inside(bound_at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_,
 }
 
 pub(crate) fn a_prefix(short: &[(i64, bool)], long: &[(i64, bool)]) -> bool {
-    for k in 0..short.len() as i64 { if nikaia_std::index::get(&short, (k) as usize).0 != nikaia_std::index::get(&long, (k) as usize).0 || nikaia_std::index::get(&short, (k) as usize).1 != nikaia_std::index::get(&long, (k) as usize).1 { return false; } }
+    for k in 0..short.len() as i64 { if unsafe { nikaia_std::proven::read(&short, (k) as usize) }.0 != nikaia_std::index::get(&long, (k) as usize).0 || unsafe { nikaia_std::proven::read(&short, (k) as usize) }.1 != unsafe { nikaia_std::proven::read(&long, (k) as usize) }.1 { return false; } }
     true
 }
 
@@ -870,7 +870,7 @@ pub(crate) fn nested_blocks(expr: &Expr, at: i64, ask: &BufferAsk<'_, '_, '_, '_
 
 pub(crate) fn nested_arm(at: i64, block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, walk: &mut BufferWalk) {
     if !block.stmts.is_empty() {
-        let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
+        let last = unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) };
         match &last.node {
             Stmt::Expr(_) => {
                 let outer = nikaia_std::index::or(walk.hoisted.get(&walk.statement), || walk.statement.into());
@@ -1029,9 +1029,9 @@ pub(crate) fn put_by_method(root: &str, method: &str, args: &[Expr], ask: &Buffe
     if !keeps_what_it_is_given(method) { return; }
     let mut all: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     for k in 0..args.len() as i64 {
-        let of = moved_origins(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, holes_of, unaliased, walk);
+        let of = moved_origins(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, ask, holes_of, unaliased, walk);
         put_into(root, k, &of, walk);
-        let named = struct_of(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, &walk);
+        let named = struct_of(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, ask, &walk);
         if named.is_some() { walk.struct_puts.insert(nikaia_std::block::Text::from(root.to_string()), nikaia_std::index::or(named, || "".into())); }
         all.extend(of.iter().cloned());
     }
@@ -1065,7 +1065,7 @@ pub(crate) fn moved_origins(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_,
 pub(crate) fn moved_tail_origins(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let none: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     if block.stmts.is_empty() { return none; }
-    let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
+    let last = unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) };
     match &last.node {
         Stmt::Expr(value) => {
             let outer = walk.statement;
@@ -1251,7 +1251,7 @@ pub(crate) fn method_origins(call: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_
             Some(__nikaia_it) => Some(__nikaia_it.contains(&position)),
             None => None,
         }, || true) { add_all(&of, &mut out); }
-        position += 1;
+        position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
     }
     out
 }
@@ -1283,10 +1283,10 @@ pub(crate) fn sources_of_a_method(contract: &FnContract, into: &mut collections:
         for (name, _) in signature.params.iter() {
             let dotted = format!("{}.", name);
             if b == name || b.starts_with(&*dotted) {
-                into.insert(at - 1);
+                into.insert(unsafe { nikaia_std::proven::sub::<i64>(at, 1) });
                 found = true;
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         if !found { return false; }
     }
@@ -1322,7 +1322,7 @@ pub(crate) fn call_origins(func: &Expr, args: &[Expr], ask: &BufferAsk<'_, '_, '
         let of = lent_origins(arg, ask, &holes_of, &unaliased, walk);
         let lent = borrowed.is_empty() || borrowed.contains(&position);
         if lent && !(variant && is_the_buffer(arg, ask, &walk)) { add_all(&of, &mut by_args); }
-        position += 1;
+        position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
     }
     if callee.is_some() {
         let mut owned = false;
@@ -1351,7 +1351,7 @@ pub(crate) fn borrowed_positions(named: &str, ask: &BufferAsk<'_, '_, '_, '_, '_
     for (name, _) in signature.params.iter() {
         let dotted = format!("{}.", name);
         for b in contract.borrows.iter() { if b == name || b.starts_with(&*dotted) { out.insert(position); } }
-        position += 1;
+        position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
     }
     if out.is_empty() { out.insert(-1); }
     out
@@ -1364,7 +1364,7 @@ pub(crate) fn answered_by(contract: &FnContract, named: &str, args: &[Expr], ask
             if held.state != State::Tethered || held.position == RESULT_POSITION { continue; }
             let at = parameter_index(contract, &held.position);
             if at < 0 || at >= args.len() as i64 { continue; }
-            let root = match root_of(ask.names, nikaia_std::index::get(&args, nikaia_std::index::at(at))) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let root = match root_of(ask.names, unsafe { nikaia_std::proven::read(&args, (at) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
             flow_into(&root, &source.copy_owned(), walk);
         }
         for held in contract.views.iter() {
@@ -1404,7 +1404,7 @@ pub(crate) fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], 
     if !a_result_of_views(result, ask) { return; }
     let copying: Vec<&Ledger> = vec![ask.own, ask.library];
     for k in 0..args.len() as i64 {
-        if !made_in_the_call(nikaia_std::index::get(&args, nikaia_std::index::at(k))) || !lends_in(contract, k, &copying) || buffers_view_call(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, unaliased) { continue; }
+        if !made_in_the_call(unsafe { nikaia_std::proven::read(&args, (k) as usize) }) || !lends_in(contract, k, &copying) || buffers_view_call(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, ask, unaliased) { continue; }
         let id = (walk.statement, format!("{}#{}", named, k));
         if !walk.sources.contains_key(&id) {
             let source = Source::Argument { at: walk.statement, callee: nikaia_std::block::Text::from(named.to_string()), index: k, span: Span { start: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) } };
@@ -1419,10 +1419,10 @@ pub(crate) fn stored_arguments(contract: &FnContract, named: &str, args: &[Expr]
     for entry in contract.stores.iter() {
         let parts = entry.split(':').collect::<Vec<_>>();
         if parts.len() != 2 { continue; }
-        let place = parameter_index(contract, *nikaia_std::index::get(&parts, 0));
-        let k = parameter_index(contract, *nikaia_std::index::get(&parts, 1));
+        let place = parameter_index(contract, *unsafe { nikaia_std::proven::read(&parts, (0) as usize) });
+        let k = parameter_index(contract, *unsafe { nikaia_std::proven::read(&parts, (1) as usize) });
         if place < 0 || k < 0 || place >= args.len() as i64 || k >= args.len() as i64 { continue; }
-        if !made_in_the_call(nikaia_std::index::get(&args, nikaia_std::index::at(k))) || !lends_in(contract, k, &copying) || buffers_view_call(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, unaliased) { continue; }
+        if !made_in_the_call(unsafe { nikaia_std::proven::read(&args, (k) as usize) }) || !lends_in(contract, k, &copying) || buffers_view_call(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, unaliased) { continue; }
         let root = match root_of(ask.names, nikaia_std::index::get(&args, nikaia_std::index::at(place))) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let id = (walk.statement, format!("{}#{}", named, k));
         if !walk.sources.contains_key(&id) {
@@ -1499,7 +1499,7 @@ pub(crate) fn parameter_index(contract: &FnContract, position: &str) -> i64 {
     let mut at: i64 = 0;
     for (name, _) in signature.params.iter() {
         if name == position { return at; }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     -1
 }
@@ -1507,7 +1507,7 @@ pub(crate) fn parameter_index(contract: &FnContract, position: &str) -> i64 {
 pub(crate) fn tail_origins(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let none: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     if block.stmts.is_empty() { return none; }
-    let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
+    let last = unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) };
     match &last.node {
         Stmt::Expr(value) => {
             let outer = walk.statement;
@@ -1533,7 +1533,7 @@ pub(crate) fn call_source(callee: &str, walk: &mut BufferWalk) -> collections::B
 
 pub(crate) fn decide(key: String, body: &Block, walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> BufferPlan {
     let mut first: i64 = -1;
-    if !body.stmts.is_empty() { first = nikaia_std::index::get(&body.stmts, 0).span.start as i64; }
+    if !body.stmts.is_empty() { first = unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.span.start as i64; }
     let mut plan = BufferPlan { key, first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet::new(), puts: collections::BTreeMap::new(), calls: collections::BTreeMap::new(), tethered: collections::BTreeMap::new(), element_keepers: collections::BTreeSet::new(), struct_keepers: collections::BTreeSet::new(), widths: collections::BTreeMap::new(), keeper_structs: collections::BTreeMap::new(), held_locals: collections::BTreeSet::new(), holds: collections::BTreeMap::new(), escapes: vec![], refusals: vec![], reputs: collections::BTreeMap::new(), opaque_puts: collections::BTreeSet::new(), late_puts: collections::BTreeMap::new() };
     for (id, found) in walk.sources.iter() { decide_source(&id.clone(), &found.source, &found.path, walk, &mut plan); }
     for (statement, bound) in walk.reassigned.iter() {
@@ -1789,7 +1789,7 @@ pub(crate) fn untethered_returns(function: &str, ret_type: Option<&Type>, body: 
     let asked = UntetheredAsk { function: nikaia_std::block::Text::from(function.to_string()), bare, text, owned_text, struct_name: nikaia_std::block::Text::from(ask.names.resolve(written.name).to_string()), fields, text_fields, owned_text_fields };
     untethered_block(body, &asked, ask, &mut walk);
     if !body.stmts.is_empty() {
-        let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
+        let last = unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) };
         match &last.node {
             Stmt::Expr(value) => { untethered_returned(value, &last.span, &asked, ask, &mut walk); },
             _ => { },
@@ -1827,7 +1827,7 @@ pub(crate) fn untethered_view(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_,
     if !ty.is_view || ty.is_tuple || (*ty.code).is_some() { return false; }
     let base = last_segment(ask.names.resolve(ty.name));
     if base == "String" || base == "Bytes" || base == "Mapped" || base == "str" { return false; }
-    if ty.generics.len() == 1 && ask.names.resolve(nikaia_std::index::get(&ty.generics, 0).name) == "u8" { return false; }
+    if ty.generics.len() == 1 && ask.names.resolve(unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }.name) == "u8" { return false; }
     true
 }
 
@@ -1863,7 +1863,7 @@ pub(crate) fn untethered_block(block: &Block, asked: &UntetheredAsk, ask: &Buffe
         match &stmt.node {
             Stmt::Let { names, value, ty, .. } => {
                 untethered_expr(value, &stmt.span, asked, ask, walk);
-                if names.len() == 1 { untethered_let(nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string()), value, (ty).as_ref(), stmt.span, asked, ask, walk); }
+                if names.len() == 1 { untethered_let(nikaia_std::block::Text::from(ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), value, (ty).as_ref(), stmt.span, asked, ask, walk); }
             },
             Stmt::Return(value) => {
                 let returned = match value { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -2004,13 +2004,13 @@ pub(crate) fn untethered_method_list(method: &str, ask: &BufferAsk<'_, '_, '_, '
             _ => { },
         }
     }
-    if sure { return found.len() == 1 && *nikaia_std::index::get(&found, 0); }
+    if sure { return found.len() == 1 && *unsafe { nikaia_std::proven::read(&found, (0) as usize) }; }
     found.contains(&true)
 }
 
 pub(crate) fn untethered_owned_list(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
     if ty.is_view || ty.is_nullable || ty.is_tuple || ty.generics.len() != 1 || !is_a_container_name(ask.names.resolve(ty.name)) { return false; }
-    untethered_owned_text(nikaia_std::index::get(&ty.generics, 0), ask)
+    untethered_owned_text(unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, ask)
 }
 
 pub(crate) fn untethered_element(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &UntetheredWalk) -> Option<String> {
@@ -2137,7 +2137,7 @@ pub(crate) fn untethered_tails(value: &Expr) -> Vec<&Expr> {
 
 pub(crate) fn untethered_block_tails(block: &Block) -> Vec<&Expr> {
     if block.stmts.is_empty() { return vec![]; }
-    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
         Stmt::Expr(last) => untethered_tails(last),
         _ => vec![],
     }

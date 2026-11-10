@@ -114,7 +114,7 @@ impl EmitState {
             let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut generics = generics;
             for i in 0..parameters.len() as i64 {
                 generics.push(format!("P{}", i));
-                fields.push(format!("    pub {}: P{},", *nikaia_std::index::get(&parameters, (i) as usize), i));
+                fields.push(format!("    pub {}: P{},", *unsafe { nikaia_std::proven::read(&parameters, (i) as usize) }, i));
             }
             let listed = nikaia_std::block::Text::from(generics.join(", "));
             let body = nikaia_std::block::Text::from(fields.join("\n"));
@@ -164,8 +164,8 @@ impl EmitState {
 pub(crate) fn emit_program_param_type(param: &str) -> String {
     let parts: Vec<&str> = param.split(": ").collect::<Vec<_>>();
     if parts.len() < 2 { return String::from("_"); }
-    let mut ty = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string());
-    for i in 2..parts.len() as i64 { ty = format!("{}: {}", ty, *nikaia_std::index::get(&parts, (i) as usize)); }
+    let mut ty = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).to_string());
+    for i in 2..parts.len() as i64 { ty = format!("{}: {}", ty, *unsafe { nikaia_std::proven::read(&parts, (i) as usize) }); }
     ty
 }
 

@@ -60,7 +60,7 @@ pub(crate) fn read_by_free_functions(asked: &Asked<'_, '_, '_>) -> collections::
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => continue };
         if signature.takes_a_receiver() { continue; }
-        for i in 0..signature.params.len() as i64 { if !nikaia_std::list::contains(&contract.keeps, &nikaia_std::index::get(&signature.params, (i) as usize).0) { out.insert(format!("{}#{}", key, i)); } }
+        for i in 0..signature.params.len() as i64 { if !nikaia_std::list::contains(&contract.keeps, &unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0) { out.insert(format!("{}#{}", key, i)); } }
     }
     out
 }
@@ -112,8 +112,8 @@ pub(crate) fn method_table(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], u
                             }
                             let reading = takes_a_view_of_itself((receiver).as_ref());
                             for i in 0..args.len() as i64 {
-                                if takes_mut || !nikaia_std::index::get(&args, (i) as usize).ty.is_view && brings_buffer(&unit, asked, &nikaia_std::index::get(&args, (i) as usize).ty) { unit.kept.insert(format!("{}::{}", key, *nikaia_std::index::get(&params, (i) as usize))); }
-                                if reading && !nikaia_std::index::get(&args, (i) as usize).mutable { unit.readonly.insert(format!("{}::{}", key, i)); }
+                                if takes_mut || !unsafe { nikaia_std::proven::read(&args, (i) as usize) }.ty.is_view && brings_buffer(&unit, asked, &unsafe { nikaia_std::proven::read(&args, (i) as usize) }.ty) { unit.kept.insert(format!("{}::{}", key, *unsafe { nikaia_std::proven::read(&params, (i) as usize) })); }
+                                if reading && !unsafe { nikaia_std::proven::read(&args, (i) as usize) }.mutable { unit.readonly.insert(format!("{}::{}", key, i)); }
                             }
                             { let __nikaia_stored = params; nikaia_std::index::set(&mut unit.methods, key, __nikaia_stored); }
                         },
@@ -194,7 +194,7 @@ pub(crate) fn in_source_order(found: &[Stored]) -> Vec<Stored> {
     let mut out: Vec<Stored> = vec![];
     for stored in found.iter() {
         let mut at = out.len() as i64;
-        while at > 0 && nikaia_std::index::get(&out, nikaia_std::index::at(at - 1)).span.start > stored.span.start { at -= 1; }
+        while at > 0 && unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(at, 1)) as usize) }.span.start > stored.span.start { at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) }; }
         out.insert(nikaia_std::count::of(at), stored.clone());
     }
     out
@@ -312,7 +312,7 @@ pub(crate) fn names_borrowing(names: &winnow_grammar::InternerContext, ty: &Type
         let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         let mut named: i64 = 0;
-        for part in ty.generics.iter() { if !holds_view(part) && names_borrowing(names, part, borrowing) { named += 1; } }
+        for part in ty.generics.iter() { if !holds_view(part) && names_borrowing(names, part, borrowing) { named = unsafe { nikaia_std::proven::add::<i64>(named, 1) }; } }
         if views_the_call_s(ty, named) { return false; }
         return names_borrowing(names, result, borrowing);
     }
@@ -339,7 +339,7 @@ pub(crate) fn view_fields(names: &winnow_grammar::InternerContext, items: &[Span
                 for variant in variants.iter() {
                     match &variant.fields {
                         VariantFields::Unit => { },
-                        VariantFields::Tuple(written) => { for i in 0..written.len() as i64 { carried.push((format!("{}", i), (*nikaia_std::index::get(&written, (i) as usize)).clone())); } },
+                        VariantFields::Tuple(written) => { for i in 0..written.len() as i64 { carried.push((format!("{}", i), (*unsafe { nikaia_std::proven::read(&written, (i) as usize) }).clone())); } },
                         VariantFields::Named(declared) => { for field in declared.iter() { carried.push((nikaia_std::block::Text::from(names.resolve(field.name).to_string()), field.ty.clone())); } },
                     }
                 }
@@ -440,11 +440,11 @@ pub(crate) fn one_answer(asked: &Asked<'_, '_, '_>, here: &Here, symbol: winnow_
     if candidates.is_empty() { return; }
     let mut best: i64 = 0;
     for i in 1..candidates.len() as i64 {
-        let rank_i = rank(&nikaia_std::index::get(&candidates, (i) as usize).1);
+        let rank_i = rank(&unsafe { nikaia_std::proven::read(&candidates, (i) as usize) }.1);
         let rank_best = rank(&nikaia_std::index::get(&candidates, nikaia_std::index::at(best)).1);
-        if rank_i < rank_best || rank_i == rank_best && nikaia_std::index::get(&candidates, (i) as usize).0.start < nikaia_std::index::get(&candidates, nikaia_std::index::at(best)).0.start { best = i; }
+        if rank_i < rank_best || rank_i == rank_best && unsafe { nikaia_std::proven::read(&candidates, (i) as usize) }.0.start < unsafe { nikaia_std::proven::read(&candidates, (best) as usize) }.0.start { best = i; }
     }
-    out.push(Stored { span: nikaia_std::index::get(&candidates, nikaia_std::index::at(best)).0.clone(), param: signed.param, ty: signed.ty, function: signed.function, subject: signed.subject, into: nikaia_std::index::get(&candidates, nikaia_std::index::at(best)).1.clone(), carried, method: signed.method, symbol, carrier: if one_carrier && carried { carrier } else { None } });
+    out.push(Stored { span: nikaia_std::index::get(&candidates, nikaia_std::index::at(best)).0.clone(), param: signed.param, ty: signed.ty, function: signed.function, subject: signed.subject, into: unsafe { nikaia_std::proven::read(&candidates, (best) as usize) }.1.clone(), carried, method: signed.method, symbol, carrier: if one_carrier && carried { carrier } else { None } });
 }
 
 pub(crate) fn a_param_field(into: &Destination) -> bool { matches!(into, Destination::ParamField { .. }) }
@@ -470,7 +470,7 @@ pub(crate) fn buffered(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: Option<&Type>
 pub(crate) fn listed_struct(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: Option<&Type>) -> Option<String> {
     let list = match ty { Some(__nikaia_value) => __nikaia_value, None => return None };
     if list.is_view || list.is_nullable || (*list.code).is_some() || list.generics.len() != 1 || asked.names.resolve(list.name) != "Vec" { return None; }
-    let element = (*nikaia_std::index::get(&list.generics, 0)).clone();
+    let element = (*unsafe { nikaia_std::proven::read(&list.generics, (0) as usize) }).clone();
     if !element.generics.is_empty() || element.is_view || element.is_nullable || element.is_tuple || (*element.code).is_some() { return None; }
     if !brings_buffer(unit, asked, &element) { return None; }
     let name = nikaia_std::block::Text::from(asked.names.resolve(element.name).to_string());
@@ -490,9 +490,9 @@ pub(crate) fn rsrc_unknown_named(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: &Ty
     let written = nikaia_std::block::Text::from(asked.names.resolve(ty.name).to_string());
     let mut name = nikaia_std::block::Text::from(written.to_string());
     let segments: Vec<&str> = written.split("::").collect::<Vec<_>>();
-    if segments.len() > 1 { name = nikaia_std::block::Text::from((*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_string()); } ::core::mem::drop(segments);
+    if segments.len() > 1 { name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(segments.len() as i64, 1)) as usize) }).to_string()); } ::core::mem::drop(segments);
     let first: Vec<scalar> = nikaia_std::list::chars(name.chars());
-    let a_word = !first.is_empty() && (*nikaia_std::index::get(&first, 0)).is_alphabetic();
+    let a_word = !first.is_empty() && (*unsafe { nikaia_std::proven::read(&first, (0) as usize) }).is_alphabetic();
     if a_word && !rsrc_plain_name(&name) && name != "Self" && !unit.fields.contains_key(&name) {
         if asked.own.types.contains_key(&name) {
             let described = match match *nikaia_std::index::get(&asked.own.types, &name) {
@@ -538,9 +538,9 @@ pub(crate) fn fields_of_type(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: Option<
 pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, tail: bool, own_buffer: &dyn Fn(&Expr) -> bool, here: &mut Here) {
     let count = block.stmts.len() as i64;
     for i in 0..count {
-        let returning = tail && i + 1 == count;
-        let span = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.clone();
-        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node {
+        let returning = tail && unsafe { nikaia_std::proven::add::<i64>(i, 1) } == count;
+        let span = unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span.clone();
+        match &unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.node {
             Stmt::Let { names, value, .. } => {
                 if mentions(unit, asked, &here, value) && !own_buffer(value) {
                     for name in names.iter() {
@@ -603,17 +603,17 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
 pub(crate) fn local_vec_handed_back(asked: &Asked<'_, '_, '_>, block: &Block, at: i64, tail: bool, names: &[winnow_grammar::Symbol], value: &Expr) -> i64 {
     if !list_shaped(value) { return -1; }
     if names.len() != 1 { return -1; }
-    let name = asked.names.resolve(*nikaia_std::index::get(&names, 0));
+    let name = asked.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) });
     let mut uses: i64 = 0;
     let mut allowed: i64 = 0;
     let mut handed: i64 = 0;
     for j in at + 1..block.stmts.len() as i64 {
-        if returns_named(asked.names, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node, name) || tail && j + 1 == block.stmts.len() as i64 && a_tail_named(asked.names, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node, name) { handed += 1; }
-        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node {
+        if returns_named(asked.names, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node, name) || tail && unsafe { nikaia_std::proven::add::<i64>(j, 1) } == block.stmts.len() as i64 && a_tail_named(asked.names, &unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.node, name) { handed += 1; }
+        match &unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.node {
             Stmt::For { iter, .. } => { if a_variable_named(asked.names, iter, name) { allowed += 1; } },
             _ => { },
         }
-        for each in visited_in_stmt(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node) {
+        for each in visited_in_stmt(&unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.node) {
             match each {
                 Expr::Variable(n, _) => {
                     let n = *n;
@@ -655,7 +655,7 @@ pub(crate) fn list_shaped(value: &Expr) -> bool {
 pub(crate) fn list_shaped_block(block: &Block) -> bool {
     let count = block.stmts.len() as i64;
     if count != 1 { return false; }
-    match &nikaia_std::index::get(&block.stmts, 0).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.node {
         Stmt::Expr(expr) => list_shaped(expr),
         _ => false,
     }
@@ -685,7 +685,7 @@ pub(crate) fn views_a_local_struct(unit: &Unit, asked: &Asked<'_, '_, '_>, block
         _ => return false,
     };
     if names.len() != 1 { return false; }
-    let handed = struct_handed_back(asked.names, block, at, asked.names.resolve(*nikaia_std::index::get(&names, 0)), &literal, &unit.readonly, &unit.read_by_free);
+    let handed = struct_handed_back(asked.names, block, at, asked.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }), &literal, &unit.readonly, &unit.read_by_free);
     if handed == 0 { return true; }
     let result = match ours { Some(__nikaia_value) => __nikaia_value, None => return false };
     handed > 0 && result == literal
@@ -702,7 +702,7 @@ pub(crate) fn struct_handed_back(names: &winnow_grammar::InternerContext, block:
     let mut handed: i64 = 0;
     for j in at + 1..block.stmts.len() as i64 {
         if returns_named(names, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node, name) { handed += 1; }
-        for each in visited_in_stmt(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node) {
+        for each in visited_in_stmt(&unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.node) {
             match each {
                 Expr::Variable(n, _) => {
                     let n = *n;
@@ -739,9 +739,9 @@ pub(crate) fn read_by_a_free_call(names: &winnow_grammar::InternerContext, func:
     };
     let mut read: i64 = 0;
     for i in 0..args.len() as i64 {
-        if a_variable_named(names, nikaia_std::index::get(&args, (i) as usize), name) {
+        if a_variable_named(names, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, name) {
             if !read_by_free.contains(&format!("{}#{}", callee, i)) { return 0; }
-            read += 1;
+            read = unsafe { nikaia_std::proven::add::<i64>(read, 1) };
         }
     }
     read
@@ -749,7 +749,7 @@ pub(crate) fn read_by_a_free_call(names: &winnow_grammar::InternerContext, func:
 
 pub(crate) fn only_read_by(names: &winnow_grammar::InternerContext, owner: &str, method: winnow_grammar::Symbol, args: &[Expr], readonly: &collections::BTreeSet<String>) -> bool {
     let key = format!("{}::{}", owner, names.resolve(method));
-    for i in 0..args.len() as i64 { if !a_plain_literal(nikaia_std::index::get(&args, (i) as usize)) && !readonly.contains(&format!("{}::{}", key, i)) { return false; } }
+    for i in 0..args.len() as i64 { if !a_plain_literal(unsafe { nikaia_std::proven::read(&args, (i) as usize) }) && !readonly.contains(&format!("{}::{}", key, i)) { return false; } }
     true
 }
 
@@ -991,7 +991,7 @@ pub(crate) fn handed_to(unit: &Unit, asked: &Asked<'_, '_, '_>, receiver: &Expr,
     let mut handed_over = false;
     let mut held = false;
     for i in 0..args.len() as i64 {
-        if mentions(unit, asked, &here, nikaia_std::index::get(&args, nikaia_std::index::at(i))) {
+        if mentions(unit, asked, &here, unsafe { nikaia_std::proven::read(&args, (i) as usize) }) {
             handed_over = true;
             if !named || kept_by_callee(unit, asked, &callee, i) { held = true; }
         }
@@ -1018,7 +1018,7 @@ pub(crate) fn kept_by_callee(unit: &Unit, asked: &Asked<'_, '_, '_>, callee: &st
     if known.is_some() {
         let params = match known { Some(__nikaia_value) => __nikaia_value, None => return true };
         if at >= params.len() as i64 { return true; }
-        return unit.kept.contains(&format!("{}::{}", callee, *nikaia_std::index::get(&params, nikaia_std::index::at(at))));
+        return unit.kept.contains(&format!("{}::{}", callee, *unsafe { nikaia_std::proven::read(&params, (at) as usize) }));
     }
     let contract = match *nikaia_std::index::get(&asked.own.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&asked.library.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => return true } };
     let signature = match match contract.signature.as_ref() {
@@ -1027,7 +1027,7 @@ pub(crate) fn kept_by_callee(unit: &Unit, asked: &Asked<'_, '_, '_>, callee: &st
     } { Some(__nikaia_value) => __nikaia_value, None => return true };
     let position = if signature.takes_a_receiver() { at + 1 } else { at };
     if position >= signature.params.len() as i64 { return true; }
-    nikaia_std::list::contains(&contract.keeps, &nikaia_std::index::get(&signature.params, nikaia_std::index::at(position)).0)
+    nikaia_std::list::contains(&contract.keeps, &unsafe { nikaia_std::proven::read(&signature.params, (position) as usize) }.0)
 }
 
 pub(crate) fn a_field_built(unit: &Unit, asked: &Asked<'_, '_, '_>, owner: &str, declared: &[(String, Type)], init: &FieldInit, span: &Span, here: &mut Here) {
@@ -1166,7 +1166,7 @@ pub(crate) fn call_args_mention(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &H
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return any_mentions(unit, asked, here, args) };
     if contract.borrows.is_empty() || !contract.stores.is_empty() || !signature.mutable.is_empty() { return any_mentions(unit, asked, here, args); }
-    for i in 0..args.len() as i64 { if mentions(unit, asked, here, nikaia_std::index::get(&args, (i) as usize)) { if ((i) as usize) >= signature.params.len() || nikaia_std::list::contains(&contract.borrows, &nikaia_std::index::get(&signature.params, (i) as usize).0) { return true; } } }
+    for i in 0..args.len() as i64 { if mentions(unit, asked, here, unsafe { nikaia_std::proven::read(&args, (i) as usize) }) { if ((i) as usize) >= signature.params.len() || nikaia_std::list::contains(&contract.borrows, &unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0) { return true; } } }
     false
 }
 
@@ -1240,8 +1240,8 @@ pub(crate) fn descend(unit: &Unit, asked: &Asked<'_, '_, '_>, node: &Expr, span:
                 _ => String::from(""),
             };
             for i in 0..args.len() as i64 {
-                let literal = matches!(*nikaia_std::index::get(&args, (i) as usize), Expr::StructLit { .. });
-                if literal && callee != "" && config.is_empty() && unit.read_by_free.contains(&format!("{}#{}", callee, i)) { descend(unit, asked, nikaia_std::index::get(&args, (i) as usize), span, own_buffer, here); } else { stores(unit, asked, nikaia_std::index::get(&args, (i) as usize), span, &own_buffer, here); }
+                let literal = matches!(*unsafe { nikaia_std::proven::read(&args, (i) as usize) }, Expr::StructLit { .. });
+                if literal && callee != "" && config.is_empty() && unit.read_by_free.contains(&format!("{}#{}", callee, i)) { descend(unit, asked, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, span, own_buffer, here); } else { stores(unit, asked, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, span, &own_buffer, here); }
             }
             stores_config(unit, asked, config, span, &own_buffer, here);
         },
@@ -1360,7 +1360,7 @@ pub fn fields_held(words: &winnow_grammar::InternerContext, items: &[Spanned<Ite
                 for variant in variants.iter() {
                     match &variant.fields {
                         VariantFields::Unit => { },
-                        VariantFields::Tuple(types) => { for k in 0..types.len() as i64 { held.push((format!("{}", k), (*nikaia_std::index::get(&types, (k) as usize)).clone())); } },
+                        VariantFields::Tuple(types) => { for k in 0..types.len() as i64 { held.push((format!("{}", k), (*unsafe { nikaia_std::proven::read(&types, (k) as usize) }).clone())); } },
                         VariantFields::Named(fields) => { for f in fields.iter() { held.push((nikaia_std::block::Text::from(words.resolve(f.name).to_string()), f.ty.clone())); } },
                     }
                 }
@@ -1422,13 +1422,13 @@ pub(crate) fn rsrc_join(into: &mut collections::BTreeSet<String>, more: &collect
 
 pub(crate) fn rsrc_param_of(entry: &str) -> String {
     let parts = entry.split(':').collect::<Vec<_>>();
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string())
+    nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) }))).to_string())
 }
 
 pub(crate) fn rsrc_path_of(entry: &str) -> String {
     let parts = entry.split(':').collect::<Vec<_>>();
     if parts.len() < 2 { return String::from(""); }
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string())
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string())
 }
 
 pub(crate) fn rsrc_under(path: &str, entries: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
@@ -1799,7 +1799,7 @@ pub(crate) fn rsrc_if(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known
 
 pub(crate) fn rsrc_pattern_names(asked: &Asked<'_, '_, '_>, pattern: &MatchPattern, out: &mut Vec<String>) {
     match pattern {
-        MatchPattern::Path(parts) => { if parts.len() == 1 { out.push(nikaia_std::block::Text::from(asked.names.resolve(*nikaia_std::index::get(&parts, 0)).to_string())); } },
+        MatchPattern::Path(parts) => { if parts.len() == 1 { out.push(nikaia_std::block::Text::from(asked.names.resolve(*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string())); } },
         MatchPattern::Tuple { parts, .. } => { for part in parts.iter() { rsrc_pattern_names(asked, part, out); } },
         MatchPattern::List(parts) => { for part in parts.iter() { rsrc_pattern_names(asked, part, out); } },
         MatchPattern::RestNamed(name) => { let name = *name; out.push(nikaia_std::block::Text::from(asked.names.resolve(name).to_string())); },
@@ -1862,9 +1862,9 @@ pub(crate) fn rsrc_block(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kn
     let count = block.stmts.len() as i64;
     let mut tail = rsrc_none();
     for i in 0..count {
-        flow.at = Span { start: nikaia_std::index::get(&block.stmts, (i) as usize).span.start, end: nikaia_std::index::get(&block.stmts, (i) as usize).span.end };
-        let last = i + 1 == count;
-        match &nikaia_std::index::get(&block.stmts, (i) as usize).node {
+        flow.at = Span { start: unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span.start, end: unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span.end };
+        let last = unsafe { nikaia_std::proven::add::<i64>(i, 1) } == count;
+        match &unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.node {
             Stmt::Let { names, value, ty, .. } => {
                 let reach = rsrc_eval(unit, asked, here, known, &own_buffer, value, flow);
                 for name in names.iter() {
@@ -1877,12 +1877,12 @@ pub(crate) fn rsrc_block(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kn
                 }
                 if names.len() == 1 && ty.is_some() {
                     let annotation = match ty { Some(__nikaia_value) => __nikaia_value, None => return tail };
-                    flow.annotated.insert(nikaia_std::block::Text::from(asked.names.resolve(*nikaia_std::index::get(&names, 0)).to_string()), annotation.clone());
+                    flow.annotated.insert(nikaia_std::block::Text::from(asked.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), annotation.clone());
                 } else if names.len() == 1 {
                     match value {
                         Expr::StructLit { name, .. } => {
                             let name = *name;
-                            flow.built.insert(nikaia_std::block::Text::from(asked.names.resolve(*nikaia_std::index::get(&names, 0)).to_string()), Type { name, generics: vec![], is_view: false, is_tuple: false, is_nullable: false, code: Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false });
+                            flow.built.insert(nikaia_std::block::Text::from(asked.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), Type { name, generics: vec![], is_view: false, is_tuple: false, is_nullable: false, code: Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false });
                         },
                         _ => { },
                     }
@@ -1985,13 +1985,13 @@ pub(crate) fn rsrc_method(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, k
     let name = asked.names.resolve(method);
     if name == "clone" || name == "to_string" { return rsrc_copy(unit, asked, here, &flow, receiver, &on); }
     let mut stored = rsrc_none();
-    for i in 1..positional.len() as i64 { rsrc_join(&mut stored, nikaia_std::index::get(&positional, (i) as usize)); }
+    for i in 1..positional.len() as i64 { rsrc_join(&mut stored, unsafe { nikaia_std::proven::read(&positional, (i) as usize) }); }
     let root = rsrc_root_local(asked, here, &flow, receiver);
     let ty = nikaia_std::index::or_maybe(rsrc_type(unit, asked, here, &flow, receiver), || rsrc_local_type(asked, &flow, receiver));
     if !stored.is_empty() && !flow.places.is_empty() && rsrc_changes_described(asked, (ty).as_ref(), name) {
         let mut kept = rsrc_none();
         let params = rsrc_described_params(asked, (ty).as_ref(), name);
-        for i in 1..positional.len() as i64 { if ((i) as usize) >= params.len() || nikaia_std::index::get(&params, (i) as usize).1 { rsrc_join(&mut kept, nikaia_std::index::get(&positional, (i) as usize)); } }
+        for i in 1..positional.len() as i64 { if ((i) as usize) >= params.len() || unsafe { nikaia_std::proven::read(&params, (i) as usize) }.1 { rsrc_join(&mut kept, unsafe { nikaia_std::proven::read(&positional, (i) as usize) }); } }
         rsrc_store(asked, receiver, &kept, flow);
     }
     if !stored.is_empty() && root.is_some() {
@@ -2141,18 +2141,18 @@ pub(crate) fn rsrc_call(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kno
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return rsrc_callee(asked, known, &key, &positional, &everything) };
         for i in 0..args.len() as i64 {
-            if ((i) as usize) < signature.params.len() && nikaia_std::list::contains(&signature.mutable, &nikaia_std::index::get(&signature.params, (i) as usize).0) {
-                let root = rsrc_root_local(asked, here, &flow, nikaia_std::index::get(&args, (i) as usize));
-                let kept_views = rsrc_ty_holds_view(asked, &nikaia_std::index::get(&signature.params, (i) as usize).1);
+            if ((i) as usize) < signature.params.len() && nikaia_std::list::contains(&signature.mutable, &unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0) {
+                let root = rsrc_root_local(asked, here, &flow, unsafe { nikaia_std::proven::read(&args, (i) as usize) });
+                let kept_views = rsrc_ty_holds_view(asked, &unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.1);
                 if root.is_some() && kept_views && rsrc_may_hold(unit, asked, &flow, &nikaia_std::block::Text::from(nikaia_std::index::or(root.as_deref(), || "").to_string())) { rsrc_bind(flow, &nikaia_std::block::Text::from(nikaia_std::index::or(root.as_deref(), || "").to_string()), &everything); }
             }
         }
         for entry in contract.stores.iter() {
             let parts: Vec<&str> = entry.split(':').collect::<Vec<_>>();
             if parts.len() != 2 { continue; }
-            let place = rsrc_param_index(&signature, *nikaia_std::index::get(&parts, 0));
-            let source = rsrc_param_index(&signature, *nikaia_std::index::get(&parts, 1));
-            if place >= 0 && source >= 0 && place < args.len() as i64 && source < positional.len() as i64 { rsrc_store(asked, nikaia_std::index::get(&args, nikaia_std::index::at(place)), nikaia_std::index::get(&positional, nikaia_std::index::at(source)), flow); }
+            let place = rsrc_param_index(&signature, *unsafe { nikaia_std::proven::read(&parts, (0) as usize) });
+            let source = rsrc_param_index(&signature, *unsafe { nikaia_std::proven::read(&parts, (1) as usize) });
+            if place >= 0 && source >= 0 && place < args.len() as i64 && source < positional.len() as i64 { rsrc_store(asked, unsafe { nikaia_std::proven::read(&args, (place) as usize) }, unsafe { nikaia_std::proven::read(&positional, (source) as usize) }, flow); }
         }
     }
     rsrc_callee(asked, known, &key, &positional, &everything)
@@ -2162,7 +2162,7 @@ pub(crate) fn rsrc_param_index(signature: &Signature, name: &str) -> i64 {
     let mut at: i64 = 0;
     for (named, _) in signature.params.iter() {
         if named == name { return at; }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     -1
 }
@@ -2179,9 +2179,9 @@ pub(crate) fn rsrc_callee(asked: &Asked<'_, '_, '_>, known: &collections::BTreeM
             if written.starts_with('=') { continue; }
             let borrowed = rsrc_bare(&written);
             let mut at: i64 = -1;
-            for i in 0..found.params.len() as i64 { if at < 0 && *nikaia_std::index::get(&found.params, (i) as usize) == borrowed { at = i; } }
+            for i in 0..found.params.len() as i64 { if at < 0 && *unsafe { nikaia_std::proven::read(&found.params, (i) as usize) } == borrowed { at = i; } }
             if at < 0 || at >= positional.len() as i64 { return everything.copy_owned(); }
-            let mapped = rsrc_under(&rsrc_path_of(entry), nikaia_std::index::get(&positional, nikaia_std::index::at(at)));
+            let mapped = rsrc_under(&rsrc_path_of(entry), unsafe { nikaia_std::proven::read(&positional, (at) as usize) });
             if written.starts_with('~') { rsrc_join(&mut out, &rsrc_all_loose(&mapped)); } else { rsrc_join(&mut out, &mapped); }
         }
         return out;
@@ -2205,15 +2205,15 @@ pub(crate) fn rsrc_callee(asked: &Asked<'_, '_, '_>, known: &collections::BTreeM
         if !rsrc_ty_holds_view(asked, &result) { return rsrc_none(); }
     }
     if contract.borrows.is_empty() {
-        if !positional.is_empty() && rsrc_result_is_receivers(asked, &signature) { return (*nikaia_std::index::get(&positional, 0)).copy_owned(); }
+        if !positional.is_empty() && rsrc_result_is_receivers(asked, &signature) { return (*unsafe { nikaia_std::proven::read(&positional, (0) as usize) }).copy_owned(); }
         return everything.copy_owned();
     }
     let mut out = rsrc_none();
     for (path, borrowed) in rsrc_written_paths(&contract) {
         let mut at: i64 = -1;
-        for i in 0..signature.params.len() as i64 { if at < 0 && nikaia_std::index::get(&signature.params, (i) as usize).0 == borrowed { at = i; } }
+        for i in 0..signature.params.len() as i64 { if at < 0 && unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0 == borrowed { at = i; } }
         if at < 0 || at >= positional.len() as i64 { return everything.copy_owned(); }
-        rsrc_join(&mut out, &rsrc_under(&path, nikaia_std::index::get(&positional, nikaia_std::index::at(at))));
+        rsrc_join(&mut out, &rsrc_under(&path, unsafe { nikaia_std::proven::read(&positional, (at) as usize) }));
     }
     out
 }
@@ -2227,8 +2227,8 @@ pub(crate) fn rsrc_written_paths(contract: &FnContract) -> Vec<(String, String)>
     for part in contract.returns.split("),") {
         let pieces: Vec<&str> = part.split(':').collect::<Vec<_>>();
         if pieces.len() != 2 { continue; }
-        let path = nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).trim().to_string());
-        let inside = (*nikaia_std::index::get(&pieces, 1)).trim(); ::core::mem::drop(pieces);
+        let path = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).trim().to_string());
+        let inside = (*unsafe { nikaia_std::proven::read(&pieces, (1) as usize) }).trim(); ::core::mem::drop(pieces);
         let names = nikaia_std::block::Text::from(nikaia_std::index::or(inside.strip_prefix("ref("), || std::convert::AsRef::<str>::as_ref(inside)).to_string());
         for name in names.split('|') {
             let bare = nikaia_std::block::Text::from(nikaia_std::index::or(name.trim().strip_suffix(')'), || name.trim().into()).to_string());
@@ -2243,12 +2243,12 @@ pub(crate) fn rsrc_result_is_receivers(asked: &Asked<'_, '_, '_>, signature: &Si
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return false };
-    if signature.params.is_empty() || nikaia_std::index::get(&signature.params, 0).0 != "self" { return false; }
+    if signature.params.is_empty() || unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 != "self" { return false; }
     #[allow(unused_mut)] let mut wanted: Vec<String> = vec![];
     rsrc_ty_names(&result, &mut wanted);
     let mut generics = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut wanted = wanted;
     let mut receiver: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut wanted = wanted;
-    rsrc_ty_names(&nikaia_std::index::get(&signature.params, 0).1, &mut receiver);
+    rsrc_ty_names(&unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.1, &mut receiver);
     for name in wanted.iter() {
         let generic = !rsrc_plain_name(name) && !name.contains("::") && !asked.own.types.contains_key(name) && !asked.library.types.contains_key(name);
         if generic {
@@ -2256,7 +2256,7 @@ pub(crate) fn rsrc_result_is_receivers(asked: &Asked<'_, '_, '_>, signature: &Si
             if !nikaia_std::list::contains(&receiver, &name) { return false; }
             for i in 1..signature.params.len() as i64 {
                 let mut other: Vec<String> = vec![];
-                rsrc_ty_names(&nikaia_std::index::get(&signature.params, (i) as usize).1, &mut other);
+                rsrc_ty_names(&unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.1, &mut other);
                 if nikaia_std::list::contains(&other, &name) { return false; }
             }
         }
@@ -2408,7 +2408,7 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
                 let mut trait_from: Vec<String> = vec![];
                 for position in declared_result.from.iter() {
                     let position = nikaia_std::num::value(position);
-                    if position < 0 { trait_from.push(nikaia_std::block::Text::from(self_name.to_string())); } else if position < args.len() as i64 { trait_from.push(nikaia_std::block::Text::from(asked.names.resolve(nikaia_std::index::get(&args, nikaia_std::index::at(position)).name).to_string())); }
+                    if position < 0 { trait_from.push(nikaia_std::block::Text::from(self_name.to_string())); } else if position < args.len() as i64 { trait_from.push(nikaia_std::block::Text::from(asked.names.resolve(unsafe { nikaia_std::proven::read(&args, (position) as usize) }.name).to_string())); }
                 }
                 rsrc_report(asked, &of, &sources, &declared_views, &plain_ways, &rsrc_plain(&reach), (receiver).as_ref(), trait_name, declared_result, &trait_from, !ret_from.is_empty(), at, out);
             }
@@ -2448,7 +2448,7 @@ pub(crate) fn rsrc_trait_result(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item
                                 let source = *source;
                                 let written = nikaia_std::block::Text::from(asked.names.resolve(source).to_string());
                                 if written == "self" { from.push(-1); }
-                                for position in 0..declared.node.args.len() as i64 { if asked.names.resolve(nikaia_std::index::get(&declared.node.args, nikaia_std::index::at(position)).name) == written { from.push(position); } }
+                                for position in 0..declared.node.args.len() as i64 { if asked.names.resolve(unsafe { nikaia_std::proven::read(&declared.node.args, (position) as usize) }.name) == written { from.push(position); } }
                             }
                             let mut view = !declared.node.ret_from.is_empty();
                             match &declared.node.ret_type {
@@ -2476,9 +2476,9 @@ pub(crate) fn rsrc_plain_text(asked: &Asked<'_, '_, '_>, ty: &Type) -> bool { (*
 pub(crate) fn rsrc_tail(body: &Block, tail: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
     let count = body.stmts.len() as i64;
     if count == 0 { return; }
-    match &nikaia_std::index::get(&body.stmts, nikaia_std::index::at(count - 1)).node {
+    match &unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }.node {
         Stmt::Expr(_) => {
-            let span = Span { start: nikaia_std::index::get(&body.stmts, nikaia_std::index::at(count - 1)).span.start, end: nikaia_std::index::get(&body.stmts, nikaia_std::index::at(count - 1)).span.end };
+            let span = Span { start: unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }.span.start, end: unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }.span.end };
             flow.ways.push(ResultSrcWay { span, reach: tail.copy_owned() });
         },
         _ => { },
@@ -2534,7 +2534,7 @@ pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String
         return;
     }
     let mut allowed: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut named = named;
-    if takes_a_view_of_itself(receiver) { allowed = String::from("self"); } else if declared_views.len() == 1 { allowed = nikaia_std::block::Text::from((*nikaia_std::index::get(&declared_views, 0)).to_string()); } else if declared_views.len() > 1 { return; }
+    if takes_a_view_of_itself(receiver) { allowed = String::from("self"); } else if declared_views.len() == 1 { allowed = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&declared_views, (0) as usize) }).to_string()); } else if declared_views.len() > 1 { return; }
     for source in named.iter() {
         if *source != allowed {
             let message = format!("{} implements a trait method that hands back views of `{}` only, but this hands back a view of `{}`'s data.", of, allowed, source);
@@ -2766,7 +2766,7 @@ pub(crate) fn rsrc_solve(unit: &Unit, asked: &Asked<'_, '_, '_>, items: &[Spanne
     if !settled && !items.is_empty() {
         let message: String = String::from("A chain of functions handing back views is too long for the build to follow, so a caller can't tell whose data a result is.");
         let help: String = String::from("Split the chain, or hand back a copy: declare `-> String` and write `.clone()`.");
-        out.push(refusal("NK2302", Span { start: nikaia_std::index::get(&items, 0).span.start, end: nikaia_std::index::get(&items, 0).span.end }, message, vec![], help));
+        out.push(refusal("NK2302", Span { start: unsafe { nikaia_std::proven::read(&items, (0) as usize) }.span.start, end: unsafe { nikaia_std::proven::read(&items, (0) as usize) }.span.end }, message, vec![], help));
     }
     for item in items.iter() {
         match &item.node {

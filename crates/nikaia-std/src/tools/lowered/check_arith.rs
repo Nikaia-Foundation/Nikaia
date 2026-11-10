@@ -39,7 +39,7 @@ pub(crate) fn arith_env_name_says(name: &str) -> Option<String> {
 // this was written - see `contracts::sync`.
 pub(crate) fn arith_env_pair_fault<H: CheckHost>(host: &H, expr: &Expr) -> Option<String> {
     match expr {
-        Expr::Tuple(parts, _) => if parts.len() == 2 { arith_env_parts_fault(host, nikaia_std::index::get(&parts, 0), nikaia_std::index::get(&parts, 1)) } else { None },
+        Expr::Tuple(parts, _) => if parts.len() == 2 { arith_env_parts_fault(host, unsafe { nikaia_std::proven::read(&parts, (0) as usize) }, unsafe { nikaia_std::proven::read(&parts, (1) as usize) }) } else { None },
         _ => None,
     }
 }
@@ -65,7 +65,7 @@ pub(crate) fn arith_negated_literal(expr: &Expr) -> Option<String> {
 impl CheckState {
     pub fn an_exit_code_out_of_range(&mut self, key: &str, args: &[Expr], span: &Span) {
         if key != "process::exit" || args.is_empty() { return; }
-        let code = match arith_exit_code_outside(nikaia_std::index::get(&args, 0)) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let code = match arith_exit_code_outside(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return };
         let note: String = String::from("An exit status is one byte; the system would keep only part of it.");
         self.findings.push(check_refusal("NK1116", span, format!("The exit code {} is not in 0..=255.", code), vec![note], Some(String::from("Give `process::exit` a code from 0 to 255."))));
     }
@@ -94,10 +94,10 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_byte_set_written_empty(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, args: &[Expr], span: &Span) {
         if key != "bytes::ByteSet" || args.len() != 1 { return; }
-        match nikaia_std::index::get(&args, 0) {
+        match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
             Expr::ListLit { items, .. } => {
                 if items.is_empty() {
-                    let at = check_span_at(world, nikaia_std::index::get(&args, 0), span);
+                    let at = check_span_at(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span);
                     let note: String = String::from("A set with no bytes finds nothing: `find` is `null`, `find_all` yields nothing, `split` yields the whole as its one piece.");
                     self.findings.push(check_refusal("NK1287", &at, String::from("This `bytes::ByteSet` is written empty, so every search with it finds nothing."), vec![note], Some(String::from("Name the bytes to search for, `bytes::ByteSet([';', '\\n'])`. A set computed at run time may be empty, and then finds nothing."))));
                 }
@@ -315,7 +315,7 @@ impl CheckState {
         let mut field: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut numeric = numeric;
         if numeric.len() == 1 && declared_with_no_arithmetic(&world.here, other).is_none() {
             let bound = arith_a_variable(side, world);
-            if bound.is_some() { field = Some(format!("{}.{}", nikaia_std::index::or(bound.as_deref(), || ""), *nikaia_std::index::get(&numeric, 0))); }
+            if bound.is_some() { field = Some(format!("{}.{}", nikaia_std::index::or(bound.as_deref(), || ""), *unsafe { nikaia_std::proven::read(&numeric, (0) as usize) })); }
         }
         let mut help: String = format!("Write a method that says what `{}` means for it.", symbol);
         if kind == "struct" { help = format!("Do the arithmetic on one of its fields, or write a method that says what `{}` means for it.", symbol); }

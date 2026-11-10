@@ -174,7 +174,7 @@ pub fn parse(written: &str) -> Ty {
     if trimmed.starts_with('(') && trimmed.ends_with(')') {
         let inner = cut(trimmed, 1, 1);
         let parts = split_args(&inner);
-        if parts.len() == 1 && !inner.trim().ends_with(',') { return parse(nikaia_std::index::get(&parts, 0)); }
+        if parts.len() == 1 && !inner.trim().ends_with(',') { return parse(unsafe { nikaia_std::proven::read(&parts, (0) as usize) }); }
         return Ty::Tuple(each(&parts));
     }
     if trimmed.starts_with("fn(") {
@@ -265,9 +265,9 @@ pub(crate) fn word_off(tail: &str, word: &str) -> Option<String> {
     if !tail.ends_with(AsRef::<str>::as_ref(word)) { return None; }
     let c: Vec<scalar> = nikaia_std::list::chars(tail.chars());
     let w: Vec<scalar> = nikaia_std::list::chars(word.chars());
-    let shorter = between(&c, 0, c.len() as i64 - w.len() as i64);
+    let shorter = between(&c, 0, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, w.len() as i64) });
     if shorter.is_empty() { return Some(shorter); }
-    if (*nikaia_std::index::get(&c, nikaia_std::index::at(c.len() as i64 - w.len() as i64 - 1))).is_whitespace() { return Some(nikaia_std::block::Text::from(shorter.trim_end().to_string())); }
+    if (*nikaia_std::index::get(&c, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(nikaia_std::proven::sub::<i64>(c.len() as i64, w.len() as i64), 1) }))).is_whitespace() { return Some(nikaia_std::block::Text::from(shorter.trim_end().to_string())); }
     None
 }
 
@@ -411,10 +411,10 @@ pub(crate) fn a_name(rest: &str, view: bool) -> Ty {
     if !rest.ends_with(']') { return Ty::Named { name: nikaia_std::block::Text::from(rest.to_string()), args: vec![], view }; }
     let c: Vec<scalar> = nikaia_std::list::chars(rest.chars());
     let mut open: i64 = -1;
-    for at in 0..c.len() as i64 { if open < 0 && *nikaia_std::index::get(&c, (at) as usize) == '[' { open = at; } }
+    for at in 0..c.len() as i64 { if open < 0 && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '[' { open = at; } }
     if open >= 0 {
         let named_text = between(&c, 0, open);
-        return Ty::Named { name: nikaia_std::block::Text::from(named_text.trim().to_string()), args: each(&split_args(&between(&c, open + 1, c.len() as i64 - 1))), view };
+        return Ty::Named { name: nikaia_std::block::Text::from(named_text.trim().to_string()), args: each(&split_args(&between(&c, open + 1, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 1) }))), view };
     }
     Ty::Named { name: nikaia_std::block::Text::from(rest.to_string()), args: vec![], view }
 }
@@ -671,7 +671,7 @@ pub struct Signature {
 
 impl Signature {
     pub fn empty() -> Signature { Signature { bounds: vec![], params: vec![], mutable: vec![], config: vec![], result: None } }
-    pub fn takes_a_receiver(&self) -> bool { !self.params.is_empty() && nikaia_std::index::get(&self.params, 0).0 == "self" }
+    pub fn takes_a_receiver(&self) -> bool { !self.params.is_empty() && unsafe { nikaia_std::proven::read(&self.params, (0) as usize) }.0 == "self" }
     pub fn result_or_unit(&self) -> Ty {
         nikaia_std::index::or(match self.result.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -827,7 +827,7 @@ impl Ty {
     }
     pub fn unseen(&self) -> Ty {
         match self {
-            Ty::Named { name, args, .. } => { if name == SEEN && args.len() == 1 { return (*nikaia_std::index::get(&args, 0)).clone(); } },
+            Ty::Named { name, args, .. } => { if name == SEEN && args.len() == 1 { return (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone(); } },
             Ty::Nullable(inner) => {
                 let inner = nikaia_std::boxed::open(inner);
                 return Ty::Nullable(Box::new(inner.unseen()));
@@ -965,7 +965,7 @@ pub(crate) fn a_sequence_type(ty: &Ty) -> bool { matches!(ty, Ty::Seq { .. }) }
 
 pub(crate) fn all_fit(found: &[Ty], wanted: &[Ty]) -> bool {
     if (found.len() as i64) != wanted.len() as i64 { return false; }
-    for at in 0..found.len() as i64 { if !(*nikaia_std::index::get(&found, (at) as usize)).fits(nikaia_std::index::get(&wanted, (at) as usize)) { return false; } }
+    for at in 0..found.len() as i64 { if !(*unsafe { nikaia_std::proven::read(&found, (at) as usize) }).fits(unsafe { nikaia_std::proven::read(&wanted, (at) as usize) }) { return false; } }
     true
 }
 
@@ -1013,8 +1013,8 @@ pub(crate) fn lends_a_run_of(found: &Ty, item: &Ty) -> bool {
 }
 
 pub(crate) fn a_run_named(name: &str, args: &[Ty], item: &Ty) -> bool {
-    if (name == "Vec" || name == "List") && args.len() == 1 { return (*nikaia_std::index::get(&args, 0)).fits(item); }
-    if name == ARRAY && (args.len() == 1 || args.len() == 2) { return (*nikaia_std::index::get(&args, 0)).fits(item); }
+    if (name == "Vec" || name == "List") && args.len() == 1 { return (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).fits(item); }
+    if name == ARRAY && (args.len() == 1 || args.len() == 2) { return (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).fits(item); }
     if (name == "String" || name == "str") && args.is_empty() {
         return match item {
             Ty::Named { name, .. } => name == "u8",
@@ -1115,10 +1115,10 @@ pub(crate) fn bind_named(pattern_name: &str, pattern_args: &[Ty], actual: &Ty, o
 pub(crate) fn bind_arguments(pattern_name: &str, pattern_args: &[Ty], name: &str, args: &[Ty], out: &mut collections::BTreeMap<String, Ty>) {
     if name != pattern_name { return; }
     if (args.len() as i64) != pattern_args.len() as i64 {
-        if name == "Array" && !args.is_empty() && !pattern_args.is_empty() { bind(nikaia_std::index::get(&pattern_args, 0), nikaia_std::index::get(&args, 0), out); }
+        if name == "Array" && !args.is_empty() && !pattern_args.is_empty() { bind(unsafe { nikaia_std::proven::read(&pattern_args, (0) as usize) }, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, out); }
         return;
     }
-    for at in 0..args.len() as i64 { bind(nikaia_std::index::get(&pattern_args, (at) as usize), nikaia_std::index::get(&args, (at) as usize), out); }
+    for at in 0..args.len() as i64 { bind(unsafe { nikaia_std::proven::read(&pattern_args, (at) as usize) }, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, out); }
 }
 
 pub(crate) fn bind_item(pattern: &Ty, actual: &Ty, out: &mut collections::BTreeMap<String, Ty>) {
@@ -1267,7 +1267,7 @@ pub(crate) fn renamed_name(name: &str, renames: &collections::BTreeMap<String, S
 pub(crate) fn renamed_path(name: &str, renames: &collections::BTreeMap<String, String>) -> String {
     let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
     for at in 0..c.len() as i64 {
-        if at + 1 < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == ':' && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1)) == ':' {
+        if unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ':' && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == ':' {
             let package = between(&c, 0, at);
             if renames.contains_key(&package) {
                 let ours = nikaia_std::index::or(*nikaia_std::index::get(&renames, &package), || "");
@@ -1393,7 +1393,7 @@ pub(crate) fn __nikaia_test_6() -> Result<(), Box<dyn std::error::Error>> {
         _ => vec![],
     };
     if !(params.len() == 1) { nikaia_std::abort::assertion_failed("assert(params.len() == 1)", None, &[("params.len()", (&&nikaia_std::abort::Operand(&(params.len() as i64))).shown()), ]) };
-    if !(*nikaia_std::index::get(&params, 0) == ty_test_view(String::from("Stats"))) { nikaia_std::abort::assertion_failed("assert(params[0] == ty_test_view(\"Stats\"))", None, &[("params[0]", (&&nikaia_std::abort::Operand(&(*nikaia_std::index::get(&params, 0)))).shown()), ("ty_test_view(\"Stats\")", (&&nikaia_std::abort::Operand(&(ty_test_view(String::from("Stats"))))).shown()), ]) };
+    if !(*unsafe { nikaia_std::proven::read(&params, (0) as usize) } == ty_test_view(String::from("Stats"))) { nikaia_std::abort::assertion_failed("assert(params[0] == ty_test_view(\"Stats\"))", None, &[("params[0]", (&&nikaia_std::abort::Operand(&(*unsafe { nikaia_std::proven::read(&params, (0) as usize) }))).shown()), ("ty_test_view(\"Stats\")", (&&nikaia_std::abort::Operand(&(ty_test_view(String::from("Stats"))))).shown()), ]) };
     Ok(())
 }
 

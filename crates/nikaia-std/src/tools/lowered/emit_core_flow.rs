@@ -183,7 +183,7 @@ impl EmitState {
         if a_task && !fails { if pauses { out.push("nikaia_std::task::plain_paused("); } else { out.push("nikaia_std::task::plain("); } }
         if pauses { out.push("async "); }
         let pattern = self.facts.filter_patterns.contains(&node_key(node));
-        if pattern && names.len() == 1 { out.push(&format!("|&{}| ", *nikaia_std::index::get(&names, 0))); } else if self.facts.copied_entry_lambdas.contains(&node_key(node)) && names.len() == 1 { out.push("|__nikaia_slot| "); } else {
+        if pattern && names.len() == 1 { out.push(&format!("|&{}| ", *unsafe { nikaia_std::proven::read(&names, (0) as usize) })); } else if self.facts.copied_entry_lambdas.contains(&node_key(node)) && names.len() == 1 { out.push("|__nikaia_slot| "); } else {
             let by_use: Vec<Ty> = nikaia_std::index::or(match self.facts.lambda_params_by_use.get(&node_key(node)) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
@@ -256,7 +256,7 @@ impl EmitState {
         for p in params.iter() {
             let p = *p;
             let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&spelled, (k) as usize)).to_string());
-            k += 1;
+            k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
             if mutable.contains(&p) { bound.push(format!("mut {}", name)); } else { bound.push(name); }
         }
         out.push(&format!("nikaia_std::func::Kept(std::sync::Arc::new(move |{}| ", nikaia_std::block::Text::from(bound.join(", "))));
@@ -452,9 +452,9 @@ impl EmitState {
     }
     pub(crate) fn emit_flow_a_declared_variant(&self, world: &EmitWorld<'_, '_, '_, '_>, fallback: &Expr) -> bool {
         match fallback {
-            Expr::Path(segments, _) => segments.len() == 2 && self.is_variant(world, &emit_text(world, *nikaia_std::index::get(&segments, 0)), &emit_text(world, *nikaia_std::index::get(&segments, 1))),
+            Expr::Path(segments, _) => segments.len() == 2 && self.is_variant(world, &emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (0) as usize) }), &emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (1) as usize) })),
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
-                Expr::Path(segments, _) => segments.len() == 2 && self.is_variant(world, &emit_text(world, *nikaia_std::index::get(&segments, 0)), &emit_text(world, *nikaia_std::index::get(&segments, 1))),
+                Expr::Path(segments, _) => segments.len() == 2 && self.is_variant(world, &emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (0) as usize) }), &emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (1) as usize) })),
                 _ => false,
             } },
             _ => false,
@@ -463,7 +463,7 @@ impl EmitState {
     pub(crate) fn emit_flow_a_declared_constructor(&self, world: &EmitWorld<'_, '_, '_, '_>, fallback: &Expr) -> bool {
         match fallback {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
-                Expr::Path(segments, _) => segments.len() == 2 && self.emit_flow_constructs(&emit_text(world, *nikaia_std::index::get(&segments, 0)), &emit_text(world, *nikaia_std::index::get(&segments, 1))),
+                Expr::Path(segments, _) => segments.len() == 2 && self.emit_flow_constructs(&emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (0) as usize) }), &emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (1) as usize) })),
                 _ => false,
             } },
             _ => false,
@@ -961,7 +961,7 @@ impl EmitState {
         if admission != "" { first = "nikaia_std::task::admission_first(__nikaia_admission).await; "; }
         let mut fallback_inside = false;
         if deadline != "" && body.stmts.len() == 1 {
-            match &nikaia_std::index::get(&body.stmts, 0).node {
+            match &unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.node {
                 Stmt::Expr(only) => { match only {
                     Expr::TryCatch { expr: guarded, .. } => { let guarded = nikaia_std::boxed::open(guarded); match guarded {
                         Expr::Block(_, _) => { fallback_inside = true; },
@@ -1087,9 +1087,9 @@ pub(crate) fn emit_core_flow_typed_names(names: &[String], given: &[Ty]) -> Vec<
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     for name in names.iter() {
         let mut spelled: String = String::from("_");
-        if at < given.len() as i64 { spelled = plain_rust_spelling(nikaia_std::index::get(&given, (at) as usize)); }
+        if at < given.len() as i64 { spelled = plain_rust_spelling(unsafe { nikaia_std::proven::read(&given, (at) as usize) }); }
         if spelled == "_" { out.push(nikaia_std::block::Text::from(name.to_string())); } else { out.push(format!("{}: {}", name, spelled)); }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     out
 }

@@ -75,9 +75,9 @@ impl CxPython {
         }
         let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut argtypes = argtypes; #[allow(unused_mut, clippy::redundant_locals)] let mut before = before; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut keep = keep; #[allow(unused_mut, clippy::redundant_locals)] let mut raising = raising;
         while position < entry.arg_names.len() as i64 {
-            let name = cx_python_name(nikaia_std::index::get(&entry.arg_names, nikaia_std::index::at(position)));
+            let name = cx_python_name(unsafe { nikaia_std::proven::read(&entry.arg_names, (position) as usize) });
             let ty = (*nikaia_std::index::get(&entry.arg_types, nikaia_std::index::at(position))).clone();
-            position += 1;
+            position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
             def_params.push(nikaia_std::block::Text::from(name.to_string()));
             let taken = cx_taken(words, &ctx.plains, &ctx.handles, &ctx.records, &ty);
             if taken.is_none() { continue; }
@@ -252,7 +252,7 @@ impl CxPython {
             async_lines.push(String::from("def finish(status):"));
             async_lines.push(String::from("    if status != 0:"));
             async_lines.push(String::from("        return _ERRORS.get(status, Error)(_said())"));
-            if !after.is_empty() { async_lines.push(format!("    {}", *nikaia_std::index::get(&after, 0))); } else { async_lines.push(String::from("    return None")); }
+            if !after.is_empty() { async_lines.push(format!("    {}", *unsafe { nikaia_std::proven::read(&after, (0) as usize) })); } else { async_lines.push(String::from("    return None")); }
             async_lines.push(format!("return _start(_lib.{}_async, [{}], finish, done)", symbol, nikaia_std::block::Text::from(handed_args.join(", "))));
         }
         #[allow(unused_mut)] let mut lines: Vec<String> = before.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut keep = keep; #[allow(unused_mut, clippy::redundant_locals)] let mut raising = raising; #[allow(unused_mut, clippy::redundant_locals)] let mut after = after;
@@ -283,7 +283,7 @@ impl CxPython {
                     _ => { },
                 }
             }
-            position += 1;
+            position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
         }
         if streams.len() == 1 && owner_name.is_none() {
             self.any_stream = true;
@@ -291,11 +291,11 @@ impl CxPython {
             #[allow(unused_mut)] let mut forwarded: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut others = others;
             let mut place: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut others = others; #[allow(unused_mut, clippy::redundant_locals)] let mut forwarded = forwarded;
             while ((place) as usize) < def_params.len() {
-                if place != *nikaia_std::index::get(&streams, 0) {
-                    others.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&def_params, (place) as usize)).to_string()));
-                    forwarded.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&def_params, (place) as usize)).to_string()));
+                if place != *unsafe { nikaia_std::proven::read(&streams, (0) as usize) } {
+                    others.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&def_params, (place) as usize) }).to_string()));
+                    forwarded.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&def_params, (place) as usize) }).to_string()));
                 } else { forwarded.push(String::from("each")); }
-                place += 1;
+                place = unsafe { nikaia_std::proven::add::<i64>(place, 1) };
             }
             self.functions.push(format!("def {}_iter({}):\n    return _stream(lambda each: {}({}))\n", entry.name, nikaia_std::block::Text::from(others.join(", ")), cx_python_name(&entry.name), nikaia_std::block::Text::from(forwarded.join(", "))));
         }
@@ -319,8 +319,8 @@ impl CxPython {
                 params.extend(def_params);
                 let mut made = lines.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                 if !made.is_empty() {
-                    let last = made.len() as i64 - 1;
-                    { let __nikaia_stored = String::from("self._ptr = out.value"); nikaia_std::index::set(&mut made, nikaia_std::index::at(last), __nikaia_stored); }
+                    let last = unsafe { nikaia_std::proven::sub::<i64>(made.len() as i64, 1) };
+                    { let __nikaia_stored = String::from("self._ptr = out.value"); unsafe { nikaia_std::proven::write(&mut made, (last) as usize, __nikaia_stored) }; }
                 }
                 self.add_class(&owner, format!("    def __init__({}):\n{}", nikaia_std::block::Text::from(params.join(", ")), cx_indent(&made, "        ")));
             } else { self.add_class(&owner, format!("    @staticmethod\n    def {}({}):\n{}", python, nikaia_std::block::Text::from(def_params.join(", ")), cx_indent(&lines, "        "))); }
@@ -425,7 +425,7 @@ impl CxPython {
         let mut at: i64 = 0;
         while ((at) as usize) < ctx.handles.len() {
             if *nikaia_std::index::get(&held, (at) as usize) {
-                let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.handles, (at) as usize).name.to_string());
+                let ty = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&ctx.handles, (at) as usize) }.name.to_string());
                 out.push_str(&format!("_lib.{}_{}_free.argtypes = [ctypes.c_void_p]\n_lib.{}_{}_free.restype = ctypes.c_int\n\n\nclass {}:\n    \"\"\"A handle (ADR-284 D5): `close()` frees it, as leaving a `with` does.\"\"\"\n\n    _ptr = None\n\n    @classmethod\n    def _from(cls, ptr):\n        made = cls.__new__(cls)\n        made._ptr = ptr\n        return made\n\n    def _live(self):\n        if not self._ptr:\n            raise ArgumentError(\"the handle is closed\")\n        return self._ptr\n\n    def close(self):\n        if self._ptr:\n            ptr, self._ptr = self._ptr, None\n            _check(_lib.{}_{}_free(ptr))\n\n    def __enter__(self):\n        return self\n\n    def __exit__(self, *_):\n        self.close()\n\n    def __del__(self):\n        try:\n            self.close()\n        except Exception:\n            pass\n\n", prefix, ty, prefix, ty, ty, prefix, ty));
                 let own = *nikaia_std::index::get(&self.classes, &ty);
                 if own.is_some() {
@@ -437,7 +437,7 @@ impl CxPython {
                 }
                 out.push_str("\n");
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         for signature in self.signatures.iter() {
             out.push_str(signature);

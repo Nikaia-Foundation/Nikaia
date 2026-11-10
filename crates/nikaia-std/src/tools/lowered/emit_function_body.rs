@@ -74,7 +74,7 @@ impl EmitState {
         let count = body.stmts.len() as i64;
         let mut seen: i64 = 0;
         for stmt in body.stmts.iter() {
-            seen += 1;
+            seen = unsafe { nikaia_std::proven::add::<i64>(seen, 1) };
             if seen == count { leaves = emit_ends_in_a_jump(world, &stmt.node); }
         }
         let main_ends = skip_free_at_exit && depth == 0 && key == "main" && self.user_main(world).is_some() && !leaves;
@@ -96,7 +96,7 @@ impl EmitState {
         let inner_pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1))); #[allow(unused_mut, clippy::redundant_locals)] let mut first = first;
         out.push("{\n");
         for line in first.iter() { out.push(&format!("{}{}\n", inner_pad, line)); }
-        let last = if count == 0 { 0 } else { count - 1 };
+        let last = if count == 0 { 0 } else { unsafe { nikaia_std::proven::sub::<i64>(count, 1) } };
         let keeps = walk.async_keeps;
         let rests = walk.async_rests.len() as i64;
         let mut i: i64 = 0;
@@ -119,7 +119,7 @@ impl EmitState {
             self.emit_view_list_drops(out, stmt.span.start as i64);
             self.emit_view_list_rebinds(out, stmt.span.start as i64);
             out.push("\n");
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         walk.async_keeps = keeps;
         let finished = emit_stmt_finish_rests(walk, rests, &inner_pad);

@@ -72,8 +72,8 @@ impl CheckState {
                 let order = match *nikaia_std::index::get(&self.struct_parameters, name) { Some(__nikaia_value) => __nikaia_value, None => return bound };
                 let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let order = order;
                 while at < order.len() as i64 && at < args.len() as i64 {
-                    if !(*nikaia_std::index::get(&args, nikaia_std::index::at(at))).is_unknown() { bound.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&order, nikaia_std::index::at(at))).to_string()), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
-                    at = at + 1;
+                    if !(*unsafe { nikaia_std::proven::read(&args, (at) as usize) }).is_unknown() { bound.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&order, (at) as usize) }).to_string()), (*unsafe { nikaia_std::proven::read(&args, (at) as usize) }).clone()); }
+                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 }
             },
             _ => { },
@@ -122,8 +122,8 @@ impl CheckState {
         let mark = format!("${}", name);
         let mut other: i64 = 0;
         while other < wanted.len() as i64 {
-            if other != at && nikaia_std::index::get(&wanted, nikaia_std::index::at(other)).1.text().contains(AsRef::<str>::as_ref(&mark)) { return false; }
-            other = other + 1;
+            if other != at && unsafe { nikaia_std::proven::read(&wanted, (other) as usize) }.1.text().contains(AsRef::<str>::as_ref(&mark)) { return false; }
+            other = unsafe { nikaia_std::proven::add::<i64>(other, 1) };
         }
         true
     }
@@ -132,8 +132,8 @@ impl CheckState {
     pub fn kept_arguments_are_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty]) {
         let mut at: i64 = 0;
         while at < args.len() as i64 && at < params.len() as i64 {
-            let built = self.text_literal(world, nikaia_std::index::get(&params, nikaia_std::index::at(at)), nikaia_std::index::get(&args, nikaia_std::index::at(at)), true);
-            at = at + 1;
+            let built = self.text_literal(world, unsafe { nikaia_std::proven::read(&params, (at) as usize) }, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, true);
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

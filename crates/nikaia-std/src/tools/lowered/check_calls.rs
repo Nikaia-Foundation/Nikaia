@@ -25,7 +25,7 @@ pub fn expected_arguments(contract: &FnContract) -> Vec<Ty> {
 pub fn receiver_bindings(contract: &FnContract, receiver: &Ty) -> collections::BTreeMap<String, Ty> {
     let mut bound: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return bound };
-    if !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "self" { bind(&nikaia_std::index::get(&signature.params, 0).1, receiver, &mut bound); }
+    if !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "self" { bind(&unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.1, receiver, &mut bound); }
     bound
 }
 
@@ -35,8 +35,8 @@ pub fn argument_bindings(contract: &FnContract, found: &[Ty]) -> collections::BT
     let arguments = call_arguments(signature);
     let mut at: i64 = 0;
     while ((at) as usize) < arguments.len() && ((at) as usize) < found.len() {
-        bind(&nikaia_std::index::get(&arguments, (at) as usize).1, nikaia_std::index::get(&found, (at) as usize), &mut bound);
-        at += 1;
+        bind(&unsafe { nikaia_std::proven::read(&arguments, (at) as usize) }.1, unsafe { nikaia_std::proven::read(&found, (at) as usize) }, &mut bound);
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     bound
 }
@@ -44,7 +44,7 @@ pub fn argument_bindings(contract: &FnContract, found: &[Ty]) -> collections::BT
 pub fn walks_by_value(contract: &FnContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if signature.params.is_empty() { return false; }
-    matches!(nikaia_std::index::get(&signature.params, 0).1, Ty::Seq { .. })
+    matches!(unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.1, Ty::Seq { .. })
 }
 
 pub fn shape_through(contract: &FnContract, receiver: &Ty, found: &[Ty], result: Ty) -> Ty {
@@ -61,7 +61,7 @@ pub fn shape_through(contract: &FnContract, receiver: &Ty, found: &[Ty], result:
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || Signature::empty());
-        if !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "self" && a_sequence_type(&nikaia_std::index::get(&signature.params, 0).1) {
+        if !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "self" && a_sequence_type(&unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.1) {
             ends = ends && shape_ends(receiver);
             sized = sized && shape_sized(receiver);
             on_every_core = on_every_core || shape_parallel(receiver);
@@ -70,12 +70,12 @@ pub fn shape_through(contract: &FnContract, receiver: &Ty, found: &[Ty], result:
         let arguments = call_arguments(&signature);
         let mut at: i64 = 0;
         while ((at) as usize) < arguments.len() && ((at) as usize) < found.len() {
-            if a_sequence_type(&nikaia_std::index::get(&arguments, (at) as usize).1) {
-                ends = ends && shape_ends(nikaia_std::index::get(&found, (at) as usize));
-                sized = sized && shape_sized(nikaia_std::index::get(&found, (at) as usize));
-                timed = timed || shape_timed(nikaia_std::index::get(&found, (at) as usize));
+            if a_sequence_type(&unsafe { nikaia_std::proven::read(&arguments, (at) as usize) }.1) {
+                ends = ends && shape_ends(unsafe { nikaia_std::proven::read(&found, (at) as usize) });
+                sized = sized && shape_sized(unsafe { nikaia_std::proven::read(&found, (at) as usize) });
+                timed = timed || shape_timed(unsafe { nikaia_std::proven::read(&found, (at) as usize) });
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     }
     ends = ends && (!contract.ends_by_length || sized);

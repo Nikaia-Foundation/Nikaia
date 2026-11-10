@@ -26,13 +26,13 @@ pub fn after(path: &str, word: &str) -> Option<String> {
 pub fn module_of(relative: &str) -> Option<String> {
     if !relative.starts_with("src/") || !relative.ends_with(".rs") { return None; }
     let c: Vec<scalar> = nikaia_std::list::chars(relative.chars());
-    let inside = slice(&c, 4, c.len() as i64 - 3);
+    let inside = slice(&c, 4, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 3) });
     if inside == "lib" { return Some(String::from("")); }
     if inside == "main" || inside.starts_with("bin/") { return None; }
     let mut path = nikaia_std::block::Text::from(inside.to_string());
     if inside == "mod" { path = String::from(""); } else if inside.ends_with("/mod") {
         let i: Vec<scalar> = nikaia_std::list::chars(inside.chars());
-        path = slice(&i, 0, i.len() as i64 - 4);
+        path = slice(&i, 0, unsafe { nikaia_std::proven::sub::<i64>(i.len() as i64, 4) });
     }
     let mut out: String = String::from("");
     for part in path.split('/') { out = joined(&out, part); }
@@ -53,12 +53,12 @@ pub fn exported(at: &str, text: &str) -> Vec<Export> {
     let open = find_text(&c, 0, "::{");
     if open >= 0 && whole.ends_with('}') {
         let prefix = slice(&c, 0, open);
-        let inside = slice(&c, open + 3, c.len() as i64 - 1);
+        let inside = slice(&c, open + 3, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 1) });
         for one in split_top_level(&inside) { if !one.is_empty() { out.push(Export { at: nikaia_std::block::Text::from(at.to_string()), prefix: nikaia_std::block::Text::from(prefix.to_string()), name: Some(named(&one)) }); } }
         return out;
     }
     if whole.ends_with("::*") {
-        out.push(Export { at: nikaia_std::block::Text::from(at.to_string()), prefix: slice(&c, 0, c.len() as i64 - 3), name: None });
+        out.push(Export { at: nikaia_std::block::Text::from(at.to_string()), prefix: slice(&c, 0, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 3) }), name: None });
         return out;
     }
     let mut path = nikaia_std::block::Text::from(whole.to_string());
@@ -144,12 +144,12 @@ pub(crate) fn find_last_text(c: &[scalar], word: &str) -> i64 {
     let w: Vec<scalar> = nikaia_std::list::chars(word.chars());
     let mut found: i64 = -1;
     if w.is_empty() || (c.len() as i64) < w.len() as i64 { return found; }
-    for at in 0..c.len() as i64 - w.len() as i64 + 1 { if stands_at(c, at, &w) { found = at; } }
+    for at in 0..unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::sub::<i64>(c.len() as i64, w.len() as i64), 1) } { if stands_at(c, at, &w) { found = at; } }
     found
 }
 
 pub(crate) fn stands_at(c: &[scalar], at: i64, w: &[scalar]) -> bool {
-    for k in 0..w.len() as i64 { if *nikaia_std::index::get(&c, nikaia_std::index::at(at + k)) != *nikaia_std::index::get(&w, (k) as usize) { return false; } }
+    for k in 0..w.len() as i64 { if *nikaia_std::index::get(&c, nikaia_std::index::at(at + k)) != *unsafe { nikaia_std::proven::read(&w, (k) as usize) } { return false; } }
     true
 }
 

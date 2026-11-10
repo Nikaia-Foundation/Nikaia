@@ -104,7 +104,7 @@ pub(crate) fn binding_reason(top: &Block, block: &Block, name: &str, in_loop: bo
 pub(crate) fn statement_reason(top: &Block, stmt: &Stmt, name: &str, in_loop: bool, words: &winnow_grammar::InternerContext) -> String {
     match stmt {
         Stmt::Let { names, value, .. } => {
-            if names.len() == 1 && words.resolve(*nikaia_std::index::get(&names, 0)) == name {
+            if names.len() == 1 && words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }) == name {
                 if is_choice(value) { return choice(); }
                 if is_element(value, words) { return reason_element_from(value, top, words); }
             }
@@ -263,7 +263,7 @@ pub(crate) fn reason_element_of(list: &Expr, top: &Block, words: &winnow_grammar
 pub(crate) fn reason_bound_to_call(block: &Block, name: &str, words: &winnow_grammar::InternerContext) -> bool {
     for stmt in block.stmts.iter() {
         let here = match &stmt.node {
-            Stmt::Let { names, value, .. } => names.len() == 1 && words.resolve(*nikaia_std::index::get(&names, 0)) == name && match value {
+            Stmt::Let { names, value, .. } => names.len() == 1 && words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }) == name && match value {
                 Expr::Call { .. } => true,
                 Expr::MethodCall { method, .. } => { let method = *method; words.resolve(method) != "clone" },
                 _ => false,

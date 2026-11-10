@@ -8,8 +8,8 @@ pub(crate) fn check_core_places_str_view() -> Ty { Ty::Named { name: String::fro
 pub(crate) fn check_core_places_base(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
     if parts.is_empty() { return nikaia_std::block::Text::from(name.to_string()); }
-    let last = parts.len() as i64 - 1;
-    format!("{}", *nikaia_std::index::get(&parts, nikaia_std::index::at(last)))
+    let last = unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) };
+    format!("{}", *unsafe { nikaia_std::proven::read(&parts, (last) as usize) })
 }
 
 pub(crate) fn check_core_places_a_list(base: &str) -> bool { base == "Vec" || base == "List" || base == "Array" }
@@ -87,7 +87,7 @@ pub(crate) fn check_core_places_tuple_part(state: &mut CheckState, parts: &[Ty],
     let at = check_core_places_position(field);
     if at >= 0 && at >= parts.len() as i64 {
         let count = parts.len() as i64;
-        let mut last = count - 1;
+        let mut last = unsafe { nikaia_std::proven::sub::<i64>(count, 1) };
         if last < 0 { last = 0; }
         let mut help: String = String::from("There's nothing in it to read.");
         if count > 0 { help = format!("Use one of `.0` to `.{}`.", last); }
@@ -95,7 +95,7 @@ pub(crate) fn check_core_places_tuple_part(state: &mut CheckState, parts: &[Ty],
         return Ty::Unknown;
     }
     if at < 0 { return Ty::Unknown; }
-    (*nikaia_std::index::get(&parts, nikaia_std::index::at(at))).clone()
+    (*unsafe { nikaia_std::proven::read(&parts, (at) as usize) }).clone()
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -256,7 +256,7 @@ pub fn check_core_places_array_length(state: &mut CheckState, node: i64, on: &Ty
     match on {
         Ty::Named { name, args, .. } => {
             if (name == "Array" || name.ends_with("::Array")) && args.len() == 2 {
-                match nikaia_std::index::get(&args, 1) {
+                match unsafe { nikaia_std::proven::read(&args, (1) as usize) } {
                     Ty::Count(n) => {
                         let n = *n;
                         if n >= 0 { state.facts.array_lengths.insert(node, n); }
@@ -410,7 +410,7 @@ pub(crate) fn check_core_places_tail_into<H: CheckHost>(state: &CheckState, worl
         stored.unresolved = true;
         return;
     }
-    let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(n - 1));
+    let last = unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) };
     match &last.node {
         Stmt::Expr(e) => { check_core_places_code_into(state, world, host, e, stored); },
         _ => { stored.unresolved = true; },
@@ -424,11 +424,11 @@ pub(crate) fn check_core_places_a_declared_field<H: CheckHost>(state: &mut Check
     let mut at: i64 = -1;
     let mut i: i64 = 0;
     while i < declared.len() as i64 {
-        if nikaia_std::index::get(&declared, (i) as usize).name == field {
+        if unsafe { nikaia_std::proven::read(&declared, (i) as usize) }.name == field {
             at = i;
             break;
         }
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     if at < 0 {
         state.no_such_field(name, field, declared, span);
@@ -647,11 +647,11 @@ pub(crate) fn check_core_places_a_with_field<H: CheckHost>(state: &mut CheckStat
     let mut at: i64 = -1;
     let mut i: i64 = 0;
     while i < declared.len() as i64 {
-        if nikaia_std::index::get(&declared, (i) as usize).name == field {
+        if unsafe { nikaia_std::proven::read(&declared, (i) as usize) }.name == field {
             at = i;
             break;
         }
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     if at < 0 {
         state.no_such_field(name, &field, declared, span);
@@ -763,7 +763,7 @@ pub(crate) fn check_core_places_either_position(one: &CheckTextPosition, other: 
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_places_block_position(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) -> Option<CheckTextPosition> {
     if block.stmts.len() != 1 { return None; }
-    match &nikaia_std::index::get(&block.stmts, 0).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.node {
         Stmt::Expr(value) => check_core_places_text_position(state, world, value),
         _ => None,
     }
@@ -782,7 +782,7 @@ pub fn check_core_places_text_position(state: &CheckState, world: &CheckWorld<'_
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let called = world.words.resolve(method);
             if state.a_text_bytes_view(world, receiver) { return None; }
-            if (called == "find" || called == "rfind") && !args.is_empty() { return Some(CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: check_core_places_literal_bytes(nikaia_std::index::get(&args, 0)) }); }
+            if (called == "find" || called == "rfind") && !args.is_empty() { return Some(CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: check_core_places_literal_bytes(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) }); }
             if called == "len" && args.is_empty() && check_core_places_literal_bytes(receiver) >= 0 { return Some(CheckTextPosition { text: String::from(""), step: -1 }); }
             if called == "len" && args.is_empty() { return Some(CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: -1 }); }
             return None;
@@ -937,7 +937,7 @@ pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     let b = check_core_places_base(&name);
     if !a_range && check_core_places_a_list(&b) { state.number_asked(world, index, &check_core_places_named("i64"), span, false); }
     if a_range {
-        if check_core_places_a_list(&b) && !args.is_empty() { return Ty::Named { name: String::from("Array"), args: vec![(*nikaia_std::index::get(&args, 0)).clone()], view: true }; }
+        if check_core_places_a_list(&b) && !args.is_empty() { return Ty::Named { name: String::from("Array"), args: vec![(*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone()], view: true }; }
         if (b == "String" || b == "str") && args.is_empty() {
             check_core_places_text_cut(state, world, base, index, span);
             return check_core_places_str_view();
@@ -955,13 +955,13 @@ pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     }
     if check_core_places_a_list(&b) && !args.is_empty() {
         state.facts.list_indices.insert(id_of(base) as i64);
-        return (*nikaia_std::index::get(&args, 0)).clone();
+        return (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone();
     }
     if (b == "HashMap" || b == "Map" || b == "BTreeMap") && args.len() == 2 {
         state.flow.read_a_map = !writing;
-        state.a_map_key(world, nikaia_std::index::get(&args, 0), &key, index, writing, span);
+        state.a_map_key(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &key, index, writing, span);
         if !writing { check_core_call_on_key_read(state, world, base, index, span); }
-        let value: Ty = (*nikaia_std::index::get(&args, 1)).clone();
+        let value: Ty = (*unsafe { nikaia_std::proven::read(&args, (1) as usize) }).clone();
         if !writing {
             match value {
                 Ty::Nullable(ref held) => {

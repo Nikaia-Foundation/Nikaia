@@ -24,8 +24,8 @@ impl CheckState {
     pub fn bind_local(&mut self, local: CheckLocal) {
         if local.ty.is_unknown() { self.flow.unknown_bound.insert(local.id); }
         if !self.scope.is_empty() {
-            let at = self.scope.len() as i64 - 1;
-            self.scope[nikaia_std::index::at(at)].push(local);
+            let at = unsafe { nikaia_std::proven::sub::<i64>(self.scope.len() as i64, 1) };
+            (*unsafe { nikaia_std::proven::slot(&mut self.scope, (at) as usize) }).push(local);
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -49,8 +49,8 @@ impl CheckState {
         if shape.is_empty() { let refused = self.a_tuple_pattern_that_does_not_fit(found, names.len() as i64, what, span); }
         if !shape.is_empty() {
             let mut width: i64 = 1;
-            if *nikaia_std::index::get(&shape, 0) > 0 {
-                width = *nikaia_std::index::get(&shape, 0);
+            if *unsafe { nikaia_std::proven::read(&shape, (0) as usize) } > 0 {
+                width = *unsafe { nikaia_std::proven::read(&shape, (0) as usize) };
                 let refused = self.a_tuple_pattern_that_does_not_fit(found, width, what, span);
             }
             parts = self.nested_pattern_parts(world, &binds_tuple_parts(found, width), shape, names.len() as i64, what, span);
@@ -58,15 +58,15 @@ impl CheckState {
         let at = span.start as i64;
         let lent = self.facts.lent_lets.contains(&at) || self.a_tuple_over_a_lent_name(world, value) || self.a_tuple_got_past_a_jump(world, value);
         let mut frame: i64 = 0;
-        if !self.scope.is_empty() { frame = self.scope.len() as i64 - 1; }
+        if !self.scope.is_empty() { frame = unsafe { nikaia_std::proven::sub::<i64>(self.scope.len() as i64, 1) }; }
         for index in 0..names.len() as i64 {
-            let bound = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&names, (index) as usize)).to_string());
+            let bound = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&names, (index) as usize) }).to_string());
             self.nameable(&bound, span, "a `let`");
             self.a_tuple_part_is_lent(lent, &bound, nikaia_std::index::get(&parts, (index) as usize), at, frame);
-            let mut ty = (*nikaia_std::index::get(&parts, (index) as usize)).clone();
+            let mut ty = (*unsafe { nikaia_std::proven::read(&parts, (index) as usize) }).clone();
             if self.facts.copied_tuple_parts.contains(&(at, nikaia_std::block::Text::from(bound.to_string()))) { ty = ty.owned(); }
             self.bind_with(nikaia_std::block::Text::from(bound.to_string()), ty, None);
-            if check_owned_text(nikaia_std::index::get(&parts, (index) as usize)) && (lent || (*nikaia_std::index::get(&parts, (index) as usize)).is_a_view()) {
+            if check_owned_text(unsafe { nikaia_std::proven::read(&parts, (index) as usize) }) && (lent || (*unsafe { nikaia_std::proven::read(&parts, (index) as usize) }).is_a_view()) {
                 let local = match self.binding(&bound) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 self.flow.lent_text_params.insert(local.id);
             }
@@ -94,7 +94,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn nested_pattern_parts(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, top: &[Ty], shape: &[i64], count: i64, site: &str, span: &Span) -> Vec<Ty> {
         let mut out: Vec<Ty> = vec![];
-        if shape.len() == 1 && *nikaia_std::index::get(&shape, 0) == -1 {
+        if shape.len() == 1 && *unsafe { nikaia_std::proven::read(&shape, (0) as usize) } == -1 {
             self.findings.push(check_refusal("NK1259", span, format!("{} can't take a variant apart.", site), vec![String::from("A variant may not be the one the value holds, and a binding has no other branch to go to.")], Some(String::from("Take the value apart with a `match`, which has an arm for each case."))));
             for _ in 0..count { out.push(Ty::Unknown); }
             return out;
@@ -102,13 +102,13 @@ impl CheckState {
         let mut pending: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut index = top.len() as i64;
         while index > 0 {
-            index -= 1;
-            pending.push((*nikaia_std::index::get(&top, nikaia_std::index::at(index))).clone());
+            index = unsafe { nikaia_std::proven::sub::<i64>(index, 1) };
+            pending.push((*unsafe { nikaia_std::proven::read(&top, (index) as usize) }).clone());
         }
         let mut at: i64 = 1;
         while ((at) as usize) < shape.len() {
-            let width = *nikaia_std::index::get(&shape, (at) as usize);
-            at += 1;
+            let width = *unsafe { nikaia_std::proven::read(&shape, (at) as usize) };
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             let part: Ty = nikaia_std::index::or(pending.pop(), || Ty::Unknown);
             if width == 0 { out.push(part); } else {
                 let refused = self.a_tuple_pattern_that_does_not_fit(&part, width, site, span);
@@ -133,8 +133,8 @@ impl CheckState {
         let arguments = call_arguments(signature);
         let mut at: i64 = 0;
         for arg in args.iter() {
-            if at < arguments.len() as i64 { for (name, view) in binds_item_params(world, arg, &nikaia_std::index::get(&arguments, (at) as usize).1, &held) { if view || lends { let added = out.insert(name); } } }
-            at += 1;
+            if at < arguments.len() as i64 { for (name, view) in binds_item_params(world, arg, &unsafe { nikaia_std::proven::read(&arguments, (at) as usize) }.1, &held) { if view || lends { let added = out.insert(name); } } }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         out
     }
@@ -261,12 +261,12 @@ pub(crate) fn binds_item_params(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
             for p in params.iter() {
                 let p = *p;
                 if at < types.len() as i64 {
-                    match *nikaia_std::index::get(&types, (at) as usize) {
+                    match *unsafe { nikaia_std::proven::read(&types, (at) as usize) } {
                         Ty::Var { ref name, view } => { if name == held { out.push((nikaia_std::block::Text::from(world.words.resolve(p).to_string()), view)); } },
                         _ => { },
                     }
                 }
-                at += 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
         },
         _ => { },

@@ -9,24 +9,24 @@ pub fn parameters(body: &str) -> Vec<String> {
     let mut i: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut found = found;
     while i < c.len() as i64 {
         if *nikaia_std::index::get(&c, nikaia_std::index::at(i)) != ':' {
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             continue;
         }
-        let before = i > 0 && *nikaia_std::index::get(&c, nikaia_std::index::at(i - 1)) == ':';
-        let after = i + 1 < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(i + 1)) == ':';
+        let before = i > 0 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) } == ':';
+        let after = unsafe { nikaia_std::proven::add::<i64>(i, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(i, 1)) as usize) } == ':';
         if before || after {
-            i += 2;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 2) };
             continue;
         }
-        let start: i64 = i + 1;
+        let start: i64 = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         let mut end: i64 = start;
-        while end < c.len() as i64 && a_name_goes_on(*nikaia_std::index::get(&c, nikaia_std::index::at(end))) { end += 1; }
+        while end < c.len() as i64 && a_name_goes_on(*unsafe { nikaia_std::proven::read(&c, (end) as usize) }) { end = unsafe { nikaia_std::proven::add::<i64>(end, 1) }; }
         if end > start && a_name_begins(*nikaia_std::index::get(&c, nikaia_std::index::at(start))) {
             let mut name: String = String::new();
             for k in start..end { name.push(*nikaia_std::index::get(&c, nikaia_std::index::at(k))); }
             if !nikaia_std::list::contains(&found, &name) { found.push(name); }
             i = end;
-        } else { i += 1; }
+        } else { i = unsafe { nikaia_std::proven::add::<i64>(i, 1) }; }
     }
     found
 }
@@ -136,7 +136,7 @@ pub(crate) fn checked_body(body: &Block, words: &winnow_grammar::InternerContext
         match &stmt.node {
             Stmt::Let { names, value, .. } => {
                 if names.len() != 1 { continue; }
-                let text = nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 0)).to_string());
+                let text = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string());
                 let deferred = deferred_parameters(value, words);
                 if deferred.is_some() { bound.insert(text, nikaia_std::index::or(deferred, || vec![].into())); } else { bound.remove(&text); }
             },
@@ -349,7 +349,7 @@ pub(crate) fn a_parameter_call(callee: &str, passed: &[String], subject: Option<
     let declared = match *nikaia_std::index::get(&bound, name) { Some(__nikaia_value) => __nikaia_value, None => return };
     if callee.is_empty() || !nikaia_std::list::contains(&takers, &callee) {
         let shown: String = if callee.is_empty() { String::from("this call") } else { nikaia_std::block::Text::from(callee.to_string()) };
-        let first: String = if !passed.is_empty() { nikaia_std::block::Text::from((*nikaia_std::index::get(&passed, 0)).to_string()) } else { String::from("") };
+        let first: String = if !passed.is_empty() { nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&passed, (0) as usize) }).to_string()) } else { String::from("") };
         let reached = parameter_list(&passed);
         found.push(refusal("NK1109", span.clone(), format!("`{}` has no option called `{}`.", shown, first), vec![format!("`{}` is a `dsl` statement, and its parameters go to a driver: a function declared with `...args: Self::dsl`. Nothing in this file declares `{}` that way, so {} would reach nothing.", name, shown, reached)], format!("Hand `{}` to a driver, a method declared `run(ref self, statement: ref String; ...args: Self::dsl)`, and pass the parameters there: `driver.run({}; {}: …)`.", name, name, first)));
         return;
@@ -383,7 +383,7 @@ pub(crate) fn parameter_list(names: &[String]) -> String {
     let mut out: String = String::from("");
     for k in 0..names.len() as i64 {
         if k > 0 { out.push_str(", "); }
-        let one = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, (k) as usize)).to_string());
+        let one = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (k) as usize) }).to_string());
         out.push_str(&format!("`:{}`", one));
     }
     out

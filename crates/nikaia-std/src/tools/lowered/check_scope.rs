@@ -13,12 +13,12 @@ impl CheckState {
     pub fn binding(&self, name: &str) -> Option<CheckLocal> {
         let mut frame_at = self.scope.len() as i64;
         while frame_at > 0 {
-            frame_at = frame_at - 1;
-            let frame = nikaia_std::index::get(&self.scope, nikaia_std::index::at(frame_at));
+            frame_at = unsafe { nikaia_std::proven::sub::<i64>(frame_at, 1) };
+            let frame = unsafe { nikaia_std::proven::read(&self.scope, (frame_at) as usize) };
             let mut at = frame.len() as i64;
             while at > 0 {
-                at = at - 1;
-                if nikaia_std::index::get(&frame, nikaia_std::index::at(at)).name == name { return Some((*nikaia_std::index::get(&frame, nikaia_std::index::at(at))).clone()); }
+                at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
+                if unsafe { nikaia_std::proven::read(&frame, (at) as usize) }.name == name { return Some((*unsafe { nikaia_std::proven::read(&frame, (at) as usize) }).clone()); }
             }
         }
         None
@@ -28,8 +28,8 @@ impl CheckState {
     pub fn frame_holding(&self, name: &str) -> i64 {
         let mut frame_at = self.scope.len() as i64;
         while frame_at > 0 {
-            frame_at = frame_at - 1;
-            for local in (*nikaia_std::index::get(&self.scope, nikaia_std::index::at(frame_at))).iter() { if local.name == name { return frame_at; } }
+            frame_at = unsafe { nikaia_std::proven::sub::<i64>(frame_at, 1) };
+            for local in (*unsafe { nikaia_std::proven::read(&self.scope, (frame_at) as usize) }).iter() { if local.name == name { return frame_at; } }
         }
         -1
     }
@@ -41,7 +41,7 @@ impl CheckState {
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return None };
         let count = self.repeats.len() as i64;
-        if count > 0 && nikaia_std::index::get(&self.repeats, nikaia_std::index::at(count - 1)).frame > self.frame_holding(name) { return None; }
+        if count > 0 && unsafe { nikaia_std::proven::read(&self.repeats, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }.frame > self.frame_holding(name) { return None; }
         Some(value)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -53,7 +53,7 @@ impl CheckState {
         };
         let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
         let mut next: Option<Integer> = None;
-        if self.frame_holding(&name) == self.scope.len() as i64 - 1 { next = self.followed_value(world, local.id, op, value); }
+        if self.frame_holding(&name) == unsafe { nikaia_std::proven::sub::<i64>(self.scope.len() as i64, 1) } { next = self.followed_value(world, local.id, op, value); }
         if next.is_none() { self.flow.followed.remove(&local.id); } else { self.flow.followed.insert(local.id, match next { Some(__nikaia_value) => __nikaia_value, None => return }); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -119,8 +119,8 @@ pub fn resolve_method<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, key: &
         have = true;
     }
     let ends = method_keys(world.library_methods, key);
-    if !ends.is_empty() && (!have || AsRef::<str>::as_ref(&(*nikaia_std::index::get(&ends, 0))) < AsRef::<str>::as_ref(&(best))) {
-        best = nikaia_std::block::Text::from((*nikaia_std::index::get(&ends, 0)).to_string());
+    if !ends.is_empty() && (!have || AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&ends, (0) as usize) })) < AsRef::<str>::as_ref(&(best))) {
+        best = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&ends, (0) as usize) }).to_string());
         have = true;
     }
     if have {

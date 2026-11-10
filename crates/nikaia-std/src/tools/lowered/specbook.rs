@@ -16,18 +16,18 @@ pub fn blocks_in(text: &str) -> Vec<SpecBlock> {
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
     while at < lines.len() as i64 {
         if (*nikaia_std::index::get(&lines, nikaia_std::index::at(at))).trim() != "```nika" {
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }
-        let start: i64 = at + 1;
+        let start: i64 = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         let mut end: i64 = start;
-        while end < lines.len() as i64 && (*nikaia_std::index::get(&lines, nikaia_std::index::at(end))).trim() != "```" { end += 1; }
+        while end < lines.len() as i64 && (*unsafe { nikaia_std::proven::read(&lines, (end) as usize) }).trim() != "```" { end = unsafe { nikaia_std::proven::add::<i64>(end, 1) }; }
         let mut code: String = String::from("");
         for k in start..end {
             if k > start { code.push('\n'); }
             code.push_str(nikaia_std::index::get(&lines, nikaia_std::index::at(k)));
         }
-        found.push(SpecBlock { line: start + 1, discusses_a_refusal: discusses_a_refusal(&code), sketch: is_a_sketch(&code), code });
+        found.push(SpecBlock { line: unsafe { nikaia_std::proven::add::<i64>(start, 1) }, discusses_a_refusal: discusses_a_refusal(&code), sketch: is_a_sketch(&code), code });
         at = end + 1;
     }
     found
@@ -44,12 +44,12 @@ pub fn is_a_sketch(code: &str) -> bool {
     let c: Vec<scalar> = nikaia_std::list::chars(code.chars());
     let mut at: i64 = 0;
     while ((at) as usize) < c.len() {
-        if *nikaia_std::index::get(&c, (at) as usize) == '…' { return true; }
-        if ((at + 2) as usize) < c.len() && *nikaia_std::index::get(&c, (at) as usize) == '.' && *nikaia_std::index::get(&c, (at + 1) as usize) == '.' && *nikaia_std::index::get(&c, (at + 2) as usize) == '.' {
-            let named = ((at + 3) as usize) < c.len() && ((*nikaia_std::index::get(&c, (at + 3) as usize)).is_alphabetic() || *nikaia_std::index::get(&c, (at + 3) as usize) == '_');
+        if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '…' { return true; }
+        if ((unsafe { nikaia_std::proven::add::<i64>(at, 2) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '.' && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '.' && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 2)) as usize) } == '.' {
+            let named = ((unsafe { nikaia_std::proven::add::<i64>(at, 3) }) as usize) < c.len() && ((*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 3)) as usize) }).is_alphabetic() || *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 3)) as usize) } == '_');
             if !named { return true; }
-            at += 3;
-        } else { at += 1; }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 3) };
+        } else { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
     }
     false
 }
@@ -69,9 +69,9 @@ pub fn readings(code: &str) -> Vec<Reading> {
     all.push(Reading { name: String::from("a body"), source: wrapped(code) });
     let parts = split_at_the_first_statement(code);
     if parts.len() == 2 {
-        let mut both = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string());
+        let mut both = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string());
         both.push_str("\n\n");
-        both.push_str(&wrapped(nikaia_std::index::get(&parts, 1)));
+        both.push_str(&wrapped(unsafe { nikaia_std::proven::read(&parts, (1) as usize) }));
         all.push(Reading { name: String::from("items, then a body"), source: both });
     }
     all
@@ -98,12 +98,12 @@ pub(crate) fn split_at_the_first_statement(code: &str) -> Vec<String> {
     let mut head: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
     let mut depth: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
     for at in 0..lines.len() as i64 {
-        let trimmed = (*nikaia_std::index::get(&lines, (at) as usize)).trim();
+        let trimmed = (*unsafe { nikaia_std::proven::read(&lines, (at) as usize) }).trim();
         if depth == 0 {
             if !(trimmed.is_empty() || trimmed.starts_with("//") || an_item(trimmed)) { break; }
-            head = at + 1;
+            head = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
-        depth += braces(nikaia_std::index::get(&lines, (at) as usize));
+        depth += braces(unsafe { nikaia_std::proven::read(&lines, (at) as usize) });
     }
     if head == 0 || head >= lines.len() as i64 { return vec![]; }
     let mut before: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
@@ -111,10 +111,10 @@ pub(crate) fn split_at_the_first_statement(code: &str) -> Vec<String> {
     for at in 0..lines.len() as i64 {
         if at < head {
             if at > 0 { before.push('\n'); }
-            before.push_str(nikaia_std::index::get(&lines, (at) as usize));
+            before.push_str(unsafe { nikaia_std::proven::read(&lines, (at) as usize) });
         } else {
             if at > head { after.push('\n'); }
-            after.push_str(nikaia_std::index::get(&lines, (at) as usize));
+            after.push_str(unsafe { nikaia_std::proven::read(&lines, (at) as usize) });
         }
     }
     vec![before, after]
@@ -138,7 +138,7 @@ pub fn opening(code: &str) -> String {
         let c: Vec<scalar> = nikaia_std::list::chars(trimmed.chars());
         if c.len() <= 56 { return nikaia_std::block::Text::from(trimmed.to_string()); }
         let mut cut: String = String::from("");
-        for k in 0..55 { cut.push(*nikaia_std::index::get(&c, (k) as usize)); }
+        for k in 0..55 { cut.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }
         cut.push('…');
         return cut;
     }

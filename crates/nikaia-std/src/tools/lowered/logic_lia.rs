@@ -164,11 +164,11 @@ pub fn lg_terms_cmp(a: &collections::BTreeMap<String, i64>, b: &collections::BTr
     }
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut left_names = left_names; #[allow(unused_mut, clippy::redundant_locals)] let mut right_names = right_names;
     while ((at) as usize) < left_ks.len() && ((at) as usize) < right_ks.len() {
-        if AsRef::<str>::as_ref(&(*nikaia_std::index::get(&left_names, (at) as usize))) < AsRef::<str>::as_ref(&(*nikaia_std::index::get(&right_names, (at) as usize))) { return -1; }
-        if AsRef::<str>::as_ref(&(*nikaia_std::index::get(&right_names, (at) as usize))) < AsRef::<str>::as_ref(&(*nikaia_std::index::get(&left_names, (at) as usize))) { return 1; }
-        if *nikaia_std::index::get(&left_ks, (at) as usize) < *nikaia_std::index::get(&right_ks, (at) as usize) { return -1; }
-        if *nikaia_std::index::get(&right_ks, (at) as usize) < *nikaia_std::index::get(&left_ks, (at) as usize) { return 1; }
-        at += 1;
+        if AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&left_names, (at) as usize) })) < AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&right_names, (at) as usize) })) { return -1; }
+        if AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&right_names, (at) as usize) })) < AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&left_names, (at) as usize) })) { return 1; }
+        if *unsafe { nikaia_std::proven::read(&left_ks, (at) as usize) } < *unsafe { nikaia_std::proven::read(&right_ks, (at) as usize) } { return -1; }
+        if *unsafe { nikaia_std::proven::read(&right_ks, (at) as usize) } < *unsafe { nikaia_std::proven::read(&left_ks, (at) as usize) } { return 1; }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     if (left_ks.len() as i64) < right_ks.len() as i64 { return -1; }
     if (left_ks.len() as i64) > right_ks.len() as i64 { return 1; }
@@ -307,7 +307,7 @@ pub(crate) struct LgForm {
 impl LgIndexed {
     pub(crate) fn atom(&mut self, lin: LgLin) -> Vec<LgItem> {
         self.atoms.push(lin);
-        vec![LgItem { atom: true, n: self.atoms.len() as i64 - 1 }]
+        vec![LgItem { atom: true, n: unsafe { nikaia_std::proven::sub::<i64>(self.atoms.len() as i64, 1) } }]
     }
     pub(crate) fn strongest(&self, alternative: &[LgItem]) -> Vec<LgForm> {
         let mut by_form: Vec<LgForm> = vec![];
@@ -318,14 +318,14 @@ impl LgIndexed {
             let mut at: i64 = 0;
             let mut placed = false;
             while at < by_form.len() as i64 {
-                let order = lg_terms_cmp(&atom.terms, &nikaia_std::index::get(&by_form, nikaia_std::index::at(at)).terms);
+                let order = lg_terms_cmp(&atom.terms, &unsafe { nikaia_std::proven::read(&by_form, (at) as usize) }.terms);
                 if order == 0 {
                     placed = true;
-                    if atom.constant > nikaia_std::index::get(&by_form, nikaia_std::index::at(at)).constant { by_form[nikaia_std::index::at(at)].constant = atom.constant; }
+                    if atom.constant > unsafe { nikaia_std::proven::read(&by_form, (at) as usize) }.constant { (*unsafe { nikaia_std::proven::slot(&mut by_form, (at) as usize) }).constant = atom.constant; }
                     break;
                 }
                 if order < 0 { break; }
-                at += 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
             if !placed { by_form.insert(nikaia_std::count::of(at), LgForm { terms: atom.terms.copy_owned(), constant: atom.constant }); }
         }
@@ -378,7 +378,7 @@ impl LgIndexed {
         let mut alternatives: Vec<Vec<LgItem>> = vec![];
         for part in parts.iter() { alternatives.push(self.items(part)); }
         if alternatives.is_empty() { return self.atom(lg_constant(1)); }
-        if alternatives.len() == 1 { return (*nikaia_std::index::get(&alternatives, 0)).copy_owned(); }
+        if alternatives.len() == 1 { return (*unsafe { nikaia_std::proven::read(&alternatives, (0) as usize) }).copy_owned(); }
         for alternative in alternatives.iter() { if alternative.is_empty() { return vec![]; } }
         let mut items: Vec<LgItem> = vec![LgItem { atom: false, n: at }];
         for hull in self.hull(&alternatives) { items.extend(self.atom(hull)); }
@@ -396,7 +396,7 @@ pub fn lg_indexed(arena: &TermArena, facts: &[i64], goal: i64, why: &mut LgWhy) 
     all.push(match lg_formula(arena, goal, false, why) { Some(__nikaia_value) => __nikaia_value, None => return None });
     let mut at: i64 = 0;
     while ((at) as usize) < why.quotients.len() {
-        all.push(match lg_quotient(arena, *nikaia_std::index::get(&why.quotients, (at) as usize), why) { Some(__nikaia_value) => __nikaia_value, None => return None });
+        all.push(match lg_quotient(arena, *unsafe { nikaia_std::proven::read(&why.quotients, (at) as usize) }, why) { Some(__nikaia_value) => __nikaia_value, None => return None });
         at += 1;
     }
     let mut indexed = LgIndexed { atoms: vec![], ors: vec![], top: vec![] };
@@ -448,7 +448,7 @@ pub(crate) enum LgClosed {
 }
 
 pub(crate) fn lg_tighten_step(bound: &LgLin, steps: &mut Vec<LgStep>, ranks: &collections::BTreeMap<String, i64>) -> LgHeld {
-    let made = steps.len() as i64 - 1;
+    let made = unsafe { nikaia_std::proven::sub::<i64>(steps.len() as i64, 1) };
     let mut g: i64 = 0;
     for (_, k) in bound.terms.iter() {
         let k = nikaia_std::num::value(k);
@@ -458,7 +458,7 @@ pub(crate) fn lg_tighten_step(bound: &LgLin, steps: &mut Vec<LgStep>, ranks: &co
     let tight = lg_tightened(bound);
     let form = lg_form_of(&tight.terms, ranks);
     steps.push(LgStep::Tighten(made));
-    LgHeld { lin: tight, step: steps.len() as i64 - 1, form }
+    LgHeld { lin: tight, step: unsafe { nikaia_std::proven::sub::<i64>(steps.len() as i64, 1) }, form }
 }
 
 pub(crate) fn lg_form_of(terms: &collections::BTreeMap<String, i64>, ranks: &collections::BTreeMap<String, i64>) -> Vec<i64> {
@@ -474,9 +474,9 @@ pub(crate) fn lg_form_of(terms: &collections::BTreeMap<String, i64>, ranks: &col
 pub(crate) fn lg_form_cmp(a: &[i64], b: &[i64]) -> i64 {
     let mut at: i64 = 0;
     while ((at) as usize) < a.len() && ((at) as usize) < b.len() {
-        if *nikaia_std::index::get(&a, (at) as usize) < *nikaia_std::index::get(&b, (at) as usize) { return -1; }
-        if *nikaia_std::index::get(&b, (at) as usize) < *nikaia_std::index::get(&a, (at) as usize) { return 1; }
-        at += 1;
+        if *unsafe { nikaia_std::proven::read(&a, (at) as usize) } < *unsafe { nikaia_std::proven::read(&b, (at) as usize) } { return -1; }
+        if *unsafe { nikaia_std::proven::read(&b, (at) as usize) } < *unsafe { nikaia_std::proven::read(&a, (at) as usize) } { return 1; }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     if (a.len() as i64) < b.len() as i64 { return -1; }
     if (b.len() as i64) < a.len() as i64 { return 1; }
@@ -486,21 +486,21 @@ pub(crate) fn lg_form_cmp(a: &[i64], b: &[i64]) -> i64 {
 pub(crate) fn lg_place_before(held: &[LgHeld], b: i64, a: i64) -> bool {
     let order = lg_form_cmp(&nikaia_std::index::get(&held, nikaia_std::index::at(b)).form, &nikaia_std::index::get(&held, nikaia_std::index::at(a)).form);
     if order != 0 { return order < 0; }
-    nikaia_std::index::get(&held, nikaia_std::index::at(a)).lin.constant < nikaia_std::index::get(&held, nikaia_std::index::at(b)).lin.constant
+    unsafe { nikaia_std::proven::read(&held, (a) as usize) }.lin.constant < unsafe { nikaia_std::proven::read(&held, (b) as usize) }.lin.constant
 }
 
 pub(crate) fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
     let mut out = places.copy_owned();
     let mut i: i64 = 1;
     while ((i) as usize) < out.len() {
-        let x = *nikaia_std::index::get(&out, (i) as usize);
+        let x = *unsafe { nikaia_std::proven::read(&out, (i) as usize) };
         let mut j: i64 = i;
-        while j > 0 && lg_place_before(held, x, *nikaia_std::index::get(&out, nikaia_std::index::at(j - 1))) {
-            { let __nikaia_stored = *nikaia_std::index::get(&out, nikaia_std::index::at(j - 1)); nikaia_std::index::set(&mut out, nikaia_std::index::at(j), __nikaia_stored); }
-            j -= 1;
+        while j > 0 && lg_place_before(held, x, *unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(j, 1)) as usize) }) {
+            { let __nikaia_stored = *unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(j, 1)) as usize) }; unsafe { nikaia_std::proven::write(&mut out, (j) as usize, __nikaia_stored) }; }
+            j = unsafe { nikaia_std::proven::sub::<i64>(j, 1) };
         }
         { let __nikaia_stored = x; nikaia_std::index::set(&mut out, nikaia_std::index::at(j), __nikaia_stored); }
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     out
 }
@@ -539,7 +539,7 @@ pub(crate) fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed 
     loop {
         for place in alive.iter() {
             let place = nikaia_std::num::value(place);
-            if nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.terms.is_empty() && nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.constant > 0 { return LgClosed::Refuted(lg_traced(&steps, nikaia_std::index::get(&held, nikaia_std::index::at(place)).step)); }
+            if nikaia_std::index::get(&held, nikaia_std::index::at(place)).lin.terms.is_empty() && unsafe { nikaia_std::proven::read(&held, (place) as usize) }.lin.constant > 0 { return LgClosed::Refuted(lg_traced(&steps, unsafe { nikaia_std::proven::read(&held, (place) as usize) }.step)); }
         }
         let mut live: Vec<i64> = vec![];
         for place in alive.iter() {
@@ -557,22 +557,22 @@ pub(crate) fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed 
         }
         let mut cleared: i64 = 0;
         while ((cleared) as usize) < present.len() {
-            { let __nikaia_stored = false; nikaia_std::index::set(&mut present, (cleared) as usize, __nikaia_stored); }
-            { let __nikaia_stored = 0; nikaia_std::index::set(&mut ups, (cleared) as usize, __nikaia_stored); }
-            { let __nikaia_stored = 0; nikaia_std::index::set(&mut downs, (cleared) as usize, __nikaia_stored); }
-            cleared += 1;
+            { let __nikaia_stored = false; unsafe { nikaia_std::proven::write(&mut present, (cleared) as usize, __nikaia_stored) }; }
+            { let __nikaia_stored = 0; unsafe { nikaia_std::proven::write(&mut ups, (cleared) as usize, __nikaia_stored) }; }
+            { let __nikaia_stored = 0; unsafe { nikaia_std::proven::write(&mut downs, (cleared) as usize, __nikaia_stored) }; }
+            cleared = unsafe { nikaia_std::proven::add::<i64>(cleared, 1) };
         }
         for place in now.iter() {
             let place = nikaia_std::num::value(place);
             let form = &nikaia_std::index::get(&held, nikaia_std::index::at(place)).form;
             let mut at: i64 = 0;
             while ((at + 1) as usize) < form.len() {
-                let rank = *nikaia_std::index::get(&form, (at) as usize);
-                let k = *nikaia_std::index::get(&form, (at + 1) as usize);
+                let rank = *unsafe { nikaia_std::proven::read(&form, (at) as usize) };
+                let k = *unsafe { nikaia_std::proven::read(&form, (nikaia_std::proven::add::<i64>(at, 1)) as usize) };
                 { let __nikaia_stored = true; nikaia_std::index::set(&mut present, nikaia_std::index::at(rank), __nikaia_stored); }
                 if k > 0 { ups[nikaia_std::index::at(rank)] += 1; }
                 if k < 0 { downs[nikaia_std::index::at(rank)] += 1; }
-                at += 2;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
             }
         }
         let mut chosen: i64 = -1;
@@ -581,20 +581,20 @@ pub(crate) fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed 
         let mut others = false;
         let mut rank: i64 = 0;
         while rank < quotients.len() as i64 {
-            if *nikaia_std::index::get(&present, nikaia_std::index::at(rank)) && !*nikaia_std::index::get(&quotients, nikaia_std::index::at(rank)) { others = true; }
-            rank += 1;
+            if *unsafe { nikaia_std::proven::read(&present, (rank) as usize) } && !*unsafe { nikaia_std::proven::read(&quotients, (rank) as usize) } { others = true; }
+            rank = unsafe { nikaia_std::proven::add::<i64>(rank, 1) };
         }
         rank = 0;
         while rank < quotients.len() as i64 {
-            if *nikaia_std::index::get(&present, nikaia_std::index::at(rank)) && !(others && *nikaia_std::index::get(&quotients, nikaia_std::index::at(rank))) {
-                let made = *nikaia_std::index::get(&ups, nikaia_std::index::at(rank)) * *nikaia_std::index::get(&downs, nikaia_std::index::at(rank));
+            if *unsafe { nikaia_std::proven::read(&present, (rank) as usize) } && !(others && *unsafe { nikaia_std::proven::read(&quotients, (rank) as usize) }) {
+                let made = *unsafe { nikaia_std::proven::read(&ups, (rank) as usize) } * *unsafe { nikaia_std::proven::read(&downs, (rank) as usize) };
                 if !have || made < fewest {
                     have = true;
                     chosen = rank;
                     fewest = made;
                 }
             }
-            rank += 1;
+            rank = unsafe { nikaia_std::proven::add::<i64>(rank, 1) };
         }
         if !have {
             let mut round_bounds: Vec<Vec<LgLin>> = vec![];
@@ -610,7 +610,7 @@ pub(crate) fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed 
         }
         let mut stop: Vec<LgClosed> = vec![];
         alive = lg_eliminate(&mut held, &now, nikaia_std::index::get(&rank_names, nikaia_std::index::at(chosen)), budget, &mut steps, &mut round_names, &mut round_places, &ranks, &mut stop);
-        if !stop.is_empty() { return (*nikaia_std::index::get(&stop, 0)).clone(); }
+        if !stop.is_empty() { return (*unsafe { nikaia_std::proven::read(&stop, (0) as usize) }).clone(); }
     }
 }
 
@@ -648,7 +648,7 @@ pub(crate) fn lg_eliminate(held: &mut Vec<LgHeld>, now: &[i64], name: &str, budg
             if sum.is_none() { return lg_stopped(stop, LgUnknown::Overflow); }
             steps.push(LgStep::Combine { left: u.step, by_left: b, right: d.step, by_right: a });
             made.push(lg_tighten_step(&match sum { Some(__nikaia_value) => __nikaia_value, None => return lg_stopped(stop, LgUnknown::Overflow) }, steps, ranks));
-            if (without.len() as i64 + made.len() as i64) > budget.bounds { return lg_stopped(stop, LgUnknown::TooManyBounds); }
+            if (unsafe { nikaia_std::proven::add::<i64>(without.len() as i64, made.len() as i64) }) > budget.bounds { return lg_stopped(stop, LgUnknown::TooManyBounds); }
         }
     }
     let mut next = without;
@@ -668,8 +668,8 @@ pub(crate) fn lg_consistent(names: &[String], bounds: &[Vec<LgLin>]) -> LgClosed
     let mut values: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut round = names.len() as i64;
     while round > 0 {
-        round -= 1;
-        let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(round))).to_string());
+        round = unsafe { nikaia_std::proven::sub::<i64>(round, 1) };
+        let name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (round) as usize) }).to_string());
         let mut low: Option<i64> = None;
         let mut high: Option<i64> = None;
         for bound in (*nikaia_std::index::get(&bounds, nikaia_std::index::at(round))).iter() {
@@ -716,7 +716,7 @@ pub(crate) fn lg_traced(steps: &[LgStep], last: i64) -> LgRefutation {
     let mut at = last;
     while at >= 0 {
         if *nikaia_std::index::get(&needed, nikaia_std::index::at(at)) {
-            match (*nikaia_std::index::get(&steps, nikaia_std::index::at(at))).clone() {
+            match (*unsafe { nikaia_std::proven::read(&steps, (at) as usize) }).clone() {
                 LgStep::Hypothesis(_) => { },
                 LgStep::Tighten(from) => { { let __nikaia_stored = true; nikaia_std::index::set(&mut needed, nikaia_std::index::at(from), __nikaia_stored); } },
                 LgStep::Combine { left, right, .. } => {
@@ -725,7 +725,7 @@ pub(crate) fn lg_traced(steps: &[LgStep], last: i64) -> LgRefutation {
                 },
             }
         }
-        at -= 1;
+        at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
     }
     let mut renumbered: Vec<i64> = vec![];
     for _ in steps.iter() { renumbered.push(-1); }
@@ -733,14 +733,14 @@ pub(crate) fn lg_traced(steps: &[LgStep], last: i64) -> LgRefutation {
     at = 0;
     while at <= last {
         if *nikaia_std::index::get(&needed, nikaia_std::index::at(at)) {
-            { let __nikaia_stored = kept.len() as i64; nikaia_std::index::set(&mut renumbered, nikaia_std::index::at(at), __nikaia_stored); }
-            match (*nikaia_std::index::get(&steps, nikaia_std::index::at(at))).clone() {
+            { let __nikaia_stored = kept.len() as i64; unsafe { nikaia_std::proven::write(&mut renumbered, (at) as usize, __nikaia_stored) }; }
+            match (*unsafe { nikaia_std::proven::read(&steps, (at) as usize) }).clone() {
                 LgStep::Hypothesis(i) => { kept.push(LgStep::Hypothesis(i)); },
                 LgStep::Tighten(from) => { kept.push(LgStep::Tighten(*nikaia_std::index::get(&renumbered, nikaia_std::index::at(from)))); },
                 LgStep::Combine { left, by_left, right, by_right } => { kept.push(LgStep::Combine { left: *nikaia_std::index::get(&renumbered, nikaia_std::index::at(left)), by_left, right: *nikaia_std::index::get(&renumbered, nikaia_std::index::at(right)), by_right }); },
             }
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     LgRefutation { steps: kept }
 }

@@ -193,8 +193,8 @@ pub fn code_on_a_cycle(graph: &collections::BTreeMap<String, collections::BTreeS
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut pending = pending;
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut pending = pending;
     while ((at) as usize) < pending.len() {
-        let next = nikaia_std::block::Text::from((*nikaia_std::index::get(&pending, (at) as usize)).to_string());
-        at += 1;
+        let next = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pending, (at) as usize) }).to_string());
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         if next == key { return true; }
         if seen.insert(nikaia_std::block::Text::from(next.to_string())) { for then in reach_set_for(graph, &next) { pending.push(then); } }
     }

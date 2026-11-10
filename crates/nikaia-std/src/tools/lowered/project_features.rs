@@ -115,7 +115,7 @@ pub fn features_chosen_checked(features: &[ManifestFeature], chosen: &[String]) 
 
 pub(crate) fn features_hashes_follow(c: &[scalar], at: i64, hashes: i64) -> bool {
     if hashes <= 0 { return true; }
-    for k in 0..hashes { if at + k >= c.len() as i64 || *nikaia_std::index::get(&c, nikaia_std::index::at(at + k)) != '#' { return false; } }
+    for k in 0..hashes { if at + k >= c.len() as i64 || *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, k)) as usize) } != '#' { return false; } }
     true
 }
 
@@ -126,90 +126,90 @@ pub(crate) fn features_scan_line(line: &str, lexer: &mut FeatureLexer) -> Featur
     let mut last = ' ';
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut words = words;
     while at < n {
-        let ch = *nikaia_std::index::get(&c, nikaia_std::index::at(at));
+        let ch = *unsafe { nikaia_std::proven::read(&c, (at) as usize) };
         if lexer.comment > 0 {
-            if ch == '*' && at + 1 < n && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1)) == '/' {
-                lexer.comment -= 1;
-                at += 2;
-            } else if ch == '/' && at + 1 < n && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1)) == '*' {
+            if ch == '*' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < n && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '/' {
+                lexer.comment = unsafe { nikaia_std::proven::sub::<i64>(lexer.comment, 1) };
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
+            } else if ch == '/' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < n && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '*' {
                 lexer.comment += 1;
-                at += 2;
-            } else { at += 1; }
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
+            } else { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
             continue;
         }
         if lexer.string {
             if lexer.hashes < 0 && ch == '\\' {
-                at += 2;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
                 continue;
             }
-            if ch == '"' && features_hashes_follow(&c, at + 1, lexer.hashes) {
+            if ch == '"' && features_hashes_follow(&c, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, lexer.hashes) {
                 lexer.string = false;
-                at += 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 if lexer.hashes > 0 { at += lexer.hashes; }
                 last = '"';
                 continue;
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }
-        if ch == '/' && at + 1 < n && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1)) == '/' { break; }
-        if ch == '/' && at + 1 < n && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1)) == '*' {
+        if ch == '/' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < n && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '/' { break; }
+        if ch == '/' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < n && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '*' {
             lexer.comment = 1;
-            at += 2;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
             continue;
         }
         if ch == '"' {
             lexer.string = true;
             lexer.hashes = -1;
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }
         if ch == '\'' {
-            if at + 1 < n && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1)) == '\\' {
-                at += 2;
-                while at < n && *nikaia_std::index::get(&c, nikaia_std::index::at(at)) != '\'' { at += 1; }
-                at += 1;
+            if unsafe { nikaia_std::proven::add::<i64>(at, 1) } < n && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '\\' {
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
+                while at < n && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } != '\'' { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 last = '\'';
                 continue;
             }
-            if at + 2 < n && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 2)) == '\'' {
-                at += 3;
+            if unsafe { nikaia_std::proven::add::<i64>(at, 2) } < n && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 2)) as usize) } == '\'' {
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 3) };
                 last = '\'';
                 continue;
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }
         if ch.is_alphabetic() || ch == '_' {
             let mut word: String = String::from("");
-            while at < n && ((*nikaia_std::index::get(&c, nikaia_std::index::at(at))).is_alphanumeric() || *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '_') {
-                word.push(*nikaia_std::index::get(&c, nikaia_std::index::at(at)));
-                at += 1;
+            while at < n && ((*unsafe { nikaia_std::proven::read(&c, (at) as usize) }).is_alphanumeric() || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '_') {
+                word.push(*unsafe { nikaia_std::proven::read(&c, (at) as usize) });
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
-            if (word == "r" || word == "br") && at < n && (*nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '"' || *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '#') {
+            if (word == "r" || word == "br") && at < n && (*unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '"' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '#') {
                 let mut hashes: i64 = 0;
-                while at < n && *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '#' {
-                    hashes += 1;
-                    at += 1;
+                while at < n && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '#' {
+                    hashes = unsafe { nikaia_std::proven::add::<i64>(hashes, 1) };
+                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 }
                 lexer.string = true;
                 lexer.hashes = hashes;
                 at += 1;
                 continue;
             }
-            if word == "b" && at < n && (*nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '"' || *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '\'') { continue; }
-            last = *nikaia_std::index::get(&c, nikaia_std::index::at(at - 1));
+            if word == "b" && at < n && (*unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '"' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '\'') { continue; }
+            last = *nikaia_std::index::get(&c, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(at, 1) }));
             words.push(word);
             continue;
         }
         if ch.is_ascii_digit() {
-            while at < n && ((*nikaia_std::index::get(&c, nikaia_std::index::at(at))).is_alphanumeric() || *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '_' || *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '.') { at += 1; }
+            while at < n && ((*unsafe { nikaia_std::proven::read(&c, (at) as usize) }).is_alphanumeric() || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '_' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '.') { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
             last = '0';
             continue;
         }
         if ch == '(' || ch == '[' || ch == '{' { lexer.depth += 1; } else if ch == ')' || ch == ']' || ch == '}' { lexer.depth -= 1; }
         if !ch.is_whitespace() { last = ch; }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     FeatureLine { words, last }
 }
@@ -229,14 +229,14 @@ pub(crate) fn features_items(lines: &[String]) -> Vec<FeatureItem> {
     let mut header: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut words = words;
     for i in 0..lines.len() as i64 {
         let open = lexer.depth != 0 || lexer.comment > 0 || lexer.string;
-        let line = features_scan_line(nikaia_std::index::get(&lines, (i) as usize), &mut lexer);
+        let line = features_scan_line(unsafe { nikaia_std::proven::read(&lines, (i) as usize) }, &mut lexer);
         if in_attribute {
             if lexer.depth == 0 { in_attribute = false; }
             continue;
         }
         if current < 0 {
             if open { continue; }
-            let trimmed = (*nikaia_std::index::get(&lines, (i) as usize)).trim();
+            let trimmed = (*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).trim();
             if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with("#!") { continue; }
             if trimmed.starts_with("#[") {
                 if pending < 0 { pending = i; }
@@ -246,10 +246,10 @@ pub(crate) fn features_items(lines: &[String]) -> Vec<FeatureItem> {
             current = i;
             words = vec![];
             let mut head_lexer = FeatureLexer { depth: 0, comment: 0, string: false, hashes: -1 };
-            let head = nikaia_std::index::or((*nikaia_std::index::get(&lines, (i) as usize)).split('{').next(), || "");
+            let head = nikaia_std::index::or((*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).split('{').next(), || "");
             header = features_scan_line(head, &mut head_lexer).words;
         }
-        if !(*nikaia_std::index::get(&lines, (i) as usize)).trim().starts_with("beside:") && !(*nikaia_std::index::get(&lines, (i) as usize)).trim().starts_with("pub use super::__nikaia_reader_") { for word in line.words.iter() { words.push(nikaia_std::block::Text::from(word.to_string())); } }
+        if !(*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).trim().starts_with("beside:") && !(*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).trim().starts_with("pub use super::__nikaia_reader_") { for word in line.words.iter() { words.push(nikaia_std::block::Text::from(word.to_string())); } }
         if lexer.depth == 0 && (line.last == '}' || line.last == ';') {
             let first: i64 = if pending >= 0 { pending } else { current };
             let mut item = features_item(first, &words, &header);
@@ -265,16 +265,16 @@ pub(crate) fn features_items(lines: &[String]) -> Vec<FeatureItem> {
 pub(crate) fn features_item(first: i64, words: &[String], header: &[String]) -> FeatureItem {
     let mut at: i64 = 0;
     while ((at) as usize) < words.len() {
-        let next = if ((at + 1) as usize) < words.len() { nikaia_std::block::Text::from((*nikaia_std::index::get(&words, (at + 1) as usize)).to_string()) } else { String::from("") };
-        if !features_modifier(nikaia_std::index::get(&words, (at) as usize), &next) { break; }
-        at += 1;
+        let next = if ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < words.len() { nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (nikaia_std::proven::add::<i64>(at, 1)) as usize) }).to_string()) } else { String::from("") };
+        if !features_modifier(unsafe { nikaia_std::proven::read(&words, (at) as usize) }, &next) { break; }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
-    let public = words.len() > 1 && *nikaia_std::index::get(&words, 0) == "pub" && *nikaia_std::index::get(&words, 1) != "crate" && *nikaia_std::index::get(&words, 1) != "super" && *nikaia_std::index::get(&words, 1) != "in";
-    let kind = if ((at) as usize) < words.len() { nikaia_std::block::Text::from((*nikaia_std::index::get(&words, (at) as usize)).to_string()) } else { String::from("") };
+    let public = words.len() > 1 && *unsafe { nikaia_std::proven::read(&words, (0) as usize) } == "pub" && *unsafe { nikaia_std::proven::read(&words, (1) as usize) } != "crate" && *unsafe { nikaia_std::proven::read(&words, (1) as usize) } != "super" && *unsafe { nikaia_std::proven::read(&words, (1) as usize) } != "in";
+    let kind = if ((at) as usize) < words.len() { nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (at) as usize) }).to_string()) } else { String::from("") };
     let mut name: String = String::from("");
-    if kind != "impl" && kind != "use" && ((at + 1) as usize) < words.len() { name = nikaia_std::block::Text::from((*nikaia_std::index::get(&words, (at + 1) as usize)).to_string()); }
+    if kind != "impl" && kind != "use" && ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < words.len() { name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (nikaia_std::proven::add::<i64>(at, 1)) as usize) }).to_string()); }
     #[allow(unused_mut)] let mut methods: Vec<String> = vec![];
-    if kind == "trait" { for k in 0..words.len() as i64 { if *nikaia_std::index::get(&words, (k) as usize) == "fn" && ((k + 1) as usize) < words.len() { methods.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&words, (k + 1) as usize)).to_string())); } } }
+    if kind == "trait" { for k in 0..words.len() as i64 { if *unsafe { nikaia_std::proven::read(&words, (k) as usize) } == "fn" && ((unsafe { nikaia_std::proven::add::<i64>(k, 1) }) as usize) < words.len() { methods.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (nikaia_std::proven::add::<i64>(k, 1)) as usize) }).to_string())); } } }
     let mut kept: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut methods = methods;
     if kind == "impl" { kept = header.copy_owned(); }
     FeatureItem { first, last: first, kind, name, public, words: words.copy_owned(), header: kept, methods, owners: vec![] }
@@ -287,7 +287,7 @@ pub(crate) fn features_closure(items: &[FeatureItem], named: &collections::BTree
     for seed in seeds.iter() {
         let seed = nikaia_std::num::value(seed);
         if !*nikaia_std::index::get(&inside, nikaia_std::index::at(seed)) {
-            { let __nikaia_stored = true; nikaia_std::index::set(&mut inside, nikaia_std::index::at(seed), __nikaia_stored); }
+            { let __nikaia_stored = true; unsafe { nikaia_std::proven::write(&mut inside, (seed) as usize, __nikaia_stored) }; }
             work.push(seed);
         }
     }
@@ -299,22 +299,22 @@ pub(crate) fn features_closure(items: &[FeatureItem], named: &collections::BTree
                 for target in found.iter() {
                     let target = nikaia_std::num::value(target);
                     if !*nikaia_std::index::get(&inside, nikaia_std::index::at(target)) {
-                        { let __nikaia_stored = true; nikaia_std::index::set(&mut inside, nikaia_std::index::at(target), __nikaia_stored); }
+                        { let __nikaia_stored = true; unsafe { nikaia_std::proven::write(&mut inside, (target) as usize, __nikaia_stored) }; }
                         work.push(target);
                     }
                 }
             }
         }
         for at in 0..items.len() as i64 {
-            if *nikaia_std::index::get(&inside, nikaia_std::index::at(at)) || nikaia_std::index::get(&items, nikaia_std::index::at(at)).kind != "impl" || nikaia_std::index::get(&items, nikaia_std::index::at(at)).owners.is_empty() { continue; }
+            if *unsafe { nikaia_std::proven::read(&inside, (at) as usize) } || unsafe { nikaia_std::proven::read(&items, (at) as usize) }.kind != "impl" || unsafe { nikaia_std::proven::read(&items, (at) as usize) }.owners.is_empty() { continue; }
             let mut some = false;
             let mut all = true;
-            for owner in nikaia_std::index::get(&items, nikaia_std::index::at(at)).owners.iter() {
+            for owner in unsafe { nikaia_std::proven::read(&items, (at) as usize) }.owners.iter() {
                 let owner = nikaia_std::num::value(owner);
                 if *nikaia_std::index::get(&inside, nikaia_std::index::at(owner)) { some = true; } else { all = false; }
             }
             if any && some || !any && all {
-                { let __nikaia_stored = true; nikaia_std::index::set(&mut inside, nikaia_std::index::at(at), __nikaia_stored); }
+                { let __nikaia_stored = true; unsafe { nikaia_std::proven::write(&mut inside, (at) as usize, __nikaia_stored) }; }
                 work.push(at);
             }
         }
@@ -324,7 +324,7 @@ pub(crate) fn features_closure(items: &[FeatureItem], named: &collections::BTree
 }
 
 pub(crate) fn features_condition(names: &[String]) -> String {
-    if names.len() == 1 { return format!("feature = \"{}\"", *nikaia_std::index::get(&names, 0)); }
+    if names.len() == 1 { return format!("feature = \"{}\"", *unsafe { nikaia_std::proven::read(&names, (0) as usize) }); }
     let parts: Vec<String> = names.iter().map(|name| { format!("feature = \"{}\"", name) }).collect::<Vec<_>>();
     format!("any({})", nikaia_std::block::Text::from(parts.join(", ")))
 }
@@ -347,8 +347,8 @@ pub(crate) fn features_roots(feature: &ManifestFeature, package: &str, items: &[
         }
         if entry == package {
             for at in 0..items.len() as i64 {
-                let offered_item = !nikaia_std::index::get(&items, nikaia_std::index::at(at)).name.starts_with("__") || features_reader_path(&nikaia_std::index::get(&items, nikaia_std::index::at(at)).name).is_some();
-                if nikaia_std::index::get(&items, nikaia_std::index::at(at)).public && !nikaia_std::index::get(&items, nikaia_std::index::at(at)).name.is_empty() && offered_item && nikaia_std::index::get(&items, nikaia_std::index::at(at)).kind != "use" { roots.push(at); }
+                let offered_item = !unsafe { nikaia_std::proven::read(&items, (at) as usize) }.name.starts_with("__") || features_reader_path(&unsafe { nikaia_std::proven::read(&items, (at) as usize) }.name).is_some();
+                if unsafe { nikaia_std::proven::read(&items, (at) as usize) }.public && !unsafe { nikaia_std::proven::read(&items, (at) as usize) }.name.is_empty() && offered_item && unsafe { nikaia_std::proven::read(&items, (at) as usize) }.kind != "use" { roots.push(at); }
             }
             continue;
         }
@@ -356,10 +356,10 @@ pub(crate) fn features_roots(feature: &ManifestFeature, package: &str, items: &[
         let mut found: i64 = -1;
         if entry.starts_with(&*prefix) {
             let rest = nikaia_std::block::Text::from(entry.replace(&*prefix, &*""));
-            for at in 0..items.len() as i64 { if nikaia_std::index::get(&items, nikaia_std::index::at(at)).name == rest && nikaia_std::index::get(&items, nikaia_std::index::at(at)).kind != "use" { found = at; } }
+            for at in 0..items.len() as i64 { if unsafe { nikaia_std::proven::read(&items, (at) as usize) }.name == rest && unsafe { nikaia_std::proven::read(&items, (at) as usize) }.kind != "use" { found = at; } }
             let mut readers: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for at in 0..items.len() as i64 {
-                let path = match features_reader_path(&nikaia_std::index::get(&items, nikaia_std::index::at(at)).name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let path = match features_reader_path(&unsafe { nikaia_std::proven::read(&items, (at) as usize) }.name) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if path == rest || path.starts_with(&*format!("{}::", rest)) { readers.push(at); }
             }
             if !readers.is_empty() {
@@ -374,7 +374,7 @@ pub(crate) fn features_roots(feature: &ManifestFeature, package: &str, items: &[
         let near = nearest_name(entry, &offered);
         if near.is_some() { help = Some(format!("The closest `pub` path is `{}`.", nikaia_std::index::or(near.as_deref(), || ""))); }
         if found < 0 { return Err(nikaia_std::error::throwing(FeaturesRefusal { code: String::from("NK1344"), feature: nikaia_std::block::Text::from(feature.name.to_string()), entry: nikaia_std::block::Text::from(entry.to_string()), message: format!("The root `{}` of the feature `{}` names nothing: a root is the package `{}`, standing for all its `pub` items, or one `pub` item written `{}::<name>`, or the `@stream` entry of a `pub grammar` written `{}::<Grammar>::<rule>`.", entry, feature.name, package, package, package), help }, &"features_roots")); }
-        if !nikaia_std::index::get(&items, nikaia_std::index::at(found)).public { return Err(nikaia_std::error::throwing(FeaturesRefusal { code: String::from("NK1344"), feature: nikaia_std::block::Text::from(feature.name.to_string()), entry: nikaia_std::block::Text::from(entry.to_string()), message: format!("The root `{}` of the feature `{}` is not `pub`: a Rust user can take only what the package offers.", entry, feature.name), help: Some(format!("Make `{}` `pub`, or name a `pub` item that uses it.", nikaia_std::index::get(&items, nikaia_std::index::at(found)).name)) }, &"features_roots")); }
+        if !nikaia_std::index::get(&items, nikaia_std::index::at(found)).public { return Err(nikaia_std::error::throwing(FeaturesRefusal { code: String::from("NK1344"), feature: nikaia_std::block::Text::from(feature.name.to_string()), entry: nikaia_std::block::Text::from(entry.to_string()), message: format!("The root `{}` of the feature `{}` is not `pub`: a Rust user can take only what the package offers.", entry, feature.name), help: Some(format!("Make `{}` `pub`, or name a `pub` item that uses it.", unsafe { nikaia_std::proven::read(&items, (found) as usize) }.name)) }, &"features_roots")); }
         roots.push(found);
     }
     Ok(FeatureRoots { name: nikaia_std::block::Text::from(feature.name.to_string()), roots, implied })
@@ -418,35 +418,35 @@ pub fn features_applied(rust: &str, manifest: &str, features: &[ManifestFeature]
     let mut homes: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
     for at in 0..items.len() as i64 {
         if *nikaia_std::index::get(&core, (at) as usize) { continue; }
-        if features_reader_path(&nikaia_std::index::get(&items, (at) as usize).name).is_some() && !reached.iter().any(|one| { *nikaia_std::index::get(&one, nikaia_std::index::at(at)) }) {
-            features_reader_blanked(&mut lines, nikaia_std::index::get(&items, (at) as usize));
+        if features_reader_path(&unsafe { nikaia_std::proven::read(&items, (at) as usize) }.name).is_some() && !reached.iter().any(|one| { *nikaia_std::index::get(&one, nikaia_std::index::at(at)) }) {
+            features_reader_blanked(&mut lines, unsafe { nikaia_std::proven::read(&items, (at) as usize) });
             continue;
         }
         let mut condition: String = String::from("");
-        if nikaia_std::index::get(&items, (at) as usize).kind == "impl" {
+        if unsafe { nikaia_std::proven::read(&items, (at) as usize) }.kind == "impl" {
             let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for owner in nikaia_std::index::get(&items, (at) as usize).owners.iter() {
+            for owner in unsafe { nikaia_std::proven::read(&items, (at) as usize) }.owners.iter() {
                 let owner = nikaia_std::num::value(owner);
                 if *nikaia_std::index::get(&core, nikaia_std::index::at(owner)) { continue; }
                 let mut names: Vec<String> = vec![];
-                for k in 0..resolved.len() as i64 { if *nikaia_std::index::get(nikaia_std::index::get(&reached, nikaia_std::index::at(k)), nikaia_std::index::at(owner)) { names.push(nikaia_std::block::Text::from(nikaia_std::index::get(&resolved, nikaia_std::index::at(k)).name.to_string())); } }
+                for k in 0..resolved.len() as i64 { if *nikaia_std::index::get(nikaia_std::index::get(&reached, nikaia_std::index::at(k)), nikaia_std::index::at(owner)) { names.push(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&resolved, (k) as usize) }.name.to_string())); } }
                 let part = features_condition(&names);
                 if !nikaia_std::list::contains(&parts, &part) { parts.push(part); }
             }
             if parts.is_empty() { continue; }
-            condition = if parts.len() == 1 { nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string()) } else { format!("all({})", nikaia_std::block::Text::from(parts.join(", "))) };
+            condition = if parts.len() == 1 { nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string()) } else { format!("all({})", nikaia_std::block::Text::from(parts.join(", "))) };
         } else {
             let mut names: Vec<String> = vec![];
-            for k in 0..resolved.len() as i64 { if *nikaia_std::index::get(nikaia_std::index::get(&reached, nikaia_std::index::at(k)), (at) as usize) { names.push(nikaia_std::block::Text::from(nikaia_std::index::get(&resolved, nikaia_std::index::at(k)).name.to_string())); } }
+            for k in 0..resolved.len() as i64 { if *nikaia_std::index::get(nikaia_std::index::get(&reached, nikaia_std::index::at(k)), (at) as usize) { names.push(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&resolved, (k) as usize) }.name.to_string())); } }
             if names.is_empty() { continue; }
             condition = features_condition(&names);
-            if !nikaia_std::index::get(&items, (at) as usize).name.is_empty() { homes.push((nikaia_std::block::Text::from(nikaia_std::index::get(&items, (at) as usize).name.to_string()), nikaia_std::block::Text::from((*nikaia_std::index::get(&names, 0)).to_string()))); }
+            if !unsafe { nikaia_std::proven::read(&items, (at) as usize) }.name.is_empty() { homes.push((nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&items, (at) as usize) }.name.to_string()), nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()))); }
         }
-        let first = nikaia_std::index::get(&items, (at) as usize).first;
-        { let __nikaia_stored = format!("#[cfg({})] {}", condition, *nikaia_std::index::get(&lines, nikaia_std::index::at(first))); nikaia_std::index::set(&mut lines, nikaia_std::index::at(first), __nikaia_stored); }
-        if features_reader_path(&nikaia_std::index::get(&items, (at) as usize).name).is_some() {
-            let taken = format!("pub use super::{} as ", nikaia_std::index::get(&items, (at) as usize).name);
-            for i in 0..lines.len() as i64 { if (*nikaia_std::index::get(&lines, (i) as usize)).trim().starts_with(&*taken) { { let __nikaia_stored = nikaia_std::block::Text::from((*nikaia_std::index::get(&lines, (i) as usize)).replace(&*taken, &*format!("#[cfg({})] {}", condition, taken))); nikaia_std::index::set(&mut lines, (i) as usize, __nikaia_stored); } } }
+        let first = unsafe { nikaia_std::proven::read(&items, (at) as usize) }.first;
+        { let __nikaia_stored = format!("#[cfg({})] {}", condition, *nikaia_std::index::get(&lines, nikaia_std::index::at(first))); unsafe { nikaia_std::proven::write(&mut lines, (first) as usize, __nikaia_stored) }; }
+        if features_reader_path(&unsafe { nikaia_std::proven::read(&items, (at) as usize) }.name).is_some() {
+            let taken = format!("pub use super::{} as ", unsafe { nikaia_std::proven::read(&items, (at) as usize) }.name);
+            for i in 0..lines.len() as i64 { if (*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).trim().starts_with(&*taken) { { let __nikaia_stored = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).replace(&*taken, &*format!("#[cfg({})] {}", condition, taken))); unsafe { nikaia_std::proven::write(&mut lines, (i) as usize, __nikaia_stored) }; } } }
         }
     }
     #[allow(unused_mut)] let mut optional: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
@@ -457,7 +457,7 @@ pub fn features_applied(rust: &str, manifest: &str, features: &[ManifestFeature]
         let mut in_core = false;
         let mut users: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for at in 0..items.len() as i64 {
-            if !nikaia_std::list::contains(&nikaia_std::index::get(&items, (at) as usize).words, &word) { continue; }
+            if !nikaia_std::list::contains(&unsafe { nikaia_std::proven::read(&items, (at) as usize) }.words, &word) { continue; }
             if *nikaia_std::index::get(&core, (at) as usize) {
                 in_core = true;
                 continue;
@@ -472,7 +472,7 @@ pub fn features_applied(rust: &str, manifest: &str, features: &[ManifestFeature]
         }
         let names: Vec<String> = users.iter().copied().map(|k| { nikaia_std::block::Text::from(nikaia_std::index::get(&resolved, nikaia_std::index::at(k)).name.to_string()) }).collect::<Vec<_>>();
         let condition = features_condition(&names);
-        for i in 0..lines.len() as i64 { if (*nikaia_std::index::get(&lines, (i) as usize)).trim().starts_with("beside:") { { let __nikaia_stored = nikaia_std::block::Text::from((*nikaia_std::index::get(&lines, (i) as usize)).replace(&*format!("&::{}::__NIKAIA_PLACES", word), &*format!("#[cfg({})] &::{}::__NIKAIA_PLACES", condition, word))); nikaia_std::index::set(&mut lines, (i) as usize, __nikaia_stored); } } }
+        for i in 0..lines.len() as i64 { if (*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).trim().starts_with("beside:") { { let __nikaia_stored = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).replace(&*format!("&::{}::__NIKAIA_PLACES", word), &*format!("#[cfg({})] &::{}::__NIKAIA_PLACES", condition, word))); unsafe { nikaia_std::proven::write(&mut lines, (i) as usize, __nikaia_stored) }; } } }
     }
     let mut table = String::from("[features]\n"); #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines; #[allow(unused_mut, clippy::redundant_locals)] let mut optional = optional;
     let quoted: Vec<String> = default.iter().map(|name| { format!("\"{}\"", name) }).collect::<Vec<_>>();
@@ -481,30 +481,30 @@ pub fn features_applied(rust: &str, manifest: &str, features: &[ManifestFeature]
     for f in 0..resolved.len() as i64 {
         for g in 0..resolved.len() as i64 {
             if f == g || edges.contains(&(g, f)) { continue; }
-            let mut implies = nikaia_std::list::contains(&nikaia_std::index::get(&resolved, (f) as usize).implied, &nikaia_std::index::get(&resolved, (g) as usize).name);
-            if !implies && !nikaia_std::index::get(&resolved, (g) as usize).roots.is_empty() { implies = nikaia_std::index::get(&resolved, (g) as usize).roots.iter().copied().all(|root| { *nikaia_std::index::get(nikaia_std::index::get(&reached, nikaia_std::index::at(f)), nikaia_std::index::at(root)) }); }
+            let mut implies = nikaia_std::list::contains(&unsafe { nikaia_std::proven::read(&resolved, (f) as usize) }.implied, &unsafe { nikaia_std::proven::read(&resolved, (g) as usize) }.name);
+            if !implies && !unsafe { nikaia_std::proven::read(&resolved, (g) as usize) }.roots.is_empty() { implies = unsafe { nikaia_std::proven::read(&resolved, (g) as usize) }.roots.iter().copied().all(|root| { *nikaia_std::index::get(nikaia_std::index::get(&reached, nikaia_std::index::at(f)), nikaia_std::index::at(root)) }); }
             if implies { edges.push((f, g)); }
         }
     }
     let mut names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines; #[allow(unused_mut, clippy::redundant_locals)] let mut optional = optional;
     for f in 0..resolved.len() as i64 {
-        names.push(nikaia_std::block::Text::from(nikaia_std::index::get(&resolved, (f) as usize).name.to_string()));
+        names.push(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&resolved, (f) as usize) }.name.to_string()));
         let mut entries: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for edge in edges.iter() { if edge.0 == f { entries.push(format!("\"{}\"", nikaia_std::index::get(&resolved, nikaia_std::index::at(edge.1)).name)); } }
         for dep in (*nikaia_std::index::get(&uses, (f) as usize)).iter() { entries.push(format!("\"{}\"", dep)); }
-        table = format!("{}{} = [{}]\n", table, nikaia_std::index::get(&resolved, (f) as usize).name, nikaia_std::block::Text::from(entries.join(", ")));
+        table = format!("{}{} = [{}]\n", table, unsafe { nikaia_std::proven::read(&resolved, (f) as usize) }.name, nikaia_std::block::Text::from(entries.join(", ")));
     }
     Ok(FeaturesMade { rust: nikaia_std::block::Text::from(lines.join("\n")), table, optional, names, homes })
 }
 
 pub(crate) fn features_readers_sent(reach: &FeaturesReach, features: &[ManifestFeature], package: &str) -> Result<(), nikaia_std::error::Thrown<FeaturesRefusal>> {
     for k in 0..reach.resolved.len() as i64 {
-        let feature = nikaia_std::block::Text::from(nikaia_std::index::get(&reach.resolved, (k) as usize).name.to_string());
+        let feature = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&reach.resolved, (k) as usize) }.name.to_string());
         for at in 0..reach.items.len() as i64 {
             if !*nikaia_std::index::get(nikaia_std::index::get(&reach.reached, (k) as usize), (at) as usize) { continue; }
-            let path = match features_reader_path(&nikaia_std::index::get(&reach.items, (at) as usize).name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let path = match features_reader_path(&unsafe { nikaia_std::proven::read(&reach.items, (at) as usize) }.name) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut text = String::from("");
-            for i in nikaia_std::index::get(&reach.items, (at) as usize).first..nikaia_std::index::get(&reach.items, (at) as usize).last + 1 { text = format!("{}{}\n", text, *nikaia_std::index::get(&reach.lines, nikaia_std::index::at(i))); }
+            for i in unsafe { nikaia_std::proven::read(&reach.items, (at) as usize) }.first..unsafe { nikaia_std::proven::read(&reach.items, (at) as usize) }.last + 1 { text = format!("{}{}\n", text, *nikaia_std::index::get(&reach.lines, nikaia_std::index::at(i))); }
             let after = match text.split("Iterator<Item = Result<").nth(1) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let item = match after.split(", nikaia_std::grammar::ParseError").next() { Some(__nikaia_value) => __nikaia_value, None => continue };
             let (owner, field) = match features_unsendable(&reach.items, &reach.lines, item.trim()) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -531,8 +531,8 @@ pub(crate) fn features_unsendable(items: &[FeatureItem], lines: &[String], ty: &
     #[allow(unused_mut)] let mut seen: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     let mut next: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue; #[allow(unused_mut, clippy::redundant_locals)] let mut seen = seen;
     while ((next) as usize) < queue.len() {
-        let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&queue, (next) as usize)).to_string());
-        next += 1;
+        let name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&queue, (next) as usize) }).to_string());
+        next = unsafe { nikaia_std::proven::add::<i64>(next, 1) };
         if nikaia_std::list::contains(&seen, &name) { continue; }
         seen.push(nikaia_std::block::Text::from(name.to_string()));
         for item in items.iter() {
@@ -565,10 +565,10 @@ pub fn features_kept(rust: &str, features: &[ManifestFeature], package: &str, ch
     for name in named.iter() { if name == "default" { for listed in reach.default.iter() { wanted.push(nikaia_std::block::Text::from(listed.to_string())); } } else { wanted.push(nikaia_std::block::Text::from(name.to_string())); } }
     let mut kept: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut wanted = wanted;
     for at in 0..reach.items.len() as i64 {
-        let item = nikaia_std::index::get(&reach.items, (at) as usize);
+        let item = unsafe { nikaia_std::proven::read(&reach.items, (at) as usize) };
         if item.name.is_empty() || item.kind == "use" || nikaia_std::list::contains(&kept, &item.name) { continue; }
         let mut inside = *nikaia_std::index::get(&reach.core, (at) as usize);
-        for k in 0..reach.resolved.len() as i64 { if *nikaia_std::index::get(nikaia_std::index::get(&reach.reached, (k) as usize), (at) as usize) && nikaia_std::list::contains(&wanted, &nikaia_std::index::get(&reach.resolved, (k) as usize).name) { inside = true; } }
+        for k in 0..reach.resolved.len() as i64 { if *nikaia_std::index::get(nikaia_std::index::get(&reach.reached, (k) as usize), (at) as usize) && nikaia_std::list::contains(&wanted, &unsafe { nikaia_std::proven::read(&reach.resolved, (k) as usize) }.name) { inside = true; } }
         if inside { kept.push(nikaia_std::block::Text::from(item.name.to_string())); }
     }
     Ok(kept)
@@ -586,7 +586,7 @@ pub(crate) fn features_reader_path(name: &str) -> Option<String> {
 pub(crate) fn features_reader_blanked(lines: &mut Vec<String>, item: &FeatureItem) {
     for i in item.first..item.last + 1 { { let __nikaia_stored = String::from(""); nikaia_std::index::set(&mut *lines, nikaia_std::index::at(i), __nikaia_stored); } }
     let taken = format!("pub use super::{} as ", item.name);
-    for i in 0..lines.len() as i64 { if (*nikaia_std::index::get(&lines, nikaia_std::index::at(i))).trim().starts_with(&*taken) { { let __nikaia_stored = String::from(""); nikaia_std::index::set(&mut *lines, nikaia_std::index::at(i), __nikaia_stored); } } }
+    for i in 0..lines.len() as i64 { if (*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).trim().starts_with(&*taken) { { let __nikaia_stored = String::from(""); unsafe { nikaia_std::proven::write(&mut *lines, (i) as usize, __nikaia_stored) }; } } }
 }
 
 pub fn features_readers_dropped(rust: &str) -> String {
@@ -603,20 +603,20 @@ pub(crate) fn features_reach(rust: &str, features: &[ManifestFeature], package: 
     let mut items = features_items(&lines);
     let mut named: collections::BTreeMap<String, Vec<i64>> = collections::BTreeMap::new();
     for at in 0..items.len() as i64 {
-        if !nikaia_std::index::get(&items, nikaia_std::index::at(at)).name.is_empty() && nikaia_std::index::get(&items, nikaia_std::index::at(at)).kind != "use" { named.entry(nikaia_std::block::Text::from(nikaia_std::index::get(&items, nikaia_std::index::at(at)).name.to_string())).or_insert(vec![]).push(at); }
-        for method in nikaia_std::index::get(&items, nikaia_std::index::at(at)).methods.iter() { named.entry(nikaia_std::block::Text::from(method.to_string())).or_insert(vec![]).push(at); }
+        if !unsafe { nikaia_std::proven::read(&items, (at) as usize) }.name.is_empty() && unsafe { nikaia_std::proven::read(&items, (at) as usize) }.kind != "use" { named.entry(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&items, (at) as usize) }.name.to_string())).or_insert(vec![]).push(at); }
+        for method in unsafe { nikaia_std::proven::read(&items, (at) as usize) }.methods.iter() { named.entry(nikaia_std::block::Text::from(method.to_string())).or_insert(vec![]).push(at); }
     }
     for at in 0..items.len() as i64 {
-        if nikaia_std::index::get(&items, nikaia_std::index::at(at)).kind != "impl" { continue; }
+        if unsafe { nikaia_std::proven::read(&items, (at) as usize) }.kind != "impl" { continue; }
         let mut owners: Vec<i64> = vec![];
-        for word in nikaia_std::index::get(&items, nikaia_std::index::at(at)).header.iter() {
+        for word in unsafe { nikaia_std::proven::read(&items, (at) as usize) }.header.iter() {
             let found = match named.get(word) { Some(__nikaia_value) => __nikaia_value, None => continue };
             for target in found.iter() {
                 let target = nikaia_std::num::value(target);
                 if nikaia_std::index::get(&items, nikaia_std::index::at(target)).kind != "impl" && !owners.contains(&target) { owners.push(target); }
             }
         }
-        items[nikaia_std::index::at(at)].owners = owners;
+        (*unsafe { nikaia_std::proven::slot(&mut items, (at) as usize) }).owners = owners;
     }
     #[allow(unused_mut)] let mut declared: Vec<String> = vec![];
     for feature in features.iter() { declared.push(nikaia_std::block::Text::from(feature.name.to_string())); }
@@ -644,8 +644,8 @@ pub(crate) fn features_reach(rust: &str, features: &[ManifestFeature], package: 
     }
     let mut seeds: Vec<i64> = vec![];
     for at in 0..items.len() as i64 {
-        if nikaia_std::index::get(&items, nikaia_std::index::at(at)).kind == "impl" && !nikaia_std::index::get(&items, nikaia_std::index::at(at)).owners.is_empty() { continue; }
-        if features_reader_path(&nikaia_std::index::get(&items, nikaia_std::index::at(at)).name).is_some() { continue; }
+        if unsafe { nikaia_std::proven::read(&items, (at) as usize) }.kind == "impl" && !unsafe { nikaia_std::proven::read(&items, (at) as usize) }.owners.is_empty() { continue; }
+        if features_reader_path(&unsafe { nikaia_std::proven::read(&items, (at) as usize) }.name).is_some() { continue; }
         let mut claimed = false;
         for one in reached.iter() { if *nikaia_std::index::get(&one, nikaia_std::index::at(at)) { claimed = true; } }
         if !claimed { seeds.push(at); }
@@ -738,7 +738,7 @@ pub fn features_span(toml: &str, feature: &str, entry: &str) -> Span {
                 return Span { start: u32::try_from(start).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(start + feature.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
             }
         }
-        offset += line.len() as i64 + 1;
+        offset += unsafe { nikaia_std::proven::add::<i64>(line.len() as i64, 1) };
     }
     if header < 0 {
         header = build;

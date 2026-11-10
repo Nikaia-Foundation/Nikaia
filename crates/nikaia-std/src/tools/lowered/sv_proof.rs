@@ -182,7 +182,7 @@ impl SvBook {
         let mut strict = false;
         let mut i: i64 = 0;
         while ((i) as usize) < sources.len() {
-            let b = match self.source(nikaia_std::index::get(&sources, (i) as usize)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let b = match self.source(unsafe { nikaia_std::proven::read(&sources, (i) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let m = *nikaia_std::index::get(&multipliers, (i) as usize);
             let is_eq = matches!(b.rel, SvRel::Eq);
             if m < 0 && !is_eq { return None; }
@@ -193,7 +193,7 @@ impl SvBook {
                 row = match sv_row_sum(1, &row, m, &b.row) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 assumed = sv_lits_union(&assumed, &b.assumed);
             }
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         let rel = if equality { SvRel::Eq } else if strict { SvRel::Lt } else { SvRel::Le };
         Some(SvBound { row: sv_row_reduced(row), rel, assumed })
@@ -201,7 +201,7 @@ impl SvBook {
     pub(crate) fn combine(&mut self, sources: Vec<SvSrc>, multipliers: Vec<i64>) -> Option<u32> {
         let b = match self.sum(&sources, &multipliers) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if sources.len() == 1 && *nikaia_std::index::get(&multipliers, 0) == 1 {
-            match *nikaia_std::index::get(&sources, 0) {
+            match *unsafe { nikaia_std::proven::read(&sources, (0) as usize) } {
                 SvSrc::Fact(id) => {
                     let had = match self.bounds.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return None };
                     if sv_row_same(&had.row, &b.row) { return Some(id); }

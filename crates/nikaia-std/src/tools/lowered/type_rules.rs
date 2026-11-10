@@ -176,7 +176,7 @@ pub fn tr_part(ruled: &TrRuled, taken: &[bool]) -> TrRuled {
     let mut rules: Vec<TrRule> = vec![];
     for at in 0..ruled.rules.len() as i64 {
         if *nikaia_std::index::get(&taken, (at) as usize) {
-            let rule = nikaia_std::index::get(&ruled.rules, (at) as usize);
+            let rule = unsafe { nikaia_std::proven::read(&ruled.rules, (at) as usize) };
             rules.push(TrRule { claim: rule.claim.clone(), message: match rule.message.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,

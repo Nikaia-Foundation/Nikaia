@@ -26,7 +26,7 @@ impl CheckState {
             BuildValue::List(items) => {
                 let mut element: String = String::from("T");
                 match held {
-                    Ty::Named { args, .. } => { if !args.is_empty() && (*nikaia_std::index::get(&args, 0)).text() != "?" { element = (*nikaia_std::index::get(&args, 0)).text(); } },
+                    Ty::Named { args, .. } => { if !args.is_empty() && (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).text() != "?" { element = (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).text(); } },
                     _ => { },
                 }
                 owns = String::from("a `Vec`");
@@ -143,6 +143,6 @@ impl CheckState {
 // this was written - see `contracts::sync`.
 pub(crate) fn did_not_build(found: &CheckFinding) -> bool {
     if found.code != "NK1178" || found.notes.is_empty() { return false; }
-    (*nikaia_std::index::get(&found.notes, 0)).starts_with("This is a bug in the compiler")
+    (*unsafe { nikaia_std::proven::read(&found.notes, (0) as usize) }).starts_with("This is a bug in the compiler")
 }
 

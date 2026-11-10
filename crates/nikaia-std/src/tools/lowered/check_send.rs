@@ -35,15 +35,15 @@ impl CheckState {
         while at < args.len() as i64 && at < found.len() as i64 {
             let (what, path) = names_the_argument(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), at);
             self.a_value_crosses(world, callee, &what, (path).as_deref(), nikaia_std::index::get(&found, nikaia_std::index::at(at)), span, why);
-            at = at + 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         let mut named: i64 = 0;
         while named < config.len() as i64 && named < passed.len() as i64 {
-            let arg = nikaia_std::index::get(&config, nikaia_std::index::at(named));
+            let arg = unsafe { nikaia_std::proven::read(&config, (named) as usize) };
             let label = format!("`{}`", world.words.resolve(arg.name));
             let path = dotted_path(world, &arg.value);
-            self.a_value_crosses(world, callee, &label, (path).as_deref(), &nikaia_std::index::get(&passed, nikaia_std::index::at(named)).1, span, why);
-            named = named + 1;
+            self.a_value_crosses(world, callee, &label, (path).as_deref(), &unsafe { nikaia_std::proven::read(&passed, (named) as usize) }.1, span, why);
+            named = unsafe { nikaia_std::proven::add::<i64>(named, 1) };
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

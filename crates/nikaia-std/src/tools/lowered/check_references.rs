@@ -52,7 +52,7 @@ impl CheckState {
         }
         let key = id_of(given) as i64;
         let mut found: i64 = -1;
-        for at in 0..self.flow.pending_coalesces.len() as i64 { if found < 0 && nikaia_std::index::get(&self.flow.pending_coalesces, (at) as usize).key == key { found = at; } }
+        for at in 0..self.flow.pending_coalesces.len() as i64 { if found < 0 && unsafe { nikaia_std::proven::read(&self.flow.pending_coalesces, (at) as usize) }.key == key { found = at; } }
         if found < 0 { return false; }
         let pending = self.flow.pending_coalesces.remove(nikaia_std::count::of(found));
         self.facts.lent_coalesces.insert(pending.key, check_reference_opened(&pending.opened));
@@ -331,7 +331,7 @@ pub(crate) fn check_gives_back_tail(expr: &Expr, name: &str, words: &winnow_gram
 
 pub(crate) fn check_gives_back_block_tail(block: &Block, name: &str, words: &winnow_grammar::InternerContext) -> bool {
     if block.stmts.is_empty() { return false; }
-    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
         Stmt::Expr(inner) => check_gives_back_tail(inner, name, words),
         _ => false,
     }

@@ -112,8 +112,8 @@ pub(crate) fn a_named_constant_type(library: &Ledger, name: &str, args: &[Ty], v
     }
     if name == "str" && args.is_empty() && view { return Some(String::from("&str")); }
     if name == "Array" && !view && args.len() == 2 {
-        return match nikaia_std::index::get(&args, 1) {
-            Ty::Count(n) => { let n = *n; wrapped_constant(library, nikaia_std::index::get(&args, 0), "[", &format!("; {}]", n)) },
+        return match unsafe { nikaia_std::proven::read(&args, (1) as usize) } {
+            Ty::Count(n) => { let n = *n; wrapped_constant(library, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, "[", &format!("; {}]", n)) },
             _ => None,
         };
     }
@@ -143,7 +143,7 @@ pub(crate) fn wrapped_constant(library: &Ledger, inner: &Ty, open: &str, close: 
 // this was written - see `contracts::sync`.
 pub fn element_below(library: &Ledger, found: &Ty) -> Option<String> {
     match found {
-        Ty::Named { name, args, .. } => if (name == "Vec" || name == "List") && !args.is_empty() { rust_constant_type(library, nikaia_std::index::get(&args, 0)) } else { None },
+        Ty::Named { name, args, .. } => if (name == "Vec" || name == "List") && !args.is_empty() { rust_constant_type(library, unsafe { nikaia_std::proven::read(&args, (0) as usize) }) } else { None },
         _ => None,
     }
 }
@@ -182,9 +182,9 @@ pub fn constructed(constructor: &str) -> Option<String> {
     if parts.len() < 2 { return None; }
     #[allow(unused_mut)] let mut kept: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let parts = parts;
     let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let parts = parts; #[allow(unused_mut, clippy::redundant_locals)] let mut kept = kept;
-    while at < parts.len() as i64 - 1 {
-        kept.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(at))).to_string()));
-        at = at + 1;
+    while at < unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) } {
+        kept.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (at) as usize) }).to_string()));
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     Some(nikaia_std::block::Text::from(kept.join("::")))
 }
@@ -216,7 +216,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn block_exits(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) -> bool {
         if block.stmts.is_empty() { return false; }
-        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+        match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
             Stmt::Return(_) => true,
             Stmt::Expr(inner) => self.exits(world, inner),
             _ => false,
@@ -236,7 +236,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn block_leaves(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) -> bool {
         if block.stmts.is_empty() { return false; }
-        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+        match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
             Stmt::Return(_) => true,
             Stmt::Break => true,
             Stmt::Continue => true,

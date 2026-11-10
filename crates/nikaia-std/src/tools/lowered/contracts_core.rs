@@ -32,7 +32,7 @@ pub fn contracts_read_beside(written: &str, derived: Option<String>) -> Option<L
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn contracts_arguments(signature: &Signature) -> &[(String, Ty)] {
-    if !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "self" { return &nikaia_std::index::get(&signature.params, 1..); }
+    if !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "self" { return &nikaia_std::index::get(&signature.params, 1..); }
     &signature.params
 }
 

@@ -138,14 +138,14 @@ pub(crate) fn sv_step_of(word: &str) -> Option<SvStep> {
 }
 
 pub(crate) fn sv_step_from(kind: &str, fields: &[&str]) -> Option<SvStep> {
-    if kind == "i" && fields.len() == 1 { return Some(SvStep::Input(match sv_u32_of(*nikaia_std::index::get(&fields, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
-    if kind == "l" && fields.len() == 2 { return Some(SvStep::Learn(match sv_u32s_of(*nikaia_std::index::get(&fields, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None }, match sv_u32s_of(*nikaia_std::index::get(&fields, 1)) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
-    if kind == "d" && fields.len() == 1 { return Some(SvStep::Delete(match sv_u32_of(*nikaia_std::index::get(&fields, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
-    if kind == "f" && fields.len() == 4 { return Some(SvStep::Farkas(match sv_u32s_of(*nikaia_std::index::get(&fields, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None }, match sv_srcs_of(*nikaia_std::index::get(&fields, 1)) { Some(__nikaia_value) => __nikaia_value, None => return None }, match sv_i64s_of(*nikaia_std::index::get(&fields, 2)) { Some(__nikaia_value) => __nikaia_value, None => return None }, match text::parse_i64(*nikaia_std::index::get(&fields, 3)) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
-    if kind == "c" && fields.len() == 2 { return Some(SvStep::Combine(match sv_srcs_of(*nikaia_std::index::get(&fields, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None }, match sv_i64s_of(*nikaia_std::index::get(&fields, 1)) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
-    if kind == "r" && fields.len() == 2 { return Some(SvStep::Round(match sv_u32_of(*nikaia_std::index::get(&fields, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None }, match text::parse_i64(*nikaia_std::index::get(&fields, 1)) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
-    if kind == "s" && fields.len() == 2 { return Some(SvStep::Split(match sv_row_from(*nikaia_std::index::get(&fields, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None }, match sv_row_from(*nikaia_std::index::get(&fields, 1)) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
-    if kind == "x" && fields.len() == 3 { return Some(SvStep::Extend(match sv_row_from(*nikaia_std::index::get(&fields, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None }, match text::parse_i64(*nikaia_std::index::get(&fields, 1)) { Some(__nikaia_value) => __nikaia_value, None => return None }, match sv_u32_of(*nikaia_std::index::get(&fields, 2)) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
+    if kind == "i" && fields.len() == 1 { return Some(SvStep::Input(match sv_u32_of(*unsafe { nikaia_std::proven::read(&fields, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
+    if kind == "l" && fields.len() == 2 { return Some(SvStep::Learn(match sv_u32s_of(*unsafe { nikaia_std::proven::read(&fields, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None }, match sv_u32s_of(*unsafe { nikaia_std::proven::read(&fields, (1) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
+    if kind == "d" && fields.len() == 1 { return Some(SvStep::Delete(match sv_u32_of(*unsafe { nikaia_std::proven::read(&fields, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
+    if kind == "f" && fields.len() == 4 { return Some(SvStep::Farkas(match sv_u32s_of(*unsafe { nikaia_std::proven::read(&fields, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None }, match sv_srcs_of(*unsafe { nikaia_std::proven::read(&fields, (1) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None }, match sv_i64s_of(*unsafe { nikaia_std::proven::read(&fields, (2) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None }, match text::parse_i64(*unsafe { nikaia_std::proven::read(&fields, (3) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
+    if kind == "c" && fields.len() == 2 { return Some(SvStep::Combine(match sv_srcs_of(*unsafe { nikaia_std::proven::read(&fields, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None }, match sv_i64s_of(*unsafe { nikaia_std::proven::read(&fields, (1) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
+    if kind == "r" && fields.len() == 2 { return Some(SvStep::Round(match sv_u32_of(*unsafe { nikaia_std::proven::read(&fields, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None }, match text::parse_i64(*unsafe { nikaia_std::proven::read(&fields, (1) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
+    if kind == "s" && fields.len() == 2 { return Some(SvStep::Split(match sv_row_from(*unsafe { nikaia_std::proven::read(&fields, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None }, match sv_row_from(*unsafe { nikaia_std::proven::read(&fields, (1) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
+    if kind == "x" && fields.len() == 3 { return Some(SvStep::Extend(match sv_row_from(*unsafe { nikaia_std::proven::read(&fields, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None }, match text::parse_i64(*unsafe { nikaia_std::proven::read(&fields, (1) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None }, match sv_u32_of(*unsafe { nikaia_std::proven::read(&fields, (2) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None })); }
     None
 }
 
@@ -186,9 +186,9 @@ pub(crate) fn sv_srcs_of(word: &str) -> Option<Vec<SvSrc>> {
 pub(crate) fn sv_row_from(word: &str) -> Option<SvRow> {
     let parts: Vec<&str> = word.split(':').collect::<Vec<_>>();
     if parts.len() != 3 { return None; }
-    let cols = match sv_u32s_of(*nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let ks = match sv_i64s_of(*nikaia_std::index::get(&parts, 1)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let cols = match sv_u32s_of(*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let ks = match sv_i64s_of(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if (cols.len() as i64) != ks.len() as i64 { return None; }
-    Some(SvRow { cols, ks, constant: match text::parse_i64(*nikaia_std::index::get(&parts, 2)) { Some(__nikaia_value) => __nikaia_value, None => return None } })
+    Some(SvRow { cols, ks, constant: match text::parse_i64(*unsafe { nikaia_std::proven::read(&parts, (2) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None } })
 }
 
