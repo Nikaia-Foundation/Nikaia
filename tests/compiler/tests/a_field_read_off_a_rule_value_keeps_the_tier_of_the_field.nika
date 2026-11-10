@@ -1,0 +1,26 @@
+// A field read off a rule's value of a struct is that struct's field, as off
+// a function's parameter (ADR-grammar-1 D2, #1548): `p.a` with `p: P` is a
+// view of the input where `P.a` is one, so `N { a: p.a }` keeps it and is
+// no `ref String` handed to a field of text of its own (NK1106).
+struct P {
+	a: String?,
+}
+struct N {
+	a: String?,
+	b: String?,
+}
+grammar G {
+	rule WS = "" -> { }
+	entry rule top -> N =
+		p:Pr v:Tail(p) -> { v }
+	rule Pr -> P = "&" s:text("z"+) -> { P { a: s } }
+	rule Tail(p: P) -> N = " " s:text("y"+) -> { N { a: p.a, b: s } }
+}
+fn main() throws {
+	let n = G::top("&zz yy") catch {
+		println("refused")
+		return
+	}
+	println(n.a ?? "none")
+	println(n.b ?? "none")
+}
