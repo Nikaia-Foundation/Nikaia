@@ -1,0 +1,12 @@
+error[NK2305]: `s` is changed here, but `w` may point into its data and is used later.
+   --> tests/a_text_lent_to_a_literal_is_not_changed_while_the_literal_is_used.nika:19:5
+    |
+ 18 |     let w = Named { name: s }
+    |         - `w` is built here over `s`, which it views
+ 19 |     s.push_str("!")
+    |     ^ `s` changes here
+ 20 |     println(w.name)
+    |             - `w` is used here, after the change
+    |
+    = help: Use `w` before this change, or build it with a copy: `s.clone()`.
+1 change to data a view still to be used may point into

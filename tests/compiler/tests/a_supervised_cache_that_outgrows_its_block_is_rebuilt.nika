@@ -1,0 +1,55 @@
+// A shared value allocates from a block of its own (ADR-327 D5): what a door
+// builds while it runs is the value's, not the task's that opened it. A task
+// that holds half its own block can still build a large index inside the
+// door; a door that builds more than the value's block holds poisons the
+// value (D6), the task ends with `task::OverBudget`, and the next door
+// rebuilds the supervised value (D3).
+fn index_beside_own(cache: SharedMut[Vec[i64]]) -> i64 {
+    let mut own: Vec[i64] = []
+    for i in 0..<3000 {
+        own.push(i)
+    }
+    cache.update fn(mut v) {
+        let mut index: Vec[i64] = []
+        for i in 0..<3000 {
+            index.push(i * 2)
+        }
+        v.push(index.len())
+    }
+    return own.len()
+}
+
+fn outgrow(cache: SharedMut[Vec[i64]]) -> i64 {
+    cache.update fn(mut v) {
+        let mut index: Vec[i64] = []
+        for i in 0..<20000 {
+            index.push(i)
+        }
+        v.push(index.len())
+    }
+    return 1
+}
+
+fn main() throws {
+    let cache: SharedMut[Vec[i64]] = SharedMut::supervised(fn { [7] })
+    let fits = async index_beside_own(cache) catch {
+        match error {
+            task::OverBudget => println(f"beside its own: {error}"),
+            else => println(f"failed: {error}"),
+        }
+        0
+    }
+    println("the first task runs")
+    println(f"the task kept {fits}, the cache holds {cache.get().len()}")
+    let over = async outgrow(cache) catch {
+        match error {
+            task::OverBudget => println(f"outgrown: {error}"),
+            else => println(f"failed: {error}"),
+        }
+        0
+    }
+    println("the second task runs")
+    println(f"the second task ended: {over == 0}")
+    let now: Vec[i64] = cache.get()
+    println(f"rebuilt: {now[0]}, {now.len()} item")
+}

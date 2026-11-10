@@ -891,7 +891,7 @@ fn check_core_async_crash[H: CheckHost](mut state: CheckState, world: ref CheckW
     // **A task that builds in its block can run over its budget** (ADR-327
     // D13): it fails with `task::OverBudget` where it is waited for.
     if places_of_task(task, world.here.items, world.words, fn(literal) { host.literal_holes(literal) }, facts, world.own, world.library) {
-        check_core_async_fails(state, span, "task::OverBudget", "This function can fail, because the task started here can run over its memory budget.", "A task builds its lists in its own block; when the block is full, whoever waits for the task gets `task::OverBudget` (ADR-327 D13).", f"Add `throws` to `{function}`, or write a fallback: `async e catch {{ … }}`.")
+        check_core_async_fails(state, span, "task::OverBudget", "This function can fail, because the task started here can run over its memory budget.", "A task builds its lists and texts in its own block; when the block is full, whoever waits for the task gets `task::OverBudget` (ADR-327 D13).", f"Add `throws` to `{function}`, or write a fallback: `async e catch {{ … }}`.")
     }
     if !panics_of_task(task, world.here.items, world.words, fn(literal) { host.literal_holes(literal) }, facts, world.own, world.library) {
         return

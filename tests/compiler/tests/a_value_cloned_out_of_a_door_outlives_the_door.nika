@@ -1,0 +1,28 @@
+// A value that leaves a shared value's door is built outside the value's
+// block (ADR-327 D9, supervisor 2026-11-10 on #1536): a copy taken out of
+// the door, after the door built in the value's block, is kept, grown and
+// freed by the task that took it, after the door has ended.
+fn take_out(cache: SharedMut[Vec[i64]]) -> i64 {
+    cache.update fn(mut v) {
+        let mut scratch: Vec[i64] = []
+        for i in 0..<1000 {
+            scratch.push(i)
+        }
+        v.push(scratch.len())
+    }
+    let mut copy: Vec[i64] = cache.get()
+    for i in 0..<5000 {
+        copy.push(i)
+    }
+    return copy.len()
+}
+
+fn main() throws {
+    let cache: SharedMut[Vec[i64]] = SharedMut([1, 2, 3])
+    let taken = async take_out(cache) catch { -1 }
+    println("the task runs")
+    println(f"the task kept a copy of {taken}")
+    let mut mine: Vec[i64] = cache.get()
+    mine.push(9)
+    println(f"main's copy: {mine.len()}, the value: {cache.get().len()}")
+}

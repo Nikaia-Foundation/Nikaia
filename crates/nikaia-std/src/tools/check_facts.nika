@@ -285,8 +285,9 @@ pub struct CheckFacts {
     /// (`check_core_view_list_assigned`).
     pub view_list_assigns: collections::BTreeSet[i64],
     /// **The list literals placed in the running task's block** (ADR-327
-    /// D9, step 5 of #490), by the literal's node: the emitter writes
-    /// `Place::Block` there, `Place::Outside` everywhere else
+    /// D9, step 5 of #490), by the literal's node, and the texts by the
+    /// `String` of their `String()`: the emitter writes `Place::Block`
+    /// there, `Place::Outside` everywhere else
     /// (`check_core_place_in_block`).
     pub placed_in_block: collections::BTreeSet[i64],
     /// **The lists of views a `let` binds what they may view after** (#490),
@@ -608,6 +609,9 @@ pub struct CheckFacts {
     pub lent_list_reads: collections::BTreeSet[i64],
     /// **An arm that reads an element or a field off a place, lent** (#613).
     pub lent_reads: collections::BTreeSet[i64],
+    /// **A `T?` place handed back into a `ref T?` result** (#1486): written
+    /// `.as_ref()`, the option of a view, not `&` before it.
+    pub lent_option_results: collections::BTreeSet[i64],
     pub view_fallbacks: collections::BTreeSet[i64],
     /// **A map read that jumps where it finds nothing** (`m[k] ?? return`),
     /// by the `??`: of a value that moves, the answer is a view of the map
@@ -857,6 +861,7 @@ impl CheckFacts {
             kept_byte_fields: collections::BTreeSet(),
             lent_list_reads: collections::BTreeSet(),
             lent_reads: collections::BTreeSet(),
+            lent_option_results: collections::BTreeSet(),
             view_fallbacks: collections::BTreeSet(),
             map_read_views: collections::BTreeSet(),
             keep_plans: null,
@@ -934,8 +939,8 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
     let mut at = 0
     for (key, claim) in claims {
         let mut start = key.0
-        if start > source.len() {
-            start = source.len()
+        if start > source.bytes.len() {
+            start = source.bytes.len()
         }
         if start > at {
             for c in source.bytes[at..<start] {

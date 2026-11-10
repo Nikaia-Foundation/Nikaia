@@ -1,0 +1,24 @@
+bounds in tests/prove_a_list_twice_as_long.nika: 8 indexes, 6 proved; 15 operations, 11 proved
+    24  i += 1                                    proved
+    29  b[k]                                      proved
+    40  i += 1                                    proved
+    45  b[2 * k].len() + b[2 * k + 1].len()       checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    45  b[2 * k]                                  proved
+    45  2 * k                                     proved
+    45  b[2 * k + 1]                              proved
+    45  2 * k + 1                                 proved
+    45  2 * k                                     proved
+    60  self.row[a] + self.lits[2 * a].len() + self.lits[2 * a + 1].len()  checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    60  self.row[a] + self.lits[2 * a].len()      checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    60  self.row[a]                               proved
+    60  self.lits[2 * a]                          proved
+    60  2 * a                                     proved
+    60  self.lits[2 * a + 1]                      proved
+    60  2 * a + 1                                 proved
+    60  2 * a                                     proved
+    79  self.lits[2 * a].len() + self.lits[2 * a + 1].len()  checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    79  self.lits[2 * a]                          checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    79  2 * a                                     proved
+    79  self.lits[2 * a + 1]                      checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    79  2 * a + 1                                 proved
+    79  2 * a                                     proved

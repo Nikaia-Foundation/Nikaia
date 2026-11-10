@@ -1,0 +1,34 @@
+// #1526, ADR-326 D6, D7 and D8: `http::listen` gives a request head one
+// deadline, `head_timeout`, and each read waits only for the time left on
+// it; a body has to arrive at `body_bytes_per_second` once two seconds have
+// passed. A head that stops, a head sent a byte at a time and a slow body are
+// each answered `408` and closed. The client waits for the answer with
+// `read(within:)`. The server runs in a package of its own that depends on
+// `examples/http` by path.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let repo = process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nhttp = { path = \"" + repo + "/examples/http\" }\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use http\nuse std::net\nuse std::time\n\nfn free() -> String throws {\n\tlet probe = net::listen(\"127.0.0.1:0\")\n\treturn probe.address()\n}\n\n// What the server sent until it closed, as its first line and its last.\nfn until_closed(mut conn: net::Connection, start: String) -> String throws {\n\tlet mut got = start.clone()\n\twhile true {\n\t\tlet more = conn.read()\n\t\tif more.len() == 0 {\n\t\t\tbreak\n\t\t}\n\t\tgot.push_str(more.text())\n\t}\n\tif got.len() == 0 {\n\t\treturn \"closed without an answer\"\n\t}\n\tlet lines: Vec[String] = got.lines().collect()\n\treturn f\"{lines[0]} / {lines[lines.len() - 1]}\"\n}\n\n// Sends `text` a byte at a time, one every `gap`, and stops once the server\n// answers: the wait for the answer is the gap.\nfn drip(mut conn: net::Connection, text: String, gap: time::Duration) -> String throws {\n\tfor piece in text.chars() {\n\t\tconn.write(f\"{piece}\")\n\t\tlet more = conn.read(within: gap) catch {\n\t\t\tcontinue\n\t\t}\n\t\treturn until_closed(conn, more.text())\n\t}\n\treturn \"sent it all\"\n}\n\nfn clients(at: String) throws {\n\tlet mut stopping = net::connect(at)\n\tstopping.write(\"GET /stops HTTP/1.1\\r\\n\")\n\tprintln(f\"a head that stops: {until_closed(stopping, \"\")}\")\n\tlet mut dripping = net::connect(at)\n\tprintln(f\"a head a byte at a time: {drip(dripping, \"GET /drips HTTP/1.1\\r\\nhost: x\\r\\nuser-agent: a client that sends a byte at a time\\r\\n\\r\\n\", 50.millis())}\")\n\tlet mut slow = net::connect(at)\n\tslow.write(\"POST /slow HTTP/1.1\\r\\nhost: x\\r\\ncontent-length: 100\\r\\n\\r\\n\")\n\tprintln(f\"a slow body: {drip(slow, \"a body that arrives slower than fifty bytes a second, one byte every tenth of a second, and on\", 100.millis())}\")\n}\n\nfn main() throws {\n\tlet at = free()\n\tlet copy = at.clone()\n\tlet client = spawn fn { clients(copy) }\n\thttp::listen(at; head_timeout: 400.millis(), body_bytes_per_second: 50, connections: 3) fn(request) {\n\t\treturn http::Response::text(f\"answered {request.path()}\")\n\t}\n\tclient.join()\n\tprintln(\"listen returned after three connections\")\n}\n")
+    let out = process::run(toolchain(), ["run"]; dir: f"{tmp}/app")
+    for line in out.stdout.lines() {
+        if !line.starts_with("http: listening on ") {
+            println(line)
+        }
+    }
+    println(f"exit {out.code}")
+    if out.code != 0 {
+        println(out.stderr.replace(tmp, "TMP"))
+    }
+    process::run("rm", ["-rf", tmp])
+}

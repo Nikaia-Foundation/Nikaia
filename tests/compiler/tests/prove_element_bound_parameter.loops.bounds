@@ -1,5 +1,0 @@
-bounds in tests/prove_element_bound_parameter.nika: 2 indexes, 2 proved; 1 operations, 1 proved
-     8  atoms[k]      proved
-     9  values[atom]  proved
-    12  k += 1        proved
-  derived  eval: 0 <= atoms[..], atoms[..] < values.len(), proved at the calls on lines 20

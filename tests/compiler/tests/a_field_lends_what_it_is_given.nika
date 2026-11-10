@@ -1,0 +1,20 @@
+// A struct literal over a local lends it while the value stays in the function
+// (ADR-views-3 D5, #1490); the old NK2105 test of the Rust suite (handed_over)
+// said the local was handed over.
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("abc")
+    return g
+}
+
+struct Person {
+    name: String,
+}
+
+fn main() throws {
+    let name = make()
+    let p = Person { name: name }
+    println(name)
+    println(p.name)
+}

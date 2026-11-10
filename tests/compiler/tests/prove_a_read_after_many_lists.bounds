@@ -1,0 +1,3 @@
+bounds in tests/prove_a_read_after_many_lists.nika: 1 indexes, 1 proved; 1 operations, 1 proved
+    75  t += 1  proved
+    80  ys[i]   proved

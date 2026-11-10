@@ -1,0 +1,8 @@
+first request: HTTP/1.1 200 OK / answered /one
+second request, same connection: HTTP/1.1 200 OK / answered /two
+two in one write, in order: HTTP/1.1 200 OK / answered /four
+quiet: closed with 0 bytes, after idle_timeout true
+connection: close: HTTP/1.1 200 OK / connection: close true / answered /close
+HTTP/1.0: HTTP/1.1 200 OK / connection: close true / answered /old
+listen returned after three connections
+exit 0

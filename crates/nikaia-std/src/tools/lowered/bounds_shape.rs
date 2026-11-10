@@ -19,6 +19,7 @@ pub struct Around {
     pub changing_receivers: collections::BTreeSet<String>,
     pub frames: collections::BTreeMap<String, BoundsChanged>,
     pub rules: Vec<BoundsRule>,
+    pub held: collections::BTreeMap<String, Vec<BoundsRule>>,
     pub derived: Derived,
     pub fields: collections::BTreeSet<String>,
     pub field_writers: collections::BTreeSet<i64>,

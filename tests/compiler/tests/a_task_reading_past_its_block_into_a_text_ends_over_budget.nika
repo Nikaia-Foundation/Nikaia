@@ -1,0 +1,30 @@
+// A text a task builds for itself grows in the task's block (ADR-327 D9,
+// D12): one that reads more than the block holds ends that task with
+// `task::OverBudget`, and the task beside it runs on (ADR-327 D6, D13).
+fn read_all() -> i64 {
+    let mut body = String()
+    for _ in 0..<100000 {
+        body.push_str("a line of the request\n")
+    }
+    return body.len()
+}
+
+fn count() -> i64 {
+    let mut seen = String()
+    for _ in 0..<100 {
+        seen.push_str("ok")
+    }
+    return seen.len()
+}
+
+fn main() throws {
+    let big = async read_all() catch {
+        match error {
+            task::OverBudget => println(f"over budget: {error}"),
+            else => println(f"failed: {error}"),
+        }
+        0
+    }
+    let small = async count() catch { -1 }
+    println(f"read: {big}, beside: {small}")
+}

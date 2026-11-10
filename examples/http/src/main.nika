@@ -10,8 +10,9 @@
 // Shows: a package written in Nikaia and reached by a path, a function passed
 // as a value, options with defaults after the `;`, and `catch`.
 //
-// It speaks `GET` and `POST`, reads a body by `Content-Length`, and closes each
-// connection after one answer. There is no chunked transfer and no TLS. The
+// It speaks `GET` and `POST`, reads a body by `Content-Length`, and keeps a
+// connection open for the client's next request. There is no chunked transfer
+// and no TLS. The
 // socket is `std::net` and the request parsing is `std::http1`; this package
 // decides what a request means. A program hands it one handler function, not
 // a route table: the handler looks at the path and decides.
@@ -20,6 +21,8 @@ use std::net
 use std::http1
 use std::io
 use std::fs
+use std::time
+use std::task
 
 // Only two methods. `std::http1` answers `400` to any other method before a
 // handler runs, so a `match` over this covers every request a handler can get.
@@ -194,9 +197,18 @@ fn length_of(body: Body) -> i64 {
 // The status line and the headers, as the text that goes on the wire before
 // the body.
 pub fn render_head(response: Response) -> String {
+    return head_text(response, false)
+}
+
+// The head, and `connection: close` where this answer is the connection's last.
+fn head_text(response: Response, closing: bool) -> String {
     let status = status_line(response.status)
     let length = length_of(response.body)
-    return f"HTTP/1.1 {status}\r\ncontent-type: {response.content_type}\r\ncontent-length: {length}\r\n\r\n"
+    let mut close = ""
+    if closing {
+        close = "connection: close\r\n"
+    }
+    return f"HTTP/1.1 {status}\r\ncontent-type: {response.content_type}\r\ncontent-length: {length}\r\n{close}\r\n"
 }
 
 // The head and a text body, as the text that goes on the wire. A body of
@@ -212,8 +224,8 @@ pub fn render(response: Response) -> String {
 // The answer, written to the connection. What the client sees was settled by
 // the head: a file that fails to read after it closes the connection short,
 // and the failure is logged (ADR-289 D27).
-fn send(mut connection: net::Connection, response: Response) throws {
-    connection.write(render_head(response))
+fn send(mut connection: net::Connection, response: Response, closing: bool) throws {
+    connection.write(head_text(response, closing))
     match response.body {
         Body::Text(text) => connection.write(text)
         Body::Bytes(bytes) => connection.write(bytes)
@@ -246,106 +258,206 @@ pub fn status_line(status: i32) -> String {
     }
 }
 
-// The server. It takes one connection at a time: read the request, run the
-// handler, send the answer, close. A slow client holds up everyone else, and
-// `head_wait` limits how long. The limits are options after the `;`, so a
-// program names only the ones it changes.
+// How long a body may take before its rate counts (ADR-326 D7): a client's
+// first bytes cross a slow network and the server's own scheduling, so the
+// rate is measured over at least this many milliseconds.
+fn body_start_millis() -> i64 {
+    return 2000
+}
+
+// The server. Each connection is served in a task of its own: read a request,
+// run the handler, send the answer, and wait for the next request on the same
+// connection. A slow client holds up only itself, and three limits decide how
+// long it keeps its own connection (ADR-326 D6, D7, D9):
 //
-// Nothing here waits in a special way. `accept` and `read` are plain calls
-// with no `async` or `await`.
+// * `head_timeout`, the time from a request's first byte to the end of its
+//   head;
+// * `body_bytes_per_second`, the rate a body arrives at, measured once two
+//   seconds have passed (`0` takes the body at any rate);
+// * `idle_timeout`, the time between one answer and the next request's first
+//   byte.
+//
+// The limits are options after the `;`, so a program names only the ones it
+// changes.
+//
+// The accepting is `std::net`'s (ADR-326 D10): bind first, so the address can
+// be printed (port `0` picks any free one), then `serve` the listener. Nothing
+// here waits in a special way. `serve` and `read` are plain calls with no
+// `async` or `await`.
 pub fn listen(
     at: String,
-    handler: fn(keep Request) -> Response;
+    keep handler: fn(keep Request) -> Response;
     body_cap: i64 = 1048576,
     head_cap: i64 = 16384,
-    head_wait: i64 = 10,
+    head_timeout: time::Duration? = null,
+    body_bytes_per_second: i64 = 500,
+    idle_timeout: time::Duration? = null,
     connections: i64 = 0
 ) throws {
     let listener = net::listen(at)
     let bound = listener.address()
     println(f"http: listening on {bound}")
 
-    let mut served = 0
-    // `connections: 0` means serve forever. Any other number stops after that
-    // many connections.
-    while connections == 0 || served < connections {
-        let mut connection = listener.accept()
-        answer(connection, handler; body_cap: body_cap, head_cap: head_cap, head_wait: head_wait)
-        served = served + 1
-    }
+    // The defaults are 10 seconds and 75 seconds (ADR-326 D6, D9), decided
+    // here: a default that calls a method is not computed while the program is
+    // built.
+    let head_limit = head_timeout ?? 10.seconds()
+    let idle_limit = idle_timeout ?? 75.seconds()
+
+    // `connections: 0` means serve forever. Any other number stops accepting
+    // after that many connections and returns once they are answered.
+    listener.serve(fn(mut connection) {
+        answer(connection, handler, head_limit, idle_limit; body_cap: body_cap, head_cap: head_cap, body_bytes_per_second: body_bytes_per_second)
+    }; connections: connections)
 }
 
-// One connection, from its first byte to its close.
-//
-// A bad request is answered with a status instead of thrown, because it is
-// one client's problem and must not stop the server. `catch` is
-// where that happens; inside it, `error` is what was thrown.
+// One connection, from its first byte to its close: one request after
+// another, in the order they came (ADR-326 D9). Bytes that arrived after a
+// request start the next one, so pipelined requests are answered in order.
 //
 // `mut connection` in the signature lends the connection for changing. The
 // call site writes nothing extra.
 fn answer(
     mut connection: net::Connection,
-    handler: fn(keep Request) -> Response;
+    keep handler: fn(keep Request) -> Response,
+    head_timeout: time::Duration,
+    keep idle_timeout: time::Duration;
     body_cap: i64 = 1048576,
     head_cap: i64 = 16384,
-    head_wait: i64 = 10
+    body_bytes_per_second: i64 = 500
 ) {
     let mut buffer = http1::Buffer()
+    let mut open = true
+    while open {
+        open = request(connection, buffer, handler, head_timeout; body_cap: body_cap, head_cap: head_cap, body_bytes_per_second: body_bytes_per_second)
+        if open && buffer.len() == 0 {
+            // A quiet connection is closed without a word: there is no request
+            // to answer. A client that sends nothing more ends it the same way.
+            let more = connection.read(within: idle_timeout) catch { return }
+            if more.len() == 0 {
+                return
+            }
+            buffer.take(more)
+        }
+    }
+}
 
+// One request, from its first byte to its answer; whether the connection
+// stays open for the next.
+//
+// A bad request is answered with a status instead of thrown, because it is
+// one client's problem and must not stop the server. `catch` is
+// where that happens; inside it, `error` is what was thrown.
+fn request(
+    mut connection: net::Connection,
+    mut buffer: http1::Buffer,
+    keep handler: fn(keep Request) -> Response,
+    head_timeout: time::Duration;
+    body_cap: i64 = 1048576,
+    head_cap: i64 = 16384,
+    body_bytes_per_second: i64 = 500
+) -> bool {
     // Read until the head ends. `head_end` returns `0` for "not yet" and throws
-    // once the head is over `head_cap`. `head_wait` is how many reads a client
-    // gets, so one that sends a byte at a time cannot hold the server forever.
-    let mut ended = 0
-    let mut reads = 0
-    while ended == 0 && reads < head_wait {
-        let more = connection.read() catch { return }
+    // once the head is over `head_cap`. The head has one deadline, and each
+    // read waits only for the time left, so a client that sends a byte at a
+    // time cannot hold the connection past it.
+    let started = time::now()
+    let mut ended = buffer.head_end(head_cap) catch {
+        refuse(connection, 431, f"{error}")
+        return false
+    }
+    while ended == 0 {
+        let left = head_timeout.in_millis() - started.elapsed().in_millis()
+        if left <= 0 {
+            refuse(connection, 408, "408 a request head that never ended")
+            return false
+        }
+        let more = connection.read(within: left.millis()) catch {
+            match error {
+                task::TimedOut => refuse(connection, 408, "408 a request head that never ended"),
+                else => {},
+            }
+            return false
+        }
         if more.len() == 0 {
             // The client went away. There is nobody to answer.
-            return
+            return false
         }
         buffer.take(more)
         ended = buffer.head_end(head_cap) catch {
             refuse(connection, 431, f"{error}")
-            return
+            return false
         }
-        reads = reads + 1
-    }
-    if ended == 0 {
-        refuse(connection, 408, "408 a request head that never ended")
-        return
     }
 
     let asked = buffer.head() catch {
         refuse(connection, 400, f"{error}")
-        return
+        return false
     }
 
     // The body limit is checked against the length the head announced, before
     // any of the body is read. Refusing is cheap only at this point.
     if asked.length() > body_cap {
         refuse(connection, 413, "413 a body over the cap")
-        return
+        return false
     }
 
     // Read the rest of the body. Some of it may have arrived with the head,
-    // so this counts from where the head ends.
-    while buffer.len() - asked.size() < asked.length() {
-        let more = connection.read() catch { return }
-        if more.len() == 0 { return }
+    // so this counts from where the head ends. Each read waits until the body
+    // would fall below `body_bytes_per_second`, and not past it.
+    let size = asked.size()
+    let end = size + asked.length()
+    let body_started = time::now()
+    while buffer.len() < end {
+        let mut more = Bytes([])
+        if body_bytes_per_second > 0 {
+            let mut due = (buffer.len() - size) * 1000 / body_bytes_per_second
+            if due < body_start_millis() {
+                due = body_start_millis()
+            }
+            let left = due - body_started.elapsed().in_millis()
+            if left <= 0 {
+                refuse(connection, 408, "408 a body slower than the server takes")
+                return false
+            }
+            more = connection.read(within: left.millis()) catch {
+                match error {
+                    task::TimedOut => refuse(connection, 408, "408 a body slower than the server takes"),
+                    else => {},
+                }
+                return false
+            }
+        } else {
+            more = connection.read() catch { return false }
+        }
+        if more.len() == 0 {
+            return false
+        }
         buffer.take(more)
     }
-    let body = buffer.text_from(asked.size()) catch {
+    let body = buffer.text_between(size, end) catch {
         refuse(connection, 400, f"{error}")
-        return
+        return false
     }
 
-    let answered = handler(Request { head: asked, body: body })
-    send(connection, answered) catch { return }
+    // A handler that panics ends its own task, and the client, whose answer
+    // has not begun, is told `500` (ADR-326 D4). The server goes on.
+    let staying = asked.keep_alive()
+    let request = Request { head: asked, body: body }
+    let running = spawn fn { handler(request) }
+    let answered = running.join() catch {
+        refuse(connection, 500, "500 the handler stopped")
+        return false
+    }
+    send(connection, answered, !staying) catch { return false }
+    buffer.discard(end)
+    return staying
 }
 
-// Answers a request the server refuses. The text `http1` throws already starts
-// with the status code, so it is passed on as the body.
+// Answers a request the server refuses, and the connection closes after it.
+// The text `http1` throws already starts with the status code, so it is
+// passed on as the body.
 fn refuse(mut connection: net::Connection, status: i32, why: String) {
     let answered = Response { status: status, content_type: "text/plain", body: Body::Text(why.clone()) }
-    send(connection, answered) catch { return }
+    send(connection, answered, true) catch { return }
 }

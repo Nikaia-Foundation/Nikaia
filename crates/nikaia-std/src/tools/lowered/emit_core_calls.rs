@@ -369,6 +369,10 @@ impl EmitState {
         let awaits_a_parameter = self.emit_call_awaits_a_parameter(func, scope);
         let decided = pausing.is_none() && self.decided_by_its_lambda(world, func);
         let settled = decided && (flow.in_lambda || !self.lowered_pausing(&scope.function));
+        let rust_result = self.emit_call_rust_owner_result(world, func);
+        let fails_here = flow.can_throw && !flow.caught;
+        let wraps_result = rust_result != "" && (fails_here || !call_can_fail(world.words, &self.own_contracts, world.library, &self.described, func));
+        if wraps_result && rust_result == "Vec" { out.push("nikaia_std::block::List::from("); } else if wraps_result { out.push("nikaia_std::block::Text::from("); }
         if settled { out.push("nikaia_std::rt::exec::settled("); }
         let boxed = pausing.is_some() && self.closes_a_pausing_cycle(&scope.function, nikaia_std::index::or(pausing.as_deref(), || ""));
         if boxed { out.push("Box::pin("); }
@@ -385,7 +389,16 @@ impl EmitState {
             if code_fails { out.push(&self.box_into_channel(world, scope)); }
             out.push("?");
         }
+        if wraps_result { out.push(")"); }
         Ok(())
+    }
+    pub(crate) fn emit_call_rust_owner_result(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> String {
+        let name = match call_written_name(world.words, func) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        if self.own_contracts.functions.contains_key(&name) { return String::from(""); }
+        let contract = match self.described.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        emit_rust_owner(result)
     }
     pub(crate) fn emit_call_awaits_a_parameter(&self, func: &Expr, scope: &EmitScope) -> bool {
         match func {
@@ -699,6 +712,11 @@ impl EmitState {
         if name == "set" && self.facts.witnessed_sets.contains(&flow.statement) { witness = emit_call_option_named(world, config, "after"); }
         let mut limit: Vec<Expr> = vec![];
         if name == "join" && args.is_empty() { limit = emit_call_option_named(world, config, "within"); }
+        let mut deadline: Vec<Expr> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        if name == "read" && args.is_empty() && nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into()) == "net::Connection::read(within)" { deadline = emit_call_option_named(world, config, "within"); }
         if receiver.is_some() && name == "to_string" && args.is_empty() {
             let text = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.facts.text_as_is.contains(&node_key(text)) {
@@ -844,7 +862,7 @@ impl EmitState {
                 None => { },
                 Some(on) => { if self.facts.text_copies.contains(&node_key(on)) { written = String::from("to_string"); } },
             }
-        } else if name == "get" && args.len() == 1 && self.facts.mut_view_gets.contains(&on_node) { written = String::from("get_mut"); } else if name == "set" && !witness.is_empty() { written = String::from("set_after"); } else if !limit.is_empty() { written = String::from("join_within"); }
+        } else if name == "get" && args.len() == 1 && self.facts.mut_view_gets.contains(&on_node) { written = String::from("get_mut"); } else if name == "set" && !witness.is_empty() { written = String::from("set_after"); } else if !limit.is_empty() { written = String::from("join_within"); } else if !deadline.is_empty() { written = String::from("read_within"); }
         if name == "fold" && receiver.is_some() {
             let folded = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.facts.par_folds.contains(&node_key(folded)) { written = String::from("fold_merged"); }
@@ -960,6 +978,7 @@ impl EmitState {
                 None => None,
             }, || "".into());
             if closes == "cleanup::close" && !self.method_pauses(on_node) { out.push("_sync"); }
+            if host.overlaps_user_code() && emit_call_on_the_pool(&closes) { out.push("_on_pool"); }
             if self.emit_call_method_proved(world, host, receiver, on_node, &name, args, scope) { out.push("__unchecked"); }
         }
         let mut declared = false;
@@ -996,7 +1015,7 @@ impl EmitState {
         if !witness.is_empty() {
             out.push(", &");
             self.emit_core_postfix_base(world, walk, out, host, nikaia_std::index::get(&witness, 0), depth, flow, scope)?;
-        } else if !limit.is_empty() {
+        } else if !deadline.is_empty() { self.emit_expr(world, walk, out, host, nikaia_std::index::get(&deadline, 0), depth, flow, scope)?; } else if !limit.is_empty() {
             self.emit_expr(world, walk, out, host, nikaia_std::index::get(&limit, 0), depth, flow, scope)?;
             let on_timeout = emit_call_option_named(world, config, "on_timeout");
             out.push(", ");
@@ -1218,8 +1237,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple90174| {
-        let (i, word) = __nikaia_tuple90174;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple92606| {
+        let (i, word) = __nikaia_tuple92606;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

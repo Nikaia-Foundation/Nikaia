@@ -471,6 +471,87 @@ unsafe impl Allocator for Place {
     }
 }
 
+/// **A value with a block of its own** (D5, D6; #1536): what a shared value
+/// is below its lock. What is placed in the block while the value is
+/// [`inside`](Housed::inside) - a door, its construction, its rebuild - is
+/// the value's, not the task's that opened the door, and the value is
+/// dropped with its block in place, so what it still holds there goes back
+/// to the block before the block goes.
+///
+/// **A value that leaves the door is not in the block** (D9, supervisor
+/// 2026-11-10 on #1536): `Clone` builds outside, and the compiler places in
+/// the block only what the door keeps to itself, so nothing the door hands
+/// out points into a block that is not in place where it is freed.
+pub struct Housed<T> {
+    /// The value; dropped by hand, inside its block.
+    value: std::mem::ManuallyDrop<T>,
+    /// Its block, taken when something is first placed in it.
+    block: Block,
+}
+
+impl<T> Housed<T> {
+    /// A value built already, outside the block.
+    pub fn new(value: T) -> Housed<T> {
+        Housed {
+            value: std::mem::ManuallyDrop::new(value),
+            block: Block::default(),
+        }
+    }
+
+    /// A value built inside its own block (D5: the construction is the
+    /// value's).
+    #[track_caller]
+    pub fn built(build: impl FnOnce() -> T) -> Housed<T> {
+        let block = Block::default();
+        let value = {
+            let _in = enter(&block);
+            build()
+        };
+        Housed {
+            value: std::mem::ManuallyDrop::new(value),
+            block,
+        }
+    }
+
+    /// **The value with its block in place**, for a door: what `f` places
+    /// in the block is the value's, and a full block ends `f` in [`full`],
+    /// which its lock reads as a poison (D6).
+    #[inline]
+    #[track_caller]
+    pub fn inside<R>(&mut self, f: impl FnOnce(&mut T) -> R) -> R {
+        let _in = enter(&self.block);
+        f(&mut self.value)
+    }
+
+    /// The value, read without its block in place: for a door that only
+    /// reads and builds nothing.
+    #[inline]
+    pub fn get(&self) -> &T {
+        &self.value
+    }
+}
+
+impl<T> Drop for Housed<T> {
+    fn drop(&mut self) {
+        let _in = enter(&self.block);
+        // SAFETY: the value is dropped once, here, and never read again: the
+        // `Housed` is being dropped.
+        unsafe { std::mem::ManuallyDrop::drop(&mut self.value) };
+    }
+}
+
+impl<T: Default> Default for Housed<T> {
+    fn default() -> Housed<T> {
+        Housed::new(T::default())
+    }
+}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for Housed<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.value.fmt(f)
+    }
+}
+
 mod list;
 pub mod text;
 

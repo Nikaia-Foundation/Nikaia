@@ -1,0 +1,38 @@
+// A method that hands back a `T?` field of `self` hands back a view of it,
+// written `-> U? from self`, `-> ref U?`, or inferred (ADR-views-3 D7, D8,
+// #1486); a `null` it hands back points into nothing.
+struct U { s: String, n: i64 }
+struct H { o: U?, p: U }
+impl H {
+    fn inferred(self) -> U? { return self.o }
+    fn named(self) -> U? from self { return self.o }
+    fn tail(self) -> U? from self { self.o }
+    fn marked(self) -> ref U? { return self.o }
+    fn maybe(self, c: bool) -> U? from self {
+        if c {
+            return null
+        }
+        return self.o
+    }
+    fn plain(self) -> U? from self { return self.p }
+}
+fn pick(h: H) -> U? from h { return h.o }
+fn mk(t: String) -> String {
+    let mut g = String()
+    g.push_str(t)
+    return g
+}
+fn main() throws {
+    let h = H { o: U { s: mk("o"), n: 1 }, p: U { s: mk("p"), n: 2 } }
+    let u = h.inferred()
+    println(u?.s ?? "none")
+    println(h.named()?.s ?? "none")
+    println(h.tail()?.s ?? "none")
+    println(h.marked()?.s ?? "none")
+    println(h.maybe(true)?.s ?? "none")
+    println(h.maybe(false)?.s ?? "none")
+    println(h.plain()?.s ?? "none")
+    println(h.plain()?.n ?? 0)
+    println(pick(h)?.s ?? "none")
+    println(h.p.s)
+}

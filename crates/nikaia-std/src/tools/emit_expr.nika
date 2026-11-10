@@ -270,6 +270,10 @@ impl EmitState {
             return
         }
         self.emit_expr_written(world, walk, out, host, node, depth, flow, scope)
+        // **A `T?` place handed back into a `ref T?`** (#1486).
+        if self.facts.lent_option_results.contains(node_key(node)) {
+            out.push(".as_ref()")
+        }
     }
 
     /// **Whether a call that can fail inside the expression a `catch` guards

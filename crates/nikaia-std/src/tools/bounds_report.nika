@@ -225,9 +225,61 @@ fn bounds_report_lambda(
 	}
 }
 
+/// **The bytes `--bounds-trace` asks about in this file** (#1495): `asked`
+/// is `LINE` or `FILE:LINE`, a file named by the end of its path; the
+/// result is `[from, to]` of that line, empty where it names another file
+/// or no line of this one.
+pub fn bounds_report_trace(source: ref String, path: ref String, asked: ref String) -> Vec[i64] {
+	let mut number = text::parse_i64(asked.trim())
+	let split = asked.rsplit_once(":")
+	if split != null {
+		let (file, line) = split ?? ("", "")
+		if !path.ends_with(file) {
+			return []
+		}
+		number = text::parse_i64(line.trim())
+	}
+	let wanted = number ?? return []
+	if wanted < 1 {
+		return []
+	}
+	let mut seen = 1
+	let mut from = -1
+	if wanted == 1 {
+		from = 0
+	}
+	let mut at = 0
+	while at < source.bytes.len() {
+		if source.bytes[at] == 10 {
+			if seen == wanted {
+				return [from, at + 1]
+			}
+			seen += 1
+			if seen == wanted {
+				from = at + 1
+			}
+		}
+		at += 1
+	}
+	if from < 0 {
+		return []
+	}
+	return [from, source.bytes.len()]
+}
+
+/// **`--bounds-trace`'s block** (#1495), after the report: the line asked,
+/// then each goal of a statement starting there with the facts it was asked
+/// with, and each read with its verdict.
+pub fn bounds_report_trace_rows(asked: ref String, rows: ref Vec[String]) -> String {
+	if rows.is_empty() {
+		return f"bounds trace {asked}: no goal\n"
+	}
+	return f"bounds trace {asked}:\n{rows.join("\n")}\n"
+}
+
 /// The line of a byte offset, counted from 1.
 fn bounds_report_line(source: ref String, at: i64) -> i64 {
-	let end = at.min(source.len())
+	let end = at.min(source.bytes.len())
 	return source.bytes[0..<end].iter().filter(fn(b) { b == 10 }).count() + 1
 }
 

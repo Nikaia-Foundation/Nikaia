@@ -200,6 +200,7 @@ pub(crate) struct FieldDecl {
 pub(crate) struct FnDecl {
     pub(crate) params: Vec<Type>,
     pub(crate) changes: Vec<bool>,
+    pub(crate) keeps: Vec<bool>,
     pub(crate) result: Option<Type>,
     published: bool,
     pub(crate) of_a_trait: bool,
@@ -281,7 +282,7 @@ pub(crate) fn declare_rules(def: &GrammarDef, names: &winnow_grammar::InternerCo
     for rule in def.rules.iter() {
         let key = format!("{}::{}", gname, names.resolve(rule.name));
         declared.rules.insert(nikaia_std::block::Text::from(key.to_string()));
-        declared.fns.insert(key, FnDecl { params: vec![], changes: vec![], result: match rule.ret_type.as_ref() {
+        declared.fns.insert(key, FnDecl { params: vec![], changes: vec![], keeps: vec![], result: match rule.ret_type.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, published: def.public && rule.is_entry, of_a_trait: false, changes_self: false });
@@ -299,11 +300,13 @@ pub(crate) fn declare_function(item: &Item, target: Option<&str>, names: &winnow
     if target.is_some() { declared.methods.entry(nikaia_std::block::Text::from(own.to_string())).or_insert(vec![]).push(nikaia_std::block::Text::from(key.to_string())); }
     let mut params: Vec<Type> = vec![];
     let mut changes: Vec<bool> = vec![];
+    let mut keeps: Vec<bool> = vec![];
     for arg in args.iter() {
         params.push(arg.ty.clone());
         changes.push(arg.mutable);
+        keeps.push(arg.keep);
     }
-    declared.fns.insert(key, FnDecl { params, changes, result: match ret_type {
+    declared.fns.insert(key, FnDecl { params, changes, keeps, result: match ret_type {
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
     }, published: is_public || of_a_trait, of_a_trait, changes_self });
@@ -431,6 +434,7 @@ pub(crate) struct TierWalk {
     pub(crate) late: collections::BTreeSet<i64>,
     pub(crate) late_args: collections::BTreeSet<i64>,
     pub(crate) late_params: collections::BTreeSet<i64>,
+    pub(crate) late_lent: collections::BTreeSet<i64>,
     pub(crate) keeping: collections::BTreeSet<String>,
     pub(crate) kept_into: collections::BTreeSet<(String, i64)>,
     pub(crate) param_arms: collections::BTreeSet<i64>,
@@ -2267,6 +2271,7 @@ pub(crate) fn lendable_parameter(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return None };
     if function.of_a_trait || at >= function.params.len() as i64 || *nikaia_std::index::get(&function.changes, nikaia_std::index::at(at)) { return None; }
+    if at < function.keeps.len() as i64 && *nikaia_std::index::get(&function.keeps, nikaia_std::index::at(at)) { return None; }
     let ty = (*nikaia_std::index::get(&function.params, nikaia_std::index::at(at))).clone();
     if !plain_string(ask.names, &ty) || ty.is_view { return None; }
     Some(seen(&parameter, &no_path(), walk))
@@ -2891,6 +2896,7 @@ pub(crate) struct TierLateFound {
     pub(crate) params: collections::BTreeSet<i64>,
     pub(crate) moved: collections::BTreeMap<i64, (String, String)>,
     pub(crate) held: collections::BTreeSet<i64>,
+    pub(crate) lent: collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2926,10 +2932,12 @@ pub(crate) struct TierLate {
     pub(crate) held: collections::BTreeMap<String, Vec<(i64, (String, String))>>,
     pub(crate) held_moves: collections::BTreeSet<i64>,
     pub(crate) temporaries: collections::BTreeSet<String>,
+    pub(crate) lendable: collections::BTreeSet<i64>,
+    pub(crate) lent: collections::BTreeSet<i64>,
 }
 
 pub(crate) fn late_arms(program: &Program, declared: &TextDeclared, ask: &TierAsk<'_, '_, '_, '_, '_>) -> TierLateFound {
-    let mut late = TierLate { bound: collections::BTreeMap::new(), frames: vec![], serial: 0, loops: 0, leaving: 0, leaves: vec![], pending: vec![], found: collections::BTreeSet::new(), args: collections::BTreeSet::new(), params: collections::BTreeSet::new(), params_from: 0, params_upto: 0, branch_args: vec![], branches: 0, viewing: collections::BTreeSet::new(), viewing_methods: collections::BTreeSet::new(), variants: collections::BTreeSet::new(), views: collections::BTreeMap::new(), viewers: collections::BTreeMap::new(), moved: collections::BTreeMap::new(), changing_methods: collections::BTreeSet::new(), text_fields: collections::BTreeSet::new(), held: collections::BTreeMap::new(), held_moves: collections::BTreeSet::new(), temporaries: collections::BTreeSet::new() };
+    let mut late = TierLate { bound: collections::BTreeMap::new(), frames: vec![], serial: 0, loops: 0, leaving: 0, leaves: vec![], pending: vec![], found: collections::BTreeSet::new(), args: collections::BTreeSet::new(), params: collections::BTreeSet::new(), params_from: 0, params_upto: 0, branch_args: vec![], branches: 0, viewing: collections::BTreeSet::new(), viewing_methods: collections::BTreeSet::new(), variants: collections::BTreeSet::new(), views: collections::BTreeMap::new(), viewers: collections::BTreeMap::new(), moved: collections::BTreeMap::new(), changing_methods: collections::BTreeSet::new(), text_fields: collections::BTreeSet::new(), held: collections::BTreeMap::new(), held_moves: collections::BTreeSet::new(), temporaries: collections::BTreeSet::new(), lendable: collections::BTreeSet::new(), lent: collections::BTreeSet::new() };
     for (key, function) in declared.fns.iter() {
         let result = match function.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         if late_holds_text(result, declared, ask, 0) { late.viewing.insert(nikaia_std::block::Text::from(key.to_string())); }
@@ -2962,7 +2970,7 @@ pub(crate) fn late_arms(program: &Program, declared: &TextDeclared, ask: &TierAs
             if late.held_moves.contains(&node) { held.insert(node.clone()); }
         }
     }
-    TierLateFound { arms: late.found.copy_owned(), args: late.args.copy_owned(), params: late.params.copy_owned(), moved, held }
+    TierLateFound { arms: late.found.copy_owned(), args: late.args.copy_owned(), params: late.params.copy_owned(), moved, held, lent: late.lent.copy_owned() }
 }
 
 pub(crate) fn late_function(item: &Item, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) {
@@ -3089,6 +3097,7 @@ pub(crate) fn late_stmt(stmt: &Stmt, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
         Stmt::Let { names, value, .. } => {
             let sources = late_sources(value, ask, &late);
             let alias = late_alias(value, ask, &late); #[allow(clippy::redundant_locals)] let sources = sources;
+            late_lendable(value, ask, late);
             late_expr(value, false, ask, late);
             for name in names.iter() {
                 let name = *name;
@@ -3511,6 +3520,26 @@ pub(crate) fn late_held_view(name: &str, value: &Expr, ask: &TierAsk<'_, '_, '_,
     }
 }
 
+pub(crate) fn late_lendable(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) {
+    match value {
+        Expr::StructLit { fields, .. } => { for field in fields.iter() { late_lendable_part(match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue }, ask, late); } },
+        Expr::ListLit { items, .. } => { for item in items.iter() { late_lendable_part(item, ask, late); } },
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let callee = match tier_callee(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return };
+            if late.variants.contains(&callee) { for arg in args.iter() { late_lendable_part(arg, ask, late); } }
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn late_lendable_part(part: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) {
+    match part {
+        Expr::Variable(_, _) => { late.lendable.insert(node_key(part)); },
+        _ => { late_lendable(part, ask, late); },
+    }
+}
+
 pub(crate) fn late_moved(value: &Expr, position: Option<&(String, String)>, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) {
     if late.leaving > 0 { return; }
     let word = match value {
@@ -3518,6 +3547,14 @@ pub(crate) fn late_moved(value: &Expr, position: Option<&(String, String)>, ask:
         _ => return,
     };
     let key = match late_key(&word, &late) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if late.lendable.contains(&node_key(value)) {
+        late.lent.insert(node_key(value));
+        late_defer(TierLateArm { at: node_key(value), name: nikaia_std::block::Text::from(word.to_string()), serial: late_serial(&word, &late), loops: late.loops, argument: false }, late);
+        match position {
+            None => { },
+            Some(found) => { if !late.moved.contains_key(&node_key(value)) { late.moved.insert(node_key(value), found.clone()); } },
+        }
+    }
     let held = match match *nikaia_std::index::get(&late.viewers, &key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -3590,7 +3627,7 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &m
         Expr::Variable(name, _) => {
             let name = *name;
             let kinds = kinds_of_local(ask.names.resolve(name), &walk);
-            let late = walk.late.contains(&node_key(expr)) || tier_arm_read(node_key(expr), walk);
+            let late = walk.late.contains(&node_key(expr)) || tier_arm_read(node_key(expr), walk) || tier_lent_view(expr, ask, &walk);
             if late { count_arm_use(expr, ask, walk); }
             if late && kinds.owned && !kinds.view && !kinds.either && !kinds.still {
                 walk.flows.viewed_arms.insert(node_key(expr));
@@ -3823,6 +3860,16 @@ pub(crate) fn a_range(index: &Expr) -> bool { matches!(index, Expr::Range { .. }
 pub(crate) fn name_kinds(name: &str, walk: &TierWalk) -> Kinds {
     if walk.declared.comptime_texts.contains(name) { return still_kinds(); }
     owned_kinds()
+}
+
+pub(crate) fn tier_lent_view(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &TierWalk) -> bool {
+    if !walk.late_lent.contains(&node_key(expr)) { return false; }
+    let name = match expr {
+        Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name) },
+        _ => return false,
+    };
+    let local = match tier_local(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    local.from.is_some() && !local.made
 }
 
 pub(crate) fn kinds_of_local(name: &str, walk: &TierWalk) -> Kinds {
@@ -5074,6 +5121,7 @@ pub(crate) fn viewed_param_arms(flows: &Flows, before: &collections::BTreeSet<i6
 pub(crate) fn a_keeping_target(function: &FnDecl, at: i64, ask: &TierAsk<'_, '_, '_, '_, '_>) -> bool {
     if function.published || function.of_a_trait || at >= function.params.len() as i64 { return false; }
     if at < function.changes.len() as i64 && *nikaia_std::index::get(&function.changes, nikaia_std::index::at(at)) { return false; }
+    if at < function.keeps.len() as i64 && *nikaia_std::index::get(&function.keeps, nikaia_std::index::at(at)) { return false; }
     let ty = (*nikaia_std::index::get(&function.params, nikaia_std::index::at(at))).clone();
     if !plain_string(ask.names, &ty) || ty.is_nullable || ty.is_view { return false; }
     true
@@ -5164,11 +5212,12 @@ pub(crate) fn tier_word(tier: &Tier) -> &'static str {
 pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_, '_>) -> TextTiers {
     let declared = declared_of(program, ask.names);
     let text = string_type(&declared, ask.names);
-    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: collections::BTreeSet::new(), late_args: collections::BTreeSet::new(), late_params: collections::BTreeSet::new(), keeping: collections::BTreeSet::new(), kept_into: collections::BTreeSet::new(), param_arms: collections::BTreeSet::new(), reads: no_reads(), function: String::from(""), stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap::new(), closure_owns: false };
+    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: collections::BTreeSet::new(), late_args: collections::BTreeSet::new(), late_params: collections::BTreeSet::new(), late_lent: collections::BTreeSet::new(), keeping: collections::BTreeSet::new(), kept_into: collections::BTreeSet::new(), param_arms: collections::BTreeSet::new(), reads: no_reads(), function: String::from(""), stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap::new(), closure_owns: false };
     let found = late_arms(program, &walk.declared, ask);
     walk.late = found.arms;
     walk.late_args = found.args;
     walk.late_params = found.params;
+    walk.late_lent = found.lent;
     let units = tier_units(program);
     let mut found_flows: Vec<Flows> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut found_reads: Vec<TierReads> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -6073,7 +6122,8 @@ pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, pl
     match item {
         Item::Fn { name, receiver, args, ret_type, body, is_extern, ret_from, .. } => {
             let is_extern = *is_extern; let name = *name;
-            if is_extern || !hb_result_may_be_a_view((ret_type).as_ref(), words, plain) { return; }
+            let nullable = hb_nullable_may_be_a_view((ret_type).as_ref(), words, plain);
+            if is_extern || !nullable && !hb_result_may_be_a_view((ret_type).as_ref(), words, plain) { return; }
             let mut sources: Vec<i64> = vec![];
             if !ret_from.is_empty() {
                 for (at, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) { if ret_from.iter().any(|source| { words.resolve(*source) == words.resolve(arg.name) }) { sources.push(at as i64); } }
@@ -6086,6 +6136,7 @@ pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, pl
                 return;
             }
             let roots = match hb_roots(body, &args, hb_plain_self((receiver).as_ref()), words, opted, &views) { Some(__nikaia_value) => __nikaia_value, None => return };
+            if nullable && (roots.is_empty() || roots.iter().any(|root| { AsRef::<str>::as_ref(&(root)) != AsRef::<str>::as_ref(&("self")) })) { return; }
             for (at, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) { if roots.contains(words.resolve(arg.name)) { sources.push(at as i64); } }
             for arg in args.iter_mut() { if roots.contains(words.resolve((*arg).name)) { hb_set(&mut (*arg).ty); } }
             hb_set_maybe(&mut *ret_type);
@@ -6301,6 +6352,14 @@ pub(crate) fn hb_result_may_be_a_view(ty: Option<&Type>, words: &winnow_grammar:
     !t.is_view && hb_type_may_be_a_view(t, words, plain)
 }
 
+pub(crate) fn hb_nullable_may_be_a_view(ty: Option<&Type>, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>) -> bool {
+    let t = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if !t.is_nullable || t.is_view { return false; }
+    let mut held = t.clone();
+    held.is_nullable = false;
+    hb_type_may_be_a_view(&held, words, plain)
+}
+
 pub fn hb_type_may_be_a_view(t: &Type, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>) -> bool {
     if t.is_nullable || t.is_tuple || t.is_slice || t.is_mut || (*t.code).is_some() || t.count.is_some() || t.either || t.lasting { return false; }
     let name = words.resolve(t.name);
@@ -6315,6 +6374,7 @@ pub(crate) fn hb_roots(body: &Block, args: &[FnArg], plain_self: bool, words: &w
     let mut roots: collections::BTreeSet<String> = collections::BTreeSet::new();
     for way in ways.iter() {
         let way = *way;
+        if hb_a_null(way) { continue; }
         if hb_place_root(way, words).is_some() {
             roots.insert(match hb_root(way, body, args, plain_self, words, opted, false) { Some(__nikaia_value) => __nikaia_value, None => return None });
             continue;
@@ -6327,6 +6387,8 @@ pub(crate) fn hb_roots(body: &Block, args: &[FnArg], plain_self: bool, words: &w
     }
     Some(roots)
 }
+
+pub(crate) fn hb_a_null(way: &Expr) -> bool { matches!(way, Expr::LitNull(_)) }
 
 pub(crate) fn hb_root(way: &Expr, body: &Block, args: &[FnArg], plain_self: bool, words: &winnow_grammar::InternerContext, opted: bool, lent: bool) -> Option<String> {
     let root = match hb_place_root(way, words) { Some(__nikaia_value) => __nikaia_value, None => return None };

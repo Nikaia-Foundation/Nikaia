@@ -545,6 +545,10 @@ pub(crate) fn check_core_lambda_a_unit(ty: &Ty) -> bool {
     }
 }
 
+pub fn check_core_a_field(value: &Expr) -> bool { matches!(value, Expr::Field { .. }) }
+
+pub fn check_core_a_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
+
 pub(crate) fn check_core_lambda_held(ty: &Ty) -> Ty {
     match ty {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
@@ -599,6 +603,13 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         }, || Ty::Unknown)) {
             lending = true;
             state.facts.lent_returns.insert(span.start as i64);
+        }
+        if lending && check_core_a_field(given) && check_core_a_nullable(&found) && !found.is_a_view() && check_core_a_nullable(&nikaia_std::index::or(match state.expected.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || Ty::Unknown)) {
+            state.facts.lent_returns.remove(&(span.start as i64));
+            state.facts.lent_option_results.insert(node_key(given));
         }
     }
     state.flow.lambda_expected = None;

@@ -287,7 +287,7 @@ pub fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut CheckStat
     let mut way: &'static str = "";
     if what == "handed back" { way = " to return"; }
     let notes: Vec<String> = vec![format!("`mut {}` is passed as `ref mut`, so the caller's `{}` is changed in place and stays the caller's. Giving it away would take it from them.", name, ty.text())];
-    let help: String = format!("Write `{}.clone()` for a copy{}, or drop the `mut` if the function is meant to use up its value.", name, way); #[allow(clippy::redundant_locals)] let notes = notes;
+    let help: String = format!("Write `{}.clone()` for a copy{}, or, if the function is meant to use up its value, take `keep {}` and change a local of its own: `let mut own = {}`.", name, way, name, name); #[allow(clippy::redundant_locals)] let notes = notes;
     state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: a `mut` parameter is only borrowed.", name), notes, Some(help)));
 }
 

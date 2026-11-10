@@ -1,0 +1,90 @@
+/// **Lists grown together keep their lengths' relation** (ADR-306 D23,
+/// D25, #1470): a loop that pushes once to `a` and once (or twice) to `b`
+/// each turn leaves `b` as long as `a` (or twice as long), and two fields
+/// every method of the type grows so are kept that way. A method that
+/// pushes to only one of them leaves the reads checked.
+struct W {
+	atoms: Vec[i64],
+	row: Vec[i64],
+	lits: Vec[Vec[i64]],
+}
+
+struct V {
+	atoms: Vec[i64],
+	lits: Vec[Vec[i64]],
+}
+
+pub fn local_same(n: i64, k: i64) -> i64 {
+	let mut a: Vec[i64] = []
+	let mut b: Vec[i64] = []
+	let mut i = 0
+	while i < n {
+		a.push(i)
+		b.push(i)
+		i += 1
+	}
+	if k < 0 || k >= a.len() {
+		return 0
+	}
+	b[k]
+}
+
+pub fn local_twice(n: i64, k: i64) -> i64 {
+	let mut a: Vec[i64] = []
+	let mut b: Vec[Vec[i64]] = []
+	let mut i = 0
+	while i < n {
+		a.push(i)
+		b.push([])
+		b.push([])
+		i += 1
+	}
+	if k < 0 || k >= a.len() {
+		return 0
+	}
+	b[2 * k].len() + b[2 * k + 1].len()
+}
+
+impl W {
+	pub fn add(ref mut self, x: i64) {
+		self.atoms.push(x)
+		self.row.push(0)
+		self.lits.push([])
+		self.lits.push([])
+	}
+
+	pub fn get(ref self, a: i64) -> i64 {
+		if a < 0 || a >= self.atoms.len() {
+			return 0
+		}
+		self.row[a] + self.lits[2 * a].len() + self.lits[2 * a + 1].len()
+	}
+}
+
+impl V {
+	pub fn add(ref mut self, x: i64) {
+		self.atoms.push(x)
+		self.lits.push([])
+		self.lits.push([])
+	}
+
+	pub fn grow(ref mut self) {
+		self.lits.push([])
+	}
+
+	pub fn get(ref self, a: i64) -> i64 {
+		if a < 0 || a >= self.atoms.len() {
+			return 0
+		}
+		self.lits[2 * a].len() + self.lits[2 * a + 1].len()
+	}
+}
+
+fn main() throws {
+	let mut w = W { atoms: [], row: [], lits: [] }
+	w.add(3)
+	let mut v = V { atoms: [], lits: [] }
+	v.add(4)
+	v.grow()
+	println(f"{w.get(0)} {v.get(0)} {local_same(3, 1)} {local_twice(3, 1)}")
+}

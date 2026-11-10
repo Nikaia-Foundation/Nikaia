@@ -132,6 +132,9 @@ impl EmitState {
                 if member == "supervisor::Handed" { handed = true; }
             }
             if escalated && handed { out.push(&format!("impl{} From<nikaia_std::supervisor::Stopped> for {}{} {{\n    fn from(error: nikaia_std::supervisor::Stopped) -> {}{} {{\n        match error {{\n            nikaia_std::supervisor::Stopped::Escalated(e) => e.into(),\n            nikaia_std::supervisor::Stopped::Handed(e) => e.into(),\n        }}\n    }}\n}}\n", decl, name, params, name, params)); }
+            let mut io_failed = false;
+            for member in members.iter() { if member == "io::IoError" { io_failed = true; } }
+            if io_failed && timed_out { out.push(&format!("impl{} From<nikaia_std::net::ReadFailed> for {}{} {{\n    fn from(error: nikaia_std::net::ReadFailed) -> {}{} {{\n        match error {{\n            nikaia_std::net::ReadFailed::Io(e) => e.into(),\n            nikaia_std::net::ReadFailed::TimedOut(e) => e.into(),\n        }}\n    }}\n}}\n", decl, name, params, name, params)); }
             if crashed && timed_out { out.push(&format!("impl{} From<nikaia_std::task::Late> for {}{} {{\n    fn from(error: nikaia_std::task::Late) -> {}{} {{\n        match error {{\n            nikaia_std::task::Late::Crashed(e) => e.into(),\n            nikaia_std::task::Late::TimedOut(e) => e.into(),\n        }}\n    }}\n}}\n", decl, name, params, name, params)); }
             out.push(&format!("impl{} std::fmt::Display for {}{} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        match self {{\n", decl, name, params));
             for member in members.iter() {

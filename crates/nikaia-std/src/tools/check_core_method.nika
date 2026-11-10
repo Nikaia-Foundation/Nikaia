@@ -147,13 +147,13 @@ fn check_core_method_an_empty_map_read(state: ref CheckState, world: ref CheckWo
     return at
 }
 
-/// The option that is a witness: `set`'s `after`, `join`'s `within`; `-1`
-/// none.
+/// The option that is a witness: `set`'s `after`, `join`'s and a
+/// connection's `read`'s `within`; `-1` none.
 fn check_core_method_witness(world: ref CheckWorld, method: ref String, config: ref Vec[ConfigArg]) -> i64 sync {
     let mut wanted: String = ""
     if method == "set" {
         wanted = "after"
-    } else if method == "join" {
+    } else if method == "join" || method == "read" {
         wanted = "within"
     } else {
         return -1
@@ -361,6 +361,14 @@ fn check_core_method_run(on: ref Ty) -> Ty? {
 fn check_core_method_task_handle(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, .. } => name == "TaskHandle" || name == CHILD_HANDLE,
+        else => false,
+    }
+}
+
+/// `net::Connection`, whose `read(within: d)` waits at most `d` (ADR-326 D8).
+pub fn check_core_method_connection(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, .. } => name == "net::Connection",
         else => false,
     }
 }
@@ -1236,7 +1244,8 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     }
     // **The witness door, now that the receiver is typed** (ADR-281 D26),
     // before `NK2203`.
-    let within = witness >= 0 && check_core_method_task_handle(on) && name == "join"
+    let read_within = witness >= 0 && check_core_method_connection(on) && name == "read"
+    let within = (witness >= 0 && check_core_method_task_handle(on) && name == "join") || read_within
     let door = witness >= 0 && locked_content_of(on) != null && name == "set"
     if witness >= 0 && !within && !door {
         // Not a lock after all, so it was an option like any other.
@@ -1255,6 +1264,9 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     if within {
         let mut given: Vec[Expr] = args.clone()
         given.push(config[witness].value.clone())
+        if read_within {
+            return check_core_method_called(state, world, host, expr, on, receiver, method, given, "read(within)", span)
+        }
         if on_timeout >= 0 {
             given.push(config[on_timeout].value.clone())
             return check_core_method_called(state, world, host, expr, on, receiver, method, given, "join(within, on_timeout)", span)

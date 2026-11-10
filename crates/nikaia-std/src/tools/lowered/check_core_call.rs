@@ -393,9 +393,56 @@ pub(crate) fn check_core_call_unresolved<H: CheckHost>(state: &mut CheckState, w
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_rust_owner(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, contract: &FnContract, args: &[Expr], span: &Span) {
+    if !contract.described { return; }
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+    let current = match match state.current.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let own = match world.own.functions.get(&current) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if !own.public { return; }
+    let mut i: i64 = 0;
+    while i < args.len() as i64 && i < signature.params.len() as i64 {
+        let at: i64 = i;
+        i = i + 1;
+        let (param, ty) = (*nikaia_std::index::get(&signature.params, nikaia_std::index::at(at))).clone();
+        let owner = emit_rust_owner(&ty);
+        if owner == "" { continue; }
+        let arg = nikaia_std::index::get(&args, nikaia_std::index::at(at));
+        let written = match check_core_call_place_text(world, &arg) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let root: String = nikaia_std::block::Text::from(nikaia_std::index::or(written.split('.').next(), || "").to_string());
+        let local = match state.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !local.changing {
+            let held = match local.without_mut { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if held.kind != CheckKind::Parameter { continue; }
+        }
+        let what = if owner == "Vec" { "list" } else { "text" };
+        let notes: Vec<String> = vec![format!("`{}` takes its `{}` as Rust's `{}`, and a {} crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.", name, param, owner, what), format!("`{}` is a parameter of `pub fn {}`, so it was built by a caller the compiler does not see.", root, current)];
+        state.findings.push(check_refusal("NK2506", &check_span_at(world, &arg, span), format!("`{}` takes `{}` as its own, but the compiler can't follow it back to where it was built.", name, written), notes, Some(format!("Write `{}.clone()` to hand `{}` a copy.", written, name))));
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_place_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr) -> Option<String> {
+    match arg {
+        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string())) },
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            let inner = match check_core_call_place_text(world, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return Some(format!("{}.{}", inner, world.words.resolve(name)));
+        },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_described<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, key: &str, contract: &FnContract, args: &[Expr], found: &[Ty], config: &[ConfigArg], passed: &[(String, Ty)], span: &Span) -> Ty {
     state.reachable(name, contract, span);
+    check_core_call_rust_owner(state, world, name, contract, args, span);
     if contract.threads.may() { state.crosses_into_an_unseen_call(world, name, args, found, config, passed, span, &format!("`{}` is described as starting a thread of its own (`threads = true`), so what it is given may be looked at from one", name)); }
     let given = check_core_call_from_given(&state, world, host, contract, args);
     state.may_fail_here(world, host, key, &given, span);

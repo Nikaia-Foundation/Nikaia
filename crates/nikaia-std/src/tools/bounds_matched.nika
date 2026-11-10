@@ -16,7 +16,7 @@ pub struct BmMatched {
     pub text_lengths: collections::BTreeMap[String, Range],
     pub text_classes: collections::BTreeMap[String, Range],
     /// A binding of a rule of the grammar's own, by name, with the rule's
-    /// name: its value is what the rule's actions hand back (ADR-306 D30).
+    /// name: its value is what the rule's actions hand back (ADR-306 D32).
     pub rule_binds: collections::BTreeMap[String, String],
 }
 

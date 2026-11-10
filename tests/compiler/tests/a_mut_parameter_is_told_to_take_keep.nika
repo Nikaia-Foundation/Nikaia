@@ -1,0 +1,12 @@
+// NK1131 over a `mut` parameter handed back: the help names `keep` and a
+// local of its own, not dropping the `mut`, which leads to NK1138
+// (ADR-views-3, #1486).
+struct U { s: String }
+fn grow(mut u: U) -> U {
+    u.s.push_str("!")
+    return u
+}
+fn main() throws {
+    let mut u = U { s: "x" }
+    println(grow(u).s)
+}

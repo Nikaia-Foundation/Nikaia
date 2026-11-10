@@ -1496,7 +1496,8 @@ pub fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckW
 /// `within`, of a door's `set` its `after`.
 pub fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, inner: Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], witness: i64, span: ref Span) -> Ty sync {
     let name: String = f"{world.words.resolve(method)}"
-    let within = witness >= 0 && check_core_call_on_task_handle(inner) && name == "join"
+    let read_within = witness >= 0 && check_core_method_connection(inner) && name == "read"
+    let within = (witness >= 0 && check_core_call_on_task_handle(inner) && name == "join") || read_within
     let door = witness >= 0 && locked_content_of(inner) != null && name == "set"
     if witness >= 0 && !within && !door {
         check_core_expr(state, world, host, config[witness].value, span)
@@ -1515,7 +1516,9 @@ pub fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref Ch
     } else if within {
         given.push(config[witness].value.clone())
         written = "join(within)"
-        if timeout_at >= 0 {
+        if read_within {
+            written = "read(within)"
+        } else if timeout_at >= 0 {
             given.push(config[timeout_at].value.clone())
             written = "join(within, on_timeout)"
         }

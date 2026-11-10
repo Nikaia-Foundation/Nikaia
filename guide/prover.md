@@ -194,9 +194,8 @@ The two functions differ only in the counter's type, and the second check is rig
 list may hold up to 2^60 elements, which an `i64` counter can count and an `i32` cannot.
 The prover takes no shortcut on the size of the data.
 
-By default the compiler asks only `assert`s through a loop's invariant. With
-`prove-through-loops:on` in `optimization` it asks index and overflow checks the same way.
-In `probe` the slot `at` wraps round a table of 16384 entries, and only an invariant carried
+The compiler asks index and overflow checks through a loop's invariant, as it asks an
+`assert`. In `probe` the slot `at` wraps round a table of 16384 entries, and only an invariant carried
 from turn to turn shows that it stays inside:
 
 ```nika
@@ -222,12 +221,6 @@ fn main() throws {
 
 ```text
 $ nikaia check --bounds probe.nika
-bounds in probe.nika: 2 indexes, 1 proved; 1 operations, 0 proved - written without their check: indexes off, operations off
-     5  xs[at]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
-     8  at + 1  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
-    16  xs[5]   proved
-Checked probe.nika
-$ nikaia check --bounds --optimization=prove-through-loops:on probe.nika
 bounds in probe.nika: 2 indexes, 2 proved; 1 operations, 1 proved - written without their check: indexes off, operations off
      5  xs[at]  proved
      8  at + 1  proved
@@ -235,8 +228,9 @@ bounds in probe.nika: 2 indexes, 2 proved; 1 operations, 1 proved - written with
 Checked probe.nika
 ```
 
-The setting changes what is proved, and so what the other two settings may leave out; it
-does not change what the program does.
+What is proved is the same in every build; `remove-bounds-checks` and
+`remove-overflow-checks` only say whether a proved check is left out. Neither changes what
+the program does.
 
 ## When a claim is not shown
 

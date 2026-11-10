@@ -25,6 +25,28 @@ pub(crate) fn emit_arg_opening_inside(inner: &Ty) -> String {
     }
 }
 
+pub fn emit_rust_owner(ty: &Ty) -> String {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; if view { String::from("") } else if name == "String" && args.is_empty() { String::from("String") } else if name == "Vec" && args.len() == 1 && !emit_ty_holds_text(nikaia_std::index::get(&args, 0)) { String::from("Vec") } else { String::from("") } },
+        _ => String::from(""),
+    }
+}
+
+pub(crate) fn emit_ty_holds_text(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, .. } => name == "String" || args.iter().any(|a| { emit_ty_holds_text(a) }),
+        Ty::Tuple(parts) => parts.iter().any(|a| { emit_ty_holds_text(a) }),
+        _ => true,
+    }
+}
+
+pub fn emit_rust_owner_param(described: &Ledger, callee: &str, i: i64) -> String {
+    let contract = match described.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+    if i >= signature.params.len() as i64 { return String::from(""); }
+    emit_rust_owner(&nikaia_std::index::get(&signature.params, nikaia_std::index::at(i)).1)
+}
+
 pub(crate) fn emit_arg_lends_own(contract: &FnContract, at: i64, library: &Ledger, described: &Ledger) -> bool { lends_in_own(contract, at, &vec![library, described]) }
 
 pub(crate) fn emit_arg_opening_in(contract: &FnContract, i: i64, library: &Ledger, described: &Ledger) -> String {
@@ -320,6 +342,8 @@ impl EmitState {
         let copy_in = lent_option && emit_arg_names_a_place(arg) && !self.facts.kept_functions.contains_key(&node_key(arg));
         if lent_option || lent_path { out.push("&"); }
         out.push(&before);
+        let rust_owner = if method_callee.is_none() && !lend && !change && !self.own_contracts.functions.contains_key(callee) { emit_rust_owner_param(&self.described, callee, i) } else { String::from("") };
+        if rust_owner == "Vec" { out.push("::std::vec::Vec::from("); } else if rust_owner == "String" { out.push("::std::string::String::from("); }
         if either { out.push("nikaia_std::either_text::either("); }
         let keeps_bytes = self.emit_arg_keeps_bytes(world, callee, method_callee, i);
         if keeps_bytes { out.push("&*nikaia_std::bytes::kept("); }
@@ -385,6 +409,7 @@ impl EmitState {
         if keeps_bytes { out.push(")"); }
         if either { out.push(")"); }
         if copy_in { out.push(".clone()"); }
+        if rust_owner != "" { out.push(")"); }
         out.push(&after);
         let copied = copies && !lend && !change && !self.facts.kept_args.contains(&node);
         if duplicate || copied { out.push(".clone()"); }
@@ -579,7 +604,7 @@ pub(crate) fn emit_arg_passing(names: &[String], lent: &[bool]) -> String {
     nikaia_std::block::Text::from(passed.join(", "))
 }
 
-pub(crate) fn emit_call_on_the_pool(key: &str) -> bool { key == "net::serve" || key == "supervisor::child" || key == "supervisor::run" || key == "task::scope" }
+pub fn emit_call_on_the_pool(key: &str) -> bool { key == "net::serve" || key == "net::Listener::serve" || key == "supervisor::child" || key == "supervisor::run" || key == "task::scope" }
 
 pub(crate) fn emit_call_tasks_channel(flow: &EmitFlow, scope: &EmitScope) -> String {
     if flow.handled_here { return String::from("Box<dyn std::error::Error>"); }
@@ -1269,6 +1294,10 @@ impl EmitState {
             }
         }
         if self.emit_call_supervised(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(true); }
+        if args.is_empty() && self.facts.placed_in_block.contains(&node_key(func)) {
+            out.push("nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block)");
+            return Ok(true);
+        }
         match func {
             Expr::Variable(name, _) => {
                 let name = *name;

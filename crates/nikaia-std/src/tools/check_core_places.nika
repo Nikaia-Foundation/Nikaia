@@ -292,7 +292,7 @@ fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref Check
                         if part.is_unknown() {
                             return Ty::Unknown
                         }
-                        return state.a_safe_reach(world, base, part)
+                        return state.a_safe_reach(world, base, part, inner.is_a_view())
                     },
                     else => {}
                 }

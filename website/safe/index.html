@@ -244,7 +244,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Checked while the program runs</span>
         <h3>How many run at once</h3>
-        <p><code>async(limit: n) { … }</code> lets at most <code>n</code> of its tasks run at once, and the others wait, unstarted, in the order they are written. <code>admission:</code> names the strategy that decides when the next one starts, and on a form that starts one task, when that task starts. A <code>limit:</code> on a form that starts one task is refused before the program runs. The same options work on <code>xs.par_iter()</code>, and <code>within: d</code> there makes the walk fail with <code>task::TimedOut</code> once <code>d</code> has run out. Serving many connections at once is not possible yet.</p>
+        <p><code>async(limit: n) { … }</code> lets at most <code>n</code> of its tasks run at once, and the others wait, unstarted, in the order they are written. <code>admission:</code> names the strategy that decides when the next one starts, and on a form that starts one task, when that task starts. A <code>limit:</code> on a form that starts one task is refused before the program runs. The same options work on <code>xs.par_iter()</code>, and <code>within: d</code> there makes the walk fail with <code>task::TimedOut</code> once <code>d</code> has run out. <code>net::serve</code> runs each connection in a task of its own, so a client that sends nothing holds up only its own connection, and the HTTP server answers <code>500</code> to a request whose handler panics and goes on serving.</p>
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-async-5.html" | relative_url }}">ADR-async-5, D15 →</a>
       </div>
       <div class="safe-tile safe-tile-b">
@@ -260,9 +260,9 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-328.html" | relative_url }}">ADR-328 →</a>
       </div>
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-run">Specified, not built yet</span>
+        <span class="safe-chip safe-chip-build">Checked while the program runs</span>
         <h3>Clients that send slowly</h3>
-        <p>In the specification the HTTP server gives a request's head ten seconds to arrive, asks a body to keep a minimum rate, and keeps a quiet connection open for a set time between requests, answering 408 to a client that falls behind. Today the server counts reads while it waits for the head, not time, and closes each connection after one answer.</p>
+        <p>The HTTP server gives a request's head ten seconds from its first byte, however the client splits it, and asks a body to arrive at 500 bytes a second once two seconds have passed. A client that falls behind gets 408 and its connection closes. Between requests a connection stays open for 75 seconds, and a quiet one is closed after that. Each limit is an option of <code>http::listen</code>, and each read waits with <code>read(within:)</code>, so no task waits on a timer.</p>
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-326.html" | relative_url }}">ADR-326, D6-D9 →</a>
       </div>
     </div>
