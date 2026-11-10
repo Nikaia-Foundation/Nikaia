@@ -1247,6 +1247,11 @@ pub struct FnContract {
     /// For each entry of `requires` and then of `ensures`, the `assert` it was
     /// computed from, as written (ADR-269 D18).
     pub from: Vec[String],
+    /// **Whether a described Rust crate's description holds it** (ADR-327
+    /// D8, #1541): a `Vec` or `String` it owns crosses as it is, so the
+    /// caller must be able to follow the value back. Set where the
+    /// descriptions are read; never written into a ledger.
+    pub described: bool,
 }
 
 impl FnContract {
@@ -1283,6 +1288,7 @@ impl FnContract {
             ensures_each: [],
             inferred: [],
             from: [],
+            described: false,
         }
     }
 }

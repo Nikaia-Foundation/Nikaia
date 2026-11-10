@@ -519,10 +519,64 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
     return Ty::Unknown
 }
 
+/// **`NK2506`: a list or text a Rust owner takes that the compiler cannot
+/// follow back** (ADR-327 D8, #1541). The value crosses as it is, so it must
+/// have been built in the package; a `pub` function's parameter, or a part of
+/// one, was built by a caller this package does not see. A value read out of
+/// a shared value is a view in its door, `NK1102` already.
+fn check_core_call_rust_owner(mut state: CheckState, world: ref CheckWorld, name: ref String, contract: ref FnContract, args: ref Vec[Expr], span: ref Span) sync {
+    if !contract.described {
+        return
+    }
+    let signature = contract.signature ?? return
+    let current = state.current?.clone() ?? return
+    let own = world.own.functions.get(current) ?? return
+    if !own.public {
+        return
+    }
+    let mut i = 0
+    while i < args.len() && i < signature.params.len() {
+        let at = i
+        i = i + 1
+        let (param, ty) = signature.params[at].clone()
+        let owner = emit_rust_owner(ty)
+        if owner == "" {
+            continue
+        }
+        let arg = args[at]
+        let written = check_core_call_place_text(world, arg) ?? continue
+        let root: String = (written.split(".").next() ?? "").clone()
+        let local = state.binding(root) ?? continue
+        if !local.changing {
+            let held = local.without_mut ?? continue
+            if held.kind != CheckKind::Parameter {
+                continue
+            }
+        }
+        let what = if owner == "Vec" { "list" } else { "text" }
+        let notes: Vec[String] = [f"`{name}` takes its `{param}` as Rust's `{owner}`, and a {what} crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.", f"`{root}` is a parameter of `pub fn {current}`, so it was built by a caller the compiler does not see."]
+        state.findings.push(check_refusal("NK2506", check_span_at(world, arg, span), f"`{name}` takes `{written}` as its own, but the compiler can't follow it back to where it was built.", notes, f"Write `{written}.clone()` to hand `{name}` a copy."))
+    }
+}
+
+/// A variable or a field of one, as written (`bag.items`); `null` for
+/// anything else.
+fn check_core_call_place_text(world: ref CheckWorld, arg: ref Expr) -> String? sync {
+    return match arg {
+        Expr::Variable(name, _) => world.words.resolve(name).clone(),
+        Expr::Field { base, name, .. } => {
+            let inner = check_core_call_place_text(world, base) ?? return null
+            return f"{inner}.{world.words.resolve(name)}"
+        },
+        else => null,
+    }
+}
+
 /// A call the ledger describes: reached, asked, and typed from its signature
 /// and what the arguments bind.
 fn check_core_call_described[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: ref String, key: ref String, contract: ref FnContract, args: ref Vec[Expr], found: ref Vec[Ty], config: ref Vec[ConfigArg], passed: ref Vec[(String, Ty)], span: ref Span) -> Ty sync {
     state.reachable(name, contract, span)
+    check_core_call_rust_owner(state, world, name, contract, args, span)
     // **A described call is asked too, where the description says the word**
     // (ADR-290 D7).
     if contract.threads.may() {

@@ -471,8 +471,13 @@ pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembers
     let mut descriptions = host.empty_ledger();
     let mut moved: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for name in declared.iter() {
-        let ledger = match project_members_description_at(root, name, host) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let mut ledger = match project_members_description_at(root, name, host) { Some(__nikaia_value) => __nikaia_value, None => continue };
         described.insert(nikaia_std::block::Text::from(name.to_string()));
+        let functions: Vec<String> = ledger.functions.keys().map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect::<Vec<_>>();
+        for function in functions.iter() {
+            let contract = match ledger.functions.get_mut(function) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            contract.described = true;
+        }
         let differing = project_members_sources_that_moved(root, name, &ledger, host).await;
         if !differing.is_empty() { moved.insert(nikaia_std::block::Text::from(name.to_string()), differing); }
         descriptions = host.absorb(descriptions, ledger);

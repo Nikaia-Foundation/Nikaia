@@ -60,7 +60,13 @@ pub fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -
     if stale > 0 {
         refused.push(f"{stale} description{project_check_plural(stale)} of a crate that has moved")
     }
-    let crossings = project_check_count(findings, "NK25") - reaching - undescribed - stale
+    // **And `NK2506` is a list or text a Rust owner takes** (ADR-327 D8,
+    // #1541): no thread is in it, and the way out is a `.clone()`.
+    let unfollowed = project_check_count(findings, "NK2506")
+    if unfollowed > 0 {
+        refused.push(f"{unfollowed} value{project_check_plural(unfollowed)} handed to Rust that the compiler can't follow back")
+    }
+    let crossings = project_check_count(findings, "NK25") - reaching - undescribed - stale - unfollowed
     if crossings > 0 {
         refused.push(f"{crossings} value{project_check_plural(crossings)} that may not cross a thread")
     }
@@ -176,6 +182,7 @@ pub fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -
         reaching -
         undescribed -
         stale -
+        unfollowed -
         aliases -
         changed_under -
         tethered -

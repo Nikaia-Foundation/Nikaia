@@ -522,6 +522,19 @@ impl EmitState {
         // call.
         let decided = pausing == null && self.decided_by_its_lambda(world, func)
         let settled = decided && (flow.in_lambda || !self.lowered_pausing(scope.function))
+        // **A `Vec` or `String` a described Rust crate hands back is wrapped
+        // as it is** (ADR-327 D8, #1541): the list or text the program goes on
+        // with holds Rust's memory, outside the block, with no copy. Around
+        // the `?`, so not where the failure is caught and the call is still a
+        // `Result`.
+        let rust_result = self.emit_call_rust_owner_result(world, func)
+        let fails_here = flow.can_throw && !flow.caught
+        let wraps_result = rust_result != "" && (fails_here || !call_can_fail(world.words, self.own_contracts, world.library, self.described, func))
+        if wraps_result && rust_result == "Vec" {
+            out.push("nikaia_std::block::List::from(")
+        } else if wraps_result {
+            out.push("nikaia_std::block::Text::from(")
+        }
         if settled {
             out.push("nikaia_std::rt::exec::settled(")
         }
@@ -572,6 +585,22 @@ impl EmitState {
             }
             out.push("?")
         }
+        if wraps_result {
+            out.push(")")
+        }
+    }
+
+    /// The Rust owner (`Vec`, `String`) the described crate's function `func`
+    /// names hands back; empty for any other call (ADR-327 D8, #1541).
+    fn emit_call_rust_owner_result(ref self, world: ref EmitWorld, func: ref Expr) -> String {
+        let name = call_written_name(world.words, func) ?? return ""
+        if self.own_contracts.functions.contains_key(name) {
+            return ""
+        }
+        let contract = self.described.functions.get(name) ?? return ""
+        let signature = contract.signature ?? return ""
+        let result = signature.result ?? return ""
+        return emit_rust_owner(result)
     }
 
     fn emit_call_awaits_a_parameter(ref self, func: ref Expr, scope: ref EmitScope) -> bool {
