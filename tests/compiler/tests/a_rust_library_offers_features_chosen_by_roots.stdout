@@ -13,7 +13,7 @@ src/lib.rs:
   #[cfg(any(feature = "show", feature = "tree"))] #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct Node
   #[cfg(any(feature = "show", feature = "tree"))] #[automatically_derived]
-    impl nikaia_std::block::Weigh for Node
+    impl nikaia_std::block::DeepSize for Node
   #[cfg(any(feature = "show", feature = "tree"))] pub fn make(v: i64) -> Node
   #[cfg(any(feature = "show", feature = "tree"))] pub trait Show
   #[cfg(any(feature = "show", feature = "tree"))] impl Show for Node
@@ -21,7 +21,7 @@ src/lib.rs:
   #[cfg(feature = "stream")] #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct Event
   #[cfg(feature = "stream")] #[automatically_derived]
-    impl nikaia_std::block::Weigh for Event
+    impl nikaia_std::block::DeepSize for Event
   #[cfg(feature = "stream")] pub fn event(at: i64) -> Event
   #[cfg(feature = "extra")] pub fn doubled(v: i64) -> i64
   beside: &[#[cfg(feature = "extra")] &::util::__NIKAIA_PLACES, ],
