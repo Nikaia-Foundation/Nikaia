@@ -128,6 +128,10 @@ pub(crate) fn check_core_stmt_a_named(ty: &Ty) -> bool { matches!(ty, Ty::Named 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_tuple(ty: &Ty) -> bool { matches!(ty, Ty::Tuple(_)) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_read_that_leaves(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
         Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); (check_core_stmt_an_index(read) || check_core_stmt_a_get(world, read)) && (state.leaves(world, fallback) || check_core_stmt_a_read_that_leaves(state, world, fallback)) },
@@ -929,7 +933,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         if element_constants.is_some() { state.flow.list_constants.insert(id, nikaia_std::index::or(element_constants, || vec![].into())); }
     }
     let word_copied = match bound {
-        Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); !a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner) && (state.facts.copied_walks.contains(&(id_of(value) as i64)) || state.facts.copied_reads.contains(&(id_of(value) as i64))) },
+        Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); (!a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner) || check_core_stmt_a_tuple(inner)) && (state.facts.copied_walks.contains(&(id_of(value) as i64)) || state.facts.copied_reads.contains(&(id_of(value) as i64))) },
         _ => false,
     };
     if of_a_map && !word_copied {

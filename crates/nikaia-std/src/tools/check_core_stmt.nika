@@ -176,6 +176,14 @@ fn check_core_stmt_a_named(ty: ref Ty) -> bool sync {
     }
 }
 
+/// A tuple, which has no view form (#1535).
+fn check_core_stmt_a_tuple(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Tuple(_) => true,
+        else => false,
+    }
+}
+
 /// A read through the brackets or a `get` whose fallback leaves.
 fn check_core_stmt_a_read_that_leaves(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
@@ -1267,8 +1275,10 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     // **And typed as one**: a `V?` read out of a map is an option of a view.
     // **Unless a word by its kind is copied out of it** (ADR-279 D8, #1460):
     // `let k: K? = m.get(1)` holds the `K`, as a number's read holds it.
+    // **So does a tuple copied out** (#1535): `let t: (i64, i64)? = m.get(k)`
+    // holds the tuple, which has no view to be typed as.
     let word_copied = match bound {
-        Ty::Nullable(inner) => !a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner) && (state.facts.copied_walks.contains(id_of(value) as i64) || state.facts.copied_reads.contains(id_of(value) as i64)),
+        Ty::Nullable(inner) => ((!a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner)) || check_core_stmt_a_tuple(inner)) && (state.facts.copied_walks.contains(id_of(value) as i64) || state.facts.copied_reads.contains(id_of(value) as i64)),
         else => false,
     }
     if of_a_map && !word_copied {
