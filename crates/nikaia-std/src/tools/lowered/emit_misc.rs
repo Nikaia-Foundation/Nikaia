@@ -113,7 +113,7 @@ impl EmitState {
         match expr {
             Expr::Call { func, .. } => {
                 let func = nikaia_std::boxed::open(func);
-                let kept = self.facts.kept_calls.get(&node_key(func));
+                let kept = self.facts.kept_calls.get(&node_key(func)).copied();
                 if kept.is_some() {
                     let pair = match kept { Some(__nikaia_value) => __nikaia_value, None => return false };
                     return pair.1;

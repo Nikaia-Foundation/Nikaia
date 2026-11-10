@@ -932,6 +932,15 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         if element_levels > 1 { state.flow.open_levels.insert(id, element_levels); }
         if element_constants.is_some() { state.flow.list_constants.insert(id, nikaia_std::index::or(element_constants, || vec![].into())); }
     }
+    if of_a_map && ty.is_none() {
+        match bound {
+            Ty::Nullable(ref inner) => {
+                let inner = nikaia_std::boxed::open(inner);
+                if check_core_stmt_a_tuple(inner) && !state.takes_away(world, inner) && state.flow.map_read_sites.contains(&(id_of(value) as i64)) { let added = state.facts.copied_reads.insert(id_of(value) as i64); }
+            },
+            _ => { },
+        }
+    }
     let word_copied = match bound {
         Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); (!a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner) || check_core_stmt_a_tuple(inner)) && (state.facts.copied_walks.contains(&(id_of(value) as i64)) || state.facts.copied_reads.contains(&(id_of(value) as i64))) },
         _ => false,
