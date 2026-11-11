@@ -82,8 +82,8 @@ website/easy/formats-as-grammar.html #1 fragment (as written)  grammar Calc {
 website/easy/index.html #1 refused (a body) [NK1117,NK1117,NK1117,NK1117]  let a = async count_words(first)    // starts at once
 website/easy/index.html #2 fragment (as written) [sketch]  grammar Calc {
 website/index.html #1 refused (as written) [NK1117,NK2605]  fn load() -> String {
-website/index.html #2 refused (a body) [NK1117,NK1202]  let out = process::run("git", ["rev-parse", "HEAD"])
-website/index.html #3 refused (items, then a body) [NK1207]  fn percent(n: int) -> int {
+website/index.html #2 refused (items, then a body) [NK1207]  fn partition(mut a: Vec[i64], lo: i64, hi: i64) -> i64 {
+website/index.html #3 refused (a body) [NK1117,NK1202]  let out = process::run("git", ["rev-parse", "HEAD"])
 website/index.html #4 refused (a body) [NK2110,NK1117]  let price = async(within: 100.millis()) lookup()
 website/index.html #5 refused (a body) [NK1117,NK1117,NK1117,NK1117]  let a = async count_words(first)    // starts at once
 website/index.html #6 fragment (as written) [sketch]  grammar Calc {
@@ -100,10 +100,10 @@ website/safe/conflicting-actions.html #1 refused (a body) [NK2107,NK2107]  let m
 website/safe/deadlines.html #1 refused (as written) [NK2605]  use std::time
 website/safe/deadlines.html #2 lowered (as written)  use std::time
 website/safe/index.html #1 refused (as written) [NK1117,NK2605]  fn load() -> String {
-website/safe/index.html #2 refused (a body) [NK1117,NK1202]  let out = process::run("git", ["rev-parse", "HEAD"])
-website/safe/index.html #3 refused (a body) [NK1117,NK1117]  fs::read_to_string(name, fs::Root::Dir("store"))
-website/safe/index.html #4 refused (items, then a body) [NK1207]  fn percent(n: int) -> int {
-website/safe/index.html #5 refused (a body) [NK1117,NK1117,NK1117,NK1117]  async {
+website/safe/index.html #2 refused (items, then a body) [NK1207]  fn percent(n: int) -> int {
+website/safe/index.html #3 refused (a body) [NK1117,NK1117,NK1117,NK1117]  async {
+website/safe/index.html #4 refused (a body) [NK1117,NK1202]  let out = process::run("git", ["rev-parse", "HEAD"])
+website/safe/index.html #5 refused (a body) [NK1117,NK1117]  fs::read_to_string(name, fs::Root::Dir("store"))
 website/safe/index.html #6 refused (a body) [NK2110,NK1117]  let price = async(within: 100.millis()) lookup()
 website/safe/index.html #7 refused (a body) [NK1117,NK1117]  a.update fn(mut acc) {
 website/safe/outside-data.html #1 refused (as written) [NK1202]  use std::process
