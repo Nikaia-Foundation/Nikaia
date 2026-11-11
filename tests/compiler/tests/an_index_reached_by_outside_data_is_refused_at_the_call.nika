@@ -1,0 +1,16 @@
+// An index reached by a value read from outside, not proved, is refused with NK1302 at the call.
+// (ADR-396 D1, #1572)
+use std::io
+use std::text
+
+fn month_name(month: int) -> String {
+    let names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return names[month]
+}
+
+fn main() throws {
+    let month = text::parse_i64(io::read_to_string().trim()) ?? 1
+    return if !(month >= 0 && month <= 12)
+    println(month_name(month))
+}

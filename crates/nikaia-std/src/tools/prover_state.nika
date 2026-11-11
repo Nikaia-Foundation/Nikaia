@@ -20,6 +20,10 @@ pub struct ProverState {
     /// parameters** (ADR-306 D15, ADR-395 D1), by function, as pass 1 found
     /// them: a call whose arguments rule one out is refused (`NK1207`).
     pub unwritten: collections::BTreeMap[String, Vec[UnwrittenCheck]],
+    /// **The walk before's `unwritten`**, which pass 1 carries through a
+    /// call to the caller's entry, for data from outside that a caller may
+    /// hand on (ADR-396 D1): the pass repeats until they stop changing.
+    pub known_unwritten: collections::BTreeMap[String, Vec[UnwrittenCheck]],
     /// Which function calls which, by name: a call inside a cycle is not
     /// carried back, so that recursion cannot grow a precondition forever.
     pub edges: collections::BTreeSet[(String, String)],
@@ -128,6 +132,7 @@ impl ProverState {
             preconditions: collections::BTreeMap(),
             known: collections::BTreeMap(),
             unwritten: collections::BTreeMap(),
+            known_unwritten: collections::BTreeMap(),
             edges: collections::BTreeSet(),
             candidates: collections::BTreeMap(),
             postconditions: collections::BTreeMap(),
@@ -796,7 +801,18 @@ impl ProverState {
                     outside = true
                 }
             }
-            if outside {
+            // **Data from outside reaches the check** (ADR-396 D1): proved
+            // at this call, or refused, `NK1302`.
+            if outside && check.index {
+                let found = self.outside_call(arena, callee, check, goal, at_call, span, scope, ask, model)
+                if found != null {
+                    findings.push(found ?? continue)
+                }
+                continue
+            }
+            // A check carried here through a call is asked only of data
+            // from outside; the call it stands behind asks the rest.
+            if outside || check.within != "" {
                 continue
             }
             let help = f"Pass `{callee}` arguments for which `{check.holds}` holds, or check them with a guard before the call."
@@ -811,6 +827,45 @@ impl ProverState {
             findings.push(Finding { code: "NK1207", span: span, message: f"At this call, `{check.written}` in `{callee}` {check.fails} when {shown(sometimes)}.", notes: [f"Then {shown(given)}."], help: help, warning: false, labels: [] })
         }
         return findings
+    }
+
+    /// **A check nobody writes in a callee, at a call that hands it data
+    /// from outside the program** (ADR-396 D1, D2): proved here from what
+    /// is known - the guard where the value arrived - or refused, `NK1302`,
+    /// with the case the walk could not exclude, as the callee's parameters
+    /// have it. A caller of the callee's caller is not asked: data from
+    /// outside is not carried back (ADR-269 D6).
+    fn outside_call(ref self, mut arena: TermArena, callee: ref String, check: ref UnwrittenCheck, goal: i64, at_call: ref GoalAtCall, span: Span, scope: ref ProverScope, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> Finding? {
+        if is_proved(ask(arena, scope.facts, goal)) {
+            return null
+        }
+        if scope.history_reads(arena, goal) && is_proved(ask(arena, scope.with_history(), goal)) {
+            return null
+        }
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(goal, names)
+        let mut first: String = ""
+        for name in names {
+            if scope.tainted.contains(name) {
+                first = name.clone()
+                break
+            }
+        }
+        let source = scope.sources[first]?.clone()
+        let mut notes: Vec[String] = [outside_note(first, source)]
+        let found = model(arena, scope.facts, goal)
+        if found != null {
+            let given = values_given(arena, at_call.given_by, at_call.read, found ?? collections::BTreeMap())
+            if !given.is_empty() {
+                notes.push(f"What is known at this call does not exclude {can_be(given)} in `{callee}`, for which `{check.holds}` fails.")
+            }
+        }
+        let holds = arena.text(goal)
+        let mut stands = f"`{check.written}` in `{callee}`"
+        if check.within != "" {
+            stands = f"`{check.written}` in `{check.within}`, reached through `{callee}`,"
+        }
+        return Finding { code: "NK1302", span: span, message: f"At this call, {stands} is not proved in bounds, and `{first}` comes from outside the program.", notes: notes, help: outside_help(first, holds), warning: false, labels: [] }
     }
 
     /// **A check nobody writes that this body leaves open is asked of its
@@ -836,8 +891,34 @@ impl ProverState {
             return
         }
         let mut found = self.unwritten.remove(owner) ?? []
-        found.push(UnwrittenCheck { term: term, written: check.written, fails: check.fails, holds: check.holds })
+        found.push(UnwrittenCheck { term: term, written: check.written, fails: check.fails, holds: check.holds, index: check.index, within: check.within })
         self.unwritten.insert(owner, found)
+    }
+
+    /// **A callee's open checks, carried through the call** (ADR-396 D1), in
+    /// pass 1: each as the call's arguments state it, asked of this function
+    /// as its own unwritten check would be, so that a caller further out
+    /// that hands data from outside meets it. The walk before's checks, as
+    /// for preconditions; not through a call that can come back here, nor
+    /// in a test.
+    pub fn carry_unwritten(ref mut self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], args: ref Vec[Expr], scope: ref ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
+        let owner = carrying_function(at.function) ?? return
+        if self.in_test || self.reaches(callee, owner) {
+            return
+        }
+        let checks = self.known_unwritten[callee]?.clone() ?? return
+        for check in checks {
+            if !check.index {
+                continue
+            }
+            let at_call = self.goal_at_call(arena, words, params, check.term, args, scope)
+            let goal = at_call.goal ?? continue
+            let mut within = check.within.clone()
+            if within == "" {
+                within = callee.clone()
+            }
+            self.an_unwritten_check(arena, UnwrittenCheck { term: goal, written: check.written.clone(), fails: check.fails.clone(), holds: check.holds.clone(), index: true, within: within }, scope, at, ask, model)
+        }
     }
 
     /// **A callee's precondition this function cannot show is its callers'**
@@ -1272,6 +1353,31 @@ fn values_given(arena: ref TermArena, given_by: ref collections::BTreeMap[String
         out.insert(name.clone(), value)
     }
     return out
+}
+
+/// **Where the value of an index that outside data reaches came from**
+/// (ADR-396 D1), as `NK1302`'s first note says it.
+pub fn outside_note(first: ref String, source: ref String?) -> String {
+    if source != null && (source ?? "") != first {
+        return f"`{first}` comes from `{source ?? ""}`: whoever sends it chooses the value, so nothing the compiler can see says what it holds."
+    }
+    return f"`{first}` comes from outside the program: whoever sends it chooses the value, so nothing the compiler can see says what it holds."
+}
+
+/// **The way out of `NK1302`** (ADR-396 D2): a guard where the value
+/// arrives, after which the index is proved. Not an `assert` (NK1202).
+pub fn outside_help(first: ref String, holds: ref String) -> String {
+    return f"Check it where it arrives, with a guard the program handles: `throw BadInput({first}) if !({holds})`, or the early `return` that rejects it. After that line, the index is proved."
+}
+
+/// Values a state may have, as `NK1302` names the case the walk could not
+/// exclude: "`month` can be 12".
+pub fn can_be(values: ref collections::BTreeMap[String, i64]) -> String {
+    let mut said: Vec[String] = []
+    for (name, value) in values {
+        said.push(f"`{name}` can be {value}")
+    }
+    return said.join(", ")
 }
 
 /// A term as the language below writes it (`prove_text.nika`'s `rust_of`),

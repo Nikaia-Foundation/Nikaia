@@ -7,6 +7,7 @@ pub struct ProverState {
     pub preconditions: collections::BTreeMap<String, Precondition>,
     pub known: collections::BTreeMap<String, Precondition>,
     pub unwritten: collections::BTreeMap<String, Vec<UnwrittenCheck>>,
+    pub known_unwritten: collections::BTreeMap<String, Vec<UnwrittenCheck>>,
     pub edges: collections::BTreeSet<(String, String)>,
     pub candidates: collections::BTreeMap<String, Vec<PostClaim>>,
     pub postconditions: collections::BTreeMap<String, Vec<PostClaim>>,
@@ -46,7 +47,7 @@ pub struct ProverState {
 }
 
 impl ProverState {
-    pub fn fresh() -> ProverState { ProverState { foreign: collections::BTreeMap::new(), preconditions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), unwritten: collections::BTreeMap::new(), edges: collections::BTreeSet::new(), candidates: collections::BTreeMap::new(), postconditions: collections::BTreeMap::new(), broken: collections::BTreeSet::new(), before_return: collections::BTreeMap::new(), collecting: true, in_test: false, readers: collections::BTreeSet::new(), value_readers: collections::BTreeSet::new(), pinned: collections::BTreeMap::new(), comptime_at: collections::BTreeMap::new(), whole_lets: collections::BTreeMap::new(), zero_divisors: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), unfit_numbers: collections::BTreeSet::new(), method_callees: collections::BTreeMap::new(), call_sites: collections::BTreeMap::new(), call_args: collections::BTreeMap::new(), wanted: collections::BTreeSet::new(), not_run: collections::BTreeMap::new(), stopped: collections::BTreeMap::new(), summaries: collections::BTreeMap::new(), summing: vec![], unsummed: false, second_queries: 0, loops_found: collections::BTreeMap::new(), loops_failed: collections::BTreeSet::new(), loop_claims: 0, loop_queries: 0, loops_recorded: collections::BTreeMap::new(), loops_used: collections::BTreeMap::new(), loops_searched: 0, loops_read: 0, loops_unfound: 0, divisor_queries: 0, divisor_notes: collections::BTreeMap::new() } }
+    pub fn fresh() -> ProverState { ProverState { foreign: collections::BTreeMap::new(), preconditions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), unwritten: collections::BTreeMap::new(), known_unwritten: collections::BTreeMap::new(), edges: collections::BTreeSet::new(), candidates: collections::BTreeMap::new(), postconditions: collections::BTreeMap::new(), broken: collections::BTreeSet::new(), before_return: collections::BTreeMap::new(), collecting: true, in_test: false, readers: collections::BTreeSet::new(), value_readers: collections::BTreeSet::new(), pinned: collections::BTreeMap::new(), comptime_at: collections::BTreeMap::new(), whole_lets: collections::BTreeMap::new(), zero_divisors: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), unfit_numbers: collections::BTreeSet::new(), method_callees: collections::BTreeMap::new(), call_sites: collections::BTreeMap::new(), call_args: collections::BTreeMap::new(), wanted: collections::BTreeSet::new(), not_run: collections::BTreeMap::new(), stopped: collections::BTreeMap::new(), summaries: collections::BTreeMap::new(), summing: vec![], unsummed: false, second_queries: 0, loops_found: collections::BTreeMap::new(), loops_failed: collections::BTreeSet::new(), loop_claims: 0, loop_queries: 0, loops_recorded: collections::BTreeMap::new(), loops_used: collections::BTreeMap::new(), loops_searched: 0, loops_read: 0, loops_unfound: 0, divisor_queries: 0, divisor_notes: collections::BTreeMap::new() } }
     pub fn reaches(&self, from: &str, to: &str) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut next: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(from.to_string())], nikaia_std::block::Place::Block);
@@ -417,7 +418,12 @@ impl ProverState {
             arena.variables(goal, &mut names);
             let mut outside = false;
             for name in names.iter() { if scope.tainted.contains(name) { outside = true; } }
-            if outside { continue; }
+            if outside && check.index {
+                let found = self.outside_call(arena, callee, check, goal, &at_call, span, scope, ask, model);
+                if found.is_some() { findings.push(match found { Some(__nikaia_value) => __nikaia_value, None => continue }); }
+                continue;
+            }
+            if outside || check.within != "" { continue; }
             let help = format!("Pass `{}` arguments for which `{}` holds, or check them with a guard before the call.", callee, check.holds);
             let always = refuting_values(arena, &scope.facts, goal, ask, model);
             if always.is_some() {
@@ -431,6 +437,34 @@ impl ProverState {
         }
         findings
     }
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn outside_call(&self, arena: &mut TermArena, callee: &str, check: &UnwrittenCheck, goal: i64, at_call: &GoalAtCall, span: Span, scope: &ProverScope, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Option<Finding> {
+        if is_proved(&ask(&arena, &scope.facts, goal)) { return None; }
+        if scope.history_reads(&arena, goal) && is_proved(&ask(&arena, &scope.with_history(), goal)) { return None; }
+        let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+        arena.variables(goal, &mut names);
+        let mut first: String = String::from("");
+        for name in names.iter() {
+            if scope.tainted.contains(name) {
+                first = nikaia_std::block::Text::from(name.to_string());
+                break;
+            }
+        }
+        let source = match *nikaia_std::index::get(&scope.sources, &first) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        #[allow(unused_mut)] let mut notes: Vec<String> = vec![outside_note(&first, (source).as_deref())];
+        let found = model(&arena, &scope.facts, goal); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
+        if found.is_some() {
+            let given = values_given(&arena, &at_call.given_by, &at_call.read, &nikaia_std::index::or(found, || collections::BTreeMap::new().into()));
+            if !given.is_empty() { notes.push(format!("What is known at this call does not exclude {} in `{}`, for which `{}` fails.", can_be(&given), callee, check.holds)); }
+        }
+        let holds = arena.text(goal); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
+        let mut stands = format!("`{}` in `{}`", check.written, callee); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
+        if check.within != "" { stands = format!("`{}` in `{}`, reached through `{}`,", check.written, check.within, callee); }
+        Some(Finding { code: String::from("NK1302"), span, message: format!("At this call, {} is not proved in bounds, and `{}` comes from outside the program.", stands, first), notes, help: Some(outside_help(&first, &holds)), warning: false, labels: vec![] })
+    }
     pub fn an_unwritten_check(&mut self, arena: &mut TermArena, check: UnwrittenCheck, scope: &ProverScope, at: &ProverWhere, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) {
         let owner = match carrying_function((at.function).as_deref()) { Some(__nikaia_value) => __nikaia_value, None => return };
         if at.lambda { return; }
@@ -440,8 +474,25 @@ impl ProverState {
         let term = match scope.precondition_at(arena, check.term, &at.params) { Some(__nikaia_value) => __nikaia_value, None => return };
         if is_proved(&ask(&arena, &scope.facts, check.term)) || refuting_values(arena, &scope.facts, check.term, ask, model).is_some() { return; }
         let mut found = nikaia_std::index::or(self.unwritten.remove(&owner), || vec![].into());
-        found.push(UnwrittenCheck { term, written: check.written, fails: check.fails, holds: check.holds });
+        found.push(UnwrittenCheck { term, written: check.written, fails: check.fails, holds: check.holds, index: check.index, within: check.within });
         self.unwritten.insert(owner, found);
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn carry_unwritten(&mut self, arena: &mut TermArena, words: &winnow_grammar::InternerContext, callee: &str, params: &[String], args: &[Expr], scope: &ProverScope, at: &ProverWhere, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) {
+        let owner = match carrying_function((at.function).as_deref()) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if self.in_test || self.reaches(callee, &owner) { return; }
+        let checks = match match *nikaia_std::index::get(&self.known_unwritten, callee) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return };
+        for check in checks.iter() {
+            if !check.index { continue; }
+            let at_call = self.goal_at_call(arena, words, params, check.term, args, scope);
+            let goal = match at_call.goal { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut within = nikaia_std::block::Text::from(check.within.to_string());
+            if within == "" { within = nikaia_std::block::Text::from(callee.to_string()); }
+            self.an_unwritten_check(arena, UnwrittenCheck { term: goal, written: nikaia_std::block::Text::from(check.written.to_string()), fails: nikaia_std::block::Text::from(check.fails.to_string()), holds: nikaia_std::block::Text::from(check.holds.to_string()), index: true, within }, scope, at, ask, model);
+        }
     }
     #[allow(clippy::too_many_arguments)]
     pub fn carry_back(&mut self, arena: &mut TermArena, goal: Option<i64>, pre: &PreClaim, callee: &str, site: CarriedFrom, scope: &ProverScope, function: Option<&str>, params: &collections::BTreeSet<String>, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) {
@@ -750,6 +801,22 @@ pub(crate) fn values_given(arena: &TermArena, given_by: &collections::BTreeMap<S
         out.insert(nikaia_std::block::Text::from(name.to_string()), value);
     }
     out
+}
+
+pub fn outside_note(first: &str, source: Option<&str>) -> String {
+    if source.is_some() && nikaia_std::index::or(source, || "") != first { return format!("`{}` comes from `{}`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.", first, nikaia_std::index::or(source, || "")); }
+    format!("`{}` comes from outside the program: whoever sends it chooses the value, so nothing the compiler can see says what it holds.", first)
+}
+
+pub fn outside_help(first: &str, holds: &str) -> String { format!("Check it where it arrives, with a guard the program handles: `throw BadInput({}) if !({})`, or the early `return` that rejects it. After that line, the index is proved.", first, holds) }
+
+pub fn can_be(values: &collections::BTreeMap<String, i64>) -> String {
+    let mut said: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for (name, value) in values.iter() {
+        let value = nikaia_std::num::value(value);
+        said.push(format!("`{}` can be {}", name, value));
+    }
+    nikaia_std::block::Text::from(said.join(", "))
 }
 
 pub(crate) fn rust_text(arena: &TermArena, id: i64, escape: &impl Fn(&str) -> String) -> String { rust_of(id, &|at| { arena.at(at) }, escape) }

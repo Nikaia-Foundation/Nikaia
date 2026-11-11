@@ -302,6 +302,65 @@ fn config_from_outside(config: ref Vec[ConfigArg], tainted: ref collections::BTr
 }
 
 /// A call's callee as `std`'s ledger keys a source: a bare name, or a path.
+/// **The source a value from outside reads** (ADR-396 D1), as the message
+/// of an index it reaches names it: the first call to an untrusted source
+/// inside it (`io::read_to_string`), or the source of a name in `tainted`
+/// it reads. Null where `from_outside` would find none, or only one this
+/// shorter walk does not reach; the message then names the binding alone.
+pub fn outside_source(expr: ref Expr, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, callees: ref collections::BTreeMap[i64, String], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> String? {
+    match expr {
+        Expr::Variable(name, _) => {
+            let n = words.resolve(name)
+            if tainted.contains(n) {
+                return sources[n]?.clone() ?? n.clone()
+            }
+            return null
+        },
+        Expr::Call { func, args, config, .. } => {
+            let source = outside_source_named(func, words)
+            if source != null && untrusted(library, source ?? "") && !says_trusted(words, config) {
+                return source
+            }
+            return outside_source_in(args, tainted, sources, words, library, callees, holes_of)
+        },
+        Expr::MethodCall { receiver, args, config, .. } => {
+            let callee = callees.get(id_of(receiver) as i64) ?? ""
+            if untrusted(library, callee) && !says_trusted(words, config) {
+                return callee.clone()
+            }
+            return outside_source(receiver, tainted, sources, words, library, callees, holes_of) ?? outside_source_in(args, tainted, sources, words, library, callees, holes_of)
+        },
+        Expr::SafeMethod { receiver, args, config, .. } => {
+            let callee = callees.get(id_of(receiver) as i64) ?? ""
+            if untrusted(library, callee) && !says_trusted(words, config) {
+                return callee.clone()
+            }
+            return outside_source(receiver, tainted, sources, words, library, callees, holes_of) ?? outside_source_in(args, tainted, sources, words, library, callees, holes_of)
+        },
+        Expr::Binary { lhs, rhs, .. } => return outside_source(lhs, tainted, sources, words, library, callees, holes_of) ?? outside_source(rhs, tainted, sources, words, library, callees, holes_of),
+        Expr::Unary { expr, .. } => return outside_source(expr, tainted, sources, words, library, callees, holes_of),
+        Expr::Try(inner, _) => return outside_source(inner, tainted, sources, words, library, callees, holes_of),
+        Expr::Cast { expr, .. } => return outside_source(expr, tainted, sources, words, library, callees, holes_of),
+        Expr::Field { base, .. } => return outside_source(base, tainted, sources, words, library, callees, holes_of),
+        Expr::SafeField { base, .. } => return outside_source(base, tainted, sources, words, library, callees, holes_of),
+        Expr::Index { base, index, .. } => return outside_source(index, tainted, sources, words, library, callees, holes_of) ?? outside_source(base, tainted, sources, words, library, callees, holes_of),
+        Expr::Coalesce { value, fallback, .. } => return outside_source(value, tainted, sources, words, library, callees, holes_of) ?? outside_source(fallback, tainted, sources, words, library, callees, holes_of),
+        Expr::TryCatch { expr, .. } => return outside_source(expr, tainted, sources, words, library, callees, holes_of),
+        else => {},
+    }
+    return outside_source_in(holes_of(expr), tainted, sources, words, library, callees, holes_of)
+}
+
+fn outside_source_in(exprs: ref Vec[Expr], tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, callees: ref collections::BTreeMap[i64, String], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> String? {
+    for e in exprs {
+        let found = outside_source(e, tainted, sources, words, library, callees, holes_of)
+        if found != null {
+            return found
+        }
+    }
+    return null
+}
+
 fn outside_source_named(func: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
     return match func {
         Expr::Variable(name, _) => words.resolve(name).clone(),

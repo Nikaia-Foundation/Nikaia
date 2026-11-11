@@ -1,0 +1,47 @@
+// #1572 (ADR-396 D3): at `unproved-claims = "warn"` an index reached by data
+// from outside, not proved, builds with NK1302 as a warning, and the index is
+// checked when the program runs: a month read as 12 stops it there.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn shown(tmp: String, text: String) -> String {
+	let mut lines: Vec[String] = []
+	for line in text.replace(tmp, "TMP").lines() {
+		let t = line.trim()
+		if t.starts_with("Compiling") || t.starts_with("Finished") || t.starts_with("Running") {
+			continue
+		}
+		lines.push(line.clone())
+	}
+	return lines.join("\n")
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	fs::write(
+		f"{tmp}/month.nika",
+		fs::Root::Anywhere,
+		"use std::io\nuse std::text\n\nfn month_name(month: int) -> String {\n\tlet names = [\"Jan\", \"Feb\", \"Mar\", \"Apr\", \"May\", \"Jun\", \"Jul\", \"Aug\", \"Sep\", \"Oct\", \"Nov\", \"Dec\"]\n\treturn names[month]\n}\n\nfn main() throws {\n\tlet month = text::parse_i64(io::read_to_string().trim()) ?? 1\n\treturn if !(month >= 0 && month <= 12)\n\tprintln(month_name(month))\n}\n",
+	)
+	for input in ["5", "12"] {
+		let out = process::run(
+			"sh",
+			["-c", f"echo {input} | \"$0\" run --unproved-claims=warn month.nika", toolchain()]; dir: tmp,
+		)
+		println(shown(tmp, f"{out.stdout}{out.stderr}"))
+		println(f"exit {out.code}")
+	}
+	process::run("rm", ["-rf", tmp])
+}

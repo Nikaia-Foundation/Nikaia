@@ -16,15 +16,19 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
     walk.state.readers = prover_length_keepers(program, &readers, words);
     let bound = unsafe { nikaia_std::proven::add::<i64>(program.items.len() as i64, 2) };
     let mut preconditions: collections::BTreeMap<String, Precondition> = collections::BTreeMap::new();
+    let mut unwritten: collections::BTreeMap<String, Vec<UnwrittenCheck>> = collections::BTreeMap::new();
     for _ in 0..bound {
         walk.state.known = preconditions;
+        walk.state.known_unwritten = unwritten;
         walk.state.preconditions = collections::BTreeMap::new();
         walk.state.candidates = collections::BTreeMap::new();
         walk.state.unwritten = collections::BTreeMap::new();
         prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
         preconditions = walk.state.preconditions.copy_owned();
-        if same_preconditions(&walk.arena, &preconditions, &walk.state.known) { break; }
+        unwritten = walk.state.unwritten.copy_owned();
+        if same_preconditions(&walk.arena, &preconditions, &walk.state.known) && same_unwritten(&unwritten, &walk.state.known_unwritten) { break; }
     }
+    walk.state.known_unwritten = collections::BTreeMap::new();
     walk.state.known = collections::BTreeMap::new();
     walk.state.collecting = false;
     walk.state.preconditions = preconditions;
@@ -45,6 +49,16 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
     count_checked_calls(walk);
     hold_unreached(walk, program);
     answers
+}
+
+pub(crate) fn same_unwritten(now: &collections::BTreeMap<String, Vec<UnwrittenCheck>>, before: &collections::BTreeMap<String, Vec<UnwrittenCheck>>) -> bool {
+    if (now.len() as i64) != before.len() as i64 { return false; }
+    for (function, checks) in now.iter() {
+        let earlier = match before.get(function) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if (earlier.len() as i64) != checks.len() as i64 { return false; }
+        for (one, other) in checks.iter().zip(earlier.iter()) { if one.written != other.written || one.within != other.within || one.holds != other.holds { return false; } }
+    }
+    true
 }
 
 pub(crate) fn strike_broken(state: &mut ProverState) {

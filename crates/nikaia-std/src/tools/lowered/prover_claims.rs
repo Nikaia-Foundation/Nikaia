@@ -7,6 +7,8 @@ pub struct UnwrittenCheck {
     pub written: String,
     pub fails: String,
     pub holds: String,
+    pub index: bool,
+    pub within: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -424,6 +424,10 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
                         }
                     }
                     if tainted {
+                        let source = outside_source(value, scope.tainted, scope.sources, words, library, walk.state.method_callees, holes_of)
+                        if source != null {
+                            scope.sources.insert(n.clone(), source ?? "")
+                        }
                         scope.tainted.insert(n)
                     }
                 },
@@ -646,12 +650,19 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
             else => {},
         }
     }
+    let mut source: String = ""
+    if tainted {
+        source = outside_source(value, scope.tainted, scope.sources, words, library, walk.state.method_callees, holes_of) ?? ""
+    }
     for name in names {
         let n = words.resolve(name).clone()
         scope.rebind(walk.arena, n)
         if tainted {
             scope.tainted.insert(n.clone())
             scope.loose.insert(n.clone())
+            if source != "" {
+                scope.sources.insert(n.clone(), source.clone())
+            }
         }
     }
     // **A mask's or a shift's value is bounded** (#776), a `let mut`'s too.
@@ -1154,6 +1165,10 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
         let n = words.resolve(binding).clone()
         inner.rebind(walk.arena, n)
         if tainted {
+            let source = outside_source(iter, scope.tainted, scope.sources, words, library, walk.state.method_callees, holes_of)
+            if source != null {
+                inner.sources.insert(n.clone(), source ?? "")
+            }
             inner.tainted.insert(n)
         }
     }
@@ -1516,6 +1531,10 @@ fn prover_join_arms(mut walk: ProverWalk, mut scope: ProverScope, sides: ref Vec
             }
             if !side.leaves && side.scope.tainted.contains(n) {
                 scope.tainted.insert(n.clone())
+                let source = side.scope.sources[n]?.clone()
+                if source != null {
+                    scope.sources.insert(n.clone(), source ?? "")
+                }
             }
         }
     }
@@ -1852,7 +1871,7 @@ fn prover_expr(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref Prov
 /// Every call inside `expr`, as `contracts::sync`'s walk reaches them: not
 /// into nested blocks, the holes of literals included.
 fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
-    prover_unwritten_check(walk, expr, span, scope, at, words, ask, model, written_of)
+    prover_unwritten_check(walk, expr, span, scope, at, words, library, holes_of, ask, model, written_of)
     match expr {
         Expr::Call { func, args, config, .. } => {
             let callee = prover_called(func, words, unaliased)
@@ -1987,12 +2006,18 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
 /// in the machine code in every case. Not in a test (D11). Pass 1 carries
 /// one the body leaves open over its parameters back to the entry, for its
 /// callers (`ProverState::an_unwritten_check`).
-fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref ProverScope, at: ref ProverWhere, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, written_of: fn(ref Expr) -> String sync) {
+fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref ProverScope, at: ref ProverWhere, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, written_of: fn(ref Expr) -> String sync) {
     if walk.state.in_test {
         return
     }
     match expr {
         Expr::Index { base, index, .. } => {
+            if from_outside(index, scope.tainted, words, library, walk.state.method_callees, holes_of) {
+                if !walk.state.collecting {
+                    prover_outside_index(walk, expr, base, index, span, scope, words, library, holes_of, ask, model, written_of)
+                }
+                return
+            }
             match index {
                 Expr::Range { .. } => return,
                 else => {},
@@ -2004,7 +2029,7 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
             let below = walk.arena.lt(i, n)
             let goal = walk.arena.and([from, below])
             if walk.state.collecting {
-                let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: "is out of bounds", holds: f"0 <= {written_of(index)} < {written_of(base)}.len()" }
+                let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: "is out of bounds", holds: f"0 <= {written_of(index)} < {written_of(base)}.len()", index: true, within: "" }
                 walk.state.an_unwritten_check(walk.arena, check, scope, at, ask, model)
                 return
             }
@@ -2037,7 +2062,7 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
             let zero = walk.arena.int(0)
             let goal = walk.arena.unequal(d, zero)
             if walk.state.collecting {
-                let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: "divides by zero", holds: f"{written_of(rhs)} != 0" }
+                let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: "divides by zero", holds: f"{written_of(rhs)} != 0", index: false, within: "" }
                 walk.state.an_unwritten_check(walk.arena, check, scope, at, ask, model)
                 return
             }
@@ -2045,6 +2070,114 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
         },
         else => {},
     }
+}
+
+/// **An index that data from outside the program reaches is proved, or the
+/// program is refused** (ADR-396 D1, D2, `NK1302`): the index's bound - a
+/// cut's `0 <= a <= b <= len` - asked of what is known where it stands,
+/// with what the earlier values make known (ADR-361 D9). Where it is not
+/// proved, a stranger may choose the value that stops the program, and the
+/// way out is a guard where the value arrives. `unproved-claims = "warn"`
+/// lowers it to a warning (D3); the index keeps its check either way.
+fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, index: ref Expr, span: Span, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, written_of: fn(ref Expr) -> String sync) {
+    let n = prover_length_of(walk, base, scope, words)
+    let zero = walk.arena.int(0)
+    let mut goal: i64? = null
+    let mut holds = f"0 <= {written_of(index)} < {written_of(base)}.len()"
+    let mut guard = f"0 <= {written_of(index)} && {written_of(index)} < {written_of(base)}.len()"
+    match index {
+        Expr::Range { start, end, inclusive, .. } => {
+            let below = if inclusive { "<" } else { "<=" }
+            holds = f"0 <= {written_of(start)} <= {written_of(end)} {below} {written_of(base)}.len()"
+            guard = f"0 <= {written_of(start)} && {written_of(start)} <= {written_of(end)} && {written_of(end)} {below} {written_of(base)}.len()"
+            let a = lin_term(start, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+            let b = lin_term(end, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+            if a != null && n != null {
+                let from = a ?? 0
+                let len = n ?? 0
+                let low = walk.arena.le(zero, from)
+                if b != null {
+                    let to = b ?? 0
+                    let ordered = walk.arena.le(from, to)
+                    let mut high = walk.arena.le(to, len)
+                    if inclusive {
+                        high = walk.arena.lt(to, len)
+                    }
+                    goal = walk.arena.and([low, ordered, high])
+                } else if !from_outside(end, scope.tainted, words, library, walk.state.method_callees, holes_of) {
+                    // An open end: the cut runs to the length.
+                    let inside = walk.arena.le(from, len)
+                    goal = walk.arena.and([low, inside])
+                }
+            }
+        },
+        else => {
+            let i = lin_term(index, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+            if i != null && n != null {
+                let from = walk.arena.le(zero, i ?? 0)
+                let below = walk.arena.lt(i ?? 0, n ?? 0)
+                goal = walk.arena.and([from, below])
+            }
+        },
+    }
+    if goal != null && prover_proves_here(walk, goal ?? 0, scope, ask) {
+        return
+    }
+    let first = prover_outside_name(walk, goal, index, scope, words, written_of)
+    let source = outside_source(index, scope.tainted, scope.sources, words, library, walk.state.method_callees, holes_of)
+    let mut notes: Vec[String] = [outside_note(first, source)]
+    if goal != null {
+        let found = model(walk.arena, scope.facts, goal ?? 0)
+        if found != null {
+            let values = found ?? collections::BTreeMap()
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            walk.arena.variables(goal ?? 0, read)
+            let mut shown_values: collections::BTreeMap[String, i64] = collections::BTreeMap()
+            for name in read {
+                let value = values[name] ?? continue
+                shown_values.insert(name.clone(), value)
+            }
+            if !shown_values.is_empty() {
+                notes.push(f"What is known here does not exclude {can_be(shown_values)}, for which `{holds}` fails.")
+            }
+        }
+    } else {
+        notes.push(f"The prover cannot state `{holds}` here: a part of it is not a whole number it reads.")
+    }
+    walk.findings.push(Finding { code: "NK1302", span: span, message: f"`{written_of(expr)}` is not proved in bounds, and `{first}` comes from outside the program.", notes: notes, help: outside_help(first, guard), warning: false, labels: [] })
+}
+
+/// Whether `goal` holds of what is known here, or of that with what the
+/// earlier values of the followed mutable whole numbers make known
+/// (ADR-361 D9).
+fn prover_proves_here(mut walk: ProverWalk, goal: i64, scope: ref ProverScope, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync) -> bool {
+    if is_proved(ask(walk.arena, scope.facts, goal)) {
+        return true
+    }
+    if scope.history_reads(walk.arena, goal) {
+        walk.state.second_queries += 1
+        return is_proved(ask(walk.arena, scope.with_history(), goal))
+    }
+    return false
+}
+
+/// The first name from outside an index reads: of its bound where the
+/// prover states one, else as written.
+fn prover_outside_name(walk: ref ProverWalk, goal: i64?, index: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, written_of: fn(ref Expr) -> String sync) -> String {
+    if goal != null {
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        walk.arena.variables(goal ?? 0, read)
+        for name in read {
+            if scope.tainted.contains(name) {
+                return name.clone()
+            }
+        }
+    }
+    let named = prover_variable_named(index, words)
+    if named != null {
+        return named ?? ""
+    }
+    return written_of(index)
 }
 
 /// **An operation stays inside its type** (ADR-306 D15, D6): `lo <= a + b
@@ -2075,7 +2208,7 @@ fn prover_overflow_check(mut walk: ProverWalk, expr: ref Expr, op_at: i64, span:
     }
     let fails = f"goes past what {an_or_a(ty)} `{ty}` holds"
     if walk.state.collecting {
-        let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: fails, holds: holds }
+        let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: fails, holds: holds, index: false, within: "" }
         walk.state.an_unwritten_check(walk.arena, check, scope, at, ask, model)
         return
     }
@@ -2256,6 +2389,12 @@ fn prover_a_call(mut walk: ProverWalk, callee: ref String, call: i64, args: ref 
     }
     let told = walk.findings.len()
     prover_call_precondition(walk, callee, call, args, config, span, scope, at, program, words, own, library, ask, model, escape, written_of, condition)
+    if walk.state.collecting && walk.state.known_unwritten.contains_key(callee) {
+        let function = free_function(program, words, callee) ?? return
+        let all = arguments_in_order(function, args, config, words)
+        walk.state.carry_unwritten(walk.arena, words, callee, function.params, all, scope, at, ask, model)
+        return
+    }
     if walk.findings.len() == told && !walk.state.collecting && walk.state.unwritten.contains_key(callee) {
         let function = free_function(program, words, callee) ?? return
         let all = arguments_in_order(function, args, config, words)
@@ -2314,7 +2453,9 @@ fn prover_a_method_call(mut walk: ProverWalk, receiver: ref Expr, method: winnow
         let found = pre ?? return
         prover_record_call(walk, callee, target.params, found.claims, all, null, span, scope, at, words, ask, model, escape, written_of)
     }
-    if walk.findings.len() == told && !walk.state.collecting {
+    if walk.state.collecting {
+        walk.state.carry_unwritten(walk.arena, words, callee, target.params, all, scope, at, ask, model)
+    } else if walk.findings.len() == told {
         prover_unwritten_call(walk, callee, target.params, all, span, scope, words, ask, model)
     }
 }

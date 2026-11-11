@@ -5,6 +5,7 @@
 pub struct ProverScope {
     pub ints: collections::BTreeSet<String>,
     pub tainted: collections::BTreeSet<String>,
+    pub sources: collections::BTreeMap<String, String>,
     pub locals: collections::BTreeSet<String>,
     pub facts: Vec<i64>,
     pub entry: collections::BTreeMap<String, i64>,
@@ -28,7 +29,7 @@ pub struct ProverBits {
 }
 
 impl ProverScope {
-    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new() } }
+    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), sources: collections::BTreeMap::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new() } }
     pub fn at_the_entry() -> ProverScope {
         let mut scope = ProverScope::unknown();
         scope.path = Some(vec![]);
@@ -243,6 +244,7 @@ impl ProverScope {
     pub fn blind(&self) -> ProverScope {
         let mut scope = ProverScope::unknown();
         scope.tainted = self.tainted.copy_owned();
+        scope.sources = self.sources.copy_owned();
         scope.locals = self.locals.copy_owned();
         scope
     }

@@ -22,6 +22,12 @@ pub struct UnwrittenCheck {
     pub fails: String,
     /// The goal as a reader writes it: `d != 0`.
     pub holds: String,
+    /// Whether it is an index's or a slice's bounds (ADR-396 D1).
+    pub index: bool,
+    /// The function the check stands in where a call carried it here, ""
+    /// where it is this function's own: carried through a call only for
+    /// data from outside (ADR-396 D1).
+    pub within: String,
 }
 
 /// One claim of a precondition (ADR-269 D15).

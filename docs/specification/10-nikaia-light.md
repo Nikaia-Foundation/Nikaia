@@ -380,7 +380,10 @@ names its limits, `T::MIN` and `T::MAX`, values of type `T`: `i64::MIN` is
 `-9223372036854775808`, `u8::MAX` is `255`, and `int::MAX` is `i64::MAX`. A **length** is an `i64`:
 `for i in 0..<xs.len()` gives an `i64`, `xs[i]` takes one, and neither
 conversion is written, because the compiler emits both. A negative index
-reports as an access out of bounds (Part III, A.2).
+reports as an access out of bounds (Part III, A.2). An index whose value comes
+from outside the program and that the compiler does not prove in bounds is
+refused (`NK1302`, Part III 14.2, [ADR-396](adr/adr-396.md)): the guard that
+keeps it in bounds is written where the value arrives.
 
 **An integer that does not fit aborts, at every build.** An `i32` holds what an
 `i32` holds. An arithmetic result that does not fit is an inconsistent program

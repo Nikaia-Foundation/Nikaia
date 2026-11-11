@@ -233,13 +233,15 @@ pub fn project_check_let_refuted_claims_through(mut findings: Vec[CheckFinding],
 
 /// **`unproved-claims = "warn"`: a claim the compiler did not prove builds**
 /// ([ADR-380](../../docs/specification/adr/adr-380.md) D2), as a warning, and
-/// is checked where it is reached, as every claim was before the switch.
+/// is checked where it is reached, as every claim was before the switch. An
+/// index that data from outside reaches and the build does not prove
+/// (`NK1302`) is such a claim too ([ADR-396](../../docs/specification/adr/adr-396.md) D3).
 pub fn project_check_let_unproved_claims_through(mut findings: Vec[CheckFinding], unproved_claims: String) {
     if unproved_claims != "warn" {
         return
     }
     for mut finding in findings {
-        if finding.code != "NK1300" {
+        if finding.code != "NK1300" && finding.code != "NK1302" {
             continue
         }
         finding.severity = CheckSeverity::Warning

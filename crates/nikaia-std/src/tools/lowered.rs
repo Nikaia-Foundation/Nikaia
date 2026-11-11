@@ -4135,7 +4135,7 @@ pub mod prover_arena {
 }
 pub mod prover_calls {
     #[allow(unused_imports)]
-    pub use super::{FreeFunction, free_function, own_method, arguments_in_order, may_throw, from_outside};
+    pub use super::{FreeFunction, free_function, own_method, arguments_in_order, may_throw, from_outside, outside_source};
 }
 pub mod prover_claims {
     #[allow(unused_imports)]
@@ -4163,7 +4163,7 @@ pub mod prover_solver {
 }
 pub mod prover_state {
     #[allow(unused_imports)]
-    pub use super::{ProverState, postconditions_for, summed_read, leaned_notes, summed_facts, length_given, prover_pinned, ProverWhere, GoalAtCall, CallOutcome, AssertOutcome};
+    pub use super::{ProverState, postconditions_for, summed_read, leaned_notes, summed_facts, length_given, prover_pinned, ProverWhere, GoalAtCall, CallOutcome, outside_note, outside_help, can_be, AssertOutcome};
 }
 pub mod prover_walk {
     #[allow(unused_imports)]

@@ -1,0 +1,9 @@
+error[NK1207]: At this call, `names[month]` in `month_name` is out of bounds every time it is reached.
+   --> tests/an_index_reached_only_by_a_constant_keeps_nk1207.nika:15:5
+    |
+ 15 |     println(month_name(12))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Here `month` is 12.
+    = help: Pass `month_name` arguments for which `0 <= month < names.len()` holds, or check them with a guard before the call.
+1 claim shown false

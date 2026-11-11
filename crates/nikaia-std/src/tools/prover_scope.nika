@@ -13,6 +13,10 @@ pub struct ProverScope {
     pub ints: collections::BTreeSet[String],
     /// Names whose value came from outside the program (ADR-010).
     pub tainted: collections::BTreeSet[String],
+    /// **Where each name of `tainted` came from** (ADR-396 D1): the source
+    /// its value reads (`io::read_to_string`, `Request::query`), for the
+    /// message of an index it reaches. Read only for a name `tainted` holds.
+    pub sources: collections::BTreeMap[String, String],
     /// Names bound anywhere in this body, so a callee's name that a local
     /// shadows is not the callee.
     pub locals: collections::BTreeSet[String],
@@ -87,6 +91,7 @@ impl ProverScope {
         return ProverScope {
             ints: collections::BTreeSet(),
             tainted: collections::BTreeSet(),
+            sources: collections::BTreeMap(),
             locals: collections::BTreeSet(),
             facts: [],
             entry: collections::BTreeMap(),
@@ -418,6 +423,7 @@ impl ProverScope {
     pub fn blind(ref self) -> ProverScope {
         let mut scope = ProverScope::unknown()
         scope.tainted = self.tainted.clone()
+        scope.sources = self.sources.clone()
         scope.locals = self.locals.clone()
         return scope
     }

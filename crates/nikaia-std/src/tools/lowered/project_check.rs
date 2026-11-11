@@ -75,7 +75,7 @@ pub fn project_check_let_refuted_claims_through(findings: &mut Vec<CheckFinding>
 pub fn project_check_let_unproved_claims_through(findings: &mut Vec<CheckFinding>, unproved_claims: &str) {
     if unproved_claims != "warn" { return; }
     for finding in findings.iter_mut() {
-        if (*finding).code != "NK1300" { continue; }
+        if (*finding).code != "NK1300" && (*finding).code != "NK1302" { continue; }
         (*finding).severity = CheckSeverity::Warning;
         (*finding).notes.push(String::from("`unproved-claims = \"warn\"` lets this build through: the claim is checked when the program runs, and a false one stops it there"));
     }
@@ -161,14 +161,14 @@ pub fn project_check_keeps_that_moved(committed: &Ledger, inferred: &Ledger) -> 
         let before = match committed.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let now = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         let then = match before.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple23854| {
-            let (param, _) = __nikaia_tuple23854;
-            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple23913| {
-                let (p, _) = __nikaia_tuple23913;
+        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple24047| {
+            let (param, _) = __nikaia_tuple24047;
+            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple24106| {
+                let (p, _) = __nikaia_tuple24106;
                 AsRef::<str>::as_ref(&(p)) == AsRef::<str>::as_ref(&(param))
             })
-        }).filter_map(|__nikaia_tuple23954| {
-            let (param, ty) = __nikaia_tuple23954;
+        }).filter_map(|__nikaia_tuple24147| {
+            let (param, ty) = __nikaia_tuple24147;
             let kept = nikaia_std::list::contains(&contract.keeps, &param);
             if kept != nikaia_std::list::contains(&before.keeps, &param) { Some(ProjectCheckKept { param: nikaia_std::block::Text::from(param.to_string()), now: kept, ty: ty.text() }) } else { None }
         }).collect::<Vec<_>>();
@@ -196,11 +196,11 @@ pub fn project_check_explain<H: ProjectCheckExplainHost>(host: &H, comptime_aske
 }
 
 pub fn project_check_explain_kinds(overlaps: bool, sharing: bool, tethers: bool, asserts: bool, bounds: bool, trust: bool) -> Vec<String> {
-    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple26532| {
-        let (_, asked) = __nikaia_tuple26532; let asked = nikaia_std::num::value(asked);
+    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple26725| {
+        let (_, asked) = __nikaia_tuple26725; let asked = nikaia_std::num::value(asked);
         asked
-    }).map(|__nikaia_tuple26562| {
-        let (kind, _) = __nikaia_tuple26562;
+    }).map(|__nikaia_tuple26755| {
+        let (kind, _) = __nikaia_tuple26755;
         nikaia_std::block::Text::from(kind.to_string())
     }).collect::<Vec<_>>()
 }

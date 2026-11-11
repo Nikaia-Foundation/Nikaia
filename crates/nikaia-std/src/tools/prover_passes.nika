@@ -31,17 +31,21 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
     walk.state.readers = prover_length_keepers(program, readers, words)
     let bound = program.items.len() + 2
     let mut preconditions: collections::BTreeMap[String, Precondition] = collections::BTreeMap()
+    let mut unwritten: collections::BTreeMap[String, Vec[UnwrittenCheck]] = collections::BTreeMap()
     for _ in 0..<bound {
         walk.state.known = preconditions
+        walk.state.known_unwritten = unwritten
         walk.state.preconditions = collections::BTreeMap()
         walk.state.candidates = collections::BTreeMap()
         walk.state.unwritten = collections::BTreeMap()
         prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
         preconditions = walk.state.preconditions.clone()
-        if same_preconditions(walk.arena, preconditions, walk.state.known) {
+        unwritten = walk.state.unwritten.clone()
+        if same_preconditions(walk.arena, preconditions, walk.state.known) && same_unwritten(unwritten, walk.state.known_unwritten) {
             break
         }
     }
+    walk.state.known_unwritten = collections::BTreeMap()
     walk.state.known = collections::BTreeMap()
     walk.state.collecting = false
     walk.state.preconditions = preconditions
@@ -70,6 +74,26 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
     count_checked_calls(walk)
     hold_unreached(walk, program)
     return answers
+}
+
+/// Whether two walks left the same checks open, by function: what each
+/// says, where it stands (ADR-396 D1).
+fn same_unwritten(now: ref collections::BTreeMap[String, Vec[UnwrittenCheck]], before: ref collections::BTreeMap[String, Vec[UnwrittenCheck]]) -> bool {
+    if now.len() != before.len() {
+        return false
+    }
+    for (function, checks) in now {
+        let earlier = before.get(function) ?? return false
+        if earlier.len() != checks.len() {
+            return false
+        }
+        for (one, other) in checks.iter().zip(earlier.iter()) {
+            if one.written != other.written || one.within != other.within || one.holds != other.holds {
+                return false
+            }
+        }
+    }
+    return true
 }
 
 /// The postconditions an exit did not show, struck - from the last place

@@ -1,0 +1,20 @@
+// An index two calls in, reached by outside data, is refused at the outer call.
+// (ADR-396 D1, #1572)
+use std::io
+use std::text
+
+fn month_name(month: int) -> String {
+    let names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return names[month]
+}
+
+fn label(month: int) -> String {
+    return f"month {month_name(month)}"
+}
+
+fn main() throws {
+    let month = text::parse_i64(io::read_to_string().trim()) ?? 1
+    return if !(month >= 0 && month <= 12)
+    println(label(month))
+}

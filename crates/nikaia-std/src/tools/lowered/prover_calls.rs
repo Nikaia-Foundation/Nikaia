@@ -209,6 +209,59 @@ pub(crate) fn config_from_outside(config: &[ConfigArg], tainted: &collections::B
     false
 }
 
+pub fn outside_source(expr: &Expr, tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, callees: &collections::BTreeMap<i64, String>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> Option<String> {
+    match expr {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let n = words.resolve(name);
+            if tainted.contains(n) {
+                return Some(nikaia_std::index::or(match *nikaia_std::index::get(&sources, n) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || nikaia_std::block::Text::from(n.to_string()).into()));
+            }
+            return None;
+        },
+        Expr::Call { func, args, config, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let source = outside_source_named(func, words);
+            if source.is_some() && untrusted(library, nikaia_std::index::or(source.as_deref(), || "")) && !says_trusted(words, config) { return std::convert::identity(source); }
+            return outside_source_in(args, tainted, sources, words, library, callees, &holes_of);
+        },
+        Expr::MethodCall { receiver, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            let callee = nikaia_std::index::or(callees.get(&(id_of(receiver) as i64)), || "");
+            if untrusted(library, callee) && !says_trusted(words, config) { return Some(nikaia_std::block::Text::from(callee.to_string())); }
+            return nikaia_std::index::or_maybe(outside_source(receiver, tainted, sources, words, library, callees, holes_of), || outside_source_in(args, tainted, sources, words, library, callees, &holes_of));
+        },
+        Expr::SafeMethod { receiver, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            let callee = nikaia_std::index::or(callees.get(&(id_of(receiver) as i64)), || "");
+            if untrusted(library, callee) && !says_trusted(words, config) { return Some(nikaia_std::block::Text::from(callee.to_string())); }
+            return nikaia_std::index::or_maybe(outside_source(receiver, tainted, sources, words, library, callees, holes_of), || outside_source_in(args, tainted, sources, words, library, callees, &holes_of));
+        },
+        Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); return nikaia_std::index::or_maybe(outside_source(lhs, tainted, sources, words, library, callees, holes_of), || outside_source(rhs, tainted, sources, words, library, callees, holes_of)); },
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return outside_source(expr, tainted, sources, words, library, callees, holes_of); },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return outside_source(inner, tainted, sources, words, library, callees, holes_of); },
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return outside_source(expr, tainted, sources, words, library, callees, holes_of); },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); return outside_source(base, tainted, sources, words, library, callees, holes_of); },
+        Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); return outside_source(base, tainted, sources, words, library, callees, holes_of); },
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); return nikaia_std::index::or_maybe(outside_source(index, tainted, sources, words, library, callees, holes_of), || outside_source(base, tainted, sources, words, library, callees, holes_of)); },
+        Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); return nikaia_std::index::or_maybe(outside_source(value, tainted, sources, words, library, callees, holes_of), || outside_source(fallback, tainted, sources, words, library, callees, holes_of)); },
+        Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return outside_source(expr, tainted, sources, words, library, callees, holes_of); },
+        _ => { },
+    }
+    outside_source_in(&holes_of(expr), tainted, sources, words, library, callees, &holes_of)
+}
+
+pub(crate) fn outside_source_in(exprs: &[Expr], tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, callees: &collections::BTreeMap<i64, String>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> Option<String> {
+    for e in exprs.iter() {
+        let found = outside_source(e, tainted, sources, words, library, callees, &holes_of);
+        if found.is_some() { return std::convert::identity(found); }
+    }
+    None
+}
+
 pub(crate) fn outside_source_named(func: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match func {
         Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },

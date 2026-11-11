@@ -1,0 +1,24 @@
+Jun
+warning[NK1302]: At this call, `names[month]` in `month_name` is not proved in bounds, and `month` comes from outside the program.
+   --> month.nika:12:2
+    |
+ 12 | 	println(month_name(month))
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `month` comes from `io::read_to_string`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: What is known at this call does not exclude `month` can be 12 in `month_name`, for which `0 <= month < names.len()` fails.
+    = note: `unproved-claims = "warn"` lets this build through: the claim is checked when the program runs, and a false one stops it there.
+    = help: Check it where it arrives, with a guard the program handles: `throw BadInput(month) if !(0 <= month && month < 12)`, or the early `return` that rejects it. After that line, the index is proved.
+exit 0
+warning[NK1302]: At this call, `names[month]` in `month_name` is not proved in bounds, and `month` comes from outside the program.
+   --> month.nika:12:2
+    |
+ 12 | 	println(month_name(month))
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `month` comes from `io::read_to_string`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: What is known at this call does not exclude `month` can be 12 in `month_name`, for which `0 <= month < names.len()` fails.
+    = note: `unproved-claims = "warn"` lets this build through: the claim is checked when the program runs, and a false one stops it there.
+    = help: Check it where it arrives, with a guard the program handles: `throw BadInput(month) if !(0 <= month && month < 12)`, or the early `return` that rejects it. After that line, the index is proved.
+month.nika:6: the program stopped: index out of bounds: the len is 12 but the index is 12
+exit 101
