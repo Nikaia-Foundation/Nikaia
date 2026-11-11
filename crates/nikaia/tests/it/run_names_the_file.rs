@@ -57,7 +57,7 @@ fn a_panic_names_the_file_that_was_run() {
     let input = dir.join("stops.nika");
     std::fs::write(
         &input,
-        "fn main() throws {\n    let xs = [1, 2, 3]\n    let i = 7\n    println(f\"{xs[i]}\")\n}\n",
+        "use std::cli\nfn main() throws {\n    let xs = [1, 2, 3]\n    let i = 7 - cli::args().len()\n    println(f\"{xs[i]}\")\n}\n",
     )
     .expect("write the source");
     let ran = Command::new(env!("CARGO_BIN_EXE_nikaia"))
@@ -73,5 +73,5 @@ fn a_panic_names_the_file_that_was_run() {
         .lines()
         .find(|line| line.contains("the program stopped"))
         .unwrap_or_else(|| panic!("no stop in:\n{said}"));
-    assert!(line.starts_with("stops.nika:4:"), "{said}");
+    assert!(line.starts_with("stops.nika:5:"), "{said}");
 }
