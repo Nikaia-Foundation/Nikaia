@@ -1,0 +1,25 @@
+// #1476: a tuple written out where a `(T, U?)?` is wanted wraps its `U?`
+// part as well as the whole, `Some((1, Some(2)))`, as it does where
+// `(T, U?)` is wanted; it lowered to `Some((1, 2))`, a rustc error.
+
+fn range(ty: String) -> (i64, i64?)? {
+	return match ty {
+		"a" => (1, 2),
+		"b" => (0, null),
+		else => null,
+	}
+}
+
+fn first(k: i64) -> (i64, i64?)? {
+	if k > 0 {
+		return (1, 2)
+	}
+	return null
+}
+
+fn main() throws {
+	let x = range("a") ?? (0, null)
+	let y = range("b") ?? (5, null)
+	let z = first(1) ?? (0, null)
+	println(f"{x.0} {x.1 ?? 9} {y.1 ?? 9} {z.1 ?? 9}")
+}

@@ -275,6 +275,32 @@ pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWor
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_overflow_list_into_nullables(state: &mut CheckState, given: &Expr, found: &Ty, want: &Ty) -> bool {
+    let literal = matches!(given, Expr::ListLit { .. } | Expr::Tuple(_, _));
+    if literal && !check_overflow_a_nullable(found) {
+        match want {
+            Ty::Nullable(inner) => {
+                let inner = nikaia_std::boxed::open(inner);
+                check_overflow_list_into_nullables(state, given, found, inner);
+                return false;
+            },
+            _ => { },
+        }
+    }
+    let branching = matches!(given, Expr::If { .. } | Expr::Match { .. } | Expr::Block(_, _) | Expr::AsyncGroup(_, _, _, _, _));
+    if branching {
+        match want {
+            Ty::Nullable(inner) => {
+                let inner = nikaia_std::boxed::open(inner);
+                let plain: Ty = match found {
+                    Ty::Nullable(of) => { let of = nikaia_std::boxed::open(of); of.clone() },
+                    _ => found.clone(),
+                };
+                check_overflow_ends_into_nullables(state, given, &plain, inner);
+                return false;
+            },
+            _ => { },
+        }
+    }
     let items = match given {
         Expr::ListLit { items, .. } => items,
         Expr::Tuple(_, _) => return check_overflow_tuple_into_nullables(state, given, found, want),

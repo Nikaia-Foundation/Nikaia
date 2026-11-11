@@ -386,6 +386,45 @@ pub fn check_widened_slot[H: CheckHost](mut state: CheckState, world: ref CheckW
 /// `vec![Some(..)]`, element by element, as the same value is in a `let` of
 /// its own. True where the elements were wrapped.
 pub fn check_overflow_list_into_nullables(mut state: CheckState, given: ref Expr, found: ref Ty, want: ref Ty) -> bool sync {
+    // **Into a `T?` of such a list or tuple** (#1476): `(1, 2)` for `(i64,
+    // i64?)?` is `Some((1, Some(2)))`, its parts wrapped against the `T`;
+    // the whole still takes its own `Some`, so this says no wrap was made.
+    let literal = match given {
+        Expr::ListLit { .. } => true,
+        Expr::Tuple(_, _) => true,
+        else => false,
+    }
+    if literal && !check_overflow_a_nullable(found) {
+        match want {
+            Ty::Nullable(inner) => {
+                check_overflow_list_into_nullables(state, given, found, inner)
+                return false
+            },
+            else => {},
+        }
+    }
+    // The ends of a branch likewise, each against the `T`: `"a" => (1, 2)`
+    // beside `else => null`.
+    let branching = match given {
+        Expr::If { .. } => true,
+        Expr::Match { .. } => true,
+        Expr::Block(_, _) => true,
+        Expr::AsyncGroup(_, _, _, _, _) => true,
+        else => false,
+    }
+    if branching {
+        match want {
+            Ty::Nullable(inner) => {
+                let plain: Ty = match found {
+                    Ty::Nullable(of) => of.clone(),
+                    else => found.clone(),
+                }
+                check_overflow_ends_into_nullables(state, given, plain, inner)
+                return false
+            },
+            else => {},
+        }
+    }
     let items = match given {
         Expr::ListLit { items, .. } => items,
         Expr::Tuple(_, _) => return check_overflow_tuple_into_nullables(state, given, found, want),
