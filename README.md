@@ -3,8 +3,7 @@
   <h1>N I K A I A</h1>
   <p><strong>Good wins.</strong></p>
   <p>
-    Concise by design. Catch what can be proven at compile time.
-    Fast as lightning.
+    Safe, very fast and easy to read, all three at once.
   </p>
 
 
@@ -30,134 +29,163 @@
 
 ---
 
-## When people and AI write code together
+## The reliable programming language
 
-More and more code is written with a model, or by an agent that changes a program on its own.
-Such code reads well, and its mistakes are often the kind review finds hardest: two tasks that
-change the same value, an error that nobody handles, a call outside what a function expects.
-Nikaia's compiler looks for these before the program runs. It refuses two tasks that would
-change the same value at once and names what they share, it refuses an error that is neither
-handled nor declared with `throws`, and it carries each `assert` back to the calls that must
-meet it. Where it cannot tell what a call touches, as in a Rust crate or a C library, it does
-not refuse, and `nikaia build --asserts` lists which claims it proved and which are checked at
-run time.
+Nikaia is a statically typed, compiled, type-safe programming language with easy
+verification. The compiler catches easy-to-miss mistakes before the program runs, the
+program becomes optimised machine code, and the code stays concise.
 
-That makes the compiler a reviewer for every change, whether a person wrote it or a model did.
-Its messages say what is wrong and what to write instead, so an agent can read the error,
-change the code and build again, and the person reviews a program the compiler has already
-checked. Memory, waiting and sharing are left to the compiler and the build settings, so the
-code a person reads is mostly about the task itself.
-
-No model has Nikaia in its training data yet. Generating it means putting the specification in
-the model's context, and `docs/specification/` together with `examples/` serves for that
-today. The compiler is pre-alpha. The longer argument is in the [Manifesto](manifesto.md), §8.
+The compiler is pre-alpha. What works today is in
+[Status & roadmap](docs/project_status_and_roadmap.md); the reasons behind the project are in
+the [Manifesto](manifesto.md).
 
 ---
 
-## The idea
+## Safe, secure, reliable
 
-Python or JavaScript are quick to write, but the programs are slower than they could be, and
-some mistakes only show up in production. C++ or Rust produce fast programs, but a good part
-of each program tells the compiler how memory, waiting and sharing should work.
+A program fails in more than one way. Nikaia looks at five of them, checks at compile time
+wherever it can, and says for each where its checks stop.
 
-Nikaia's bet is that a compiler which sees the whole program can work much of that out
-itself: which data needs protecting, where a function waits, when memory can be freed, and
-how to spread work over several cores. You write what should happen, and the compiler picks
-how.
+- A call that can fail is handled or passed on, or the program is
+  not built. What a function can fail with is worked out from its body, so its signature says
+  `throws` and not a list of every error. A task that can panic ends alone, and whoever waits
+  for it handles the crash. An index past the end, an overflow or a division by zero that the
+  compiler can show happens is refused.
+- A claim about data from outside waits for a guard where the data
+  arrives, a path from outside stays in the directory the call names, and formats are read by
+  parsers built from a grammar.
+- An `assert` is a contract, and the compiler checks it at
+  every call (below).
+- Every change is checked against the rules the code states,
+  whoever wrote it, and a change that breaks one is refused with what to write instead.
+  `nikaia build --asserts` lists which claims were proved and which are checked at run time.
+- A wait with a deadline has to handle its timeout, a lock held
+  across a pause is refused, and two tasks that would change the same value at once are
+  refused with the value they share named. A task that fills its memory block ends alone with
+  `task::OverBudget`, and the tasks beside it run on.
 
-Much of that is about safety, and for tasks safety means more than memory. Two tasks that would change the same
-value at once, or both write to standard output, are refused when the program is built, and
-the message names what they share; where the compiler cannot tell what a call touches, as in
-a Rust crate or a C library, it does not refuse. A task's error is thrown where the program
-waits for the task, and the compiler asks for it to be handled there, as for any call that can
-fail. A task handle that is never joined, cancelled or detached is refused. Each task is to
-get a memory budget of its own, so that a task that uses it up ends alone while the rest runs
-on; that is specified, not built yet, and memory a Rust crate or a C library allocates for
-itself is not counted.
+Where the compiler cannot tell what a call touches, as in a Rust crate or a C library, it does
+not refuse, and the report says so.
 
-The compiler also treats an `assert` as a contract that every caller must meet, and refuses a
-missing value that is used unchecked or an error that is neither handled nor declared with
-`throws`. Memory is released at a point you can see, without a garbage collector and without
-`free`. Whether a program runs on one core or on many is one line in `nikaia.toml`, and the
-code stays the same. Formats are part of the language: a log or a protocol is described as a
-grammar.
+### An assert is a contract
 
-You do not need to mark the functions that wait, because the compiler finds where a function
-pauses: a call that waits is written like any other, and a function that starts to wait leaves
-its callers as they are. Work that runs beside other work is written with `async` before an
-expression: `async e` starts `e` at once, and the program waits for its value where it is first
-needed, so `f(async g(), async h())` runs `g` and `h` beside each other and then calls `f`. A
-task's error is thrown where the program waits for it, and an `async { … }` group ends only when
-every task in it has ended; `limit:`, `within:` and `admission:` bound how many tasks run, how
-long and how many may wait. Handles and detached tasks are specified and still being built
-([#987](https://github.com/Nikaia-Foundation/Nikaia/issues/987),
-[#988](https://github.com/Nikaia-Foundation/Nikaia/issues/988)).
-
-Nikaia checks your program, and Rust's compiler checks memory safety again. The name comes from my
-daughter, **Nika**: in Persian, *nik* means *good*, so the motto is *good wins*. The longer
-story is in the [Manifesto](manifesto.md).
-
----
-
-## An assert is a contract
-
-`percent` asserts that `whole` is positive. `share` only hands its `total` on, so the duty
-passes to `share`'s callers, and the bad call in `main` does not build:
+An `assert` at the start of a function is its contract: it says what every caller has to hand
+it. In this quicksort, `partition` and `sort` ask for a range that lies inside the list. The
+`assert` at the end of `partition` is its promise in return, that the pivot lands inside that
+range, and that is what lets `sort` go on with both halves:
 
 ```nika
-fn percent(part: int, whole: int) -> int {
-    assert(whole > 0)
-    return part * 100 / whole
+fn partition(mut a: Vec[int], lo: int, hi: int) -> int {
+    assert(lo >= 0 && lo <= hi && hi < a.len())   // what every caller must hand in
+    let pivot = a[hi]
+    let mut i = lo
+    for j in lo..<hi {
+        if a[j] < pivot {
+            let t = a[i]
+            a[i] = a[j]
+            a[j] = t
+            i += 1
+        }
+    }
+    a[hi] = a[i]
+    a[i] = pivot
+    assert(i >= lo && i <= hi)    // the promise back: the pivot lands inside the range
+    return i
 }
 
-fn share(done: int, total: int) -> int {
-    return percent(done, total)     // hands the duty on to its caller
+fn sort(mut a: Vec[int], lo: int, hi: int) {
+    assert(lo >= 0 && hi < a.len())               // what every caller must hand in
+    if lo < hi {
+        let p = partition(a, lo, hi)
+        sort(a, lo, p - 1)
+        sort(a, p + 1, hi)
+    }
 }
 
-fn at_least_zero(n: int) -> int {
-    return 0 if n < 0
-    assert(n >= 0)                  // a claim about the result
-    return n
-}
-
-fn per_row(rows: int) -> int {
-    let r = at_least_zero(rows) + 1
-    return percent(50, r)           // r >= 1: proved, no check
-}
-
-fn main() throws {
-    println(f"{per_row(4)}% {share(3, 4)}%")
-    // and this call breaks it:
-    println(f"{share(1, 0)}%")
+fn main() {
+    let mut v: Vec[int] = [5, 3, 9, 1, 4]
+    sort(v, 0, v.len())           // one past the end
 }
 ```
 
 ```text
-$ nikaia build
-error[NK1207]: This call breaks `share`'s precondition `total > 0` every time it is reached.
-   --> …/pre/src/main.nika:24:5
+$ nikaia run qs.nika
+error[NK1207]: This call breaks `sort`'s precondition `lo >= 0 && hi < a.len()` every time it is reached.
+   --> qs.nika:30:5
     |
- 24 |     println(f"{share(1, 0)}%")
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 30 |     sort(v, 0, v.len())
+    |     ^^^^^^^^^^^^^^^^^^^
     |
-    = note: Here `total` is 0.
-    = note: The precondition is `assert(whole > 0)` in `percent`, carried back to `share`'s entry.
-    = help: Pass `share` arguments for which `total > 0` holds, or check them with a guard before the call.
+    = note: Here `a.len()` is 5, `hi` is 5, `lo` is 0.
+    = help: Pass `sort` arguments for which `lo >= 0 && hi < a.len()` holds, or check them with a guard before the call.
 1 claim shown false
 ```
 
-The `assert` became a precondition, carried back through `share` to the call that passes 0.
-`at_least_zero`'s `assert` is a claim about its result, so `per_row`'s call to `percent` is
-proved and has no check at run time. A claim the compiler cannot prove is refused (`NK1300`);
-a build that says `unproved-claims = "warn"` builds it with a warning and checks it at run time.
+The compiler proves each `assert` through loops and recursion, without loop invariants written
+by hand. With `sort(v, 0, v.len() - 1)` the program builds, and with these three asserts every
+index is proved in range, so none is checked when the program runs. A claim the compiler cannot
+prove is refused (`NK1300`); a build that says `unproved-claims = "warn"` builds it with a
+warning and checks it at run time.
 
-More: loops without written invariants, the `--asserts` report, and data from outside, in
-[Contracts](guide/contracts.md); `main`'s parameters as the command line in [The command
-line](guide/command-line.md).
+`lo` and `hi` are `int`, the type of a length and an index, so `p - 1` may become -1 for an
+empty range and no index needs a conversion. More in [Contracts](guide/contracts.md).
 
 ---
 
-## Hello, world
+## Very fast
+
+Programs written in Nikaia become optimised machine code, release memory at a point the code
+shows, without collector pauses, and can spread their work over every core.
+
+- On the One Billion Row Challenge, counted with callgrind
+  ([benches/brc](benches/brc/README.md)) at the baseline CPU level, Nikaia's safe program
+  already does less work than the fastest Rust a person wrote, and mispredicts a third as many
+  branches. The figures and how they are taken are in that README.
+- Whether your code may run on several cores is one line in
+  `nikaia.toml`, and the code does not change:
+
+  ```toml
+  [build]
+  user-parallelism = "no"    # or "yes"
+  ```
+- Memory is released without `free` and without lifetimes written by hand: the
+  compiler works out when memory can be released, and the release is a point you can see.
+- A build setting tells the compiler to leave out the index
+  and overflow checks it has proved cannot fail:
+
+  ```toml
+  [build]
+  optimization = "remove-bounds-checks:on,remove-overflow-checks:on"
+  ```
+
+---
+
+## Easy to understand
+
+You write what should happen, and Nikaia works out the technical details other fast languages
+make you spell out. When something is wrong, it tells you in plain words what to change.
+
+- A function that waits for a file or the network
+  is called like any other, and a wait added deep inside leaves every caller as it is. The
+  program waits where it needs the value:
+
+  ```nika
+  let a = async count_words(first)    // starts at once
+  let b = async count_words(second)   // runs beside the first
+  println("both counts have started")
+  println(f"{a + b} words")           // waits for both
+  ```
+- An error says what you wrote, why it cannot work and what to write
+  instead, so a person or an agent can fix the code and build again:
+
+  ```text
+  error[NK1139]: You're changing `count`, but it wasn't declared as mutable.
+  help: Add `mut` where it's declared: `let mut count`.
+  ```
+- Describe a format as a grammar and the compiler builds
+  the parser ([Grammars](guide/grammars.md)).
+
+### Hello, world
 
 ```nika
 // src/main.nika
@@ -175,17 +203,16 @@ syntax](guide/syntax.md) shows the language on one page.
 
 ---
 
-## Performance
+## Made for good
 
-A preliminary comparison on the One Billion Row Challenge, counted with callgrind
-([benches/brc](benches/brc/README.md)), instructions a row at 16 codegen units: the fastest
-Rust program written by a person runs 131, an AI-written one after several measured rounds
-(AI variant 2) 147. Nikaia's `fast.nika` runs 95 built optimized, where a check the compiler
-proved is written without it in `unsafe` Rust, and 143 built safe, every check kept and no
-`unsafe` in the emitted Rust; its plain `examples/1brc.nika` runs 209 and 206.
-`fast-unsafe.nika`, the same program with its claims written `unsafe { assume(…) }`, runs 87
-optimized. Both Nikaia programs mispredict 0.14 branches a row, the person's program 0.47. At
-`x86-64-v3` the person's program runs 92 instructions a row, `fast-unsafe.nika` 79.
+Software that fails less hurts fewer people. Programs that do more with less hardware use less
+energy. And a language anyone can read lets more people build.
+
+Nikaia is built in the open: each design decision is argued in an
+[ADR](docs/specification/adr/README.md) and accepted by a human, and the compiler is moving
+into Nikaia a module at a time ([ADR-294](docs/specification/adr/adr-294.md)); the badge above
+shows the share. The name comes from my daughter, Nika: in Persian, *nik* means *good*, so the
+motto is *good wins*.
 
 ---
 
@@ -193,15 +220,25 @@ optimized. Both Nikaia programs mispredict 0.14 branches a row, the person's pro
 
 | | |
 | :--- | :--- |
-| **Aimed at** | services that mostly wait; data in unusual formats; heavy computation; code written by AI, with the compiler as reviewer ([Manifesto](manifesto.md), §8) |
+| **Built for** | services that have to keep running; data processing and batch jobs; backends under load; small machines and cloud bills; code a model writes, with the compiler as reviewer ([Manifesto](manifesto.md), §8); many tasks at once; languages and formats; libraries with one version of each function; small tools that grow |
 | **Not planned** | an interactive REPL: the checks look at the whole program, and a typed line has none |
 | **Not yet** | something to ship next quarter, a large ecosystem, years of answered questions online |
-| **Status** | pre-alpha. [`examples/`](examples/) holds a calculator, a JSON parser, a log analyser, a small HTTP server and more, and the tests compile and run them. A dependency is found by version through crates.io, though no Nikaia package is published there yet; `nikaia lsp` shows the checker's messages in the editor and goes to a definition; the HTTP server takes many connections at once; there is no TLS and no database access yet |
-| **Self-hosting** | the compiler is moving into Nikaia a module at a time ([ADR-294](docs/specification/adr/adr-294.md)); the badge above shows the share |
+| **Status** | pre-alpha. A calculator, a JSON parser, a log analyser, a small HTTP server and the One Billion Row Challenge build today ([`examples/`](examples/)). `nikaia fmt` formats, `nikaia lsp` shows the checker's messages in the editor, and a dependency is found by version through crates.io, though no Nikaia package is published there yet. There is no TLS and no database access yet |
 
-What works today, the limits you will hit and the progress over time are in
-[Status & roadmap](docs/project_status_and_roadmap.md). Bug reports and "this cannot work
-because…" arguments are welcome.
+No model has Nikaia in its training data yet. Generating it means putting the specification in
+the model's context, and `docs/specification/` together with `examples/` serves for that today.
+
+Bug reports and "this cannot work because…" arguments are welcome.
+
+---
+
+## Build Nikaia with us
+
+Nikaia is built in the open, and there is room to help at every size: a clearer error message,
+a missing example or a fix as a [pull request](https://github.com/Nikaia-Foundation/Nikaia/pulls);
+an issue marked [`ready`](https://github.com/Nikaia-Foundation/Nikaia/issues?q=is%3Aissue+is%3Aopen+label%3Aready),
+which is decided and says what to build; a part of the language you look after; or a question
+on [Discord](https://discord.gg/CtnPEbPDWu).
 
 ---
 

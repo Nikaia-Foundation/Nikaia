@@ -36,7 +36,7 @@ grammar Calc {
     //
     // `a - b - c` means `(a - b) - c`: the tails are collected and folded left to
     // right in the action. (`expr = expr &quot;-&quot; term` would never terminate.)
-    entry rule expr -&gt; i64 =
+    entry rule expr -&gt; int =
         head:term tail:add_tail* {
             let mut value = head
             for t in tail { value = value + t }
@@ -44,15 +44,15 @@ grammar Calc {
         }
 
     // Subtraction is addition of a negation, so the fold above needs no operator.
-    rule add_tail -&gt; i64 =
+    rule add_tail -&gt; int =
           &quot;+&quot; t:term { t }
         | &quot;-&quot; t:term { -t }
 
     // Division cannot be folded that way, so each operand travels with its
-    // operator as a pair `(Op, i64)`, and `match` takes the pair apart.
+    // operator as a pair `(Op, int)`, and `match` takes the pair apart.
     // `term` sits between `expr` and `factor`, which is why `*` binds tighter
     // than `+`: precedence is the order of the rules, not a table.
-    rule term -&gt; i64 =
+    rule term -&gt; int =
         head:factor tail:mul_tail* {
 </code></pre>
         </details>
