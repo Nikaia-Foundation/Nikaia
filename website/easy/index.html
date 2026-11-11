@@ -67,10 +67,10 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
     </div>
     <div class="home-code-side">
 <div class="home-code markdown-body"><pre><code class="language-nika">grammar Calc {
-    entry rule expr -&gt; i64 =
+    entry rule expr -&gt; int =
         head:term tail:add_tail* { … }
 
-    rule add_tail -&gt; i64 =
+    rule add_tail -&gt; int =
           "+" t:term { t }
         | "-" t:term { -t }
 }</code></pre></div>

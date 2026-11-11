@@ -59,9 +59,9 @@ description: >-
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Caught at compile time</span>
         <h3><a href="{{ "/safe/#logic" | relative_url }}">Contracts kept at every call</a></h3>
-        <p>An <code>assert</code> is a contract. The compiler proves it, through loops and recursion, where other provers want the loop invariants written by hand, and a call that breaks it is refused. In this quicksort three asserts are all it takes: every index is proved in range, so none is checked when the program runs. Two tasks that change the same value are refused too.</p>
-<div class="home-code markdown-body"><pre><code class="language-nika">fn partition(mut a: Vec[i64], lo: i64, hi: i64) -&gt; i64 {
-    assert(0 &lt;= lo &amp;&amp; lo &lt;= hi &amp;&amp; hi &lt; a.len())
+        <p>An <code>assert</code> at the start of a function is its contract: it says what every caller has to hand it. In this quicksort, <code>partition</code> and <code>sort</code> ask for a range that lies inside the list. The assert at the end of <code>partition</code> is its promise in return, that the pivot lands inside that range, and that is what lets <code>sort</code> go on with both halves. The compiler proves each assert, through loops and recursion, where other provers want the loop invariants written by hand, and a call that breaks a contract is refused. With these three asserts every index is proved in range, so none is checked when the program runs. Two tasks that change the same value are refused too.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">fn partition(mut a: Vec[int], lo: int, hi: int) -&gt; int {
+    assert(lo &gt;= 0 &amp;&amp; lo &lt;= hi &amp;&amp; hi &lt; a.len())
     let pivot = a[hi]
     let mut i = lo
     for j in lo..&lt;hi {
@@ -74,12 +74,12 @@ description: >-
     }
     a[hi] = a[i]
     a[i] = pivot
-    assert(lo &lt;= i &amp;&amp; i &lt;= hi)    // the pivot lands inside the range
+    assert(i &gt;= lo &amp;&amp; i &lt;= hi)    // the pivot lands inside the range
     return i
 }
 
-fn sort(mut a: Vec[i64], lo: i64, hi: i64) {
-    assert(0 &lt;= lo &amp;&amp; hi &lt; a.len())
+fn sort(mut a: Vec[int], lo: int, hi: int) {
+    assert(lo &gt;= 0 &amp;&amp; hi &lt; a.len())
     if lo &lt; hi {
         let p = partition(a, lo, hi)
         sort(a, lo, p - 1)
@@ -87,9 +87,9 @@ fn sort(mut a: Vec[i64], lo: i64, hi: i64) {
     }
 }
 
-let mut v: Vec[i64] = [5, 3, 9, 1, 4]
+let mut v: Vec[int] = [5, 3, 9, 1, 4]
 sort(v, 0, v.len())</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code>  3 asserts proved, 9 indexes proved
-<span class="d-error">error</span><b>: This call breaks `sort`'s precondition `0 &lt;= lo &amp;&amp; hi &lt; a.len()` every time it is reached.</b>
+<span class="d-error">error</span><b>: This call breaks `sort`'s precondition `lo &gt;= 0 &amp;&amp; hi &lt; a.len()` every time it is reached.</b>
   = note: Here `a.len()` is 5, `hi` is 5, `lo` is 0.</code></pre></div>
         <a class="safe-more" href="{{ "/safe/#logic" | relative_url }}">Read more →</a>
       </div>
@@ -190,10 +190,10 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
         <h3><a href="{{ "/easy/#grammar" | relative_url }}">Parsers from a grammar you write</a></h3>
         <p>Describe a format as a grammar and the compiler builds the parser.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">grammar Calc {
-    entry rule expr -&gt; i64 =
+    entry rule expr -&gt; int =
         head:term tail:add_tail* { … }
 
-    rule add_tail -&gt; i64 =
+    rule add_tail -&gt; int =
           "+" t:term { t }
         | "-" t:term { -t }
 }</code></pre></div>
