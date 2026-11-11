@@ -782,7 +782,7 @@ fn solver_tune(repo: String, nikaia: String, args: Vec[String]) throws {
 			println(f"  {engine}: PAR-2 sum {cost}")
 			if cost >= 0 && cost < best {
 				best = cost
-				chosen = trial.clone()
+				chosen = trial
 			}
 		}
 		settings = chosen
@@ -795,7 +795,7 @@ fn solver_tune(repo: String, nikaia: String, args: Vec[String]) throws {
 	))
 	println(solver_summary(
 		f"held out, {tuned}",
-		solver_tune_rows(bin.clone(), tuned.clone(), held, timeout),
+		solver_tune_rows(bin.clone(), tuned, held, timeout),
 	))
 	let bin_dir = bin.replace("/target/nikaia/bin/solver_rod", "")
 	process::run("rm", ["-rf", bin_dir])

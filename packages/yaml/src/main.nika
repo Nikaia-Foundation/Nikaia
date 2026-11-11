@@ -573,7 +573,13 @@ grammar Yaml {
 	// An implicit key: one line (`ns-s-implicit-yaml-key`, `c-s-implicit-json-key`),
 	// a flow collection, a quoted or a plain scalar.
 	rule Key(ds: Vec[Dir], left: i64) -> Node =
-		p:Props(ds) Sep1 t:text(v:KeyNode(ds, left, tag_kind(ds, p.tag))) if(one_line(t), "an implicit key on one line") if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
+		p:Props(ds) v:KeyTail(ds, left, p) -> { v }
+		| t:text(v:KeyNode(ds, left, TagKind::Untagged)) if(one_line(t), "an implicit key on one line") -> {
+			v
+		}
+	// What follows a key's properties `p`, read once: a node, or none.
+	rule KeyTail(ds: Vec[Dir], left: i64, p: Props) -> Node =
+		Sep1 t:text(v:KeyNode(ds, left, tag_kind(ds, p.tag))) if(one_line(t), "an implicit key on one line") if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -585,10 +591,7 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| t:text(v:KeyNode(ds, left, TagKind::Untagged)) if(one_line(t), "an implicit key on one line") -> {
-			v
-		}
-		| p:Props(ds) if(empty_fits(tag_kind(ds, p.tag)), "a node its tag fits") peek(Sp ":" Gap) -> {
+		| if(empty_fits(tag_kind(ds, p.tag)), "a node its tag fits") peek(Sp ":" Gap) -> {
 			empty_of(tag_kind(ds, p.tag), p)
 		}
 	rule KeyNode(ds: Vec[Dir], left: i64, k: TagKind) -> Node =
@@ -609,7 +612,10 @@ grammar Yaml {
 	// the node below then holds the other one, and the two join. `k` is the
 	// tag a property line above gave it.
 	rule Propped(ds: Vec[Dir], left: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
-		p:Props(ds) s:count(" " | "\t") if(s > 0) v:BlockScalar(n; k: kind_with(ds, p.tag, k)) BlockTail -> {
+		p:Props(ds) v:PropTail(ds, left, n, p; c: c, k: k) -> { v }
+	// What follows the properties `p` of `Propped`, read once.
+	rule PropTail(ds: Vec[Dir], left: i64, n: i64, p: Props; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
+		s:count(" " | "\t") if(s > 0) v:BlockScalar(n; k: kind_with(ds, p.tag, k)) BlockTail -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -621,7 +627,7 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| p:Props(ds) s:count(" " | "\t") if(s > 0) v:Inline(ds, left, n; k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") Eol Blanks -> {
+		| s:count(" " | "\t") if(s > 0) v:Inline(ds, left, n; k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") Eol Blanks -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -633,7 +639,7 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| p:Props(ds) Eol Blanks v:Block(ds, left, n; c: c, k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") if(p.anchor == null || v.anchor == null, "one anchor to a node") if(p.tag == null || v.tag == null, "one tag to a node") -> {
+		| Eol Blanks v:Block(ds, left, n; c: c, k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") if(p.anchor == null || v.anchor == null, "one anchor to a node") if(p.tag == null || v.tag == null, "one tag to a node") -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -645,17 +651,18 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| p:Props(ds) if(empty_fits(kind_with(ds, p.tag, k)), "a node its tag fits") Eol Blanks -> {
+		| if(empty_fits(kind_with(ds, p.tag, k)), "a node its tag fits") Eol Blanks -> {
 			empty_of(kind_with(ds, p.tag, k), p)
 		}
 	rule Nothing = "" -> { }
 
 	// `c-ns-properties`: a tag and an anchor, in either order, or one alone.
+	// The first property is read once; the second, after blanks, may follow.
 	rule Props(ds: Vec[Dir]) -> Props =
-		a:here t:Tag(ds) Sep1 n:Anchor b:here -> { Props { start: a, end: b, anchor: n, tag: t } }
-		| a:here n:Anchor Sep1 t:Tag(ds) b:here -> { Props { start: a, end: b, anchor: n, tag: t } }
-		| a:here t:Tag(ds) b:here -> { Props { start: a, end: b, anchor: null, tag: t } }
-		| a:here n:Anchor b:here -> { Props { start: a, end: b, anchor: n, tag: null } }
+		a:here t:Tag(ds) n:AnchorAfter? b:here -> { Props { start: a, end: b, anchor: n, tag: t } }
+		| a:here n:Anchor t:TagAfter(ds)? b:here -> { Props { start: a, end: b, anchor: n, tag: t } }
+	rule AnchorAfter -> String = Sep1 n:Anchor -> { n }
+	rule TagAfter(ds: Vec[Dir]) -> String = Sep1 t:Tag(ds) -> { t }
 	rule Sep1 = (" " | "\t")+ -> { }
 	// `c-ns-anchor-property`: the name, after `&`.
 	rule Anchor -> String = "&" s:text(AnchorChar+) -> { s }
@@ -957,7 +964,11 @@ grammar Yaml {
 	// A flow node, with properties or without; properties alone are an empty
 	// node.
 	rule FlowAny(ds: Vec[Dir], left: i64, n: i64) -> Node =
-		p:Props(ds) Fs(n) v:FlowNode(ds, left, n, tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
+		p:Props(ds) v:FlowPropTail(ds, left, n, p) -> { v }
+		| v:FlowNode(ds, left, n, TagKind::Untagged) -> { v }
+	// What follows a flow node's properties `p`, read once: a node, or none.
+	rule FlowPropTail(ds: Vec[Dir], left: i64, n: i64, p: Props) -> Node =
+		Fs(n) v:FlowNode(ds, left, n, tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -969,7 +980,7 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| p:Props(ds) if(empty_fits(tag_kind(ds, p.tag)), "a node its tag fits") e:text(Nothing) -> {
+		| if(empty_fits(tag_kind(ds, p.tag)), "a node its tag fits") e:text(Nothing) -> {
 			let v = match tag_kind(ds, p.tag) {
 				TagKind::Str => Value::Str(Scalar {
 					raw: e,
@@ -998,7 +1009,6 @@ grammar Yaml {
 				value: v,
 			}
 		}
-		| v:FlowNode(ds, left, n, TagKind::Untagged) -> { v }
 	rule FlowNode(ds: Vec[Dir], left: i64, n: i64, k: TagKind) -> Node =
 		v:FlowSeq(ds, left, n) -> { v }
 		| v:FlowMap(ds, left, n) -> { v }
@@ -1575,18 +1585,22 @@ fn digits_in(s: String, from: i64, radix: i64) -> bool sync {
 	return true
 }
 
-// `[-+]?[0-9]+`, `0o[0-7]+`, `0x[0-9a-fA-F]+`.
+// `[-+]?[0-9]+`, `0o[0-7]+`, `0x[0-9a-fA-F]+`, of a number that fits, as
+// serde_yaml resolves them (#1516): a decimal one an `i64` or a `u64` holds,
+// else it is a float (`is_float` takes its digits); a `0x…` or `0o…` one an
+// `i64` holds, else it stays a string.
 fn is_int(s: String) -> bool sync {
 	if s.starts_with("0o") {
-		return digits_in(s, 2, 8)
+		return digits_in(s, 2, 8) && radix_value(s, 8) != null
 	}
 	if s.starts_with("0x") {
-		return digits_in(s, 2, 16)
+		return digits_in(s, 2, 16) && radix_value(s, 16) != null
 	}
-	if s.starts_with("-") || s.starts_with("+") {
-		return digits_in(s, 1, 10)
+	let from = if s.starts_with("-") || s.starts_with("+") { 1 } else { 0 }
+	if !digits_in(s, from, 10) {
+		return false
 	}
-	return digits_in(s, 0, 10)
+	return text::parse_i64(s) != null || text::parse_u64(s) != null
 }
 
 // `[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?`, and `.inf`, `.nan`
@@ -1637,14 +1651,17 @@ fn is_float(s: String) -> bool sync {
 	return i == cs.len() as i64
 }
 
-// The decimal number at the start of `t`, 0 where none is.
+// The decimal number at the start of `t`, 0 where none is or where it does
+// not fit an `i64`: the place the library writes itself, which a number of
+// more digits than that can only mean is broken, never a stop.
 fn leading_number(t: String) -> i64 sync {
 	let mut n = 0
 	for c in t.chars() {
 		if c < '0' || c > '9' {
 			break
 		}
-		n = n * 10 + text::digit_value(c) as i64
+		let tens = n.checked_mul(10) ?? return 0
+		n = tens.checked_add(text::digit_value(c) as i64) ?? return 0
 	}
 	return n
 }
@@ -2486,69 +2503,62 @@ fn opening(kind: EventKind, n: ref Node, ds: ref Vec[Dir]) -> Event sync {
 	}
 }
 
-// A node's events: a collection's start, its children's events and its end;
-// a scalar's or an alias's one event.
-fn walk(n: ref Node, ds: ref Vec[Dir]) -> Vec[Event] sync {
-	return match n.value {
+// A node's events, pushed onto `out`: a collection's start, its children's
+// events and its end; a scalar's or an alias's one event. One list for the
+// whole walk, so no event is copied once per level around it.
+fn walk(n: ref Node, ds: ref Vec[Dir], mut out: Vec[Event]) sync {
+	match n.value {
 		Value::Seq(items) => {
-			let mut out: Vec[Event] = [opening(EventKind::SequenceStart, n, ds)]
+			out.push(opening(EventKind::SequenceStart, n, ds))
 			for x in items {
-				out.extend(walk(x, ds))
+				walk(x, ds, out)
 			}
 			out.push(bare(EventKind::SequenceEnd, n.end, n.end))
-			out
 		}
 		Value::Map(entries) => {
-			let mut out: Vec[Event] = [opening(EventKind::MappingStart, n, ds)]
+			out.push(opening(EventKind::MappingStart, n, ds))
 			for e in entries {
-				out.extend(walk(e.key, ds))
-				out.extend(walk(e.value, ds))
+				walk(e.key, ds, out)
+				walk(e.value, ds, out)
 			}
 			out.push(bare(EventKind::MappingEnd, n.end, n.end))
-			out
 		}
-		Value::Alias(a) => [
-			Event {
-				kind: EventKind::Alias,
-				start: n.start,
-				end: n.end,
-				explicit: false,
-				flow: false,
-				anchor: null,
-				tag: null,
-				style: Style::Plain,
-				value: a,
-				text: null,
-			},
-		]
-		Value::Str(s) => [
-			Event {
-				kind: EventKind::Scalar,
-				start: n.start,
-				end: n.end,
-				explicit: false,
-				flow: false,
-				anchor: n.anchor,
-				tag: resolved(ds, n.tag),
-				style: s.style,
-				value: n.raw,
-				text: text(s),
-			},
-		]
-		else => [
-			Event {
-				kind: EventKind::Scalar,
-				start: n.start,
-				end: n.end,
-				explicit: false,
-				flow: false,
-				anchor: n.anchor,
-				tag: resolved(ds, n.tag),
-				style: n.style,
-				value: n.raw,
-				text: null,
-			},
-		]
+		Value::Alias(a) => out.push(Event {
+			kind: EventKind::Alias,
+			start: n.start,
+			end: n.end,
+			explicit: false,
+			flow: false,
+			anchor: null,
+			tag: null,
+			style: Style::Plain,
+			value: a,
+			text: null,
+		})
+		Value::Str(s) => out.push(Event {
+			kind: EventKind::Scalar,
+			start: n.start,
+			end: n.end,
+			explicit: false,
+			flow: false,
+			anchor: n.anchor,
+			tag: resolved(ds, n.tag),
+			style: s.style,
+			value: n.raw,
+			text: text(s),
+		})
+		else => out.push(Event {
+			kind: EventKind::Scalar,
+			start: n.start,
+			end: n.end,
+			explicit: false,
+			flow: false,
+			anchor: n.anchor,
+			tag: resolved(ds, n.tag),
+			style: n.style,
+			value: n.raw,
+			text: null,
+		})
 	}
 }
 
@@ -2559,7 +2569,7 @@ pub fn events(docs: ref Vec[Document]) -> Vec[Event] sync {
 	let mut last: u32 = 0
 	for d in docs {
 		out.push(marker(EventKind::DocumentStart, d.root.start, d.root.end, d.start))
-		out.extend(walk(d.root, d.directives))
+		walk(d.root, d.directives, out)
 		out.push(marker(EventKind::DocumentEnd, d.root.end, d.root.end, d.end))
 		last = d.root.end
 	}

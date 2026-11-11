@@ -1,0 +1,37 @@
+// A number of thirty digits never stops the program (#1516): a plain scalar
+// of that shape resolves as D5 says (`[-+]?[0-9]+`, `0x[0-9a-fA-F]+` are
+// integers), and converting it is refused with the package's range error,
+// never an overflow. `leading_number`, which reads the line and column of
+// the parse's own refusal, gives 0 where a number does not fit, as checked
+// arithmetic answers it.
+use yaml
+
+fn kind(n: yaml::Node) -> String {
+	return match n.value {
+		yaml::Value::Int(t) => f"int({t})"
+		yaml::Value::Float(t) => f"float({t})"
+		yaml::Value::Str(s) => f"str({yaml::text(s)})"
+		else => "other"
+	}
+}
+
+fn number(text: String) throws {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println("error")
+		return
+	}
+	println(kind(docs[0]))
+	let i = yaml::as_i64(docs[0].value) catch {
+		println(f"i64 refused: {error.message}")
+		return
+	}
+	println(f"i64 {i}")
+}
+
+fn main() throws {
+	number("123456789012345678901234567890")
+	number("-123456789012345678901234567890")
+	number("0x123456789012345678901234567890")
+	number("0o123456701234567012345670123456")
+}

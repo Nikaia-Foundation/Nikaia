@@ -486,7 +486,7 @@ pub(crate) fn lg_form_cmp(a: &[i64], b: &[i64]) -> i64 {
 pub(crate) fn lg_place_before(held: &[LgHeld], b: i64, a: i64) -> bool {
     let order = lg_form_cmp(&nikaia_std::index::get(&held, nikaia_std::index::at(b)).form, &nikaia_std::index::get(&held, nikaia_std::index::at(a)).form);
     if order != 0 { return order < 0; }
-    unsafe { nikaia_std::proven::read(&held, (a) as usize) }.lin.constant < unsafe { nikaia_std::proven::read(&held, (b) as usize) }.lin.constant
+    (unsafe { nikaia_std::proven::read(&held, (a) as usize) }.lin.constant < unsafe { nikaia_std::proven::read(&held, (b) as usize) }.lin.constant)
 }
 
 pub(crate) fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {

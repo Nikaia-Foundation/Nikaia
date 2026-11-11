@@ -7,7 +7,7 @@ impl CheckState {
     pub fn a_lock_inside_a_lock(&mut self, called: &str, holds: &Lock, span: &Span) {
         if !self.inside_a_door || !holds.holds() { return; }
         let parts: Vec<&str> = called.split("::").collect::<Vec<_>>();
-        let method = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) }))).to_string()); ::core::mem::drop(parts);
+        let method = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string()); ::core::mem::drop(parts);
         let letters: Vec<scalar> = nikaia_std::list::chars(called.chars());
         let mut written = nikaia_std::block::Text::from(called.to_string());
         if !letters.is_empty() && (*unsafe { nikaia_std::proven::read(&letters, (0) as usize) }).to_ascii_lowercase() != *unsafe { nikaia_std::proven::read(&letters, (0) as usize) } { written = nikaia_std::block::Text::from(method.to_string()); }

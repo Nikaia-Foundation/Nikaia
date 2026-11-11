@@ -1,0 +1,37 @@
+// `tag ?? ""` handed to a call only reads `tag`: the parameter is lent,
+// and a field of a borrowed struct can be passed (#1523, #1529).
+pub struct Node {
+    pub tag: String?,
+}
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("!y")
+    return g
+}
+
+fn tag_written(tag: String) -> String {
+    if tag == "!" {
+        return "!"
+    }
+    return f"!<{tag}>"
+}
+
+fn tag_length(tag: String?) -> i64 {
+    let t = tag_written(tag ?? "")
+    return t.len() as i64
+}
+
+fn tag_shown(tag: String?) -> String {
+    return f"[{tag ?? ""}]"
+}
+
+fn size(n: ref Node) -> i64 {
+    return tag_length(n.tag)
+}
+
+fn main() throws {
+    let n = Node{ tag: make() }
+    println(size(n))
+    println(tag_shown(n.tag))
+}

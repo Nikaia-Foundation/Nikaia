@@ -1,0 +1,19 @@
+// An untyped `let` of a map's tuple option of words holds the tuple, read
+// through `??`, destructured and reached into (#1539).
+use std::collections
+
+fn main() throws {
+    let mut m: collections::BTreeMap[String, (i64, i64)] = collections::BTreeMap()
+    m.insert("a", (1, 2))
+    let had = m.get("a")
+    let (x, y) = had ?? (0, 0)
+    let none = m.get("b")
+    let t = none ?? (3, 4)
+    let read = m["a"]
+    let (p, q) = read ?? (0, 0)
+    let got = m.get("a")
+    if got != null {
+        println("got")
+    }
+    println(f"{x} {y} {t.0} {t.1} {p} {q}")
+}

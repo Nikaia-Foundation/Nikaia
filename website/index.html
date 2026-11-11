@@ -58,24 +58,49 @@ description: >-
       </div>
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Caught at compile time</span>
-        <h3><a href="{{ "/safe/#outside" | relative_url }}">Input checked where it arrives</a></h3>
+        <h3><a href="{{ "/safe/#logic" | relative_url }}">Contracts kept at every call</a></h3>
+        <p>An <code>assert</code> is a contract. The compiler proves it, through loops and recursion, where other provers want the loop invariants written by hand, and a call that breaks it is refused. In this quicksort three asserts are all it takes: every index is proved in range, so none is checked when the program runs. Two tasks that change the same value are refused too.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">fn partition(mut a: Vec[i64], lo: i64, hi: i64) -&gt; i64 {
+    assert(0 &lt;= lo &amp;&amp; lo &lt;= hi &amp;&amp; hi &lt; a.len())
+    let pivot = a[hi]
+    let mut i = lo
+    for j in lo..&lt;hi {
+        if a[j] &lt; pivot {
+            let t = a[i]
+            a[i] = a[j]
+            a[j] = t
+            i += 1
+        }
+    }
+    a[hi] = a[i]
+    a[i] = pivot
+    assert(lo &lt;= i &amp;&amp; i &lt;= hi)    // the pivot lands inside the range
+    return i
+}
+
+fn sort(mut a: Vec[i64], lo: i64, hi: i64) {
+    assert(0 &lt;= lo &amp;&amp; hi &lt; a.len())
+    if lo &lt; hi {
+        let p = partition(a, lo, hi)
+        sort(a, lo, p - 1)
+        sort(a, p + 1, hi)
+    }
+}
+
+let mut v: Vec[i64] = [5, 3, 9, 1, 4]
+sort(v, 0, v.len())</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code>  3 asserts proved, 9 indexes proved
+<span class="d-error">error</span><b>: This call breaks `sort`'s precondition `0 &lt;= lo &amp;&amp; hi &lt; a.len()` every time it is reached.</b>
+  = note: Here `a.len()` is 5, `hi` is 5, `lo` is 0.</code></pre></div>
+        <a class="safe-more" href="{{ "/safe/#logic" | relative_url }}">Read more →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
+        <h3><a href="{{ "/safe/#outside" | relative_url }}">The compiler knows where the data comes from</a></h3>
         <p>A claim about data from outside waits for a guard where the data arrives, a path from outside stays in the directory the call names, and formats are read by parsers built from a grammar.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">let out = process::run("git", ["rev-parse", "HEAD"])
 let n: int = out.stdout.len()
 assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: `n == 41` is a claim about data from outside the program.</b></code></pre></div>
         <a class="safe-more" href="{{ "/safe/#outside" | relative_url }}">Read more →</a>
-      </div>
-      <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-build">Caught at compile time</span>
-        <h3><a href="{{ "/safe/#logic" | relative_url }}">Contracts kept at every call</a></h3>
-        <p>An <code>assert</code> is a contract, and a call that breaks it is refused. Two tasks that change the same value are refused too.</p>
-<div class="home-code markdown-body"><pre><code class="language-nika">fn percent(n: int) -&gt; int {
-    assert(n &gt;= 0 &amp;&amp; n &lt;= 100)
-    return n
-}
-
-percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This call breaks `percent`'s precondition `n &gt;= 0 &amp;&amp; n &lt;= 100` every time it is reached.</b></code></pre></div>
-        <a class="safe-more" href="{{ "/safe/#logic" | relative_url }}">Read more →</a>
       </div>
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Checked on every build</span>

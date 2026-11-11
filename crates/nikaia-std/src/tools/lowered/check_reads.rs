@@ -11,7 +11,7 @@ pub(crate) fn check_owned_text(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, .. } => {
             let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
-            let last = *nikaia_std::index::get(&parts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) }));
+            let last = *unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) };
             last == "String" || last == "str"
         },
         _ => false,

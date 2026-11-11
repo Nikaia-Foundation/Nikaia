@@ -1,0 +1,6 @@
+bounds in tests/a_bytes_parameter_and_a_counter_one_below_it_are_derived.nika: 2 indexes, 2 proved; 2 operations, 2 proved
+     6  at - 1    proved
+     7  input[i]  proved
+     8  i -= 1    proved
+    10  input[i]  proved
+  derived  first: 0 <= at, at <= input.len(), at < input.len(), proved at the calls on lines 16

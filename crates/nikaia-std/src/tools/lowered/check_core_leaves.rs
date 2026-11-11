@@ -440,7 +440,7 @@ pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
         frame.push(local);
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
-    let first = if !frame.is_empty() { unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.id } else { -1 };
+    let first = if !frame.is_empty() { (unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.id) } else { -1 };
     let depth = state.scope.len() as i64;
     state.repeats.push(CheckRepeats::a_lambda(depth));
     state.scope.push(frame);

@@ -305,8 +305,18 @@ impl CheckState {
     }
 }
 
+/// **A wall the program's own error explains**: a parser that did not
+/// build (`NK1178`), or a default or `comptime` whose program this compiler
+/// could not lower (`NK1127`, #1507): a program that is refused elsewhere
+/// lowers to nothing, and each `= default_limits()` said so again.
 fn did_not_build(found: ref CheckFinding) -> bool sync {
-    if found.code != "NK1178" || found.notes.len() == 0 {
+    if found.notes.len() == 0 {
+        return false
+    }
+    if found.code == "NK1127" {
+        return found.notes[0].starts_with(COMPTIME_NOT_LOWERED)
+    }
+    if found.code != "NK1178" {
         return false
     }
     return found.notes[0].starts_with("This is a bug in the compiler")

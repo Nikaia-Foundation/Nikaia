@@ -287,7 +287,7 @@ pub fn path_of(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<S
 
 pub fn path_root(path: &str) -> String {
     let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string())
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string())
 }
 
 pub fn path_within(path: &str, within: &str) -> bool {

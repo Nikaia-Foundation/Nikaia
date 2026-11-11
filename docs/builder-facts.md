@@ -215,4 +215,5 @@ together with the specification section and an example test.
 * A `-> ref(a) String` or `a: borrowed` in the ledger for a `String` parameter comes from the text-tier pass (`lendable_parameter`, `a_keeping_target` in `text_tiers.nika`), which runs before the keep inference and the checker. (issue-1491)
 * A `.stdout`-only test passes even when the compiler prints a warning; add an empty `.stderr` beside it to pin "no warning". (issue-1491)
 * Files of the views-3 migration may carry `keep` marks the old binary already warned NK1334 on; when your fix makes `keep` mean kept, drop such marks where the file means lent. (issue-1491)
+* `a_list_element_past_a_jump_is_refused_where_an_own_value_is_wanted` is red on develop before #1501 (the `by_val` NK1102 is missing), so don't chase it in a list filter run. (issue-1501)
 

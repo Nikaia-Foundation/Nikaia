@@ -1,0 +1,55 @@
+/// A `let` of an `if` or a `match` value holds what every arm's value holds
+/// (#1516): `end` lies within `input` whichever arm gives it, a linear term
+/// or a call whose result is found within the list (ADR-306 D31), so the
+/// slices need no check. An arm of `n - 1`, which is -1 of an empty input,
+/// keeps its check.
+enum Cut {
+	Whole,
+	Line,
+	None,
+}
+
+fn line_start(input: ref Bytes, at: i64) -> i64 sync {
+	let n = input.len() as i64
+	let mut i = at.min(n)
+	while i > 0 {
+		if input[i - 1] == 10 {
+			return i
+		}
+		i -= 1
+	}
+	return 0
+}
+
+fn head(input: ref Bytes, at: i64, whole: bool) -> i64 sync {
+	let n = input.len() as i64
+	let end = if whole { n } else { line_start(input, at) }
+	return input[0..<end].len() as i64
+}
+
+fn cut(input: ref Bytes, at: i64, how: Cut) -> i64 sync {
+	let end = match how {
+		Cut::Whole => input.len() as i64,
+		Cut::Line => {
+			line_start(input, at)
+		},
+		else => 0,
+	}
+	return input[0..<end].len() as i64
+}
+
+fn short(input: ref Bytes, whole: bool) -> i64 sync {
+	let n = input.len() as i64
+	let end = if whole { n } else { n - 1 }
+	return input[0..<end].len() as i64
+}
+
+fn main() throws {
+	let input = Bytes([65, 10, 66, 67])
+	println(head(input, 3, false))
+	println(head(input, 3, true))
+	println(cut(input, 3, Cut::Whole))
+	println(cut(input, 3, Cut::Line))
+	println(cut(input, 3, Cut::None))
+	println(short(input, false))
+}

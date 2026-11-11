@@ -1,0 +1,4 @@
+bounds in tests/a_counter_started_at_a_min_is_proved.nika: 1 indexes, 1 proved; 2 operations, 2 proved
+     8  input[i - 1]  proved
+     8  i - 1         proved
+    11  i -= 1        proved

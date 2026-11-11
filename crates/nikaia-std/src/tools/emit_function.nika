@@ -284,6 +284,36 @@ impl EmitState {
         return c.returns.contains(f"ref({name})") || c.returns.contains(f"ref({name} |") || c.returns.contains(f"| {name})") || c.returns.contains(f"| {name} |")
     }
 
+    /// **What a `mut` place keeps is what the parameter's views point into,
+    /// not the parameter** (ADR-283 D27), as for a result (`source_nested`):
+    /// a struct that carries views, whose place holds another type with no
+    /// view of a type, `out.push(Event { anchor: n.anchor, .. })`, is written
+    /// `n: &Node<'a>` beside `out: &mut Vec<Event<'a>>`, so a caller lends a
+    /// node of a longer-lived list for a moment (#1548).
+    fn emit_store_nested(ref self, world: ref EmitWorld, args: ref Vec[FnArg], stores: ref Vec[EmitPair], source: ref FnArg) -> bool {
+        let name = emit_text(world, source.name)
+        if source.mutable || emit_store_place(stores, name) || !emit_store_source(stores, name) {
+            return false
+        }
+        if !self.carries_a_view(world, source.ty) || !self.borrows(world, source.ty.name) || !source.ty.generics.is_empty() {
+            return false
+        }
+        for pair in stores {
+            if pair.second != name {
+                continue
+            }
+            let place = args.iter().find(fn(a) { emit_text(world, a.name) == pair.first }) ?? return false
+            let mut held = place.ty.clone()
+            if held.generics.len() == 1 && emit_text(world, held.name) == "Vec" {
+                held = held.generics[0].clone()
+            }
+            if held.name == source.ty.name || held.is_view || emit_holds_a_ref_of_a_type(world, held) {
+                return false
+            }
+        }
+        return true
+    }
+
     /// A function or a method, with its signature and body.
     pub fn emit_function[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, written: ref Spanned[Item], depth: i64, lifetimes: EmitLifetimes, carries_input: ref collections::BTreeSet[String], owner_target: String?, owner_declared_by: String?, owner_bridged: bool?) sync throws {
         match written.node {
@@ -500,7 +530,15 @@ impl EmitState {
                             }
                         }
                         let at = position ?? -1
-                        if at >= 0 && self.emit_fn_lowered_as_a_view(world, key, recv, at, args[at]) && !self.borrows(world, args[at].ty.name) {
+                        // **A struct of views handed over** (#1523): `fn
+                        // pair<'r>(k: Node<'r, 'r>, v: Node<'r, 'r>) ->
+                        // Node<'r, 'r>`, one lifetime over all its views, as
+                        // the single parameter of #1380 has.
+                        let mut owned_views = false
+                        if at >= 0 {
+                            owned_views = !args[at].ty.is_view && !self.emit_fn_lends(world, key, at + recv) && !self.emit_fn_changes(key, emit_text(world, args[at].name)) && self.carries_a_view(world, args[at].ty) && args[at].ty.generics.is_empty()
+                        }
+                        if at >= 0 && self.emit_fn_lowered_as_a_view(world, key, recv, at, args[at]) && (!self.borrows(world, args[at].ty.name) || owned_views) {
                             // A parameter whose type arguments hold views of
                             // their own has two lifetimes, which one cannot
                             // name; a `ref Vec[E]` of plain elements has one.
@@ -692,7 +730,10 @@ impl EmitState {
                         }
                     }
                     let read_only = changes || self.emit_fn_lends(world, key, at)
-                    let how = self.emit_how(sig, each.name, pname, ty.is_view, read_only)
+                    let mut how = self.emit_how(sig, each.name, pname, ty.is_view, read_only)
+                    if ty.is_view && self.emit_store_nested(world, args, stores, each) {
+                        how = EmitLifetimes::Inner
+                    }
                     let mut spelled: String = ""
                     if lengths[k] != "" || runs[k] {
                         // **An array of any length is written with the length

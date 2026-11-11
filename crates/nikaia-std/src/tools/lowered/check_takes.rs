@@ -671,8 +671,8 @@ pub(crate) fn a_copy_said(path: &str, ty: &Ty) -> String {
 
 pub(crate) fn a_root_segment(path: &str) -> String {
     let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
-    let first: Vec<&str> = (*nikaia_std::index::get(&parts, 0)).split('[').collect::<Vec<_>>();
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&first, 0)).to_string())
+    let first: Vec<&str> = (*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).split('[').collect::<Vec<_>>();
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&first, (0) as usize) }).to_string())
 }
 
 pub(crate) fn by_position(ahead: &[(i64, i64, i64)]) -> Vec<(i64, i64, i64)> {
@@ -733,6 +733,181 @@ impl CheckState {
                 self.hands_over_path(world, &nikaia_std::block::Text::from(read.path.to_string()), &one.ty, read.seq, "given to `??`", &one.span);
             }
         }
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_clone_seen(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, receiver: &Expr, copy: &Ty, span: &Span) {
+        if self.reading_only || !self.task_bindings.is_empty() { return; }
+        let at = check_span_at(world, expr, span);
+        if self.a_clone_that_copies(world, copy) {
+            let what: String = nikaia_std::index::or(dotted_path(world, receiver), || "the value".into());
+            self.a_needless_clone(&at, format!("`{}` is a `{}`, which copies by itself: `.clone()` makes nothing new.", what, copy.text()), vec![String::from("A number, a `bool`, a `char` and a type whose every part copies are copied wherever they are read (ADR-294 D9.1).")], String::from("Delete `.clone()`."));
+            return;
+        }
+        let name = match receiver {
+            Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
+            _ => return,
+        };
+        let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if !clone_of_a_let(&local) || !self.flow.clone_owners.contains(&local.id) || local.view_of != "" || local.lent || local.ty.is_a_view() || self.lent_here(&name) || !self.takes_away(world, &local.ty) { return; }
+        let bound = self.frame_of(&name);
+        for repeat in self.repeats.iter() { if repeat.frame > bound { return; } }
+        let node = id_of(expr) as i64;
+        for held in self.flow.clones.iter() { if held.node == node { return; } }
+        self.flow.clones.push(CheckClone { name, binding: Some(local.id), seq: self.read_seq, choices: self.branch.copy_owned(), node, span: at });
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_clone_that_copies(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, copy: &Ty) -> bool {
+        match copy {
+            Ty::Named { name, view, .. } => {
+                let view = *view;
+                if view || name == "Shared" || name == "SharedMut" || self.type_parameters.contains_key(name) { return false; }
+            },
+            Ty::Nullable(_) => { },
+            Ty::Tuple(_) => { },
+            _ => { return false; },
+        }
+        if clone_of_the_unknown(copy) { return false; }
+        !self.takes_away(world, copy)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_let_made_here(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, id: i64, value: &Expr, bound: &Ty) { if clone_of_a_made_value(world, value) && !clone_holds_a_view(bound) { self.flow.clone_owners.insert(id); } }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_let_that_may_lend(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, bound_names: &[String], value: &Expr, found: &Ty) {
+        if !is_a_place(value) && !clone_holds_a_view(found) { return; }
+        let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+        names_in(value, world.words, &mut named);
+        for n in named.iter() {
+            let local = match self.binding(n) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            for b in bound_names.iter() { self.flow.clone_loans.push((nikaia_std::block::Text::from(b.to_string()), Some(local.id))); }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn a_loop_over_a_needless_clone(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, iter: &Expr, over: &Ty, body: &Block, items: &[CheckLocal], handed_before: i64, mutable: bool, span: &Span) {
+        if mutable || self.reading_only || !self.task_bindings.is_empty() { return; }
+        let receiver = match iter {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                if !args.is_empty() || world.words.resolve(method) != "clone" { return; }
+                receiver.clone()
+            },
+            _ => return,
+        };
+        match over {
+            Ty::Named { view, .. } => {
+                let view = *view;
+                if view { return; }
+            },
+            _ => { return; },
+        }
+        let path: String = match dotted_path(world, &receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let root = a_root_segment(&path);
+        let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+        names_in_block(body, world.words, &mut named);
+        if named.contains(&root) { return; }
+        let mut copies = true;
+        for item in items.iter() { if self.takes_away(world, &item.ty) { copies = false; } }
+        if !copies {
+            let last = unsafe { nikaia_std::proven::sub::<i64>(self.repeats.len() as i64, 1) };
+            if last < 0 || unsafe { nikaia_std::proven::read(&self.repeats, (last) as usize) }.leaves { return; }
+            let mut at = handed_before;
+            while at < self.handed.len() as i64 {
+                let taken = (*nikaia_std::index::get(&self.handed, nikaia_std::index::at(at))).clone();
+                for item in items.iter() {
+                    let id: Option<i64> = Some(item.id);
+                    if taken.binding == id { return; }
+                }
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+            }
+        }
+        let node = id_of(iter) as i64;
+        self.flow.clones.retain(|held| { held.node != node });
+        self.a_needless_clone(&check_span_at(world, iter, span), format!("`{}` is copied only to be walked: nothing in the loop changes it or takes it.", path), vec![String::from("A `for` over a place lends its elements (ADR-094 D4), so the loop can walk the place itself.")], String::from("Delete `.clone()`."));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn needless_clones_said(&mut self) {
+        let clones = self.flow.clones.copy_owned();
+        let loans = self.flow.clone_loans.copy_owned();
+        self.flow.clones = vec![];
+        self.flow.clone_loans = vec![];
+        self.flow.clone_owners = collections::BTreeSet::new();
+        for one in clones.iter() {
+            if self.a_clone_read_after(one) { continue; }
+            let mut lent = false;
+            for loan in loans.iter() { if loan.1 == one.binding && self.a_view_read_after(&loan.0, one) { lent = true; } }
+            if lent { continue; }
+            self.a_needless_clone(&one.span, format!("This `.clone()` is the last use of `{}`: it copies `{}` only to drop it.", one.name, one.name), vec![format!("Nothing reads `{}` after it, so it can be handed over itself.", one.name)], format!("Hand `{}` itself: write `{}` for `{}.clone()`.", one.name, one.name, one.name));
+        }
+    }
+    pub(crate) fn a_clone_read_after(&self, one: &CheckClone) -> bool {
+        for read in self.reads_on_paths.iter() { if read.binding == one.binding && read.seq > one.seq && !choices_apart(&one.choices, &read.choices) { return true; } }
+        false
+    }
+    pub(crate) fn a_view_read_after(&self, view: &str, one: &CheckClone) -> bool {
+        for read in self.reads_on_paths.iter() { if read.seq > one.seq && a_root_segment(&read.path) == view && !choices_apart(&one.choices, &read.choices) { return true; } }
+        false
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_needless_clone(&mut self, at: &Span, message: String, notes: Vec<String>, help: String) {
+        for said in self.findings.iter() { if said.code == "NK1350" && said.span.start == at.start { return; } }
+        let mut warned = check_refusal("NK1350", &at, message, notes, Some(help));
+        warned.severity = CheckSeverity::Warning;
+        self.findings.push(warned);
+    }
+}
+
+pub(crate) fn clone_of_a_let(local: &CheckLocal) -> bool {
+    match &local.without_mut {
+        None => local.written_mut && !local.changing && local.view_of == "",
+        Some(kept) => kept.kind == CheckKind::Let,
+    }
+}
+
+pub(crate) fn clone_of_a_made_value(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    match value {
+        Expr::Call { .. } => true,
+        Expr::MethodCall { method, .. } => {
+            let method = *method;
+            let name = world.words.resolve(method);
+            name != "get" && name != "get_mut" && name != "first" && name != "last" && name != "peek"
+        },
+        Expr::LitStr { .. } => true,
+        Expr::LitInterpolated { .. } => true,
+        Expr::ListLit { .. } => true,
+        Expr::ListRepeat { .. } => true,
+        Expr::StructLit { .. } => true,
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); clone_of_a_made_value(world, inner) },
+        _ => false,
+    }
+}
+
+pub(crate) fn clone_of_the_unknown(ty: &Ty) -> bool {
+    match ty {
+        Ty::Unknown => true,
+        Ty::Named { args, .. } => args.iter().any(|arg| { clone_of_the_unknown(arg) }),
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); clone_of_the_unknown(inner) },
+        Ty::Tuple(parts) => parts.iter().any(|part| { clone_of_the_unknown(part) }),
+        _ => false,
+    }
+}
+
+pub(crate) fn clone_holds_a_view(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { view, args, .. } => { let view = *view; view || args.iter().any(|arg| { clone_holds_a_view(arg) }) },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); clone_holds_a_view(inner) },
+        Ty::Tuple(parts) => parts.iter().any(|part| { clone_holds_a_view(part) }),
+        Ty::Named { .. } => false,
+        _ => true,
     }
 }
 

@@ -53,7 +53,7 @@ pub fn bounds_around(program: &Program, beside: &[&Program], beside_words: &[&wi
     context.around
 }
 
-pub(crate) fn frame_context(around: Around, std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>) -> BoundsContext { BoundsContext { lengths: collections::BTreeSet::new(), sized: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), nonnegative: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), ensured: collections::BTreeMap::new(), required: collections::BTreeMap::new(), each: collections::BTreeMap::new(), std_receivers: std_receivers.copy_owned(), simd_loads: simd_loads.copy_owned(), shifts: collections::BTreeMap::new(), given: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: collections::BTreeSet::new(), whole_loops: collections::BTreeSet::new(), whole_parts: collections::BTreeMap::new(), array_lengths: collections::BTreeMap::new(), through_loops: false, trace: vec![], decided: collections::BTreeMap::new(), list_indices: collections::BTreeSet::new(), returns: collections::BTreeMap::new() } }
+pub(crate) fn frame_context(around: Around, std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>) -> BoundsContext { BoundsContext { lengths: collections::BTreeSet::new(), sized: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), nonnegative: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), ensured: collections::BTreeMap::new(), required: collections::BTreeMap::new(), each: collections::BTreeMap::new(), collected: collections::BTreeMap::new(), std_receivers: std_receivers.copy_owned(), simd_loads: simd_loads.copy_owned(), shifts: collections::BTreeMap::new(), given: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: collections::BTreeSet::new(), whole_loops: collections::BTreeSet::new(), whole_parts: collections::BTreeMap::new(), array_lengths: collections::BTreeMap::new(), through_loops: false, trace: vec![], decided: collections::BTreeMap::new(), list_indices: collections::BTreeSet::new(), returns: collections::BTreeMap::new() } }
 
 pub(crate) fn frames_round(program: &Program, context: &BoundsContext, words: &winnow_grammar::InternerContext) -> collections::BTreeMap<String, BoundsChanged> {
     let mut out: collections::BTreeMap<String, BoundsChanged> = collections::BTreeMap::new();
@@ -276,7 +276,7 @@ pub(crate) fn frame_onto(path: &str, receiver: Option<&str>, handed: &[Option<St
 
 pub(crate) fn frame_list(entry: &str) -> String {
     let pieces: Vec<&str> = entry.split('|').collect::<Vec<_>>();
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).to_string())
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).to_string())
 }
 
 pub fn frame_writes(frame: &BoundsChanged, root: &str) -> bool { frame.values.iter().any(|e| { frame_from(e, root) }) || frame.lengths.iter().any(|e| { frame_from(e, root) }) || frame.parts.iter().any(|e| { frame_from(e, root) }) || frame.elements.iter().any(|e| { frame_from(e, root) }) }

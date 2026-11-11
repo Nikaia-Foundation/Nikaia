@@ -1,0 +1,22 @@
+// A view taken from a temporary call result lives as long as the
+// binding: the call is held in a hidden local first (#1523).
+pub struct Tok {
+    pub word: String,
+}
+
+fn words(input: ref Bytes) -> Vec[Tok] throws {
+    let t = input.text()
+    let mut out: Vec[Tok] = []
+    for w in t.split(" ") {
+        out.push(Tok{ word: w })
+    }
+    return out
+}
+
+fn main() throws {
+    let s = "a b c"
+    let toks = words(Bytes(s.bytes().collect())) catch { [] }
+    println(toks.len())
+    let first = words(Bytes(s.bytes().collect()))[0]
+    println(first.word)
+}

@@ -948,6 +948,8 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
             state.written_at.push((n.clone(), span.start as i64))
         }
     }
+    // **A `let` that may hold a view of names keeps their clone needed** (`NK1350`).
+    state.a_let_that_may_lend(world, bound_names, value, found)
     // **A list's element past a jump is a view of it**: `let it = v.get(i) ??
     // return` binds what the list holds, as `let it = v[i]` does.
     if !mutable && ty == null && check_core_stmt_a_lent_list_read(state, world, value) {
@@ -1277,6 +1279,18 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     // `let k: K? = m.get(1)` holds the `K`, as a number's read holds it.
     // **So does a tuple copied out** (#1535): `let t: (i64, i64)? = m.get(k)`
     // holds the tuple, which has no view to be typed as.
+    // **And an untyped `let` of a tuple whose parts copy** (#1539): `let t =
+    // m.get(k)` holds the tuple, as the inline `m.get(k) ?? (0, 0)` does.
+    if of_a_map && ty == null {
+        match bound {
+            Ty::Nullable(inner) => {
+                if check_core_stmt_a_tuple(inner) && !state.takes_away(world, inner) && state.flow.map_read_sites.contains(id_of(value) as i64) {
+                    let added = state.facts.copied_reads.insert(id_of(value) as i64)
+                }
+            },
+            else => {},
+        }
+    }
     let word_copied = match bound {
         Ty::Nullable(inner) => ((!a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner)) || check_core_stmt_a_tuple(inner)) && (state.facts.copied_walks.contains(id_of(value) as i64) || state.facts.copied_reads.contains(id_of(value) as i64)),
         else => false,
@@ -1392,6 +1406,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     if declared_option && names.len() == 1 && shape.len() == 0 {
         state.flow.declared_options.insert(local.id)
     }
+    state.a_let_made_here(world, id, value, local.ty)
     state.bind_local(local)
     // **A mutable view is the `&mut` already** (#975): handed to a `mut`
     // parameter, it is lent on again.
@@ -2315,10 +2330,14 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
             state.lent_lets.insert((f"{world.words.resolve(b)}", frame_at))
         }
     }
+    let handed_before = state.handed.len() as i64
     state.flow.loops += 1
     check_core_stmt_body_discarded(state, body)
     check_core_block(state, world, host, body)
     state.flow.loops -= 1
+    // **A `for` over a clone it only walks** (`NK1350`, #1318).
+    let items = state.scope[frame_at].clone()
+    state.a_loop_over_a_needless_clone(world, iter, over, body, items, handed_before, mutable, span)
     // **A turn's element is whole again where the turn ends** (ADR-views-1 D2,
     // ADR-views-2).
     if mut_view && body.stmts.len() > 0 {

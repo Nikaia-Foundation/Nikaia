@@ -18,7 +18,7 @@ description: >-
     <h1 class="home-heading">Safe, secure, reliable</h1>
     <p class="safe-lead home-intro">Safety is more than one check. A program fails when something goes wrong while it runs and nothing handles it, when data from outside is not what it expected, when a part is used outside what it was made for, when a change quietly breaks a rule another part relies on, and when a service it waits for is slow or gone.</p>
     <p class="safe-lead home-intro">Nikaia looks at all five, at compile time wherever it can. For each one this page says what the compiler checks and where the check stops, and every topic has a page with the whole program and the message the compiler gives.</p>
-    <p class="safe-others">The five layers: <a href="#running">Errors that have to be handled</a><a href="#outside">Input checked where it arrives</a><a href="#logic">Contracts kept at every call</a><a href="#changes">Every change held to the rules</a><a href="#load">Steady under load and failure</a></p>
+    <p class="safe-others">The five layers: <a href="#running">Errors that have to be handled</a><a href="#logic">Contracts kept at every call</a><a href="#outside">The compiler knows where the data comes from</a><a href="#changes">Every change held to the rules</a><a href="#load">Steady under load and failure</a></p>
     <p class="safe-others">Also: <a href="{{ "/fast/" | relative_url }}">Very fast</a><a href="{{ "/easy/" | relative_url }}">Easy to understand</a><a href="{{ "/good/" | relative_url }}">Made for good</a></p>
   </div>
 </section>
@@ -66,10 +66,57 @@ description: >-
   </div>
 </section>
 
-<section class="home-section" id="outside">
+<section class="home-section" id="logic">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center">Layer 3</p>
+    <h2 class="home-heading">Contracts kept at every call</h2>
+    <p class="safe-lead home-intro">A function is written for certain inputs, and a value shared between tasks is meant to change in a certain way. Nikaia lets these rules be written in the code, and checks them when the program is built, so a state the program relies on is not broken unnoticed.</p>
+    <div class="safe-tiles">
+      <div class="safe-tile safe-tile-b" id="promises">
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
+        <h3><a href="{{ "/safe/broken-promises.html" | relative_url }}">Calls that break a function's contract</a></h3>
+        <p>An expectation written as an <code>assert</code> becomes a contract. A call that breaks it is refused, a promise about a result is available to the callers, and a contract carries across package boundaries. A claim the compiler cannot prove refuses the program too, unless the project asks for it to be checked while the program runs.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">fn percent(n: int) -&gt; int {
+    assert(n &gt;= 0 &amp;&amp; n &lt;= 100)
+    return n
+}
+
+percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This call breaks `percent`'s precondition `n &gt;= 0 &amp;&amp; n &lt;= 100` every time it is reached.</b></code></pre></div>
+        <a class="safe-more" href="{{ "/safe/broken-promises.html" | relative_url }}">In depth →</a>
+      </div>
+      <div class="safe-tile safe-tile-b" id="conflicts">
+        <details class="safe-why"><summary class="safe-chip safe-chip-part">Where the compiler's view ends</summary>
+<p><span class="why why-limit">Beyond what a compiler sees</span> A file is told apart by a name written in the program; two tasks writing paths worked out while the program runs are not refused.</p>
+<p><span class="why why-limit">Beyond what a compiler sees</span> Code in a Rust crate or a C library that starts threads of its own is outside what the compiler can look into. There it does not refuse, and you hand over a copy instead of shared data.</p>
+</details>
+        <h3><a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Two tasks changing the same value</a></h3>
+        <p>Two tasks that change the same balance at once can overwrite each other's update. Nikaia looks at what each task touches and refuses a task that changes a value bound outside it, and two tasks that write the same file, the same lock or standard output, naming what they share. The message shows the way out, which is a value of its own for each task, a <code>SharedMut</code> changed through <code>update</code>, or the two changes in order.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">async {
+    async fn { balance = balance + 50 }
+    async fn { balance = balance - 30 }   // refused: `balance` is bound outside
+}</code></pre></div>
+        <a class="safe-more" href="{{ "/safe/conflicting-actions.html" | relative_url }}">In depth →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
+        <h3>A type keeps its rule</h3>
+        <p>An <code>assert</code> written inside a struct is the type's rule. It has to hold after every construction, at the end of every method that changes the value and after every write to a field from outside, proved where the compiler can and checked while the program runs where it cannot. A binding marked <code>immutable</code> is refused if anything reachable from its value can change, so every task that reads it sees the same value.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-369.html" | relative_url }}">ADR-369 →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
+        <h3>What crosses into C</h3>
+        <p>A call into a C library is written inside <code>unsafe</code>, and what crosses is a view that lives for the call or an opaque handle that a cleanup releases. A lock may go into a task of the program's own, and the compiler refuses it where it would reach code that nothing describes.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-302.html" | relative_url }}">ADR-302 →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="home-section home-section-alt" id="outside">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Layer 2</p>
-    <h2 class="home-heading">Input checked where it arrives</h2>
+    <h2 class="home-heading">The compiler knows where the data comes from</h2>
     <p class="safe-lead home-intro">What a request carries, what another program prints or what a person types is not up to your program. Nikaia knows which values come from outside, and asks for them to be checked where they arrive, before the rest of the program relies on them.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b">
@@ -119,53 +166,6 @@ assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre clas
         <h3>Encrypted connections</h3>
         <p>The specification gives the HTTP server TLS through the Rust library <code>rustls</code>. It is not built yet, so today the server speaks plain HTTP.</p>
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-303.html" | relative_url }}">ADR-303, D2 →</a>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="home-section home-section-alt" id="logic">
-  <div class="home-inner">
-    <p class="home-eyebrow home-eyebrow-center">Layer 3</p>
-    <h2 class="home-heading">Contracts kept at every call</h2>
-    <p class="safe-lead home-intro">A function is written for certain inputs, and a value shared between tasks is meant to change in a certain way. Nikaia lets these rules be written in the code, and checks them when the program is built, so a state the program relies on is not broken unnoticed.</p>
-    <div class="safe-tiles">
-      <div class="safe-tile safe-tile-b" id="promises">
-        <span class="safe-chip safe-chip-build">Caught at compile time</span>
-        <h3><a href="{{ "/safe/broken-promises.html" | relative_url }}">Calls that break a function's contract</a></h3>
-        <p>An expectation written as an <code>assert</code> becomes a contract. A call that breaks it is refused, a promise about a result is available to the callers, and a contract carries across package boundaries. A claim the compiler cannot prove refuses the program too, unless the project asks for it to be checked while the program runs.</p>
-<div class="home-code markdown-body"><pre><code class="language-nika">fn percent(n: int) -&gt; int {
-    assert(n &gt;= 0 &amp;&amp; n &lt;= 100)
-    return n
-}
-
-percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This call breaks `percent`'s precondition `n &gt;= 0 &amp;&amp; n &lt;= 100` every time it is reached.</b></code></pre></div>
-        <a class="safe-more" href="{{ "/safe/broken-promises.html" | relative_url }}">In depth →</a>
-      </div>
-      <div class="safe-tile safe-tile-b" id="conflicts">
-        <details class="safe-why"><summary class="safe-chip safe-chip-part">Where the compiler's view ends</summary>
-<p><span class="why why-limit">Beyond what a compiler sees</span> A file is told apart by a name written in the program; two tasks writing paths worked out while the program runs are not refused.</p>
-<p><span class="why why-limit">Beyond what a compiler sees</span> Code in a Rust crate or a C library that starts threads of its own is outside what the compiler can look into. There it does not refuse, and you hand over a copy instead of shared data.</p>
-</details>
-        <h3><a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Two tasks changing the same value</a></h3>
-        <p>Two tasks that change the same balance at once can overwrite each other's update. Nikaia looks at what each task touches and refuses a task that changes a value bound outside it, and two tasks that write the same file, the same lock or standard output, naming what they share. The message shows the way out, which is a value of its own for each task, a <code>SharedMut</code> changed through <code>update</code>, or the two changes in order.</p>
-<div class="home-code markdown-body"><pre><code class="language-nika">async {
-    async fn { balance = balance + 50 }
-    async fn { balance = balance - 30 }   // refused: `balance` is bound outside
-}</code></pre></div>
-        <a class="safe-more" href="{{ "/safe/conflicting-actions.html" | relative_url }}">In depth →</a>
-      </div>
-      <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-build">Caught at compile time</span>
-        <h3>A type keeps its rule</h3>
-        <p>An <code>assert</code> written inside a struct is the type's rule. It has to hold after every construction, at the end of every method that changes the value and after every write to a field from outside, proved where the compiler can and checked while the program runs where it cannot. A binding marked <code>immutable</code> is refused if anything reachable from its value can change, so every task that reads it sees the same value.</p>
-        <a class="safe-more" href="{{ "/docs/specification/adr/adr-369.html" | relative_url }}">ADR-369 →</a>
-      </div>
-      <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-build">Caught at compile time</span>
-        <h3>What crosses into C</h3>
-        <p>A call into a C library is written inside <code>unsafe</code>, and what crosses is a view that lives for the call or an opaque handle that a cleanup releases. A lock may go into a task of the program's own, and the compiler refuses it where it would reach code that nothing describes.</p>
-        <a class="safe-more" href="{{ "/docs/specification/adr/adr-302.html" | relative_url }}">ADR-302 →</a>
       </div>
     </div>
   </div>

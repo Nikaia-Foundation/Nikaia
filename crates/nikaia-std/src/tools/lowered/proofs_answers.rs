@@ -400,9 +400,9 @@ pub fn proofs_place_of(at: i64, source: &str) -> String {
         if i >= limit { break; }
         if b == 10 {
             line += 1;
-            start = i + 1;
+            start = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     format!("{}:{}", line, limit - start + 1)
 }

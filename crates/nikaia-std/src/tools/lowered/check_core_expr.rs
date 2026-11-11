@@ -213,6 +213,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let read = check_core_method(state, world, host, expr, false, receiver, method, args, config, span);
             check_core_expr_declared_method(state, expr, receiver);
+            if args.is_empty() && world.words.resolve(method) == "clone" { state.a_clone_seen(world, expr, receiver, &read, span); }
             read
         },
         Expr::SafeMethod { receiver, method, args, config, .. } => {

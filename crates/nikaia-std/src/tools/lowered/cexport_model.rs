@@ -537,7 +537,7 @@ pub fn cx_parameter_names(params: &[String]) -> Vec<String> {
     let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     for param in names.iter() {
         let pieces: Vec<&str> = param.split(':').collect::<Vec<_>>();
-        out.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).trim().to_string()));
+        out.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).trim().to_string()));
     }
     out
 }

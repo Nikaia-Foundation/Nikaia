@@ -1,0 +1,35 @@
+// A struct that carries views, lent for a moment, whose views are pushed into
+// a `mut` list parameter that outlives it (ADR-283 D27, #1548): what the list
+// keeps points into what the struct views, not into the struct.
+struct Word { text: String, at: i64 }
+struct Use { text: String, at: i64 }
+
+fn words(input: String) -> Vec[Word] {
+    let mut out: Vec[Word] = []
+    let mut at = 0
+    for piece in input.split(" ") {
+        out.push(Word { text: piece, at: at })
+        at += 1
+    }
+    return out
+}
+
+fn collect(w: ref Word, mut out: Vec[Use]) {
+    out.push(Use { text: w.text, at: w.at * 10 })
+}
+
+fn uses(ws: ref Vec[Word]) -> Vec[Use] {
+    let mut out: Vec[Use] = []
+    for w in ws {
+        collect(w, out)
+    }
+    return out
+}
+
+fn main() throws {
+    let input = "alpha beta"
+    let ws = words(input)
+    for u in uses(ws) {
+        println(f"{u.at} {u.text}")
+    }
+}

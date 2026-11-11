@@ -209,6 +209,7 @@ impl EmitState {
                 if owns { return Ok(()); }
                 self.emit_core_hold_chain_base(world, walk, out, host, value, node_key(value), false, depth, flow, scope)?;
                 self.emit_core_hold_viewed_arguments(world, walk, out, host, value, depth, flow, scope)?;
+                self.emit_core_hold_indexed_call(world, walk, out, host, value, false, depth, flow, scope)?;
             },
             _ => { },
         }
@@ -218,7 +219,11 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_hold_viewed_arguments<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        let args = match value {
+        let call = match value {
+            Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); expr },
+            _ => value,
+        };
+        let args = match call {
             Expr::Call { args, .. } => args,
             Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); match inner {
                 Expr::Call { args, .. } => args,
@@ -226,7 +231,7 @@ impl EmitState {
             } },
             _ => return Ok(()),
         };
-        let callee = match call_callee_name(world.words, world.aliases, value) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+        let callee = match call_callee_name(world.words, world.aliases, call) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         let contract = match self.own_contracts.functions.get(&callee) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         let borrows = contract.borrows.copy_owned();
         let signature = match match contract.signature.as_ref() {
@@ -251,6 +256,27 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, &arg, depth, flow, scope)?;
             out.push(&format!(";\n{}", nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)))));
             walk.held.insert(key, name);
+        }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_core_hold_indexed_call<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, at: &Expr, indexed: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        match at {
+            Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); self.emit_core_hold_indexed_call(world, walk, out, host, base, true, depth, flow, scope)?; },
+            Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.emit_core_hold_indexed_call(world, walk, out, host, base, indexed, depth, flow, scope)?; },
+            _ => {
+                if !indexed || !emit_read_a_call(at) { return Ok(()); }
+                self.emit_core_hold_viewed_arguments(world, walk, out, host, at, depth, flow, scope)?;
+                let key = node_key(at);
+                walk.held.remove(&key);
+                let name = format!("__nikaia_held_{}", walk.held.len() as i64);
+                out.push(&format!("let {} = ", name));
+                self.emit_expr(world, walk, out, host, at, depth, flow, scope)?;
+                out.push(&format!(";\n{}", nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)))));
+                walk.held.insert(key, name);
+            },
         }
         Ok(())
     }

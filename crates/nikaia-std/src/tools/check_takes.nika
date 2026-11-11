@@ -1138,3 +1138,264 @@ impl CheckState {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// **`NK1350`: a `.clone()` that copies nothing new** (#1318). A warning, the
+// author decides: the clone of a value whose type copies, the clone of a
+// `let` at its last use, and the clone of a place a `for` only walks. One
+// code, three sentences.
+// ---------------------------------------------------------------------------
+
+impl CheckState {
+    /// **A `.clone()` met**: said at once where the value's type copies,
+    /// held to the body's end where it clones a `let` that may not be read
+    /// again.
+    pub fn a_clone_seen(ref mut self, world: ref CheckWorld, expr: ref Expr, receiver: ref Expr, copy: ref Ty, span: ref Span) sync {
+        if self.reading_only || self.task_bindings.len() > 0 {
+            return
+        }
+        let at = check_span_at(world, expr, span)
+        if self.a_clone_that_copies(world, copy) {
+            let what: String = dotted_path(world, receiver) ?? "the value"
+            self.a_needless_clone(at, f"`{what}` is a `{copy.text()}`, which copies by itself: `.clone()` makes nothing new.", ["A number, a `bool`, a `char` and a type whose every part copies are copied wherever they are read (ADR-294 D9.1)."], "Delete `.clone()`.")
+            return
+        }
+        let name = match receiver {
+            Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
+            else => return,
+        }
+        let local = self.binding(name) ?? return
+        // Only a `let`: a parameter is lent unless its body keeps it
+        // (ADR-views-3 D2), so handing it on would make the caller's copy.
+        if !clone_of_a_let(local) || !self.flow.clone_owners.contains(local.id) || local.view_of != "" || local.lent || local.ty.is_a_view() || self.lent_here(name) || !self.takes_away(world, local.ty) {
+            return
+        }
+        // A loop or a lambda around the clone that the name was declared
+        // outside of reads it again on the next turn.
+        let bound = self.frame_of(name)
+        for repeat in self.repeats {
+            if repeat.frame > bound {
+                return
+            }
+        }
+        let node = id_of(expr) as i64
+        for held in self.flow.clones {
+            if held.node == node {
+                return
+            }
+        }
+        self.flow.clones.push(CheckClone { name: name, binding: local.id, seq: self.read_seq, choices: self.branch.clone(), node: node, span: at })
+    }
+
+    /// Whether a clone's value copies by itself: a number, a `bool`, a
+    /// `char`, a type of the package or the ledger that copies, and an
+    /// option, a tuple or an array of such. Not a handle, a type parameter
+    /// or what the walk could not type.
+    fn a_clone_that_copies(ref self, world: ref CheckWorld, copy: ref Ty) -> bool sync {
+        match copy {
+            Ty::Named { name, view, .. } => {
+                if view || name == "Shared" || name == "SharedMut" || self.type_parameters.contains_key(name) {
+                    return false
+                }
+            },
+            Ty::Nullable(_) => {},
+            Ty::Tuple(_) => {},
+            else => return false,
+        }
+        if clone_of_the_unknown(copy) {
+            return false
+        }
+        return !self.takes_away(world, copy)
+    }
+
+    /// **A `let` bound to a value made there** (`NK1350`): only its clone
+    /// can be the binding's last use.
+    pub fn a_let_made_here(ref mut self, world: ref CheckWorld, id: i64, value: ref Expr, bound: ref Ty) sync {
+        if clone_of_a_made_value(world, value) && !clone_holds_a_view(bound) {
+            self.flow.clone_owners.insert(id)
+        }
+    }
+
+    /// **A `let` bound to a view of names**, or over a place: each name it
+    /// reads is lent to it, and a later read of it keeps a clone needed.
+    pub fn a_let_that_may_lend(ref mut self, world: ref CheckWorld, bound_names: ref Vec[String], value: ref Expr, found: ref Ty) sync {
+        if !is_a_place(value) && !clone_holds_a_view(found) {
+            return
+        }
+        let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+        names_in(value, world.words, named)
+        for n in named {
+            let local = self.binding(n) ?? continue
+            for b in bound_names {
+                self.flow.clone_loans.push((b.clone(), local.id))
+            }
+        }
+    }
+
+    /// **A `for` over a clone of a place it only walks** (`NK1350`): the body
+    /// names nothing of the place, and keeps no element it walks unless the
+    /// elements copy. The clone's last-use question is not asked again.
+    pub fn a_loop_over_a_needless_clone(ref mut self, world: ref CheckWorld, iter: ref Expr, over: ref Ty, body: ref Block, items: ref Vec[CheckLocal], handed_before: i64, mutable: bool, span: ref Span) sync {
+        if mutable || self.reading_only || self.task_bindings.len() > 0 {
+            return
+        }
+        let receiver = match iter {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                if args.len() != 0 || world.words.resolve(method) != "clone" {
+                    return
+                }
+                receiver.clone()
+            },
+            else => return,
+        }
+        match over {
+            Ty::Named { view, .. } => {
+                if view {
+                    return
+                }
+            },
+            else => return,
+        }
+        let path: String = dotted_path(world, receiver) ?? return
+        let root = a_root_segment(path)
+        let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+        names_in_block(body, world.words, named)
+        if named.contains(root) {
+            return
+        }
+        let mut copies = true
+        for item in items {
+            if self.takes_away(world, item.ty) {
+                copies = false
+            }
+        }
+        if !copies {
+            let last = self.repeats.len() as i64 - 1
+            if last < 0 || self.repeats[last].leaves {
+                return
+            }
+            let mut at = handed_before
+            while at < self.handed.len() as i64 {
+                let taken = self.handed[at].clone()
+                for item in items {
+                    let id: i64? = item.id
+                    if taken.binding == id {
+                        return
+                    }
+                }
+                at = at + 1
+            }
+        }
+        let node = id_of(iter) as i64
+        self.flow.clones.retain(fn(held) { held.node != node })
+        self.a_needless_clone(check_span_at(world, iter, span), f"`{path}` is copied only to be walked: nothing in the loop changes it or takes it.", ["A `for` over a place lends its elements (ADR-094 D4), so the loop can walk the place itself."], "Delete `.clone()`.")
+    }
+
+    /// **The clones no read followed**, said where the body ends.
+    pub fn needless_clones_said(ref mut self) sync {
+        let clones = self.flow.clones.clone()
+        let loans = self.flow.clone_loans.clone()
+        self.flow.clones = []
+        self.flow.clone_loans = []
+        self.flow.clone_owners = collections::BTreeSet()
+        for one in clones {
+            if self.a_clone_read_after(one) {
+                continue
+            }
+            let mut lent = false
+            for loan in loans {
+                if loan.1 == one.binding && self.a_view_read_after(loan.0, one) {
+                    lent = true
+                }
+            }
+            if lent {
+                continue
+            }
+            self.a_needless_clone(one.span, f"This `.clone()` is the last use of `{one.name}`: it copies `{one.name}` only to drop it.", [f"Nothing reads `{one.name}` after it, so it can be handed over itself."], f"Hand `{one.name}` itself: write `{one.name}` for `{one.name}.clone()`.")
+        }
+    }
+
+    // A read of the cloned binding later in the walk, on a path that can
+    // follow the clone.
+    fn a_clone_read_after(ref self, one: ref CheckClone) -> bool {
+        for read in self.reads_on_paths {
+            if read.binding == one.binding && read.seq > one.seq && !choices_apart(one.choices, read.choices) {
+                return true
+            }
+        }
+        return false
+    }
+
+    // A read of a view named `view` later in the walk.
+    fn a_view_read_after(ref self, view: ref String, one: ref CheckClone) -> bool {
+        for read in self.reads_on_paths {
+            if read.seq > one.seq && a_root_segment(read.path) == view && !choices_apart(one.choices, read.choices) {
+                return true
+            }
+        }
+        return false
+    }
+
+    // `NK1350`, said once per site.
+    fn a_needless_clone(ref mut self, at: Span, message: String, notes: Vec[String], help: String) sync {
+        for said in self.findings {
+            if said.code == "NK1350" && said.span.start == at.start {
+                return
+            }
+        }
+        let mut warned = check_refusal("NK1350", at, message, notes, help)
+        warned.severity = CheckSeverity::Warning
+        self.findings.push(warned)
+    }
+}
+
+// Whether a binding is a `let`'s: written so, `mut` or not, and no parameter.
+fn clone_of_a_let(local: ref CheckLocal) -> bool {
+    return match local.without_mut {
+        null => local.written_mut && !local.changing && local.view_of == "",
+        kept => kept.kind == CheckKind::Let,
+    }
+}
+
+// Whether a `let`'s value is made where it stands: a call's, a literal's, a
+// constructor's. Not a place, a `??`, a `match` or a `get`: those may bind
+// what another value holds.
+fn clone_of_a_made_value(world: ref CheckWorld, value: ref Expr) -> bool {
+    return match value {
+        Expr::Call { .. } => true,
+        Expr::MethodCall { method, .. } => {
+            let name = world.words.resolve(method)
+            name != "get" && name != "get_mut" && name != "first" && name != "last" && name != "peek"
+        },
+        Expr::LitStr { .. } => true,
+        Expr::LitInterpolated { .. } => true,
+        Expr::ListLit { .. } => true,
+        Expr::ListRepeat { .. } => true,
+        Expr::StructLit { .. } => true,
+        Expr::Try(inner, _) => clone_of_a_made_value(world, inner),
+        else => false,
+    }
+}
+
+// Whether the walk left any part of a type untyped.
+fn clone_of_the_unknown(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Unknown => true,
+        Ty::Named { args, .. } => args.iter().any(fn(arg) { clone_of_the_unknown(arg) }),
+        Ty::Nullable(inner) => clone_of_the_unknown(inner),
+        Ty::Tuple(parts) => parts.iter().any(fn(part) { clone_of_the_unknown(part) }),
+        else => false,
+    }
+}
+
+// Whether a value may hold a view of what it was made from: a view, or a
+// type with one inside; a walk, code and what the walk could not type count.
+fn clone_holds_a_view(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { view, args, .. } => view || args.iter().any(fn(arg) { clone_holds_a_view(arg) }),
+        Ty::Nullable(inner) => clone_holds_a_view(inner),
+        Ty::Tuple(parts) => parts.iter().any(fn(part) { clone_holds_a_view(part) }),
+        Ty::Named { .. } => false,
+        else => true,
+    }
+}

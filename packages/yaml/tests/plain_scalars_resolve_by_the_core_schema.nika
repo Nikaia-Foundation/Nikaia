@@ -82,9 +82,10 @@ fn main() throws {
 	number("-12")
 	number("012")
 	number("+3")
+	// beyond a `u64` a decimal is a float, as serde_yaml resolves it (#1516)
 	number("99999999999999999999")
 	// hexadecimal and octal, converted for their shape: whether they fit is
-	// the count of significant digits
+	// the count of significant digits; one that does not is a string (#1516)
 	number("0x1F")
 	number("0o17")
 	number("0xff")

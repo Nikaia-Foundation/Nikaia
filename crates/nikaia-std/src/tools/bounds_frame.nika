@@ -144,6 +144,7 @@ fn frame_context(
 		ensured: collections::BTreeMap(),
 		required: collections::BTreeMap(),
 		each: collections::BTreeMap(),
+		collected: collections::BTreeMap(),
 		std_receivers: std_receivers.clone(),
 		simd_loads: simd_loads.clone(),
 		shifts: collections::BTreeMap(),

@@ -1,0 +1,56 @@
+// #1546 (ADR-306 D4): `std`'s ledger says a text's `split` gives one piece at
+// least, the empty text too, and the checker records a `String` receiver as
+// `str`'s, so the first piece of a split collected into a list is proved. A
+// type of the program's own with a `split` of the same name says nothing, and
+// its index stays checked.
+struct Line {
+	text: String,
+}
+
+impl Line {
+	fn split(self, _sep: String) -> Vec[String] {
+		return []
+	}
+}
+
+fn head(t: String) -> String {
+	let parts: Vec[ref String] = t.split(", ").collect()
+	return parts[0].clone()
+}
+
+fn tail(t: String) -> String {
+	let parts: Vec[ref String] = t.rsplit(", ").collect()
+	return parts[0].clone()
+}
+
+fn place(rows: Vec[String]) -> String {
+	if rows.len() < 2 {
+		return ""
+	}
+	let place: Vec[ref String] = rows[1].split(", column ").collect()
+	return place[0].clone()
+}
+
+fn literal() -> String {
+	let t = "a, b"
+	let parts: Vec[ref String] = t.split(", ").collect()
+	return parts[0].clone()
+}
+
+fn own(l: Line) -> String {
+	let parts: Vec[String] = l.split(", ")
+	if parts.len() == 0 {
+		return "none"
+	}
+	let again: Vec[String] = Line { text: "x" }.split(",")
+	return again[0].clone()
+}
+
+fn main() throws {
+	println(head("a, b"))
+	println(f"[{head("")}]")
+	println(tail("a, b"))
+	println(place(["x", "line 3, column 4"]))
+	println(literal())
+	println(own(Line { text: "a" }))
+}

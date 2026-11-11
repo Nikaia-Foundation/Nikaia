@@ -288,7 +288,7 @@ impl CheckState {
     pub fn a_mut_parameter_place(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, subject: &Expr) -> Option<String> {
         let path = match dotted_path(world, subject) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
-        let found = match self.binding(*nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None }; ::core::mem::drop(parts);
+        let found = match self.binding(*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None }; ::core::mem::drop(parts);
         if found.changing { return Some(path); }
         None
     }

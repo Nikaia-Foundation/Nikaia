@@ -1,0 +1,18 @@
+error[NK2105]: You're using `t` again, but it was passed to `push`, which keeps it.
+  --> tests/a_view_of_a_kept_text_parameter_suggests_a_copy.nika:5:5
+   |
+ 5 |     return t.trim()
+   |     ^
+   |
+   = note: `t` is a `String`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+   = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+   = help: If both need it, hand over a copy: `t.clone()`.
+error[NK2302]: `f` hands back a view of `t`, which it takes by value, so the data is gone when the call returns.
+  --> tests/a_view_of_a_kept_text_parameter_suggests_a_copy.nika:5:5
+   |
+ 5 |     return t.trim()
+   |     ^^^^^^^^^^^^^^^
+   |
+   = note: `t` is moved into `f` and ends with it; a view of it can't outlive the call.
+   = help: Where the body keeps `t`, keep a copy instead (`t.clone()`), so `t` is lent and the view points into the caller's text; or hand back text of its own: write `.clone()` on the view handed back.
+1 view kept past the call that was given it

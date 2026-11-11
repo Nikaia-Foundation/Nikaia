@@ -276,7 +276,7 @@ pub(crate) fn points_into_at(contract: &FnContract, at: i64) -> bool {
 
 pub(crate) fn keeps_expression(expr: &Expr, interner: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
     classify(expr, interner, &holes_of, context, own, library, walk);
-    for hole in holes_of(expr) { keeps_expression(&hole, interner, holes_of, context, own, library, walk); }
+    for hole in holes_of(expr) { if a_read_option(&hole, interner, context) { keeps_read_option(&hole, interner, &holes_of, context, own, library, walk); } else { keeps_expression(&hole, interner, holes_of, context, own, library, walk); } }
     match expr {
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -294,7 +294,7 @@ pub(crate) fn keeps_expression(expr: &Expr, interner: &winnow_grammar::InternerC
                     },
                     _ => false,
                 };
-                if !lent { keeps_expression(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, interner, holes_of, context, own, library, walk); }
+                if !lent && a_read_option(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, interner, context) { keeps_read_option(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, interner, &holes_of, context, own, library, walk); } else if !lent { keeps_expression(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, interner, holes_of, context, own, library, walk); }
             }
             for setting in config.iter() { keeps_expression(&setting.value, interner, holes_of, context, own, library, walk); }
         },
@@ -855,6 +855,10 @@ pub(crate) fn keeps_handed(expr: &Expr, interner: &winnow_grammar::InternerConte
     match expr {
         Expr::Coalesce { fallback, .. } => { let fallback = nikaia_std::boxed::open(fallback); names.extend(keeps_handed(fallback, interner, context, own, library, walk)); },
         _ => { },
+    }
+    match coalesced_option(expr, interner, context) {
+        Some(read) => { if !nikaia_std::list::contains(&names, &read) { names.push(read); } },
+        None => { },
     }
     match expr {
         Expr::Variable(ident, _) => {

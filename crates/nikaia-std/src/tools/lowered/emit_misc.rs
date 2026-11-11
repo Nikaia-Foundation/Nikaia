@@ -113,7 +113,7 @@ impl EmitState {
         match expr {
             Expr::Call { func, .. } => {
                 let func = nikaia_std::boxed::open(func);
-                let kept = self.facts.kept_calls.get(&node_key(func));
+                let kept = self.facts.kept_calls.get(&node_key(func)).copied();
                 if kept.is_some() {
                     let pair = match kept { Some(__nikaia_value) => __nikaia_value, None => return false };
                     return pair.1;
@@ -336,7 +336,7 @@ impl EmitState {
     }
     pub fn attribute_in_rust(&self, world: &EmitWorld<'_, '_, '_, '_>, written: &str) -> String {
         let pieces: Vec<&str> = written.split(" { ").collect::<Vec<_>>();
-        let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).to_string());
+        let name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).to_string());
         let mut inside: String = String::from("");
         if pieces.len() > 1 {
             let mut rest: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);

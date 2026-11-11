@@ -11,7 +11,7 @@ pub(crate) fn check_exprs_part_name(index: i64) -> String {
 // this was written - see `contracts::sync`.
 pub(crate) fn check_exprs_package_type(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, std_in_scope: &collections::BTreeSet<String>, name: &str) -> Option<TypeContract> {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
-    let head = (*nikaia_std::index::get(&parts, 0)); ::core::mem::drop(parts);
+    let head = (*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }); ::core::mem::drop(parts);
     if std_in_scope.contains(head) || !imports_a_package(&world.here, head) { return None; }
     for ledger in [world.own, world.library] {
         let contract = match ledger.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };

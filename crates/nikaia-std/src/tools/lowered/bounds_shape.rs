@@ -118,7 +118,7 @@ pub fn only_removes(method: &str) -> bool { matches!(method, "pop" | "remove" | 
 
 pub fn key_root(key: &str) -> String {
     let parts: Vec<&str> = key.split('[').collect::<Vec<_>>();
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string())
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string())
 }
 
 pub fn root_name(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {

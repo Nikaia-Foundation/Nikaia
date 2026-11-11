@@ -86,6 +86,7 @@ pub fn bounds_proven(
 		ensured: bm_ensured(ledgers, read),
 		required: bm_required(ledgers, read),
 		each: bm_each(ledgers, read),
+		collected: bm_collected(ledgers, read),
 		std_receivers: facts.std_receivers.clone(),
 		simd_loads: facts.simd_loads.clone(),
 		shifts: facts.shifts.clone(),

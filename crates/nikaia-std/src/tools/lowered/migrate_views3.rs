@@ -158,7 +158,7 @@ pub(crate) fn migrate_ahead(c: &[scalar], k: i64) -> scalar {
 // this was written - see `contracts::sync`.
 pub(crate) fn migrate_character_end(c: &[scalar], at: i64) -> i64 {
     let mut k = at + 1;
-    if k < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(k)) == '\\' { k = unsafe { nikaia_std::proven::add::<i64>(k, 2) }; } else { k += 1; }
+    if k < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (k) as usize) } == '\\' { k = unsafe { nikaia_std::proven::add::<i64>(k, 2) }; } else { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
     while k < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(k)) != '\'' && *nikaia_std::index::get(&c, nikaia_std::index::at(k)) != '\n' { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
     if k < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(k)) == '\'' { return unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
     0
@@ -207,7 +207,7 @@ pub(crate) fn migrate_closing(tokens: &[MigrateToken], open: i64) -> i64 {
 // this was written - see `contracts::sync`.
 pub(crate) fn migrate_extern_end(tokens: &[MigrateToken], at: i64) -> i64 {
     let mut k = at + 1;
-    if k < tokens.len() as i64 && nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind == MigrateKind::Text { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
+    if k < tokens.len() as i64 && unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.kind == MigrateKind::Text { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
     if migrate_text_at(&tokens, k) == "(" { k = unsafe { nikaia_std::proven::add::<i64>(migrate_closing(&tokens, k), 1) }; }
     if migrate_text_at(&tokens, k) == "{" { return migrate_closing(&tokens, k); }
     let mut depth = 0;

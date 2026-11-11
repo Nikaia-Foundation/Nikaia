@@ -242,7 +242,7 @@ pub(crate) fn a_nonempty(fields: &[FieldContract]) -> Option<Vec<FieldContract>>
 // this was written - see `contracts::sync`.
 pub fn a_type_base(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) }))).to_string())
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string())
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

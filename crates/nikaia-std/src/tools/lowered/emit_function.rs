@@ -112,7 +112,7 @@ impl EmitState {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let signature = match c.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         if at < 0 || at >= signature.params.len() as i64 { return false; }
-        unsafe { nikaia_std::proven::read(&signature.params, (at) as usize) }.1.is_a_view()
+        (unsafe { nikaia_std::proven::read(&signature.params, (at) as usize) }.1.is_a_view())
     }
     pub(crate) fn emit_fn_keeps(&self, key: &str, name: &str) -> bool {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -175,6 +175,19 @@ impl EmitState {
         if nikaia_std::list::contains(&c.borrows, &name) { return true; }
         c.returns.contains(&*format!("ref({})", name)) || c.returns.contains(&*format!("ref({} |", name)) || c.returns.contains(&*format!("| {})", name)) || c.returns.contains(&*format!("| {} |", name))
     }
+    pub(crate) fn emit_store_nested(&self, world: &EmitWorld<'_, '_, '_, '_>, args: &[FnArg], stores: &[EmitPair], source: &FnArg) -> bool {
+        let name = emit_text(world, source.name);
+        if source.mutable || emit_store_place(stores, &name) || !emit_store_source(stores, &name) { return false; }
+        if !self.carries_a_view(world, &source.ty) || !self.borrows(world, source.ty.name) || !source.ty.generics.is_empty() { return false; }
+        for pair in stores.iter() {
+            if pair.second != name { continue; }
+            let place = match args.iter().find(|&a| { emit_text(world, a.name) == pair.first }) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            let mut held = place.ty.clone();
+            if held.generics.len() == 1 && emit_text(world, held.name) == "Vec" { held = (*unsafe { nikaia_std::proven::read(&held.generics, (0) as usize) }).clone(); }
+            if held.name == source.ty.name || held.is_view || emit_holds_a_ref_of_a_type(world, &held) { return false; }
+        }
+        true
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
@@ -183,7 +196,7 @@ impl EmitState {
             Item::Fn { name, generics, receiver, args: written_args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
                 let can_throw = *can_throw; let is_public = *is_public; let is_sync = *is_sync; let name = *name; let spread = *spread;
                 let throws_ = can_throw;
-                let mut args: Vec<FnArg> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                let mut args: Vec<FnArg> = vec![];
                 for each in written_args.iter() { if emit_text(world, each.name) != "" { args.push(each.clone()); } }
                 let has_owner = owner_target.is_some();
                 let target: String = nikaia_std::index::or(match owner_target {
@@ -321,7 +334,9 @@ impl EmitState {
                         let mut position: Option<i64> = None;
                         for k in 0..args.len() as i64 { if position.is_none() && emit_text(world, unsafe { nikaia_std::proven::read(&args, (k) as usize) }.name) == *each { position = Some(k); } }
                         let at = nikaia_std::index::or(position, || -1);
-                        if at >= 0 && self.emit_fn_lowered_as_a_view(world, &key, recv, at, nikaia_std::index::get(&args, nikaia_std::index::at(at))) && !self.borrows(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name) {
+                        let mut owned_views = false;
+                        if at >= 0 { owned_views = !nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.is_view && !self.emit_fn_lends(world, &key, at + recv) && !self.emit_fn_changes(&key, &emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).name)) && self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty) && nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.is_empty(); }
+                        if at >= 0 && self.emit_fn_lowered_as_a_view(world, &key, recv, at, nikaia_std::index::get(&args, nikaia_std::index::at(at))) && (!self.borrows(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name) || owned_views) {
                             let mut inside = false;
                             for g in nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.iter() { if self.carries_a_view(world, g) { inside = true; } }
                             if !inside { found.push(at); }
@@ -423,7 +438,8 @@ impl EmitState {
                     let mut reference: &'static str = "";
                     if changes { if lifted { reference = "&'r mut "; } else if is_source && source_kept { reference = "&'k mut "; } else { reference = "&mut "; } } else if self.emit_fn_lends(world, &key, at) && !written_as_a_view { if !is_source && emit_store_source(&stores, &pname) { reference = "&'a "; } else if lifted { reference = "&'r "; } else if is_source && source_kept { reference = "&'k "; } else { reference = "&"; } }
                     let read_only = changes || self.emit_fn_lends(world, &key, at);
-                    let how = self.emit_how(&sig, each.name, &pname, ty.is_view, read_only);
+                    let mut how = self.emit_how(&sig, each.name, &pname, ty.is_view, read_only);
+                    if ty.is_view && self.emit_store_nested(world, &args, &stores, each) { how = EmitLifetimes::Inner; }
                     let mut spelled: String = String::from("");
                     if *unsafe { nikaia_std::proven::read(&lengths, (k) as usize) } != "" || *unsafe { nikaia_std::proven::read(&runs, (k) as usize) } {
                         let mut element: String = String::from("u8");

@@ -66,7 +66,7 @@
           <p class="site-nav-title">{% if in_research %}Research{% else %}{{ nav_section.title | escape }}{% endif %}</p>
           <ul>
           {%- if in_research -%}
-            {%- assign research_pages = "/research/|Research questions,/research/prover/|The prover,/research/prover/architecture.html|How the prover is built,/research/performance/|Performance with safety" | split: "," -%}
+            {%- assign research_pages = "/research/|Research questions,/research/prover/|The prover,/research/prover/architecture.html|How the prover is built,/research/performance/|Performance with safety,/research/libraries/|Libraries written in Nikaia" | split: "," -%}
             {%- for pair in research_pages -%}
               {%- assign r = pair | split: "|" %}
             <li><a href="{{ r[0] | relative_url }}"{% if r[0] == page.url %} aria-current="page"{% endif %}>{{ r[1] }}</a></li>
