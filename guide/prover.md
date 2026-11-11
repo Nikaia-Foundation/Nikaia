@@ -238,7 +238,31 @@ the program does.
 What happens next depends on who wrote the claim.
 
 An index or overflow check the prover cannot show stays in the program and does its work when
-the program runs. Here `first` gets an empty list:
+the program runs. Here the list's length comes from the command line:
+
+```nika
+fn first(xs: Vec[int]) -> int {
+    return xs[0]
+}
+
+fn main(count: int) throws {
+    let mut xs: Vec[int] = []
+    for i in 0..<count {
+        xs.push(i + 3)
+    }
+    println(f"{first(xs)}")
+}
+```
+
+```text
+$ nikaia run stop.nika -- 2
+3
+$ nikaia run stop.nika -- 0
+stop.nika:2: the program stopped: index out of bounds: the len is 0 but the index is 0
+```
+
+A check the prover shows to fail is a different matter: the build stops with `NK1207` and
+names the value. Handing `first` a list the program itself made empty is refused at the call:
 
 ```nika
 fn first(xs: Vec[int]) -> int {
@@ -247,15 +271,14 @@ fn first(xs: Vec[int]) -> int {
 
 fn main() throws {
     let empty: Vec[int] = []
-    println(f"{first([3, 4])}")
     println(f"{first(empty)}")
 }
 ```
 
 ```text
-$ nikaia run stop.nika
-3
-stop.nika:2: the program stopped: index out of bounds: the len is 0 but the index is 0
+error[NK1207]: At this call, `xs[0]` in `first` is out of bounds every time it is reached.
+  --> stop.nika:7:5
+   = note: Here `xs.len()` is 0.
 ```
 
 An `assert` the prover cannot show stops the build with `NK1300`. Not proved is not false, so
