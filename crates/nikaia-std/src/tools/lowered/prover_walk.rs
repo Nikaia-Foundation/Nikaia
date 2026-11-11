@@ -2339,7 +2339,7 @@ pub(crate) fn prover_bit_range(walk: &mut ProverWalk, expr: &Expr, scope: &Prove
                     if *op != BinaryOp::Shr { return None; }
                     let k = match prover_constant_of(walk, rhs, scope, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
                     if k < 2 || k > 63 { return None; }
-                    let by = 64 - k;
+                    let by = unsafe { nikaia_std::proven::sub::<i64>(64, k) };
                     let top: i64 = 1 << by;
                     return Some(ProverBits { lo: 0, hi: top - 1 });
                 },

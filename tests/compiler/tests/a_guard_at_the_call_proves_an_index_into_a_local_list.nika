@@ -1,0 +1,30 @@
+/// A guard at the call proves an index into a list the callee writes as a
+/// literal (#1571, ADR-391 D1): the derived precondition's side is the
+/// list's length as a number, `month < 12`, proved by the guard of a value
+/// read from outside and by a constant argument.
+use std::text
+
+fn given() -> String {
+	let mut s = String()
+	s.push_str("10")
+	return s
+}
+
+fn month_name(month: int) -> String {
+	let names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+		"Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+	return names[month]
+}
+
+fn day_name(day: int) -> String {
+	let names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+	return names[day]
+}
+
+fn main() throws {
+	let month = text::parse_i64(given()) ?? 1
+	if month >= 0 && month < 12 {
+		println(month_name(month))
+	}
+	println(day_name(6))
+}

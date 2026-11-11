@@ -118,6 +118,6 @@ pub fn element_at(on: &BuildValue, at: &BuildValue) -> ElementRead {
     };
     let count = nikaia_std::index::or(integer_as_count(&index), || -1);
     if count < 0 || count >= items.len() as i64 { return ElementRead::OutOfBounds { at: index, len: items.len() as i64 }; }
-    ElementRead::Found((*nikaia_std::index::get(&items, nikaia_std::index::at(count))).clone())
+    ElementRead::Found((*unsafe { nikaia_std::proven::read(&items, (count) as usize) }).clone())
 }
 

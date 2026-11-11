@@ -846,7 +846,7 @@ pub(crate) fn bounding_nearest(walk: &BoundsWalk, facts: &BoundsFacts, asked: i6
         let id = match ids.get(name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
         { let __nikaia_stored = true; nikaia_std::index::set(&mut reached, nikaia_std::index::at(id), __nikaia_stored); }
         let through = (*nikaia_std::index::get(&readers, nikaia_std::index::at(id))).len() as i64;
-        for k in (*nikaia_std::index::get(&readers, nikaia_std::index::at(id))).iter() {
+        for k in (*unsafe { nikaia_std::proven::read(&readers, (id) as usize) }).iter() {
             let k = nikaia_std::num::value(k);
             if *nikaia_std::index::get(&near, nikaia_std::index::at(k)) < 0 || through < *unsafe { nikaia_std::proven::read(&near, (k) as usize) } { { let __nikaia_stored = through; unsafe { nikaia_std::proven::write(&mut near, (k) as usize, __nikaia_stored) }; } }
         }
@@ -861,9 +861,9 @@ pub(crate) fn bounding_nearest(walk: &BoundsWalk, facts: &BoundsFacts, asked: i6
         for name in (*unsafe { nikaia_std::proven::read(&ways, (best) as usize) }).iter() {
             let id = match ids.get(name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
             if *nikaia_std::index::get(&reached, nikaia_std::index::at(id)) { continue; }
-            { let __nikaia_stored = true; nikaia_std::index::set(&mut reached, nikaia_std::index::at(id), __nikaia_stored); }
-            let through = *unsafe { nikaia_std::proven::read(&near, (best) as usize) } + (*nikaia_std::index::get(&readers, nikaia_std::index::at(id))).len() as i64;
-            for k in (*nikaia_std::index::get(&readers, nikaia_std::index::at(id))).iter() {
+            { let __nikaia_stored = true; unsafe { nikaia_std::proven::write(&mut reached, (id) as usize, __nikaia_stored) }; }
+            let through = *unsafe { nikaia_std::proven::read(&near, (best) as usize) } + (*unsafe { nikaia_std::proven::read(&readers, (id) as usize) }).len() as i64;
+            for k in (*unsafe { nikaia_std::proven::read(&readers, (id) as usize) }).iter() {
                 let k = nikaia_std::num::value(k);
                 if *nikaia_std::index::get(&near, nikaia_std::index::at(k)) < 0 || through < *unsafe { nikaia_std::proven::read(&near, (k) as usize) } { { let __nikaia_stored = through; unsafe { nikaia_std::proven::write(&mut near, (k) as usize, __nikaia_stored) }; } }
             }
@@ -1092,11 +1092,11 @@ pub(crate) fn bounding_range_of(walk: &mut BoundsWalk, op: &BinaryOp, lhs: &Expr
             let ty = nikaia_std::index::or(*nikaia_std::index::get(&context.shifts, &at), || "");
             let width = nikaia_std::index::or(bounding_bits(ty), || 0);
             if ty.starts_with('u') && width > 0 && k >= 1 && k < width {
-                let most = (1 << (width - k).min(62)) - 1;
+                let most = (1 << (unsafe { nikaia_std::proven::sub::<i64>(width, k) }).min(62)) - 1;
                 widest = Some(Range { lo: Some(0), hi: Some(most) });
             }
             if ty.starts_with('i') && width > 0 && k >= 1 && k < width {
-                let by = width - 1 - k;
+                let by = unsafe { nikaia_std::proven::sub::<i64>(nikaia_std::proven::sub::<i64>(width, 1), k) };
                 let half: i64 = 1 << by;
                 let below = half - 1;
                 widest = Some(Range { lo: Some(-half), hi: Some(below) });
@@ -1105,8 +1105,8 @@ pub(crate) fn bounding_range_of(walk: &mut BoundsWalk, op: &BinaryOp, lhs: &Expr
             let x = match known { Some(__nikaia_value) => __nikaia_value, None => return widest };
             let lo = match x.lo { Some(__nikaia_value) => __nikaia_value, None => return widest };
             if lo < 0 { return widest; }
-            let mut shifted = Range { lo: Some(lo >> k), hi: nikaia_std::index::or(widest, || Range { lo: Some(0), hi: None }).hi };
-            if x.hi.is_some() { shifted.hi = Some(nikaia_std::index::or(x.hi, || 0) >> k); }
+            let mut shifted = Range { lo: Some(unsafe { nikaia_std::proven::shr::<i64>(lo, (k) as u32) }), hi: nikaia_std::index::or(widest, || Range { lo: Some(0), hi: None }).hi };
+            if x.hi.is_some() { shifted.hi = Some(unsafe { nikaia_std::proven::shr::<i64>(nikaia_std::index::or(x.hi, || 0), (k) as u32) }); }
             return Some(shifted);
         },
         BinaryOp::BitXor => {
@@ -1789,7 +1789,7 @@ pub(crate) fn bounding_derived_call(walk: &mut BoundsWalk, expr: &Expr, name: &s
             let claim = (*unsafe { nikaia_std::proven::read(&callee.claims, (k) as usize) }).clone();
             let mut given: Vec<i64> = vec![];
             let left = match bounding_derived_side(walk, &callee.params, &claim.left, false, claim.each, args, on, facts, &mut given, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let right = match bounding_derived_side(walk, &callee.params, &claim.right, claim.length, claim.each, args, on, facts, &mut given, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let right = if claim.fixed.is_some() { walk.arena.int(nikaia_std::index::or(claim.fixed, || 0)) } else { match bounding_derived_side(walk, &callee.params, &claim.right, claim.length, claim.each, args, on, facts, &mut given, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue } };
             let side = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
             let goal = bounding_each_guarded(walk, side);
             if given.is_empty() { if bounding_proves(&walk, facts, goal, ask) { proved.insert(k); } } else {
@@ -1877,7 +1877,7 @@ pub(crate) fn bounding_derived_entry(walk: &mut BoundsWalk, facts: &mut BoundsFa
     let held = match *nikaia_std::index::get(&context.around.derived.entry, &(nikaia_std::index::get(&args, 0).span.start as i64)) { Some(__nikaia_value) => __nikaia_value, None => return };
     for claim in held.iter() {
         let left = if claim.left == "" { walk.arena.int(0) } else if claim.each { walk.arena.var(&bounding_element_of(&claim.left)) } else { walk.arena.var(&claim.left) };
-        let right = if claim.length { walk.arena.var(&length_of(&claim.right)) } else if claim.each { walk.arena.var(&bounding_element_of(&claim.right)) } else { walk.arena.var(&claim.right) };
+        let right = if claim.fixed.is_some() { walk.arena.int(nikaia_std::index::or(claim.fixed, || 0)) } else if claim.length { walk.arena.var(&length_of(&claim.right)) } else if claim.each { walk.arena.var(&bounding_element_of(&claim.right)) } else { walk.arena.var(&claim.right) };
         let side = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
         let fact = bounding_each_guarded(walk, side);
         bounding_push(&walk, facts, fact);
@@ -3303,6 +3303,7 @@ pub(crate) fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbo
         Expr::Field { .. } => context.whole_fields.contains(&node_key(value)),
         Expr::Call { .. } => context.whole_fields.contains(&node_key(value)),
         Expr::MethodCall { .. } => context.whole_fields.contains(&node_key(value)),
+        Expr::Coalesce { .. } => context.whole_fields.contains(&node_key(value)),
         _ => false,
     };
     let whole = nikaia_std::index::or(bounding_declared_whole(ty, words), || (value_lin.is_some() || value_range.is_some() || whole_field).into());

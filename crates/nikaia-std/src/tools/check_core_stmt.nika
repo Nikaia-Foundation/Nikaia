@@ -328,6 +328,14 @@ fn check_core_stmt_a_call(value: ref Expr) -> bool sync {
     }
 }
 
+/// `x ?? d`.
+fn check_core_stmt_a_choice(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Coalesce { .. } => true,
+        else => false,
+    }
+}
+
 /// A field or an index, the places a `let` is a view of. **Not off a call's
 /// owned result** (#1191): `f().inner` reads a part of a value the call hands
 /// over, which nothing else owns, so the `let` moves it out rather than
@@ -812,8 +820,10 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     }
     // **A call's whole-number result is a number of the bounds walk**
     // (#781): `let at = self.slot_of(…)` is bounded by what is assumed of
-    // `at`, as a name bound to a sum is.
-    if names.len() == 1 && check_core_stmt_a_call(value) {
+    // `at`, as a name bound to a sum is. So is a whole number out of a
+    // choice, `let n = text::parse_i64(s) ?? 1` (#1571): what a guard says
+    // of `n` is kept.
+    if names.len() == 1 && (check_core_stmt_a_call(value) || check_core_stmt_a_choice(value)) {
         match found {
             Ty::Named { name, args, .. } => {
                 if args.is_empty() && is_whole_number(name) {

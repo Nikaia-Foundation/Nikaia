@@ -180,7 +180,7 @@ pub fn check_walked_place_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pla
     if unit < 0 || byte < 0 || byte > 4294967295i64 { return none; }
     if unit == here { return CheckPlace { at: byte, function: None }; }
     let mut function: Option<String> = None;
-    if world.here_at < 0 { if unit == 0 { function = check_walked_function_at(&world.here, byte); } else if unit - 1 < world.beside.len() as i64 { function = check_walked_function_at(nikaia_std::index::get(&world.beside, nikaia_std::index::at(unit - 1)), byte); } } else if unit < world.beside.len() as i64 { function = check_walked_function_at(nikaia_std::index::get(&world.beside, nikaia_std::index::at(unit)), byte); }
+    if world.here_at < 0 { if unit == 0 { function = check_walked_function_at(&world.here, byte); } else if unsafe { nikaia_std::proven::sub::<i64>(unit, 1) } < world.beside.len() as i64 { function = check_walked_function_at(unsafe { nikaia_std::proven::read(&world.beside, (nikaia_std::proven::sub::<i64>(unit, 1)) as usize) }, byte); } } else if unit < world.beside.len() as i64 { function = check_walked_function_at(unsafe { nikaia_std::proven::read(&world.beside, (unit) as usize) }, byte); }
     CheckPlace { at: -1, function }
 }
 

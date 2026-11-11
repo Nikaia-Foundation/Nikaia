@@ -277,7 +277,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_narrowed_read_given_up(&mut self, value: &Expr) {
         let narrowed = nikaia_std::index::or(self.facts.narrowed_reads.get(&node_key(value)), || 0);
-        if narrowed % 8 >= 4 && narrowed < 8 { self.facts.narrowed_reads.insert(node_key(value), narrowed + 8); }
+        if narrowed % 8 >= 4 && narrowed < 8 { self.facts.narrowed_reads.insert(node_key(value), unsafe { nikaia_std::proven::add::<i64>(narrowed, 8) }); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -361,7 +361,7 @@ impl CheckState {
         let at = match self.flow.read_index.get(&(node_key(value), read_at)) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return };
         if !a_name_or_a_field(value) { return; }
         let path = nikaia_std::block::Text::from(nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).path.to_string());
-        let seq = nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).seq;
+        let seq = unsafe { nikaia_std::proven::read(&self.reads_on_paths, (at) as usize) }.seq;
         self.hands_over_path_of(world, node_key(value), &path, ty, seq, to, span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

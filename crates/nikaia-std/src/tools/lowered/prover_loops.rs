@@ -506,7 +506,7 @@ pub(crate) fn loop_unrolled(arena: &mut TermArena, record: &LoopRecord, steady: 
         let limit = match loop_constant_limit(&arena, c, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let begins = match loop_known_value(&arena, &record.problem.fixed, &loop_before_name(name, start)) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let mut t: i64 = 0;
-        if limit.op == "<" { if limit.value > begins { t = (limit.value - begins + k - 1) / k; } } else if limit.op == "<=" { if limit.value >= begins { t = (limit.value - begins) / k + 1; } } else { continue; }
+        if limit.op == "<" { if limit.value > begins { t = (unsafe { nikaia_std::proven::sub::<i64>(limit.value - begins + k, 1) }) / k; } } else if limit.op == "<=" { if limit.value >= begins { t = (limit.value - begins) / k + 1; } } else { continue; }
         if t <= loop_turns_most() {
             counter = nikaia_std::block::Text::from(name.to_string());
             first = begins;

@@ -1,0 +1,5 @@
+bounds in tests/a_guard_at_the_call_proves_an_index_into_a_local_list.nika: 2 indexes, 2 proved; 0 operations, 0 proved
+    16  names[month]  proved
+    21  names[day]    proved
+  derived  day_name: 0 <= day, day <= 7, day < 7, proved at the calls on lines 29
+  derived  month_name: 0 <= month, month <= 12, month < 12, proved at the calls on lines 27

@@ -298,7 +298,7 @@ impl LgNormal {
             for c in digits.chars() { if c < '0' || c > '9' { plain = false; } }
             if plain {
                 let n = nikaia_std::index::or(text::parse_i64(&digits), || -1);
-                if n >= 0 && n < self.names.len() as i64 { return nikaia_std::block::Text::from((*nikaia_std::index::get(&self.names, nikaia_std::index::at(n))).to_string()); }
+                if n >= 0 && n < self.names.len() as i64 { return nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&self.names, (n) as usize) }).to_string()); }
             }
         }
         nikaia_std::block::Text::from(name.to_string())

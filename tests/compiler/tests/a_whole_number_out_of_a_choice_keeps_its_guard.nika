@@ -1,0 +1,24 @@
+/// A whole number bound out of a choice, `text::parse_i64(s) ?? 1`, is a
+/// number of the bounds walk (#1571): what the guard says of it holds below,
+/// so `names[month]` needs no check, and the call under the same guard
+/// proves the derived precondition of `pick` (ADR-391 D1).
+use std::text
+
+fn given() -> String {
+	let mut s = String()
+	s.push_str("1")
+	return s
+}
+
+fn pick(names: Vec[String], month: int) -> String {
+	return names[month]
+}
+
+fn main() throws {
+	let month = text::parse_i64(given()) ?? 1
+	let names = ["Jan", "Feb", "Mar"]
+	if month >= 0 && month < names.len() {
+		println(names[month])
+		println(pick(names, month))
+	}
+}

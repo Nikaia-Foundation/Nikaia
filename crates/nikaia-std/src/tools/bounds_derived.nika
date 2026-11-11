@@ -24,13 +24,15 @@ use std::collections
 /// where `length`. Where `each` (ADR-306 D21, #1397), a side that is not
 /// a length names a list, a parameter or a path of fields from one, and
 /// stands for every value it holds: `0 <= atoms[..]`, `atoms[..] <
-/// values.len()`.
+/// values.len()`. Where `fixed` is a number, `right` is that whole number
+/// (#1571): `month < 12`, the length of a list the body writes as a literal.
 pub struct DerivedClaim {
 	pub left: String,
 	pub strict: bool,
 	pub right: String,
 	pub length: bool,
 	pub each: bool,
+	pub fixed: i64?,
 }
 
 /// **A private function its callers may bound**: its parameters, the
@@ -327,6 +329,25 @@ fn derived_claims(
 			lists.push(name)
 		}
 	}
+	// **A list the body writes as a literal** (#1571), bound once by a
+	// `let` that is not `mut`: its length is fixed from the start, so a
+	// position into it is bounded by a number.
+	let mut literals: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	for stmt in body.stmts {
+		match stmt.node {
+			Stmt::Let { names, mutable, value, .. } => {
+				if names.len() == 1 && !mutable {
+					match value {
+						Expr::ListLit { items, .. } => {
+							literals.insert(words.resolve(names[0]).clone(), items.len() as i64)
+						},
+						else => {},
+					}
+				}
+			},
+			else => {},
+		}
+	}
 	let mut compared: collections::BTreeSet[String] = collections::BTreeSet()
 	let mut indexed: collections::BTreeSet[String] = collections::BTreeSet()
 	for e in visited_in_block(body) {
@@ -400,7 +421,7 @@ fn derived_claims(
 			continue
 		}
 		if !unsigned.contains(p) {
-			claims.push(DerivedClaim { left: "", strict: false, right: p.clone(), length: false, each: false })
+			claims.push(DerivedClaim { left: "", strict: false, right: p.clone(), length: false, each: false, fixed: null })
 		}
 		for list in lists {
 			if indexed.contains(list) {
@@ -410,6 +431,7 @@ fn derived_claims(
 					right: list.clone(),
 					length: true,
 					each: false,
+					fixed: null,
 				})
 				claims.push(DerivedClaim {
 					left: p.clone(),
@@ -417,6 +439,27 @@ fn derived_claims(
 					right: list.clone(),
 					length: true,
 					each: false,
+					fixed: null,
+				})
+			}
+		}
+		for (list, n) in literals {
+			if indexed.contains(list) && !lists.contains(list) {
+				claims.push(DerivedClaim {
+					left: p.clone(),
+					strict: false,
+					right: "",
+					length: false,
+					each: false,
+					fixed: n,
+				})
+				claims.push(DerivedClaim {
+					left: p.clone(),
+					strict: true,
+					right: "",
+					length: false,
+					each: false,
+					fixed: n,
 				})
 			}
 		}
@@ -428,6 +471,7 @@ fn derived_claims(
 					right: q.clone(),
 					length: false,
 					each: false,
+					fixed: null,
 				})
 				claims.push(DerivedClaim {
 					left: p.clone(),
@@ -435,6 +479,7 @@ fn derived_claims(
 					right: q.clone(),
 					length: false,
 					each: false,
+					fixed: null,
 				})
 			}
 		}
@@ -516,9 +561,9 @@ fn derived_element_claims(
 	for (s, m) in pairs {
 		if !floors.contains(s) {
 			floors.insert(s.clone())
-			out.push(DerivedClaim { left: "", strict: false, right: s.clone(), length: false, each: true })
+			out.push(DerivedClaim { left: "", strict: false, right: s.clone(), length: false, each: true, fixed: null })
 		}
-		out.push(DerivedClaim { left: s.clone(), strict: true, right: m.clone(), length: true, each: true })
+		out.push(DerivedClaim { left: s.clone(), strict: true, right: m.clone(), length: true, each: true, fixed: null })
 	}
 	return out
 }
@@ -625,7 +670,7 @@ pub fn derived_written(claim: ref DerivedClaim) -> String {
 		left = f"{left}[..]"
 	}
 	let op = if claim.strict { "<" } else { "<=" }
-	let right = if claim.length { f"{claim.right}.len()" } else if claim.each {
+	let right = if claim.fixed != null { (claim.fixed ?? 0).to_string() } else if claim.length { f"{claim.right}.len()" } else if claim.each {
 		f"{claim.right}[..]"
 	} else {
 		claim.right.clone()

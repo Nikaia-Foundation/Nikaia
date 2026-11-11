@@ -317,11 +317,11 @@ impl EmitState {
                     for k in 0..args.len() as i64 { if found.is_none() && emit_text(world, unsafe { nikaia_std::proven::read(&args, (k) as usize) }.name) == *unsafe { nikaia_std::proven::read(&named, (0) as usize) } { found = Some(k); } }
                     let at = nikaia_std::index::or(found, || -1);
                     if at >= 0 && self.emit_fn_lowered_as_a_view(world, &key, recv, at, nikaia_std::index::get(&args, nikaia_std::index::at(at))) {
-                        let loan = nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.is_view || self.emit_fn_lends(world, &key, at + recv);
+                        let loan = nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.is_view || self.emit_fn_lends(world, &key, unsafe { nikaia_std::proven::add::<i64>(at, recv) });
                         let mut inside = false;
-                        for g in nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.iter() { if self.carries_a_view(world, g) || g.is_view && g.lasting { inside = true; } }
-                        let owned = !loan && !self.emit_fn_changes(&key, &emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).name)) && self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty);
-                        if receiver.is_some() || lowered_views > 1 || has_kept || owned || loan && self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty) && (self.borrows(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name) || inside) { source_at = Some(at); }
+                        for g in unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.generics.iter() { if self.carries_a_view(world, g) || g.is_view && g.lasting { inside = true; } }
+                        let owned = !loan && !self.emit_fn_changes(&key, &emit_text(world, unsafe { nikaia_std::proven::read(&args, (at) as usize) }.name)) && self.carries_a_view(world, &unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty);
+                        if receiver.is_some() || lowered_views > 1 || has_kept || owned || loan && self.carries_a_view(world, &unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty) && (self.borrows(world, unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.name) || inside) { source_at = Some(at); }
                     }
                 }
                 let mut several_at: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -335,7 +335,7 @@ impl EmitState {
                         for k in 0..args.len() as i64 { if position.is_none() && emit_text(world, unsafe { nikaia_std::proven::read(&args, (k) as usize) }.name) == *each { position = Some(k); } }
                         let at = nikaia_std::index::or(position, || -1);
                         let mut owned_views = false;
-                        if at >= 0 { owned_views = !nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.is_view && !self.emit_fn_lends(world, &key, at + recv) && !self.emit_fn_changes(&key, &emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).name)) && self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty) && nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.is_empty(); }
+                        if at >= 0 { owned_views = !nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.is_view && !self.emit_fn_lends(world, &key, unsafe { nikaia_std::proven::add::<i64>(at, recv) }) && !self.emit_fn_changes(&key, &emit_text(world, unsafe { nikaia_std::proven::read(&args, (at) as usize) }.name)) && self.carries_a_view(world, &unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty) && unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.generics.is_empty(); }
                         if at >= 0 && self.emit_fn_lowered_as_a_view(world, &key, recv, at, nikaia_std::index::get(&args, nikaia_std::index::at(at))) && (!self.borrows(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name) || owned_views) {
                             let mut inside = false;
                             for g in nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.iter() { if self.carries_a_view(world, g) { inside = true; } }
@@ -350,13 +350,13 @@ impl EmitState {
                 let mut source_nested = false;
                 if source_at.is_some() {
                     let at = nikaia_std::index::or(source_at, || 0);
-                    if self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty) && self.borrows(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name) && nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.is_empty() {
+                    if self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty) && self.borrows(world, unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.name) && unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.generics.is_empty() {
                         match ret_type {
-                            Some(each) => { source_nested = !each.either && (each.name != nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name || !emit_holds_a_ref_of_a_type(world, each)); },
+                            Some(each) => { source_nested = !each.either && (each.name != unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.name || !emit_holds_a_ref_of_a_type(world, each)); },
                             None => { },
                         }
                     }
-                    let list = nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.clone();
+                    let list = unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.clone();
                     if list.generics.len() == 1 && emit_text(world, list.name) == "Vec" && !list.is_nullable && !list.is_slice {
                         let element = (*unsafe { nikaia_std::proven::read(&list.generics, (0) as usize) }).clone();
                         if self.carries_a_view(world, &element) && self.borrows(world, element.name) && element.generics.is_empty() && !element.is_view && !element.is_nullable {

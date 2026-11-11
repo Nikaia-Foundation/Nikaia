@@ -10,7 +10,7 @@ impl CheckState {
         let under = (id_of(base) as i64, span.start as i64);
         if !self.flow.read_index.contains_key(&under) { return; }
         let at = match self.flow.read_index.get(&under) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return };
-        self.reads_on_paths[nikaia_std::index::at(at)].path = format!("{}.{}", nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).path, field);
+        (*unsafe { nikaia_std::proven::slot(&mut self.reads_on_paths, (at) as usize) }).path = format!("{}.{}", nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).path, field);
         self.flow.read_index.insert(own, at);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

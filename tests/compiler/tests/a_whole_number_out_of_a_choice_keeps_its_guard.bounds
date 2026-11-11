@@ -1,0 +1,4 @@
+bounds in tests/a_whole_number_out_of_a_choice_keeps_its_guard.nika: 2 indexes, 2 proved; 0 operations, 0 proved
+    14  names[month]  proved
+    21  names[month]  proved
+  derived  pick: 0 <= month, month <= names.len(), month < names.len(), proved at the calls on lines 22

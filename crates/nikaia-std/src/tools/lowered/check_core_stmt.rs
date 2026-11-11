@@ -246,6 +246,10 @@ pub(crate) fn check_core_stmt_a_call(value: &Expr) -> bool { matches!(value, Exp
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_choice(value: &Expr) -> bool { matches!(value, Expr::Coalesce { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_place(state: &CheckState, value: &Expr) -> bool {
     match value {
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); check_core_stmt_a_lent_root(state, base) },
@@ -645,7 +649,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             _ => { },
         }
     }
-    if names.len() == 1 && check_core_stmt_a_call(value) {
+    if names.len() == 1 && (check_core_stmt_a_call(value) || check_core_stmt_a_choice(value)) {
         match found {
             Ty::Named { ref name, ref args, .. } => { if args.is_empty() && is_whole_number(name) { state.facts.whole_fields.insert(id_of(value) as i64); } },
             _ => { },

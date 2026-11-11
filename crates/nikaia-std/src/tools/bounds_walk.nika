@@ -3130,21 +3130,24 @@ fn bounding_derived_call(
 				words,
 			)
 				?? continue
-			let right = bounding_derived_side(
-				walk,
-				callee.params,
-				claim.right,
-				claim.length,
-				claim.each,
-				args,
-				on,
-				facts,
-				given,
-				context,
-				program,
-				words,
-			)
-				?? continue
+			// A number as a side (#1571).
+			let right = if claim.fixed != null { walk.arena.int(claim.fixed ?? 0) } else {
+				bounding_derived_side(
+					walk,
+					callee.params,
+					claim.right,
+					claim.length,
+					claim.each,
+					args,
+					on,
+					facts,
+					given,
+					context,
+					program,
+					words,
+				)
+					?? continue
+			}
 			let side = if claim.strict { walk.arena.lt(left, right) } else {
 				walk.arena.le(left, right)
 			}
@@ -3305,7 +3308,9 @@ fn bounding_derived_entry(
 		} else {
 			walk.arena.var(claim.left)
 		}
-		let right = if claim.length { walk.arena.var(length_of(claim.right)) } else if claim.each {
+		let right = if claim.fixed != null { walk.arena.int(claim.fixed ?? 0) } else if claim.length {
+			walk.arena.var(length_of(claim.right))
+		} else if claim.each {
 			walk.arena.var(bounding_element_of(claim.right))
 		} else {
 			walk.arena.var(claim.right)
@@ -5913,6 +5918,8 @@ fn bounding_let(
 		// A call's whole-number result too (#781).
 		Expr::Call { .. } => context.whole_fields.contains(node_key(value)),
 		Expr::MethodCall { .. } => context.whole_fields.contains(node_key(value)),
+		// A choice's: `text::parse_i64(s) ?? 1` (#1571).
+		Expr::Coalesce { .. } => context.whole_fields.contains(node_key(value)),
 		else => false,
 	}
 	let whole = bounding_declared_whole(ty, words)

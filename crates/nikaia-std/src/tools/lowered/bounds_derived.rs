@@ -8,6 +8,7 @@ pub struct DerivedClaim {
     pub right: String,
     pub length: bool,
     pub each: bool,
+    pub fixed: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -185,6 +186,21 @@ pub(crate) fn derived_claims(args: &[FnArg], body: &Block, method: bool, words: 
             ints.push(name);
         } else if ty == "Vec" || ty == "List" || ty == "Array" || ty == "Bytes" { lists.push(name); }
     }
+    let mut literals: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut ints = ints; #[allow(unused_mut, clippy::redundant_locals)] let mut lists = lists;
+    for stmt in body.stmts.iter() {
+        match &stmt.node {
+            Stmt::Let { names, mutable, value, .. } => {
+                let mutable = *mutable;
+                if names.len() == 1 && !mutable {
+                    match value {
+                        Expr::ListLit { items, .. } => { literals.insert(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), items.len() as i64); },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
     let mut compared: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut ints = ints; #[allow(unused_mut, clippy::redundant_locals)] let mut lists = lists;
     let mut indexed: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut ints = ints; #[allow(unused_mut, clippy::redundant_locals)] let mut lists = lists;
     for e in visited_in_block(body) {
@@ -251,17 +267,24 @@ pub(crate) fn derived_claims(args: &[FnArg], body: &Block, method: bool, words: 
     let mut claims: Vec<DerivedClaim> = vec![];
     for p in ints.iter() {
         if !compared.contains(p) { continue; }
-        if !unsigned.contains(p) { claims.push(DerivedClaim { left: String::from(""), strict: false, right: nikaia_std::block::Text::from(p.to_string()), length: false, each: false }); }
+        if !unsigned.contains(p) { claims.push(DerivedClaim { left: String::from(""), strict: false, right: nikaia_std::block::Text::from(p.to_string()), length: false, each: false, fixed: None }); }
         for list in lists.iter() {
             if indexed.contains(list) {
-                claims.push(DerivedClaim { left: nikaia_std::block::Text::from(p.to_string()), strict: false, right: nikaia_std::block::Text::from(list.to_string()), length: true, each: false });
-                claims.push(DerivedClaim { left: nikaia_std::block::Text::from(p.to_string()), strict: true, right: nikaia_std::block::Text::from(list.to_string()), length: true, each: false });
+                claims.push(DerivedClaim { left: nikaia_std::block::Text::from(p.to_string()), strict: false, right: nikaia_std::block::Text::from(list.to_string()), length: true, each: false, fixed: None });
+                claims.push(DerivedClaim { left: nikaia_std::block::Text::from(p.to_string()), strict: true, right: nikaia_std::block::Text::from(list.to_string()), length: true, each: false, fixed: None });
+            }
+        }
+        for (list, n) in literals.iter() {
+            let n = nikaia_std::num::value(n);
+            if indexed.contains(list) && !nikaia_std::list::contains(&lists, &list) {
+                claims.push(DerivedClaim { left: nikaia_std::block::Text::from(p.to_string()), strict: false, right: String::from(""), length: false, each: false, fixed: Some(n) });
+                claims.push(DerivedClaim { left: nikaia_std::block::Text::from(p.to_string()), strict: true, right: String::from(""), length: false, each: false, fixed: Some(n) });
             }
         }
         for q in ints.iter() {
             if q != p && compared.contains(q) {
-                claims.push(DerivedClaim { left: nikaia_std::block::Text::from(p.to_string()), strict: false, right: nikaia_std::block::Text::from(q.to_string()), length: false, each: false });
-                claims.push(DerivedClaim { left: nikaia_std::block::Text::from(p.to_string()), strict: true, right: nikaia_std::block::Text::from(q.to_string()), length: false, each: false });
+                claims.push(DerivedClaim { left: nikaia_std::block::Text::from(p.to_string()), strict: false, right: nikaia_std::block::Text::from(q.to_string()), length: false, each: false, fixed: None });
+                claims.push(DerivedClaim { left: nikaia_std::block::Text::from(p.to_string()), strict: true, right: nikaia_std::block::Text::from(q.to_string()), length: false, each: false, fixed: None });
             }
         }
     }
@@ -320,9 +343,9 @@ pub(crate) fn derived_element_claims(args: &[FnArg], body: &Block, words: &winno
     for (s, m) in pairs.iter() {
         if !floors.contains(s) {
             floors.insert(nikaia_std::block::Text::from(s.to_string()));
-            out.push(DerivedClaim { left: String::from(""), strict: false, right: nikaia_std::block::Text::from(s.to_string()), length: false, each: true });
+            out.push(DerivedClaim { left: String::from(""), strict: false, right: nikaia_std::block::Text::from(s.to_string()), length: false, each: true, fixed: None });
         }
-        out.push(DerivedClaim { left: nikaia_std::block::Text::from(s.to_string()), strict: true, right: nikaia_std::block::Text::from(m.to_string()), length: true, each: true });
+        out.push(DerivedClaim { left: nikaia_std::block::Text::from(s.to_string()), strict: true, right: nikaia_std::block::Text::from(m.to_string()), length: true, each: true, fixed: None });
     }
     out
 }
@@ -406,7 +429,7 @@ pub fn derived_written(claim: &DerivedClaim) -> String {
     let mut left = if claim.left == "" { String::from("0") } else { nikaia_std::block::Text::from(claim.left.to_string()) };
     if claim.each && claim.left != "" { left = format!("{}[..]", left); }
     let op = if claim.strict { "<" } else { "<=" };
-    let right = if claim.length { format!("{}.len()", claim.right) } else if claim.each { format!("{}[..]", claim.right) } else { nikaia_std::block::Text::from(claim.right.to_string()) };
+    let right = if claim.fixed.is_some() { nikaia_std::block::Text::from(nikaia_std::index::or(claim.fixed, || 0).to_string()) } else if claim.length { format!("{}.len()", claim.right) } else if claim.each { format!("{}[..]", claim.right) } else { nikaia_std::block::Text::from(claim.right.to_string()) };
     format!("{} {} {}", left, op, right)
 }
 
