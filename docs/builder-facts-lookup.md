@@ -285,6 +285,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **A rule's fact over every element of a list is guarded by the list's emptiness**: `bounding_each_guarded` turns it into `len(xs) <= 0 || fact`, and `bounding_each_present` gives `len(xs) >= 1` where an element is actually read. A new kind of rule (as D28's `inner`) states its element facts through these, or it proves anything under an empty list. (issue-1483)
 * **A list field that a free function such as `main` writes is dropped from the rule candidates**, so a rule test fills its lists only through `ref mut self` methods. (issue-1483)
 * **Derived entry claims (ADR-391) key on the first non-`self` parameter**, so a method that takes only `self` gets none. (issue-1483)
+* **Derived claims are proposed in `derived_claims` (`bounds_derived.nika`) and only stated at the call by `bounding_derived_side` (`bounds_walk.nika`)**: a claim never proposed shows no row in `--bounds`, not even an unproved one. (issue-1571)
+* **A `let` whose value the walk cannot write as a linear term or a bounded range is a number only through the checker's `whole_fields`** (calls, fields, and `x ?? d`); a value outside it drops every guard fact on the name. (issue-1571)
 * **`nikaia check --bounds FILE`** checks a file alone; a tools file is
   measured with `lower-std --bounds --asserts > R` and `nikaia run scripts/proved.nika -- R`,
   before and after on the same tree. Where the walk stops:
