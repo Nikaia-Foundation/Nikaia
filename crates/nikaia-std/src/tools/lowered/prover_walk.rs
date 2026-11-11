@@ -1484,14 +1484,7 @@ pub(crate) fn prover_unwritten_check(walk: &mut ProverWalk, expr: &Expr, span: S
             }
             let d = match lin_term(rhs, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return };
             if walk.arena.constant(d).is_some() { return; }
-            let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
-            walk.arena.variables(d, &mut read);
-            let mut folded = true;
-            for name in read.iter() {
-                let at_entry = nikaia_std::index::or(*nikaia_std::index::get(&scope.entry, name), || -1);
-                if scope.mutables.contains(name) || at_entry < 0 || walk.arena.constant(at_entry).is_none() { folded = false; }
-            }
-            if folded { return; }
+            if walk.state.zero_divisors.contains(&node_key(rhs)) { return; }
             let zero = walk.arena.int(0);
             let goal = walk.arena.unequal(d, zero);
             if walk.state.collecting {

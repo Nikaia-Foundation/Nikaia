@@ -436,6 +436,7 @@ impl CheckWalkedPasses for Host<'_> {
             &facts.comptime_values,
             &facts.whole_lets,
             &facts.method_callees,
+            &facts.zero_divisors,
         );
         let runner = |call: &Expr, callee: &str, args: &[i64]| {
             self.run_for_a_claim(call, callee, args, &comptimes.by_name)

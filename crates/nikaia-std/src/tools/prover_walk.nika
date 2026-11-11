@@ -2025,18 +2025,9 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
             if walk.arena.constant(d) != null {
                 return
             }
-            // **What the checker folds is `NK1118`'s**: a divisor over names
-            // bound once to a constant (`let z = 0`).
-            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
-            walk.arena.variables(d, read)
-            let mut folded = true
-            for name in read {
-                let at_entry = scope.entry[name] ?? -1
-                if scope.mutables.contains(name) || at_entry < 0 || walk.arena.constant(at_entry) == null {
-                    folded = false
-                }
-            }
-            if folded {
+            // **What the checker folds is `NK1118`'s** (#1566): a divisor
+            // its `constant_of` shows zero, also through a `let mut`.
+            if walk.state.zero_divisors.contains(node_key(rhs)) {
                 return
             }
             let zero = walk.arena.int(0)

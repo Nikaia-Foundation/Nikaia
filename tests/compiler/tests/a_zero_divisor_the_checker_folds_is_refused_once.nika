@@ -1,0 +1,10 @@
+// #1566 (ADR-395 D1): a divisor the checker shows zero is `NK1118`'s alone,
+// also through a `let mut` assigned after it; the walk asks no `d != 0` of
+// it, so the program gets one refusal, not a second `NK1207`.
+
+fn main() throws {
+	let mut k = 3
+	println(f"{100 % (k - 3)}")
+	k += 1
+	println(f"{100 / (k - 4)}")
+}

@@ -1,0 +1,17 @@
+error[NK1118]: This takes the remainder by zero.
+  --> tests/a_zero_divisor_the_checker_folds_is_refused_once.nika:7:2
+   |
+ 7 | 	println(f"{100 % (k - 3)}")
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Dividing by zero would stop the program, and here it's certain to happen.
+   = help: If the divisor can really be zero, check it before dividing.
+error[NK1118]: This divides by zero.
+  --> tests/a_zero_divisor_the_checker_folds_is_refused_once.nika:9:2
+   |
+ 9 | 	println(f"{100 / (k - 4)}")
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Dividing by zero would stop the program, and here it's certain to happen.
+   = help: If the divisor can really be zero, check it before dividing.
+2 type errors

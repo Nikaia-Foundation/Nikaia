@@ -16,6 +16,7 @@ pub struct ProveComptimes {
     pub at: collections::BTreeMap<i64, i64>,
     pub whole_lets: collections::BTreeMap<i64, String>,
     pub method_callees: collections::BTreeMap<i64, String>,
+    pub zero_divisors: collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -24,8 +25,8 @@ pub struct ProveWalked {
     pub answers: ProverAnswers,
 }
 
-pub fn prove_comptimes_of(program: &Program, words: &winnow_grammar::InternerContext, values: &collections::BTreeMap<i64, (String, String)>, whole_lets: &collections::BTreeMap<i64, String>, method_callees: &collections::BTreeMap<i64, String>) -> ProveComptimes {
-    let mut found = ProveComptimes { by_name: collections::BTreeMap::new(), at: collections::BTreeMap::new(), whole_lets: whole_lets.copy_owned(), method_callees: method_callees.copy_owned() };
+pub fn prove_comptimes_of(program: &Program, words: &winnow_grammar::InternerContext, values: &collections::BTreeMap<i64, (String, String)>, whole_lets: &collections::BTreeMap<i64, String>, method_callees: &collections::BTreeMap<i64, String>, zero_divisors: &collections::BTreeSet<i64>) -> ProveComptimes {
+    let mut found = ProveComptimes { by_name: collections::BTreeMap::new(), at: collections::BTreeMap::new(), whole_lets: whole_lets.copy_owned(), method_callees: method_callees.copy_owned(), zero_divisors: zero_divisors.copy_owned() };
     for (at, (below, written)) in values.iter() {
         let at = nikaia_std::num::value(at);
         if !prove_whole(below) { continue; }
@@ -101,6 +102,7 @@ pub(crate) fn prove_state(pinned: &collections::BTreeMap<String, i64>, comptimes
     state.comptime_at = comptimes.at.copy_owned();
     state.whole_lets = comptimes.whole_lets.copy_owned();
     state.method_callees = comptimes.method_callees.copy_owned();
+    state.zero_divisors = comptimes.zero_divisors.copy_owned();
     state.not_run = not_run.copy_owned();
     state.stopped = stopped.copy_owned();
     state.loops_recorded = recorded.copy_owned();

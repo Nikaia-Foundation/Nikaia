@@ -59,6 +59,9 @@ pub struct ProveComptimes {
     /// The checker's `method_callees`: the ledger entry each method call
     /// resolved to, by its receiver's node (#1446).
     pub method_callees: collections::BTreeMap[i64, String],
+    /// The checker's `zero_divisors`: each divisor `NK1118` refused, by its
+    /// node (#1566).
+    pub zero_divisors: collections::BTreeSet[i64],
 }
 
 /// What the walk and its passes made.
@@ -69,10 +72,10 @@ pub struct ProveWalked {
 
 /// Read off the checker's `comptime_values` (the type below and the literal,
 /// by the start of the item or statement): each one whose type is a whole
-/// number and whose literal an `i64` holds; its `whole_lets` and
-/// `method_callees`, as they are.
-pub fn prove_comptimes_of(program: ref Program, words: ref winnow_grammar::InternerContext, values: ref collections::BTreeMap[i64, (String, String)], whole_lets: ref collections::BTreeMap[i64, String], method_callees: ref collections::BTreeMap[i64, String]) -> ProveComptimes {
-    let mut found = ProveComptimes { by_name: collections::BTreeMap(), at: collections::BTreeMap(), whole_lets: whole_lets.clone(), method_callees: method_callees.clone() }
+/// number and whose literal an `i64` holds; its `whole_lets`,
+/// `method_callees` and `zero_divisors`, as they are.
+pub fn prove_comptimes_of(program: ref Program, words: ref winnow_grammar::InternerContext, values: ref collections::BTreeMap[i64, (String, String)], whole_lets: ref collections::BTreeMap[i64, String], method_callees: ref collections::BTreeMap[i64, String], zero_divisors: ref collections::BTreeSet[i64]) -> ProveComptimes {
+    let mut found = ProveComptimes { by_name: collections::BTreeMap(), at: collections::BTreeMap(), whole_lets: whole_lets.clone(), method_callees: method_callees.clone(), zero_divisors: zero_divisors.clone() }
     for (at, (below, written)) in values {
         if !prove_whole(below) {
             continue
@@ -168,6 +171,7 @@ fn prove_state(pinned: ref collections::BTreeMap[String, i64], comptimes: ref Pr
     state.comptime_at = comptimes.at.clone()
     state.whole_lets = comptimes.whole_lets.clone()
     state.method_callees = comptimes.method_callees.clone()
+    state.zero_divisors = comptimes.zero_divisors.clone()
     state.not_run = not_run.clone()
     state.stopped = stopped.clone()
     state.loops_recorded = recorded.clone()

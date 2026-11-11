@@ -167,6 +167,7 @@ impl CheckState {
         if divisor.beyond || divisor.value.magnitude != 0 {
             return
         }
+        self.facts.zero_divisors.insert(id_of(rhs) as i64)
         let mut what: String = "takes the remainder"
         if op == BinaryOp::Div {
             what = "divides"
