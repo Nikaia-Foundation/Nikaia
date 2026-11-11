@@ -1,0 +1,15 @@
+// #1476 (ADR-306 D15, ADR-269 D8): the right side of `&&` runs only where
+// the left holds, of `||` only where it fails, so an index there is asked
+// under that guard and not refused on a state that never reaches it; a call
+// whose argument the guard rules out builds too.
+
+fn last_is_newline(xs: ref Vec[i64], i: i64) -> bool {
+	return i < 0 || xs[i] == 10
+}
+
+fn main() throws {
+	let xs = [1, 10]
+	let i = -1
+	let j = 5
+	println(f"{i < 0 || xs[i] == 10} {j < xs.len() && xs[j] == 1} {last_is_newline(xs, -1)}")
+}

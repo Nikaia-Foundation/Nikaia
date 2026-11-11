@@ -1,0 +1,19 @@
+// #1476 (ADR-269 D8, ADR-395 §4): a divisor or an index over a function's
+// parameters, a check nobody writes, is asked at each call whether the
+// arguments rule it out. `f(0)` over `10 / d` and `g([1, 2, 3], 5)` over
+// `xs[i]` are refused with NK1207 and the values; the check stays in the
+// callee, never a precondition. Calls the walk cannot decide build:
+// `a_call_that_leaves_an_unwritten_check_open_builds`.
+
+fn f(d: i64) -> i64 {
+	return 10 / d
+}
+
+fn g(xs: ref Vec[i64], i: i64) -> i64 {
+	return xs[i]
+}
+
+fn main() throws {
+	println(f"{f(0)}")
+	println(f"{g([1, 2, 3], 5)}")
+}

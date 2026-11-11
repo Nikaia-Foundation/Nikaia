@@ -1852,7 +1852,7 @@ fn prover_expr(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref Prov
 /// Every call inside `expr`, as `contracts::sync`'s walk reaches them: not
 /// into nested blocks, the holes of literals included.
 fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
-    prover_unwritten_check(walk, expr, span, scope, words, ask, model, written_of)
+    prover_unwritten_check(walk, expr, span, scope, at, words, ask, model, written_of)
     match expr {
         Expr::Call { func, args, config, .. } => {
             let callee = prover_called(func, words, unaliased)
@@ -1894,9 +1894,26 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
                 prover_calls_in(walk, c.value, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             }
         },
-        Expr::Binary { lhs, rhs, .. } => {
+        Expr::Binary { op, lhs, rhs, .. } => {
             prover_calls_in(walk, lhs, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
-            prover_calls_in(walk, rhs, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+            if op != BinaryOp::And && op != BinaryOp::Or {
+                prover_calls_in(walk, rhs, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+                return
+            }
+            // **The right side of `&&` is reached only where the left holds**,
+            // of `||` only where it fails, as an `if`'s branch is: a check
+            // there is asked under it (`i < 0 || xs[i] == 10`).
+            let mut side = scope.clone()
+            let mut reached = claim_term(lhs, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+            if reached != null && op == BinaryOp::Or {
+                reached = walk.arena.not(reached ?? 0)
+            }
+            if reached != null {
+                side.facts.push(reached ?? 0)
+            }
+            side.exact = side.exact && reached != null
+            side.on_the_path(walk.arena, reached)
+            prover_calls_in(walk, rhs, span, side, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
         },
         Expr::Unary { expr, .. } => prover_calls_in(walk, expr, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
         Expr::Try(inner, _) => prover_calls_in(walk, inner, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
@@ -1967,9 +1984,11 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
 /// time the read is reached, or a state pinned by what reaches it breaks it,
 /// the program is refused with `NK1207` and the values, as a refuted `assert`
 /// is; a divisor's `d != 0` likewise. Never on *unknown*: the check stays
-/// in the machine code in every case. Not in a test (D11).
-fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, written_of: fn(ref Expr) -> String sync) {
-    if walk.state.collecting || walk.state.in_test {
+/// in the machine code in every case. Not in a test (D11). Pass 1 carries
+/// one the body leaves open over its parameters back to the entry, for its
+/// callers (`ProverState::an_unwritten_check`).
+fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref ProverScope, at: ref ProverWhere, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, written_of: fn(ref Expr) -> String sync) {
+    if walk.state.in_test {
         return
     }
     match expr {
@@ -1984,6 +2003,11 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
             let from = walk.arena.le(zero, i)
             let below = walk.arena.lt(i, n)
             let goal = walk.arena.and([from, below])
+            if walk.state.collecting {
+                let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: "is out of bounds", holds: f"0 <= {written_of(index)} < {written_of(base)}.len()" }
+                walk.state.an_unwritten_check(walk.arena, check, scope, at, ask, model)
+                return
+            }
             prover_refuted_check(walk, goal, written_of(expr), "is out of bounds", "An index is in `0..<len()`: if the read is right, the code before it is wrong.", span, scope, ask, model)
         },
         // **A divisor is not zero** (ADR-395 D1, D2): `d != 0` for every `/`
@@ -2017,6 +2041,11 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
             }
             let zero = walk.arena.int(0)
             let goal = walk.arena.unequal(d, zero)
+            if walk.state.collecting {
+                let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: "divides by zero", holds: f"{written_of(rhs)} != 0" }
+                walk.state.an_unwritten_check(walk.arena, check, scope, at, ask, model)
+                return
+            }
             prover_refuted_check(walk, goal, written_of(expr), "divides by zero", "If the divisor can really be zero, check it before dividing.", span, scope, ask, model)
         },
         else => {},
@@ -2172,9 +2201,9 @@ fn prover_nested(mut walk: ProverWalk, block: ref Block, lambda: Vec[String]?, s
     }
 }
 
-/// **A call by name**: an edge of the call graph, and where the callee has a
-/// precondition - its own, as the walk before found it in the first pass, or
-/// another package's ledger's - what the call shows of it.
+/// **A call by name**: an edge of the call graph, what the call shows of
+/// the callee's precondition, and where that shows nothing broken, of the
+/// checks nobody writes in its body (ADR-395 D1): one diagnostic per call.
 fn prover_a_call(mut walk: ProverWalk, callee: ref String, call: i64, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     if scope.locals.contains(callee) {
         return
@@ -2183,6 +2212,19 @@ fn prover_a_call(mut walk: ProverWalk, callee: ref String, call: i64, args: ref 
     if caller != null {
         walk.state.edges.insert((caller ?? "", callee.clone()))
     }
+    let told = walk.findings.len()
+    prover_call_precondition(walk, callee, call, args, config, span, scope, at, program, words, own, library, ask, model, escape, written_of, condition)
+    if walk.findings.len() == told && !walk.state.collecting && walk.state.unwritten.contains_key(callee) {
+        let function = free_function(program, words, callee) ?? return
+        let all = arguments_in_order(function, args, config, words)
+        prover_unwritten_call(walk, callee, function.params, all, span, scope, words, ask, model)
+    }
+}
+
+/// Where the callee of a call by name has a precondition - its own, as the
+/// walk before found it in the first pass, or another package's ledger's -
+/// what the call shows of it.
+fn prover_call_precondition(mut walk: ProverWalk, callee: ref String, call: i64, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     // The first pass reads the walk before's preconditions: its own are still
     // being found.
     let pre = if walk.state.collecting { prover_precondition_in(walk.state.known, callee) } else { prover_precondition_in(walk.state.preconditions, callee) }
@@ -2222,11 +2264,26 @@ fn prover_a_method_call(mut walk: ProverWalk, receiver: ref Expr, method: winnow
     let name = words.resolve(method).clone()
     let callee = f"{owner}::{name}"
     walk.state.edges.insert((function.clone(), callee.clone()))
-    let pre = if walk.state.collecting { prover_precondition_in(walk.state.known, callee) } else { prover_precondition_in(walk.state.preconditions, callee) }
-    let found = pre ?? return
     let target = own_method(program, words, owner, name) ?? return
     let all = arguments_in_order(target, args, config, words)
-    prover_record_call(walk, callee, target.params, found.claims, all, null, span, scope, at, words, ask, model, escape, written_of)
+    let told = walk.findings.len()
+    let pre = if walk.state.collecting { prover_precondition_in(walk.state.known, callee) } else { prover_precondition_in(walk.state.preconditions, callee) }
+    if pre != null {
+        let found = pre ?? return
+        prover_record_call(walk, callee, target.params, found.claims, all, null, span, scope, at, words, ask, model, escape, written_of)
+    }
+    if walk.findings.len() == told && !walk.state.collecting {
+        prover_unwritten_call(walk, callee, target.params, all, span, scope, words, ask, model)
+    }
+}
+
+/// **What a call's arguments show of the checks nobody writes in its
+/// callee** (ADR-306 D15, ADR-395 D1): a refutation only, as `NK1207` at the
+/// call.
+fn prover_unwritten_call(mut walk: ProverWalk, callee: ref String, params: ref Vec[String], args: ref Vec[Expr], span: Span, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
+    let checks = walk.state.unwritten[callee]?.clone() ?? return
+    let found = walk.state.unwritten_call(walk.arena, words, callee, params, checks, args, span, scope, ask, model)
+    walk.findings.extend(found)
 }
 
 /// What a call shows of its callee's precondition, recorded: its findings,

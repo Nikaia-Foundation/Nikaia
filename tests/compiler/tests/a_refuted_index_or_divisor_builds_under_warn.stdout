@@ -22,3 +22,15 @@ warning[NK1207]: `10 / d` divides by zero every time it is reached.
    = help: If the divisor can really be zero, check it before dividing.
 TMP/divide/src/main.nika:3: the program stopped: attempt to divide by zero
 exit 101
+before
+warning[NK1207]: At this call, `10 / d` in `f` divides by zero every time it is reached.
+  --> TMP/call/src/main.nika:7:2
+   |
+ 7 | 	println(f"{f(0)}")
+   |  ^^^^^^^^^^^^^^^^^^
+   |
+   = note: Here `d` is 0.
+   = note: `refuted-claims = "warn"` lets this build through: the claim is checked when the program runs, and stops it there.
+   = help: Pass `f` arguments for which `d != 0` holds, or check them with a guard before the call.
+TMP/call/src/main.nika:2: the program stopped: attempt to divide by zero
+exit 101

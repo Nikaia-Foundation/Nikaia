@@ -1,0 +1,17 @@
+error[NK1207]: At this call, `10 / d` in `f` divides by zero every time it is reached.
+   --> tests/a_call_whose_arguments_break_an_unwritten_check_is_refused.nika:17:2
+    |
+ 17 | 	println(f"{f(0)}")
+    |  ^^^^^^^^^^^^^^^^^^
+    |
+    = note: Here `d` is 0.
+    = help: Pass `f` arguments for which `d != 0` holds, or check them with a guard before the call.
+error[NK1207]: At this call, `xs[i]` in `g` is out of bounds every time it is reached.
+   --> tests/a_call_whose_arguments_break_an_unwritten_check_is_refused.nika:18:2
+    |
+ 18 | 	println(f"{g([1, 2, 3], 5)}")
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Here `i` is 5, `xs.len()` is 3.
+    = help: Pass `g` arguments for which `0 <= i < xs.len()` holds, or check them with a guard before the call.
+2 claims shown false

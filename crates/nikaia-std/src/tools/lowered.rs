@@ -4139,7 +4139,7 @@ pub mod prover_calls {
 }
 pub mod prover_claims {
     #[allow(unused_imports)]
-    pub use super::{PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape, foreign_shape, foreign_from};
+    pub use super::{UnwrittenCheck, PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape, foreign_shape, foreign_from};
 }
 pub mod prover_loops {
     #[allow(unused_imports)]
@@ -4163,7 +4163,7 @@ pub mod prover_solver {
 }
 pub mod prover_state {
     #[allow(unused_imports)]
-    pub use super::{ProverState, postconditions_for, summed_read, leaned_notes, summed_facts, length_given, prover_pinned, ProverWhere, CallOutcome, AssertOutcome};
+    pub use super::{ProverState, postconditions_for, summed_read, leaned_notes, summed_facts, length_given, prover_pinned, ProverWhere, GoalAtCall, CallOutcome, AssertOutcome};
 }
 pub mod prover_walk {
     #[allow(unused_imports)]

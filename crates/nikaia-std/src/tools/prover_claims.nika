@@ -8,6 +8,22 @@
 
 use std::collections
 
+/// **A check nobody writes, over a function's parameters** (ADR-306 D15,
+/// ADR-395 D1): an index's bound or a divisor's `d != 0` that the body
+/// leaves open, carried back to the entry as an `assert`'s claim is. Never a
+/// precondition: a call asks only whether its arguments rule it out
+/// (ADR-269 D8), and the check stays in the callee.
+pub struct UnwrittenCheck {
+    /// The goal at the function's entry, over its parameters.
+    pub term: i64,
+    /// The index or the division, written: `10 / d`.
+    pub written: String,
+    /// What it does where it fails: `divides by zero`.
+    pub fails: String,
+    /// The goal as a reader writes it: `d != 0`.
+    pub holds: String,
+}
+
 /// One claim of a precondition (ADR-269 D15).
 pub struct PreClaim {
     /// The condition at the function's entry, over its parameters: the

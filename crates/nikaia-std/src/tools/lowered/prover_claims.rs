@@ -2,6 +2,14 @@
 // Edit prover_claims.nika in the directory above, not this file.
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnwrittenCheck {
+    pub term: i64,
+    pub written: String,
+    pub fails: String,
+    pub holds: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreClaim {
     pub term: i64,
     pub written: String,

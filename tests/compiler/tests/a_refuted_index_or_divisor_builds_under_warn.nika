@@ -1,6 +1,7 @@
 // #1476 (ADR-269 D8, ADR-306 D15, ADR-395): `--refuted-claims=warn` builds
 // an index and a divisor shown to fail, with a warning each, and keeps their
-// checks: the program stops where it reaches them.
+// checks: the program stops where it reaches them. So does a call whose
+// argument breaks a divisor over a parameter, `f(0)` over `10 / d`.
 use std::fs
 use std::process
 
@@ -30,10 +31,11 @@ fn shown(tmp: String, text: String) -> String {
 
 fn main() throws {
 	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	process::run("mkdir", ["-p", f"{tmp}/index/src", f"{tmp}/divide/src"])
+	process::run("mkdir", ["-p", f"{tmp}/index/src", f"{tmp}/divide/src", f"{tmp}/call/src"])
 	let toml = "[package]\nname = \"p\"\nversion = \"0.1.0\"\n"
 	fs::write(f"{tmp}/index/nikaia.toml", fs::Root::Anywhere, toml)
 	fs::write(f"{tmp}/divide/nikaia.toml", fs::Root::Anywhere, toml)
+	fs::write(f"{tmp}/call/nikaia.toml", fs::Root::Anywhere, toml)
 	fs::write(
 		f"{tmp}/index/src/main.nika",
 		fs::Root::Anywhere,
@@ -50,5 +52,13 @@ fn main() throws {
 	let again = process::run(toolchain(), ["run", "--refuted-claims=warn"]; dir: f"{tmp}/divide")
 	println(shown(tmp, f"{again.stdout}{again.stderr}"))
 	println(f"exit {again.code}")
+	fs::write(
+		f"{tmp}/call/src/main.nika",
+		fs::Root::Anywhere,
+		"fn f(d: i64) -> i64 {\n\treturn 10 / d\n}\n\nfn main() throws {\n\tprintln(\"before\")\n\tprintln(f\"{f(0)}\")\n}\n",
+	)
+	let call = process::run(toolchain(), ["run", "--refuted-claims=warn"]; dir: f"{tmp}/call")
+	println(shown(tmp, f"{call.stdout}{call.stderr}"))
+	println(f"exit {call.code}")
 	process::run("rm", ["-rf", tmp])
 }

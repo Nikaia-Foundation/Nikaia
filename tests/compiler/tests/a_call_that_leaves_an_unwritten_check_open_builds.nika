@@ -1,0 +1,16 @@
+// #1476 (ADR-269 D8, ADR-395 §4): a divisor or an index over a parameter
+// builds as before where no call rules its check out: callers pass a value
+// that is never zero or in bounds, or one the walk does not know. The
+// refused calls: `a_call_whose_arguments_break_an_unwritten_check_is_refused`.
+fn f(d: i64) -> i64 {
+	return 10 / d
+}
+
+fn g(xs: ref Vec[i64], i: i64) -> i64 {
+	return xs[i]
+}
+
+fn main() throws {
+	let n = "12".len() as i64
+	println(f"{f(2)} {f(n)} {g([1, 2, 3], 2)} {g([1, 2, 3], n - 1)}")
+}

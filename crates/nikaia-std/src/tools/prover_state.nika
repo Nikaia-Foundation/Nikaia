@@ -16,6 +16,10 @@ pub struct ProverState {
     /// at a call to carry a callee's precondition back (ADR-269 D15): the
     /// pass repeats until they stop changing.
     pub known: collections::BTreeMap[String, Precondition],
+    /// **The checks nobody writes that a body leaves open over its
+    /// parameters** (ADR-306 D15, ADR-395 D1), by function, as pass 1 found
+    /// them: a call whose arguments rule one out is refused (`NK1207`).
+    pub unwritten: collections::BTreeMap[String, Vec[UnwrittenCheck]],
     /// Which function calls which, by name: a call inside a cycle is not
     /// carried back, so that recursion cannot grow a precondition forever.
     pub edges: collections::BTreeSet[(String, String)],
@@ -114,6 +118,7 @@ impl ProverState {
             foreign: collections::BTreeMap(),
             preconditions: collections::BTreeMap(),
             known: collections::BTreeMap(),
+            unwritten: collections::BTreeMap(),
             edges: collections::BTreeSet(),
             candidates: collections::BTreeMap(),
             postconditions: collections::BTreeMap(),
@@ -612,35 +617,10 @@ impl ProverState {
         let mut outcome = CallOutcome { reach: CallReach::Proved, findings: [], held: [] }
         for index in 0..<claims.len() {
             let pre = claims[index]
-            // Each parameter's term as this call gives it, and a list's
-            // length as the argument's: `p.len()` in the precondition is the
-            // argument's.
-            let mut given_by: collections::BTreeMap[String, i64] = collections::BTreeMap()
-            let mut k = 0
-            for arg in args {
-                if k >= params.len() {
-                    break
-                }
-                let param = params[k]
-                let term = lin_term(arg, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(self.pinned, scope, name) }, arena.nodes)
-                if term != null {
-                    given_by.insert(param.clone(), term ?? 0)
-                }
-                // A literal, a repeat or `Bytes(x)` gives its length as a
-                // bound one does (#1084).
-                let given_length = length_given(arena, words, arg, scope, self.pinned)
-                if given_length != null {
-                    given_by.insert(length_of(param), given_length ?? 0)
-                }
-                k += 1
-            }
-            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
-            arena.variables(pre.term, read)
-            given_paths(arena, words, read, params, args, scope, self.pinned, given_by)
-            let mut goal: i64? = null
-            if every_given(read, given_by) {
-                goal = arena.substitute(pre.term, given_by)
-            }
+            let at_call = self.goal_at_call(arena, words, params, pre.term, args, scope)
+            let given_by = at_call.given_by
+            let read = at_call.read
+            let goal = at_call.goal
             if goal != null && is_proved(ask(arena, scope.facts, goal ?? 0)) {
                 if of_std {
                     outcome.held.push(ClaimHeld::Proved)
@@ -749,6 +729,103 @@ impl ProverState {
             outcome.reach = joined_reach(outcome.reach, this_reach)
         }
         return outcome
+    }
+
+    /// **A claim over a callee's parameters, as one call gives them**: each
+    /// parameter's term as the call's argument, and a list's length as the
+    /// argument's - `p.len()` in the claim is the argument's. No goal where
+    /// an argument the claim reads is not one the prover reads.
+    pub fn goal_at_call(ref self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, params: ref Vec[String], term: i64, args: ref Vec[Expr], scope: ref ProverScope) -> GoalAtCall {
+        let mut given_by: collections::BTreeMap[String, i64] = collections::BTreeMap()
+        let mut k = 0
+        for arg in args {
+            if k >= params.len() {
+                break
+            }
+            let param = params[k]
+            let given = lin_term(arg, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(self.pinned, scope, name) }, arena.nodes)
+            if given != null {
+                given_by.insert(param.clone(), given ?? 0)
+            }
+            // A literal, a repeat or `Bytes(x)` gives its length as a
+            // bound one does (#1084).
+            let given_length = length_given(arena, words, arg, scope, self.pinned)
+            if given_length != null {
+                given_by.insert(length_of(param), given_length ?? 0)
+            }
+            k += 1
+        }
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(term, read)
+        given_paths(arena, words, read, params, args, scope, self.pinned, given_by)
+        let mut goal: i64? = null
+        if every_given(read, given_by) {
+            goal = arena.substitute(term, given_by)
+        }
+        return GoalAtCall { goal: goal, given_by: given_by, read: read }
+    }
+
+    /// **A call that makes a check nobody writes in its callee fail**
+    /// (ADR-306 D15, ADR-395 D1): each of the callee's `checks`, with this
+    /// call's arguments in place of its `params`, asked as a precondition is
+    /// at a call, but for a refutation only (ADR-269 D8) - every time, or for
+    /// a state that reaches the call. Nothing on *unknown*, and no check moves:
+    /// the callee keeps its own.
+    pub fn unwritten_call(ref self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], checks: ref Vec[UnwrittenCheck], args: ref Vec[Expr], span: Span, scope: ref ProverScope, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> Vec[Finding] {
+        let mut findings: Vec[Finding] = []
+        for check in checks {
+            let at_call = self.goal_at_call(arena, words, params, check.term, args, scope)
+            let goal = at_call.goal ?? continue
+            let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+            arena.variables(goal, names)
+            let mut outside = false
+            for name in names {
+                if scope.tainted.contains(name) {
+                    outside = true
+                }
+            }
+            if outside {
+                continue
+            }
+            let help = f"Pass `{callee}` arguments for which `{check.holds}` holds, or check them with a guard before the call."
+            let always = refuting_values(arena, scope.facts, goal, ask, model)
+            if always != null {
+                let given = values_given(arena, at_call.given_by, at_call.read, always ?? collections::BTreeMap())
+                findings.push(Finding { code: "NK1207", span: span, message: f"At this call, `{check.written}` in `{callee}` {check.fails} every time it is reached.", notes: [f"Here {shown(given)}."], help: help, warning: false, labels: [] })
+                continue
+            }
+            let sometimes = breaking_values(arena, scope, goal, model) ?? continue
+            let given = values_given(arena, at_call.given_by, at_call.read, sometimes)
+            findings.push(Finding { code: "NK1207", span: span, message: f"At this call, `{check.written}` in `{callee}` {check.fails} when {shown(sometimes)}.", notes: [f"Then {shown(given)}."], help: help, warning: false, labels: [] })
+        }
+        return findings
+    }
+
+    /// **A check nobody writes that this body leaves open is asked of its
+    /// callers** (ADR-306 D15, ADR-395 D1), in pass 1: carried back to the
+    /// entry as an `assert`'s claim is, where that reads only the
+    /// parameters. Not where what is known proves it or rules it out - the
+    /// body says that itself - nor about data from outside (ADR-269 D6), nor
+    /// in a lambda, which is not the function's entry.
+    pub fn an_unwritten_check(ref mut self, mut arena: TermArena, check: UnwrittenCheck, scope: ref ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
+        let owner = carrying_function(at.function) ?? return
+        if at.lambda {
+            return
+        }
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(check.term, names)
+        for name in names {
+            if scope.tainted.contains(name) {
+                return
+            }
+        }
+        let term = scope.precondition_at(arena, check.term, at.params) ?? return
+        if is_proved(ask(arena, scope.facts, check.term)) || refuting_values(arena, scope.facts, check.term, ask, model) != null {
+            return
+        }
+        let mut found = self.unwritten.remove(owner) ?? []
+        found.push(UnwrittenCheck { term: term, written: check.written, fails: check.fails, holds: check.holds })
+        self.unwritten.insert(owner, found)
     }
 
     /// **A callee's precondition this function cannot show is its callers'**
@@ -1143,6 +1220,15 @@ impl ProverWhere {
         at.lambda = self.lambda || lambda
         return at
     }
+}
+
+/// A claim over a callee's parameters at one call (`goal_at_call`): the
+/// goal, where every name it reads is given, what each parameter is given,
+/// and the names the claim reads.
+pub struct GoalAtCall {
+    pub goal: i64?,
+    pub given_by: collections::BTreeMap[String, i64],
+    pub read: collections::BTreeSet[String],
 }
 
 /// What one call to a function with a precondition makes: how it reaches
