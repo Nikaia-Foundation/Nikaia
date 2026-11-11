@@ -719,18 +719,13 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
             file: Some(file),
             args: program_args,
         } => {
-            let mut project = project::project_for_file(
+            let project = project::project_for_file(
                 file,
                 args.target.as_deref(),
                 args.user_parallelism.as_deref(),
                 args.no_cache,
                 args.allow_read_from_list.as_deref(),
-            )?;
-            project.settings.optimize(&args.optimization)?;
-            project.settings.choose_cpu(args.cpu.as_deref())?;
-            project.settings.refutations(
-                args.refuted_claims.as_deref(),
-                args.unproved_claims.as_deref(),
+                &|settings| command_line_settings(args, settings),
             )?;
             return drive(args, &project, "run", program_args);
         }
@@ -804,6 +799,17 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
 }
 
 /// A project's `build` or `run`, with the switches this command line set.
+/// The command line's settings for `nikaia run <file>` and `check --rustc`,
+/// applied before the file is first checked (#1565).
+fn command_line_settings(args: &Cli, settings: &mut Settings) -> Result<()> {
+    settings.optimize(&args.optimization)?;
+    settings.choose_cpu(args.cpu.as_deref())?;
+    settings.refutations(
+        args.refuted_claims.as_deref(),
+        args.unproved_claims.as_deref(),
+    )
+}
+
 fn drive(args: &Cli, project: &Project, subcommand: &str, program_args: &[String]) -> Result<i32> {
     project.drive(
         subcommand,
@@ -1058,18 +1064,13 @@ fn single_file(args: &Cli, input: &std::path::Path, verb: Verb<'_>) -> Result<()
                 args.allow_read_from_list.as_deref(),
             )?;
             if rustc {
-                let mut project = project::project_for_file(
+                let project = project::project_for_file(
                     input,
                     args.target.as_deref(),
                     args.user_parallelism.as_deref(),
                     args.no_cache,
                     args.allow_read_from_list.as_deref(),
-                )?;
-                project.settings.optimize(&args.optimization)?;
-                project.settings.choose_cpu(args.cpu.as_deref())?;
-                project.settings.refutations(
-                    args.refuted_claims.as_deref(),
-                    args.unproved_claims.as_deref(),
+                    &|settings| command_line_settings(args, settings),
                 )?;
                 let code = drive(args, &project, "check", &[])?;
                 if code != 0 {

@@ -1,0 +1,23 @@
+warning[NK1207]: `xs[5]` is out of bounds every time it is reached.
+  --> refuted.nika:3:2
+   |
+ 3 | 	println(f"{xs[5]}")
+   |  ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: What is known before it rules the check out: `xs.len()` is 3.
+   = note: `refuted-claims = "warn"` lets this build through: the claim is checked when the program runs, and stops it there.
+   = help: An index is in `0..<len()`: if the read is right, the code before it is wrong.
+refuted.nika:3: the program stopped: index out of bounds: the len is 3 but the index is 5
+exit 101
+AA
+warning[NK1300]: `scalar::from: n >= 0 && n <= 0x10FFFF && (n < 0xD800 || n > 0xDFFF)` is not proved: nothing before the call shows it.
+  --> unproved.nika:4:3
+   |
+ 4 | 		out.push(scalar::from(n))
+   |   ^^^^^^
+   |
+   = note: Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.
+   = note: `nikaia check --asserts` lists every claim and why it is not proved.
+   = note: `unproved-claims = "warn"` lets this build through: the claim is checked when the program runs, and a false one stops it there.
+   = help: Give the compiler what it needs to prove it, or build with `unproved-claims = "warn"` to have it checked when the program runs.
+exit 0

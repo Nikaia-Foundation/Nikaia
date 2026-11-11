@@ -690,19 +690,25 @@ fn is_program_test(input: &Path, layout: &Layout) -> bool {
 /// file is lowered under its own name, standalone (D2), and only a file that
 /// lowers is copied and built. The copy is rewritten only when its bytes
 /// changed, so Cargo's freshness keeps working.
+///
+/// `command_line` applies the command line's settings (`--refuted-claims`,
+/// `--unproved-claims`, `-O`, `--cpu`): to the settings the file is checked
+/// with, before that check, and to the project's (#1565).
 pub fn project_for_file(
     file: &Path,
     target: Option<&str>,
     user_parallelism: Option<&str>,
     no_cache: bool,
     allowlist: Option<&Path>,
+    command_line: &dyn Fn(&mut Settings) -> Result<()>,
 ) -> Result<Project> {
     if !file.is_file() {
         refuse!("{} is not there.", file.display());
     }
     let layout = Layout::resolve(file);
     if layout.in_project {
-        let project = Project::open(&layout.root, target, user_parallelism)?;
+        let mut project = Project::open(&layout.root, target, user_parallelism)?;
+        command_line(&mut project.settings)?;
         if canonical(file) != canonical(&project.entry()) {
             refuse!(
                 "{}",
@@ -712,7 +718,8 @@ pub fn project_for_file(
         return Ok(project);
     }
 
-    let settings = Settings::resolve(&Manifest::find(file)?, target, user_parallelism)?;
+    let mut settings = Settings::resolve(&Manifest::find(file)?, target, user_parallelism)?;
+    command_line(&mut settings)?;
     lower_reading(file, &settings, no_cache, &[], allowlist)?;
     let warned = true;
 
@@ -726,6 +733,7 @@ pub fn project_for_file(
     ))
     .map_err(|error| host.failed.take().unwrap_or_else(|| anyhow!("{error}")))?;
     let mut project = Project::open(&root, target, user_parallelism)?;
+    command_line(&mut project.settings)?;
     project.warned = warned;
     project.written = Some(file.to_path_buf());
     Ok(project)

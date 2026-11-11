@@ -1,0 +1,55 @@
+// #1565 (ADR-269 D8, ADR-359 D9): `nikaia run --refuted-claims=warn FILE`
+// and `--unproved-claims=warn` for a file outside a project apply before the
+// file is first checked, as in a project and with `nikaia check`: a refuted
+// index builds with a warning and stops the program where it is reached, an
+// unproved claim builds and is checked at run time.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn shown(tmp: String, text: String) -> String {
+	let mut lines: Vec[String] = []
+	for line in text.replace(tmp, "TMP").lines() {
+		let t = line.trim()
+		if t.starts_with("Compiling") || t.starts_with("Finished") || t.starts_with("Running") {
+			continue
+		}
+		lines.push(line.clone())
+	}
+	return lines.join("\n")
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	fs::write(
+		f"{tmp}/refuted.nika",
+		fs::Root::Anywhere,
+		"fn main() throws {\n\tlet xs = [1, 2, 3]\n\tprintln(f\"{xs[5]}\")\n}\n",
+	)
+	let out = process::run(toolchain(), ["run", "--refuted-claims=warn", "refuted.nika"]; dir: tmp)
+	println(shown(tmp, f"{out.stdout}{out.stderr}"))
+	println(f"exit {out.code}")
+	fs::write(
+		f"{tmp}/unproved.nika",
+		fs::Root::Anywhere,
+		"fn repeated(n: i64, times: i64) -> String {\n\tlet mut out = String()\n\tfor _k in 0..<times {\n\t\tout.push(scalar::from(n))\n\t}\n\treturn out\n}\n\nfn main() throws {\n\tprintln(repeated(65, 2))\n}\n",
+	)
+	let again = process::run(
+		toolchain(),
+		["run", "--unproved-claims=warn", "unproved.nika"]; dir: tmp,
+	)
+	println(shown(tmp, f"{again.stdout}{again.stderr}"))
+	println(f"exit {again.code}")
+	process::run("rm", ["-rf", tmp])
+}
