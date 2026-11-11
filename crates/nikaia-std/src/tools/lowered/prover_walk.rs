@@ -156,7 +156,7 @@ pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner
                 let lent = nikaia_std::index::or(receiver, || Receiver { is_ref: true, is_mut: true, is_keep: false });
                 if !lent.is_mut && has_owner {
                     let mut not_params: collections::BTreeSet<String> = collections::BTreeSet::new();
-                    prover_parameter_fields(walk, &mut scope, &mut not_params, "self", nikaia_std::index::or(owner.as_deref(), || ""), program, words);
+                    prover_parameter_fields(walk, &mut scope, &mut not_params, "self", nikaia_std::index::or(owner, || ""), program, words);
                 }
             }
             for arg in args.iter() {
