@@ -448,3 +448,11 @@ jobs:
         run: |
           export PATH="$PWD/target/release:$PATH"
           cd tests/page-examples && nikaia test
+
+      # The ledgers of tests/compiler (`nikaia.contracts`, `nikaia.proofs`,
+      # `nikaia.derived`) are committed like a lockfile (ADR-268 D2, D6):
+      # a change to its src/ that leaves them stale fails here.
+      - name: The ledgers of tests/compiler are current
+        run: |
+          export PATH="$PWD/target/release:$PATH"
+          cd tests/compiler && nikaia build --locked

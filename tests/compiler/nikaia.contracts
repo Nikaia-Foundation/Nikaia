@@ -25,6 +25,22 @@ panics = false
 touches = []
 signature = "(ref mut self, n: String) -> i64"
 
+[fn."NamedLikeState::named_like_frame_of"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["item: borrowed"]
+signature = "(ref self, item: ref NamedLikeItem) -> i64"
+
+[fn."NamedLikeState::named_like_twice"]
+pub = true
+sync = "inferred"
+keeps = ["name"]
+panics = true
+touches = []
+signature = "(ref self, name: String) -> i64"
+
 [fn."Nest::close"]
 pub = true
 panics = true
@@ -138,6 +154,21 @@ panics = false
 touches = []
 signature = "(n: String, mut vars: MutLentVars) -> i64"
 
+[fn."named_like_frame_of"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["holder: borrowed"]
+signature = "(holder: ref NamedLikeHolder?, extra: i64) -> i64"
+
+[fn."named_like_frame_of_held"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+signature = "(n: i64) -> i64"
+
 [fn."none_of"]
 pub = true
 sync = "inferred"
@@ -174,10 +205,10 @@ signature = "(s: String) -> Vec[Places]"
 [fn."same"]
 pub = true
 sync = "inferred"
-keeps = ["x"]
 panics = false
 touches = []
-signature = "[T](x: T) -> T"
+views = ["x: borrowed", "<result>: borrowed"]
+signature = "[T](x: ref T) -> ref(x) T"
 
 [fn."shelved"]
 pub = true
@@ -239,6 +270,18 @@ fields = ["pub vars: MutLentVars"]
 [type."MutLentVars"]
 pub = true
 fields = ["pub names: Vec[String]"]
+
+[type."NamedLikeHolder"]
+pub = true
+fields = ["pub n: i64"]
+
+[type."NamedLikeItem"]
+pub = true
+fields = ["pub name: String"]
+
+[type."NamedLikeState"]
+pub = true
+fields = ["pub count: i64"]
 
 [type."Nest"]
 pub = true
