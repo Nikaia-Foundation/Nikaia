@@ -34,3 +34,15 @@ warning[NK1207]: At this call, `10 / d` in `f` divides by zero every time it is 
    = help: Pass `f` arguments for which `d != 0` holds, or check them with a guard before the call.
 TMP/call/src/main.nika:2: the program stopped: attempt to divide by zero
 exit 101
+before
+warning[NK1207]: At this call, `a + 1000` in `add` goes past what an `i32` holds every time it is reached.
+  --> TMP/over/src/main.nika:7:2
+   |
+ 7 | 	println(f"{add(2147483000)}")
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Here `a` is 2147483000.
+   = note: `refuted-claims = "warn"` lets this build through: the claim is checked when the program runs, and stops it there.
+   = help: Pass `add` arguments for which `-2147483648 <= a + 1000 <= 2147483647` holds, or check them with a guard before the call.
+TMP/over/src/main.nika:2: the program stopped: attempt to add with overflow
+exit 101

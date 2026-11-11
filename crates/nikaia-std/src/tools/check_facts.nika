@@ -194,6 +194,9 @@ pub struct CheckFacts {
     /// **Each divisor `NK1118` refused**, by its node (#1566): a zero the
     /// checker folds is its refusal, and the prover asks no `d != 0` of it.
     pub zero_divisors: collections::BTreeSet[i64],
+    /// **Each statement `NK1116` refused a folded number at**, by its start:
+    /// the prover refuses no overflow there again (ADR-306 D15).
+    pub unfit_numbers: collections::BTreeSet[i64],
     /// **The `N` of each `Array[T, N]` read or counted**, by node (#711).
     pub array_lengths: collections::BTreeMap[i64, i64],
     pub char_codes: collections::BTreeSet[i64],
@@ -705,6 +708,7 @@ impl CheckFacts {
             whole_parts: collections::BTreeMap(),
             whole_lets: collections::BTreeMap(),
             zero_divisors: collections::BTreeSet(),
+            unfit_numbers: collections::BTreeSet(),
             array_lengths: collections::BTreeMap(),
             char_codes: collections::BTreeSet(),
             arithmetic: collections::BTreeMap(),

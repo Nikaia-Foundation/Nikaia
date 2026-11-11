@@ -1,0 +1,27 @@
+// #1476 (ADR-306 D15, ADR-269 D8): a `+`, `-` or `*` shown to go past its
+// type is refused with NK1207 and the values, as an index or a divisor is:
+// at a call whose argument breaks it in the callee (`add(2147483000)` over
+// `a + 1000`), under a branch that rules it out every time it is reached,
+// whoever calls it, and a `u64` that goes below zero. The undecided cases:
+// `an_undecided_overflow_builds`.
+
+fn add(a: i32) -> i32 {
+	return a + 1000
+}
+
+fn past(a: i32) -> i32 {
+	if a > 2147483000 {
+		return a + 1000
+	}
+	return a
+}
+
+fn less(a: u64, b: u64) -> u64 {
+	return a - b
+}
+
+fn main() throws {
+	println(f"{add(2147483000)}")
+	println(f"{past(1)}")
+	println(f"{less(1, 2)}")
+}

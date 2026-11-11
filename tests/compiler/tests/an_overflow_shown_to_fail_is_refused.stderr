@@ -1,0 +1,25 @@
+error[NK1207]: `a + 1000` goes past what an `i32` holds every time it is reached.
+   --> tests/an_overflow_shown_to_fail_is_refused.nika:14:3
+    |
+ 14 | 		return a + 1000
+    |   ^^^^^^^^^^^^^^^
+    |
+    = note: What is known before it rules the check out: `a` is 2147483001.
+    = help: Use a wider type where the number needs more room, or check the operands before the operation.
+error[NK1207]: At this call, `a + 1000` in `add` goes past what an `i32` holds every time it is reached.
+   --> tests/an_overflow_shown_to_fail_is_refused.nika:24:2
+    |
+ 24 | 	println(f"{add(2147483000)}")
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Here `a` is 2147483000.
+    = help: Pass `add` arguments for which `-2147483648 <= a + 1000 <= 2147483647` holds, or check them with a guard before the call.
+error[NK1207]: At this call, `a - b` in `less` goes past what a `u64` holds every time it is reached.
+   --> tests/an_overflow_shown_to_fail_is_refused.nika:26:2
+    |
+ 26 | 	println(f"{less(1, 2)}")
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Here `a` is 1, `b` is 2.
+    = help: Pass `less` arguments for which `0 <= a - b` holds, or check them with a guard before the call.
+3 claims shown false

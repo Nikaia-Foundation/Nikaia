@@ -1475,8 +1475,12 @@ pub(crate) fn prover_unwritten_check(walk: &mut ProverWalk, expr: &Expr, span: S
             }
             prover_refuted_check(walk, goal, &written_of(expr), "is out of bounds", String::from("An index is in `0..<len()`: if the read is right, the code before it is wrong."), span, scope, ask, model);
         },
-        Expr::Binary { op, rhs, .. } => {
+        Expr::Binary { op, rhs, span: op_at, .. } => {
             let rhs = nikaia_std::boxed::open(rhs);
+            if *op == BinaryOp::Add || *op == BinaryOp::Sub || *op == BinaryOp::Mul {
+                prover_overflow_check(walk, expr, op_at.start as i64, span, scope, at, words, ask, model, written_of);
+                return;
+            }
             if *op != BinaryOp::Div && *op != BinaryOp::Rem { return; }
             match rhs {
                 Expr::LitInt { .. } => { return; },
@@ -1495,6 +1499,46 @@ pub(crate) fn prover_unwritten_check(walk: &mut ProverWalk, expr: &Expr, span: S
             prover_refuted_check(walk, goal, &written_of(expr), "divides by zero", String::from("If the divisor can really be zero, check it before dividing."), span, scope, ask, model);
         },
         _ => { },
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn prover_overflow_check(walk: &mut ProverWalk, expr: &Expr, op_at: i64, span: Span, scope: &ProverScope, at: &ProverWhere, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, written_of: &impl Fn(&Expr) -> String) {
+    let ty = match match *nikaia_std::index::get(&walk.state.arithmetic, &op_at) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let (lo, hi) = match prover_stated_range(&ty) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if walk.state.unfit_numbers.contains(&(span.start as i64)) { return; }
+    let term = match lin_term(expr, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if walk.arena.constant(term).is_some() { return; }
+    let low = walk.arena.int(lo);
+    let mut goal = walk.arena.le(low, term);
+    let mut holds = format!("{} <= {}", lo, written_of(expr));
+    if hi.is_some() {
+        let high = walk.arena.int(nikaia_std::index::or(hi, || 0));
+        let below = walk.arena.le(term, high);
+        goal = { let __nikaia_value = walk.arena.and(vec![goal, below]); __nikaia_value };
+        holds = format!("{} <= {} <= {}", lo, written_of(expr), nikaia_std::index::or(hi, || 0));
+    }
+    let fails = format!("goes past what {} `{}` holds", an_or_a(&ty), ty);
+    if walk.state.collecting {
+        let check = UnwrittenCheck { term: goal, written: written_of(expr), fails, holds };
+        walk.state.an_unwritten_check(&mut walk.arena, check, scope, at, ask, model);
+        return;
+    }
+    prover_refuted_check(walk, goal, &written_of(expr), &fails, nikaia_std::block::Text::from("Use a wider type where the number needs more room, or check the operands before the operation."), span, scope, ask, model);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn prover_stated_range(ty: &str) -> Option<(i64, Option<i64>)> {
+    match ty {
+        "i32" => Some((-2147483648, Some(2147483647))),
+        "u8" => Some((0, Some(255))),
+        "u32" => Some((0, Some(4294967295i64))),
+        "u64" => Some((0, None)),
+        _ => None,
     }
 }
 

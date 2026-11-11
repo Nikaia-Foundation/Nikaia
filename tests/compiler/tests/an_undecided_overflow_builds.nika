@@ -1,0 +1,19 @@
+// #1476 (ADR-306 D15): an operation the walk cannot decide builds as before,
+// with its check where it runs: a call whose argument fits, one whose
+// argument the walk does not know, and an `i64`, whose bound the solver
+// cannot state. The refused cases: `an_overflow_shown_to_fail_is_refused`.
+
+fn add(a: i32) -> i32 {
+	return a + 1
+}
+
+fn wide(a: i64) -> i64 {
+	return a * 2
+}
+
+fn main() throws {
+	let xs: Vec[i32] = [1, 2]
+	println(f"{add(5)}")
+	println(f"{add(xs[1])}")
+	println(f"{wide(4611686018427387904 - 1)}")
+}

@@ -50,7 +50,7 @@ description: >-
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Caught at compile time</span>
         <h3><a href="{{ "/safe/#running" | relative_url }}">Errors that have to be handled</a></h3>
-        <p>A call that can fail is handled or passed on, or the program is not built. What a function can fail with is worked out from its body, so its signature says <code>throws</code> and not a list of every error. A task that can panic ends alone, and whoever waits for it handles the crash. A division by a constant zero is refused, and so, once it is built, is an index past the end, an overflow or a division by zero that the compiler can show happens.</p>
+        <p>A call that can fail is handled or passed on, or the program is not built. What a function can fail with is worked out from its body, so its signature says <code>throws</code> and not a list of every error. A task that can panic ends alone, and whoever waits for it handles the crash. A division by a constant zero is refused, and so is an index past the end, an overflow or a division by zero that the compiler can show happens.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">fn load() -&gt; String {
     return fs::read_to_string("config.txt", fs::Root::Anywhere)
 }</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This function can fail, because `fs::read_to_string` can fail.</b></code></pre></div>

@@ -58,6 +58,12 @@ pub struct ProverState {
     /// **Each divisor the checker refused with `NK1118`**, by its node
     /// (#1566): its zero is that refusal's, and no `d != 0` is asked of it.
     pub zero_divisors: collections::BTreeSet[i64],
+    /// **The type of each `+`, `-` and `*` on whole numbers**, by the byte
+    /// its operator starts at, as the checker's `arithmetic` (ADR-306 D15).
+    pub arithmetic: collections::BTreeMap[i64, String],
+    /// **Each statement the checker refused a folded number at with
+    /// `NK1116`**, by its start: no overflow is refused there again.
+    pub unfit_numbers: collections::BTreeSet[i64],
     /// **The `std` entry each method call resolved to**, by its receiver's
     /// node, as the checker's `method_callees` keys it (#1446).
     pub method_callees: collections::BTreeMap[i64, String],
@@ -135,6 +141,8 @@ impl ProverState {
             comptime_at: collections::BTreeMap(),
             whole_lets: collections::BTreeMap(),
             zero_divisors: collections::BTreeSet(),
+            arithmetic: collections::BTreeMap(),
+            unfit_numbers: collections::BTreeSet(),
             method_callees: collections::BTreeMap(),
             call_sites: collections::BTreeMap(),
             call_args: collections::BTreeMap(),

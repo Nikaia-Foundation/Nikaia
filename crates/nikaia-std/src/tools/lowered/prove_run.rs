@@ -17,6 +17,8 @@ pub struct ProveComptimes {
     pub whole_lets: collections::BTreeMap<i64, String>,
     pub method_callees: collections::BTreeMap<i64, String>,
     pub zero_divisors: collections::BTreeSet<i64>,
+    pub arithmetic: collections::BTreeMap<i64, String>,
+    pub unfit_numbers: collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,8 +27,9 @@ pub struct ProveWalked {
     pub answers: ProverAnswers,
 }
 
-pub fn prove_comptimes_of(program: &Program, words: &winnow_grammar::InternerContext, values: &collections::BTreeMap<i64, (String, String)>, whole_lets: &collections::BTreeMap<i64, String>, method_callees: &collections::BTreeMap<i64, String>, zero_divisors: &collections::BTreeSet<i64>) -> ProveComptimes {
-    let mut found = ProveComptimes { by_name: collections::BTreeMap::new(), at: collections::BTreeMap::new(), whole_lets: whole_lets.copy_owned(), method_callees: method_callees.copy_owned(), zero_divisors: zero_divisors.copy_owned() };
+#[allow(clippy::too_many_arguments)]
+pub fn prove_comptimes_of(program: &Program, words: &winnow_grammar::InternerContext, values: &collections::BTreeMap<i64, (String, String)>, whole_lets: &collections::BTreeMap<i64, String>, method_callees: &collections::BTreeMap<i64, String>, zero_divisors: &collections::BTreeSet<i64>, arithmetic: &collections::BTreeMap<i64, String>, unfit_numbers: &collections::BTreeSet<i64>) -> ProveComptimes {
+    let mut found = ProveComptimes { by_name: collections::BTreeMap::new(), at: collections::BTreeMap::new(), whole_lets: whole_lets.copy_owned(), method_callees: method_callees.copy_owned(), zero_divisors: zero_divisors.copy_owned(), arithmetic: arithmetic.copy_owned(), unfit_numbers: unfit_numbers.copy_owned() };
     for (at, (below, written)) in values.iter() {
         let at = nikaia_std::num::value(at);
         if !prove_whole(below) { continue; }
@@ -103,6 +106,8 @@ pub(crate) fn prove_state(pinned: &collections::BTreeMap<String, i64>, comptimes
     state.whole_lets = comptimes.whole_lets.copy_owned();
     state.method_callees = comptimes.method_callees.copy_owned();
     state.zero_divisors = comptimes.zero_divisors.copy_owned();
+    state.arithmetic = comptimes.arithmetic.copy_owned();
+    state.unfit_numbers = comptimes.unfit_numbers.copy_owned();
     state.not_run = not_run.copy_owned();
     state.stopped = stopped.copy_owned();
     state.loops_recorded = recorded.copy_owned();

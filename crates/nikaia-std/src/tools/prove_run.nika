@@ -62,6 +62,12 @@ pub struct ProveComptimes {
     /// The checker's `zero_divisors`: each divisor `NK1118` refused, by its
     /// node (#1566).
     pub zero_divisors: collections::BTreeSet[i64],
+    /// The checker's `arithmetic`: the type of each `+`, `-` and `*`, by its
+    /// operator's start (ADR-306 D15).
+    pub arithmetic: collections::BTreeMap[i64, String],
+    /// The checker's `unfit_numbers`: each statement `NK1116` refused a
+    /// folded number at, by its start.
+    pub unfit_numbers: collections::BTreeSet[i64],
 }
 
 /// What the walk and its passes made.
@@ -73,9 +79,10 @@ pub struct ProveWalked {
 /// Read off the checker's `comptime_values` (the type below and the literal,
 /// by the start of the item or statement): each one whose type is a whole
 /// number and whose literal an `i64` holds; its `whole_lets`,
-/// `method_callees` and `zero_divisors`, as they are.
-pub fn prove_comptimes_of(program: ref Program, words: ref winnow_grammar::InternerContext, values: ref collections::BTreeMap[i64, (String, String)], whole_lets: ref collections::BTreeMap[i64, String], method_callees: ref collections::BTreeMap[i64, String], zero_divisors: ref collections::BTreeSet[i64]) -> ProveComptimes {
-    let mut found = ProveComptimes { by_name: collections::BTreeMap(), at: collections::BTreeMap(), whole_lets: whole_lets.clone(), method_callees: method_callees.clone(), zero_divisors: zero_divisors.clone() }
+/// `method_callees`, `zero_divisors`, `arithmetic` and `unfit_numbers`, as
+/// they are.
+pub fn prove_comptimes_of(program: ref Program, words: ref winnow_grammar::InternerContext, values: ref collections::BTreeMap[i64, (String, String)], whole_lets: ref collections::BTreeMap[i64, String], method_callees: ref collections::BTreeMap[i64, String], zero_divisors: ref collections::BTreeSet[i64], arithmetic: ref collections::BTreeMap[i64, String], unfit_numbers: ref collections::BTreeSet[i64]) -> ProveComptimes {
+    let mut found = ProveComptimes { by_name: collections::BTreeMap(), at: collections::BTreeMap(), whole_lets: whole_lets.clone(), method_callees: method_callees.clone(), zero_divisors: zero_divisors.clone(), arithmetic: arithmetic.clone(), unfit_numbers: unfit_numbers.clone() }
     for (at, (below, written)) in values {
         if !prove_whole(below) {
             continue
@@ -172,6 +179,8 @@ fn prove_state(pinned: ref collections::BTreeMap[String, i64], comptimes: ref Pr
     state.whole_lets = comptimes.whole_lets.clone()
     state.method_callees = comptimes.method_callees.clone()
     state.zero_divisors = comptimes.zero_divisors.clone()
+    state.arithmetic = comptimes.arithmetic.clone()
+    state.unfit_numbers = comptimes.unfit_numbers.clone()
     state.not_run = not_run.clone()
     state.stopped = stopped.clone()
     state.loops_recorded = recorded.clone()

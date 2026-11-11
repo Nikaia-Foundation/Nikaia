@@ -2013,7 +2013,11 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
         // **A divisor is not zero** (ADR-395 D1, D2): `d != 0` for every `/`
         // and `%` on whole numbers whose divisor is not a literal. A constant
         // zero is `NK1118`'s. The check stays in the machine code (D3).
-        Expr::Binary { op, rhs, .. } => {
+        Expr::Binary { op, rhs, span: op_at, .. } => {
+            if op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul {
+                prover_overflow_check(walk, expr, op_at.start as i64, span, scope, at, words, ask, model, written_of)
+                return
+            }
             if op != BinaryOp::Div && op != BinaryOp::Rem {
                 return
             }
@@ -2040,6 +2044,52 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
             prover_refuted_check(walk, goal, written_of(expr), "divides by zero", "If the divisor can really be zero, check it before dividing.", span, scope, ask, model)
         },
         else => {},
+    }
+}
+
+/// **An operation stays inside its type** (ADR-306 D15, D6): `lo <= a + b
+/// <= hi` for a `+`, `-` or `*` of the type the checker gave it, by the byte
+/// its operator starts at. A refutation is `NK1207`, as an index's is; the
+/// check stays in the machine code. Only a bound the solver can state: an
+/// `i64` none, a `u64` only its `0`. Not where the checker folded the
+/// number and refused it with `NK1116` already.
+fn prover_overflow_check(mut walk: ProverWalk, expr: ref Expr, op_at: i64, span: Span, scope: ref ProverScope, at: ref ProverWhere, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, written_of: fn(ref Expr) -> String sync) {
+    let ty = walk.state.arithmetic[op_at]?.clone() ?? return
+    let (lo, hi) = prover_stated_range(ty) ?? return
+    if walk.state.unfit_numbers.contains(span.start as i64) {
+        return
+    }
+    let term = lin_term(expr, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return
+    if walk.arena.constant(term) != null {
+        return
+    }
+    let low = walk.arena.int(lo)
+    let mut goal = walk.arena.le(low, term)
+    let mut holds = f"{lo} <= {written_of(expr)}"
+    if hi != null {
+        let high = walk.arena.int(hi ?? 0)
+        let below = walk.arena.le(term, high)
+        goal = walk.arena.and([goal, below])
+        holds = f"{lo} <= {written_of(expr)} <= {hi ?? 0}"
+    }
+    let fails = f"goes past what {an_or_a(ty)} `{ty}` holds"
+    if walk.state.collecting {
+        let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: fails, holds: holds }
+        walk.state.an_unwritten_check(walk.arena, check, scope, at, ask, model)
+        return
+    }
+    prover_refuted_check(walk, goal, written_of(expr), fails, f"Use a wider type where the number needs more room, or check the operands before the operation.", span, scope, ask, model)
+}
+
+/// The range of a whole-number type as the solver can state it, which counts
+/// in `i64`: an `i64` has none, a `u64` only its low end.
+fn prover_stated_range(ty: ref String) -> (i64, i64?)? sync {
+    return match ty {
+        "i32" => (-2147483648, 2147483647),
+        "u8" => (0, 255),
+        "u32" => (0, 4294967295),
+        "u64" => (0, null),
+        else => null,
     }
 }
 

@@ -28,6 +28,7 @@ impl CheckState {
         let found = a_number_that_does_not_fit(&value.value, value.beyond, bare, ty, span.clone(), why);
         if found.is_some() {
             let said = match found { Some(__nikaia_value) => __nikaia_value, None => return };
+            self.facts.unfit_numbers.insert(span.start as i64);
             self.findings.push(check_finding_of(&said));
         }
     }
