@@ -2051,12 +2051,13 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
 /// <= hi` for a `+`, `-` or `*` of the type the checker gave it, by the byte
 /// its operator starts at. A refutation is `NK1207`, as an index's is; the
 /// check stays in the machine code. Only a bound the solver can state: an
-/// `i64` none, a `u64` only its `0`. Not where the checker folded the
-/// number and refused it with `NK1116` already.
+/// `i64` none, a `u64` only its `0`. Not once the checker folded a
+/// number and refused it with `NK1116`: that refusal is the cause, and a number
+/// it folded reaches the walk through a `let`, where no span names it.
 fn prover_overflow_check(mut walk: ProverWalk, expr: ref Expr, op_at: i64, span: Span, scope: ref ProverScope, at: ref ProverWhere, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, written_of: fn(ref Expr) -> String sync) {
     let ty = walk.state.arithmetic[op_at]?.clone() ?? return
     let (lo, hi) = prover_stated_range(ty) ?? return
-    if walk.state.unfit_numbers.contains(span.start as i64) {
+    if walk.state.unfit_numbers.len() > 0 {
         return
     }
     let term = lin_term(expr, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return

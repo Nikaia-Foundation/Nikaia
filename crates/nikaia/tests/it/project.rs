@@ -1554,7 +1554,7 @@ fn every_abort_names_the_nikaia_line() {
         ),
     ] {
         std::fs::write(dir.join("src/main.nika"), program).expect("the program");
-        let ran = nikaia(&["run"], &dir);
+        let ran = nikaia(&["run", "--refuted-claims=warn"], &dir);
         assert!(!ran.status.success(), "{what} must abort: {}", said(&ran));
         let out = said(&ran);
 

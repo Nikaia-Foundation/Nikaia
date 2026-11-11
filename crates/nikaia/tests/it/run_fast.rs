@@ -115,9 +115,15 @@ fn an_overflow_aborts_as_the_cargo_build_does() {
     );
     let project = dir.to_string_lossy().to_text();
 
-    let ran = nikaia(&["run", "--project", &project], &dir);
+    let ran = nikaia(
+        &["run", "--refuted-claims=warn", "--project", &project],
+        &dir,
+    );
     assert!(fast_binary(&dir, "grow").is_file(), "{}", said(&ran));
-    let built = nikaia(&["build", "--project", &project], &dir);
+    let built = nikaia(
+        &["build", "--refuted-claims=warn", "--project", &project],
+        &dir,
+    );
     assert!(built.status.success(), "{}", said(&built));
     let cargo = Command::new(dir.join("target/nikaia/bin/grow"))
         .output()
@@ -131,9 +137,12 @@ fn an_overflow_aborts_as_the_cargo_build_does() {
     );
     assert_eq!(ran.status.code(), cargo.status.code(), "{}", said(&ran));
     assert_eq!(ran.stdout, cargo.stdout, "{}", said(&ran));
-    assert_eq!(
-        String::from_utf8_lossy(&ran.stderr),
-        String::from_utf8_lossy(&cargo.stderr)
+    // The run also prints the warning the build lets through; the program's own
+    // words are what it ends with.
+    assert!(
+        String::from_utf8_lossy(&ran.stderr).ends_with(&*String::from_utf8_lossy(&cargo.stderr)),
+        "{}",
+        said(&ran)
     );
     std::fs::remove_dir_all(&dir).ok();
 }

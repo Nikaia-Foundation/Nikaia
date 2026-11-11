@@ -63,6 +63,8 @@ fn lower(dir: &Path, source: &str) -> String {
         .args(["lower", input.to_str().expect("utf-8 path")])
         .args(["--output", output.to_str().expect("utf-8 path")])
         .args(["--no-cache"])
+        // The overflow is the subject: build it, keep its check (ADR-269 D8).
+        .args(["--refuted-claims=warn"])
         // Every check as written: the default drops a proved one (ADR-306 D26).
         .args([
             "--optimization",
@@ -151,7 +153,7 @@ fn the_generated_manifest_checks_the_program_and_not_its_dependencies() {
     // build. So this asks for the one thing a build does first and reads what it
     // left behind, which is why it tolerates the build itself failing.
     let _ = Command::new(env!("CARGO_BIN_EXE_nikaia"))
-        .args(["build"])
+        .args(["build", "--refuted-claims=warn"])
         .current_dir(&dir)
         .env("CARGO_NET_OFFLINE", "true")
         .output()

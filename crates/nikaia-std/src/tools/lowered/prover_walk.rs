@@ -1509,7 +1509,7 @@ pub(crate) fn prover_overflow_check(walk: &mut ProverWalk, expr: &Expr, op_at: i
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
     let (lo, hi) = match prover_stated_range(&ty) { Some(__nikaia_value) => __nikaia_value, None => return };
-    if walk.state.unfit_numbers.contains(&(span.start as i64)) { return; }
+    if !walk.state.unfit_numbers.is_empty() { return; }
     let term = match lin_term(expr, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return };
     if walk.arena.constant(term).is_some() { return; }
     let low = walk.arena.int(lo);
