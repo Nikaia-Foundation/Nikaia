@@ -1,0 +1,7 @@
+bounds in tests/prove_an_early_return_on_a_comparison_bounds_what_follows.nika: 6 indexes, 6 proved; 0 operations, 0 proved
+    10  t[n % 3]  proved
+    18  t[n % 3]  proved
+    26  t[n % 3]  proved
+    34  t[n % 3]  proved
+    42  t[n % 3]  proved
+    56  t[n]      proved

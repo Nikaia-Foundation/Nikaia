@@ -1,0 +1,61 @@
+/// What an early return rules out holds after it (#1482): a denied
+/// comparison states its opposite, so `if n <= 0 { return 0 }` leaves
+/// `n > 0`, and the range of `n % 3` (ADR-306 D3) reads it. Each function is
+/// `pub`, so no precondition derived from the calls (ADR-391 D1) proves it.
+pub fn at_most(xs: Vec[i64], n: i64) -> i64 {
+	if n <= 0 {
+		return 0
+	}
+	let t = [1, 2, 3]
+	t[n % 3]
+}
+
+pub fn below(n: i64) -> i64 {
+	if n < 1 {
+		return 0
+	}
+	let t = [1, 2, 3]
+	t[n % 3]
+}
+
+pub fn above(n: i64) -> i64 {
+	if 0 > n {
+		return 0
+	}
+	let t = [1, 2, 3]
+	t[n % 3]
+}
+
+pub fn at_least(n: i64) -> i64 {
+	if 0 >= n {
+		return 0
+	}
+	let t = [1, 2, 3]
+	t[n % 3]
+}
+
+pub fn unequal(n: i64) -> i64 {
+	if n != 4 {
+		return 0
+	}
+	let t = [1, 2, 3]
+	t[n % 3]
+}
+
+pub fn equal(n: i64) -> i64 {
+	if n < 0 {
+		return 0
+	}
+	if n > 3 {
+		return 0
+	}
+	if n == 3 {
+		return 0
+	}
+	let t = [1, 2, 3]
+	t[n]
+}
+
+fn main() throws {
+	println(f"{at_most([1], 4)} {below(5)} {above(1)} {at_least(2)} {unequal(4)} {equal(2)}")
+}

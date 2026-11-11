@@ -2167,11 +2167,23 @@ pub(crate) fn bounding_denial(walk: &mut BoundsWalk, expr: &Expr, facts: &Bounds
                 },
                 _ => { },
             }
+            let compares = matches!(op, BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge | BinaryOp::Eq | BinaryOp::Ne);
+            if compares {
+                let a = match bounding_lin(walk, lhs, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let b = match bounding_lin(walk, rhs, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                match op {
+                    BinaryOp::Lt => { return Some(walk.arena.ge(a, b)); },
+                    BinaryOp::Le => { return Some(walk.arena.gt(a, b)); },
+                    BinaryOp::Gt => { return Some(walk.arena.le(a, b)); },
+                    BinaryOp::Ge => { return Some(walk.arena.lt(a, b)); },
+                    BinaryOp::Eq => { return Some(walk.arena.unequal(a, b)); },
+                    _ => { return Some(walk.arena.equal(a, b)); },
+                }
+            }
         },
         _ => { },
     }
-    let atom = match bounding_comparison(walk, expr, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(walk.arena.not(atom))
+    None
 }
 
 pub(crate) fn bounding_comparison(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {

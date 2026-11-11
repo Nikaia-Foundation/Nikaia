@@ -3756,11 +3756,34 @@ fn bounding_denial(
 				},
 				else => {},
 			}
+			// **A denied comparison is its opposite** (#1482): `n <= 0`
+			// false states `n > 0`, which the range of `n % 3` reads, where
+			// `not(n <= 0)` gave `n` no lower bound.
+			let compares = match op {
+				BinaryOp::Lt => true,
+				BinaryOp::Le => true,
+				BinaryOp::Gt => true,
+				BinaryOp::Ge => true,
+				BinaryOp::Eq => true,
+				BinaryOp::Ne => true,
+				else => false,
+			}
+			if compares {
+				let a = bounding_lin(walk, lhs, facts, context, program, words) ?? return null
+				let b = bounding_lin(walk, rhs, facts, context, program, words) ?? return null
+				match op {
+					BinaryOp::Lt => return walk.arena.ge(a, b),
+					BinaryOp::Le => return walk.arena.gt(a, b),
+					BinaryOp::Gt => return walk.arena.le(a, b),
+					BinaryOp::Ge => return walk.arena.lt(a, b),
+					BinaryOp::Eq => return walk.arena.unequal(a, b),
+					else => return walk.arena.equal(a, b),
+				}
+			}
 		},
 		else => {},
 	}
-	let atom = bounding_comparison(walk, expr, facts, context, program, words) ?? return null
-	return walk.arena.not(atom)
+	return null
 }
 
 /// A comparison of two linear terms, exactly.
