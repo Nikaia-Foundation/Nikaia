@@ -47,6 +47,9 @@ it, like the checks in `docs/supervisor.md`.
 * **I7. The cause, as far as known**: the file and function, and how sure
   (traced / suspected / unknown). With several shapes of the probe, which were
   traced to that cause.
+  A probe that mixes several conditions (outside input, a guard, a call) is
+  also run with each one taken away, and the issue says which variant still
+  fails: #1571 blamed the outside input, and the guard alone did not prove.
 
 ## Work to build (bug or feature)
 
