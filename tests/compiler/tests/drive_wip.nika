@@ -23,6 +23,7 @@ fn drive(repo: String, nikaia: String, args: Vec[String]) throws {
     let mut all: Vec[String] = ["run", "scripts/drive.nika", "--"]
     for a in args { all.push(a.clone()) }
     let out = process::run(nikaia, all; dir: repo)
+    if !out.ok { println(f"drive.nika failed, code {out.code}: {out.stderr.trim()}") }
     println(out.stdout.trim())
 }
 
