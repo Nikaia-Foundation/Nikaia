@@ -2,8 +2,10 @@
 // list says nothing where the list is empty. `index slots other` holds, and
 // claimed `0 <= slots[..] < other.len()` unguarded, which with `slots` empty
 // demands `other.len() >= 1`: inside `other.len() == 0` that contradiction
-// proved `self.other[100]`. Guarded by `slots`'s length, the read is checked,
-// and a position read out of a `slots` that holds one is still proved.
+// proved any read, `self.slots[100]` here. Guarded by `slots`'s length, the
+// read is checked, and a position read out of a `slots` that holds one is
+// still proved. (A read of `self.other` there is refused since #1476: it
+// fails every time it is reached.)
 
 struct S {
 	slots: Vec[i64],
@@ -24,7 +26,7 @@ impl S {
 
 	pub fn peek(ref self) -> i64 {
 		if self.other.len() == 0 {
-			return self.other[100]
+			return self.slots[100]
 		}
 		0
 	}

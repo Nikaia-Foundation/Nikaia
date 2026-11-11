@@ -1,0 +1,49 @@
+// #1476: an index or a divisor the walk cannot decide builds as before, with
+// its check where it is reached; so do a read inside a loop's bound, a
+// guarded division, and a list bound again on one side of an `if` or handed
+// to a call in a condition, whose length the walk then forgets.
+// The refused cases: `an_index_or_divisor_shown_to_fail_is_refused`.
+
+fn pick(xs: ref Vec[i64], i: i64, d: i64) -> i64 {
+	return xs[i] / d + 7 % d
+}
+
+fn guarded(d: i64) -> i64 {
+	if d == 0 {
+		return 0
+	}
+	return 10 / d
+}
+
+fn sum(xs: ref Vec[i64]) -> i64 {
+	let mut t = 0
+	for i in 0..<xs.len() {
+		t += xs[i]
+	}
+	return t
+}
+
+fn make() -> Vec[i64] {
+	return [4, 5]
+}
+
+fn fill(mut into: Vec[i64]) -> bool {
+	into.push(6)
+	return true
+}
+
+fn main() throws {
+	let xs = [1, 2, 3]
+	let c = make().len() > 1
+	let mut arms: Vec[i64] = []
+	if c {
+		arms = make()
+	}
+	let mut units: Vec[i64] = []
+	if !fill(units) {
+		return
+	}
+	let mut grown: Vec[i64] = []
+	grown.push(7)
+	println(f"{pick(xs, 1, 2)} {guarded(0)} {sum(xs)} {arms[1]} {units[0]} {grown[0]}")
+}

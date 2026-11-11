@@ -221,6 +221,16 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
             let mut params: collections::BTreeSet[String] = collections::BTreeSet()
             if receiver != null {
                 scope.locals.insert("self")
+                // **A path of fields from a `self` the method does not
+                // change is a name of its own** (ADR-306 D17), as one from a
+                // borrowed parameter is: `self.other.len()` under `if
+                // self.other.len() == 0` (#1476). Not a precondition: a call
+                // through the receiver gives no argument for it.
+                let lent = receiver ?? Receiver { is_ref: true, is_mut: true, is_keep: false }
+                if !lent.is_mut && has_owner {
+                    let mut not_params: collections::BTreeSet[String] = collections::BTreeSet()
+                    prover_parameter_fields(walk, scope, not_params, "self", owner ?? "", program, words)
+                }
             }
             for arg in args {
                 let arg_name = words.resolve(arg.name).clone()
@@ -1334,6 +1344,7 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
 /// branch that always leaves rules out holds after it.
 fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_branch: ref Block?, span: Span, mut scope: ProverScope, at: ref ProverWhere, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> bool {
     prover_expr(walk, cond, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+    prover_condition_lengths(walk, cond, scope, words)
     let holds = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
     let mut fails: i64? = null
     if holds != null {
@@ -1519,6 +1530,7 @@ fn prover_join_arms(mut walk: ProverWalk, mut scope: ProverScope, sides: ref Vec
 /// control never goes past it.
 fn prover_match(mut walk: ProverWalk, value: ref Expr, arms: ref Vec[MatchArm], span: Span, mut scope: ProverScope, at: ref ProverWhere, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> bool sync {
     prover_expr(walk, value, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+    prover_condition_lengths(walk, value, scope, words)
     let cond_leaves = leaves_expr(value, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true)
     let truth = claim_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
     let number = lin_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
@@ -1840,6 +1852,7 @@ fn prover_expr(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref Prov
 /// Every call inside `expr`, as `contracts::sync`'s walk reaches them: not
 /// into nested blocks, the holes of literals included.
 fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
+    prover_unwritten_check(walk, expr, span, scope, words, ask, model, written_of)
     match expr {
         Expr::Call { func, args, config, .. } => {
             let callee = prover_called(func, words, unaliased)
@@ -1946,6 +1959,105 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
         },
         else => {},
     }
+}
+
+/// **A check nobody writes, shown to fail** (ADR-306 D15, ADR-269 D8): an
+/// index's bound, `0 <= i < xs.len()`, as the goal of the walk where both are
+/// whole numbers the prover reads. Where what is known rules it out every
+/// time the read is reached, or a state pinned by what reaches it breaks it,
+/// the program is refused with `NK1207` and the values, as a refuted `assert`
+/// is; a divisor's `d != 0` likewise. Never on *unknown*: the check stays
+/// in the machine code in every case. Not in a test (D11).
+fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, written_of: fn(ref Expr) -> String sync) {
+    if walk.state.collecting || walk.state.in_test {
+        return
+    }
+    match expr {
+        Expr::Index { base, index, .. } => {
+            match index {
+                Expr::Range { .. } => return,
+                else => {},
+            }
+            let i = lin_term(index, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return
+            let n = prover_length_of(walk, base, scope, words) ?? return
+            let zero = walk.arena.int(0)
+            let from = walk.arena.le(zero, i)
+            let below = walk.arena.lt(i, n)
+            let goal = walk.arena.and([from, below])
+            prover_refuted_check(walk, goal, written_of(expr), "is out of bounds", "An index is in `0..<len()`: if the read is right, the code before it is wrong.", span, scope, ask, model)
+        },
+        // **A divisor is not zero** (ADR-395 D1, D2): `d != 0` for every `/`
+        // and `%` on whole numbers whose divisor is not a literal. A constant
+        // zero is `NK1118`'s. The check stays in the machine code (D3).
+        Expr::Binary { op, rhs, .. } => {
+            if op != BinaryOp::Div && op != BinaryOp::Rem {
+                return
+            }
+            match rhs {
+                Expr::LitInt { .. } => return,
+                else => {},
+            }
+            let d = lin_term(rhs, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return
+            if walk.arena.constant(d) != null {
+                return
+            }
+            // **What the checker folds is `NK1118`'s**: a divisor over names
+            // bound once to a constant (`let z = 0`).
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            walk.arena.variables(d, read)
+            let mut folded = true
+            for name in read {
+                let at_entry = scope.entry[name] ?? -1
+                if scope.mutables.contains(name) || at_entry < 0 || walk.arena.constant(at_entry) == null {
+                    folded = false
+                }
+            }
+            if folded {
+                return
+            }
+            let zero = walk.arena.int(0)
+            let goal = walk.arena.unequal(d, zero)
+            prover_refuted_check(walk, goal, written_of(expr), "divides by zero", "If the divisor can really be zero, check it before dividing.", span, scope, ask, model)
+        },
+        else => {},
+    }
+}
+
+/// The length of the list `base` names, as a term: a literal's, or that of a
+/// name or a path of fields the walk follows. Null where none is known.
+fn prover_length_of(mut walk: ProverWalk, base: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> i64? {
+    let given = length_given(walk.arena, words, base, scope, walk.state.pinned)
+    if given != null {
+        return given
+    }
+    let path = path_of(base, words) ?? return null
+    let length = length_of(path)
+    if !scope.ints.contains(length) {
+        return null
+    }
+    return walk.arena.var(length)
+}
+
+/// `goal`, a check the program does not write, asked as an `assert` is for
+/// a refutation only (ADR-269 D8): `NK1207` where what is known rules it out
+/// every time, or where exactly what reaches it breaks it. Nothing on a
+/// claim about data from outside (D6) or one left open.
+fn prover_refuted_check(mut walk: ProverWalk, goal: i64, written: String, fails: String, help: String, span: Span, scope: ref ProverScope, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    walk.arena.variables(goal, read)
+    for name in read {
+        if scope.tainted.contains(name) {
+            return
+        }
+    }
+    let always = refuting_values(walk.arena, scope.facts, goal, ask, model)
+    if always != null {
+        let values = always ?? collections::BTreeMap()
+        walk.findings.push(Finding { code: "NK1207", span: span, message: f"`{written}` {fails} every time it is reached.", notes: [f"What is known before it rules the check out: {shown(values)}."], help: help, warning: false, labels: [] })
+        return
+    }
+    let sometimes = breaking_values(walk.arena, scope, goal, model) ?? return
+    walk.findings.push(Finding { code: "NK1207", span: span, message: f"`{written}` {fails} when {shown(sometimes)}.", notes: ["That state reaches it: what is known here pins every name the check depends on."], help: help, warning: false, labels: [] })
 }
 
 fn prover_calls_in_maybe(mut walk: ProverWalk, expr: ref Expr?, span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
@@ -2657,6 +2769,25 @@ fn prover_follow_lengths(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut s
     }
 }
 
+/// **The followed lists an `if`'s condition or a `match`'s value may
+/// change** (#782, #1476): `if !fill(units) { return }` hands `units` to a
+/// call, so its length is unknown on both sides and after.
+fn prover_condition_lengths(mut walk: ProverWalk, cond: ref Expr, mut scope: ProverScope, words: ref winnow_grammar::InternerContext) sync {
+    let mut lists: Vec[String] = []
+    for m in scope.mutables {
+        if m.ends_with(".len()") {
+            lists.push((m.strip_suffix(".len()") ?? "").clone())
+        }
+    }
+    for list in lists {
+        if changes_length_in_expr(cond, list, walk.state.readers, words) {
+            let length = length_of(list)
+            scope.rebind(walk.arena, length)
+            scope.has_length(walk.arena, list, null)
+        }
+    }
+}
+
 /// `list`'s length unknown again, but not negative.
 fn prover_forget_length(mut walk: ProverWalk, list: ref String, mut scope: ProverScope) {
     let length = length_of(list)
@@ -2746,7 +2877,9 @@ fn prover_lengths_changed(mut changed: collections::BTreeSet[String], body: ref 
     for m in scope.mutables {
         if m.ends_with(".len()") {
             let list = (m.strip_suffix(".len()") ?? "").clone()
-            if changes_length_in(body, list, readers, words) {
+            // **Bound again on one side** (`list = other`), its length is
+            // the new list's: not what it was (#1476).
+            if changes_length_in(body, list, readers, words) || rebinds(body, list, words) {
                 changed.insert(m.clone())
             }
         }

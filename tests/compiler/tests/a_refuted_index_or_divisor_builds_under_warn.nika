@@ -1,0 +1,54 @@
+// #1476 (ADR-269 D8, ADR-306 D15, ADR-395): `--refuted-claims=warn` builds
+// an index and a divisor shown to fail, with a warning each, and keeps their
+// checks: the program stops where it reaches them.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn shown(tmp: String, text: String) -> String {
+	let mut lines: Vec[String] = []
+	for line in text.replace(tmp, "TMP").lines() {
+		let t = line.trim()
+		if t.starts_with("Compiling") || t.starts_with("Finished") || t.starts_with("Running") {
+			continue
+		}
+		lines.push(line.clone())
+	}
+	return lines.join("\n")
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	process::run("mkdir", ["-p", f"{tmp}/index/src", f"{tmp}/divide/src"])
+	let toml = "[package]\nname = \"p\"\nversion = \"0.1.0\"\n"
+	fs::write(f"{tmp}/index/nikaia.toml", fs::Root::Anywhere, toml)
+	fs::write(f"{tmp}/divide/nikaia.toml", fs::Root::Anywhere, toml)
+	fs::write(
+		f"{tmp}/index/src/main.nika",
+		fs::Root::Anywhere,
+		"fn main() throws {\n\tlet xs = [1, 2, 3]\n\tlet i = 5\n\tprintln(\"before\")\n\tprintln(f\"{xs[i]}\")\n}\n",
+	)
+	let out = process::run(toolchain(), ["run", "--refuted-claims=warn"]; dir: f"{tmp}/index")
+	println(shown(tmp, f"{out.stdout}{out.stderr}"))
+	println(f"exit {out.code}")
+	fs::write(
+		f"{tmp}/divide/src/main.nika",
+		fs::Root::Anywhere,
+		"fn share(d: i64) -> i64 {\n\tif d == 0 {\n\t\treturn 10 / d\n\t}\n\treturn 1\n}\n\nfn main() throws {\n\tprintln(\"before\")\n\tprintln(f\"{share(0)}\")\n}\n",
+	)
+	let again = process::run(toolchain(), ["run", "--refuted-claims=warn"]; dir: f"{tmp}/divide")
+	println(shown(tmp, f"{again.stdout}{again.stderr}"))
+	println(f"exit {again.code}")
+	process::run("rm", ["-rf", tmp])
+}

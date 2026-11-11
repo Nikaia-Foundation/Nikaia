@@ -1,0 +1,53 @@
+// #1476 (ADR-306 D15, ADR-395 D1, D2): an index's bound and a divisor's
+// `d != 0`, checks nobody writes, are goals of the walk. Where what is known
+// rules one out every time it is reached - a list of three read at 5, an
+// empty list read at 100, a read under `len() == 0` (of a parameter's
+// field and of `self`'s), also in a public function no one calls, a division under `d == 0` - or exactly what reaches
+// it breaks it, the program is refused with NK1207 and the values.
+// What the walk cannot decide builds: `an_undecided_index_or_divisor_builds`.
+
+struct Queue {
+	other: Vec[i64],
+}
+
+impl Queue {
+	pub fn front(ref self) -> i64 {
+		if self.other.len() == 0 {
+			return self.other[100]
+		}
+		return self.other[0]
+	}
+}
+
+pub fn peek(q: ref Queue) -> i64 {
+	if q.other.len() == 0 {
+		return q.other[100]
+	}
+	return q.other[0]
+}
+
+pub fn never_called(q: ref Queue) -> i64 {
+	if q.other.len() == 0 {
+		return q.other[100]
+	}
+	return 0
+}
+
+fn share(d: i64) -> i64 {
+	if d == 0 {
+		return 10 / d
+	}
+	return 10 % d
+}
+
+fn main() throws {
+	let xs = [1, 2, 3]
+	let i = 5
+	println(f"{xs[i]}")
+	let ys: Vec[i64] = []
+	println(f"{ys[100]}")
+	println(f"{peek(Queue { other: [1] })} {share(2)}")
+	let mut k = 4
+	k -= 1
+	println(f"{xs[k]} {100 % (k - 3)}")
+}

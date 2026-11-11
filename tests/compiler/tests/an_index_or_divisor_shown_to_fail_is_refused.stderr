@@ -1,0 +1,73 @@
+error[NK1207]: `self.other[100]` is out of bounds every time it is reached.
+   --> tests/an_index_or_divisor_shown_to_fail_is_refused.nika:16:4
+    |
+ 16 | 			return self.other[100]
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is known before it rules the check out: `self.other.len()` is 0.
+    = help: An index is in `0..<len()`: if the read is right, the code before it is wrong.
+error[NK1207]: `q.other[100]` is out of bounds every time it is reached.
+   --> tests/an_index_or_divisor_shown_to_fail_is_refused.nika:24:3
+    |
+ 24 | 		return q.other[100]
+    |   ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is known before it rules the check out: `q.other.len()` is 0.
+    = help: An index is in `0..<len()`: if the read is right, the code before it is wrong.
+error[NK1207]: `q.other[100]` is out of bounds every time it is reached.
+   --> tests/an_index_or_divisor_shown_to_fail_is_refused.nika:31:3
+    |
+ 31 | 		return q.other[100]
+    |   ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is known before it rules the check out: `q.other.len()` is 0.
+    = help: An index is in `0..<len()`: if the read is right, the code before it is wrong.
+error[NK1207]: `10 / d` divides by zero every time it is reached.
+   --> tests/an_index_or_divisor_shown_to_fail_is_refused.nika:38:3
+    |
+ 38 | 		return 10 / d
+    |   ^^^^^^^^^^^^^
+    |
+    = note: What is known before it rules the check out: `d` is 0.
+    = help: If the divisor can really be zero, check it before dividing.
+error[NK1207]: `xs[i]` is out of bounds every time it is reached.
+   --> tests/an_index_or_divisor_shown_to_fail_is_refused.nika:46:2
+    |
+ 46 | 	println(f"{xs[i]}")
+    |  ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is known before it rules the check out: `i` is 5, `xs.len()` is 3.
+    = help: An index is in `0..<len()`: if the read is right, the code before it is wrong.
+error[NK1207]: `ys[100]` is out of bounds every time it is reached.
+   --> tests/an_index_or_divisor_shown_to_fail_is_refused.nika:48:2
+    |
+ 48 | 	println(f"{ys[100]}")
+    |  ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is known before it rules the check out: `ys.len()` is 0.
+    = help: An index is in `0..<len()`: if the read is right, the code before it is wrong.
+error[NK1118]: This takes the remainder by zero.
+   --> tests/an_index_or_divisor_shown_to_fail_is_refused.nika:52:2
+    |
+ 52 | 	println(f"{xs[k]} {100 % (k - 3)}")
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Dividing by zero would stop the program, and here it's certain to happen.
+    = help: If the divisor can really be zero, check it before dividing.
+error[NK1207]: `xs[k]` is out of bounds every time it is reached.
+   --> tests/an_index_or_divisor_shown_to_fail_is_refused.nika:52:2
+    |
+ 52 | 	println(f"{xs[k]} {100 % (k - 3)}")
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is known before it rules the check out: `k` is 3, `xs.len()` is 3.
+    = help: An index is in `0..<len()`: if the read is right, the code before it is wrong.
+error[NK1207]: `100 % (k - 3)` divides by zero every time it is reached.
+   --> tests/an_index_or_divisor_shown_to_fail_is_refused.nika:52:2
+    |
+ 52 | 	println(f"{xs[k]} {100 % (k - 3)}")
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is known before it rules the check out: `k` is 3.
+    = help: If the divisor can really be zero, check it before dividing.
+8 claims shown false, 1 type error
