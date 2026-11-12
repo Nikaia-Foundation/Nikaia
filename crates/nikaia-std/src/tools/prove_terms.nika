@@ -35,12 +35,14 @@ pub fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var:
             if !args.is_empty() || words.resolve(method) != "len" {
                 return null
             }
-            // A path of fields counts as a name does (ADR-306 D17).
-            let list = path_of(receiver, words) ?? return null
-            let length = f"{list}.len()"
-            if !var(length) {
-                return null
+            // **A literal's length is its bytes** (ADR-396 D4): `"\n".len()`
+            // is 1.
+            let counted = text_literal_length(receiver)
+            if counted != null {
+                return built(SolverTerm::Int(counted ?? 0), out)
             }
+            // A path of fields counts as a name does (ADR-306 D17).
+            let length = length_path(receiver, words, var) ?? return null
             built(SolverTerm::Var(length), out)
         },
         // **A path of fields from a name** (ADR-306 D17, ADR-269 D9): `p.end`
@@ -131,6 +133,54 @@ pub fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var:
             }
         },
         else => null,
+    }
+}
+
+/// **The bytes a text literal stands for**, its escapes read (Part I 2.5):
+/// nothing where `expr` is no literal, or holds a `\x` or `\u{…}`.
+pub fn text_literal_length(expr: ref Expr) -> i64? {
+    let text = match expr {
+        Expr::LitStr { text, .. } => text,
+        else => return null,
+    }
+    let mut escapes = 0
+    let mut escaped = false
+    for c in text.chars() {
+        if escaped {
+            if c == 'x' || c == 'u' {
+                return null
+            }
+            escaped = false
+        } else if c == '\\' {
+            escaped = true
+            escapes += 1
+        }
+    }
+    return text.len() - escapes
+}
+
+/// **The name of a length the walk reads**: a path's (ADR-306 D17), or for
+/// the `.bytes` of a text, the text's: `s.bytes.len() == s.len()`
+/// (supervisor decision, 2026-11-12, for ADR-396 D4).
+pub fn length_path(list: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync) -> String? {
+    let path = path_of(list, words) ?? return null
+    let length = f"{path}.len()"
+    if var(length) {
+        return length
+    }
+    match list {
+        Expr::Field { base, name, .. } => {
+            if words.resolve(name) != "bytes" {
+                return null
+            }
+            let text = path_of(base, words) ?? return null
+            let counted = f"{text}.len()"
+            if var(counted) {
+                return counted
+            }
+            return null
+        },
+        else => return null,
     }
 }
 

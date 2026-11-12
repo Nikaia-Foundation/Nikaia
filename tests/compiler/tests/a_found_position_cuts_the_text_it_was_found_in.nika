@@ -1,0 +1,21 @@
+// Outside data reaches each cut, and each is proved (supervisor decision,
+// 2026-11-12, for ADR-396 D4, #1572): `find` and `rfind` ensure the match
+// lies inside the text, so the value past `??` is that match or the
+// fallback, and past `?? return` the match; an `if` inside a `let` knows
+// what holds around it; a text's bytes are as many as its length.
+use std::io
+
+fn main() throws {
+    let all = io::read_to_string() + "head 7/9\nrest"
+    let nl = all.find("\n") ?? all.len()
+    let line = f"{all[0..<nl]}"
+    let counted = if nl < all.len() { f"{all[nl + "\n".len()..]}" } else { "" }
+    let at = line.rfind(" ") ?? return
+    let shown = f"{line[at + 1..]}"
+    let slash = shown.find("/") ?? shown.len()
+    println(f"[{shown[0..<slash]}] [{line[0..<at]}] [{counted}]")
+    let colon = line.find(" ") ?? -1
+    if colon >= 0 {
+        println(f"{line.bytes[colon..<line.len()].len()}")
+    }
+}

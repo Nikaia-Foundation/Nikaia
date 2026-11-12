@@ -840,9 +840,12 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     if ty == null && names.len() == 1 && shape.len() == 0 {
         match found {
             Ty::Named { name, args, view } => {
-                if args.is_empty() && !view && is_whole_number(name) {
-                    state.facts.whole_lets.insert(span.start as i64, name.clone())
-                } else if has_a_length(name) || a_map_type(name) {
+                // **A call's result of a type of fields** (supervisor
+                // decision, 2026-11-12, for ADR-396 D4): its field paths are
+                // names of the prover, as a parameter's are.
+                let whole = args.is_empty() && !view && is_whole_number(name)
+                let fields = args.is_empty() && check_core_stmt_a_call(value)
+                if whole || has_a_length(name) || a_map_type(name) || fields {
                     state.facts.whole_lets.insert(span.start as i64, name.clone())
                 }
             },
@@ -2084,6 +2087,19 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
             Ty::Named { name, args, .. } => {
                 if args.is_empty() && is_whole_number(name) {
                     state.facts.whole_loops.insert(id_of(iter) as i64)
+                }
+            },
+            else => {}
+        }
+    }
+    // **An element with a length** (ADR-396 D4): `for line in s.split("\n")`
+    // binds a text, whose `line.len()` the prover reads, by the start of the
+    // `for` as a `let`'s type is.
+    if bindings.len() == 1 && elements.len() == 1 {
+        match elements[0] {
+            Ty::Named { name, .. } => {
+                if has_a_length(name) {
+                    state.facts.whole_lets.insert(span.start as i64, name.clone())
                 }
             },
             else => {}

@@ -229,7 +229,7 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                 let lent = receiver ?? Receiver { is_ref: true, is_mut: true, is_keep: false }
                 if !lent.is_mut && has_owner {
                     let mut not_params: collections::BTreeSet[String] = collections::BTreeSet()
-                    prover_parameter_fields(walk, scope, not_params, "self", owner ?? "", program, words)
+                    prover_parameter_fields(walk, scope, not_params, "self", owner ?? "", true, program, words)
                 }
             }
             for arg in args {
@@ -264,7 +264,7 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                 // **A path of fields from a borrowed parameter is a name of
                 // its own** (ADR-306 D17, ADR-269 D9): `p.end` of `p: Piece`.
                 if !arg.mutable && arg.ty.generics.is_empty() {
-                    prover_parameter_fields(walk, scope, params, arg_name, ty, program, words)
+                    prover_parameter_fields(walk, scope, params, arg_name, ty, true, program, words)
                 }
             }
             // **An option is a parameter** (Part I 5.1): a claim about it is
@@ -518,7 +518,10 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
 /// The fields of the struct `ty` declares, as names of the parameter `name`:
 /// each whole number `name.f` and each length `name.f.len()`, read at the
 /// entry as a parameter is; `name` is a parameter a claim may read through.
-fn prover_parameter_fields(mut walk: ProverWalk, mut scope: ProverScope, mut params: collections::BTreeSet[String], name: ref String, ty: ref String, program: ref Program, words: ref winnow_grammar::InternerContext) {
+/// Not `entered`, they are a `let`'s of a call's result (supervisor decision,
+/// 2026-11-12, for ADR-396 D4): names of their own, with no value at the
+/// entry.
+fn prover_parameter_fields(mut walk: ProverWalk, mut scope: ProverScope, mut params: collections::BTreeSet[String], name: ref String, ty: ref String, entered: bool, program: ref Program, words: ref winnow_grammar::InternerContext) {
     for item in program.items {
         match item.node {
             Item::Struct { name: declared, generics, fields, .. } => {
@@ -531,8 +534,10 @@ fn prover_parameter_fields(mut walk: ProverWalk, mut scope: ProverScope, mut par
                             scope.loose.insert(path.clone())
                             params.insert(path.clone())
                             params.insert(name.clone())
-                            let at_entry = walk.arena.var(path)
-                            scope.entry.insert(path.clone(), at_entry)
+                            if entered {
+                                let at_entry = walk.arena.var(path)
+                                scope.entry.insert(path.clone(), at_entry)
+                            }
                             if field_ty.starts_with("u") {
                                 scope.not_negative(walk.arena, path)
                             }
@@ -541,9 +546,11 @@ fn prover_parameter_fields(mut walk: ProverWalk, mut scope: ProverScope, mut par
                             scope.has_length(walk.arena, path, null)
                             params.insert(path.clone())
                             params.insert(name.clone())
-                            let length = length_of(path)
-                            let at_entry = walk.arena.var(length)
-                            scope.entry.insert(length, at_entry)
+                            if entered {
+                                let length = length_of(path)
+                                let at_entry = walk.arena.var(length)
+                                scope.entry.insert(length, at_entry)
+                            }
                         }
                     }
                 }
@@ -701,6 +708,11 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
     let name = words.resolve(names[0]).clone()
     match value {
         Expr::StructLit { fields, .. } => prover_literal_fields(walk, scope, name, fields, words),
+        // **A call's result is read through its fields** (supervisor
+        // decision, 2026-11-12, for ADR-396 D4), as a parameter is (ADR-306
+        // D17): `shape.code.len()` of `let shape = where_shape(lines)`.
+        Expr::Call { .. } => prover_result_fields(walk, scope, name, ty, span, program, words),
+        Expr::MethodCall { .. } => prover_result_fields(walk, scope, name, ty, span, program, words),
         else => {},
     }
     if !leaned.is_empty() {
@@ -732,6 +744,7 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         scope.ints.insert(name.clone())
         scope.loose.insert(name.clone())
         prover_chosen_value(walk, name, value, scope, words)
+        prover_found_value(walk, name, value, scope, words, library, condition)
     }
     if called && called_whole {
         for fact in called_facts {
@@ -760,6 +773,125 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
             }
         },
     }
+}
+
+/// The fields of a call's result bound by an immutable `let`, of the type
+/// written or the one the checker gave it.
+fn prover_result_fields(mut walk: ProverWalk, mut scope: ProverScope, name: ref String, ty: ref Type?, span: Span, program: ref Program, words: ref winnow_grammar::InternerContext) {
+    let mut declared: String = ""
+    if ty != null {
+        let t = ty ?? return
+        if !t.generics.is_empty() {
+            return
+        }
+        declared = words.resolve(t.name).clone()
+    } else {
+        declared = walk.state.whole_lets.get(span.start as i64)?.clone() ?? return
+    }
+    let mut not_params: collections::BTreeSet[String] = collections::BTreeSet()
+    prover_parameter_fields(walk, scope, not_params, name, declared, false, program, words)
+}
+
+/// **What the ledger ensures of an optional result, where `??` takes it**
+/// (supervisor decision, 2026-11-12, for ADR-396 D4): `str::find` ensures
+/// `result == null || (0 <= result && result + needle.len() <= self.len())`,
+/// so `let at = s.find(n) ?? return` knows the rest of `at`, and `let at =
+/// s.find(n) ?? d` knows it or `at == d`. A fallback that may hand back
+/// another value, `a ?? b ?? continue`, knows nothing.
+fn prover_found_value(mut walk: ProverWalk, name: ref String, value: ref Expr, mut scope: ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
+    match value {
+        Expr::Coalesce { value: found, fallback, .. } => {
+            let facts = prover_found_facts(walk, name, found, scope, words, library, condition)
+            if facts.is_empty() {
+                return
+            }
+            let held = walk.arena.and(facts)
+            let mut leaves = false
+            match fallback {
+                Expr::Coalesce { .. } => {},
+                else => {
+                    leaves = jumps_at_the_end(fallback)
+                },
+            }
+            if leaves {
+                scope.facts.push(held)
+                return
+            }
+            let other = lin_term(fallback, words, fn(n) { scope.ints.contains(n) }, fn(n) { prover_pinned(walk.state.pinned, scope, n) }, walk.arena.nodes) ?? return
+            if walk.arena.mentions(other, name) {
+                return
+            }
+            let named = walk.arena.var(name)
+            let is_other = walk.arena.equal(named, other)
+            let fact = walk.arena.or([held, is_other])
+            scope.facts.push(fact)
+        },
+        else => {},
+    }
+}
+
+/// What a method's ledger entry ensures of its result where there is one,
+/// `P` of each `result == null || P`, said of `name`: `self.len()` the
+/// receiver's length, each `p` and `p.len()` the argument's. A condition
+/// that reads what the call does not give is left out.
+fn prover_found_facts(mut walk: ProverWalk, name: ref String, found: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> Vec[i64] {
+    let mut facts: Vec[i64] = []
+    match found {
+        Expr::MethodCall { receiver, args, .. } => {
+            let key = walk.state.method_callees.get(id_of(receiver) as i64) ?? return facts
+            let contract = library.functions.get(key) ?? return facts
+            let signature = contract.signature ?? return facts
+            let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+            let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+            names.insert(result_name())
+            given.insert(result_name(), walk.arena.var(name))
+            names.insert(length_of("self"))
+            let own = prover_length_of(walk, receiver, scope, words)
+            if own != null {
+                given.insert(length_of("self"), own ?? 0)
+            }
+            let mut k = 0
+            for (param, _) in signature.params {
+                if param == "self" {
+                    continue
+                }
+                names.insert(param.clone())
+                names.insert(length_of(param))
+                if k < args.len() {
+                    let arg = args[k]
+                    let term = lin_term(arg, words, fn(n) { scope.ints.contains(n) }, fn(n) { prover_pinned(walk.state.pinned, scope, n) }, walk.arena.nodes)
+                    if term != null {
+                        given.insert(param.clone(), term ?? 0)
+                    }
+                    let length = prover_length_of(walk, arg, scope, words)
+                    if length != null {
+                        given.insert(length_of(param), length ?? 0)
+                    }
+                }
+                k += 1
+            }
+            for text in contract.ensures {
+                let claim = text.strip_prefix("result == null || ") ?? continue
+                let term = prover_condition_term(walk.arena, claim, names, condition)
+                if term < 0 {
+                    continue
+                }
+                let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+                walk.arena.variables(term, read)
+                let mut whole = true
+                for n in read {
+                    if !given.contains_key(n) {
+                        whole = false
+                    }
+                }
+                if whole {
+                    facts.push(walk.arena.substitute(term, given))
+                }
+            }
+        },
+        else => {},
+    }
+    return facts
 }
 
 /// **A whole number chosen by an `if`** (ADR-396 D4): `let n = if c { x }
@@ -1254,6 +1386,18 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
                 inner.sources.insert(n.clone(), source ?? "")
             }
             inner.tainted.insert(n)
+        }
+    }
+    // **An element with a length has one** (ADR-396 D4): `for line in
+    // s.split("\n")` knows `line.len()`, of which nothing more is known.
+    if bindings.len() == 1 {
+        match walk.state.whole_lets.get(span.start as i64) {
+            null => {},
+            element => {
+                if has_a_length(element) {
+                    inner.has_length(walk.arena, words.resolve(bindings[0]), null)
+                }
+            },
         }
     }
     let mut ranged = false
@@ -2321,17 +2465,18 @@ fn prover_stated_range(ty: ref String) -> (i64, i64?)? sync {
 }
 
 /// The length of the list `base` names, as a term: a literal's, or that of a
-/// name or a path of fields the walk follows. Null where none is known.
+/// name or a path of fields the walk follows, a text's for its `.bytes`.
+/// Null where none is known.
 fn prover_length_of(mut walk: ProverWalk, base: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> i64? {
     let given = length_given(walk.arena, words, base, scope, walk.state.pinned)
     if given != null {
         return given
     }
-    let path = path_of(base, words) ?? return null
-    let length = length_of(path)
-    if !scope.ints.contains(length) {
-        return null
+    let counted = text_literal_length(base)
+    if counted != null {
+        return walk.arena.int(counted ?? 0)
     }
+    let length = length_path(base, words, fn(name) { scope.ints.contains(name) }) ?? return null
     return walk.arena.var(length)
 }
 
@@ -2422,9 +2567,25 @@ fn prover_blocks_in(mut walk: ProverWalk, expr: ref Expr, scope: ref ProverScope
                 prover_blocks_in(walk, c.value, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             }
         },
-        Expr::If { then_branch, else_branch, .. } => {
-            prover_nested(walk, then_branch, null, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
-            prover_nested_maybe(walk, else_branch, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+        // **An `if` inside an expression runs where the expression does**
+        // (ADR-396 D4): each branch knows the bindings around it and its
+        // condition, as a statement's does; `let c = if nl < s.len() {
+        // s[nl + 1..] } else { "" }` reads `nl` as the `let` before set it.
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let holds = claim_term(cond, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+            let mut fails: i64? = null
+            if holds != null {
+                fails = walk.arena.not(holds ?? 0)
+            }
+            let mut then_scope = scope.clone()
+            if holds != null {
+                then_scope.facts.push(holds ?? 0)
+            }
+            then_scope.exact = then_scope.exact && holds != null
+            then_scope.on_the_path(walk.arena, holds)
+            prover_block(walk, then_branch, then_scope, at.inside(false), program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+            let mut else_scope = scope.clone()
+            prover_else(walk, else_branch, else_scope, fails, at.inside(false), program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
         },
         Expr::TryCatch { expr, handler, .. } => {
             prover_blocks_in(walk, expr, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
@@ -2442,11 +2603,6 @@ fn prover_blocks_in(mut walk: ProverWalk, expr: ref Expr, scope: ref ProverScope
         },
         else => {},
     }
-}
-
-fn prover_nested_maybe(mut walk: ProverWalk, block: ref Block?, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
-    let present = block ?? return
-    prover_nested(walk, present, null, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
 }
 
 /// A nested block: a lambda's body, `lambda` its parameters, knows what the

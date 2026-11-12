@@ -1,0 +1,34 @@
+// Outside data reaches each index, and each is proved (supervisor decision,
+// 2026-11-12, for ADR-396 D4, #1572): the fields of a `let` bound to a
+// call's result are read as a parameter's are (ADR-306 D17), and the name a
+// `for` binds to a text of a split has the length of that text.
+use std::io
+
+struct Shape {
+    code: Vec[bool],
+}
+
+fn shape_of(lines: ref Vec[ref String]) -> Shape {
+    let mut code: Vec[bool] = []
+    for line in lines {
+        code.push(line.len() > 0)
+    }
+    return Shape { code: code }
+}
+
+fn main() throws {
+    let input = io::read_to_string() + "a b\n\ncd"
+    let lines: Vec[ref String] = input.split("\n").collect()
+    let shape = shape_of(lines)
+    for i in 0..<shape.code.len() {
+        if shape.code[i] {
+            println(f"code {i}")
+        }
+    }
+    for line in input.split("\n") {
+        let space = line.find(" ") ?? -1
+        if space >= 0 {
+            println(f"[{line.bytes[0..<space].len()}]")
+        }
+    }
+}

@@ -20,9 +20,9 @@ pub fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &dyn 
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             if !args.is_empty() || words.resolve(method) != "len" { return None; }
-            let list = match path_of(receiver, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let length = format!("{}.len()", list);
-            if !var(&length) { return None; }
+            let counted = text_literal_length(receiver);
+            if counted.is_some() { return Some(built(SolverTerm::Int(nikaia_std::index::or(counted, || 0)), out)); }
+            let length = match length_path(receiver, words, &var) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(built(SolverTerm::Var(length), out))
         },
         Expr::Field { .. } => {
@@ -86,6 +86,42 @@ pub fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &dyn 
             }
         },
         _ => None,
+    }
+}
+
+pub fn text_literal_length(expr: &Expr) -> Option<i64> {
+    let text = match expr {
+        Expr::LitStr { text, .. } => text,
+        _ => return None,
+    };
+    let mut escapes: i64 = 0;
+    let mut escaped = false;
+    for c in text.chars() {
+        if escaped {
+            if c == 'x' || c == 'u' { return None; }
+            escaped = false;
+        } else if c == '\\' {
+            escaped = true;
+            escapes = unsafe { nikaia_std::proven::add::<i64>(escapes, 1) };
+        }
+    }
+    Some(unsafe { nikaia_std::proven::sub::<i64>(text.len() as i64, escapes) })
+}
+
+pub fn length_path(list: &Expr, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool) -> Option<String> {
+    let path = match path_of(list, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let length = format!("{}.len()", path);
+    if var(&length) { return Some(length); }
+    match list {
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            if words.resolve(name) != "bytes" { return None; }
+            let text = match path_of(base, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let counted = format!("{}.len()", text);
+            if var(&counted) { return Some(counted); }
+            return None;
+        },
+        _ => return None,
     }
 }
 

@@ -657,7 +657,11 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     }
     if ty.is_none() && names.len() == 1 && shape.is_empty() {
         match found {
-            Ty::Named { ref name, ref args, view } => { if args.is_empty() && !view && is_whole_number(name) { state.facts.whole_lets.insert(span.start as i64, nikaia_std::block::Text::from(name.to_string())); } else if has_a_length(name) || a_map_type(name) { state.facts.whole_lets.insert(span.start as i64, nikaia_std::block::Text::from(name.to_string())); } },
+            Ty::Named { ref name, ref args, view } => {
+                let whole = args.is_empty() && !view && is_whole_number(name);
+                let fields = args.is_empty() && check_core_stmt_a_call(value);
+                if whole || has_a_length(name) || a_map_type(name) || fields { state.facts.whole_lets.insert(span.start as i64, nikaia_std::block::Text::from(name.to_string())); }
+            },
             _ => { },
         }
     }
@@ -1498,6 +1502,12 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     if bindings.len() == 1 && elements.len() == 1 {
         match *unsafe { nikaia_std::proven::read(&elements, (0) as usize) } {
             Ty::Named { ref name, ref args, .. } => { if args.is_empty() && is_whole_number(name) { state.facts.whole_loops.insert(id_of(iter) as i64); } },
+            _ => { },
+        }
+    }
+    if bindings.len() == 1 && elements.len() == 1 {
+        match *unsafe { nikaia_std::proven::read(&elements, (0) as usize) } {
+            Ty::Named { ref name, .. } => { if has_a_length(name) { state.facts.whole_lets.insert(span.start as i64, nikaia_std::block::Text::from(name.to_string())); } },
             _ => { },
         }
     }

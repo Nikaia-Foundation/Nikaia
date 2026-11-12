@@ -4724,6 +4724,7 @@ pub = true
 panics = false
 sync = true
 touches = []
+ensures = ["result == null || (0 <= result && result + needle.len() <= self.len())"]
 signature = "(self: ref String, needle: ?; from: i64 = 0) -> i64?"
 
 # **The byte position of the last match**, or nothing. The position cuts the
@@ -4733,6 +4734,7 @@ pub = true
 panics = false
 sync = true
 touches = []
+ensures = ["result == null || (0 <= result && result + needle.len() <= self.len())"]
 signature = "(self: ref String, needle: ?) -> i64?"
 
 # The lines of the text, each a view into it, without its line ending.
@@ -6768,6 +6770,7 @@ pub = true
 panics = false
 sync = true
 touches = []
+ensures = ["result == null || (0 <= result && result < self.len())"]
 signature = "(ref self, byte: u8; from: i64 = 0) -> i64?"
 
 # Every position at or after `from` that holds a byte of `set`, rising

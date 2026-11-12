@@ -359,7 +359,7 @@ fn where_outline(path: String) -> Vec[String] throws {
     let shape = where_shape(lines, nika)
     let mut out: Vec[String] = []
     for i in 0..<lines.len() {
-        if !shape.code[i] { continue }
+        if i >= shape.code.len() || !shape.code[i] { continue }
         let item = where_item(lines[i].clone())
         if item == "" { continue }
         out.push(where_cap(f"{i + 1}-{where_end(shape, lines, i, nika)} {item}"))
