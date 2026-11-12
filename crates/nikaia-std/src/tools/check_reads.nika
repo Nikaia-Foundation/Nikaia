@@ -355,8 +355,9 @@ impl CheckState {
         }
         // **A name that is a view below whatever its type says** - a `let`
         // bound to a map read beside a jump - is a reference already (#125);
-        // not one that copied its value.
-        if moves(ty) && !copied && (self.a_lent_name(world, given) || self.a_lent_let(world, given)) {
+        // not one that copied its value. So is one `get` handed back past a
+        // jump (D30): `let k = a.get(1) ?? return` keys `b.get(k)` as it is.
+        if moves(ty) && !copied && (self.a_lent_name(world, given) || self.a_lent_let(world, given) || check_reads_got_past_a_jump(self, world, given)) {
             return
         }
         // **A number is lent as it is**, typed or not (0.0.246): a literal, or a
@@ -542,6 +543,15 @@ fn check_reads_keyed_by_numbers(on: ref Ty) -> bool sync {
             let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set"
             keyed && args.len() > 0 && check_copied(args[0])
         },
+        else => false,
+    }
+}
+
+/// A name bound to what `get` handed back past a jump (D30), which is a
+/// reference below.
+fn check_reads_got_past_a_jump(state: ref CheckState, world: ref CheckWorld, given: ref Expr) -> bool sync {
+    return match given {
+        Expr::Variable(name, _) => state.got_past_a_jump.contains(world.words.resolve(name)),
         else => false,
     }
 }

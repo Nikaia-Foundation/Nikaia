@@ -1,0 +1,17 @@
+// A text `get` handed back past a jump is a view of its map, and keys a
+// lookup in another map as it is (D30).
+use std::collections
+
+fn look(a: ref collections::BTreeMap[i64, String], b: ref collections::BTreeMap[String, i64]) -> i64 {
+    let key = a.get(1) ?? return 0
+    let v = b.get(key) ?? return 0
+    return v
+}
+
+fn main() throws {
+    let mut a: collections::BTreeMap[i64, String] = collections::BTreeMap()
+    a.insert(1, "x")
+    let mut b: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    b.insert("x", 7)
+    println(f"{look(a, b)}")
+}

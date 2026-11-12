@@ -229,7 +229,7 @@ impl CheckState {
         }
         let copied = (self.a_lent_let(world, &given) || self.a_lent_name(world, &given)) && a_ledger_copies(&unviewed_type(&ty), &vec![world.library]);
         if ty.is_a_view() && !copied || a_string || self.facts.bytes_cuts.contains(&(id_of(&given) as i64)) { return; }
-        if moves(&ty) && !copied && (self.a_lent_name(world, &given) || self.a_lent_let(world, &given)) { return; }
+        if moves(&ty) && !copied && (self.a_lent_name(world, &given) || self.a_lent_let(world, &given) || check_reads_got_past_a_jump(self, world, &given)) { return; }
         let mut a_number = matches!(given, Expr::LitInt { .. } | Expr::LitFloat(_, _));
         match given {
             Expr::Variable(name, _) => {
@@ -362,6 +362,15 @@ pub(crate) fn check_reads_keyed_by_numbers(on: &Ty) -> bool {
             let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set";
             keyed && !args.is_empty() && check_copied(unsafe { nikaia_std::proven::read(&args, (0) as usize) })
         },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_reads_got_past_a_jump(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
+    match given {
+        Expr::Variable(name, _) => { let name = *name; state.got_past_a_jump.contains(world.words.resolve(name)) },
         _ => false,
     }
 }
