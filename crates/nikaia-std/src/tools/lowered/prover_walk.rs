@@ -276,6 +276,7 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
             prover_expr(walk, value, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
             let bound = nikaia_std::block::Text::from(words.resolve(name).to_string());
             scope.rebind(&walk.arena, &bound);
+            scope.maps.remove(&bound);
             let computed = *nikaia_std::index::get(&walk.state.comptime_at, &(span.start as i64));
             if computed.is_some() {
                 scope.ints.insert(nikaia_std::block::Text::from(bound.to_string()));
@@ -490,6 +491,7 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
         let name = *name;
         let n = nikaia_std::block::Text::from(words.resolve(name).to_string());
         scope.rebind(&walk.arena, &n);
+        scope.maps.remove(&n);
         if tainted {
             scope.tainted.insert(nikaia_std::block::Text::from(n.to_string()));
             scope.loose.insert(nikaia_std::block::Text::from(n.to_string()));
@@ -1030,6 +1032,7 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
         let binding = *binding;
         let n = nikaia_std::block::Text::from(words.resolve(binding).to_string());
         inner.rebind(&walk.arena, &n);
+        inner.maps.remove(&n);
         if tainted {
             let source = outside_source(iter, &scope.tainted, &scope.sources, words, library, &walk.state.method_callees, &holes_of);
             if source.is_some() { inner.sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::index::or(source, || "".into())); }
@@ -1324,7 +1327,10 @@ pub(crate) fn prover_match(walk: &mut ProverWalk, value: &Expr, arms: &[MatchArm
         let mut arm_scope = scope.clone();
         let mut bound: collections::BTreeSet<String> = collections::BTreeSet::new();
         prover_pattern_names(&arm.pattern, words, &mut bound);
-        for name in bound.iter() { arm_scope.rebind(&walk.arena, name); }
+        for name in bound.iter() {
+            arm_scope.rebind(&walk.arena, name);
+            arm_scope.maps.remove(name);
+        }
         if fact.is_some() { arm_scope.facts.push(nikaia_std::index::or(fact, || 0)); }
         arm_scope.exact = arm_scope.exact && fact.is_some() && arm.guard.is_none();
         if arm.guard.is_none() { arm_scope.on_the_path(&mut walk.arena, fact); } else { arm_scope.on_the_path(&mut walk.arena, None); }
@@ -1922,6 +1928,7 @@ pub(crate) fn prover_nested(walk: &mut ProverWalk, block: &Block, lambda: Option
         let mut inner = scope.clone();
         for param in nikaia_std::index::or(lambda, || vec![].into()) {
             inner.rebind(&walk.arena, &param);
+            inner.maps.remove(&param);
             inner.loose.insert(nikaia_std::block::Text::from(param.to_string()));
         }
         inner.path = None;

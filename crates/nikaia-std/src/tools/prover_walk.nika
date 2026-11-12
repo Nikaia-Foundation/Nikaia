@@ -397,6 +397,7 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             prover_expr(walk, value, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             let bound = words.resolve(name).clone()
             scope.rebind(walk.arena, bound)
+            scope.maps.remove(bound)
             // **An integer `comptime` is its value** (ADR-359 D7): the one
             // the build computed, which every state that reaches here has.
             let computed = walk.state.comptime_at[span.start as i64]
@@ -667,6 +668,7 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
     for name in names {
         let n = words.resolve(name).clone()
         scope.rebind(walk.arena, n)
+        scope.maps.remove(n)
         if tainted {
             scope.tainted.insert(n.clone())
             scope.loose.insert(n.clone())
@@ -1380,6 +1382,7 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
     for binding in bindings {
         let n = words.resolve(binding).clone()
         inner.rebind(walk.arena, n)
+        inner.maps.remove(n)
         if tainted {
             let source = outside_source(iter, scope.tainted, scope.sources, words, library, walk.state.method_callees, holes_of)
             if source != null {
@@ -1812,6 +1815,7 @@ fn prover_match(mut walk: ProverWalk, value: ref Expr, arms: ref Vec[MatchArm], 
         prover_pattern_names(arm.pattern, words, bound)
         for name in bound {
             arm_scope.rebind(walk.arena, name)
+            arm_scope.maps.remove(name)
         }
         if fact != null {
             arm_scope.facts.push(fact ?? 0)
@@ -2614,6 +2618,7 @@ fn prover_nested(mut walk: ProverWalk, block: ref Block, lambda: Vec[String]?, s
         let mut inner = scope.clone()
         for param in lambda ?? [] {
             inner.rebind(walk.arena, param)
+            inner.maps.remove(param)
             inner.loose.insert(param.clone())
         }
         inner.path = null

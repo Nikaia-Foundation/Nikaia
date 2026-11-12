@@ -47,7 +47,6 @@ impl ProverScope {
         self.ints.remove(name);
         self.ints.remove(&length);
         self.tainted.remove(name);
-        self.maps.remove(name);
         self.entry.remove(name);
         self.entry.remove(&length);
         self.locals.insert(nikaia_std::block::Text::from(name.to_string()));
