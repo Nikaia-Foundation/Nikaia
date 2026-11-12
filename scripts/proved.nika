@@ -112,7 +112,7 @@ fn main() throws {
         if line.starts_with("bounds in ") {
             files += 1
             let (head, counts) = line.split_once(": ") ?? continue
-            let path = head["bounds in ".len()..].to_string()
+            let path = (head.strip_prefix("bounds in ") ?? continue).to_string()
             let (index_part, operation_part) = counts.split_once("; ") ?? continue
             let i = number_before(index_part, "indexes,")
             let ip = number_before(index_part, "proved")

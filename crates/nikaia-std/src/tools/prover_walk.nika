@@ -251,6 +251,9 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                 // `sort` keep it; binding the list again, a method that
                 // grows or shrinks it, or a call that may change it, does not.
                 let kept = !arg.mutable || (!changes_length_in(body, arg_name, walk.state.readers, words) && !rebinds(body, arg_name, words))
+                if a_map_type(ty) {
+                    scope.maps.insert(arg_name.clone())
+                }
                 if kept && has_a_length(ty) {
                     scope.has_length(walk.arena, arg_name, null)
                     params.insert(arg_name.clone())
@@ -665,6 +668,10 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
             }
         }
     }
+    // **A map's index reads a key** (ADR-396 D4), a `let mut`'s too.
+    if names.len() == 1 && prover_let_typed(walk, ty, span, words, 3) {
+        scope.maps.insert(words.resolve(names[0]).clone())
+    }
     // **A mask's or a shift's value is bounded** (#776), a `let mut`'s too.
     if names.len() == 1 && value_lin == null && !tainted {
         let bits = prover_bit_range(walk, value, scope, words)
@@ -724,6 +731,7 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
     } else if prover_let_typed(walk, ty, span, words, 0) || (called && called_whole) {
         scope.ints.insert(name.clone())
         scope.loose.insert(name.clone())
+        prover_chosen_value(walk, name, value, scope, words)
     }
     if called && called_whole {
         for fact in called_facts {
@@ -746,10 +754,86 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
             if prover_list_length(walk, name, value, scope, words) {
                 return
             }
-            if prover_typed(ty, words, 2) {
+            if prover_let_typed(walk, ty, span, words, 2) {
                 scope.has_length(walk.arena, name, null)
+                prover_collected_parts(walk, name, value, scope, words, library, condition)
             }
         },
+    }
+}
+
+/// **A whole number chosen by an `if`** (ADR-396 D4): `let n = if c { x }
+/// else { y }` is `x` where `c` holds and `y` where it does not, so `n`
+/// of `if a.len() < b.len() { a.len() } else { b.len() }` is below both.
+fn prover_chosen_value(mut walk: ProverWalk, name: ref String, value: ref Expr, mut scope: ProverScope, words: ref winnow_grammar::InternerContext) {
+    match value {
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let other = else_branch ?? return
+            if then_branch.stmts.len() != 1 || other.stmts.len() != 1 {
+                return
+            }
+            match then_branch.stmts[0].node {
+                Stmt::Expr(yes) => {
+                    match other.stmts[0].node {
+                        Stmt::Expr(no) => {
+                            let c = claim_term(cond, words, fn(n) { scope.ints.contains(n) }, fn(n) { prover_pinned(walk.state.pinned, scope, n) }, walk.arena.nodes) ?? return
+                            let x = lin_term(yes, words, fn(n) { scope.ints.contains(n) }, fn(n) { prover_pinned(walk.state.pinned, scope, n) }, walk.arena.nodes) ?? return
+                            let y = lin_term(no, words, fn(n) { scope.ints.contains(n) }, fn(n) { prover_pinned(walk.state.pinned, scope, n) }, walk.arena.nodes) ?? return
+                            if walk.arena.mentions(c, name) || walk.arena.mentions(x, name) || walk.arena.mentions(y, name) {
+                                return
+                            }
+                            let named = walk.arena.var(name)
+                            let is_x = walk.arena.equal(named, x)
+                            let is_y = walk.arena.equal(named, y)
+                            let first = walk.arena.and([c, is_x])
+                            let not_c = walk.arena.not(c)
+                            let second = walk.arena.and([not_c, is_y])
+                            let fact = walk.arena.or([first, second])
+                            scope.facts.push(fact)
+                        },
+                        else => {},
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+}
+
+/// **What the ledger ensures of a collected list's length** (ADR-396 D4):
+/// `let parts = s.split("/").collect()` has the parts `str::split` ensures,
+/// `result.len() >= 1`, so `parts[parts.len() - 1]` is in bounds.
+fn prover_collected_parts(mut walk: ProverWalk, name: ref String, value: ref Expr, mut scope: ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
+    match value {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if words.resolve(method) != "collect" || !args.is_empty() {
+                return
+            }
+            match receiver {
+                Expr::MethodCall { receiver: from, .. } => {
+                    let key = walk.state.method_callees.get(id_of(from) as i64) ?? return
+                    let contract = library.functions.get(key) ?? return
+                    let counted = length_of(result_name())
+                    let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+                    names.insert(counted.clone())
+                    let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+                    given.insert(counted.clone(), walk.arena.var(length_of(name)))
+                    for text in contract.ensures {
+                        if !text.contains(counted) {
+                            continue
+                        }
+                        let term = prover_condition_term(walk.arena, text, names, condition)
+                        if term >= 0 {
+                            let fact = walk.arena.substitute(term, given)
+                            scope.facts.push(fact)
+                        }
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {},
     }
 }
 
@@ -2012,6 +2096,15 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
     }
     match expr {
         Expr::Index { base, index, .. } => {
+            // **A map's index reads a key** (ADR-396 D4): it has no bound.
+            match base {
+                Expr::Variable(name, _) => {
+                    if scope.maps.contains(words.resolve(name)) {
+                        return
+                    }
+                },
+                else => {},
+            }
             if from_outside(index, scope.tainted, words, library, walk.state.method_callees, holes_of) {
                 if !walk.state.collecting {
                     prover_outside_index(walk, expr, base, index, span, scope, words, library, holes_of, ask, model, written_of)
@@ -3167,23 +3260,27 @@ fn prover_symbol_text(symbol: ref winnow_grammar::Symbol?, words: ref winnow_gra
 }
 
 /// `prover_typed` of a `let`'s type, where a `let` written without one has
-/// the whole-number type the checker gave it (#1358).
+/// the type the checker gave it: a whole number (#1358), a list, a text or
+/// a map (ADR-396 D4).
 fn prover_let_typed(walk: ref ProverWalk, ty: ref Type?, span: Span, words: ref winnow_grammar::InternerContext, asked: i64) -> bool {
     if ty != null {
         return prover_typed(ty, words, asked)
     }
     let inferred = walk.state.whole_lets.get(span.start as i64) ?? return false
     if asked == 0 {
-        return true
+        return is_whole_number(inferred)
     }
     if asked == 1 {
-        return inferred.starts_with("u")
+        return is_whole_number(inferred) && inferred.starts_with("u")
     }
-    return false
+    if asked == 2 {
+        return has_a_length(inferred)
+    }
+    return a_map_type(inferred)
 }
 
 /// What a `let`'s written type says: `0` a whole number, `1` an unsigned
-/// one, `2` a list or text, which has a length.
+/// one, `2` a list or text, which has a length, `3` a map.
 fn prover_typed(ty: ref Type?, words: ref winnow_grammar::InternerContext, asked: i64) -> bool {
     let t = ty ?? return false
     let name = words.resolve(t.name)
@@ -3193,7 +3290,10 @@ fn prover_typed(ty: ref Type?, words: ref winnow_grammar::InternerContext, asked
     if asked == 1 {
         return name.starts_with("u")
     }
-    return has_a_length(name)
+    if asked == 2 {
+        return has_a_length(name)
+    }
+    return a_map_type(name)
 }
 
 /// A function's name as `nikaia test` makes it from a `test` block:

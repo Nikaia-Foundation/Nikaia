@@ -189,7 +189,8 @@ pub struct CheckFacts {
     pub whole_parts: collections::BTreeMap[i64, collections::BTreeSet[i64]],
     /// **Each `let` of one name without a written type whose value is a whole
     /// number**, by the statement's start, with the type (#1358): the prover
-    /// reads the name as a whole number, as it reads `let n: i64`.
+    /// reads the name as a whole number, as it reads `let n: i64`. A list, a
+    /// text or a map is kept too, by its type's name (ADR-396 D4).
     pub whole_lets: collections::BTreeMap[i64, String],
     /// **Each divisor `NK1118` refused**, by its node (#1566): a zero the
     /// checker folds is its refusal, and the prover asks no `d != 0` of it.

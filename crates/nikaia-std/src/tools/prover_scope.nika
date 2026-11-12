@@ -77,6 +77,9 @@ pub struct ProverScope {
     /// the value they were last given has (`prover_bit_range`), kept so a
     /// loop that gives them only such values keeps them (D-a, #776).
     pub bits: collections::BTreeMap[String, ProverBits],
+    /// **The names bound to a map** (ADR-396 D4): `m[k]` reads a key, not a
+    /// position, so no index bound is asked of it.
+    pub maps: collections::BTreeSet[String],
 }
 
 /// The bounds `lo <= x <= hi` a mask or a shift gives a whole number.
@@ -106,6 +109,7 @@ impl ProverScope {
             around: [],
             history: [],
             bits: collections::BTreeMap(),
+            maps: collections::BTreeSet(),
         }
     }
 
@@ -135,6 +139,7 @@ impl ProverScope {
         self.ints.remove(name)
         self.ints.remove(length)
         self.tainted.remove(name)
+        self.maps.remove(name)
         self.entry.remove(name)
         self.entry.remove(length)
         self.locals.insert(name.clone())
@@ -425,6 +430,7 @@ impl ProverScope {
         scope.tainted = self.tainted.clone()
         scope.sources = self.sources.clone()
         scope.locals = self.locals.clone()
+        scope.maps = self.maps.clone()
         return scope
     }
 }

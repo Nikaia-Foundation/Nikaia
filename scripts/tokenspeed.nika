@@ -361,15 +361,17 @@ fn ts_agents(location: String, root: String) -> Vec[TsAgent] throws {
     let mut found: Vec[TsAgent] = []
     if fs::metadata(location.clone(), fs::Root::Anywhere).is_file() {
         let base = process::run("basename", [location.clone()]).stdout.trim().clone()
-        let stem = if base.ends_with(".jsonl") { f"{base.bytes[0..<base.len() - 6].text()}" } else { f"{base}" }
+        let stem = match base.strip_suffix(".jsonl") {
+            null => base.clone(),
+            cut => cut.to_string(),
+        }
         found.push(ts_agent(location, stem, root))
         return found
     }
     for entry in fs::read_dir(location.clone(), fs::Root::Anywhere) {
         let name = entry.to_text()
-        let jsonl = name.starts_with("agent-") && name.ends_with(".jsonl")
-        if !jsonl && !name.ends_with(".output") { continue }
-        let stem = if jsonl { name.bytes[0..<name.len() - 6].text().clone() } else { name.bytes[0..<name.len() - 7].text().clone() }
+        let agent = if name.starts_with("agent-") { name.strip_suffix(".jsonl") } else { null }
+        let stem = (agent ?? name.strip_suffix(".output") ?? continue).to_string()
         let a = ts_agent(f"{location}/{name}", stem, root.clone())
         if a.end != 0 { found.push(a) }
     }

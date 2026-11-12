@@ -172,6 +172,7 @@ pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner
                     if ty.starts_with('u') { scope.not_negative(&mut walk.arena, &arg_name); }
                 }
                 let kept = !arg.mutable || !changes_length_in(body, &arg_name, &walk.state.readers, words) && !rebinds(body, &arg_name, words);
+                if a_map_type(ty) { scope.maps.insert(nikaia_std::block::Text::from(arg_name.to_string())); }
                 if kept && has_a_length(ty) {
                     scope.has_length(&mut walk.arena, &arg_name, None);
                     params.insert(nikaia_std::block::Text::from(arg_name.to_string()));
@@ -490,6 +491,7 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
             if source != "" { scope.sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::block::Text::from(source.to_string())); }
         }
     }
+    if names.len() == 1 && prover_let_typed(&walk, ty, &span, words, 3) { scope.maps.insert(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string())); }
     if names.len() == 1 && value_lin.is_none() && !tainted {
         let bits = prover_bit_range(walk, value, &scope, words);
         if bits.is_some() {
@@ -528,6 +530,7 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
     } else if prover_let_typed(&walk, ty, &span, words, 0) || called && called_whole {
         scope.ints.insert(nikaia_std::block::Text::from(name.to_string()));
         scope.loose.insert(nikaia_std::block::Text::from(name.to_string()));
+        prover_chosen_value(walk, &name, value, scope, words);
     }
     if called && called_whole {
         for fact in called_facts.iter() {
@@ -545,8 +548,75 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
         Expr::LitStr { .. } => { scope.has_length(&mut walk.arena, &name, None); },
         _ => {
             if prover_list_length(walk, &name, value, scope, words) { return; }
-            if prover_typed(ty, words, 2) { scope.has_length(&mut walk.arena, &name, None); }
+            if prover_let_typed(&walk, ty, &span, words, 2) {
+                scope.has_length(&mut walk.arena, &name, None);
+                prover_collected_parts(walk, &name, value, scope, words, library, &condition);
+            }
         },
+    }
+}
+
+pub(crate) fn prover_chosen_value(walk: &mut ProverWalk, name: &str, value: &Expr, scope: &mut ProverScope, words: &winnow_grammar::InternerContext) {
+    match value {
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let cond = nikaia_std::boxed::open(cond);
+            let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
+            if then_branch.stmts.len() != 1 || other.stmts.len() != 1 { return; }
+            match &unsafe { nikaia_std::proven::read(&then_branch.stmts, (0) as usize) }.node {
+                Stmt::Expr(yes) => {
+                    match &unsafe { nikaia_std::proven::read(&other.stmts, (0) as usize) }.node {
+                        Stmt::Expr(no) => {
+                            let c = match claim_term(cond, words, &|n| { scope.ints.contains(n) }, &|n| { prover_pinned(&walk.state.pinned, &scope, n) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return };
+                            let x = match lin_term(yes, words, &|n| { scope.ints.contains(n) }, &|n| { prover_pinned(&walk.state.pinned, &scope, n) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return };
+                            let y = match lin_term(no, words, &|n| { scope.ints.contains(n) }, &|n| { prover_pinned(&walk.state.pinned, &scope, n) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return };
+                            if walk.arena.mentions(c, name) || walk.arena.mentions(x, name) || walk.arena.mentions(y, name) { return; }
+                            let named = walk.arena.var(name);
+                            let is_x = walk.arena.equal(named, x);
+                            let is_y = walk.arena.equal(named, y);
+                            let first = walk.arena.and(vec![c, is_x]);
+                            let not_c = walk.arena.not(c);
+                            let second = walk.arena.and(vec![not_c, is_y]);
+                            let fact = walk.arena.or(vec![first, second]);
+                            scope.facts.push(fact);
+                        },
+                        _ => { },
+                    }
+                },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn prover_collected_parts(walk: &mut ProverWalk, name: &str, value: &Expr, scope: &mut ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+    match value {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if words.resolve(method) != "collect" || !args.is_empty() { return; }
+            match receiver {
+                Expr::MethodCall { receiver: from, .. } => {
+                    let from = nikaia_std::boxed::open(from);
+                    let key = match walk.state.method_callees.get(&(id_of(from) as i64)) { Some(__nikaia_value) => __nikaia_value, None => return };
+                    let contract = match library.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return };
+                    let counted = length_of(&result_name());
+                    let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+                    names.insert(nikaia_std::block::Text::from(counted.to_string()));
+                    let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+                    given.insert(nikaia_std::block::Text::from(counted.to_string()), walk.arena.var(&length_of(name)));
+                    for text in contract.ensures.iter() {
+                        if !text.contains(&*counted) { continue; }
+                        let term = prover_condition_term(&mut walk.arena, text, &names, condition);
+                        if term >= 0 {
+                            let fact = walk.arena.substitute(term, &given);
+                            scope.facts.push(fact);
+                        }
+                    }
+                },
+                _ => { },
+            }
+        },
+        _ => { },
     }
 }
 
@@ -1476,6 +1546,13 @@ pub(crate) fn prover_unwritten_check(walk: &mut ProverWalk, expr: &Expr, span: S
     match expr {
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            match base {
+                Expr::Variable(name, _) => {
+                    let name = *name;
+                    if scope.maps.contains(words.resolve(name)) { return; }
+                },
+                _ => { },
+            }
             if from_outside(index, &scope.tainted, words, library, &walk.state.method_callees, holes_of) {
                 if !walk.state.collecting { prover_outside_index(walk, expr, base, index, span, scope, words, library, holes_of, ask, model, written_of); }
                 return;
@@ -2312,9 +2389,10 @@ pub(crate) fn prover_symbol_text(symbol: Option<&winnow_grammar::Symbol>, words:
 pub(crate) fn prover_let_typed(walk: &ProverWalk, ty: Option<&Type>, span: &Span, words: &winnow_grammar::InternerContext, asked: i64) -> bool {
     if ty.is_some() { return prover_typed(std::convert::identity(ty), words, asked); }
     let inferred = match walk.state.whole_lets.get(&(span.start as i64)) { Some(__nikaia_value) => __nikaia_value, None => return false };
-    if asked == 0 { return true; }
-    if asked == 1 { return inferred.starts_with('u'); }
-    false
+    if asked == 0 { return is_whole_number(&inferred); }
+    if asked == 1 { return is_whole_number(&inferred) && inferred.starts_with('u'); }
+    if asked == 2 { return has_a_length(&inferred); }
+    a_map_type(&inferred)
 }
 
 pub(crate) fn prover_typed(ty: Option<&Type>, words: &winnow_grammar::InternerContext, asked: i64) -> bool {
@@ -2322,7 +2400,8 @@ pub(crate) fn prover_typed(ty: Option<&Type>, words: &winnow_grammar::InternerCo
     let name = words.resolve(t.name);
     if asked == 0 { return t.generics.is_empty() && is_whole_number(name); }
     if asked == 1 { return name.starts_with('u'); }
-    has_a_length(name)
+    if asked == 2 { return has_a_length(name); }
+    a_map_type(name)
 }
 
 pub(crate) fn prover_a_test_function(name: Option<&str>) -> bool {

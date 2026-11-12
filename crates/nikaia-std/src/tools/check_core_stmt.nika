@@ -834,11 +834,15 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         }
     }
     // **A whole number bound without a type is one to the prover** (#1358):
-    // `let n = text::parse_i64(s) ?? 0` is read as `let n: i64 = …` is.
+    // `let n = text::parse_i64(s) ?? 0` is read as `let n: i64 = …` is. So
+    // is a list, a text or a map (ADR-396 D4): `let parts = s.split("/")
+    // .collect()` has a length, and `m[k]` of a map is no list index.
     if ty == null && names.len() == 1 && shape.len() == 0 {
         match found {
             Ty::Named { name, args, view } => {
                 if args.is_empty() && !view && is_whole_number(name) {
+                    state.facts.whole_lets.insert(span.start as i64, name.clone())
+                } else if has_a_length(name) || a_map_type(name) {
                     state.facts.whole_lets.insert(span.start as i64, name.clone())
                 }
             },

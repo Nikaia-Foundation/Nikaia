@@ -20,6 +20,7 @@ pub struct ProverScope {
     pub around: Vec<LoopRecord>,
     pub history: Vec<i64>,
     pub bits: collections::BTreeMap<String, ProverBits>,
+    pub maps: collections::BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,7 +30,7 @@ pub struct ProverBits {
 }
 
 impl ProverScope {
-    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), sources: collections::BTreeMap::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new() } }
+    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), sources: collections::BTreeMap::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new(), maps: collections::BTreeSet::new() } }
     pub fn at_the_entry() -> ProverScope {
         let mut scope = ProverScope::unknown();
         scope.path = Some(vec![]);
@@ -46,6 +47,7 @@ impl ProverScope {
         self.ints.remove(name);
         self.ints.remove(&length);
         self.tainted.remove(name);
+        self.maps.remove(name);
         self.entry.remove(name);
         self.entry.remove(&length);
         self.locals.insert(nikaia_std::block::Text::from(name.to_string()));
@@ -246,6 +248,7 @@ impl ProverScope {
         scope.tainted = self.tainted.copy_owned();
         scope.sources = self.sources.copy_owned();
         scope.locals = self.locals.copy_owned();
+        scope.maps = self.maps.copy_owned();
         scope
     }
 }

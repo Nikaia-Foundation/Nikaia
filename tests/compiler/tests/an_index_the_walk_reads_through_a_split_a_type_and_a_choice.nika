@@ -1,0 +1,25 @@
+// Outside data reaches each index, and each is proved (ADR-396 D4, #1572):
+// a split's parts are at least one, as the ledger ensures; a list, a text or
+// a map bound without a type is read by the type it has; a map's key is no
+// position; a whole number an `if` chooses is what the branch taken gives.
+use std::io
+use std::collections
+
+fn main() throws {
+    let input = io::read_to_string()
+    let parts: Vec[String] = input.split("/").collect()
+    println(f"[{parts[parts.len() - 1]}]")
+    let words = input.trim().split(" ").collect()
+    for i in 0..<words.len() {
+        println(f"word [{words[i]}]")
+    }
+    let mut counts: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    counts.insert(input.clone(), (counts[input] ?? 0) + 1)
+    println(f"{counts.len()}")
+    let a = input.split(",").collect()
+    let b = input.split(";").collect()
+    let n = if a.len() < b.len() { a.len() } else { b.len() }
+    for i in 0..<n {
+        println(f"[{a[i]}][{b[i]}]")
+    }
+}
