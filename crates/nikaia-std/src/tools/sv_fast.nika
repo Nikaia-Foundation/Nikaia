@@ -413,3 +413,84 @@ fn sv_fast(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvFastRun {
 	let mut wide = SvDistWide { dists: dists, preds: preds }
 	return sv_fast_difference(book, cnf, ids, wide)
 }
+
+// --- Tests: the fast paths as the measuring rod answers them (moved from
+// `tests/compiler/tests/solver_fast.nika`, which compiled the solver anew in a
+// program of its own on every run): a query with no Boolean choice whose
+// atoms each bound one column is decided by `interval`, one whose atoms are
+// differences by `difference`; `interval-round` holds only where each atom is
+// rounded first, `difference-wide` has eleven columns, past the dense width,
+// and `choice` has a disjunction and takes the loop ---
+
+// A file of status `status` over the integer constants `names` asserting
+// `body`.
+fn sv_fast_test_smt(status: String, names: Vec[String], body: String) -> String {
+	let mut text = f"(set-logic QF_LIA)\n(set-info :status {status})\n"
+	for n in names {
+		text = text + f"(declare-const {n} Int)\n"
+	}
+	return text + body + "(check-sat)\n"
+}
+
+// `x1 < x2 < ... < x11` and `x11 < x1 + 10`.
+fn sv_fast_test_wide() -> String {
+	let mut names: Vec[String] = []
+	let mut body: String = ""
+	for i in 1..<12 {
+		names.push(f"x{i}")
+	}
+	for i in 1..<11 {
+		body = body + f"(assert (< x{i} x{i + 1}))\n"
+	}
+	return sv_fast_test_smt("unsat", names, body + "(assert (< x11 (+ x1 10)))\n")
+}
+
+test "interval and difference queries take their fast paths" {
+	let files = [
+		(
+			"interval-unsat",
+			sv_fast_test_smt(
+				"unsat",
+				["x", "y"],
+				"(assert (>= (* 2 x) 5))\n(assert (<= x 2))\n(assert (<= 0 y))\n",
+			),
+		),
+		("interval-sat", sv_fast_test_smt("sat", ["x", "y"], "(assert (<= 1 x 3))\n(assert (= y 4))\n")),
+		(
+			"interval-round",
+			sv_fast_test_smt("unsat", ["x"], "(assert (>= (* 2 x) 3))\n(assert (<= (* 2 x) 3))\n"),
+		),
+		(
+			"difference-unsat",
+			sv_fast_test_smt(
+				"unsat",
+				["x", "y", "z"],
+				"(assert (< x y))\n(assert (< y z))\n(assert (<= z (+ x 1)))\n(assert (<= x 5))\n",
+			),
+		),
+		(
+			"difference-sat",
+			sv_fast_test_smt(
+				"sat",
+				["x", "y", "z"],
+				"(assert (< x y))\n(assert (< y z))\n(assert (<= 0 x))\n(assert (<= z 10))\n",
+			),
+		),
+		("difference-wide", sv_fast_test_wide()),
+		("choice", sv_fast_test_smt("sat", ["x"], "(assert (or (< x 0) (> x 10)))\n")),
+	]
+	let mut out: String = ""
+	for (name, text) in files {
+		out = out + f"{name}.smt2: {sv_line(text, "new")}\n"
+	}
+	let expected = [
+		"interval-unsat.smt2: proved 1/interval",
+		"interval-sat.smt2: refuted 1/interval",
+		"interval-round.smt2: proved 1/interval",
+		"difference-unsat.smt2: proved 4/difference",
+		"difference-sat.smt2: refuted 3/difference",
+		"difference-wide.smt2: proved 12/difference",
+		"choice.smt2: refuted 3",
+	]
+	assert(out == expected.join("\n") + "\n")
+}

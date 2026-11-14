@@ -8,3 +8,7 @@ touch touch_test_reached: #[cfg(test)]
 manifest manifest_test_table: #[cfg(test)]
 manifest manifest_test_value: #[cfg(test)]
 touch family: plain
+sv_rod_line sv_new_line: #[cfg(test)]
+sv_rod_line SvRun: #[cfg(test)]
+sv_walk sv_walk_test_smt: #[cfg(test)]
+sv_check sv_check_test_report: #[cfg(test)]

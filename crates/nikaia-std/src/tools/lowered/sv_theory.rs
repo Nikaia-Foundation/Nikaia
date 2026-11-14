@@ -275,3 +275,135 @@ pub(crate) fn sv_back_substituted(values: &collections::BTreeMap<String, i64>, s
     Some(out)
 }
 
+#[cfg(test)]
+pub(crate) fn sv_theory_test_answer_kind(answer: &LgAnswer) -> String {
+    match answer {
+        LgAnswer::Proved { .. } => String::from("proved"),
+        LgAnswer::Refuted { .. } => String::from("refuted"),
+        LgAnswer::Unknown { why } => sv_unknown(why),
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn sv_theory_test_both(name: &str, source: &str) -> String {
+    let script = match lg_smtlib_read(source) {
+        LgRead::Script(ref s) => s.clone(),
+        LgRead::Failed(_) => { return format!("{}: unreadable\n", name); },
+    };
+    let mut arena = script.arena.clone();
+    let goal = arena.boolean(false);
+    let budget = lg_budget();
+    let old = sv_theory_test_answer_kind(&lg_check(&arena, &script.assertions, goal, &budget));
+    let run = sv_smt_engine(&arena, &script.assertions, goal, &budget, String::from("fm"));
+    let new = match run.driven {
+        SvDriven::Proved(ref query, ref steps) => {
+            let v = sv_check(query, steps);
+            if v.ok { format!("proved, log of {} steps checked", steps.len() as i64) } else { format!("log rejected: {}", v.reason) }
+        },
+        SvDriven::Answer(ref answer) => sv_theory_test_answer_kind(answer),
+        SvDriven::RealModel(_) => String::from("refuted"),
+    };
+    format!("{}: lg_check {}; interface {}\n", name, old, new)
+}
+
+#[cfg(test)]
+pub(crate) fn sv_theory_test_row1(ks: &[i64], c: i64) -> SvRow {
+    let mut terms: Vec<SvTerm> = vec![];
+    let mut i: u32 = 0u32;
+    for k in ks.iter() {
+        let k = nikaia_std::num::value(k);
+        terms.push(SvTerm { col: i, k });
+        i += 1;
+    }
+    nikaia_std::index::or(sv_row_of(terms, c), || sv_row_constant(0).into())
+}
+
+#[cfg(test)]
+pub(crate) fn sv_theory_test_lits_text(ls: &[u32]) -> String {
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for l in ls.iter() {
+        let l = nikaia_std::num::value(l);
+        parts.push(format!("{}", l));
+    }
+    nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus("[", nikaia_std::block::Text::from(parts.join(", ")))), "]"))
+}
+
+#[cfg(test)]
+pub(crate) fn sv_theory_test_said_by(checked: &SvChecked) -> String {
+    match checked {
+        SvChecked::Consistent => String::from("consistent"),
+        SvChecked::Conflict(c) => format!("conflict {}", sv_theory_test_lits_text(&c.lits)),
+        SvChecked::Lemmas(ls) => format!("{} lemmas", ls.len() as i64),
+        SvChecked::Unknown(why) => sv_unknown(why),
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn sv_theory_test_calls() -> String {
+    let mut out: String = String::from("");
+    let atoms = vec![SvAtom { row: sv_theory_test_row1(&vec![1], -2), rel: SvRel::Le }, SvAtom { row: sv_theory_test_row1(&vec![1], -5), rel: SvRel::Le }, SvAtom { row: sv_theory_test_row1(&vec![-1], 3), rel: SvRel::Le }];
+    let query = SvQuery { atoms, clauses: vec![vec![0], vec![4]], columns: 1, reals: vec![] };
+    let mut book = match sv_book(&query) { Some(__nikaia_value) => __nikaia_value, None => return String::from("no book") };
+    let c0 = book.input(0u32);
+    let c1 = book.input(1u32);
+    let budget = lg_budget();
+    let mut theory = sv_theory(vec![String::from("x")]);
+    theory.push_level();
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("assert x <= 2: {}\n", sv_theory_test_said_by(&theory.assert(0u32, &mut book)))));
+    let implied = theory.propagate(&book);
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("propagate: {}\n", sv_theory_test_lits_text(&implied))));
+    let why = match theory.explain(2u32, &mut book) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "no explanation")) };
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("explain x <= 5: {}\n", sv_theory_test_lits_text(&why.lits))));
+    let first = theory.check(true, &budget, &mut book);
+    let x: i64 = nikaia_std::index::or(theory.model().get("x"), || -1);
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("check: {}, model x = {}\n", sv_theory_test_said_by(&first), x)));
+    theory.push_level();
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("assert x >= 3 at level {}: {}\n", ToOwned::to_owned(&(theory.level())), sv_theory_test_said_by(&theory.assert(4u32, &mut book)))));
+    let conflict = theory.check(true, &budget, &mut book);
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("check: {}\n", sv_theory_test_said_by(&conflict))));
+    theory.backtrack(1);
+    let again = theory.check(true, &budget, &mut book);
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("backtrack to 1, check: {}, shared {}\n", sv_theory_test_said_by(&again), sv_theory_test_lits_text(&theory.shared()))));
+    match conflict {
+        SvChecked::Conflict(ref c) => { book.learn(vec![], vec![c0, c1, c.id]); },
+        _ => { },
+    }
+    let v = sv_check(&query, &book.log.steps);
+    let said = if v.ok { String::from("checked") } else { nikaia_std::block::Text::from(v.reason.to_string()) };
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("log of {} steps: {}\n", book.log.steps.len() as i64, said)));
+    out
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    let out = sv_theory_test_calls();
+    let expected = vec!["assert x <= 2: consistent", "propagate: [2, 5]", "explain x <= 5: [1, 2]", "check: consistent, model x = 0", "assert x >= 3 at level 2: consistent", "check: conflict [1, 5]", "backtrack to 1, check: consistent, shared []", "log of 5 steps: checked"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+    let files = nikaia_std::block::List::from_array_in([("refused-function.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["; An uninterpreted function: outside what the reader takes.", "(set-logic QF_UFLIA)", "(set-info :status sat)", "(declare-fun f (Int) Int)", "(assert (= (f 1) 2))", "(check-sat)"].join("\n")), "\n"))), ("sat-interval.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["; A model: 1 <= x <= 3 and x != 2.", "(set-logic QF_LIA)", "(set-info :status sat)", "(declare-const x Int)", "(assert (<= 1 x))", "(assert (<= x 3))", "(assert (distinct x 2))", "(check-sat)"].join("\n")), "\n"))), ("unsat-bounds.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["; The bounds check of ADR-270 D9: 0 <= i < n proves i < n + 1.", "(set-logic QF_LIA)", "(set-info :status unsat)", "(declare-const i Int)", "(declare-const n Int)", "(assert (<= 0 i))", "(assert (< i n))", "(assert (not (< i (+ n 1))))", "(check-sat)"].join("\n")), "\n"))), ("disjunctions-03.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["(set-logic QF_LIA)", "(set-info :status sat)", "(declare-const x1 Int)", "(declare-const x2 Int)", "(declare-const x3 Int)", "(declare-const i Int)", "(declare-const k Int)", "(assert (or (= x1 0) (= x1 1)))", "(assert (or (= x2 0) (= x2 1)))", "(assert (or (= x3 0) (= x3 1)))", "(assert (<= 0 i))", "(assert (< i k))", "(check-sat)", "(exit)"].join("\n")), "\n"))), ("disjunctions-04.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["(set-logic QF_LIA)", "(set-info :status unsat)", "(declare-const x1 Int)", "(declare-const x2 Int)", "(declare-const x3 Int)", "(declare-const x4 Int)", "(declare-const i Int)", "(declare-const k Int)", "(assert (or (= x1 0) (= x1 1)))", "(assert (or (= x2 0) (= x2 1)))", "(assert (or (= x3 0) (= x3 1)))", "(assert (or (= x4 0) (= x4 1)))", "(assert (<= 0 i))", "(assert (< i k))", "(assert (not (< i (+ k 1))))", "(check-sat)", "(exit)"].join("\n")), "\n")))], nikaia_std::block::Place::Block);
+    let mut out: String = String::from("");
+    for (name, source) in files.iter() {
+        let name = *name;
+        out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_theory_test_both(name, source)));
+    }
+    let expected = vec!["refused-function.smt2: unreadable", "sat-interval.smt2: lg_check refuted; interface refuted", "unsat-bounds.smt2: lg_check proved; interface proved, log of 5 steps checked", "disjunctions-03.smt2: lg_check refuted; interface refuted", "disjunctions-04.smt2: lg_check proved; interface proved, log of 33 steps checked"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn the_interface_s_calls_one_by_one_leave_a_log_sv_check_replays() {
+        super::__nikaia_test_0().unwrap()
+    }
+    #[test]
+    fn smoke_and_disjunction_files_are_answered_alike_by_lg_check_and_over_the_interface() {
+        super::__nikaia_test_1().unwrap()
+    }
+}

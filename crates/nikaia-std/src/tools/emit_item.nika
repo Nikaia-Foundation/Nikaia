@@ -194,11 +194,16 @@ impl EmitState {
     /// An item of the unit (`emit/mod.rs` refuses the ones this does not write).
     pub fn emit_item[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, written: ref Spanned[Item]) sync throws {
         let at = written.span.start
+        // **A type only tests reach is built with them** (#1160,
+        // `modules_only_tests_package`): its derives and impls too.
+        let only_in_tests = emit_fn_only_in_tests(world.words, written.attributes)
+        let test_gate = if only_in_tests { "#[cfg(test)]\n" } else { "" }
         match written.node {
             Item::Grammar(def) => {
                 self.emit_grammar(world, walk, out, host, def)
             },
             Item::Enum { name, variants, is_public, is_extern } => {
+                out.push(test_gate)
                 out.push(self.derives(world, name))
                 // **A tagged union in C's layout** (ADR-284 D32).
                 if is_extern {
@@ -268,6 +273,7 @@ impl EmitState {
                             },
                         }
                     }
+                    out.push(test_gate)
                     out.push(f"#[automatically_derived]\nimpl{params} nikaia_std::block::DeepSize for {escaped_name(enum_name)}{params} {{\n    fn heap(&self) -> usize {{\n        match self {{ {arms.join(", ")} }}\n    }}\n}}\n")
                 }
             },
@@ -286,6 +292,7 @@ impl EmitState {
                 if by_hand {
                     derives = derives.replace(", PartialEq", "").replace(", Eq", "")
                 }
+                out.push(test_gate)
                 out.push(derives)
                 // **C's layout** (ADR-284 D14), and every field `pub` (D15).
                 if is_extern {
@@ -392,6 +399,7 @@ impl EmitState {
                     for f in fields {
                         walked = f"{walked} + nikaia_std::__nikaia_deep_size!(self.{escaped_name(emit_text(world, f.name))})"
                     }
+                    out.push(test_gate)
                     out.push(f"#[automatically_derived]\nimpl{emit_angled(declared)} nikaia_std::block::DeepSize for {escaped_name(text)}{emit_angled(applied)} {{\n    fn heap(&self) -> usize {{\n        {walked}\n    }}\n}}\n")
                 }
             },

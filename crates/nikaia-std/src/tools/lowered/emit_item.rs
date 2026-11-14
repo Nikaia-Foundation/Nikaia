@@ -135,10 +135,13 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub fn emit_item<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>) -> Result<(), Box<dyn std::error::Error>> {
         let at = written.span.start;
+        let only_in_tests = emit_fn_only_in_tests(world.words, &written.attributes);
+        let test_gate = if only_in_tests { "#[cfg(test)]\n" } else { "" };
         match &written.node {
             Item::Grammar(def) => { self.emit_grammar(world, walk, out, host, def)?; },
             Item::Enum { name, variants, is_public, is_extern } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
+                out.push(test_gate);
                 out.push(&self.derives(world, name));
                 if is_extern { out.push("#[repr(C)]\n"); }
                 let vis = if is_public { "pub " } else { "" };
@@ -201,6 +204,7 @@ impl EmitState {
                             },
                         }
                     }
+                    out.push(test_gate);
                     out.push(&format!("#[automatically_derived]\nimpl{} nikaia_std::block::DeepSize for {}{} {{\n    fn heap(&self) -> usize {{\n        match self {{ {} }}\n    }}\n}}\n", params, escaped_name(&enum_name), params, nikaia_std::block::Text::from(arms.join(", "))));
                 }
             },
@@ -212,6 +216,7 @@ impl EmitState {
                 let mut derives = self.derives(world, name);
                 let by_hand = seeded && generics.is_empty() && !self.borrowing.contains(&text) && derives.contains("PartialEq");
                 if by_hand { derives = nikaia_std::block::Text::from(nikaia_std::block::Text::from(derives.replace(", PartialEq", "")).replace(", Eq", "")); }
+                out.push(test_gate);
                 out.push(&derives);
                 if is_extern { out.push("#[repr(C)]\n"); }
                 let vis = if is_public { "pub " } else { "" };
@@ -287,6 +292,7 @@ impl EmitState {
                     for s in emit_seeds_applied(0, hidden) { applied.push(s); }
                     let mut walked: String = String::from("0"); #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared; #[allow(unused_mut, clippy::redundant_locals)] let mut applied = applied;
                     for f in fields.iter() { walked = format!("{} + nikaia_std::__nikaia_deep_size!(self.{})", walked, escaped_name(&emit_text(world, f.name))); }
+                    out.push(test_gate);
                     out.push(&format!("#[automatically_derived]\nimpl{} nikaia_std::block::DeepSize for {}{} {{\n    fn heap(&self) -> usize {{\n        {}\n    }}\n}}\n", emit_angled(&declared), escaped_name(&text), emit_angled(&applied), walked));
                 }
             },

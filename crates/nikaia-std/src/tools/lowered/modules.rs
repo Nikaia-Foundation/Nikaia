@@ -359,71 +359,101 @@ pub fn modules_test_wrappers(titles: &[String], first: i64) -> String {
 
 pub fn modules_test_only_mark() -> String { String::from("cfg(test)") }
 
-pub fn modules_only_tests_reach(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext, texts: &[String], own: i64) -> collections::BTreeSet<String> {
-    let mut found: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut candidates: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    let mut tests: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut at: i64 = 0;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModulesReach {
+    pub(crate) names: Vec<String>,
+    pub(crate) tests: Vec<bool>,
+    pub(crate) calls: Vec<collections::BTreeSet<String>>,
+}
+
+pub fn modules_reach_of(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext, source: &str) -> ModulesReach {
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    let mut tests: Vec<bool> = vec![];
+    let mut calls: Vec<collections::BTreeSet<String>> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     for item in items.iter() {
+        let mut called: String = String::from("");
+        let mut is_test = false;
         match &item.node {
             Item::Fn { name, receiver, is_public, is_extern, .. } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
-                let held = match name { Some(__nikaia_value) => __nikaia_value, None => {
-                    at += 1;
-                    continue;
-                } };
-                if receiver.is_none() && !is_public && !is_extern { candidates.insert(nikaia_std::block::Text::from(words.resolve(held).to_string()), at); }
+                if receiver.is_none() && !is_public && !is_extern {
+                    match name {
+                        Some(held) => { called = nikaia_std::block::Text::from(words.resolve(held).to_string()); },
+                        None => { },
+                    }
+                }
             },
-            Item::Test { .. } => { tests.push(at); },
+            Item::Struct { name, is_public, is_extern, .. } => {
+                let is_extern = *is_extern; let is_public = *is_public; let name = *name;
+                if !is_public && !is_extern { called = nikaia_std::block::Text::from(words.resolve(name).to_string()); }
+            },
+            Item::Enum { name, is_public, is_extern, .. } => {
+                let is_extern = *is_extern; let is_public = *is_public; let name = *name;
+                if !is_public && !is_extern { called = nikaia_std::block::Text::from(words.resolve(name).to_string()); }
+            },
+            Item::Test { .. } => { is_test = true; },
             _ => { },
         }
-        at += 1;
+        names.push(called);
+        tests.push(is_test);
+        calls.push(collections::BTreeSet::new());
     }
-    if tests.is_empty() || candidates.is_empty() { return found; }
-    let source = nikaia_std::block::Text::from((*nikaia_std::index::get(&texts, nikaia_std::index::at(own))).to_string());
-    let mentions = modules_mentions_by_item(items, &source, &candidates);
-    let mut reached: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for t in tests.iter() {
-        let t = nikaia_std::num::value(t);
-        for name in (*nikaia_std::index::get(&mentions, nikaia_std::index::at(t))).iter() { reached.insert(nikaia_std::block::Text::from(name.to_string())); }
-    }
-    modules_close_over(&mut reached, &candidates, &mentions);
-    let mut live: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut k: i64 = 0;
-    for each in mentions.iter() {
-        let is_test = tests.contains(nikaia_std::index::AsKey::as_key(&k));
-        let mut is_candidate = false;
-        for (_, place) in candidates.iter() {
-            let place = nikaia_std::num::value(place);
-            if place == k { is_candidate = true; }
-        }
-        if !is_test && !is_candidate { for name in each.iter() { live.insert(nikaia_std::block::Text::from(name.to_string())); } }
-        k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
+    for (word, start) in modules_call_starts(source) {
+        while ((k) as usize) < items.len() && start >= unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span.end as i64 { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
+        if ((k) as usize) >= items.len() { break; }
+        if start >= unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span.start as i64 { (*unsafe { nikaia_std::proven::slot(&mut calls, (k) as usize) }).insert(nikaia_std::block::Text::from(word.to_string())); }
     }
-    loop {
-        modules_close_over(&mut live, &candidates, &mentions);
-        let mut named_beside: Vec<String> = vec![];
-        for name in reached.iter() {
-            if live.contains(name) { continue; }
-            let mut j: i64 = 0;
-            for text in texts.iter() {
-                if j != own && modules_calls_in(text, name) {
-                    named_beside.push(nikaia_std::block::Text::from(name.to_string()));
-                    break;
-                }
-                j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
-            }
-        }
-        if named_beside.is_empty() { break; }
-        for name in named_beside.into_iter() { live.insert(name); }
+    k = 0;
+    for (word, start) in modules_type_words(source) {
+        while ((k) as usize) < items.len() && start >= unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span.end as i64 { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
+        if ((k) as usize) >= items.len() { break; }
+        if start >= unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span.start as i64 { (*unsafe { nikaia_std::proven::slot(&mut calls, (k) as usize) }).insert(nikaia_std::block::Text::from(word.to_string())); }
     }
-    for name in reached.iter() { if candidates.contains_key(name) && !live.contains(name) { found.insert(nikaia_std::block::Text::from(name.to_string())); } }
-    found
+    ModulesReach { names, tests, calls }
 }
 
-pub(crate) fn modules_calls_in(text: &str, name: &str) -> bool {
-    for (word, _) in modules_call_starts(text) { if word == name { return true; } }
-    false
+pub fn modules_only_tests_package(parts: &[ModulesReach]) -> Vec<collections::BTreeSet<String>> {
+    let mut bodies: Vec<collections::BTreeSet<String>> = vec![];
+    let mut candidates: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    let mut home: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    let mut twice: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut reached: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut file: i64 = 0;
+    for part in parts.iter() {
+        let mut k: i64 = 0;
+        for name in part.names.iter() {
+            if *nikaia_std::index::get(&part.tests, (k) as usize) { for word in (*nikaia_std::index::get(&part.calls, (k) as usize)).iter() { reached.insert(nikaia_std::block::Text::from(word.to_string())); } }
+            if !name.is_empty() {
+                if candidates.contains_key(name) { twice.insert(nikaia_std::block::Text::from(name.to_string())); }
+                candidates.insert(nikaia_std::block::Text::from(name.to_string()), bodies.len() as i64);
+                home.insert(nikaia_std::block::Text::from(name.to_string()), file);
+            }
+            bodies.push((*nikaia_std::index::get(&part.calls, (k) as usize)).copy_owned());
+            k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
+        }
+        file = unsafe { nikaia_std::proven::add::<i64>(file, 1) };
+    }
+    for name in twice.iter() { candidates.remove(name); }
+    let mut live: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for part in parts.iter() {
+        let mut k: i64 = 0;
+        for name in part.names.iter() {
+            if !*nikaia_std::index::get(&part.tests, (k) as usize) && !candidates.contains_key(name) { for word in (*nikaia_std::index::get(&part.calls, (k) as usize)).iter() { live.insert(nikaia_std::block::Text::from(word.to_string())); } }
+            k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
+        }
+    }
+    modules_close_over(&mut reached, &candidates, &bodies);
+    modules_close_over(&mut live, &candidates, &bodies);
+    let mut found: Vec<collections::BTreeSet<String>> = vec![];
+    for _ in parts.iter() { found.push(collections::BTreeSet::new()); }
+    for name in reached.iter() {
+        if candidates.contains_key(name) && !live.contains(name) {
+            let at = match home.get(name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
+            (*unsafe { nikaia_std::proven::slot(&mut found, (at) as usize) }).insert(nikaia_std::block::Text::from(name.to_string()));
+        }
+    }
+    found
 }
 
 pub(crate) fn modules_call_starts(text: &str) -> Vec<(String, i64)> {
@@ -466,6 +496,31 @@ pub(crate) fn modules_call_starts(text: &str) -> Vec<(String, i64)> {
     out
 }
 
+pub(crate) fn modules_type_words(text: &str) -> Vec<(String, i64)> {
+    let mut out: Vec<(String, i64)> = vec![];
+    let mut word: String = String::from("");
+    let mut start = 0;
+    let mut before: i64 = 32;
+    let mut at = 0;
+    for b in text.bytes() {
+        let c = b as i64;
+        let in_word = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95;
+        if in_word {
+            if word.is_empty() { start = at; }
+            word.push_str(&format!("{}", (u8::try_from(c).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char));
+        } else {
+            if !word.is_empty() {
+                let first = nikaia_std::index::or(word.bytes().next(), || 0);
+                if before != 46 && first >= 65 && first <= 90 { out.push((nikaia_std::block::Text::from(word.to_string()), start)); }
+                word = String::from("");
+            }
+            before = c;
+        }
+        at += 1;
+    }
+    out
+}
+
 pub(crate) fn modules_close_over(names: &mut collections::BTreeSet<String>, candidates: &collections::BTreeMap<String, i64>, mentions: &[collections::BTreeSet<String>]) {
     loop {
         let mut added: Vec<String> = vec![];
@@ -475,25 +530,6 @@ pub(crate) fn modules_close_over(names: &mut collections::BTreeSet<String>, cand
         }
         if added.is_empty() { return; }
         for name in added.into_iter() { names.insert(name); }
-    }
-}
-
-pub(crate) fn modules_mentions_by_item(items: &[Spanned<Item>], source: &str, candidates: &collections::BTreeMap<String, i64>) -> Vec<collections::BTreeSet<String>> {
-    let mut out: Vec<collections::BTreeSet<String>> = vec![];
-    for _ in items.iter() { out.push(collections::BTreeSet::new()); }
-    for (word, start) in modules_call_starts(source) { modules_note_word(items, candidates, &word, start, &mut out); }
-    out
-}
-
-pub(crate) fn modules_note_word(items: &[Spanned<Item>], candidates: &collections::BTreeMap<String, i64>, word: &str, start: i64, out: &mut Vec<collections::BTreeSet<String>>) {
-    if !candidates.contains_key(word) { return; }
-    let mut k: i64 = 0;
-    for item in items.iter() {
-        if start >= item.span.start as i64 && start < item.span.end as i64 {
-            out[nikaia_std::index::at(k)].insert(nikaia_std::block::Text::from(word.to_string()));
-            return;
-        }
-        k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
     }
 }
 
@@ -513,6 +549,8 @@ pub fn modules_mark_test_only(items: &mut Vec<Spanned<Item>>, only_tests: &colle
                     None => { },
                 }
             },
+            Item::Struct { name, .. } => { marked = only_tests.contains(words.resolve(name)); },
+            Item::Enum { name, .. } => { marked = only_tests.contains(words.resolve(name)); },
             _ => { },
         }
         if marked {
@@ -915,3 +953,94 @@ pub fn modules_emit_reading<H: ModulesEmitHost>(host: &H, packages: &[Option<Str
     Ok(rust)
 }
 
+#[cfg(test)]
+pub(crate) fn modules_reach_test_file(items: &[(&'static str, bool, Vec<&'static str>)]) -> ModulesReach {
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    let mut tests: Vec<bool> = vec![];
+    let mut calls: Vec<collections::BTreeSet<String>> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+    for (name, is_test, called) in items.iter() {
+        let is_test = nikaia_std::num::value(is_test);let name = *name;
+        names.push(nikaia_std::block::Text::from(name.to_string()));
+        tests.push(is_test);
+        let mut set: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for word in called.iter() {
+            let word = *word;
+            set.insert(nikaia_std::block::Text::from(word.to_string()));
+        }
+        calls.push(set);
+    }
+    ModulesReach { names, tests, calls }
+}
+
+#[cfg(test)]
+pub(crate) fn modules_reach_test_shown(found: &[collections::BTreeSet<String>]) -> String {
+    let mut out: String = String::from("");
+    for set in found.iter() {
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for name in set.iter() { names.push(nikaia_std::block::Text::from(name.to_string())); }
+        let line = nikaia_std::block::Text::from(names.join(" "));
+        out.push_str(&format!("[{}]\n", line));
+    }
+    out
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    let a = modules_reach_test_file(&vec![("a_help", false, vec!["a_deeper"]), ("a_deeper", false, vec![]), ("", false, vec!["a_used"]), ("a_used", false, vec![])]);
+    let b = modules_reach_test_file(&vec![("", true, vec!["a_help", "b_help"]), ("b_help", false, vec!["a_used"])]);
+    let found = modules_only_tests_package(&vec![a, b]);
+    let out = modules_reach_test_shown(&found);
+    if !(out == "[a_deeper a_help]\n[b_help]\n") { nikaia_std::abort::assertion_failed("assert(out == \"[a_deeper a_help]\\n[b_help]\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+    let a = modules_reach_test_file(&vec![("a_help", false, vec![]), ("", true, vec!["a_help"])]);
+    let b = modules_reach_test_file(&vec![("", false, vec!["a_help"])]);
+    let found = modules_only_tests_package(&vec![a, b]);
+    let out = modules_reach_test_shown(&found);
+    if !(out == "[]\n[]\n") { nikaia_std::abort::assertion_failed("assert(out == \"[]\\n[]\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
+    let a = modules_reach_test_file(&vec![("twin", false, vec![]), ("", true, vec!["twin"])]);
+    let b = modules_reach_test_file(&vec![("twin", false, vec![])]);
+    let found = modules_only_tests_package(&vec![a, b]);
+    let out = modules_reach_test_shown(&found);
+    if !(out == "[]\n[]\n") { nikaia_std::abort::assertion_failed("assert(out == \"[]\\n[]\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
+    let a = modules_reach_test_file(&vec![("ARun", false, vec![]), ("a_check", false, vec!["ARun"]), ("AKept", false, vec![]), ("", false, vec!["AKept"])]);
+    let b = modules_reach_test_file(&vec![("", true, vec!["a_check", "AKept"])]);
+    let found = modules_only_tests_package(&vec![a, b]);
+    let out = modules_reach_test_shown(&found);
+    if !(out == "[ARun a_check]\n[]\n") { nikaia_std::abort::assertion_failed("assert(out == \"[ARun a_check]\\n[]\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn a_helper_only_another_file_s_test_calls_is_test_only_1160() {
+        super::__nikaia_test_0().unwrap()
+    }
+    #[test]
+    fn a_helper_another_file_s_code_calls_stays_plain_1160() {
+        super::__nikaia_test_1().unwrap()
+    }
+    #[test]
+    fn a_name_two_files_declare_is_never_test_only_1160() {
+        super::__nikaia_test_2().unwrap()
+    }
+    #[test]
+    fn a_type_only_test_only_helpers_name_is_test_only_one_an_impl_names_is_not_1160() {
+        super::__nikaia_test_3().unwrap()
+    }
+}

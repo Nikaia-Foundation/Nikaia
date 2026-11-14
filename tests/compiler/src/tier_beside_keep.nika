@@ -1,0 +1,18 @@
+/// Keeps what `src/tier_beside.nika` hands it, beside text of its own
+/// (ADR-282 D29).
+struct TierBesideParams { theory: String }
+
+fn tier_beside_set(theory: String) -> String {
+	let mut p = TierBesideParams { theory: "both" }
+	if theory != "both" {
+		p.theory = theory
+	}
+	return p.theory.clone()
+}
+
+/// Text of its own into the same field.
+pub fn tier_beside_named(value: String) -> String {
+	let mut p = TierBesideParams { theory: "both" }
+	p.theory = value.clone()
+	return p.theory.clone()
+}

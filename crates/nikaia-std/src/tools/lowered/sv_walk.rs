@@ -293,3 +293,73 @@ pub fn sv_walk_units(moves: i64, params: &SvWalkParams) -> i64 {
     (unsafe { nikaia_std::proven::sub::<i64>(moves, 1) }) / params.moves_per_unit + 1
 }
 
+#[cfg(test)]
+pub(crate) fn sv_walk_test_problem003() -> String { nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec![String::from("(set-logic QF_LIA)"), String::from("(set-info :source |"), String::from("Alberto Griggio"), String::from(""), String::from("|)"), String::from("(set-info :smt-lib-version 2.6)"), String::from("(set-info :category \"random\")"), String::from("(set-info :status sat)"), String::from("(declare-fun x0 () Int)"), String::from("(declare-fun x1 () Int)"), String::from("(declare-fun x2 () Int)"), String::from("(declare-fun x3 () Int)"), String::from("(declare-fun x4 () Int)"), String::from("(declare-fun x5 () Int)"), String::from("(declare-fun x6 () Int)"), String::from("(declare-fun x7 () Int)"), String::from("(declare-fun x8 () Int)"), String::from("(declare-fun x9 () Int)"), nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus("(assert (let ((?v_3 (* 36 x4)) (?v_0 (* 37 x7)) (?v_21 (* 3 x1)) (?v_7 (* 1 x1)) (?v_2 (* ", "23 x0)) (?v_4 (* 37 x1)) (?v_23 (* 15 x8)) (?v_11 (* 24 x1)) (?v_14 (* 30 x5)) (?v_17 (* ")), "31 x6)) (?v_19 (* 28 x5)) (?v_5 (* 26 x5)) (?v_12 (* 13 x5)) (?v_20 (* 5 x6)) (?v_1 (* (- ")), "38) x0)) (?v_18 (* (- 33) x4)) (?v_22 (* (- 38) x1)) (?v_16 (* (- 24) x6)) (?v_6 (* (- 13) ")), "x1)) (?v_9 (* (- 8) x4)) (?v_13 (* (- 11) x9)) (?v_10 (* (- 6) x0)) (?v_15 (* (- 37) x7)) ")), "(?v_8 (* (- 3) x4))) (and (<= (+ (* 25 x2) (* 12 x8) (* 12 x7) ?v_3 (* (- 5) x6) (* (- 25) ")), "x7) (* 22 x5) (* 7 x6) (* (- 19) x5) (* 22 x8)) (- 4)) (<= (+ (* 16 x1) (* 27 x2) (* 36 ")), "x6) (* 0 x8) (* 18 x4) (* (- 6) x1) (* 3 x9) (* (- 31) x9) (* 8 x0) ?v_0) (- 39)) (<= (+ ")), "(* 22 x1) (* 14 x3) (* (- 1) x2) (* (- 29) x9) (* 25 x8) (* 27 x4) (* (- 8) x3) (* (- 17) ")), "x4) ?v_1 (* 7 x7)) (- 25)) (<= (+ (* 16 x2) (* 2 x5) (* (- 34) x8) (* 3 x7) ?v_21 (* (- ")), "17) x9) (* (- 32) x4) (* (- 7) x9) (* (- 9) x2) (* 16 x8)) (- 39)) (<= (+ ?v_7 (* (- 8) ")), "x5) (* 6 x4) ?v_18 (* (- 37) x0) (* 16 x6) (* (- 12) x0) (* 22 x3) (* (- 36) x3) (* 36 ")), "x0)) 6) (<= (+ (* 9 x3) (* (- 36) x4) (* (- 32) x8) (* (- 16) x1) ?v_0 ?v_2 (* (- 6) x5) ")), "(* (- 31) x6) (* (- 5) x8) (* (- 15) x3)) (- 15)) (<= (+ (* 1 x8) (* (- 7) x6) ?v_4 (* 20 ")), "x2) ?v_1 (* 0 x0) (* (- 37) x8) (* 13 x3) (* (- 23) x7) (* 37 x9)) (- 14)) (<= (+ (* 34 ")), "x5) (* 10 x6) (* (- 3) x5) (* (- 38) x9) ?v_22 (* 19 x6) (* (- 39) x7) ?v_16 (* 12 x1) (* ")), "(- 3) x7)) 35) (<= (+ (* 20 x4) (* (- 39) x9) (* 24 x3) ?v_23 (* (- 18) x3) ?v_11 (* (- ")), "23) x4) ?v_14 (* 11 x2) (* (- 1) x5)) (- 13)) (<= (+ (* 30 x9) ?v_17 (* 14 x2) ?v_6 (* (- ")), "16) x8) (* 29 x1) (* (- 3) x6) ?v_9 (* (- 10) x8) ?v_19) (- 39)) (<= (+ (* 8 x4) (* 37 x2) ")), "?v_13 (* 23 x2) ?v_2 (* (- 4) x1) (* 10 x5) (* (- 36) x0) (* (- 15) x0) (* (- 22) x3)) (- ")), "24)) (<= (+ (* 38 x2) (* 23 x3) (* 12 x2) ?v_10 ?v_3 (* 29 x6) (* 4 x0) ?v_5 ?v_15 (* (- ")), "10) x9)) 16) (<= (+ (* 31 x4) (* (- 26) x0) (* (- 19) x9) (* (- 21) x4) ?v_4 ?v_8 ?v_5 ")), "?v_12 (* (- 20) x4) (* (- 31) x2)) (- 12)) (<= (+ (* 38 x9) (* (- 28) x1) (* 29 x0) (* 5 ")), "x1) (* (- 38) x8) ?v_6 (* (- 8) x2) ?v_20 (* 22 x7) (* (- 24) x9)) 10) (<= (+ ?v_7 ?v_8 (* ")), "35 x5) (* 16 x3) (* 6 x7) ?v_9 (* (- 2) x3) (* (- 38) x5) ?v_10 (* (- 7) x4)) (- 29)) (<= ")), "(+ (* 11 x3) (* 5 x4) (* (- 2) x4) (* 37 x6) ?v_11 (* 0 x9) (* 25 x1) (* (- 3) x9) (* (- ")), "33) x9) (* 19 x9)) (- 37)) (<= (+ ?v_12 (* 7 x4) ?v_13 ?v_14 (* (- 31) x0) (* (- 12) x6) ")), "(* (- 35) x0) (* 36 x2) (* (- 25) x3) ?v_15) (- 33)) (<= (+ (* 10 x4) ?v_16 (* 26 x6) ")), "?v_17 ?v_18 (* (- 32) x5) (* 32 x2) (* 34 x8) (* 19 x1) ?v_1) (- 9)) (<= (+ ?v_12 (* (- 9) ")), "x3) (* (- 37) x3) (* 34 x4) (* 0 x1) ?v_19 (* 30 x6) (* (- 18) x4) (* 21 x5) (* (- 21) ")), "x9)) (- 9)) (<= (+ ?v_20 (* (- 30) x6) ?v_21 (* 9 x8) ?v_13 (* (- 28) x5) (* (- 14) x3) ")), "?v_22 (* 5 x8) ?v_23) 35))))")), String::from("(check-sat)"), String::from("(exit)")].join("\n")), "\n")) }
+
+#[cfg(test)]
+pub(crate) fn sv_walk_test_smt(status: &str, sort: &str, names: &[&'static str], body: &str) -> String {
+    let logic = if sort == "Real" { "QF_LRA" } else { "QF_LIA" };
+    let mut text = format!("(set-logic {})\n(set-info :status {})\n", logic, status);
+    for n in names.iter() {
+        let n = *n;
+        text = nikaia_std::block::Text::from(nikaia_std::concat::plus(text, format!("(declare-const {} {})\n", n, sort)));
+    }
+    nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(text, body)), "(check-sat)\n"))
+}
+
+#[cfg(test)]
+pub(crate) fn sv_walk_test_each(name: &str, source: &str) -> String {
+    let mut reals: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let script = match sv_smtlib_script(&nikaia_std::block::Text::from(source.to_string())) {
+        SvSmtRead::Script(ref s, ref sorts) => {
+            reals = sorts.reals.copy_owned();
+            s.clone()
+        },
+        _ => { return format!("{}: unreadable\n", name); },
+    };
+    let mut arena = script.arena.clone();
+    let goal = arena.boolean(false);
+    let mut why = lg_why();
+    let line = sv_line(source, "new");
+    let read = sv_cnf_sorted(&arena, &script.assertions, goal, &reals, &mut why);
+    if read.is_none() { return format!("{}: no query; {}\n", name, line); }
+    let cnf = match read { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+    let none: Vec<Vec<u32>> = vec![];
+    let params = sv_walk_params();
+    let first = sv_walk(&cnf.query, &none, &params, 5000);
+    let again = sv_walk(&cnf.query, &none, &params, 5000);
+    let same = first.moves == again.moves && first.values == again.values;
+    let mut values: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    let mut col: i64 = 0;
+    while ((col) as usize) < first.values.len() && ((col) as usize) < cnf.names.len() {
+        values.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&cnf.names, (col) as usize) }).to_string()), *unsafe { nikaia_std::proven::read(&first.values, (col) as usize) });
+        col = unsafe { nikaia_std::proven::add::<i64>(col, 1) };
+    }
+    let verdict = match lg_consistent_answer(&arena, &script.assertions, goal, true, &values) {
+        LgAnswer::Refuted { .. } => "a model",
+        _ => "no model",
+    };
+    format!("{}: walk found {} in {} moves, same again {}, {}; {}\n", name, first.found, first.moves, same, verdict, line)
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    let files = nikaia_std::block::List::from_array_in([("problem__003", sv_walk_test_problem003()), ("equation", sv_walk_test_smt("sat", "Int", &vec!["x", "y"], "(assert (= (+ (* 3 x) (* 5 y)) 7))\n(assert (distinct x y))\n(assert (or (> x 4) (< y (- 3))))\n")), ("unsat", sv_walk_test_smt("unsat", "Int", &vec!["x"], "(assert (>= x 1))\n(assert (<= x 0))\n")), ("real", sv_walk_test_smt("sat", "Real", &vec!["x"], "(assert (< 0 x 1))\n"))], nikaia_std::block::Place::Block);
+    let mut out: String = String::from("");
+    for (name, text) in files.iter() {
+        let name = *name;
+        out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_walk_test_each(&format!("{}.smt2", name), text)));
+    }
+    let expected = vec!["problem__003.smt2: walk found true in 167 moves, same again true, a model; refuted 2/walk", "equation.smt2: walk found true in 11 moves, same again true, a model; refuted 7", "unsat.smt2: walk found false in 5000 moves, same again true, no model; proved 1/interval", "real.smt2: walk found false in 0 moves, same again true, no model; refuted 2"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn the_walk_finds_a_random_system_s_model_and_nothing_where_there_is_none() {
+        super::__nikaia_test_0().unwrap()
+    }
+}

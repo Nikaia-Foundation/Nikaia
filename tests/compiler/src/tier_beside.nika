@@ -1,0 +1,19 @@
+/// A result only literals flow into, handed through a parameter to a
+/// function of another file that keeps it (`src/tier_beside_keep.nika`):
+/// the result stays text of its own, as it does within one file, and is not
+/// made a view of static text the next file refuses (ADR-282 D29).
+fn tier_beside_lit(engine: String) -> String {
+	if engine == "new-fm" {
+		return "fm"
+	}
+	return "both"
+}
+
+fn tier_beside_mid(theory: String) -> String {
+	return tier_beside_set(theory)
+}
+
+/// The theory of `engine`, through `tier_beside_lit` and `tier_beside_mid`.
+pub fn tier_beside_engine(engine: String) -> String {
+	return tier_beside_mid(tier_beside_lit(engine))
+}

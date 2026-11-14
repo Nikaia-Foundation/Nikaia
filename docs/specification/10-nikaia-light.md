@@ -95,7 +95,9 @@ The compiler decides the shape of a `SharedMut[T]` per value. A program writes `
 (6.2, Part II 12.2).
 
 `eprint` and `eprintln`, like `panic` and `assert`, are diagnosis; what they do
-depends on the target, and the compiler decides it. `access_all` and
+depends on the target, and the compiler decides it. They are the log: text from
+outside the program (Part III 17.1) is written there escaped, so it cannot begin
+a line of its own or steer a terminal ([ADR-398](adr/adr-398.md)). `access_all` and
 `update_all` take the locks in one order however the program wrote them, so a
 deadlock cycle cannot form. `Bytes` is one shared buffer: what `fs::read`
 hands back, passed on by a count. `panic` ends the

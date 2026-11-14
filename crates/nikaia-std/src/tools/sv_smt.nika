@@ -1030,3 +1030,88 @@ fn sv_real_model_holds(
 	let at_goal = sv_real_truth(arena, goal, values) ?? return false
 	return !at_goal
 }
+
+// --- Tests: the CDCL(T) engine over each theory as the measuring rod answers
+// it (moved from `tests/compiler/tests/solver_smt.nika`, which compiled the
+// solver anew in a program of its own on every run): one search over the
+// simplex, over Fourier-Motzkin and over both, then the search's counters
+// over both as `scripts/solver.nika run --stats` prints them (#1312 item 2).
+// `bits-20` holds twenty two-way disjunctions, 2^20 cases for an
+// enumeration, proved with learned clauses; `threes-10` is proved by the
+// congruence its disjunctions give before the search, over the simplex by the
+// GCD test of a tableau row (#1284); `branch-depth` is an equality without a
+// unit coefficient the elimination once extended for ever ---
+
+// `n` values `xᵢ ∈ {0, k}` whose sum is `total`, of status `status`, and
+// `extra` assertions.
+fn sv_smt_test_family(n: i64, k: i64, total: i64, status: String, extra: String) -> String {
+	let mut text = f"(set-logic QF_LIA)\n(set-info :status {status})\n"
+	let mut terms: String = ""
+	for i in 1..<n + 1 {
+		text = text + f"(declare-const x{i} Int)\n"
+		terms = terms + f" x{i}"
+	}
+	for i in 1..<n + 1 {
+		text = text + f"(assert (or (= x{i} 0) (= x{i} {k})))\n"
+	}
+	return text + extra + f"(assert (= (+{terms}) {total}))\n(check-sat)\n"
+}
+
+// Each file answered over each theory, then the search's counters.
+fn sv_smt_test_lines(files: Vec[(String, String)]) -> String {
+	let mut out: String = ""
+	for (name, source) in files {
+		let simplex = sv_line(source.clone(), "new-simplex")
+		let fm = sv_line(source.clone(), "new-fm")
+		let both = sv_line(source.clone(), "new")
+		out = out + f"{name}.smt2: simplex {simplex}; fm {fm}; both {both}\n"
+		for line in sv_line_stats(source, "new", true).lines() {
+			if line.starts_with("stats:") {
+				out = out + f"  {line}\n"
+			}
+		}
+	}
+	return out
+}
+
+test "two-way disjunctions are searched with learned clauses over each theory" {
+	let files = [
+		("bits-20", sv_smt_test_family(20, 1, 21, "unsat", "")),
+		(
+			"bits-sat",
+			sv_smt_test_family(12, 1, 5, "sat", "(assert (<= (+ x1 x2 x3) 1))\n(assert (>= (+ x4 x5) 2))\n"),
+		),
+	]
+	let out = sv_smt_test_lines(files)
+	let expected = [
+		"bits-20.smt2: simplex proved 344; fm proved 402; both proved 344",
+		"  stats: conflicts 19, theory conflicts 19, lemmas 41 (repeated 0), decisions 325, restarts 0",
+		"bits-sat.smt2: simplex refuted 49; fm refuted 72; both refuted 49",
+		"  stats: conflicts 9, theory conflicts 0, lemmas 34 (repeated 0), decisions 29, restarts 0",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "a congruence, a deep equality and contradicting bounds are answered before or without search" {
+	let files = [
+		("threes-10", sv_smt_test_family(10, 3, 16, "unsat", "")),
+		(
+			"branch-depth",
+			"(set-logic QF_LIA)\n(set-info :status sat)\n(declare-fun x () Int)\n(declare-fun x6 () Int)\n(declare-fun x4 () Int)\n(assert (and (= 0 (+ x6 1 (* 2 x4))) (= 0 (+ (* x 51725) (* x6 241)))))\n(check-sat)\n",
+		),
+		(
+			"bounds",
+			"(set-logic QF_LIA)\n(set-info :status unsat)\n(declare-const x Int)\n(declare-const y Int)\n(assert (or (< x 0) (> x 10)))\n(assert (<= 0 x 10))\n(assert (= y (+ x 1)))\n(check-sat)\n",
+		),
+	]
+	let out = sv_smt_test_lines(files)
+	let expected = [
+		"threes-10.smt2: simplex proved 1; fm proved 1; both proved 1",
+		"  stats: conflicts 0, theory conflicts 1, lemmas 1 (repeated 0), decisions 0, restarts 0",
+		"branch-depth.smt2: simplex refuted 2; fm refuted 2; both refuted 2",
+		"  stats: conflicts 0, theory conflicts 0, lemmas 0 (repeated 0), decisions 0, restarts 0",
+		"bounds.smt2: simplex proved 0/pre:l2f0; fm proved 0/pre:l2f0; both proved 0/pre:l2f0",
+		"  stats: conflicts 1, theory conflicts 0, lemmas 0 (repeated 0), decisions 0, restarts 0",
+	]
+	assert(out == expected.join("\n") + "\n")
+}

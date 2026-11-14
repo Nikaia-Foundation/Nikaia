@@ -1472,10 +1472,12 @@ it means.
 
 Every input carries a **provenance**, because the compiler knows where a buffer came from (Part I 6.6):
 
-* **Untrusted**: someone the program cannot vouch for may have chosen these bytes. HTTP requests, sockets, IPC, rows read back from a database, standard input, and every file read while the program runs.
-* **Trusted**: the operator chose these bytes. Command-line arguments, the environment, the project's assets read while building (`asset("…")`), and a source marked `trusted: true` ([ADR-365](adr/adr-365.md)).
+* **Untrusted**: someone the program cannot vouch for may have chosen these bytes. HTTP requests, sockets, IPC, rows read back from a database, standard input, every file read while the program runs, the environment ([ADR-397](adr/adr-397.md)) and the command line, `cli::args()` and `main`'s parameters ([ADR-399](adr/adr-399.md)).
+* **Trusted**: the build or the operator chose these bytes. The project's assets read while building (`asset("…")`) and a source marked `trusted: true` ([ADR-365](adr/adr-365.md)).
 
 A value inherits the provenance of the buffer it comes from, and a collection takes the most cautious provenance of everything put into it. Where the compiler cannot tell, across a dynamic call or from a foreign library, the answer is Untrusted.
+
+**The log escapes untrusted text** ([ADR-398](adr/adr-398.md)). Where untrusted text reaches `eprint`, `eprintln`, a `panic` or `assert` message or an uncaught error, control characters, the line separators U+2028 and U+2029, bidirectional controls and the backslash are written in string-literal form (`\n`, `\\`, `\u{1b}`). In an f-string each hole goes by its own provenance; trusted text is written as it is, and nothing is refused. `text::escape_control(s)` gives the same escaping to a log the program writes itself, and `--trust` lists every call that escapes. Standard output, files and sockets are data and are not touched.
 
 The hasher follows from the provenance: untrusted keys get a keyed hash with a per-process random seed, and trusted keys get a fast one. Within that, the keys' shape picks the function: a fixed-width type, text of a known length, or text of unknown length. A program may name its own with `hasher:` where it makes the map, and `--trust` lists the choice for every map ([ADR-316](adr/adr-316.md)). Nothing else about the map changes: same table, same API, and keys are always compared in full.
 
@@ -1499,7 +1501,6 @@ let data = fs::map(path, fs::Root::Anywhere; trusted: true)
 ```text
 $ nikaia lower 1brc.nika --trust
 input provenance: trusted
-    cli::args is trusted
     fs::map is trusted: `trusted: true` at 1brc.nika:7
 hash for a map keyed by the input: fast, fixed seed - no adversary chooses these keys
 ```
@@ -1519,12 +1520,14 @@ An untrusted map is seeded randomly, so **its iteration order is not stable betw
   value. A text whose shape has to be explained when it is wrong is a grammar's
   to read, with `dec[T](p)` (Part II 10.8).
 * **`json`** (an official package, 17.3): serialization using compile-time code generation, with zero-allocation parsing where possible.
-* **`std::cli`**: parsers for command-line arguments, environment variables and ANSI terminal colours. It reads the words into `main`'s parameters and checks `main`'s preconditions before the body runs (Part I 5.5); `cli::args()` returns every word as given.
+* **`std::cli`**: parsers for command-line arguments, environment variables and ANSI terminal colours. It reads the words into `main`'s parameters and checks `main`'s preconditions before the body runs (Part I 5.5); `cli::args()` returns every word as given. The words are untrusted, `main`'s parameters too, unless read with `cli::args(trusted: true)` ([ADR-399](adr/adr-399.md)).
 * **`std::env`**: the process's environment. `env::var(name: String) -> String?` is the
   variable's value, null where it is unset, empty or not Unicode; `env::temp_dir() -> fs::Path`
   is the directory for temporary files; `env::current_exe() -> fs::Path?` is the path of the running
   program, null where the platform cannot give it. All three are `sync`, and none has a `touches` line, so a
-  read of the environment orders against every other effect (13.5).
+  read of the environment orders against every other effect (13.5). A variable's value is untrusted, as
+  standard input is (17.1, [ADR-397](adr/adr-397.md)): `env::var(name; trusted: true)` says the operator
+  chose it, and the ledger records the marker.
 * **`std::net`**: low-level TCP sockets for building custom protocols — `listen`,
   `connect`, `accept`, `read`, `write`. Everything that waits gives the thread up,
   so one thread serves many connections at either setting of `user_parallelism`.

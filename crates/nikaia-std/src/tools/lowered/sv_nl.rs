@@ -264,3 +264,82 @@ pub(crate) fn sv_nl_candidates(defs: &[SvNl], values: &collections::BTreeMap<Str
     out
 }
 
+#[cfg(test)]
+pub(crate) fn sv_nl_test_lemmas(source: &str) -> String {
+    let mut reals: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut defs: Vec<SvNl> = vec![];
+    let script = match sv_smtlib_script(source) {
+        SvSmtRead::Script(ref s, ref sorts) => {
+            reals = sorts.reals.copy_owned();
+            defs = sorts.nl.copy_owned();
+            s.clone()
+        },
+        SvSmtRead::Failed(_) => { return String::from(""); },
+    };
+    let mut arena = script.arena.clone();
+    let goal = arena.boolean(false);
+    let nl = match sv_nl_engine(&arena, &script.assertions, goal, &lg_budget(), "both", &reals, "", &defs) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+    let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for l in nl.lemmas.iter() { names.push(nikaia_std::block::Text::from(l.schema.to_string())); }
+    let out = format!("; lemmas [{}]", nikaia_std::block::Text::from(names.join(", ")));
+    let steps = match nl.run.driven {
+        SvDriven::Proved(_, ref s) => s.copy_owned(),
+        _ => { return out; },
+    };
+    let mut changed = nl.lemmas.copy_owned();
+    for i in 0..changed.len() as i64 {
+        let s = nikaia_std::block::Text::from(nikaia_std::index::get(&changed, (i) as usize).schema.to_string());
+        if s == "point" || s == "tangent" || s == "pow2-point" { (*unsafe { nikaia_std::proven::slot(&mut changed, (i) as usize) }).a = match sv_rat_add(&unsafe { nikaia_std::proven::read(&changed, (i) as usize) }.a, &sv_int(1)) { Some(__nikaia_value) => __nikaia_value, None => return out }; } else if s == "divpoint" || s == "division" { (*unsafe { nikaia_std::proven::slot(&mut changed, (i) as usize) }).b = match sv_rat_add(&unsafe { nikaia_std::proven::read(&changed, (i) as usize) }.b, &sv_int(1)) { Some(__nikaia_value) => __nikaia_value, None => return out }; } else { continue; }
+        let verdict = match sv_lemma_check(&arena, &script.assertions, goal, &reals, &defs, &changed, &steps) {
+            None => "refused (not an instance)",
+            Some(ref v) => if v.ok { "accepted" } else { "refused" },
+        };
+        return format!("{}; changed {}: {}", out, s, verdict);
+    }
+    out
+}
+
+#[cfg(test)]
+pub(crate) fn sv_nl_test_script(logic: &str, status: &str, sort: &str, names: &str, asserts: &str) -> String {
+    let mut text = format!("(set-logic {})\n(set-info :status {})\n", logic, status);
+    for n in names.split(' ') { text = nikaia_std::block::Text::from(nikaia_std::concat::plus(text, format!("(declare-const {} {})\n", n, sort))); }
+    nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(text, asserts)), "(check-sat)\n"))
+}
+
+#[cfg(test)]
+pub(crate) fn sv_nl_test_lines(files: &[(String, String)]) -> String {
+    let mut out: String = String::from("");
+    for (name, text) in files.iter() { out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{}.smt2: {}{}\n", name, sv_line(&nikaia_std::block::Text::from(text.to_string()), "new"), sv_nl_test_lemmas(text)))); }
+    out
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    let files: Vec<(String, String)> = vec![(String::from("sat-abstraction"), sv_nl_test_script("QF_NIA", "sat", "Int", "x y", "(assert (= (* x y) 0))\n(assert (= x 0))\n")), (String::from("unsat-abstraction"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x y", "(assert (> (* x y) 5))\n(assert (< (* y x) 3))\n")), (String::from("sat-repaired"), sv_nl_test_script("QF_NIA", "sat", "Int", "x y", "(assert (= (int.pow2 x) 8))\n(assert (> y x))\n")), (String::from("sat-refined"), sv_nl_test_script("QF_NIA", "sat", "Int", "x y", "(assert (= (- x y) (int.pow2 x)))\n")), (String::from("arguments"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x y", "(assert (= (* (+ x 1) (* 2 y)) 6))\n(assert (= x 0))\n(assert (= y 2))\n")), (String::from("square"), sv_nl_test_script("QF_NRA", "unsat", "Real", "x", "(assert (< (* x x) 0))\n")), (String::from("division"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x", "(assert (= (mod x 3) 4))\n")), (String::from("remainder"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x", "(assert (= (div x 3) 2))\n(assert (= (mod x 3) 1))\n(assert (distinct x 7))\n")), (String::from("free"), sv_nl_test_script("QF_NRA", "unsat", "Real", "x y", "(assert (= (/ x 0) 1))\n(assert (= (/ y 0) 2))\n(assert (= x y))\n")), (String::from("point"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x y", "(assert (= x 3))\n(assert (= y 2))\n(assert (= (* x y) 7))\n")), (String::from("irrational"), sv_nl_test_script("QF_NRA", "sat", "Real", "x", "(assert (= (* x x) 2))\n"))];
+    let out = sv_nl_test_lines(&files);
+    let expected = vec!["sat-abstraction.smt2: refuted 1; lemmas []", "unsat-abstraction.smt2: proved 1; lemmas []", "sat-repaired.smt2: refuted 2; lemmas []", "sat-refined.smt2: refuted 5; lemmas [pow2-low]", "arguments.smt2: proved 3; lemmas [tangent]; changed tangent: refused", "square.smt2: proved 2; lemmas [square]", "division.smt2: proved 1; lemmas [division]; changed division: refused", "remainder.smt2: proved 4; lemmas [division]; changed division: refused", "free.smt2: proved 3; lemmas [congruence, congruence]", "point.smt2: proved 1; lemmas [tangent]; changed tangent: refused", "irrational.smt2: unknown (non-linear, budget) 93; lemmas [zero, tangent, tangent, tangent, tangent, tangent, tangent]"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+    let files: Vec<(String, String)> = vec![(String::from("parallel-let"), sv_nl_test_script("QF_LIA", "unknown", "Int", "x", "(assert (let ((a x) (b (+ a x))) (> b a)))\n")), (String::from("zero-denominator"), sv_nl_test_script("QF_LRA", "unknown", "Real", "x y", "(assert (= (+ x y) 5/0))\n"))];
+    let out = sv_nl_test_lines(&files);
+    let expected = vec!["parallel-let.smt2: malformed (a is unbound: a parallel let binds its names only in its body, in assertion 1) 0", "zero-denominator.smt2: malformed (the literal 5/0 has a zero denominator, in assertion 1) 0"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn non_linear_terms_are_abstracted_and_refined_with_lemmas() {
+        super::__nikaia_test_0().unwrap()
+    }
+    #[test]
+    fn a_parallel_let_and_a_zero_denominator_are_refused_with_their_place() {
+        super::__nikaia_test_1().unwrap()
+    }
+}
