@@ -605,6 +605,16 @@ pub(crate) fn bounding_write(walk: &mut BoundsWalk, key: &str, value: &Expr, fac
 pub(crate) fn bounding_end_write(walk: &mut BoundsWalk, key: &str, value: &Expr, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
     if key.contains('[') || key.starts_with('.') { return; }
     let mut below: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut only = match walk.written_ends.get(key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    if only.is_none() && !walk.collecting {
+        only = Some(nikaia_std::index::or(match walk.assumed_ends.get(key) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || collections::BTreeSet::new().into()));
+    }
     let term = bounding_lin(walk, value, facts, context, program, words);
     if term.is_some() {
         let v = nikaia_std::index::or(term, || 0);
@@ -616,6 +626,10 @@ pub(crate) fn bounding_end_write(walk: &mut BoundsWalk, key: &str, value: &Expr,
         let zero = walk.arena.int(0);
         for name in read.iter() {
             let list = match name.strip_suffix(".len()") { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if only.is_some() && !nikaia_std::index::or(match only.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.contains(list)),
+                None => None,
+            }, || false) { continue; }
             if !bounding_end_list(&walk, list, key) { continue; }
             let low = walk.arena.ge(v, zero);
             let len = walk.arena.var(name);

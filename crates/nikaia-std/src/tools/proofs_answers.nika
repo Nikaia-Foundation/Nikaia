@@ -34,6 +34,10 @@ pub comptime PROOFS_LONG_DIR: ref String = "nikaia.proofs.d"
 /// A certificate longer than this is written to `PROOFS_LONG_DIR`.
 pub comptime PROOFS_LONG: i64 = 4096
 
+/// How many answers a thread without a book holds by their normal form
+/// (#1590): a key and an answer each (no proof), some megabytes in all.
+pub comptime PROOFS_ANSWERED: i64 = 65536
+
 /// The solver an `unknown` was given by (D19): an entry is searched again
 /// only under a different one (D21). Fourier-Motzkin, then the new engine
 /// where it gives up (`sv_ask`, #1285).
@@ -137,6 +141,12 @@ pub struct ProofsThread {
     /// this answers them without normalising, as long as the book still
     /// holds that entry.
     pub known: collections::BTreeMap[String, ProofsKnown],
+    /// **Where no book is open, what each normal form came to** (#1590), by
+    /// its key: a bounds walk asks one question again in every pass and
+    /// every walk of a body, under fresh names, and the normal form makes
+    /// them one. At most `PROOFS_ANSWERED` are held; past that it starts
+    /// over.
+    pub answered: collections::BTreeMap[String, ProofsSearch],
     pub at: ProofsWhere,
     /// The function being checked and the byte its declaration starts at.
     pub function: String?,
@@ -145,7 +155,7 @@ pub struct ProofsThread {
 
 /// A thread before anything is opened.
 pub fn proofs_thread() -> ProofsThread {
-    return ProofsThread { book: null, known: collections::BTreeMap(), at: proofs_nowhere(), function: null, function_at: 0 }
+    return ProofsThread { book: null, known: collections::BTreeMap(), answered: collections::BTreeMap(), at: proofs_nowhere(), function: null, function_at: 0 }
 }
 
 /// Where the question being asked now stands.
@@ -269,11 +279,18 @@ fn proofs_known(mut t: ProofsThread, written: ref String) -> ProofsAsked? {
 /// **Whether the facts imply the goal**, and if not, why not.
 pub fn proofs_ask(mut t: ProofsThread, arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> ProofsAsked {
     if t.book == null {
-        // Nothing is recorded or looked up: no key to make (#727).
+        // Nothing is recorded or looked up in a book (#727), but what this
+        // thread found is answered again by its normal form (#1590).
         let normal = lg_normal_of(arena, facts, goal)
-        let asked = proofs_search(normal).asked
-        proofs_dump(normal, asked)
-        return asked
+        let key = hash::sha256_hex(normal.text().bytes().collect())
+        let again = proofs_answered(t, normal, key)
+        if again != null {
+            return again ?? ProofsAsked::Unknown
+        }
+        let found = proofs_search(normal)
+        proofs_dump(normal, found.asked)
+        proofs_remember(t, key, found.asked, found.entry)
+        return found.asked
     }
     let written = proofs_written(arena, facts, goal)
     let known = proofs_known(t, written)
@@ -289,15 +306,24 @@ pub fn proofs_ask(mut t: ProofsThread, arena: ref TermArena, facts: ref Vec[i64]
         recorded = book.entries.get(key)?.clone()
     }
     if recorded != null {
-        let asked = proofs_read(normal, recorded)
+        // The book holds an entry of the kind this thread found the same
+        // normal form to be: that is what reading it comes to (#1590).
+        let held = recorded?.clone() ?? ProofsEntry::Unknown("")
+        let again = proofs_answered(t, normal, key)
+        if again != null && proofs_agrees(again ?? ProofsAsked::Unknown, held) {
+            return again ?? ProofsAsked::Unknown
+        }
+        let asked = proofs_read(normal, held)
         if asked != null {
-            t.known.insert(written.clone(), ProofsKnown { key: key.clone(), entry: recorded.clone(), asked: asked.clone() })
+            t.known.insert(written.clone(), ProofsKnown { key: key.clone(), entry: held.clone(), asked: asked.clone() })
             proofs_dump(normal, asked)
+            proofs_remember(t, key, asked, recorded)
             return asked
         }
     }
     let found = proofs_search(normal)
     proofs_dump(normal, found.asked)
+    proofs_remember(t, key, found.asked, found.entry)
     let entry = found.entry?.clone()
     if entry != null {
         // What a read of this entry comes to: the search checked the same
@@ -314,6 +340,61 @@ pub fn proofs_ask(mut t: ProofsThread, arena: ref TermArena, facts: ref Vec[i64]
         book.entries.remove(key)
     }
     return found.asked
+}
+
+/// **What this thread found of the normal form `key`**, for `normal`
+/// (#1590), where it found it before.
+fn proofs_answered(t: ref ProofsThread, normal: ref LgNormal, key: ref String) -> ProofsAsked? {
+    let held = t.answered.get(key) ?? return null
+    return proofs_again(normal, held)
+}
+
+/// Whether `entry` says what `asked` says (#1590): a proof, values that
+/// refute it, or this solver's `unknown`.
+fn proofs_agrees(asked: ref ProofsAsked, entry: ref ProofsEntry) -> bool {
+    return match asked {
+        ProofsAsked::Proved => match entry {
+            ProofsEntry::Proved(_) => true,
+            ProofsEntry::ProvedLog(_) => true,
+            else => false,
+        },
+        ProofsAsked::Refuted(_) => match entry {
+            ProofsEntry::Refuted(_) => true,
+            else => false,
+        },
+        ProofsAsked::Unknown => match entry {
+            ProofsEntry::Unknown(solver) => solver == PROOFS_SOLVER,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// Keep what the normal form `key` came to (#1590): of an entry only values
+/// that refute it, which are read back by name; a proof is not kept. Past
+/// `PROOFS_ANSWERED` answers the thread starts over.
+fn proofs_remember(mut t: ProofsThread, key: ref String, asked: ref ProofsAsked, entry: ref ProofsEntry?) {
+    if t.answered.len() >= PROOFS_ANSWERED {
+        t.answered = collections::BTreeMap()
+    }
+    let kept = match asked {
+        ProofsAsked::Refuted(_) => entry?.clone(),
+        else => null,
+    }
+    t.answered.insert(key.clone(), ProofsSearch { asked: asked.clone(), entry: kept })
+}
+
+/// **What a search of the same normal form came to, for `normal`** (#1590):
+/// values that refute it are named by `normal`'s own names, so they are read
+/// back through it; any other answer names nothing.
+fn proofs_again(normal: ref LgNormal, held: ref ProofsSearch) -> ProofsAsked? {
+    match held.asked {
+        ProofsAsked::Refuted(_) => {
+            let entry = held.entry ?? return null
+            return proofs_read(normal, entry)
+        }
+        else => return held.asked.clone(),
+    }
 }
 
 /// A recorded entry, where it checks (D20) - and an `unknown` only from the

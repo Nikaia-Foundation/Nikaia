@@ -7,6 +7,8 @@ pub const PROOFS_LONG_DIR: &str = "nikaia.proofs.d";
 
 pub const PROOFS_LONG: i64 = 4096;
 
+pub const PROOFS_ANSWERED: i64 = 65536;
+
 pub const PROOFS_SOLVER: &str = "fourier-motzkin-1+sv-1";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,12 +76,13 @@ pub fn proofs_where(path: &std::path::Path, source: &str) -> ProofsWhere {
 pub struct ProofsThread {
     pub book: Option<ProofsBook>,
     pub known: collections::BTreeMap<String, ProofsKnown>,
+    pub answered: collections::BTreeMap<String, ProofsSearch>,
     pub at: ProofsWhere,
     pub function: Option<String>,
     pub function_at: i64,
 }
 
-pub fn proofs_thread() -> ProofsThread { ProofsThread { book: None, known: collections::BTreeMap::new(), at: proofs_nowhere(), function: None, function_at: 0 } }
+pub fn proofs_thread() -> ProofsThread { ProofsThread { book: None, known: collections::BTreeMap::new(), answered: collections::BTreeMap::new(), at: proofs_nowhere(), function: None, function_at: 0 } }
 
 pub(crate) fn proofs_here(t: &ProofsThread) -> (Option<String>, Option<i64>, Option<String>) {
     let mut line: Option<i64> = None;
@@ -206,9 +209,13 @@ pub(crate) fn proofs_known(t: &mut ProofsThread, written: &str) -> Option<Proofs
 pub fn proofs_ask(t: &mut ProofsThread, arena: &TermArena, facts: &[i64], goal: i64) -> ProofsAsked {
     if t.book.is_none() {
         let normal = lg_normal_of(arena, facts, goal);
-        let asked = proofs_search(&normal).asked;
-        proofs_dump(&normal, &asked);
-        return asked;
+        let key = hash::sha256_hex(&normal.text().bytes().collect::<Vec<_>>());
+        let again = proofs_answered(&t, &normal, &key);
+        if again.is_some() { return nikaia_std::index::or(again, || ProofsAsked::Unknown); }
+        let found = proofs_search(&normal);
+        proofs_dump(&normal, &found.asked);
+        proofs_remember(t, &key, &found.asked, (found.entry).as_ref());
+        return found.asked;
     }
     let written = proofs_written(arena, facts, goal);
     let known = proofs_known(t, &written);
@@ -225,15 +232,23 @@ pub fn proofs_ask(t: &mut ProofsThread, arena: &TermArena, facts: &[i64], goal: 
         };
     }
     if recorded.is_some() {
-        let asked = proofs_read(&normal, recorded.as_ref().unwrap());
+        let held = nikaia_std::index::or(match recorded.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || ProofsEntry::Unknown(String::from("")));
+        let again = proofs_answered(&t, &normal, &key);
+        if again.is_some() && proofs_agrees(nikaia_std::index::or(again.as_ref(), || &ProofsAsked::Unknown), &held) { return nikaia_std::index::or(again, || ProofsAsked::Unknown); }
+        let asked = proofs_read(&normal, &held);
         if asked.is_some() {
-            t.known.insert(nikaia_std::block::Text::from(written.to_string()), ProofsKnown { key: nikaia_std::block::Text::from(key.to_string()), entry: recorded.as_ref().unwrap().clone(), asked: asked.as_ref().unwrap().clone() });
+            t.known.insert(nikaia_std::block::Text::from(written.to_string()), ProofsKnown { key: nikaia_std::block::Text::from(key.to_string()), entry: held.clone(), asked: asked.as_ref().unwrap().clone() });
             proofs_dump(&normal, asked.as_ref().unwrap());
+            proofs_remember(t, &key, asked.as_ref().unwrap(), Option::as_ref(&recorded));
             return asked.unwrap();
         }
     }
     let found = proofs_search(&normal);
     proofs_dump(&normal, &found.asked);
+    proofs_remember(t, &key, &found.asked, (found.entry).as_ref());
     let entry = match found.entry.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -245,6 +260,45 @@ pub fn proofs_ask(t: &mut ProofsThread, arena: &TermArena, facts: &[i64], goal: 
     book.searched_at.insert(place);
     if entry.is_some() { book.entries.insert(key, entry.unwrap()); } else { book.entries.remove(&key); }
     found.asked
+}
+
+pub(crate) fn proofs_answered(t: &ProofsThread, normal: &LgNormal, key: &str) -> Option<ProofsAsked> {
+    let held = match t.answered.get(key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    proofs_again(normal, held)
+}
+
+pub(crate) fn proofs_agrees(asked: &ProofsAsked, entry: &ProofsEntry) -> bool {
+    match asked {
+        ProofsAsked::Proved => matches!(entry, ProofsEntry::Proved(_) | ProofsEntry::ProvedLog(_)),
+        ProofsAsked::Refuted(_) => matches!(entry, ProofsEntry::Refuted(_)),
+        ProofsAsked::Unknown => match entry {
+            ProofsEntry::Unknown(solver) => solver == PROOFS_SOLVER,
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+pub(crate) fn proofs_remember(t: &mut ProofsThread, key: &str, asked: &ProofsAsked, entry: Option<&ProofsEntry>) {
+    if (t.answered.len() as i64) >= PROOFS_ANSWERED { t.answered = collections::BTreeMap::new(); }
+    let kept = match asked {
+        ProofsAsked::Refuted(_) => match entry {
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+            None => None,
+        },
+        _ => None,
+    };
+    t.answered.insert(nikaia_std::block::Text::from(key.to_string()), ProofsSearch { asked: asked.clone(), entry: kept });
+}
+
+pub(crate) fn proofs_again(normal: &LgNormal, held: &ProofsSearch) -> Option<ProofsAsked> {
+    match &held.asked {
+        ProofsAsked::Refuted(_) => {
+            let entry = match held.entry.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return proofs_read(normal, entry);
+        },
+        _ => return Some(held.asked.clone()),
+    }
 }
 
 pub(crate) fn proofs_read(normal: &LgNormal, entry: &ProofsEntry) -> Option<ProofsAsked> {

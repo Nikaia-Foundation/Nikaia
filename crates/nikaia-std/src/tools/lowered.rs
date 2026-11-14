@@ -4126,7 +4126,7 @@ pub mod project_write {
 }
 pub mod proofs_answers {
     #[allow(unused_imports)]
-    pub use super::{PROOFS_FILE, PROOFS_LONG_DIR, PROOFS_LONG, PROOFS_SOLVER, ProofsAsked, ProofsEntry, ProofsBook, proofs_book_empty, ProofsSoFar, ProofsKnown, ProofsWhere, proofs_nowhere, proofs_where, ProofsThread, proofs_thread, proofs_shown, proofs_written, proofs_ask, PROOFS_DUMP, ProofsSearch, proofs_invariants_here, proofs_record_at, proofs_asked_so_far, proofs_ask_again_from, proofs_place_of, proofs_byte_of, proofs_book_read, proofs_book_render, proofs_book_write, proofs_book_as_recorded, proofs_book_len};
+    pub use super::{PROOFS_FILE, PROOFS_LONG_DIR, PROOFS_LONG, PROOFS_ANSWERED, PROOFS_SOLVER, ProofsAsked, ProofsEntry, ProofsBook, proofs_book_empty, ProofsSoFar, ProofsKnown, ProofsWhere, proofs_nowhere, proofs_where, ProofsThread, proofs_thread, proofs_shown, proofs_written, proofs_ask, PROOFS_DUMP, ProofsSearch, proofs_invariants_here, proofs_record_at, proofs_asked_so_far, proofs_ask_again_from, proofs_place_of, proofs_byte_of, proofs_book_read, proofs_book_render, proofs_book_write, proofs_book_as_recorded, proofs_book_len};
 }
 pub mod proofs_book {
     #[allow(unused_imports)]
