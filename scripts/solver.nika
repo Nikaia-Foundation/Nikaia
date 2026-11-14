@@ -21,9 +21,10 @@
 // never copied), the new engine's files there too (moved in #1285),
 // and the driver `crates/nikaia-std/src/solver/sv_rod.nika` into
 // one program in a temporary directory, builds it with the `nikaia` that runs
-// this script, and answers every `.smt2` file: one line per file (`name answer
-// work`), then a row per directory: solved, unknown (overflow and files the
-// reader refuses among them), malformed (a script that is not well-formed
+// this script (the binary kept in `target/solver-rod/`, see `solver_build`),
+// and answers every `.smt2` file: one line per file (`name answer work`),
+// then a row per directory: solved, unknown (overflow and files the reader
+// refuses among them), malformed (a script that is not well-formed
 // SMT-LIB, its reason on its line, ADR-270 D28), wrong, PAR-2 over the work budget, certificates
 // checked, models evaluated. `--stats` adds below each file's line the new
 // engine's counters (#1312 item 2): the SAT core's conflicts, the theory's,
@@ -108,8 +109,11 @@ fn solver_program(repo: String) -> String throws {
 	return uses.join("\n") + "\n" + body + "fn main() throws {\n    sv_rod_main()\n}\n"
 }
 
-// Builds the program in a fresh temporary directory and gives the binary's
-// path, or an empty text after printing why it did not build.
+// Builds the program and gives the binary's path, or an empty text after
+// printing why it did not build. The binary is kept in
+// `target/solver-rod/<key>/`, the key a hash of the program's text and of the
+// `nikaia` that builds it: a second run of the same program with the same
+// toolchain (the tests run it eight times) builds nothing.
 fn solver_build(repo: String, nikaia: String) -> String throws {
 	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
 	process::run("mkdir", ["-p", f"{tmp}/src"])
@@ -119,6 +123,21 @@ fn solver_build(repo: String, nikaia: String) -> String throws {
 		"[package]\nname = \"solver_rod\"\nversion = \"0.1.0\"\n",
 	)
 	fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, solver_program(repo))
+	let key = process::run(
+		"sh",
+		[
+			"-c",
+			"{ cat \"$1/src/main.nika\"; stat -L -c '%s %Y %n' \"$2\"; } | sha256sum | cut -c1-16",
+			"sh",
+			tmp.clone(),
+			nikaia.clone(),
+		],
+	).stdout.trim().clone()
+	let kept = f"{repo}/target/solver-rod/{key}/solver_rod"
+	if key != "" && fs::exists(kept.clone(), fs::Root::Anywhere) {
+		process::run("rm", ["-rf", tmp])
+		return kept
+	}
 	let built = process::run(nikaia, ["build"]; dir: tmp.clone())
 	let bin = f"{tmp}/target/nikaia/bin/solver_rod"
 	if !built.ok || !fs::exists(bin.clone(), fs::Root::Anywhere) {
@@ -126,9 +145,24 @@ fn solver_build(repo: String, nikaia: String) -> String throws {
 		for line in built.stderr.lines() {
 			if line.starts_with("error") || line.contains("-->") { println(line) }
 		}
+		process::run("rm", ["-rf", tmp])
 		return ""
 	}
-	return bin
+	if key == "" { return bin }
+	// Copied under a name of its own, then renamed: two runs building at once
+	// both leave a whole binary.
+	process::run(
+		"sh",
+		[
+			"-c",
+			"mkdir -p \"$(dirname \"$2\")\" && cp \"$1\" \"$2.$$\" && mv -f \"$2.$$\" \"$2\"",
+			"sh",
+			bin,
+			kept.clone(),
+		],
+	)
+	process::run("rm", ["-rf", tmp])
+	return kept
 }
 
 // --- run ---
@@ -341,8 +375,6 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 		println(solver_summary(g, part))
 	}
 	if groups.len() > 1 { println(solver_summary("all", rows)) }
-	let bin_dir = bin.replace("/target/nikaia/bin/solver_rod", "")
-	process::run("rm", ["-rf", bin_dir])
 }
 
 // --- oracle ---
@@ -664,8 +696,7 @@ fn solver_fuzz(repo: String, nikaia: String, args: Vec[String]) throws {
 	}
 	println(f"{n} queries (seed {seed}): proved {proved}, refuted {refuted}, unknown {unknown}, disagreements {found}")
 	if self_test { process::run("rm", ["-rf", bugs]) }
-	let bin_dir = bin.replace("/target/nikaia/bin/solver_rod", "")
-	process::run("rm", ["-rf", work, bin_dir])
+	process::run("rm", ["-rf", work])
 }
 
 // --- tune: the parameters on one half, the report on the other ---
@@ -795,10 +826,8 @@ fn solver_tune(repo: String, nikaia: String, args: Vec[String]) throws {
 	))
 	println(solver_summary(
 		f"held out, {tuned}",
-		solver_tune_rows(bin.clone(), tuned, held, timeout),
+		solver_tune_rows(bin, tuned, held, timeout),
 	))
-	let bin_dir = bin.replace("/target/nikaia/bin/solver_rod", "")
-	process::run("rm", ["-rf", bin_dir])
 }
 
 fn main() throws {
