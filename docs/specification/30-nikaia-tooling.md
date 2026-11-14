@@ -1472,8 +1472,8 @@ it means.
 
 Every input carries a **provenance**, because the compiler knows where a buffer came from (Part I 6.6):
 
-* **Untrusted**: someone the program cannot vouch for may have chosen these bytes. HTTP requests, sockets, IPC, rows read back from a database, standard input, and every file read while the program runs.
-* **Trusted**: the operator chose these bytes. Command-line arguments, the environment, the project's assets read while building (`asset("…")`), and a source marked `trusted: true` ([ADR-365](adr/adr-365.md)).
+* **Untrusted**: someone the program cannot vouch for may have chosen these bytes. HTTP requests, sockets, IPC, rows read back from a database, standard input, every file read while the program runs, and the environment ([ADR-397](adr/adr-397.md)).
+* **Trusted**: the operator chose these bytes. Command-line arguments, the project's assets read while building (`asset("…")`), and a source marked `trusted: true` ([ADR-365](adr/adr-365.md)).
 
 A value inherits the provenance of the buffer it comes from, and a collection takes the most cautious provenance of everything put into it. Where the compiler cannot tell, across a dynamic call or from a foreign library, the answer is Untrusted.
 
@@ -1524,7 +1524,9 @@ An untrusted map is seeded randomly, so **its iteration order is not stable betw
   variable's value, null where it is unset, empty or not Unicode; `env::temp_dir() -> fs::Path`
   is the directory for temporary files; `env::current_exe() -> fs::Path?` is the path of the running
   program, null where the platform cannot give it. All three are `sync`, and none has a `touches` line, so a
-  read of the environment orders against every other effect (13.5).
+  read of the environment orders against every other effect (13.5). A variable's value is untrusted, as
+  standard input is (17.1, [ADR-397](adr/adr-397.md)): `env::var(name; trusted: true)` says the operator
+  chose it, and the ledger records the marker.
 * **`std::net`**: low-level TCP sockets for building custom protocols — `listen`,
   `connect`, `accept`, `read`, `write`. Everything that waits gives the thread up,
   so one thread serves many connections at either setting of `user_parallelism`.
