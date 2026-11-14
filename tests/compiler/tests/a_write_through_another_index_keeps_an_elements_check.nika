@@ -1,0 +1,17 @@
+// #1596 (ADR-306 D33, D20): what is known of `xs[0]` goes when the list is
+// written through any index, `xs[j]` with `j` unknown: `bump(0, 1)` sets
+// `xs[0]` back to 0 first, so it is not refused, and `xs[0] += k` keeps its
+// check.
+
+fn bump(j: i64, k: i32) -> i32 {
+	let mut xs: Vec[i32] = [2147483647, 0]
+	if j >= 0 && j < 2 {
+		xs[j] = 0
+	}
+	xs[0] += k
+	return xs[0]
+}
+
+fn main() throws {
+	println(bump(0, 1))
+}

@@ -385,8 +385,8 @@ impl SvSimplex {
         let mut r: i64 = 0;
         while ((r) as usize) < self.rows.len() {
             let b = *nikaia_std::index::get(&self.basic, (r) as usize);
-            let below = nikaia_std::index::get(&self.lower, nikaia_std::index::at(b)).set && sv_delta_cmp(nikaia_std::index::get(&self.values, nikaia_std::index::at(b)), &nikaia_std::index::get(&self.lower, nikaia_std::index::at(b)).value) < 0;
-            let above = nikaia_std::index::get(&self.upper, nikaia_std::index::at(b)).set && sv_delta_cmp(nikaia_std::index::get(&self.values, nikaia_std::index::at(b)), &nikaia_std::index::get(&self.upper, nikaia_std::index::at(b)).value) > 0;
+            let below = nikaia_std::index::get(&self.lower, nikaia_std::index::at(b)).set && sv_delta_cmp(nikaia_std::index::get(&self.values, nikaia_std::index::at(b)), &unsafe { nikaia_std::proven::read(&self.lower, (b) as usize) }.value) < 0;
+            let above = nikaia_std::index::get(&self.upper, nikaia_std::index::at(b)).set && sv_delta_cmp(nikaia_std::index::get(&self.values, nikaia_std::index::at(b)), &unsafe { nikaia_std::proven::read(&self.upper, (b) as usize) }.value) > 0;
             if (below || above) && (best.var < 0 || b < best.var) { best = SvViolation { row: r, var: b, below }; }
             r = unsafe { nikaia_std::proven::add::<i64>(r, 1) };
         }
@@ -804,9 +804,9 @@ impl SvSimplex {
         let d = match sv_row_coef(nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)), match u32::try_from(b).ok() { Some(__nikaia_value) => __nikaia_value, None => return None }).checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut out: Vec<SvGomory> = vec![];
         let mut i: i64 = 0;
-        while ((i) as usize) < nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)).cols.len() {
-            let u = *nikaia_std::index::get(&nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)).cols, (i) as usize) as i64;
-            let k = *nikaia_std::index::get(&nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)).ks, (i) as usize);
+        while ((i) as usize) < unsafe { nikaia_std::proven::read(&self.rows, (r) as usize) }.cols.len() {
+            let u = *nikaia_std::index::get(&unsafe { nikaia_std::proven::read(&self.rows, (r) as usize) }.cols, (i) as usize) as i64;
+            let k = *nikaia_std::index::get(&unsafe { nikaia_std::proven::read(&self.rows, (r) as usize) }.ks, (i) as usize);
             i += 1;
             if u == b { continue; }
             let at = match self.active(u) { Some(__nikaia_value) => __nikaia_value, None => return None };

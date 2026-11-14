@@ -1,0 +1,14 @@
+// #1596 (ADR-306 D33): the prover follows a list element `xs[c]`, its index
+// a literal or a name, as a name: a `let` of a list literal records each
+// element, so `xs[0] += k` is shown to leave `i32` for `k` 1, NK1207, as
+// `y += k` on a name is.
+
+fn bump(k: i32) -> i32 {
+	let mut xs: Vec[i32] = [2147483647, 0]
+	xs[0] += k
+	return xs[0]
+}
+
+fn main() throws {
+	println(bump(1))
+}

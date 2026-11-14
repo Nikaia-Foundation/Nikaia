@@ -39,9 +39,11 @@ impl ProverScope {
     }
     pub fn rebind(&mut self, arena: &TermArena, name: &str) {
         let under = format!("{}.", name);
+        let element = format!("{}[", name);
+        let index = format!("[{}]", name);
         let mut parts: collections::BTreeSet<String> = collections::BTreeSet::new();
         let own = length_of(name);
-        for n in self.ints.iter() { if n.starts_with(&*under) && *n != own { parts.insert(nikaia_std::block::Text::from(nikaia_std::index::or(n.strip_suffix(".len()"), || std::convert::AsRef::<str>::as_ref(n)).to_string())); } }
+        for n in self.ints.iter() { if (n.starts_with(&*under) || n.starts_with(&*element) || n.ends_with(&*index)) && *n != own { parts.insert(nikaia_std::block::Text::from(nikaia_std::index::or(n.strip_suffix(".len()"), || std::convert::AsRef::<str>::as_ref(n)).to_string())); } }
         for part in parts.iter() { self.rebind(arena, part); }
         let length = length_of(name);
         self.ints.remove(name);

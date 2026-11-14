@@ -960,6 +960,10 @@ pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     }
     if check_core_places_a_list(&b) && !args.is_empty() {
         state.facts.list_indices.insert(id_of(base) as i64);
+        match *unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
+            Ty::Named { name: ref item, args: ref inner, .. } => { if inner.is_empty() && is_whole_number(item) { state.facts.whole_fields.insert(id_of(expr) as i64); } },
+            _ => { },
+        }
         return (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone();
     }
     if (b == "HashMap" || b == "Map" || b == "BTreeMap") && args.len() == 2 {

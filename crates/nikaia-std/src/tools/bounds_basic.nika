@@ -354,6 +354,10 @@ enum Seek {
     /// it again, handing it to a call, a lambda that names it, or a method
     /// `keeps_length` does not know.
     LengthChanged(String),
+    /// Something that may change an element of this list (ADR-306 D33): a
+    /// write through any index of it, what may change its length, or a
+    /// method that reorders or overwrites its items.
+    ElementsChanged(String),
     /// A `let`, `comptime`, loop, assignment or lambda parameter of the name.
     Rebound(String),
     /// The name read anywhere, or assigned.
@@ -365,6 +369,22 @@ enum Seek {
 /// **Nothing in `body` can change `list`'s length.**
 pub fn length_stays(body: ref Block, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     return !seek_block(body, Seek::LengthChanged(list.clone()), words)
+}
+
+/// **Whether `stmt` may change an element of `list`** (ADR-306 D33):
+/// asked of the statement and everything inside it.
+pub fn elements_change(stmt: ref Stmt, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    return seek_statement(stmt, Seek::ElementsChanged(list.clone()), words)
+}
+
+/// **Nothing in `body` can change an element of `list`** (ADR-306 D33).
+pub fn elements_stay(body: ref Block, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    return !seek_block(body, Seek::ElementsChanged(list.clone()), words)
+}
+
+/// Whether `stmt`, or anything inside it, binds `name` again.
+pub fn rebinds_in_statement(stmt: ref Stmt, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    return seek_statement(stmt, Seek::Rebound(name.clone()), words)
 }
 
 /// Whether `body` binds `name` again anywhere.
@@ -425,6 +445,36 @@ fn changes_through(receiver: ref Expr, method: ref String, list: ref String, wor
     return path_within(list, path)
 }
 
+/// **The path a write through `target` changes** (ADR-306 D33): `xs` of
+/// `xs[i]`, `t.slots` of `t.slots[0].sum`, the path itself of a path.
+fn written_place(target: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    return match target {
+        Expr::Index { base, .. } => written_place(base, words),
+        Expr::Field { base, .. } => path_of(target, words) ?? written_place(base, words),
+        else => path_of(target, words),
+    }
+}
+
+/// A method that keeps a list's items where they are: one that keeps its
+/// length and does not reorder or overwrite them.
+fn keeps_items(method: ref String) -> bool {
+    return match method {
+        "sort" => false, "sort_by" => false, "sort_by_key" => false,
+        "reverse" => false, "swap" => false, "fill" => false,
+        else => keeps_length(method),
+    }
+}
+
+/// **A method that may change an element of `list`**: one `keeps_items`
+/// does not know on the list itself, any method on a value it is a field of.
+fn changes_items_through(receiver: ref Expr, method: ref String, list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    let path = path_of(receiver, words) ?? return false
+    if path == list {
+        return !keeps_items(method)
+    }
+    return path_within(list, path)
+}
+
 fn is_variable(expr: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     return match expr {
         Expr::Variable(n, _) => words.resolve(n) == name,
@@ -446,6 +496,12 @@ fn statement_says(stmt: ref Stmt, seek: ref Seek, words: ref winnow_grammar::Int
     return match seek {
         Seek::LengthChanged(list) => match stmt {
             Stmt::Assign { target, .. } => holds_path(target, list, words),
+            Stmt::Let { names, .. } => any_symbol(names, path_root(list), words),
+            Stmt::For { bindings, .. } => any_symbol(bindings, path_root(list), words),
+            else => false,
+        },
+        Seek::ElementsChanged(list) => match stmt {
+            Stmt::Assign { target, .. } => path_within(list, written_place(target, words) ?? return false),
             Stmt::Let { names, .. } => any_symbol(names, path_root(list), words),
             Stmt::For { bindings, .. } => any_symbol(bindings, path_root(list), words),
             else => false,
@@ -474,6 +530,14 @@ fn expression_says(expr: ref Expr, seek: ref Seek, words: ref winnow_grammar::In
         Seek::LengthChanged(list) => match expr {
             Expr::MethodCall { receiver, method, args, .. } => changes_through(receiver, words.resolve(method), list, words) || any_holds_path(args, list, words),
             Expr::SafeMethod { receiver, method, args, .. } => changes_through(receiver, words.resolve(method), list, words) || any_holds_path(args, list, words),
+            Expr::Call { args, .. } => any_holds_path(args, list, words),
+            Expr::Closure { body, .. } => seek_block(body, Seek::Mentioned(path_root(list)), words),
+            Expr::Spawn { body, .. } => seek_expr(body, Seek::Mentioned(path_root(list)), words),
+            else => false,
+        },
+        Seek::ElementsChanged(list) => match expr {
+            Expr::MethodCall { receiver, method, args, .. } => changes_items_through(receiver, words.resolve(method), list, words) || any_holds_path(args, list, words),
+            Expr::SafeMethod { receiver, method, args, .. } => changes_items_through(receiver, words.resolve(method), list, words) || any_holds_path(args, list, words),
             Expr::Call { args, .. } => any_holds_path(args, list, words),
             Expr::Closure { body, .. } => seek_block(body, Seek::Mentioned(path_root(list)), words),
             Expr::Spawn { body, .. } => seek_expr(body, Seek::Mentioned(path_root(list)), words),

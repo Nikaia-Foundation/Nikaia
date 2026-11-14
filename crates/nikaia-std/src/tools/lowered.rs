@@ -3296,7 +3296,7 @@ pub mod boundaries {
 }
 pub mod bounds_basic {
     #[allow(unused_imports)]
-    pub use super::{basic_indices, keeps_length, bytes_word_width, length_stays, rebinds, path_of, path_root, path_within};
+    pub use super::{basic_indices, keeps_length, bytes_word_width, length_stays, elements_change, elements_stay, rebinds_in_statement, rebinds, path_of, path_root, path_within};
 }
 pub mod bounds_body {
     #[allow(unused_imports)]
@@ -3451,7 +3451,7 @@ pub mod check_core_args {
 }
 pub mod check_core_call {
     #[allow(unused_imports)]
-    pub use super::{check_core_call_lent, check_core_free_call, signature_type_variables, check_core_call, check_core_tuple};
+    pub use super::{check_core_call_lent, check_core_call_moving_options, check_core_free_call, signature_type_variables, check_core_call, check_core_tuple};
 }
 pub mod check_core_call_on {
     #[allow(unused_imports)]
@@ -4149,7 +4149,7 @@ pub mod prove_run {
 }
 pub mod prove_terms {
     #[allow(unused_imports)]
-    pub use super::{lin_term, text_literal_length, length_path, divisor_name, call_result_name, claim_term, nothing_pinned, folded_whole};
+    pub use super::{lin_term, text_literal_length, length_path, element_name, element_index, divisor_name, call_result_name, claim_term, nothing_pinned, folded_whole};
 }
 pub mod prove_text {
     #[allow(unused_imports)]

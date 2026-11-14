@@ -623,10 +623,10 @@ pub(crate) fn emit_seeds_position(place: &mut EmitSeedsPlace) -> String {
     if me >= place.groups.len() as i64 { return String::from(""); }
     let group = *nikaia_std::index::get(&place.groups, nikaia_std::index::at(me));
     if *nikaia_std::index::get(&place.names, nikaia_std::index::at(group)) == "" {
-        { let __nikaia_stored = format!("__S{}", place.next); nikaia_std::index::set(&mut place.names, nikaia_std::index::at(group), __nikaia_stored); }
+        { let __nikaia_stored = format!("__S{}", place.next); unsafe { nikaia_std::proven::write(&mut place.names, (group) as usize, __nikaia_stored) }; }
         place.next += 1;
     }
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&place.names, nikaia_std::index::at(group))).to_string())
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&place.names, (group) as usize) }).to_string())
 }
 
 pub(crate) fn emit_seeds_own(place: &mut EmitSeedsPlace) -> String {

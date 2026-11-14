@@ -1280,6 +1280,16 @@ pub fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWor
     // **A sequence keeps its `T` and its abort** (ADR-293 D3).
     if check_core_places_a_list(b) && args.len() > 0 {
         state.facts.list_indices.insert(id_of(base) as i64)
+        // **An element of a whole-number type is a number of the bounds
+        // walk** (ADR-306 D33), read through its path as a field is (D17).
+        match args[0] {
+            Ty::Named { name: item, args: inner, .. } => {
+                if inner.is_empty() && is_whole_number(item) {
+                    state.facts.whole_fields.insert(id_of(expr) as i64)
+                }
+            },
+            else => {}
+        }
         return args[0].clone()
     }
     // **A map answers a `T?`** (D1), and a map of `T?` reads one `T?`.

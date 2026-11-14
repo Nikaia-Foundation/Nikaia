@@ -54,6 +54,16 @@ pub fn lin_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var:
             }
             built(SolverTerm::Var(path), out)
         },
+        // **One element of a list** (ADR-306 D33): `xs[c]` of a list that is
+        // a path, indexed by a name or a literal, is a name of its own where
+        // the walk made it one, keyed as D20's element paths are.
+        Expr::Index { .. } => {
+            let element = element_name(expr, words) ?? return null
+            if !var(element) {
+                return null
+            }
+            built(SolverTerm::Var(element), out)
+        },
         // **A call's result**, where the walk made it a name of its own
         // (`call_result_name`, ADR-314 D3).
         Expr::Call { .. } => {
@@ -181,6 +191,36 @@ pub fn length_path(list: ref Expr, words: ref winnow_grammar::InternerContext, v
             return null
         },
         else => return null,
+    }
+}
+
+/// **The name of one element** (ADR-306 D33, D20): `xs[c]` or `t.slots[0]`,
+/// the list a path, the index a name or an integer literal that is not
+/// negative; nothing for any other index or list.
+pub fn element_name(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    return match expr {
+        Expr::Index { base, index, .. } => {
+            let list = path_of(base, words) ?? return null
+            let at = element_index(index, words) ?? return null
+            f"{list}[{at}]"
+        },
+        else => null,
+    }
+}
+
+/// An element's index as its name says it: a name, or the digits of an
+/// integer literal that is not negative.
+pub fn element_index(index: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    return match index {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        Expr::LitInt { value, negative, .. } => {
+            if negative {
+                return null
+            }
+            let n = literal_value(value, negative) ?? return null
+            f"{n}"
+        },
+        else => null,
     }
 }
 

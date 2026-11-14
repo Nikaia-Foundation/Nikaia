@@ -125,10 +125,13 @@ impl ProverScope {
     pub fn rebind(ref mut self, arena: ref TermArena, name: ref String) {
         // **The paths of fields from it go with it** (ADR-306 D17).
         let under = f"{name}."
+        // **And its elements, and the elements it indexes** (ADR-306 D33).
+        let element = f"{name}["
+        let index = f"[{name}]"
         let mut parts: collections::BTreeSet[String] = collections::BTreeSet()
         let own = length_of(name)
         for n in self.ints {
-            if n.starts_with(under) && n != own {
+            if (n.starts_with(under) || n.starts_with(element) || n.ends_with(index)) && n != own {
                 parts.insert((n.strip_suffix(".len()") ?? n).clone())
             }
         }

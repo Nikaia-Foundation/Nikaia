@@ -1,0 +1,28 @@
+error[NK2105]: You're using `e` again, but it was passed as the option `env` of `process::run`, which keeps it.
+   --> tests/an_option_that_keeps_moves_its_value.nika:33:5
+    |
+ 33 |     println(e.len())
+    |     ^
+    |
+    = note: `e` is a `Vec[(String, String)]`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: If both need it, hand over a copy: `e.clone()`.
+error[NK2105]: You're using `w` again, but it was passed as the option `name` of `keep`, which keeps it.
+   --> tests/an_option_that_keeps_moves_its_value.nika:37:5
+    |
+ 37 |     println(w)
+    |     ^
+    |
+    = note: `w` is a `String`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: If both need it, hand over a copy: `w.clone()`.
+error[NK2105]: You're using `u` again, but it was passed as the option `name` of `put`, which keeps it.
+   --> tests/an_option_that_keeps_moves_its_value.nika:42:5
+    |
+ 42 |     println(u)
+    |     ^
+    |
+    = note: `u` is a `String`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: If both need it, hand over a copy: `u.clone()`.
+
