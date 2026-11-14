@@ -1978,9 +1978,11 @@ fn the_address_it_printed(server: &mut std::process::Child) -> String {
 
 /// One request on its own connection, answered as a status line and a body.
 ///
-/// A connection each, because `Connection: close` is the MVP's scope and the
-/// server implements it that way: the answer goes out and the connection ends,
-/// which is also what makes reading to the end of it the right stop.
+/// **Read up to the end of the answer, not of the connection**: the server
+/// keeps an HTTP/1.1 connection open for the next request (ADR-326 D9), so
+/// reading to the end waited out the 20-second timeout on every request -
+/// the test took five minutes for a few seconds of work. The answer ends after
+/// its `content-length`; a refusal closes the connection, which ends it too.
 fn ask(address: &str, request: &[u8]) -> (String, String) {
     use std::io::{Read, Write};
     let mut socket = std::net::TcpStream::connect(address).expect("the server is listening");
@@ -1993,13 +1995,38 @@ fn ask(address: &str, request: &[u8]) -> (String, String) {
     // A refused request whose sender is still writing gets a reset rather than
     // the answer, which is what a closing server looks like from the other end -
     // so what arrived before it counts, and only an empty answer is a failure.
-    let _ = socket.read_to_end(&mut answered);
+    let mut chunk = [0u8; 4096];
+    while !answer_is_whole(&answered) {
+        match socket.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => answered.extend_from_slice(&chunk[..n]),
+        }
+    }
     let answered = String::from_utf8_lossy(&answered);
     let (head, body) = answered
         .split_once("\r\n\r\n")
         .unwrap_or_else(|| panic!("a head and a body, and this said {answered:?}"));
     let status = head.split("\r\n").next().unwrap_or_default().to_text();
     (status, body.to_text())
+}
+
+/// Whether `answered` holds a whole head and as many body bytes as its
+/// `content-length` says; without one the answer ends with the connection.
+fn answer_is_whole(answered: &[u8]) -> bool {
+    let Some(end) = answered.windows(4).position(|w| w == b"\r\n\r\n") else {
+        return false;
+    };
+    let head = String::from_utf8_lossy(&answered[..end]);
+    let length = head.split("\r\n").find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.trim()
+            .eq_ignore_ascii_case("content-length")
+            .then(|| value.trim().parse::<usize>().ok())?
+    });
+    match length {
+        Some(length) => answered.len() >= end + 4 + length,
+        None => false,
+    }
 }
 
 /// **A trait a package publishes is implemented and then called**
