@@ -5234,7 +5234,11 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         }
         Expr::MethodCall { receiver, method, args, .. } => method_kinds(receiver, ask.names.resolve(method), args, ask, walk),
         Expr::SafeMethod { receiver, method, args, .. } => method_kinds(receiver, ask.names.resolve(method), args, ask, walk),
-        Expr::Call { func, args, .. } => call_kinds(func, args, ask, walk),
+        Expr::Call { func, args, config, .. } => {
+            let kinds = call_kinds(func, args, ask, walk)
+            std_option_lists(func, config, ask, walk)
+            kinds
+        },
         Expr::Field { base, .. } => field_kinds(expr, base, ask, walk),
         Expr::SafeField { base, .. } => field_kinds(expr, base, ask, walk),
         Expr::Index { base, index, .. } => {
@@ -5730,6 +5734,9 @@ fn std_container_args(callee: ref String, args: ref Vec[Expr], ask: ref TierAsk,
             kept_unseen(arg, ask, walk)
             owned_literal_lets(arg, ask, walk)
         }
+        if at < params.len() {
+            std_whole_list(arg, params[at].1, ask, walk)
+        }
         at += 1
         let whole = source_of(arg, ask, walk)
         if whole != null {
@@ -5738,6 +5745,92 @@ fn std_container_args(callee: ref String, args: ref Vec[Expr], ask: ref TierAsk,
                 demote_inside(found.owner, found.ty, [], ask, walk)
             }
         }
+    }
+}
+
+/// **The options of a call of `std` holding text of its own** (#1592): a
+/// list literal a `let` binds, handed whole to one, is declared as it
+/// (`std_whole_list`), and every `String` inside it is text of its own, as
+/// in a list handed whole to a parameter (`std_container_args`).
+fn std_option_lists(func: ref Expr, config: ref Vec[ConfigArg], ask: ref TierAsk, mut walk: TierWalk) {
+    if config.len() == 0 {
+        return
+    }
+    let callee = tier_callee(func, ask) ?? return
+    if walk.declared.fns.contains_key(callee) {
+        return
+    }
+    let contract = ask.library.functions[callee] ?? return
+    let signature = contract.signature ?? return
+    for option in config {
+        let name = ask.names.resolve(option.name).clone()
+        for declared in signature.config {
+            if declared.name != name {
+                continue
+            }
+            std_whole_list(option.value, declared.ty, ask, walk)
+            let whole = source_of(option.value, ask, walk) ?? continue
+            if a_followed(ask.names, whole.ty) && holds_text(ask.names, whole.ty) {
+                demote_inside(whole.owner, whole.ty, [], ask, walk)
+            }
+        }
+    }
+}
+
+/// **A list literal a `let` binds, handed whole to `std` where it is a list
+/// of text of its own, is declared as that list** (#1592), as one handed to
+/// this program's function is (#1501): `let e = [("A", "0"), ("B", f"{x}")]`
+/// handed to `process::run`'s `env: Vec[(String, String)]` builds its
+/// literals' text there, as the same list written at the call does (#1269).
+fn std_whole_list(value: ref Expr, want: ref Ty, ask: ref TierAsk, mut walk: TierWalk) {
+    let name = match value {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        else => return,
+    }
+    let local = tier_local(name, walk) ?? return
+    let at = local.listed
+    if at < 0 || walk.flows.adopted.contains_key(at) || !std_owns_text_inside(want) {
+        return
+    }
+    let listed = match want {
+        Ty::Named { name, args, view } => !view && name == "Vec" && args.len() == 1,
+        else => false,
+    }
+    if !listed {
+        return
+    }
+    let ty = tier_written_type(want, ask.names) ?? return
+    walk.flows.adopted.insert(at, Declaring { owner: TextOwner::Let(at), ty: ty })
+}
+
+/// `ty` of the ledger as the program would write it (#1592), its names
+/// interned into the file's table; nothing for a type with no plain written
+/// form here (a path, a function, a sequence).
+fn tier_written_type(ty: ref Ty, names: ref winnow_grammar::InternerContext) -> Type? {
+    return match ty {
+        Ty::Named { name, args, view } => {
+            if name.contains("::") {
+                return null
+            }
+            let mut parts: Vec[Type] = []
+            for arg in args {
+                parts.push(tier_written_type(arg, names) ?? return null)
+            }
+            Type { name: names.intern_string(name), generics: parts, is_view: view, is_tuple: false, is_nullable: false, code: null, count: null, is_mut: false, is_slice: false, either: false, lasting: false }
+        },
+        Ty::Tuple(items) => {
+            let mut parts: Vec[Type] = []
+            for item in items {
+                parts.push(tier_written_type(item, names) ?? return null)
+            }
+            Type { name: names.intern_string("tuple"), generics: parts, is_view: false, is_tuple: true, is_nullable: false, code: null, count: null, is_mut: false, is_slice: false, either: false, lasting: false }
+        },
+        Ty::Nullable(inner) => {
+            let mut out = tier_written_type(inner, names) ?? return null
+            out.is_nullable = true
+            out
+        },
+        else => null,
     }
 }
 

@@ -3718,7 +3718,12 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &m
         },
         Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; method_kinds(receiver, ask.names.resolve(method), args, ask, walk) },
         Expr::SafeMethod { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; method_kinds(receiver, ask.names.resolve(method), args, ask, walk) },
-        Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); call_kinds(func, args, ask, walk) },
+        Expr::Call { func, args, config, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let kinds = call_kinds(func, args, ask, walk);
+            std_option_lists(func, config, ask, walk);
+            kinds
+        },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); field_kinds(expr, base, ask, walk) },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); field_kinds(expr, base, ask, walk) },
         Expr::Index { base, index, .. } => {
@@ -4118,12 +4123,71 @@ pub(crate) fn std_container_args(callee: &str, args: &[Expr], ask: &TierAsk<'_, 
             kept_unseen(arg, ask, walk);
             owned_literal_lets(arg, ask, walk);
         }
+        if ((at) as usize) < params.len() { std_whole_list(arg, &unsafe { nikaia_std::proven::read(&params, (at) as usize) }.1, ask, walk); }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         let whole = source_of(arg, ask, walk);
         if whole.is_some() {
             let found = match whole { Some(__nikaia_value) => __nikaia_value, None => return };
             if a_followed(ask.names, &found.ty) && holds_text(ask.names, &found.ty) { demote_inside(&found.owner, &found.ty, &mut vec![], ask, walk); }
         }
+    }
+}
+
+pub(crate) fn std_option_lists(func: &Expr, config: &[ConfigArg], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    if config.is_empty() { return; }
+    let callee = match tier_callee(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if walk.declared.fns.contains_key(&callee) { return; }
+    let contract = match *nikaia_std::index::get(&ask.library.functions, &callee) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+    for option in config.iter() {
+        let name = nikaia_std::block::Text::from(ask.names.resolve(option.name).to_string());
+        for declared in signature.config.iter() {
+            if declared.name != name { continue; }
+            std_whole_list(&option.value, &declared.ty, ask, walk);
+            let whole = match source_of(&option.value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if a_followed(ask.names, &whole.ty) && holds_text(ask.names, &whole.ty) { demote_inside(&whole.owner, &whole.ty, &mut vec![], ask, walk); }
+        }
+    }
+}
+
+pub(crate) fn std_whole_list(value: &Expr, want: &Ty, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    let name = match value {
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(ask.names.resolve(name).to_string()) },
+        _ => return,
+    };
+    let local = match tier_local(&name, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let at = local.listed;
+    if at < 0 || walk.flows.adopted.contains_key(&at) || !std_owns_text_inside(want) { return; }
+    let listed = match want {
+        Ty::Named { name, args, view } => { let view = *view; !view && name == "Vec" && args.len() == 1 },
+        _ => false,
+    };
+    if !listed { return; }
+    let ty = match tier_written_type(want, ask.names) { Some(__nikaia_value) => __nikaia_value, None => return };
+    walk.flows.adopted.insert(at, Declaring { owner: TextOwner::Let(at), ty });
+}
+
+pub(crate) fn tier_written_type(ty: &Ty, names: &winnow_grammar::InternerContext) -> Option<Type> {
+    match ty {
+        Ty::Named { name, args, view } => {
+            let view = *view;
+            if name.contains("::") { return None; }
+            let mut parts: Vec<Type> = vec![];
+            for arg in args.iter() { parts.push(match tier_written_type(arg, names) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+            Some(Type { name: names.intern_string(name), generics: parts, is_view: view, is_tuple: false, is_nullable: false, code: Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false })
+        },
+        Ty::Tuple(items) => {
+            let mut parts: Vec<Type> = vec![];
+            for item in items.iter() { parts.push(match tier_written_type(item, names) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+            Some(Type { name: names.intern_string("tuple"), generics: parts, is_view: false, is_tuple: true, is_nullable: false, code: Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false })
+        },
+        Ty::Nullable(inner) => {
+            let inner = nikaia_std::boxed::open(inner);
+            let mut out = match tier_written_type(inner, names) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            out.is_nullable = true;
+            Some(out)
+        },
+        _ => None,
     }
 }
 
