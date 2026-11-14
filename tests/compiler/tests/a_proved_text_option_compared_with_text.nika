@@ -1,0 +1,18 @@
+// #1599: `made != ty`, `made: String?` proved set and `ty: String`. The proved
+// read is lent below (`made.as_ref().unwrap()`), so the comparison read a
+// `&Text` beside a `Text` and rustc refused it (NK1343); it is read through
+// `*` now, as any view compared with a value.
+fn same(xs: Vec[String]) -> String? {
+    let mut made: String? = null
+    for x in xs {
+        let ty = x.clone()
+        if made != null && made != ty { return null }
+        made = ty
+    }
+    return made
+}
+
+fn main() throws {
+    println(same(["a", "a"]) ?? "none")
+    println(same(["a", "b"]) ?? "none")
+}
