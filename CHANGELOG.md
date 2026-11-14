@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1377] — 2026-11-14
+
+**Compare an indexed element of text against a list of text by its text (#1603)**
+- Fixed: `list.contains(parts[0])` with an element of a list of text views no longer ends in an internal error NK1343.
+
 ## [0.0.1376] — 2026-11-14
 
 **Builders' changes (#1595, #1596)**
