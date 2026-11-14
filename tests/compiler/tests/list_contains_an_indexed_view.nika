@@ -1,0 +1,21 @@
+// #1603: a list of text asked for an element of a list of views
+// (`a.contains(parts[0])`) was an internal error NK1343 (rustc `&&str`
+// against `&str`, or `&Text` against `&str`).
+fn make() -> String {
+    let mut g = String()
+    g.push_str("x")
+    g
+}
+
+fn main() throws {
+    let a: Vec[String] = ["x"]
+    let t = "x[y"
+    let parts: Vec[ref String] = t.split("[").collect()
+    println(a.contains(parts[0]))
+    println(a.contains(parts[1]))
+    let mut b: Vec[String] = []
+    b.push(make())
+    println(b.contains(parts[0]))
+    let owned: Vec[String] = [make()]
+    println(b.contains(owned[0]))
+}
