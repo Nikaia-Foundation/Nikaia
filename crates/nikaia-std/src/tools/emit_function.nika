@@ -1116,7 +1116,7 @@ impl EmitState {
                     pausing = "async "
                 }
                 // **What only a tools file's tests reach is built with them**
-                // (#1160, `modules_only_tests_reach`).
+                // (#1160, `modules_only_tests_package`).
                 let only_in_tests = emit_fn_only_in_tests(world.words, written.attributes)
                 if only_in_tests {
                     out.push("#[cfg(test)]\n")

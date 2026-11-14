@@ -625,108 +625,126 @@ pub fn modules_test_only_mark() -> String {
     return "cfg(test)"
 }
 
-/// **The private functions of a tools file that only its `test` blocks
-/// reach** (#1160), by name: a function without a receiver and not `pub`,
-/// mentioned by a `test` block or by another such function, and by nothing
-/// else - no other item of the file, no other file of the package (`texts`,
-/// the package's sources, of which `own` is this file's). A mention is a
-/// call of the name (`modules_call_starts`), in a comment or a string too: the
-/// files of a package share one namespace, and a local of the same name
-/// (`let foreign = ...`, `ours[i]`) is no mention. Lowered under
+/// **What one file of a package gives the test-only reach** (#1160), item by
+/// item in the file's order: the name of each private function without a
+/// receiver (`""` for any other item), whether the item is a `test` block,
+/// and the plain names its text calls (`modules_call_starts`), in a comment
+/// or a string too. The files of a package share one namespace, so the reach
+/// is worked out over all of them (`modules_only_tests_package`).
+pub struct ModulesReach {
+    names: Vec[String],
+    tests: Vec[bool],
+    calls: Vec[collections::BTreeSet[String]],
+}
+
+/// The reach of one file (`ModulesReach`): `items` parsed from `source`,
+/// their names in `words`.
+pub fn modules_reach_of(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext, source: ref String) -> ModulesReach {
+    let mut names: Vec[String] = []
+    let mut tests: Vec[bool] = []
+    let mut calls: Vec[collections::BTreeSet[String]] = []
+    for item in items {
+        let mut called: String = ""
+        let mut is_test = false
+        match item.node {
+            Item::Fn { name, receiver, is_public, is_extern, .. } => {
+                if receiver == null && !is_public && !is_extern {
+                    match name {
+                        held => { called = words.resolve(held).clone() },
+                        null => {},
+                    }
+                }
+            },
+            Item::Test { .. } => { is_test = true },
+            else => {},
+        }
+        names.push(called)
+        tests.push(is_test)
+        calls.push(collections::BTreeSet())
+    }
+    // The calls come in the text's order, the items too: each call goes to
+    // the item it stands in, one between two items to none.
+    let mut k = 0
+    for (word, start) in modules_call_starts(source) {
+        while k < items.len() && start >= items[k].span.end as i64 {
+            k += 1
+        }
+        if k >= items.len() {
+            break
+        }
+        if start >= items[k].span.start as i64 {
+            calls[k].insert(word.clone())
+        }
+    }
+    return ModulesReach { names: names, tests: tests, calls: calls }
+}
+
+/// **The private functions of a package that only `test` blocks reach**
+/// (#1160), by name, one set per file of `parts` (`modules_reach_of`): a
+/// function without a receiver and not `pub`, called by a `test` block of any
+/// file or by another such function, and by nothing else - no other item of
+/// any file. A name two files declare is no such function. A local of the
+/// same name (`let foreign = ...`, `ours[i]`) is no call. Lowered under
 /// `#[cfg(test)]`, such a function is not dead code to a build without the
 /// tests; one the rest names without calling it (a function value) fails that
 /// build loudly, never silently.
-pub fn modules_only_tests_reach(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext, texts: ref Vec[String], own: i64) -> collections::BTreeSet[String] {
-    let mut found: collections::BTreeSet[String] = collections::BTreeSet()
+pub fn modules_only_tests_package(parts: ref Vec[ModulesReach]) -> Vec[collections::BTreeSet[String]] {
+    // Every item's calls in one list; each candidate's place in it and file.
+    let mut bodies: Vec[collections::BTreeSet[String]] = []
     let mut candidates: collections::BTreeMap[String, i64] = collections::BTreeMap()
-    let mut tests: Vec[i64] = []
-    let mut at = 0
-    for item in items {
-        match item.node {
-            Item::Fn { name, receiver, is_public, is_extern, .. } => {
-                let held = name ?? {
-                    at += 1
-                    continue
-                }
-                if receiver == null && !is_public && !is_extern {
-                    candidates.insert(words.resolve(held).clone(), at)
-                }
-            },
-            Item::Test { .. } => tests.push(at),
-            else => {},
-        }
-        at += 1
-    }
-    if tests.is_empty() || candidates.is_empty() {
-        return found
-    }
-    let source = texts[own].clone()
-    let mentions = modules_mentions_by_item(items, source, candidates)
-    // What the tests reach through the candidates.
+    let mut home: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut twice: collections::BTreeSet[String] = collections::BTreeSet()
     let mut reached: collections::BTreeSet[String] = collections::BTreeSet()
-    for t in tests {
-        for name in mentions[t] {
-            reached.insert(name.clone())
-        }
-    }
-    modules_close_over(reached, candidates, mentions)
-    // What the rest of the file reaches, and what another file names.
-    let mut live: collections::BTreeSet[String] = collections::BTreeSet()
-    let mut k = 0
-    for each in mentions {
-        let is_test = tests.contains(k)
-        let mut is_candidate = false
-        for (_, place) in candidates {
-            if place == k {
-                is_candidate = true
-            }
-        }
-        if !is_test && !is_candidate {
-            for name in each {
-                live.insert(name.clone())
-            }
-        }
-        k += 1
-    }
-    while true {
-        modules_close_over(live, candidates, mentions)
-        let mut named_beside: Vec[String] = []
-        for name in reached {
-            if live.contains(name) {
-                continue
-            }
-            let mut j = 0
-            for text in texts {
-                if j != own && modules_calls_in(text, name) {
-                    named_beside.push(name.clone())
-                    break
+    let mut file = 0
+    for part in parts {
+        let mut k = 0
+        for name in part.names {
+            if part.tests[k] {
+                for word in part.calls[k] {
+                    reached.insert(word.clone())
                 }
-                j += 1
             }
+            if !name.is_empty() {
+                if candidates.contains_key(name) {
+                    twice.insert(name.clone())
+                }
+                candidates.insert(name.clone(), bodies.len() as i64)
+                home.insert(name.clone(), file)
+            }
+            bodies.push(part.calls[k].clone())
+            k += 1
         }
-        if named_beside.is_empty() {
-            break
+        file += 1
+    }
+    for name in twice {
+        candidates.remove(name)
+    }
+    // What the rest of the package calls: neither a test nor a candidate.
+    let mut live: collections::BTreeSet[String] = collections::BTreeSet()
+    for part in parts {
+        let mut k = 0
+        for name in part.names {
+            if !part.tests[k] && !candidates.contains_key(name) {
+                for word in part.calls[k] {
+                    live.insert(word.clone())
+                }
+            }
+            k += 1
         }
-        for name in named_beside.drain() {
-            live.insert(name)
-        }
+    }
+    modules_close_over(reached, candidates, bodies)
+    modules_close_over(live, candidates, bodies)
+    let mut found: Vec[collections::BTreeSet[String]] = []
+    for _ in parts {
+        found.push(collections::BTreeSet())
     }
     for name in reached {
         if candidates.contains_key(name) && !live.contains(name) {
-            found.insert(name.clone())
+            let at = home.get(name) ?? continue
+            found[at].insert(name.clone())
         }
     }
     return found
-}
-
-// Whether `text` calls `name` (`modules_call_starts`).
-fn modules_calls_in(text: ref String, name: ref String) -> bool {
-    for (word, _) in modules_call_starts(text) {
-        if word == name {
-            return true
-        }
-    }
-    return false
 }
 
 // Each call of a plain name in `text` with the byte it starts at: a word not
@@ -800,38 +818,10 @@ fn modules_close_over(mut names: collections::BTreeSet[String], candidates: ref 
     }
 }
 
-// The candidates' names each item's text calls (`modules_call_starts`), by
-// the item's place in `items`.
-fn modules_mentions_by_item(items: ref Vec[Spanned[Item]], source: ref String, candidates: ref collections::BTreeMap[String, i64]) -> Vec[collections::BTreeSet[String]] {
-    let mut out: Vec[collections::BTreeSet[String]] = []
-    for _ in items {
-        out.push(collections::BTreeSet())
-    }
-    for (word, start) in modules_call_starts(source) {
-        modules_note_word(items, candidates, word, start, out)
-    }
-    return out
-}
-
-// `word`, starting at byte `start`, into the mentions of the item it stands
-// in, when it is a candidate's name.
-fn modules_note_word(items: ref Vec[Spanned[Item]], candidates: ref collections::BTreeMap[String, i64], word: ref String, start: i64, mut out: Vec[collections::BTreeSet[String]]) {
-    if !candidates.contains_key(word) {
-        return
-    }
-    let mut k = 0
-    for item in items {
-        if start >= item.span.start as i64 && start < item.span.end as i64 {
-            out[k].insert(word.clone())
-            return
-        }
-        k += 1
-    }
-}
 
 /// **The functions a tools file lowers under `#[cfg(test)]`** (#1160): its
 /// tests, which `modules_tests_as_functions` turned into functions, and those
-/// of `only_tests` (`modules_only_tests_reach`) carry `modules_test_only_mark`.
+/// of `only_tests` (`modules_only_tests_package`) carry `modules_test_only_mark`.
 /// `tests` is how many tests the file has, numbered from 0.
 pub fn modules_mark_test_only(mut items: Vec[Spanned[Item]], only_tests: ref collections::BTreeSet[String], tests: i64, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) {
     let mut marks = only_tests.clone()
@@ -1470,4 +1460,61 @@ pub fn modules_emit_reading[H: ModulesEmitHost](host: ref H, packages: ref Vec[S
     let table = emit_needs_abort_table(rust, host.map_rows(), shown, sources, beside, host.has_main())
     rust.push_str(table)
     return rust
+}
+
+// One file's reach for the tests below: each item as (name, is a test, the
+// names it calls).
+fn modules_reach_test_file(items: Vec[(String, bool, Vec[String])]) -> ModulesReach {
+    let mut names: Vec[String] = []
+    let mut tests: Vec[bool] = []
+    let mut calls: Vec[collections::BTreeSet[String]] = []
+    for (name, is_test, called) in items {
+        names.push(name.clone())
+        tests.push(is_test)
+        let mut set: collections::BTreeSet[String] = collections::BTreeSet()
+        for word in called {
+            set.insert(word.clone())
+        }
+        calls.push(set)
+    }
+    return ModulesReach { names: names, tests: tests, calls: calls }
+}
+
+// The sets of `modules_only_tests_package`, one line per file.
+fn modules_reach_test_shown(found: ref Vec[collections::BTreeSet[String]]) -> String {
+    let mut out: String = ""
+    for set in found {
+        let mut names: Vec[String] = []
+        for name in set {
+            names.push(name.clone())
+        }
+        let line = names.join(" ")
+        out.push_str(f"[{line}]\n")
+    }
+    return out
+}
+
+test "a helper only another file's test calls is test-only (#1160)" {
+    // `a_help` (file A, no tests) calls `a_deeper`; only B's test calls it.
+    let a = modules_reach_test_file([("a_help", false, ["a_deeper"]), ("a_deeper", false, []), ("", false, ["a_used"]), ("a_used", false, [])])
+    let b = modules_reach_test_file([("", true, ["a_help", "b_help"]), ("b_help", false, ["a_used"])])
+    let found = modules_only_tests_package([a, b])
+    let out = modules_reach_test_shown(found)
+    assert(out == "[a_deeper a_help]\n[b_help]\n")
+}
+
+test "a helper another file's code calls stays plain (#1160)" {
+    let a = modules_reach_test_file([("a_help", false, []), ("", true, ["a_help"])])
+    let b = modules_reach_test_file([("", false, ["a_help"])])
+    let found = modules_only_tests_package([a, b])
+    let out = modules_reach_test_shown(found)
+    assert(out == "[]\n[]\n")
+}
+
+test "a name two files declare is never test-only (#1160)" {
+    let a = modules_reach_test_file([("twin", false, []), ("", true, ["twin"])])
+    let b = modules_reach_test_file([("twin", false, [])])
+    let found = modules_only_tests_package([a, b])
+    let out = modules_reach_test_shown(found)
+    assert(out == "[]\n[]\n")
 }

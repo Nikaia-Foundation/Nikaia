@@ -774,8 +774,9 @@ fn lower_package(
             &Host,
         )
     });
-    // A file with tests is keyed on what only its tests reach too (#1160):
-    // another file that starts to call one of them changes its lowering.
+    // A file is keyed on what only tests reach of it too (#1160): another
+    // file that starts or stops calling one of them, in a test or not,
+    // changes its lowering, and nothing else of the other files does.
     let file_key = |at: usize, only_tests: &BTreeSet<String>| -> Option<String> {
         let name = paths[at].file_name()?.to_string_lossy();
         let interface = interface.as_deref()?;
@@ -792,6 +793,24 @@ fn lower_package(
         Some(sysroot_cache::sysroot_file_key(
             interface, &name, &text, &Host,
         ))
+    };
+
+    // **What only `test` blocks reach, over the whole package** (#1160): the
+    // files share one namespace, so a helper only another file's tests call
+    // is test-only too.
+    let only_tests_of: Vec<BTreeSet<String>> = {
+        let parts: Vec<_> = parsed
+            .iter()
+            .zip(&texts)
+            .map(|(unit, text)| {
+                nikaia_std::tools::modules::modules_reach_of(
+                    &unit.program.items,
+                    &unit.interner,
+                    text,
+                )
+            })
+            .collect();
+        nikaia_std::tools::modules::modules_only_tests_package(&parts)
     };
 
     // **The package's call graphs, worked out once** (#1279): they are the
@@ -815,17 +834,8 @@ fn lower_package(
         let started = std::time::Instant::now();
         let (path, unit) = (&paths[at], &parsed[at]);
         let has_tests = nikaia_std::tools::modules::modules_test_count(&unit.program.items) > 0;
-        let only_tests = if has_tests {
-            nikaia_std::tools::modules::modules_only_tests_reach(
-                &unit.program.items,
-                &unit.interner,
-                &texts,
-                at as i64,
-            )
-        } else {
-            BTreeSet::new()
-        };
-        let key = file_key(at, &only_tests);
+        let only_tests = &only_tests_of[at];
+        let key = file_key(at, only_tests);
         if let Some(rust) = cache.get(key.as_deref()) {
             return (
                 Ok((rust, true)),
@@ -867,9 +877,9 @@ fn lower_package(
         // (`modules_tests_as_functions`) with the `#[cfg(test)]` module that
         // runs them (`modules_test_wrappers`). The file is parsed again for
         // it, and the facts of the first check belong to the first parse.
-        let (tests, facts) = if has_tests {
+        let (tests, facts) = if has_tests || !only_tests.is_empty() {
             (
-                Some(with_tests_as_functions(path, &parsed, &only_tests)),
+                Some(with_tests_as_functions(path, &parsed, only_tests)),
                 None,
             )
         } else {
@@ -971,7 +981,12 @@ fn with_tests_as_functions(
         &|text| interner.intern_string(text),
     );
     let titles: Vec<String> = found.into_iter().map(|(title, _)| title).collect();
-    let wrappers = nikaia_std::tools::modules::modules_test_wrappers(&titles, 0);
+    // A file without tests only marks what other files' tests reach.
+    let wrappers = if titles.is_empty() {
+        String::new()
+    } else {
+        nikaia_std::tools::modules::modules_test_wrappers(&titles, 0)
+    };
     Ok((again, wrappers))
 }
 
