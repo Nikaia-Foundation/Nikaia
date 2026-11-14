@@ -617,15 +617,15 @@ fn project_tests_batch_carrier() -> String {
 /// that holds it and its entry. A batch whose build fails is split in two and
 /// each half built again, down to a few programs; what is in no batch is built
 /// alone by `project_tests_program_test`. A program with a `.bounds` or
-/// `.asserts` report is never batched (the report is asked for at its build),
-/// and nothing is where there are too few programs or `NIKAIA_TEST_NO_BATCH`
-/// is set.
+/// `.asserts` report is batched too: the report is checked once per program
+/// (`project_tests_reports`), not at its build. Nothing is batched where there
+/// are too few programs or `NIKAIA_TEST_NO_BATCH` is set.
 pub fn project_tests_batches[H: ProjectTestsProgramHost](host: ref H, programs: ref Vec[ProgramTest], root: ref fs::Path, setting: String, own: ref fs::Path) -> collections::BTreeMap[String, ProjectTestsBatched] throws {
     let mut found: collections::BTreeMap[String, ProjectTestsBatched] = collections::BTreeMap()
     if env::var("NIKAIA_TEST_NO_BATCH") != null {
         return found
     }
-    let wanted: Vec[ProgramTest] = programs.iter().filter(fn(program) { program.bounds == null && program.asserts == null }).map(fn(program) { program.clone() }).collect()
+    let wanted: Vec[ProgramTest] = programs.iter().map(fn(program) { program.clone() }).collect()
     if wanted.len() < project_tests_batch_least() {
         return found
     }
@@ -794,7 +794,8 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
         null => {},
         batch => {
             let out = host.ran_batched(batch.binary, program.name, root, own, program.stdin)
-            let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(out.stderr, batch.entry, written, root))
+            let ran = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(out.stderr, batch.entry, written, root))
+            let outcome = project_tests_bounds_outcome(program, ran, reports.bounds.clone(), reports.asserts.clone())
             if outcome.passed && out.stderr.len() == 0 {
                 return outcome
             }

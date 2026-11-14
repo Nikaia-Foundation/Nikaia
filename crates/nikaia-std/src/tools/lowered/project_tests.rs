@@ -502,7 +502,7 @@ pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, program
     let __keep_frame = nikaia_std::tether::Keep::new();
     let mut found: collections::BTreeMap<String, ProjectTestsBatched> = collections::BTreeMap::new();
     if env::var("NIKAIA_TEST_NO_BATCH").is_some() { return Ok(found); }
-    let wanted: Vec<ProgramTest> = programs.iter().filter(|&program| { program.bounds.is_none() && program.asserts.is_none() }).map(|program| { program.clone() }).collect::<Vec<_>>();
+    let wanted: Vec<ProgramTest> = programs.iter().map(|program| { program.clone() }).collect::<Vec<_>>();
     if (wanted.len() as i64) < project_tests_batch_least() { return Ok(found); }
     let dependency: String = match host.package_name(root)? {
         None => String::from(""),
@@ -632,7 +632,8 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
         None => { },
         Some(batch) => {
             let out = host.ran_batched(&batch.binary, &program.name, root, own, &program.stdin)?;
-            let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&out.stderr, &batch.entry, &written, root));
+            let ran = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&out.stderr, &batch.entry, &written, root));
+            let outcome = project_tests_bounds_outcome(program, &ran, &nikaia_std::block::Text::from(reports.bounds.to_string()), &nikaia_std::block::Text::from(reports.asserts.to_string()));
             if outcome.passed && out.stderr.is_empty() { return Ok(outcome); }
             project_tests_empty_but(own, "project")?;
         },
