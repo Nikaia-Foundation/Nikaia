@@ -1,0 +1,50 @@
+// #1597, ADR-397: a value read from the environment is untrusted. An `assert`
+// about it is `NK1202`, the guard its help writes proves it, and `trusted:
+// true` at the source makes the claim one the compiler checks as any other
+// (`NK1300` where it is not proved). `--trust` names the source and the
+// marker's place, and the marker is recorded in the program's ledger.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn said(nikaia: String, tmp: String, label: String, source: String, verb: Vec[String]) throws {
+    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
+    let mut args = verb.clone()
+    args.push("p.nika")
+    let out = process::run(nikaia, args; dir: tmp.clone())
+    println(f"-- {label}")
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        let kept = line.starts_with("error") || line.starts_with("Checked") || line.starts_with("input provenance") || line.starts_with("    ") && line.contains(" is ") || line.starts_with("hash for")
+        if kept {
+            println(line.replace(tmp, "TMP"))
+        }
+    }
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let head = "use std::env\nuse std::text\n\nfn main() throws {\n"
+    let plain = "    let n: i64 = text::parse_i64(env::var(\"DEPTH\") ?? \"8\") ?? 8\n"
+    let marked = "    let n: i64 = text::parse_i64(env::var(\"DEPTH\"; trusted: true) ?? \"8\") ?? 8\n"
+    let tail = "    assert(n > 0)\n    println(n)\n}\n"
+    said(nikaia, tmp, "an assert on env::var", f"{head}{plain}{tail}", ["check"])
+    said(nikaia, tmp, "after the guard", f"{head}{plain}    return if !(n > 0)\n{tail}", ["check"])
+    said(nikaia, tmp, "trusted: true, a claim as any other", f"{head}{marked}{tail}", ["check"])
+    let map = "use std::env\nuse std::collections\n\nfn main() throws {\n    let mut m = collections::HashMap()\n    m.insert(env::var(\"HOME\""
+    let rest = ") ?? \"\", 1)\n    println(m.len())\n}\n"
+    said(nikaia, tmp, "a map keyed by env::var, no marker", f"{map}{rest}", ["lower", "--trust", "-o", "p.rs"])
+    said(nikaia, tmp, "a map keyed by env::var, trusted: true", f"{map}; trusted: true{rest}", ["lower", "--trust", "-o", "p.rs"])
+    println("-- the ledger")
+    for line in fs::read_to_string(f"{tmp}/nikaia.contracts", fs::Root::Anywhere).lines() {
+        if line.starts_with("[fn.") || line.starts_with("trusted") {
+            println(line)
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}

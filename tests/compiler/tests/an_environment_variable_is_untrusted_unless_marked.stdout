@@ -1,0 +1,17 @@
+-- an assert on env::var
+error[NK1202]: `n > 0` is a claim about data from outside the program.
+-- after the guard
+Checked p.nika
+-- trusted: true, a claim as any other
+error[NK1300]: `assert(n > 0)` is not proved: nothing before it shows it.
+-- a map keyed by env::var, no marker
+input provenance: untrusted
+    env::var is untrusted
+hash for a map keyed by the input: keyed, per-process random seed - key choice cannot be aimed at the table
+-- a map keyed by env::var, trusted: true
+input provenance: trusted
+    env::var is trusted: `trusted: true` at p.nika:6
+hash for a map keyed by the input: fast, fixed seed - no adversary chooses these keys
+-- the ledger
+[fn."main"]
+trusted = ["env::var at p.nika:6"]

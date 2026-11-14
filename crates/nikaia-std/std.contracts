@@ -2146,13 +2146,19 @@ signature = "(data: ref Vec[u8]) -> String"
 # everything* (Part III 13.5), so a read of the environment keeps its order
 # against every other effect, one of which may set the variable. Both are
 # `sync`: a read of the process's own memory, nothing to pause on.
+#
+# Whoever started the program chose its environment, and that need not be the
+# operator: a CGI host, a caller with fewer rights, a CI job. So the value is
+# **untrusted** unless the call says `trusted: true` (ADR-397 D1, D2).
+# `env::temp_dir` gives a path, and no provenance travels a path (ADR-010 D8).
 
 # The value of the environment variable `name`, null where unset, empty or not Unicode.
 [fn."env::var"]
 pub = true
 panics = false
 sync = true
-signature = "(name: ref String) -> String?"
+provenance = "untrusted"
+signature = "(name: ref String; trusted: bool = false) -> String?"
 
 # The directory for temporary files, as the system names it.
 [fn."env::temp_dir"]
