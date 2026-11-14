@@ -29,6 +29,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use nikaia_std::rt::exec::block_on;
+use nikaia_std::tools::project_batch;
 use nikaia_std::tools::project_check;
 use nikaia_std::tools::project_drive::{self, ProjectDriveRefusal};
 use nikaia_std::tools::project_lower;
@@ -2853,6 +2854,35 @@ fn run_program_tests<'a>(
     let places = (0..jobs)
         .map(|_| settings.iter().map(|_| Sandbox::new()).collect())
         .collect::<Result<Vec<Vec<_>>>>()?;
+    // **One build per setting for the programs** (`project_tests_batches`);
+    // not at `--bless`, which keeps what a build says beside each program.
+    let batch_places = settings
+        .iter()
+        .map(|_| Sandbox::new())
+        .collect::<Result<Vec<_>>>()?;
+    let batches = settings
+        .iter()
+        .zip(&batch_places)
+        .map(|(setting, place)| {
+            if suite.bless || suite.bless_stderr {
+                return Ok(BTreeMap::new());
+            }
+            let host = ProgramHost {
+                exe: std::env::current_exe().context("finding this compiler")?,
+                failed: RefCell::new(None),
+            };
+            match block_on(project_tests::project_tests_batches(
+                &host, programs, root, setting, &place.0,
+            )) {
+                Ok(found) => Ok(found),
+                Err(error) => Err(host
+                    .failed
+                    .into_inner()
+                    .unwrap_or_else(|| anyhow!("{error}"))),
+            }
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let batches = &batches;
     let next = AtomicUsize::new(0);
     let (send, receive) = std::sync::mpsc::channel();
     std::thread::scope(|scope| {
@@ -2867,8 +2897,10 @@ fn run_program_tests<'a>(
                     let outcomes = settings
                         .iter()
                         .zip(place)
-                        .map(|(setting, place)| {
-                            run_program_test(program, root, setting, &place.0)
+                        .zip(batches)
+                        .map(|((setting, place), batch)| {
+                            let batched = batch.get(&program.name);
+                            run_program_test(program, root, setting, &place.0, batched)
                                 .map(|outcome| (setting.clone(), outcome))
                         })
                         .collect::<Result<Vec<_>>>();
@@ -2912,13 +2944,19 @@ pub fn program_tests(root: &Path) -> Result<Vec<ProgramTest>> {
 /// `own` kept for the next program at this setting:
 /// `project_tests_program_test` (`tools/project_tests.nika`), the processes
 /// it starts behind [`ProgramHost`].
-fn run_program_test(test: &ProgramTest, root: &Path, setting: &str, own: &Path) -> Result<Outcome> {
+fn run_program_test(
+    test: &ProgramTest,
+    root: &Path,
+    setting: &str,
+    own: &Path,
+    batched: Option<&project_tests::ProjectTestsBatched>,
+) -> Result<Outcome> {
     let host = ProgramHost {
         exe: std::env::current_exe().context("finding this compiler")?,
         failed: RefCell::new(None),
     };
     match block_on(project_tests::project_tests_program_test(
-        &host, test, root, setting, own,
+        &host, test, root, setting, own, batched,
     )) {
         Ok(outcome) => Ok(outcome),
         Err(error) => Err(host
@@ -3046,6 +3084,42 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         let mut command = std::process::Command::new(&binary);
         command.env(nikaia_std::fs::TEST_DIR_VAR, own);
         self.held(self.ran(&binary, command, dir, stdin).map(Some))
+    }
+
+    fn batched(
+        &self,
+        setting: &str,
+        project: &Path,
+        own: &Path,
+        list: &Path,
+    ) -> HostResult<Option<PathBuf>> {
+        let mut command = std::process::Command::new(&self.exe);
+        command
+            .args(["build", "--user-parallelism", setting, "--project"])
+            .arg(project)
+            .env(nikaia_std::fs::TEST_DIR_VAR, own)
+            .env(project_batch::project_batch_var(), list)
+            .env("CARGO_TERM_QUIET", "true");
+        let built = self.held(self.ran(&self.exe, command, own, &[]))?;
+        let binary = project
+            .join("target")
+            .join("nikaia")
+            .join("bin")
+            .join(format!("program_test{}", std::env::consts::EXE_SUFFIX));
+        Ok((built.code == 0 && binary.is_file()).then_some(binary))
+    }
+
+    fn ran_batched(
+        &self,
+        binary: &Path,
+        name: &str,
+        dir: &Path,
+        own: &Path,
+        stdin: &[u8],
+    ) -> HostResult<project_tests::ProjectTestsRan> {
+        let mut command = std::process::Command::new(binary);
+        command.arg(name).env(nikaia_std::fs::TEST_DIR_VAR, own);
+        self.held(self.ran(binary, command, dir, stdin))
     }
 }
 
@@ -3617,7 +3691,7 @@ pub fn wrapper_main() -> Result<i32> {
         invocation: RefCell::new(invocation),
         failed: RefCell::new(None),
     };
-    project_drive::project_drive_wrapper(&host)
+    block_on(project_drive::project_drive_wrapper(&host))
         .map_err(|error| host.failed.take().unwrap_or_else(|| anyhow!("{error}")))
 }
 

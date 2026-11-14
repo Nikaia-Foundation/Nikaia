@@ -14,6 +14,7 @@
 // **What a test expects is `Bytes`**: a file is read as bytes and compared as
 // bytes, never as text that might not be (ADR-269 D22, ADR-247 D2).
 
+use std::env
 use std::fs
 use std::collections
 
@@ -580,6 +581,103 @@ pub trait ProjectTestsProgramHost {
     /// `dir`, with `own` as the test's directory; nothing where it is not
     /// there. `stdin` goes to its standard input, none where it is empty.
     fn built(ref self, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes) -> ProjectTestsRan? sync throws
+    /// **The batch build** (`project_batch.nika`): this compiler's `build
+    /// --user-parallelism SETTING --project PROJECT` in `own`, with
+    /// `project_batch_var()` naming `list`; the program it made, nothing where
+    /// the build failed.
+    fn batched(ref self, setting: ref String, project: ref fs::Path, own: ref fs::Path, list: ref fs::Path) -> fs::Path? sync throws
+    /// The batch's `binary NAME`, run in `dir`, with `own` as the test's
+    /// directory and `stdin` on its standard input (none where it is empty).
+    fn ran_batched(ref self, binary: ref fs::Path, name: ref String, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes) -> ProjectTestsRan sync throws
+}
+
+/// **What a program of a batch is run from**: the batch's binary, and the
+/// entry the program was lowered from (its path in what the compiler says).
+pub struct ProjectTestsBatched {
+    pub binary: fs::Path,
+    pub entry: fs::Path,
+}
+
+/// The fewest programs worth a batch: below it the extra build costs more than
+/// it saves.
+fn project_tests_batch_least() -> i64 {
+    return 8
+}
+
+/// **The entry of a batch's package**: the wrapper builds the batch in its
+/// place, but the build reads the dependencies the program crate needs from
+/// what this entry lowers to, and a program of the batch may use a grammar
+/// (`winnow_grammar`, `winnow`); so the entry holds one.
+fn project_tests_batch_carrier() -> String {
+    return "grammar Carrier {\n    rule n -> ref Bytes = s:bytes(until(\";\")) -> { s }\n    entry rule top -> i64 = x:n \";\" -> { x.len() }\n}\n\nfn main() throws {\n    let r = Carrier::top(\"abc;\") catch { -1 }\n    println(f\"{r}\")\n}\n"
+}
+
+/// **One setting's batches of `programs`** (`project_batch.nika`), each a
+/// package in a directory of its own under `own`: by program name, the binary
+/// that holds it and its entry. A batch whose build fails is split in two and
+/// each half built again, down to a few programs; what is in no batch is built
+/// alone by `project_tests_program_test`. A program with a `.bounds` or
+/// `.asserts` report is never batched (the report is asked for at its build),
+/// and nothing is where there are too few programs or `NIKAIA_TEST_NO_BATCH`
+/// is set.
+pub fn project_tests_batches[H: ProjectTestsProgramHost](host: ref H, programs: ref Vec[ProgramTest], root: ref fs::Path, setting: String, own: ref fs::Path) -> collections::BTreeMap[String, ProjectTestsBatched] throws {
+    let mut found: collections::BTreeMap[String, ProjectTestsBatched] = collections::BTreeMap()
+    if env::var("NIKAIA_TEST_NO_BATCH") != null {
+        return found
+    }
+    let wanted: Vec[ProgramTest] = programs.iter().filter(fn(program) { program.bounds == null && program.asserts == null }).map(fn(program) { program.clone() }).collect()
+    if wanted.len() < project_tests_batch_least() {
+        return found
+    }
+    let dependency: String = match host.package_name(root) {
+        null => "",
+        name => {
+            let at = project_members_canonical(root).display()
+            f"\n[dependencies]\n{name} = {{ path = {at:?} }}\n"
+        }
+    }
+    let manifest = f"[package]\nname = \"program_test\"\nversion = \"0.1.0\"\n{dependency}"
+    let mut chunks: Vec[Vec[ProgramTest]] = [wanted]
+    let mut made: i64 = 0
+    while !chunks.is_empty() {
+        let chunk = chunks.pop() ?? break
+        let dir = own.join(f"batch-{made}")
+        made = made + 1
+        fs::create_dir(dir.join("project").join("src"), fs::Root::Anywhere; recursive: true)
+        fs::write(dir.join("project").join("nikaia.toml"), fs::Root::Anywhere, manifest.clone())
+        fs::write(dir.join("project").join("src").join("main.nika"), fs::Root::Anywhere, project_tests_batch_carrier())
+        let mut lines: Vec[String] = []
+        for program in chunk {
+            let at = dir.join("programs").join(program.name)
+            fs::create_dir(at.join("src"), fs::Root::Anywhere; recursive: true)
+            fs::write(at.join("nikaia.toml"), fs::Root::Anywhere, manifest.clone())
+            let entry = at.join("src").join("main.nika")
+            let source = program.dir.join(f"{program.name}.nika")
+            fs::copy(source, entry, fs::Root::Anywhere) catch { throw ProjectTestsRefusal::Refused(f"copying {source.display()}: {error}") }
+            lines.push(f"{program.name}\t{entry.display()}\n")
+        }
+        let list = dir.join("batch.list")
+        fs::write(list, fs::Root::Anywhere, lines.join(""))
+        match host.batched(setting, dir.join("project"), dir, list) {
+            null => {
+                // **Split, and build each half again**: one program that does
+                // not compile as a module leaves its half out, not the rest.
+                if chunk.len() >= 2 * project_tests_batch_least() {
+                    let half = chunk.len() / 2
+                    chunks.push(chunk.iter().take(half).map(fn(program) { program.clone() }).collect())
+                    chunks.push(chunk.iter().skip(half).map(fn(program) { program.clone() }).collect())
+                }
+            },
+            binary => {
+                let included = fs::read_to_string(dir.join("batch.included"), fs::Root::Anywhere) catch { "" }
+                for name in included.lines() {
+                    let entry = dir.join("programs").join(name).join("src").join("main.nika")
+                    found.insert(name.clone(), ProjectTestsBatched { binary: binary.clone(), entry: entry })
+                }
+            },
+        }
+    }
+    return found
 }
 
 /// Remove everything in `dir` but the entry named `keep`; a `dir` that cannot
@@ -631,7 +729,7 @@ fn project_tests_joined(first: ref Bytes, then: ref Bytes) -> Bytes {
 /// process replaced by the program, #281). What the run wrote before the
 /// program started, the build's warnings, is the build's standard error with
 /// Cargo kept quiet as `run` keeps it (`CARGO_TERM_QUIET`).
-pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, program: ref ProgramTest, root: ref fs::Path, setting: String, own: ref fs::Path) -> ProjectTestsOutcome throws {
+pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, program: ref ProgramTest, root: ref fs::Path, setting: String, own: ref fs::Path, batched: ProjectTestsBatched?) -> ProjectTestsOutcome throws {
     let project = own.join("project")
     project_tests_empty_but(own, "project")
     project_tests_empty_but(project, "target")
@@ -648,6 +746,19 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     }
     fs::write(project.join("nikaia.toml"), fs::Root::Anywhere, f"[package]\nname = \"program_test\"\nversion = \"0.1.0\"\n{dependency}")
     let written = f"tests/{program.name}.nika"
+    // **Run from the batch, where it is in one** (`project_tests_batches`):
+    // a pass there is the verdict; anything else is built and run alone.
+    match batched {
+        null => {},
+        batch => {
+            let out = host.ran_batched(batch.binary, program.name, root, own, program.stdin)
+            let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(out.stderr, batch.entry, written, root))
+            if outcome.passed {
+                return outcome
+            }
+            project_tests_empty_but(own, "project")
+        },
+    }
     // **The `--bounds` report a `.bounds` expects** (#1069), as `check
     // --bounds` computes it for the program; what is proved does not depend
     // on the build's settings (ADR-306 D14, ADR-361 D14).

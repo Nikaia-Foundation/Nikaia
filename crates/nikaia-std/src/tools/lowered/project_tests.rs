@@ -64,6 +64,7 @@ impl nikaia_std::error::Full for __NikaiaThrows_ProjectTestsRefusal__io_IoError 
 
 
 
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectTestsOutcome {
     pub ended_well: bool,
@@ -483,6 +484,79 @@ pub trait ProjectTestsProgramHost {
     fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
     fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, Box<dyn std::error::Error>>;
     fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<Option<ProjectTestsRan>, Box<dyn std::error::Error>>;
+    fn batched(&self, setting: &str, project: &std::path::Path, own: &std::path::Path, list: &std::path::Path) -> Result<Option<fs::Path>, Box<dyn std::error::Error>>;
+    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectTestsBatched {
+    pub binary: fs::Path,
+    pub entry: fs::Path,
+}
+
+pub(crate) fn project_tests_batch_least() -> i64 { 8 }
+
+pub(crate) fn project_tests_batch_carrier() -> &'static str { "grammar Carrier {\n    rule n -> ref Bytes = s:bytes(until(\";\")) -> { s }\n    entry rule top -> i64 = x:n \";\" -> { x.len() }\n}\n\nfn main() throws {\n    let r = Carrier::top(\"abc;\") catch { -1 }\n    println(f\"{r}\")\n}\n" }
+
+pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, programs: &[ProgramTest], root: &std::path::Path, setting: &str, own: &std::path::Path) -> Result<collections::BTreeMap<String, ProjectTestsBatched>, Box<dyn std::error::Error>> {
+    let __keep_frame = nikaia_std::tether::Keep::new();
+    let mut found: collections::BTreeMap<String, ProjectTestsBatched> = collections::BTreeMap::new();
+    if env::var("NIKAIA_TEST_NO_BATCH").is_some() { return Ok(found); }
+    let wanted: Vec<ProgramTest> = programs.iter().filter(|&program| { program.bounds.is_none() && program.asserts.is_none() }).map(|program| { program.clone() }).collect::<Vec<_>>();
+    if (wanted.len() as i64) < project_tests_batch_least() { return Ok(found); }
+    let dependency: String = match host.package_name(root)? {
+        None => String::from(""),
+        Some(ref name) => {
+            let at = nikaia_std::fs::path::display(&(project_members_canonical(root)));
+            format!("\n[dependencies]\n{} = {{ path = {:?} }}\n", name, at)
+        },
+    };
+    let manifest = format!("[package]\nname = \"program_test\"\nversion = \"0.1.0\"\n{}", dependency);
+    let mut chunks: Vec<Vec<ProgramTest>> = nikaia_std::block::List::from_array_in([wanted], nikaia_std::block::Place::Block);
+    let mut made: i64 = 0;
+    while !chunks.is_empty() {
+        let chunk = match chunks.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        let dir = nikaia_std::fs::path::join(&(own), std::path::Path::new(&(format!("batch-{}", made))));
+        made = made + 1;
+        fs::create_dir(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project")))), std::path::Path::new(&("src"))), &fs::Root::Anywhere, true)?;
+        fs::write(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project")))), std::path::Path::new(&("nikaia.toml"))), &fs::Root::Anywhere, nikaia_std::block::Text::from(manifest.to_string()), false, true).await?;
+        fs::write(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project")))), std::path::Path::new(&("src")))), std::path::Path::new(&("main.nika"))), &fs::Root::Anywhere, project_tests_batch_carrier(), false, true).await?;
+        let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for program in chunk.iter() {
+            let at = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("programs")))), std::path::Path::new(&(program.name)));
+            fs::create_dir(&nikaia_std::fs::path::join(&(at), std::path::Path::new(&("src"))), &fs::Root::Anywhere, true)?;
+            fs::write(&nikaia_std::fs::path::join(&(at), std::path::Path::new(&("nikaia.toml"))), &fs::Root::Anywhere, nikaia_std::block::Text::from(manifest.to_string()), false, true).await?;
+            let entry = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(at), std::path::Path::new(&("src")))), std::path::Path::new(&("main.nika")));
+            let source = nikaia_std::fs::path::join(&(program.dir), std::path::Path::new(&(format!("{}.nika", program.name))));
+            match fs::copy(&source, &entry, &fs::Root::Anywhere) {
+                Ok(_) => {},
+                Err(error) => { return Err(nikaia_std::error::raise(ProjectTestsRefusal::Refused(format!("copying {}: {}", nikaia_std::fs::path::display(&(source)), error)), &"project_tests_batches")); },
+            };
+            lines.push(format!("{}\t{}\n", program.name, nikaia_std::fs::path::display(&(entry))));
+        }
+        let list = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("batch.list")));
+        fs::write(&list, &fs::Root::Anywhere, nikaia_std::block::Text::from(lines.join("")), false, true).await?;
+        match host.batched(setting, &nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project"))), &dir, &list)? {
+            None => {
+                if (chunk.len() as i64) >= unsafe { nikaia_std::proven::mul::<i64>(2, project_tests_batch_least()) } {
+                    let half = chunk.len() as i64 / 2;
+                    chunks.push(chunk.iter().take(nikaia_std::count::of(half)).map(|program| { program.clone() }).collect::<Vec<_>>());
+                    chunks.push(chunk.iter().skip(nikaia_std::count::of(half)).map(|program| { program.clone() }).collect::<Vec<_>>());
+                }
+            },
+            Some(ref binary) => {
+                let included = __keep_frame.put(match fs::read_to_string(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("batch.included"))), &fs::Root::Anywhere).await {
+                    Ok(value) => value,
+                    Err(_error) => { String::from("") },
+                });
+                for name in included.lines() {
+                    let entry = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("programs")))), std::path::Path::new(&(name)))), std::path::Path::new(&("src")))), std::path::Path::new(&("main.nika")));
+                    found.insert(nikaia_std::block::Text::from(name.to_string()), ProjectTestsBatched { binary: nikaia_std::fs::path::clone(&(binary)), entry });
+                }
+            },
+        }
+    }
+    Ok(found)
 }
 
 pub(crate) fn project_tests_empty_but(dir: &std::path::Path, keep: &str) -> Result<(), nikaia_std::error::Thrown<ProjectTestsRefusal>> {
@@ -512,7 +586,7 @@ pub(crate) fn project_tests_joined(first: &[u8], then: &[u8]) -> Bytes {
     Bytes(all)
 }
 
-pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, setting: &str, own: &std::path::Path) -> Result<ProjectTestsOutcome, Box<dyn std::error::Error>> {
+pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, setting: &str, own: &std::path::Path, batched: Option<&ProjectTestsBatched>) -> Result<ProjectTestsOutcome, Box<dyn std::error::Error>> {
     let project = nikaia_std::fs::path::join(&(own), std::path::Path::new(&("project")));
     project_tests_empty_but(own, "project")?;
     project_tests_empty_but(&project, "target")?;
@@ -532,6 +606,15 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     };
     fs::write(&nikaia_std::fs::path::join(&(project), std::path::Path::new(&("nikaia.toml"))), &fs::Root::Anywhere, format!("[package]\nname = \"program_test\"\nversion = \"0.1.0\"\n{}", dependency), false, true).await?;
     let written = format!("tests/{}.nika", program.name);
+    match batched {
+        None => { },
+        Some(batch) => {
+            let out = host.ran_batched(&batch.binary, &program.name, root, own, &program.stdin)?;
+            let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&out.stderr, &batch.entry, &written, root));
+            if outcome.passed { return Ok(outcome); }
+            project_tests_empty_but(own, "project")?;
+        },
+    }
     let mut report: String = String::from("");
     if program.bounds.is_some() { report = project_tests_relocated(&host.explained(&vec![String::from("--bounds")], &entry, own)?, &entry, &written, root); }
     let mut asserts: String = String::from("");

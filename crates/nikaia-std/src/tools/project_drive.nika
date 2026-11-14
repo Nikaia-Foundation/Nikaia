@@ -1014,7 +1014,7 @@ pub trait ProjectDriveWrapperHost {
 /// `.nika` source is lowered as the project build lowers it, written where the
 /// build said, and compiled in its place. Moved from `project.rs`'s
 /// `wrapper_main` (ADR-294, #125).
-pub fn project_drive_wrapper[H: ProjectDriveWrapperHost](host: ref H) -> i32 sync throws {
+pub fn project_drive_wrapper[H: ProjectDriveWrapperHost](host: ref H) -> i32 throws {
     let source = match host.source_path() {
         null => {
             host.trace("passed through")
@@ -1044,7 +1044,19 @@ pub fn project_drive_wrapper[H: ProjectDriveWrapperHost](host: ref H) -> i32 syn
     // linked into one, and a binary takes one allocator.
     let args = host.args()
     let a_program = args.iter().zip(args.iter().skip(1)).any(fn((a, b)) { a == "--crate-type" && b == "bin" })
-    let (rust, sources) = host.lower(source, no_cache, allowlist, shown, a_program)
+    // **A batch of test programs** (`project_batch.nika`): the program crate
+    // of `nikaia test`'s batch build holds every program the list names.
+    let batch: String? = match a_program {
+        true => env::var(project_batch_var()),
+        false => null,
+    }
+    let (rust, sources) = match batch {
+        null => host.lower(source, no_cache, allowlist, shown, a_program),
+        list => {
+            let path: fs::Path = list
+            project_batch_lowered(host, path, no_cache)
+        },
+    }
     let name = host.crate_name() ?? (source.with_extension("").file_name()?.display() ?? "main")
     let tag = env::var("NIKAIA_PROGRAM_TAG") ?? ""
     let name = name.strip_suffix(tag)?.clone() ?? name

@@ -732,9 +732,7 @@ pub trait ProjectDriveWrapperHost {
     fn record_dependencies(&self, inputs: &[fs::Path]) -> Result<(), Box<dyn std::error::Error>>;
 }
 
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-pub fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32, Box<dyn std::error::Error>> {
+pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32, Box<dyn std::error::Error>> {
     let source = match host.source_path() {
         None => {
             host.trace("passed through");
@@ -759,11 +757,21 @@ pub fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple55853| {
-        let (a, b) = __nikaia_tuple55853;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple55848| {
+        let (a, b) = __nikaia_tuple55848;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
-    let (rust, sources) = host.lower(&source, no_cache, (allowlist).as_deref(), (shown).as_deref(), a_program)?;
+    let batch: Option<String> = match a_program {
+        true => env::var(&project_batch_var()),
+        false => None,
+    };
+    let (rust, sources) = match batch {
+        None => host.lower(&source, no_cache, (allowlist).as_deref(), (shown).as_deref(), a_program)?,
+        Some(list) => {
+            let path: fs::Path = std::path::PathBuf::from(list);
+            project_batch_lowered(host, &path, no_cache).await?
+        },
+    };
     let name = nikaia_std::index::or(host.crate_name(), || nikaia_std::index::or(match nikaia_std::fs::path::file_name(&(nikaia_std::fs::path::with_extension(&(source), std::path::Path::new(&(""))))).as_ref() {
         Some(__nikaia_it) => Some(nikaia_std::fs::path::display(&(__nikaia_it))),
         None => None,

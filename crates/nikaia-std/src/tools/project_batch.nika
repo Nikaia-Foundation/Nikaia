@@ -1,0 +1,110 @@
+// **One build for a package's test programs** (owner, 2026-11-14: CI in
+// minutes, not 40-70). `nikaia test` built every `tests/NAME.nika` as a
+// package of its own: one `nikaia build`, one Cargo and one `rustc` per
+// program and setting, 2600 of each for tests/compiler, and the Cargo builds
+// waited for one another on the shared build directory's lock. Here the
+// programs of one setting are lowered by one wrapper process, each as a module
+// of one crate, and built by one `rustc`; a dispatcher `main` runs the program
+// its first argument names. Each test still runs in a process of its own
+// (ADR-269 D1, D22); only the build is shared.
+//
+// **The batch only speeds a test up, it never decides one**: a program the
+// batch leaves out (it does not lower alone, it has a `.bounds` or `.asserts`
+// report, its chunk did not compile) and a program whose batched run did not
+// pass is built and run alone, as before, and that run is the verdict.
+
+use std::env
+use std::fs
+use std::collections
+
+/// The variable that hands the wrapper the list of programs to build as one
+/// crate: a file of `NAME<TAB>ENTRY` lines. Beside it the wrapper writes
+/// `LIST.included`, the names of the programs the crate holds.
+pub fn project_batch_var() -> String {
+    return "NIKAIA_TEST_BATCH"
+}
+
+/// **A lowered program as the module `p{k}` of the batch**, or nothing where
+/// it has no `fn main` of its own. The module is a crate root moved one level
+/// down: `crate::` paths name the module, the program's `main` and the types it
+/// declares at the top become `pub` (the dispatcher calls `main`, and its error
+/// type is in `main`'s signature), and the global allocator is the batch's,
+/// declared once. **`main` is the last line that starts one**: an earlier one
+/// is inside a text the program holds. A text that holds `crate::` or a line
+/// starting `enum` is changed with the rest; the program then prints something
+/// else, its batched run fails and it is run alone.
+pub fn project_batch_module(k: i64, rust: ref String) -> String? {
+    let lines: Vec[String] = rust.split("\n").map(fn(line) { line.clone() }).collect()
+    let mut main_at: i64 = -1
+    for (at, line) in lines.iter().enumerate() {
+        if line.starts_with("fn main(") || line.starts_with("async fn main(") {
+            main_at = at
+        }
+    }
+    if main_at < 0 {
+        return null
+    }
+    let root = f"crate::p{k}::"
+    let mut parts: Vec[String] = [f"pub mod p{k} " + "{\n"]
+    let mut allocator = false
+    for (at, line) in lines.iter().enumerate() {
+        if allocator {
+            allocator = false
+            continue
+        }
+        if line == "#[global_allocator]" {
+            allocator = true
+            continue
+        }
+        let mut text = line.replace("$crate::", "\u{1}").replace("crate::", root).replace("\u{1}", "$crate::")
+        if at == main_at || text.starts_with("enum ") || text.starts_with("struct ") || text.starts_with("type ") {
+            text = "pub " + text
+        }
+        parts.push(text + "\n")
+    }
+    parts.push("}\n")
+    return parts.join("")
+}
+
+/// **The batch's crate**: the allocator once, every module, and the
+/// dispatcher. `names[k]` is the program `modules[k]` holds; `main`'s result
+/// is reported as a `main` of its own would report it, so the exit code and
+/// what is written on an error are the same.
+pub fn project_batch_crate(names: ref Vec[String], modules: ref Vec[String]) -> String {
+    let mut parts: Vec[String] = ["#![allow(warnings)]\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n"]
+    for module in modules {
+        parts.push(module.clone())
+    }
+    parts.push("fn main() -> std::process::ExitCode {\n    match std::env::args().nth(1).as_deref().unwrap_or(\"\") {\n")
+    for (k, name) in names.iter().enumerate() {
+        parts.push(f"        {name:?} => std::process::Termination::report(p{k}::main()),\n")
+    }
+    parts.push("        _ => std::process::ExitCode::from(2),\n    }\n}\n")
+    return parts.join("")
+}
+
+/// **What the wrapper builds for a batch** (`project_drive_wrapper`, where
+/// [`project_batch_var`] is set and the crate is the program): every program
+/// of `list` lowered as a crate of its own would be, the ones that lower made
+/// modules of one crate, their names written to `LIST.included`. The Rust, and
+/// every source the programs read.
+pub fn project_batch_lowered[H: ProjectDriveWrapperHost](host: ref H, list: ref fs::Path, no_cache: bool) -> (String, Vec[fs::Path]) throws {
+    let text = fs::read_to_string(list, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"reading the batch list {list.display()}: {error}") }
+    let mut names: Vec[String] = []
+    let mut modules: Vec[String] = []
+    let mut sources: Vec[fs::Path] = []
+    for line in text.lines() {
+        let (name, entry) = line.split_once("\t") ?? continue
+        let path: fs::Path = entry
+        let (rust, read) = host.lower(path, no_cache, null, null, true) catch { continue }
+        let module = project_batch_module(names.len(), rust) ?? continue
+        names.push(name.clone())
+        modules.push(module)
+        for source in read {
+            sources.push(source.clone())
+        }
+    }
+    let included = list.with_extension("included")
+    fs::write(included, fs::Root::Anywhere, names.iter().map(fn(name) { name.clone() + "\n" }).collect().join("")) catch { throw ProjectDriveRefusal::Failed(f"writing {included.display()}: {error}") }
+    return (project_batch_crate(names, modules), sources)
+}
