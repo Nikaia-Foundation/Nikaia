@@ -1,0 +1,25 @@
+error[NK1207]: At this call, `y + 2147483647` in `grow` goes past what an `i32` holds every time it is reached.
+   --> tests/a_compound_assignment_shown_to_overflow_is_refused.nika:25:2
+    |
+ 25 | 	println(f"{grow(1)} {split(0)} {share(0)}")
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Here `x` is 1.
+    = help: Pass `grow` arguments for which `-2147483648 <= y + 2147483647 <= 2147483647` holds, or check them with a guard before the call.
+error[NK1207]: At this call, `y / d` in `split` divides by zero every time it is reached.
+   --> tests/a_compound_assignment_shown_to_overflow_is_refused.nika:25:2
+    |
+ 25 | 	println(f"{grow(1)} {split(0)} {share(0)}")
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Here `d` is 0.
+    = help: Pass `split` arguments for which `d != 0` holds, or check them with a guard before the call.
+error[NK1207]: At this call, `xs[0] % d` in `share` divides by zero every time it is reached.
+   --> tests/a_compound_assignment_shown_to_overflow_is_refused.nika:25:2
+    |
+ 25 | 	println(f"{grow(1)} {split(0)} {share(0)}")
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Here `d` is 0.
+    = help: Pass `share` arguments for which `d != 0` holds, or check them with a guard before the call.
+3 claims shown false

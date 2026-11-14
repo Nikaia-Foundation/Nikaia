@@ -1,0 +1,57 @@
+error[NK1116]: This comes to 9223372036854775808, which doesn't fit in an `i64`.
+  --> tests/a_compound_assignment_that_overflows_is_refused.nika:8:2
+   |
+ 8 | 	a += 1
+   |  ^^^^^^
+   |
+   = note: An `i64` holds -9223372036854775808 to 9223372036854775807.
+   = help: A number this big only fits a `u64`. Write the type: `let x: u64 = …`.
+error[NK1116]: This comes to 9223372036854775808, which doesn't fit in an `i64`.
+   --> tests/a_compound_assignment_that_overflows_is_refused.nika:10:2
+    |
+ 10 | 	b = b + 1
+    |  ^^^^^^^^^
+    |
+    = note: An `i64` holds -9223372036854775808 to 9223372036854775807.
+    = help: A number this big only fits a `u64`. Write the type: `let x: u64 = …`.
+error[NK1116]: This comes to -2147483649, which doesn't fit in an `i32`.
+   --> tests/a_compound_assignment_that_overflows_is_refused.nika:12:2
+    |
+ 12 | 	c -= 1
+    |  ^^^^^^
+    |
+    = note: An `i32` holds -2147483648 to 2147483647.
+    = help: Use `i64` where the number needs more room.
+error[NK1116]: This comes to 400, which doesn't fit in a `u8`.
+   --> tests/a_compound_assignment_that_overflows_is_refused.nika:14:2
+    |
+ 14 | 	e *= 2
+    |  ^^^^^^
+    |
+    = note: A `u8` holds 0 to 255.
+    = help: A `u8` is one byte. Use `i32` or `i64` where the number is a count rather than a byte.
+error[NK1118]: This divides by zero.
+   --> tests/a_compound_assignment_that_overflows_is_refused.nika:16:2
+    |
+ 16 | 	f /= 0
+    |  ^^^^^^
+    |
+    = note: Dividing by zero would stop the program, and here it's certain to happen.
+    = help: If the divisor can really be zero, check it before dividing.
+error[NK1118]: This takes the remainder by zero.
+   --> tests/a_compound_assignment_that_overflows_is_refused.nika:18:2
+    |
+ 18 | 	g %= 0
+    |  ^^^^^^
+    |
+    = note: Dividing by zero would stop the program, and here it's certain to happen.
+    = help: If the divisor can really be zero, check it before dividing.
+error[NK1118]: This divides by zero.
+   --> tests/a_compound_assignment_that_overflows_is_refused.nika:20:2
+    |
+ 20 | 	xs[1] /= 0
+    |  ^^^^^^^^^^
+    |
+    = note: Dividing by zero would stop the program, and here it's certain to happen.
+    = help: If the divisor can really be zero, check it before dividing.
+7 type errors

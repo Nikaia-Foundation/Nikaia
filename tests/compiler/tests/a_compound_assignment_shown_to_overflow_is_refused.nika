@@ -1,0 +1,26 @@
+// #1586 (ADR-395, ADR-306 D15): `x op= k` is `x = x op k`, and an operation
+// the prover shows to fail for what a call hands it is NK1207, as the one
+// written out is: an overflow and a division by zero on a name, a remainder
+// by zero on a slot. The constants: `a_compound_assignment_that_overflows_is_refused`.
+
+fn grow(x: i32) -> i32 {
+	let mut y = x
+	y += 2147483647
+	return y
+}
+
+fn split(d: i32) -> i32 {
+	let mut y = 7
+	y /= d
+	return y
+}
+
+fn share(d: i32) -> i32 {
+	let mut xs: Vec[i32] = [7, 0]
+	xs[0] %= d
+	return xs[0]
+}
+
+fn main() throws {
+	println(f"{grow(1)} {split(0)} {share(0)}")
+}
