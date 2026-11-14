@@ -164,7 +164,8 @@ pub struct CheckFlow {
     /// **How many right sides of `&&` / `||` stand around the expression**
     /// (#1567): one runs only where its left side lets it, so a divisor the
     /// checker folds to zero there is left to the walk (`NK1207`), which reads
-    /// the guard, and is no certain `NK1118`.
+    /// the guard, and is no certain `NK1118`. A branch of an `if` whose
+    /// condition folds the other way counts too (#1588).
     pub short_circuited: i64,
     /// The nearest boundary a jump may not cross (a lambda, a task, an
     /// `overlap` branch).

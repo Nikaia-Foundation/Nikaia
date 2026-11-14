@@ -344,7 +344,11 @@ pub fn check_core_flow_if<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     state.flow.next_choice += 1;
     state.branch.push((choice, 0));
     let from = state.taken_so_far();
+    let folded = state.condition_constant(world, cond);
+    let then_dead = !nikaia_std::index::or(folded, || true);
+    if then_dead { state.flow.short_circuited += 1; }
     let then = check_core_flow_proved_block(state, world, host, cond, true, then_branch);
+    if then_dead { state.flow.short_circuited -= 1; }
     let leaves = check_core_flow_leaves(&state, world, then_branch);
     state.a_branch_that_leaves(from, leaves, span);
     state.branch.pop();
@@ -352,7 +356,10 @@ pub fn check_core_flow_if<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     let mut else_leaves = false;
     if else_branch.is_some() {
         let otherwise: &Block = nikaia_std::index::or(else_branch, || then_branch.into());
+        let else_dead = nikaia_std::index::or(folded, || false);
+        if else_dead { state.flow.short_circuited += 1; }
         branches = check_core_flow_else(state, world, host, expr, cond, then_branch, &then, otherwise, choice, span);
+        if else_dead { state.flow.short_circuited -= 1; }
         else_leaves = check_core_flow_leaves(&state, world, otherwise);
     }
     state.stamped_condition = outer_condition;

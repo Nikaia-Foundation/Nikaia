@@ -1,0 +1,18 @@
+// #1588: a branch whose condition folds the other way never runs, so a
+// divisor the checker folds to zero there is no certain `NK1118`; the walk
+// reads the guard.
+
+fn main() throws {
+	let d = 0
+	if d != 0 {
+		println(f"{10 / d}")
+	}
+	if d == 0 {
+		println("zero")
+	} else {
+		println(f"{10 % d}")
+	}
+	if !(d == 0) || false {
+		println(f"{10 / d}")
+	}
+}
