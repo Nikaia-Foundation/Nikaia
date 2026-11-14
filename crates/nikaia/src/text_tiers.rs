@@ -134,12 +134,16 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
     comptime_text_is_a_view(parsed);
     use nikaia_std::tools::text_tiers::{TierAsk, hand_number, text_tiers, tier_write};
     let library = crate::contracts::std_ledger();
-    let methods = nikaia_std::tools::ty::method_index(library);
+    // Built once: every proved condition is parsed and refined here, and
+    // `std`'s ledger never changes, so neither does its index.
+    static METHODS: std::sync::OnceLock<nikaia_std::tools::ty::MethodIndex> =
+        std::sync::OnceLock::new();
+    let methods = METHODS.get_or_init(|| nikaia_std::tools::ty::method_index(library));
     let ask = TierAsk {
         names: &parsed.interner,
         aliases: &parsed.aliases,
         library,
-        methods: &methods,
+        methods,
         beside: &beside.fields,
     };
     let decided = text_tiers(&parsed.program, &ask);
