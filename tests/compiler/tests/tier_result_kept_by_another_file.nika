@@ -1,0 +1,11 @@
+use compiler_tests
+
+/// A literal-only result handed through a parameter to a function of another
+/// file of the package that keeps it builds (ADR-282 D29): before the fix the
+/// package refused it with NK1102 (`src/tier_beside.nika`).
+fn main() throws {
+	println(compiler_tests::tier_beside_engine("new-fm"))
+	println(compiler_tests::tier_beside_engine("new"))
+	let n = 3
+	println(compiler_tests::tier_beside_named(f"simplex{n}"))
+}

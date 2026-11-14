@@ -387,6 +387,7 @@ pub(crate) struct Flows {
     pub(crate) owned_lets: collections::BTreeSet<i64>,
     pub(crate) wraps: collections::BTreeMap<i64, Hand>,
     pub(crate) param_into: collections::BTreeSet<(String, String)>,
+    pub(crate) handed_beyond: collections::BTreeSet<String>,
     pub(crate) hole_wraps: collections::BTreeMap<i64, Vec<HoleWrap>>,
     pub(crate) links: collections::BTreeSet<(String, String)>,
     pub(crate) unwrappable: collections::BTreeSet<String>,
@@ -411,7 +412,7 @@ pub(crate) struct Flows {
     pub(crate) forced: collections::BTreeMap<String, TierForced>,
 }
 
-pub(crate) fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), owned_lets: collections::BTreeSet::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), read_into: collections::BTreeSet::new(), unlinked: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new(), viewed_arms: collections::BTreeSet::new(), param_arm_into: collections::BTreeMap::new(), kept_through: collections::BTreeSet::new(), forced: collections::BTreeMap::new(), arm_uses: collections::BTreeMap::new() } }
+pub(crate) fn no_flows() -> Flows { Flows { positions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), literal_lets: collections::BTreeMap::new(), owned_lets: collections::BTreeSet::new(), wraps: collections::BTreeMap::new(), param_into: collections::BTreeSet::new(), handed_beyond: collections::BTreeSet::new(), hole_wraps: collections::BTreeMap::new(), links: collections::BTreeSet::new(), unwrappable: collections::BTreeSet::new(), viewed: collections::BTreeSet::new(), still_into: collections::BTreeSet::new(), adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), in_maps: collections::BTreeSet::new(), lent_into: collections::BTreeSet::new(), lent_kinds: collections::BTreeMap::new(), uses: collections::BTreeMap::new(), lent_uses: collections::BTreeMap::new(), arg_into: collections::BTreeSet::new(), read_into: collections::BTreeSet::new(), unlinked: collections::BTreeSet::new(), arg_uses: collections::BTreeMap::new(), changed: collections::BTreeSet::new(), viewed_arms: collections::BTreeSet::new(), param_arm_into: collections::BTreeMap::new(), kept_through: collections::BTreeSet::new(), forced: collections::BTreeMap::new(), arm_uses: collections::BTreeMap::new() } }
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct TierWalk {
@@ -4082,6 +4083,10 @@ pub(crate) fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_, '_, '_, '
         let mut at: i64 = 0;
         for arg in args.iter() {
             if at < given.len() as i64 && unsafe { nikaia_std::proven::read(&given, (at) as usize) }.still && !lent_at.contains(nikaia_std::index::AsKey::as_key(&at)) { kept_unseen(arg, ask, walk); }
+            if !lent_at.contains(nikaia_std::index::AsKey::as_key(&at)) {
+                let handed = handed_parameter(Some(arg), ask, &walk);
+                if handed.is_some() { walk.flows.handed_beyond.insert(nikaia_std::index::or(handed, || "".into())); }
+            }
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     } else { std_container_args(&callee, args, ask, walk); }
@@ -4473,6 +4478,7 @@ pub(crate) fn merge_flows(into: &mut Flows, from: &Flows) {
         into.wraps.insert(at.clone(), hand.clone());
     }
     into.param_into.extend(from.param_into.iter().cloned());
+    into.handed_beyond.extend(from.handed_beyond.iter().cloned());
     for (at, wraps) in from.hole_wraps.iter() {
         let at = nikaia_std::num::value(at);
         into.hole_wraps.entry(at.clone()).or_insert(vec![]).extend(wraps.iter().cloned());
@@ -4946,6 +4952,7 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
         let tier = *tier;
         if lasting_tier(&tier) && a_parameter_itself(word, flows) && !a_nullable_parameter(word, flows, declared) { only_read.insert(nikaia_std::block::Text::from(word.to_string())); }
     }
+    for word in flows.handed_beyond.iter() { only_read.remove(word); }
     let mut shrinking = true;
     while shrinking {
         shrinking = false;

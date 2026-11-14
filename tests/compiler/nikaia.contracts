@@ -251,6 +251,43 @@ touches = []
 views = ["a: borrowed"]
 signature = "(a: ref Vec[i64]) -> i64"
 
+[fn."tier_beside_engine"]
+pub = true
+sync = "inferred"
+panics = false
+touches = []
+views = ["engine: borrowed"]
+signature = "(engine: String) -> String"
+
+[fn."tier_beside_lit"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["engine: borrowed"]
+signature = "(engine: String) -> String"
+
+[fn."tier_beside_mid"]
+sync = "inferred"
+keeps = ["theory"]
+panics = false
+touches = []
+signature = "(theory: String) -> String"
+
+[fn."tier_beside_named"]
+pub = true
+sync = "inferred"
+panics = false
+touches = []
+views = ["value: borrowed"]
+signature = "(value: String) -> String"
+
+[fn."tier_beside_set"]
+sync = "inferred"
+keeps = ["theory"]
+panics = false
+touches = []
+signature = "(theory: String) -> String"
+
 [type."Branching"]
 pub = true
 variants = ["Leaf(i64)", "Fork { left: Branching, right: Branching, id: i64 }"]
@@ -309,3 +346,6 @@ fields = ["pub n: i64", "pub s: String"]
 pub = true
 fields = ["pub xs: ref Array[i64]"]
 tethered = ["xs"]
+
+[type."TierBesideParams"]
+fields = ["theory: String"]

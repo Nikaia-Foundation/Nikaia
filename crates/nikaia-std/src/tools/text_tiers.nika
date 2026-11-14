@@ -602,6 +602,10 @@ struct Flows {
     wraps: collections::BTreeMap[i64, Hand],
     /// A parameter's own value going into another position (ADR-282 D24).
     param_into: collections::BTreeSet[(String, String)],
+    /// The `String` parameters handed as they are to a function of another
+    /// file of the package (or a type's name): no position this walk sees
+    /// says whether it keeps them, so they are not only read (ADR-282 D29).
+    handed_beyond: collections::BTreeSet[String],
     /// The same inside an `f"…"` hole, by the hole's place and the value's
     /// shape (ADR-229 D1).
     hole_wraps: collections::BTreeMap[i64, Vec[HoleWrap]],
@@ -678,7 +682,7 @@ struct Flows {
 }
 
 fn no_flows() -> Flows {
-    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), owned_lets: collections::BTreeSet(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), read_into: collections::BTreeSet(), unlinked: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap(), kept_through: collections::BTreeSet(), forced: collections::BTreeMap(), arm_uses: collections::BTreeMap() }
+    return Flows { positions: collections::BTreeMap(), known: collections::BTreeMap(), literal_lets: collections::BTreeMap(), owned_lets: collections::BTreeSet(), wraps: collections::BTreeMap(), param_into: collections::BTreeSet(), handed_beyond: collections::BTreeSet(), hole_wraps: collections::BTreeMap(), links: collections::BTreeSet(), unwrappable: collections::BTreeSet(), viewed: collections::BTreeSet(), still_into: collections::BTreeSet(), adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), in_maps: collections::BTreeSet(), lent_into: collections::BTreeSet(), lent_kinds: collections::BTreeMap(), uses: collections::BTreeMap(), lent_uses: collections::BTreeMap(), arg_into: collections::BTreeSet(), read_into: collections::BTreeSet(), unlinked: collections::BTreeSet(), arg_uses: collections::BTreeMap(), changed: collections::BTreeSet(), viewed_arms: collections::BTreeSet(), param_arm_into: collections::BTreeMap(), kept_through: collections::BTreeSet(), forced: collections::BTreeMap(), arm_uses: collections::BTreeMap() }
 }
 
 struct TierWalk {
@@ -5666,6 +5670,16 @@ fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: T
             if at < given.len() && given[at].still && !lent_at.contains(at) {
                 kept_unseen(arg, ask, walk)
             }
+            // **A parameter handed on to another file's function** is not
+            // one the body only reads (ADR-282 D29): once its callers hand it
+            // only static text, the round after this one sees it handed on
+            // still and holds it, and what flows in, to text of its own.
+            if !lent_at.contains(at) {
+                let handed = handed_parameter(arg, ask, walk)
+                if handed != null {
+                    walk.flows.handed_beyond.insert(handed ?? "")
+                }
+            }
             at += 1
         }
     } else {
@@ -6256,6 +6270,7 @@ fn merge_flows(mut into: Flows, from: ref Flows) {
         into.wraps.insert(at.clone(), hand.clone())
     }
     into.param_into.extend(from.param_into.clone())
+    into.handed_beyond.extend(from.handed_beyond.clone())
     for (at, wraps) in from.hole_wraps {
         into.hole_wraps.entry(at.clone()).or_insert([]).extend(wraps.clone())
     }
@@ -6861,6 +6876,9 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
         if lasting_tier(tier) && a_parameter_itself(word, flows) && !a_nullable_parameter(word, flows, declared) {
             only_read.insert(word.clone())
         }
+    }
+    for word in flows.handed_beyond {
+        only_read.remove(word)
     }
     let mut shrinking = true
     while shrinking {
