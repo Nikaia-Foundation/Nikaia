@@ -1,7 +1,8 @@
 # The main session (supervisor)
 
 What only the main session does. **The supervisor is the session that runs the
-driver** (`scripts/drive.nika`; owner, 2026-11-14): it starts the agents,
+driver** (`scripts/drive.nika`; owner, 2026-11-14): whichever session starts
+the driver becomes the supervisor from then on. It starts the agents,
 talks to the owner and holds the versions. Other sessions working at the same
 time (a solver, a CI session) are not the supervisor, even when they started
 agents of their own; they leave what this file gives the supervisor (versions,
