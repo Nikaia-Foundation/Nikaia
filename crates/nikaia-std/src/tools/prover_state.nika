@@ -810,21 +810,28 @@ impl ProverState {
                 }
                 continue
             }
-            // A check carried here through a call is asked only of data
-            // from outside; the call it stands behind asks the rest.
-            if outside || check.within != "" {
+            if outside {
                 continue
             }
-            let help = f"Pass `{callee}` arguments for which `{check.holds}` holds, or check them with a guard before the call."
+            // **A check carried here through a call** (#1568) is asked as the
+            // callee's own is, and named where it stands: `10 / d` in `f`,
+            // reached through `h`, its goal over `h`'s parameters.
+            let mut stands = f"`{check.written}` in `{callee}`"
+            let mut holds = check.holds.clone()
+            if check.within != "" {
+                stands = f"`{check.written}` in `{check.within}`, reached through `{callee}`,"
+                holds = arena.text(check.term)
+            }
+            let help = f"Pass `{callee}` arguments for which `{holds}` holds, or check them with a guard before the call."
             let always = refuting_values(arena, scope.facts, goal, ask, model)
             if always != null {
                 let given = values_given(arena, at_call.given_by, at_call.read, always ?? collections::BTreeMap())
-                findings.push(Finding { code: "NK1207", span: span, message: f"At this call, `{check.written}` in `{callee}` {check.fails} every time it is reached.", notes: [f"Here {shown(given)}."], help: help, warning: false, labels: [] })
+                findings.push(Finding { code: "NK1207", span: span, message: f"At this call, {stands} {check.fails} every time it is reached.", notes: [f"Here {shown(given)}."], help: help, warning: false, labels: [] })
                 continue
             }
             let sometimes = breaking_values(arena, scope, goal, model) ?? continue
             let given = values_given(arena, at_call.given_by, at_call.read, sometimes)
-            findings.push(Finding { code: "NK1207", span: span, message: f"At this call, `{check.written}` in `{callee}` {check.fails} when {shown(sometimes)}.", notes: [f"Then {shown(given)}."], help: help, warning: false, labels: [] })
+            findings.push(Finding { code: "NK1207", span: span, message: f"At this call, {stands} {check.fails} when {shown(sometimes)}.", notes: [f"Then {shown(given)}."], help: help, warning: false, labels: [] })
         }
         return findings
     }
@@ -898,7 +905,8 @@ impl ProverState {
     /// **A callee's open checks, carried through the call** (ADR-396 D1), in
     /// pass 1: each as the call's arguments state it, asked of this function
     /// as its own unwritten check would be, so that a caller further out
-    /// that hands data from outside meets it. The walk before's checks, as
+    /// that hands data from outside, or values that break it (`NK1207`,
+    /// #1568), meets it - an index, a divisor or a whole number's range. The walk before's checks, as
     /// for preconditions; not through a call that can come back here, nor
     /// in a test.
     pub fn carry_unwritten(ref mut self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], args: ref Vec[Expr], scope: ref ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
@@ -908,16 +916,13 @@ impl ProverState {
         }
         let checks = self.known_unwritten[callee]?.clone() ?? return
         for check in checks {
-            if !check.index {
-                continue
-            }
             let at_call = self.goal_at_call(arena, words, params, check.term, args, scope)
             let goal = at_call.goal ?? continue
             let mut within = check.within.clone()
             if within == "" {
                 within = callee.clone()
             }
-            self.an_unwritten_check(arena, UnwrittenCheck { term: goal, written: check.written.clone(), fails: check.fails.clone(), holds: check.holds.clone(), index: true, within: within }, scope, at, ask, model)
+            self.an_unwritten_check(arena, UnwrittenCheck { term: goal, written: check.written.clone(), fails: check.fails.clone(), holds: check.holds.clone(), index: check.index, within: within }, scope, at, ask, model)
         }
     }
 

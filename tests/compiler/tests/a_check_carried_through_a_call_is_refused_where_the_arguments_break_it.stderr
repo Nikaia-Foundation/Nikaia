@@ -1,0 +1,17 @@
+error[NK1207]: At this call, `10 / d` in `f`, reached through `h`, divides by zero every time it is reached.
+   --> tests/a_check_carried_through_a_call_is_refused_where_the_arguments_break_it.nika:28:2
+    |
+ 28 | 	println(f"{h(0)}")
+    |  ^^^^^^^^^^^^^^^^^^
+    |
+    = note: Here `d` is 0.
+    = help: Pass `h` arguments for which `d != 0` holds, or check them with a guard before the call.
+error[NK1207]: At this call, `xs[i]` in `g`, reached through `k`, is out of bounds every time it is reached.
+   --> tests/a_check_carried_through_a_call_is_refused_where_the_arguments_break_it.nika:29:2
+    |
+ 29 | 	println(f"{k(0)}")
+    |  ^^^^^^^^^^^^^^^^^^
+    |
+    = note: Here `n` is 0.
+    = help: Pass `k` arguments for which `0 <= n + 1 + 2 && n + 1 + 2 < 3` holds, or check them with a guard before the call.
+2 claims shown false

@@ -423,17 +423,23 @@ impl ProverState {
                 if found.is_some() { findings.push(match found { Some(__nikaia_value) => __nikaia_value, None => continue }); }
                 continue;
             }
-            if outside || check.within != "" { continue; }
-            let help = format!("Pass `{}` arguments for which `{}` holds, or check them with a guard before the call.", callee, check.holds);
+            if outside { continue; }
+            let mut stands = format!("`{}` in `{}`", check.written, callee);
+            let mut holds = nikaia_std::block::Text::from(check.holds.to_string());
+            if check.within != "" {
+                stands = format!("`{}` in `{}`, reached through `{}`,", check.written, check.within, callee);
+                holds = arena.text(check.term);
+            }
+            let help = format!("Pass `{}` arguments for which `{}` holds, or check them with a guard before the call.", callee, holds);
             let always = refuting_values(arena, &scope.facts, goal, ask, model);
             if always.is_some() {
                 let given = values_given(&arena, &at_call.given_by, &at_call.read, &nikaia_std::index::or(always, || collections::BTreeMap::new().into()));
-                findings.push(Finding { code: String::from("NK1207"), span, message: format!("At this call, `{}` in `{}` {} every time it is reached.", check.written, callee, check.fails), notes: vec![format!("Here {}.", shown(&given))], help: Some(help), warning: false, labels: vec![] });
+                findings.push(Finding { code: String::from("NK1207"), span, message: format!("At this call, {} {} every time it is reached.", stands, check.fails), notes: vec![format!("Here {}.", shown(&given))], help: Some(help), warning: false, labels: vec![] });
                 continue;
             }
             let sometimes = match breaking_values(arena, scope, goal, model) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let given = values_given(&arena, &at_call.given_by, &at_call.read, &sometimes);
-            findings.push(Finding { code: String::from("NK1207"), span, message: format!("At this call, `{}` in `{}` {} when {}.", check.written, callee, check.fails, shown(&sometimes)), notes: vec![format!("Then {}.", shown(&given))], help: Some(help), warning: false, labels: vec![] });
+            findings.push(Finding { code: String::from("NK1207"), span, message: format!("At this call, {} {} when {}.", stands, check.fails, shown(&sometimes)), notes: vec![format!("Then {}.", shown(&given))], help: Some(help), warning: false, labels: vec![] });
         }
         findings
     }
@@ -486,12 +492,11 @@ impl ProverState {
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return };
         for check in checks.iter() {
-            if !check.index { continue; }
             let at_call = self.goal_at_call(arena, words, params, check.term, args, scope);
             let goal = match at_call.goal { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut within = nikaia_std::block::Text::from(check.within.to_string());
             if within == "" { within = nikaia_std::block::Text::from(callee.to_string()); }
-            self.an_unwritten_check(arena, UnwrittenCheck { term: goal, written: nikaia_std::block::Text::from(check.written.to_string()), fails: nikaia_std::block::Text::from(check.fails.to_string()), holds: nikaia_std::block::Text::from(check.holds.to_string()), index: true, within }, scope, at, ask, model);
+            self.an_unwritten_check(arena, UnwrittenCheck { term: goal, written: nikaia_std::block::Text::from(check.written.to_string()), fails: nikaia_std::block::Text::from(check.fails.to_string()), holds: nikaia_std::block::Text::from(check.holds.to_string()), index: check.index, within }, scope, at, ask, model);
         }
     }
     #[allow(clippy::too_many_arguments)]

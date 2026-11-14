@@ -1,0 +1,30 @@
+// #1568 (ADR-269 D8, ADR-395 D1, ADR-396 D1): a check nobody writes in a
+// callee is carried through a function in between. `h(0)` hands `f` a zero
+// divisor through `h`'s parameter, `k(0)` an index past the end through two
+// calls; each is refused with NK1207 at the outer call, naming the check where
+// it stands. Calls that keep the check: `a_check_carried_through_a_call_builds`.
+
+fn f(d: i64) -> i64 {
+	return 10 / d
+}
+
+fn h(d: i64) -> i64 {
+	return f(d)
+}
+
+fn g(xs: ref Vec[i64], i: i64) -> i64 {
+	return xs[i]
+}
+
+fn j(xs: ref Vec[i64], n: i64) -> i64 {
+	return g(xs, n + 2)
+}
+
+fn k(n: i64) -> i64 {
+	return j([1, 2, 3], n + 1)
+}
+
+fn main() throws {
+	println(f"{h(0)}")
+	println(f"{k(0)}")
+}
