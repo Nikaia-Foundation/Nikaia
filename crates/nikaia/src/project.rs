@@ -1307,6 +1307,15 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         }
     }
 
+    fn proofs_settled(&self) -> bool {
+        !PROOFS_WRITTEN.with(|written| written.get())
+            || self
+                .proofs
+                .borrow()
+                .as_ref()
+                .is_none_or(|book| book.searched == 0 && book.as_recorded(&self.layout.root))
+    }
+
     fn in_the_wrapper(&self) -> bool {
         std::env::var_os(WRAPPER_MARKER).is_some() || WARNED.with(|warned| warned.get())
     }
@@ -2077,6 +2086,10 @@ thread_local! {
     /// Set while a build lowers the copy [`Project::written`] names: the entry
     /// it lowers is said under that file's name (#510).
     static SHOWN_AS: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+    /// Set while a build lowers a member whose `nikaia.proofs` it writes or,
+    /// under `--locked`, checks after (#1569): only a lowering with settled
+    /// proofs is recorded in the cache then.
+    static PROOFS_WRITTEN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 impl Project {
@@ -3259,6 +3272,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         &self,
         at: i64,
         no_cache: bool,
+        writes: bool,
         crate_root: &str,
     ) -> HostResult<project_drive::ProjectDriveLowered> {
         let project = self.project;
@@ -3290,6 +3304,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
             _ => None,
         };
         let shown_outer = SHOWN_AS.with(|cell| cell.replace(shown));
+        let written_outer = PROOFS_WRITTEN.with(|written| written.replace(writes));
         let lowered = lower_reading(
             &member.entry,
             settings,
@@ -3297,6 +3312,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
             &member.dependencies,
             self.allowlist,
         );
+        PROOFS_WRITTEN.with(|written| written.set(written_outer));
         SHOWN_AS.with(|cell| cell.replace(shown_outer));
         WARNED.with(|warned| warned.set(outer));
         let mut lowered = self.held(lowered)?;
