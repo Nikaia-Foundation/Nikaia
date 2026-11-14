@@ -534,6 +534,40 @@ pub fn proofs_ask_again_from(mut t: ProofsThread, before: ref ProofsSoFar) {
     book.used = before.used.clone()
 }
 
+/// **The book a worker thread asks from** (ADR-270 D4): every recorded
+/// answer and invariant to read, nothing asked or searched yet, so that
+/// [`proofs_book_merge`] adds only what the worker did.
+pub fn proofs_book_for_worker(book: ref ProofsBook) -> ProofsBook {
+    return ProofsBook { entries: book.entries.clone(), asked: collections::BTreeSet(), searched: 0, searched_at: collections::BTreeSet(), invariants: book.invariants.clone(), used: collections::BTreeSet(), root: book.root?.clone() }
+}
+
+/// **What a worker's book adds to the book it was copied from**: the
+/// entries it found, the keys it asked, what it searched and where, the
+/// invariants it used. A parallel pass asks on threads of their own, and
+/// every question it asks belongs in the build's book all the same (D4).
+pub fn proofs_book_merge(mut into: ProofsBook, part: ref ProofsBook) {
+    for (key, entry) in part.entries.iter() {
+        if !into.entries.contains_key(key) {
+            into.entries.insert(key.clone(), entry.clone())
+        }
+    }
+    for key in part.asked.iter() {
+        into.asked.insert(key.clone())
+    }
+    into.searched += part.searched
+    for place in part.searched_at.iter() {
+        into.searched_at.insert(place.clone())
+    }
+    for (place, parts) in part.invariants.iter() {
+        if !into.invariants.contains_key(place) {
+            into.invariants.insert(place.clone(), parts.clone())
+        }
+    }
+    for place in part.used.iter() {
+        into.used.insert(place.clone())
+    }
+}
+
 /// `line:column` of byte `at` of `source`, both from 1.
 pub fn proofs_place_of(at: i64, source: ref String) -> String {
     let limit = at.min(source.len())

@@ -113,6 +113,18 @@ pub fn in_file<R>(path: &Path, source: &str, run: impl FnOnce() -> R) -> R {
     out
 }
 
+/// `run` with the `nikaia.proofs` of the package `path` belongs to open,
+/// and what it asks kept out of this build's book (D23): a dependency's
+/// ledger is inferred from its own answers.
+pub fn for_package<R>(path: &Path, run: impl FnOnce() -> R) -> R {
+    let theirs = orchestrator::cache::Layout::resolve(path);
+    let book = match theirs.in_project {
+        true => Book::read(&theirs.root),
+        false => Book::default(),
+    };
+    with_book(book, run).0
+}
+
 /// **`run` for one file of the program**: its questions placed in `path`,
 /// and - for a dependency's file - answered from that package's own
 /// `nikaia.proofs` and kept out of this build's (D23).
@@ -151,6 +163,42 @@ pub fn with_book<R>(book: Book, run: impl FnOnce() -> R) -> (R, Book) {
     let out = run();
     let book = THREAD.with(|t| std::mem::replace(&mut t.borrow_mut().book, outer));
     (out, book.map(Book).unwrap_or_default())
+}
+
+/// **[`crate::sysroot::in_parallel`] with the book open on every worker**
+/// (ADR-270 D4): each item asks from a copy of this thread's book, in the
+/// units [`with_units`] named here, and what the copies found and asked is
+/// added to the book after. Without a book it is `in_parallel` itself.
+pub fn in_parallel<T: Send>(
+    order: &[usize],
+    threads: Option<usize>,
+    work: impl Fn(usize) -> T + Sync,
+) -> Vec<T> {
+    let Some(shared) = THREAD.with(|t| {
+        t.borrow()
+            .book
+            .as_ref()
+            .map(answers::proofs_book_for_worker)
+    }) else {
+        return crate::sysroot::in_parallel(order, threads, work);
+    };
+    let units = UNITS.with(|held| held.borrow().clone());
+    let done = crate::sysroot::in_parallel(order, threads, |at| {
+        with_units(units.clone(), || {
+            with_book(Book(shared.clone()), || work(at))
+        })
+    });
+    let mut out = Vec::with_capacity(done.len());
+    THREAD.with(|t| {
+        let mut t = t.borrow_mut();
+        for (result, part) in done {
+            if let Some(book) = t.book.as_mut() {
+                answers::proofs_book_merge(book, &part.0);
+            }
+            out.push(result);
+        }
+    });
+    out
 }
 
 /// Whether the facts imply the goal, and if not, why not.

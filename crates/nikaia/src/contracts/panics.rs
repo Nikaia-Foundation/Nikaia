@@ -133,7 +133,7 @@ pub fn infer(
     let mut proofs: BTreeMap<usize, crate::bounds::Proven> = worth
         .iter()
         .copied()
-        .zip(crate::sysroot::in_parallel(&worth, threads, prove))
+        .zip(crate::proofs::in_parallel(&worth, threads, prove))
         .collect();
     for at in 0..units.len() {
         let proven = proofs.remove(&at).unwrap_or_default();

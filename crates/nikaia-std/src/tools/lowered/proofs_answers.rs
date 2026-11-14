@@ -431,6 +431,22 @@ pub fn proofs_ask_again_from(t: &mut ProofsThread, before: &ProofsSoFar) {
     book.used = before.used.copy_owned();
 }
 
+pub fn proofs_book_for_worker(book: &ProofsBook) -> ProofsBook {
+    ProofsBook { entries: book.entries.copy_owned(), asked: collections::BTreeSet::new(), searched: 0, searched_at: collections::BTreeSet::new(), invariants: book.invariants.copy_owned(), used: collections::BTreeSet::new(), root: match book.root.as_ref() {
+        Some(__nikaia_it) => Some(nikaia_std::fs::path::clone(&(__nikaia_it))),
+        None => None,
+    } }
+}
+
+pub fn proofs_book_merge(into: &mut ProofsBook, part: &ProofsBook) {
+    for (key, entry) in part.entries.iter() { if !into.entries.contains_key(key) { into.entries.insert(nikaia_std::block::Text::from(key.to_string()), entry.clone()); } }
+    for key in part.asked.iter() { into.asked.insert(nikaia_std::block::Text::from(key.to_string())); }
+    into.searched += part.searched;
+    for place in part.searched_at.iter() { into.searched_at.insert(place.clone()); }
+    for (place, parts) in part.invariants.iter() { if !into.invariants.contains_key(place) { into.invariants.insert(nikaia_std::block::Text::from(place.to_string()), nikaia_std::block::Text::from(parts.to_string())); } }
+    for place in part.used.iter() { into.used.insert(nikaia_std::block::Text::from(place.to_string())); }
+}
+
 pub fn proofs_place_of(at: i64, source: &str) -> String {
     let limit = at.min(source.len() as i64);
     let mut line = 1;
