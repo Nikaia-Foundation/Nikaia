@@ -466,6 +466,13 @@ jobs:
           - compiler-4
           - compiler-slow-solver_cnf
           - compiler-slow-prove_a_read_after_many_lists
+        # **The one-thread lowering runs weekly and by hand only** (CI speed):
+        # it is the whole tools package again on one core, the longest shard
+        # of a push (7 min), and `heavy-sysroot-pair` lowers the same package
+        # on every core against the committed bytes on every push, with a
+        # different interleaving of files on threads each time.
+        exclude:
+          - shard: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'none' || 'heavy-sysroot-cores' }}
     env:
       SHARD: ${{ matrix.shard }}
       IT_SHARDS: 3
