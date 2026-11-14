@@ -632,6 +632,18 @@ pub fn reads_for_file(input: &Path, allowlist: Option<&Path>) -> Result<assets::
     reads_for(&Layout::resolve(input), allowlist)
 }
 
+/// `run` with the project's `nikaia.proofs` open to read
+/// ([ADR-270](../../docs/specification/adr/adr-270.md) D4): an explanation
+/// infers the ledger and asks the prover as a build does, and answers from
+/// the same book; it writes none.
+pub fn with_recorded_proofs<R>(input: &Path, run: impl FnOnce() -> R) -> R {
+    let layout = Layout::resolve(input);
+    match layout.in_project {
+        true => crate::proofs::with_book(crate::proofs::Book::read(&layout.root), run).0,
+        false => run(),
+    }
+}
+
 pub fn read_file(input: &Path) -> Result<(modules::Program, Vec<modules::Dependency>)> {
     let packages = packages_of_file(input)?;
     let layout = Layout::resolve(input);
@@ -1167,7 +1179,15 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         // its `comptime`s** (ADR-321 D1, ADR-318 D1): the ledger inferred while
         // the program is read records the value.
         let (input, packages) = (self.input, self.packages);
-        let program =
+        // **The prover's recorded answers are open from here** ([ADR-270](../../docs/specification/adr/adr-270.md)
+        // D4): the ledger inferred while the program is read asks the
+        // prover too, and those questions are the build's as much as the
+        // check's. Outside a project there is no file.
+        let book = match self.layout.in_project {
+            true => crate::proofs::Book::read(&self.layout.root),
+            false => crate::proofs::Book::default(),
+        };
+        let (program, book) = crate::proofs::with_book(book, || {
             crate::comptime_run::defaults_compiled_in(self.reads.workshop().place(), || {
                 match (self.settings.words.tests, self.layout.in_project) {
                     _ if self.program_test => {
@@ -1179,7 +1199,9 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                     (false, true) => modules::Program::read_with_open(input, packages, self.open),
                     (false, false) => modules::Program::read_one_open(input, self.open),
                 }
-            });
+            })
+        });
+        *self.book.borrow_mut() = Some(book);
         let mut program = self.held(program)?;
         program.entry_shown_as = SHOWN_AS.with(|cell| cell.borrow().clone());
         *self.key_source.borrow_mut() = String::from(program.sources().join("\n// --- unit ---\n"));
@@ -1374,13 +1396,14 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         // `"inferred"` `sync` reads as *may pause* across the boundary.
         let promised = program.contracts_as_promised();
         // **The prover's recorded answers** ([ADR-270](../../docs/specification/adr/adr-270.md)
-        // D4, D21, #448): open while the program is checked and lowered,
-        // which is where every question is asked, and written back beside
-        // `nikaia.contracts` after. Outside a project there is no file.
-        let book = match layout.in_project {
-            true => crate::proofs::Book::read(&layout.root),
-            false => crate::proofs::Book::default(),
-        };
+        // D4, D21, #448): open since the program was read, while it is
+        // checked and lowered, and written back beside `nikaia.contracts`
+        // after.
+        let book = self
+            .book
+            .borrow_mut()
+            .take()
+            .expect("the program is read first");
         let mut warnings = String::new();
         // **The check's facts are the emitter's** where the check asked
         // exactly what `check::propagation_against` asks: the unit's own

@@ -528,11 +528,11 @@ fn explained(
     // program itself, and a second read parsed every file and inferred its
     // ledger again (#727).
     Ok(match want.asked() {
-        true => {
+        true => project::with_recorded_proofs(input, || -> Result<_> {
             let (program, packages) = project::read_file(input)?;
             project::explain(&program, settings, want, &reads)?;
-            packages
-        }
+            Ok(packages)
+        })?,
         false => project::packages_of_file(input)?,
     })
 }
