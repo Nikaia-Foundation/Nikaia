@@ -956,3 +956,61 @@ pub fn sv_smtlib_read(source: &str) -> LgRead {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn sv_smtlib_test_row(name: &str, source: &'static str) -> String {
+    match sv_smtlib_script(source) {
+        SvSmtRead::Script(ref s, ref sorts) => {
+            #[allow(unused_mut)] let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            for id in s.assertions.iter() {
+                let id = nikaia_std::num::value(id);
+                shown.push(s.arena.text(id));
+            }
+            let mut reals: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            for r in sorts.reals.iter() { reals.push(nikaia_std::block::Text::from(r.to_string())); }
+            let real = if !reals.is_empty() { format!("; reals {}", nikaia_std::block::Text::from(reals.join(" "))) } else { String::from("") }; #[allow(unused_mut, clippy::redundant_locals)] let mut shown = shown;
+            format!("{}: yes, {}: {}{}\n", name, s.assertions.len() as i64, nikaia_std::block::Text::from(shown.join(" ; ")), real)
+        },
+        SvSmtRead::Failed(ref why) => format!("{}: no, {}\n", name, sv_read_why_text(why)),
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn sv_smtlib_test_rows(files: &[(&'static str, &'static str)]) -> String {
+    let mut out: String = String::from("");
+    for (name, text) in files.iter() {
+        let name = *name;let text = *text;
+        out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_smtlib_test_row(&nikaia_std::block::Text::from(name.replace(',', "")), text)));
+    }
+    out
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    let files: Vec<(&'static str, &'static str)> = vec![("let", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (let ((y (+ x 1)) (z 2)) (< y z)))\n(check-sat)\n"), ("let, shadowing", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (let ((x 3)) (let ((x (+ x 1))) (= x 4))))\n(check-sat)\n"), ("named", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (or (! (= x 5) :named foo) (> x 9)))\n(assert (not foo))\n(check-sat)\n"), ("define-fun, constant", "(set-logic QF_LIA)\n(declare-const x Int)\n(define-fun big () Bool (> x 9))\n(assert big)\n(check-sat)\n"), ("define-fun, parameters", "(set-logic QF_LIA)\n(declare-const x Int)\n(define-fun twice ((a Int)) Int (* 2 a))\n(assert (= (twice x) (twice 3)))\n(check-sat)\n"), ("Bool constant", "(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-fun q () Bool)\n(assert (or p (not q)))\n(check-sat)\n"), ("ite, Boolean", "(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const x Int)\n(assert (ite p (> x 0) (< x 0)))\n(check-sat)\n"), ("ite, arithmetic", "(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const x Int)\n(assert (= x (+ 1 (ite p 2 3))))\n(check-sat)\n"), ("ite, constant condition", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= x (ite (< 1 2) 2 3)))\n(check-sat)\n"), ("ite, compared with a constant", "(set-logic QF_LIA)\n(declare-const p Bool)\n(assert (= (ite p 2 3) 3))\n(check-sat)\n"), ("ite, nested, compared with a constant", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= (ite (= x 1) 5 (ite (= x 2) 7 x)) 7))\n(check-sat)\n"), ("ite, scaled and shifted", "(set-logic QF_LIA)\n(declare-const p Bool)\n(assert (<= (+ (* 2 (ite p 4 1)) 1) 5))\n(check-sat)\n"), ("ite, read twice", "(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const x Int)\n(assert (let ((v (ite p 1 0))) (and (= v 1) (> (+ x v) 3))))\n(check-sat)\n"), ("= between Booleans", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= (>= x 5) (< x 0)))\n(check-sat)\n"), ("distinct between Booleans", "(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const q Bool)\n(assert (distinct p q))\n(check-sat)\n"), ("xor", "(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const q Bool)\n(assert (xor p q true))\n(check-sat)\n"), ("=> chain", "(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const q Bool)\n(declare-const r Bool)\n(assert (=> p q r))\n(check-sat)\n"), ("negative numeral", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (<= -175 x))\n(check-sat)\n"), ("skipped commands", "(set-logic QF_LIA)\n(set-option :produce-models true)\n(declare-const x Int)\n(assert (> x 0))\n(check-sat)\n(get-value (x))\n(get-model)\n(get-info :reason-unknown)\n(echo \"done\")\n"), ("push and pop", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (> x 0))\n(push 1)\n(assert (< x 0))\n(pop 1)\n(push)\n(assert (< x 5))\n(check-sat)\n"), ("reset-assertions", "(set-logic QF_LIA)\n(assert (= 0 1))\n(reset-assertions)\n(declare-const x Int)\n(assert (> x 0))\n(check-sat)\n"), ("two check-sat", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (> x 0))\n(check-sat)\n(assert (< x 0))\n(check-sat)\n"), ("non-linear product", "(set-logic QF_LIA)\n(declare-const x Int)\n(declare-const y Int)\n(assert (= (* x y) 1))\n(check-sat)\n"), ("uninterpreted function", "(set-logic QF_LIA)\n(declare-fun f (Int) Int)\n(assert (= (f 1) 2))\n(check-sat)\n"), ("non-standard symbol", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= (int.pow2 x) 2))\n(check-sat)\n"), ("undeclared name", "(set-logic QF_LIA)\n(assert (> y 0))\n(check-sat)\n"), ("numeral out of i64", "(set-logic QF_LIA)\n(declare-const x Int)\n(assert (< x 9223372036854775808))\n(check-sat)\n")];
+    let out = sv_smtlib_test_rows(&files);
+    let expected = vec!["let: yes, 1: x < 1", "let shadowing: yes, 1: true", "named: yes, 2: x == 5 || x > 9 ; !(x == 5)", "define-fun constant: yes, 1: x > 9", "define-fun parameters: yes, 1: 2 * x == 6", "Bool constant: yes, 5: |sv!|b:p >= 1 || !(|sv!|b:q >= 1) ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; 0 <= |sv!|b:q ; |sv!|b:q <= 1", "ite Boolean: yes, 3: |sv!|b:p >= 1 && x > 0 || !(|sv!|b:p >= 1) && x < 0 ; 0 <= |sv!|b:p ; |sv!|b:p <= 1", "ite arithmetic: yes, 4: x - |sv!|ite:1 == 1 ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; |sv!|b:p >= 1 && |sv!|ite:1 == 2 || !(|sv!|b:p >= 1) && |sv!|ite:1 == 3", "ite constant condition: yes, 1: x == 2", "ite compared with a constant: yes, 3: !(|sv!|b:p >= 1) ; 0 <= |sv!|b:p ; |sv!|b:p <= 1", "ite nested compared with a constant: yes, 1: !(x == 1) && (x == 2 || x == 7)", "ite scaled and shifted: yes, 3: !(|sv!|b:p >= 1) ; 0 <= |sv!|b:p ; |sv!|b:p <= 1", "ite read twice: yes, 4: |sv!|b:p >= 1 && x + |sv!|ite:1 > 3 ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; |sv!|b:p >= 1 && |sv!|ite:1 == 1 || !(|sv!|b:p >= 1) && |sv!|ite:1 == 0", "= between Booleans: yes, 1: x >= 5 && x < 0 || !(x >= 5) && !(x < 0)", "distinct between Booleans: yes, 5: !(|sv!|b:p >= 1 && |sv!|b:q >= 1 || !(|sv!|b:p >= 1) && !(|sv!|b:q >= 1)) ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; 0 <= |sv!|b:q ; |sv!|b:q <= 1", "xor: yes, 5: (|sv!|b:p >= 1 && !(|sv!|b:q >= 1) || !(|sv!|b:p >= 1) && |sv!|b:q >= 1) → !true ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; 0 <= |sv!|b:q ; |sv!|b:q <= 1", "=> chain: yes, 7: |sv!|b:p >= 1 → (|sv!|b:q >= 1 → |sv!|b:r >= 1) ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; 0 <= |sv!|b:q ; |sv!|b:q <= 1 ; 0 <= |sv!|b:r ; |sv!|b:r <= 1", "negative numeral: yes, 1: -x <= 175", "skipped commands: yes, 1: x > 0", "push and pop: yes, 2: x > 0 ; x < 5", "reset-assertions: yes, 1: x > 0", "two check-sat: no, unsupported: 2 check-sat commands: a query is self-contained (ADR-270 D3)", "non-linear product: yes, 1: |sv!|nl:1 == 1", "uninterpreted function: no, unsupported: (declare-fun f (Int) Int)", "non-standard symbol: yes, 1: |sv!|nl:1 == 2", "undeclared name: no, undeclared: y", "numeral out of i64: no, overflow: the numeral 9223372036854775808"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+    let files: Vec<(&'static str, &'static str)> = vec![("real zero", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (= 0 0.0))\n(check-sat)\n"), ("decimal scale", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< (* 0.5 x) 1))\n(check-sat)\n"), ("division", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< x (/ 1 3)))\n(check-sat)\n"), ("real ite", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (> (ite (> x 0) x 0.5) x))\n(check-sat)\n"), ("division by a variable", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< (/ 1 x) 2))\n(check-sat)\n"), ("division by zero", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< (/ x 0) 2))\n(check-sat)\n"), ("real product", "(set-logic QF_LRA)\n(declare-const x Real)\n(declare-const y Real)\n(assert (= (* x y) 1))\n(check-sat)\n"), ("overflowing scale", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< (* 4611686018427387904 x) (/ 1 3)))\n(check-sat)\n"), ("decimal out of i64", "(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< x 0.00000000000000000001))\n(check-sat)\n")];
+    let out = sv_smtlib_test_rows(&files);
+    let expected = vec!["real zero: yes, 1: true; reals x", "decimal scale: yes, 1: x < 2; reals x", "division: yes, 1: 3 * x < 1; reals x", "real ite: yes, 2: -x + |sv!|ite:1 > 0 ; x > 0 && -x + |sv!|ite:1 == 0 || !(x > 0) && 2 * |sv!|ite:1 == 1; reals x |sv!|ite:1", "division by a variable: yes, 2: |sv!|nl:2 < 2 ; |sv!|arg:1 == 1; reals x |sv!|nl:2", "division by zero: yes, 2: |sv!|nl:2 < 2 ; |sv!|arg:1 == 0; reals x |sv!|nl:2", "real product: yes, 1: |sv!|nl:1 == 1; reals x y |sv!|nl:1", "overflowing scale: no, overflow: the atom (< ...)", "decimal out of i64: no, overflow: the decimal 0.00000000000000000001"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn the_integer_forms_are_read_or_refused_with_their_reasons() {
+        super::__nikaia_test_0().unwrap()
+    }
+    #[test]
+    fn the_real_forms_are_read_with_their_real_variables() {
+        super::__nikaia_test_1().unwrap()
+    }
+}

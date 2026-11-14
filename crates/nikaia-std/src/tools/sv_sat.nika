@@ -999,3 +999,285 @@ impl SvSat {
 		self.place[v as i64] = i
 	}
 }
+
+// --- Tests: the SAT core (moved from `tests/compiler/tests/solver_sat.nika`,
+// which compiled these files anew in a program of its own on every run):
+// pigeonhole proved and its log accepted by `sv_check`, a learned unit
+// replayed, a random 3-SAT model evaluated, a reduced and compacted search
+// still accepted, a cut log rejected, a search stopped by its budget ---
+
+// A query of `vars` Boolean atoms (each `0 <= 0`, never read by a theory)
+// and `clauses`.
+fn sv_sat_test_query(vars: u32, clauses: Vec[Vec[u32]]) -> SvQuery {
+	let mut atoms: Vec[SvAtom] = []
+	let mut v: u32 = 0
+	while v < vars {
+		atoms.push(SvAtom { row: sv_row_constant(0), rel: SvRel::Le })
+		v += 1
+	}
+	return SvQuery { atoms: atoms, clauses: clauses, columns: 0, reals: [] }
+}
+
+fn sv_sat_test_pos(v: u32) -> u32 {
+	return sv_lit(v, false)
+}
+
+fn sv_sat_test_neg(v: u32) -> u32 {
+	return sv_lit(v, true)
+}
+
+// `p` pigeons into `h` holes, variable `i·h + j` pigeon `i` in hole `j`.
+fn sv_sat_test_pigeons(p: u32, h: u32) -> SvQuery {
+	let mut clauses: Vec[Vec[u32]] = []
+	let mut i: u32 = 0
+	while i < p {
+		let mut some: Vec[u32] = []
+		let mut j: u32 = 0
+		while j < h {
+			some.push(sv_sat_test_pos(i * h + j))
+			j += 1
+		}
+		clauses.push(some)
+		i += 1
+	}
+	let mut j: u32 = 0
+	while j < h {
+		let mut a: u32 = 0
+		while a < p {
+			let mut b = a + 1
+			while b < p {
+				clauses.push([sv_sat_test_neg(a * h + j), sv_sat_test_neg(b * h + j)])
+				b += 1
+			}
+			a += 1
+		}
+		j += 1
+	}
+	return sv_sat_test_query(p * h, clauses)
+}
+
+// `m` random clauses of three distinct variables of `n`, from `seed`.
+fn sv_sat_test_random3(n: u32, m: u32, seed: i64) -> SvQuery {
+	let mut state = seed
+	let mut clauses: Vec[Vec[u32]] = []
+	let mut c: u32 = 0
+	while c < m {
+		let mut clause: Vec[u32] = []
+		let mut vars: Vec[u32] = []
+		while vars.len() < 3 {
+			state = (state * 1103515245 + 12345) % 2147483648
+			let v = ((state / 65536) % (n as i64)) as u32
+			if vars.contains(v) {
+				continue
+			}
+			vars.push(v)
+			state = (state * 1103515245 + 12345) % 2147483648
+			clause.push(sv_lit(v, (state / 65536) % 2 == 1))
+		}
+		clauses.push(clause)
+		c += 1
+	}
+	return sv_sat_test_query(n, clauses)
+}
+
+fn sv_sat_test_answer_text(a: SvSatAnswer) -> String {
+	return match a {
+		SvSatAnswer::Sat => "sat",
+		SvSatAnswer::Unsat => "unsat",
+		SvSatAnswer::Unknown => "unknown",
+	}
+}
+
+fn sv_sat_test_work(s: ref SvSatStats) -> String {
+	return f"  work: decisions {s.decisions}, propagations {s.propagations}, conflicts {s.conflicts}, learned {s.learned}, deleted {s.deleted}, restarts {s.restarts}, reductions {s.reductions}, compactions {s.compactions}"
+}
+
+fn sv_sat_test_verdict(q: ref SvQuery, steps: ref Vec[SvStep]) -> String {
+	let v = sv_check(q, steps)
+	return if v.ok { f"accepted ({v.step} steps)" } else { f"rejected at step {v.step}: {v.reason}" }
+}
+
+// How many clauses of `q` the model of `s` makes true.
+fn sv_sat_test_satisfied(q: ref SvQuery, s: ref SvSat) -> i64 {
+	let mut n = 0
+	for clause in q.clauses {
+		let mut ok = false
+		for l in clause {
+			if s.holds(l) {
+				ok = true
+			}
+		}
+		if ok {
+			n += 1
+		}
+	}
+	return n
+}
+
+fn sv_sat_test_lits_text(lits: ref Vec[u32]) -> String {
+	let mut parts: Vec[String] = []
+	for l in lits {
+		let v = l / 2
+		parts.push(if l % 2 == 0 { f"x{v}" } else { f"-x{v}" })
+	}
+	return f"[{parts.join(" ")}]"
+}
+
+// Solves `q` within `budget` conflicts and says what came out.
+// Solves `q` within `budget` conflicts and says what came out.
+fn sv_sat_test_run(name: String, q: ref SvQuery, mut s: SvSat, budget: i64) -> String {
+	let answer = s.solve(budget)
+	let mut out: String = f"{name}: {sv_sat_test_answer_text(answer)}\n"
+	out = out + sv_sat_test_work(s.stats) + "\n"
+	let mut longest = 0
+	for step in s.book.log.steps {
+		match step {
+			SvStep::Learn(_, hints) => {
+				if hints.len() > longest {
+					longest = hints.len()
+				}
+			},
+			else => {},
+		}
+	}
+	match answer {
+		SvSatAnswer::Unsat => {
+			out = out + f"  log: {s.book.log.steps.len()} steps, longest hint chain {longest}\n"
+			out = out + f"  sv_check: {sv_sat_test_verdict(q, s.book.log.steps)}\n"
+		},
+		SvSatAnswer::Sat => {
+			out = out + f"  model: {sv_sat_test_satisfied(q, s)} of {q.clauses.len()} clauses true\n"
+		},
+		SvSatAnswer::Unknown => {},
+	}
+	return out
+}
+
+test "pigeonhole 4-into-3 is unsat and its log is accepted" {
+	let hole = sv_sat_test_pigeons(4, 3)
+	let made = sv_sat_of(hole)
+	assert(made != null)
+	let mut s = made ?? return
+	let out = sv_sat_test_run("pigeonhole 4-into-3", hole, s, 100000)
+	let expected = [
+		"pigeonhole 4-into-3: unsat",
+		"  work: decisions 9, propagations 55, conflicts 7, learned 17, deleted 0, restarts 0, reductions 0, compactions 0",
+		"  log: 39 steps, longest hint chain 12",
+		"  sv_check: accepted (39 steps)",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+/// Deciding -x0 implies x1, x2, x3 and falsifies the fourth clause: the
+/// unit x0 is learned through the whole chain; at level zero it implies x4
+/// and x5, and the last clause is the empty clause's conflict.
+test "a unit learned through a hint chain four clauses long is replayed" {
+	let chain = sv_sat_test_query(6, [
+		[sv_sat_test_pos(0), sv_sat_test_pos(1)],
+		[sv_sat_test_pos(0), sv_sat_test_neg(1), sv_sat_test_pos(2)],
+		[sv_sat_test_neg(1), sv_sat_test_neg(2), sv_sat_test_pos(3)],
+		[sv_sat_test_neg(2), sv_sat_test_neg(3)],
+		[sv_sat_test_neg(0), sv_sat_test_pos(4)],
+		[sv_sat_test_neg(4), sv_sat_test_pos(5)],
+		[sv_sat_test_neg(4), sv_sat_test_neg(5)],
+	])
+	let made = sv_sat_of(chain)
+	assert(made != null)
+	let mut s = made ?? return
+	let answer = s.solve(100)
+	let mut out: String = f"chain: {sv_sat_test_answer_text(answer)}\n"
+	for step in s.book.log.steps {
+		match step {
+			SvStep::Learn(lits, hints) => {
+				let text = hints.iter().join(" ")
+				out = out + f"  learn {sv_sat_test_lits_text(lits)} by hints [{text}]\n"
+			},
+			else => {},
+		}
+	}
+	out = out + f"  sv_check: {sv_sat_test_verdict(chain, s.book.log.steps)}\n"
+	let expected = [
+		"chain: unsat",
+		"  learn [x0] by hints [0 1 2 3]",
+		"  learn [x4] by hints [7 4]",
+		"  learn [x5] by hints [8 5]",
+		"  learn [] by hints [8 9 6]",
+		"  sv_check: accepted (11 steps)",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "a satisfiable random 3-SAT instance's model holds on every clause" {
+	let random = sv_sat_test_random3(150, 600, 7)
+	let made = sv_sat_of(random)
+	assert(made != null)
+	let mut s = made ?? return
+	let out = sv_sat_test_run("random 3-SAT, 150 variables, 600 clauses", random, s, 100000)
+	let expected = [
+		"random 3-SAT, 150 variables, 600 clauses: sat",
+		"  work: decisions 990, propagations 24221, conflicts 785, learned 785, deleted 0, restarts 5, reductions 0, compactions 0",
+		"  model: 600 of 600 clauses true",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "pigeonhole 6-into-5 reduced and compacted on the way is still accepted" {
+	let six = sv_sat_test_pigeons(6, 5)
+	let made = sv_sat_of(six)
+	assert(made != null)
+	let mut small = made ?? return
+	small.reduce_first = 60
+	small.reduce_step = 20
+	small.restart_unit = 20
+	let out = sv_sat_test_run("pigeonhole 6-into-5, reduced and compacted", six, small, 1000000)
+	let expected = [
+		"pigeonhole 6-into-5, reduced and compacted: unsat",
+		"  work: decisions 291, propagations 2345, conflicts 203, learned 226, deleted 85, restarts 6, reductions 2, compactions 1",
+		"  log: 392 steps, longest hint chain 21",
+		"  sv_check: accepted (392 steps)",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "a log with one learned clause's hints cut to one is rejected" {
+	let hole = sv_sat_test_pigeons(4, 3)
+	let made = sv_sat_of(hole)
+	assert(made != null)
+	let mut broken = made ?? return
+	let answer = broken.solve(100000)
+	assert(answer == SvSatAnswer::Unsat)
+	let mut cut: Vec[SvStep] = []
+	let mut done = false
+	for step in broken.book.log.steps {
+		let taken = match step {
+			SvStep::Learn(lits, hints) => {
+				if !done && hints.len() > 1 {
+					done = true
+					SvStep::Learn(lits.clone(), [hints[0]])
+				} else {
+					step.clone()
+				}
+			},
+			else => step.clone(),
+		}
+		cut.push(taken)
+	}
+	let out = f"pigeonhole 4-into-3, one learned clause's hints cut to one: {sv_sat_test_verdict(hole, cut)}\n"
+	let expected = [
+		"pigeonhole 4-into-3, one learned clause's hints cut to one: rejected at step 22: learn: the hints end without a conflict",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "a search stopped by its budget answers unknown" {
+	let seven = sv_sat_test_pigeons(7, 6)
+	let made = sv_sat_of(seven)
+	assert(made != null)
+	let mut s = made ?? return
+	let out = sv_sat_test_run("pigeonhole 7-into-6 within 50 conflicts", seven, s, 50)
+	let expected = [
+		"pigeonhole 7-into-6 within 50 conflicts: unknown",
+		"  work: decisions 84, propagations 598, conflicts 50, learned 50, deleted 0, restarts 0, reductions 0, compactions 0",
+	]
+	assert(out == expected.join("\n") + "\n")
+}

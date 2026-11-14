@@ -1500,3 +1500,232 @@ pub fn sv_smtlib_read(source: String) -> LgRead {
 		}),
 	}
 }
+
+// --- Tests: the forms the measuring rod's files use (moved from
+// `tests/compiler/tests/solver_smtlib.nika`, which compiled these files anew
+// in a program of its own on every run): each form, read yes or no, the
+// number of assertions and the assertions as terms, or the reason for a
+// refusal, then the script's real variables ---
+
+// One row: the form `name`, then what `sv_smtlib_script` makes of `source`.
+fn sv_smtlib_test_row(name: String, source: String) -> String {
+	return match sv_smtlib_script(source) {
+		SvSmtRead::Script(s, sorts) => {
+			let mut shown: Vec[String] = []
+			for id in s.assertions {
+				shown.push(s.arena.text(id))
+			}
+			let mut reals: Vec[String] = []
+			for r in sorts.reals {
+				reals.push(r.clone())
+			}
+			let real = if reals.len() > 0 { f"; reals {reals.join(" ")}" } else { "" }
+			f"{name}: yes, {s.assertions.len()}: {shown.join(" ; ")}{real}\n"
+		},
+		SvSmtRead::Failed(why) => f"{name}: no, {sv_read_why_text(why)}\n",
+	}
+}
+
+// The rows of `files`, each a form's name and its script.
+fn sv_smtlib_test_rows(files: Vec[(String, String)]) -> String {
+	let mut out: String = ""
+	for (name, text) in files {
+		out = out + sv_smtlib_test_row(name.replace(",", ""), text)
+	}
+	return out
+}
+
+test "the integer forms are read or refused with their reasons" {
+	let files = [
+		(
+			"let",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (let ((y (+ x 1)) (z 2)) (< y z)))\n(check-sat)\n",
+		),
+		(
+			"let, shadowing",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (let ((x 3)) (let ((x (+ x 1))) (= x 4))))\n(check-sat)\n",
+		),
+		(
+			"named",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (or (! (= x 5) :named foo) (> x 9)))\n(assert (not foo))\n(check-sat)\n",
+		),
+		(
+			"define-fun, constant",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(define-fun big () Bool (> x 9))\n(assert big)\n(check-sat)\n",
+		),
+		(
+			"define-fun, parameters",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(define-fun twice ((a Int)) Int (* 2 a))\n(assert (= (twice x) (twice 3)))\n(check-sat)\n",
+		),
+		(
+			"Bool constant",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-fun q () Bool)\n(assert (or p (not q)))\n(check-sat)\n",
+		),
+		(
+			"ite, Boolean",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const x Int)\n(assert (ite p (> x 0) (< x 0)))\n(check-sat)\n",
+		),
+		(
+			"ite, arithmetic",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const x Int)\n(assert (= x (+ 1 (ite p 2 3))))\n(check-sat)\n",
+		),
+		(
+			"ite, constant condition",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= x (ite (< 1 2) 2 3)))\n(check-sat)\n",
+		),
+		(
+			"ite, compared with a constant",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(assert (= (ite p 2 3) 3))\n(check-sat)\n",
+		),
+		(
+			"ite, nested, compared with a constant",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= (ite (= x 1) 5 (ite (= x 2) 7 x)) 7))\n(check-sat)\n",
+		),
+		(
+			"ite, scaled and shifted",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(assert (<= (+ (* 2 (ite p 4 1)) 1) 5))\n(check-sat)\n",
+		),
+		(
+			"ite, read twice",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const x Int)\n(assert (let ((v (ite p 1 0))) (and (= v 1) (> (+ x v) 3))))\n(check-sat)\n",
+		),
+		(
+			"= between Booleans",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= (>= x 5) (< x 0)))\n(check-sat)\n",
+		),
+		(
+			"distinct between Booleans",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const q Bool)\n(assert (distinct p q))\n(check-sat)\n",
+		),
+		(
+			"xor",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const q Bool)\n(assert (xor p q true))\n(check-sat)\n",
+		),
+		(
+			"=> chain",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const q Bool)\n(declare-const r Bool)\n(assert (=> p q r))\n(check-sat)\n",
+		),
+		(
+			"negative numeral",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (<= -175 x))\n(check-sat)\n",
+		),
+		(
+			"skipped commands",
+			"(set-logic QF_LIA)\n(set-option :produce-models true)\n(declare-const x Int)\n(assert (> x 0))\n(check-sat)\n(get-value (x))\n(get-model)\n(get-info :reason-unknown)\n(echo \"done\")\n",
+		),
+		(
+			"push and pop",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (> x 0))\n(push 1)\n(assert (< x 0))\n(pop 1)\n(push)\n(assert (< x 5))\n(check-sat)\n",
+		),
+		(
+			"reset-assertions",
+			"(set-logic QF_LIA)\n(assert (= 0 1))\n(reset-assertions)\n(declare-const x Int)\n(assert (> x 0))\n(check-sat)\n",
+		),
+		(
+			"two check-sat",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (> x 0))\n(check-sat)\n(assert (< x 0))\n(check-sat)\n",
+		),
+		(
+			"non-linear product",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(declare-const y Int)\n(assert (= (* x y) 1))\n(check-sat)\n",
+		),
+		(
+			"uninterpreted function",
+			"(set-logic QF_LIA)\n(declare-fun f (Int) Int)\n(assert (= (f 1) 2))\n(check-sat)\n",
+		),
+		(
+			"non-standard symbol",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= (int.pow2 x) 2))\n(check-sat)\n",
+		),
+		("undeclared name", "(set-logic QF_LIA)\n(assert (> y 0))\n(check-sat)\n"),
+		(
+			"numeral out of i64",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (< x 9223372036854775808))\n(check-sat)\n",
+		),
+	]
+	let out = sv_smtlib_test_rows(files)
+	let expected = [
+		"let: yes, 1: x < 1",
+		"let shadowing: yes, 1: true",
+		"named: yes, 2: x == 5 || x > 9 ; !(x == 5)",
+		"define-fun constant: yes, 1: x > 9",
+		"define-fun parameters: yes, 1: 2 * x == 6",
+		"Bool constant: yes, 5: |sv!|b:p >= 1 || !(|sv!|b:q >= 1) ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; 0 <= |sv!|b:q ; |sv!|b:q <= 1",
+		"ite Boolean: yes, 3: |sv!|b:p >= 1 && x > 0 || !(|sv!|b:p >= 1) && x < 0 ; 0 <= |sv!|b:p ; |sv!|b:p <= 1",
+		"ite arithmetic: yes, 4: x - |sv!|ite:1 == 1 ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; |sv!|b:p >= 1 && |sv!|ite:1 == 2 || !(|sv!|b:p >= 1) && |sv!|ite:1 == 3",
+		"ite constant condition: yes, 1: x == 2",
+		"ite compared with a constant: yes, 3: !(|sv!|b:p >= 1) ; 0 <= |sv!|b:p ; |sv!|b:p <= 1",
+		"ite nested compared with a constant: yes, 1: !(x == 1) && (x == 2 || x == 7)",
+		"ite scaled and shifted: yes, 3: !(|sv!|b:p >= 1) ; 0 <= |sv!|b:p ; |sv!|b:p <= 1",
+		"ite read twice: yes, 4: |sv!|b:p >= 1 && x + |sv!|ite:1 > 3 ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; |sv!|b:p >= 1 && |sv!|ite:1 == 1 || !(|sv!|b:p >= 1) && |sv!|ite:1 == 0",
+		"= between Booleans: yes, 1: x >= 5 && x < 0 || !(x >= 5) && !(x < 0)",
+		"distinct between Booleans: yes, 5: !(|sv!|b:p >= 1 && |sv!|b:q >= 1 || !(|sv!|b:p >= 1) && !(|sv!|b:q >= 1)) ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; 0 <= |sv!|b:q ; |sv!|b:q <= 1",
+		"xor: yes, 5: (|sv!|b:p >= 1 && !(|sv!|b:q >= 1) || !(|sv!|b:p >= 1) && |sv!|b:q >= 1) → !true ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; 0 <= |sv!|b:q ; |sv!|b:q <= 1",
+		"=> chain: yes, 7: |sv!|b:p >= 1 → (|sv!|b:q >= 1 → |sv!|b:r >= 1) ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; 0 <= |sv!|b:q ; |sv!|b:q <= 1 ; 0 <= |sv!|b:r ; |sv!|b:r <= 1",
+		"negative numeral: yes, 1: -x <= 175",
+		"skipped commands: yes, 1: x > 0",
+		"push and pop: yes, 2: x > 0 ; x < 5",
+		"reset-assertions: yes, 1: x > 0",
+		"two check-sat: no, unsupported: 2 check-sat commands: a query is self-contained (ADR-270 D3)",
+		"non-linear product: yes, 1: |sv!|nl:1 == 1",
+		"uninterpreted function: no, unsupported: (declare-fun f (Int) Int)",
+		"non-standard symbol: yes, 1: |sv!|nl:1 == 2",
+		"undeclared name: no, undeclared: y",
+		"numeral out of i64: no, overflow: the numeral 9223372036854775808",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "the real forms are read with their real variables" {
+	let files = [
+		(
+			"real zero",
+			"(set-logic QF_LRA)\n(declare-const x Real)\n(assert (= 0 0.0))\n(check-sat)\n",
+		),
+		(
+			"decimal scale",
+			"(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< (* 0.5 x) 1))\n(check-sat)\n",
+		),
+		(
+			"division",
+			"(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< x (/ 1 3)))\n(check-sat)\n",
+		),
+		(
+			"real ite",
+			"(set-logic QF_LRA)\n(declare-const x Real)\n(assert (> (ite (> x 0) x 0.5) x))\n(check-sat)\n",
+		),
+		(
+			"division by a variable",
+			"(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< (/ 1 x) 2))\n(check-sat)\n",
+		),
+		(
+			"division by zero",
+			"(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< (/ x 0) 2))\n(check-sat)\n",
+		),
+		(
+			"real product",
+			"(set-logic QF_LRA)\n(declare-const x Real)\n(declare-const y Real)\n(assert (= (* x y) 1))\n(check-sat)\n",
+		),
+		(
+			"overflowing scale",
+			"(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< (* 4611686018427387904 x) (/ 1 3)))\n(check-sat)\n",
+		),
+		(
+			"decimal out of i64",
+			"(set-logic QF_LRA)\n(declare-const x Real)\n(assert (< x 0.00000000000000000001))\n(check-sat)\n",
+		),
+	]
+	let out = sv_smtlib_test_rows(files)
+	let expected = [
+		"real zero: yes, 1: true; reals x",
+		"decimal scale: yes, 1: x < 2; reals x",
+		"division: yes, 1: 3 * x < 1; reals x",
+		"real ite: yes, 2: -x + |sv!|ite:1 > 0 ; x > 0 && -x + |sv!|ite:1 == 0 || !(x > 0) && 2 * |sv!|ite:1 == 1; reals x |sv!|ite:1",
+		"division by a variable: yes, 2: |sv!|nl:2 < 2 ; |sv!|arg:1 == 1; reals x |sv!|nl:2",
+		"division by zero: yes, 2: |sv!|nl:2 < 2 ; |sv!|arg:1 == 0; reals x |sv!|nl:2",
+		"real product: yes, 1: |sv!|nl:1 == 1; reals x y |sv!|nl:1",
+		"overflowing scale: no, overflow: the atom (< ...)",
+		"decimal out of i64: no, overflow: the decimal 0.00000000000000000001",
+	]
+	assert(out == expected.join("\n") + "\n")
+}

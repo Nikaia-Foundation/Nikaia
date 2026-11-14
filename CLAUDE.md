@@ -44,7 +44,7 @@ The rules every session and agent needs. What only the main session does
   in the shared checkout: it throws away the others' work. Restore only your
   own files, by name.
 * **An error in another agent's file is not touched, it is escalated** to the
-  supervisor (the session that runs the driver).
+  supervisor (the session that started the agents).
 
 ## Written in Nikaia only (owner, 2026-10-25 and 2026-10-31)
 
@@ -77,9 +77,10 @@ The rules every session and agent needs. What only the main session does
 
 ## Who reads what else
 
-* **The main session** (supervisor: the session that runs the driver,
-  `scripts/drive.nika`, owner 2026-11-14; starts agents, talks to the owner, raises
-  versions, watches CI, runs decision rounds, writes the briefs and keeps the lanes and the
+* **Every main session** (each is a supervisor of its own work, owner
+  2026-11-14: runs its own driver, starts agents, talks to the owner, raises the
+  version and writes `CHANGELOG.md` and `docs/tokenspeed.md` for what it pushed,
+  watches CI, runs decision rounds, writes the briefs and keeps the lanes and the
   issues): `docs/supervisor.md`.
 * **Builders**: `.claude/agents/builder.md` (the cycle and the gate) and
   `docs/builder-facts.md` (*Core*: where things live, the traps of every run),

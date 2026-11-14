@@ -200,3 +200,74 @@ pub(crate) fn sv_row_of_lin(lin: &LgLin, vars: &mut SvVars) -> Option<SvRow> {
     sv_row_of(terms, lin.constant)
 }
 
+#[cfg(test)]
+pub(crate) fn sv_row_test_term(col: u32, k: i64) -> SvTerm { SvTerm { col, k } }
+
+#[cfg(test)]
+pub(crate) fn sv_row_test_show(r: Option<&SvRow>) -> String {
+    let row = match r { Some(__nikaia_value) => __nikaia_value, None => return String::from("refused") };
+    sv_row_text(row)
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    let mut out: String = String::from("");
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== building\n"));
+    let r = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(5u32, 2), sv_row_test_term(1u32, -3), sv_row_test_term(5u32, 4), sv_row_test_term(9u32, 0), sv_row_test_term(2u32, 7), sv_row_test_term(2u32, -7)], 4), || sv_row_constant(0).into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("2·x5 - 3·x1 + 4·x5 + 0·x9 + 7·x2 - 7·x2 + 4 = {}\n", sv_row_text(&r))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("columns ascending: {}; coefficient of x5 {}, of x2 {}\n", r.cols.iter().copied().join(" "), sv_row_coef(&r, 5u32), sv_row_coef(&r, 2u32))));
+    let big: i64 = 9223372036854775807i64;
+    out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("x0 + x0 at i64 max: {}\n", sv_row_test_show((sv_row_of(vec![sv_row_test_term(0u32, big), sv_row_test_term(0u32, 1)], 0)).as_ref())))); __nikaia_value };
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== combining\n"));
+    let s = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(1u32, 6), sv_row_test_term(3u32, 2), sv_row_test_term(5u32, -4)], -2), || sv_row_constant(0).into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("r = {}, s = {}\n", sv_row_text(&r), sv_row_text(&s))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("2·r + s = {}\n", sv_row_test_show((sv_row_combine(2, &r, 1, &s)).as_ref()))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("r + s unreduced = {}\n", sv_row_test_show((sv_row_sum(1, &r, 1, &s)).as_ref()))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("r - r = {}\n", sv_row_test_show((sv_row_combine(1, &r, -1, &r)).as_ref()))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("-3·s = {}\n", sv_row_test_show((sv_row_scale(&s, -3)).as_ref()))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("s · 2^62: {}\n", sv_row_test_show((sv_row_scale(&s, 4611686018427387904i64)).as_ref()))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("x1 eliminated between r and s: {}\n", sv_row_test_show((sv_row_eliminate(&r, &s, 1u32)).as_ref()))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("x5 eliminated between r and s: {}\n", sv_row_test_show((sv_row_eliminate(&r, &s, 5u32)).as_ref()))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("x9 eliminated (neither holds it): {}\n", sv_row_test_show((sv_row_eliminate(&r, &s, 9u32)).as_ref()))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("column picked between r and s, opposite signs: {}\n", nikaia_std::index::or(sv_row_pick(&r, &s, true), || 99u32))));
+    let u = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(0u32, 1), sv_row_test_term(1u32, 4)], 0), || sv_row_constant(0).into());
+    let w = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(0u32, -3), sv_row_test_term(1u32, -6)], 0), || sv_row_constant(0).into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("column picked between {} and {}: x{}\n", sv_row_text(&u), sv_row_text(&w), nikaia_std::index::or(sv_row_pick(&u, &w, false), || 99u32))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== reducing\n"));
+    let even = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(0u32, 4), sv_row_test_term(2u32, -6)], 10), || sv_row_constant(0).into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{} reduced: {}\n", sv_row_text(&even), sv_row_text(&sv_row_reduced(even.clone())))));
+    let odd = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(0u32, 4), sv_row_test_term(2u32, -6)], 3), || sv_row_constant(0).into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{} reduced: {}, tightened (<= 0): {}\n", sv_row_text(&odd), sv_row_text(&sv_row_reduced(odd.clone())), sv_row_text(&sv_row_tightened(&odd)))));
+    let minus = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(0u32, 2)], -3), || sv_row_constant(0).into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{} tightened: {}\n", sv_row_text(&minus), sv_row_text(&sv_row_tightened(&minus)))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== evaluating\n"));
+    let values: Vec<SvRat> = vec![nikaia_std::index::or(sv_rat(1, 2), || sv_int(0).into()), sv_int(3), sv_int(-1)];
+    let e = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(0u32, 4), sv_row_test_term(1u32, -1), sv_row_test_term(2u32, 2)], 1), || sv_row_constant(0).into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{} at x0 = 1/2, x1 = 3, x2 = -1: {}\n", sv_row_text(&e), sv_rat_text(&nikaia_std::index::or(sv_row_eval(&e, &values), || sv_int(99).into())))));
+    let missing = sv_row_eval(&r, &values);
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{} there: {}\n", sv_row_text(&r), if missing.is_none() { "refused, x5 has no value" } else { "?" })));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== from logic_lia's LgLin\n"));
+    #[allow(unused_mut)] let mut vars = sv_vars();
+    let mut terms: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut vars = vars;
+    terms.insert(String::from("y"), 3);
+    terms.insert(String::from("blank"), -2);
+    let first = nikaia_std::index::or(sv_row_of_lin(&LgLin { terms, constant: 7 }, &mut vars), || sv_row_constant(0).into());
+    let mut more: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    more.insert(String::from("x"), 1);
+    more.insert(String::from("y"), -1);
+    let second = nikaia_std::index::or(sv_row_of_lin(&LgLin { terms: more, constant: 0 }, &mut vars), || sv_row_constant(0).into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("3·y - 2·blank + 7 = {}; x - y = {}\n", sv_row_text(&first), sv_row_text(&second))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("columns: {}\n", vars.names.iter().join(", "))));
+    let expected = vec!["== building", "2·x5 - 3·x1 + 4·x5 + 0·x9 + 7·x2 - 7·x2 + 4 = -3·x1 + 6·x5 + 4", "columns ascending: 1 5; coefficient of x5 6, of x2 0", "x0 + x0 at i64 max: refused", "== combining", "r = -3·x1 + 6·x5 + 4, s = 6·x1 + 2·x3 - 4·x5 - 2", "2·r + s = x3 + 4·x5 + 3", "r + s unreduced = 3·x1 + 2·x3 + 2·x5 + 2", "r - r = 0", "-3·s = -18·x1 - 6·x3 + 12·x5 + 6", "s · 2^62: refused", "x1 eliminated between r and s: x3 + 4·x5 + 3", "x5 eliminated between r and s: 6·x1 + 3·x3 + 1", "x9 eliminated (neither holds it): refused", "column picked between r and s, opposite signs: 1", "column picked between x0 + 4·x1 and -3·x0 - 6·x1: x0", "== reducing", "4·x0 - 6·x2 + 10 reduced: 2·x0 - 3·x2 + 5", "4·x0 - 6·x2 + 3 reduced: 4·x0 - 6·x2 + 3, tightened (<= 0): 2·x0 - 3·x2 + 2", "2·x0 - 3 tightened: x0 - 1", "== evaluating", "4·x0 - x1 + 2·x2 + 1 at x0 = 1/2, x1 = 3, x2 = -1: -2", "-3·x1 + 6·x5 + 4 there: refused, x5 has no value", "== from logic_lia's LgLin", "3·y - 2·blank + 7 = -2·x0 + 3·x1 + 7; x - y = -x1 + x2", "columns: blank, y, x"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn rows_are_built_combined_reduced_evaluated_and_read_from_lglin() {
+        super::__nikaia_test_0().unwrap()
+    }
+}

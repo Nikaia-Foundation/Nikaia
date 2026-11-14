@@ -224,14 +224,14 @@ impl SvSat {
         let v = sv_sat_var(l);
         if *nikaia_std::index::get(&self.value, nikaia_std::index::at(v)) != 0 {
             if self.lit_value(l) < 0 {
-                self.book.log.learn(vec![], vec![u32::try_from(*unsafe { nikaia_std::proven::read(&self.unit, (v) as usize) }).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), id]);
+                self.book.log.learn(vec![], vec![u32::try_from(*nikaia_std::index::get(&self.unit, nikaia_std::index::at(v))).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), id]);
                 self.stats.learned += 1;
                 self.refuted = true;
             }
             return;
         }
         self.assign(l, -1);
-        { let __nikaia_stored = id as i64; unsafe { nikaia_std::proven::write(&mut self.unit, (v) as usize, __nikaia_stored) }; }
+        { let __nikaia_stored = id as i64; nikaia_std::index::set(&mut self.unit, nikaia_std::index::at(v), __nikaia_stored); }
     }
     pub(crate) fn propagate(&mut self) -> i64 {
         while self.head < self.trail.len() as i64 {
@@ -246,7 +246,7 @@ impl SvSat {
             let mut conflict: i64 = -1;
             while i < n {
                 let name = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&self.watch_clause, (fl) as usize) }, (i) as usize);
-                let blocker = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&self.watch_blocker, (fl) as usize) }, (i) as usize);
+                let blocker = *nikaia_std::index::get(nikaia_std::index::get(&self.watch_blocker, nikaia_std::index::at(fl)), (i) as usize);
                 i += 1;
                 if self.lit_value(blocker) > 0 {
                     { let __nikaia_stored = name; nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_clause, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
@@ -306,12 +306,12 @@ impl SvSat {
             }
             while i < n {
                 { let __nikaia_stored = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&self.watch_clause, (fl) as usize) }, (i) as usize); nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_clause, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
-                { let __nikaia_stored = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&self.watch_blocker, (fl) as usize) }, (i) as usize); nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_blocker, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
+                { let __nikaia_stored = *nikaia_std::index::get(nikaia_std::index::get(&self.watch_blocker, nikaia_std::index::at(fl)), (i) as usize); nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_blocker, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
                 i += 1;
                 j += 1;
             }
             (*unsafe { nikaia_std::proven::slot(&mut self.watch_clause, (fl) as usize) }).truncate(nikaia_std::count::of(j));
-            (*unsafe { nikaia_std::proven::slot(&mut self.watch_blocker, (fl) as usize) }).truncate(nikaia_std::count::of(j));
+            self.watch_blocker[nikaia_std::index::at(fl)].truncate(nikaia_std::count::of(j));
             if conflict >= 0 {
                 self.head = self.trail.len() as i64;
                 return conflict;
@@ -339,7 +339,7 @@ impl SvSat {
                 let v = sv_sat_var(q);
                 if *nikaia_std::index::get(&self.seen, nikaia_std::index::at(v)) { continue; }
                 { let __nikaia_stored = true; unsafe { nikaia_std::proven::write(&mut self.seen, (v) as usize, __nikaia_stored) }; }
-                if *unsafe { nikaia_std::proven::read(&self.level, (v) as usize) } == 0 {
+                if *nikaia_std::index::get(&self.level, nikaia_std::index::at(v)) == 0 {
                     zero.push(v);
                     continue;
                 }
@@ -362,7 +362,7 @@ impl SvSat {
         for v in zero.iter() {
             let v = nikaia_std::num::value(v);
             hints.push(u32::try_from(*nikaia_std::index::get(&self.unit, nikaia_std::index::at(v))).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")));
-            { let __nikaia_stored = false; unsafe { nikaia_std::proven::write(&mut self.seen, (v) as usize, __nikaia_stored) }; }
+            { let __nikaia_stored = false; nikaia_std::index::set(&mut self.seen, nikaia_std::index::at(v), __nikaia_stored); }
         }
         let mut r = unsafe { nikaia_std::proven::sub::<i64>(chain.len() as i64, 1) };
         while r >= 0 {
@@ -552,7 +552,7 @@ impl SvSat {
     pub(crate) fn pick(&mut self) -> Option<u32> {
         while !self.heap.is_empty() {
             let v = self.heap_pop();
-            if *nikaia_std::index::get(&self.value, nikaia_std::index::at(v as i64)) == 0 { return Some(if *unsafe { nikaia_std::proven::read(&self.phase, (v as i64) as usize) } { v << 1 } else { v << 1 | 1u32 }); }
+            if *nikaia_std::index::get(&self.value, nikaia_std::index::at(v as i64)) == 0 { return Some(if *nikaia_std::index::get(&self.phase, nikaia_std::index::at(v as i64)) { v << 1 } else { v << 1 | 1u32 }); }
         }
         None
     }
@@ -620,7 +620,7 @@ impl SvSat {
         let mut l: i64 = 0;
         while ((l) as usize) < self.watch_clause.len() {
             (*unsafe { nikaia_std::proven::slot(&mut self.watch_clause, (l) as usize) }).truncate(0);
-            (*unsafe { nikaia_std::proven::slot(&mut self.watch_blocker, (l) as usize) }).truncate(0);
+            self.watch_blocker[nikaia_std::index::at(l)].truncate(0);
             l = unsafe { nikaia_std::proven::add::<i64>(l, 1) };
         }
         let mut c: i64 = 0;
@@ -631,9 +631,9 @@ impl SvSat {
         }
     }
     pub(crate) fn bump_var(&mut self, v: i64) {
-        { let __nikaia_stored = self.bump; let __nikaia_at = (v) as usize; let __nikaia_stored = *unsafe { nikaia_std::proven::read(&self.activity, __nikaia_at) } + __nikaia_stored; unsafe { nikaia_std::proven::write(&mut self.activity, __nikaia_at, __nikaia_stored) }; }
-        if *unsafe { nikaia_std::proven::read(&self.activity, (v) as usize) } > 1152921504606846976i64 { self.rescale(); }
-        if *unsafe { nikaia_std::proven::read(&self.place, (v) as usize) } >= 0 { self.heap_up(*unsafe { nikaia_std::proven::read(&self.place, (v) as usize) }); }
+        self.activity[nikaia_std::index::at(v)] += self.bump;
+        if *nikaia_std::index::get(&self.activity, nikaia_std::index::at(v)) > 1152921504606846976i64 { self.rescale(); }
+        if *nikaia_std::index::get(&self.place, nikaia_std::index::at(v)) >= 0 { self.heap_up(*unsafe { nikaia_std::proven::read(&self.place, (v) as usize) }); }
     }
     pub(crate) fn rescale(&mut self) {
         let mut v: i64 = 0;
@@ -698,3 +698,268 @@ impl SvSat {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn sv_sat_test_query(vars: u32, clauses: Vec<Vec<u32>>) -> SvQuery {
+    let mut atoms: Vec<SvAtom> = vec![];
+    let mut v: u32 = 0u32;
+    while v < vars {
+        atoms.push(SvAtom { row: sv_row_constant(0), rel: SvRel::Le });
+        v = unsafe { nikaia_std::proven::add::<u32>(v, 1) };
+    }
+    SvQuery { atoms, clauses, columns: 0, reals: vec![] }
+}
+
+#[cfg(test)]
+pub(crate) fn sv_sat_test_pos(v: u32) -> u32 { sv_lit(v, false) }
+
+#[cfg(test)]
+pub(crate) fn sv_sat_test_neg(v: u32) -> u32 { sv_lit(v, true) }
+
+#[cfg(test)]
+pub(crate) fn sv_sat_test_pigeons(p: u32, h: u32) -> SvQuery {
+    let mut clauses: Vec<Vec<u32>> = vec![];
+    let mut i: u32 = 0u32;
+    while i < p {
+        let mut some: Vec<u32> = vec![];
+        let mut j: u32 = 0u32;
+        while j < h {
+            some.push(sv_sat_test_pos(i * h + j));
+            j = unsafe { nikaia_std::proven::add::<u32>(j, 1) };
+        }
+        clauses.push(some);
+        i = unsafe { nikaia_std::proven::add::<u32>(i, 1) };
+    }
+    let mut j: u32 = 0u32;
+    while j < h {
+        let mut a: u32 = 0u32;
+        while a < p {
+            let mut b = unsafe { nikaia_std::proven::add::<u32>(a, 1u32) };
+            while b < p {
+                clauses.push(vec![sv_sat_test_neg(a * h + j), sv_sat_test_neg(b * h + j)]);
+                b = unsafe { nikaia_std::proven::add::<u32>(b, 1) };
+            }
+            a = unsafe { nikaia_std::proven::add::<u32>(a, 1) };
+        }
+        j = unsafe { nikaia_std::proven::add::<u32>(j, 1) };
+    }
+    sv_sat_test_query(p * h, clauses)
+}
+
+#[cfg(test)]
+pub(crate) fn sv_sat_test_random3(n: u32, m: u32, seed: i64) -> SvQuery {
+    let mut state = seed;
+    let mut clauses: Vec<Vec<u32>> = vec![];
+    let mut c: u32 = 0u32;
+    while c < m {
+        let mut clause: Vec<u32> = vec![];
+        let mut vars: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        while vars.len() < 3 {
+            state = (state * 1103515245 + 12345) % 2147483648i64;
+            let v = u32::try_from(state / 65536 % n as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"));
+            if vars.contains(&v) { continue; }
+            vars.push(v);
+            state = (unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::mul::<i64>(state, 1103515245), 12345) }) % 2147483648i64;
+            clause.push(sv_lit(v, state / 65536 % 2 == 1));
+        }
+        clauses.push(clause);
+        c = unsafe { nikaia_std::proven::add::<u32>(c, 1) };
+    }
+    sv_sat_test_query(n, clauses)
+}
+
+#[cfg(test)]
+pub(crate) fn sv_sat_test_answer_text(a: &SvSatAnswer) -> &'static str {
+    match a {
+        SvSatAnswer::Sat => "sat",
+        SvSatAnswer::Unsat => "unsat",
+        SvSatAnswer::Unknown => "unknown",
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn sv_sat_test_work(s: &SvSatStats) -> String { format!("  work: decisions {}, propagations {}, conflicts {}, learned {}, deleted {}, restarts {}, reductions {}, compactions {}", s.decisions, s.propagations, s.conflicts, s.learned, s.deleted, s.restarts, s.reductions, s.compactions) }
+
+#[cfg(test)]
+pub(crate) fn sv_sat_test_verdict(q: &SvQuery, steps: &[SvStep]) -> String {
+    let v = sv_check(q, steps);
+    if v.ok { format!("accepted ({} steps)", v.step) } else { format!("rejected at step {}: {}", v.step, v.reason) }
+}
+
+#[cfg(test)]
+pub(crate) fn sv_sat_test_satisfied(q: &SvQuery, s: &SvSat) -> i64 {
+    let mut n: i64 = 0;
+    for clause in q.clauses.iter() {
+        let mut ok = false;
+        for l in clause.iter() {
+            let l = nikaia_std::num::value(l);
+            if s.holds(l) { ok = true; }
+        }
+        if ok { n = unsafe { nikaia_std::proven::add::<i64>(n, 1) }; }
+    }
+    n
+}
+
+#[cfg(test)]
+pub(crate) fn sv_sat_test_lits_text(lits: &[u32]) -> String {
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for l in lits.iter() {
+        let l = nikaia_std::num::value(l);
+        let v = l / 2u32;
+        parts.push(if l % 2u32 == 0u32 { format!("x{}", v) } else { format!("-x{}", v) });
+    }
+    format!("[{}]", nikaia_std::block::Text::from(parts.join(" ")))
+}
+
+#[cfg(test)]
+pub(crate) fn sv_sat_test_run(name: &str, q: &SvQuery, s: &mut SvSat, budget: i64) -> String {
+    let answer = s.solve(budget);
+    let mut out: String = format!("{}: {}\n", name, sv_sat_test_answer_text(&answer));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_sat_test_work(&s.stats))), "\n"));
+    let mut longest: i64 = 0;
+    for step in s.book.log.steps.iter() {
+        match step {
+            SvStep::Learn(_, hints) => { if (hints.len() as i64) > longest { longest = hints.len() as i64; } },
+            _ => { },
+        }
+    }
+    match answer {
+        SvSatAnswer::Unsat => {
+            out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  log: {} steps, longest hint chain {}\n", s.book.log.steps.len() as i64, longest)));
+            out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  sv_check: {}\n", sv_sat_test_verdict(q, &s.book.log.steps))));
+        },
+        SvSatAnswer::Sat => { out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  model: {} of {} clauses true\n", sv_sat_test_satisfied(q, &s), q.clauses.len() as i64))); },
+        SvSatAnswer::Unknown => { },
+    }
+    out
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    let hole = sv_sat_test_pigeons(4u32, 3u32);
+    let made = sv_sat_of(&hole);
+    if !(made.is_some()) { nikaia_std::abort::assertion_failed("assert(made != null)", None, &[("made", (&&nikaia_std::abort::Operand(&(made))).shown()), ]) };
+    let mut s = match made { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+    let out = sv_sat_test_run("pigeonhole 4-into-3", &hole, &mut s, 100000);
+    let expected = vec!["pigeonhole 4-into-3: unsat", "  work: decisions 9, propagations 55, conflicts 7, learned 17, deleted 0, restarts 0, reductions 0, compactions 0", "  log: 39 steps, longest hint chain 12", "  sv_check: accepted (39 steps)"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+    let chain = sv_sat_test_query(6u32, vec![vec![sv_sat_test_pos(0u32), sv_sat_test_pos(1u32)], vec![sv_sat_test_pos(0u32), sv_sat_test_neg(1u32), sv_sat_test_pos(2u32)], vec![sv_sat_test_neg(1u32), sv_sat_test_neg(2u32), sv_sat_test_pos(3u32)], vec![sv_sat_test_neg(2u32), sv_sat_test_neg(3u32)], vec![sv_sat_test_neg(0u32), sv_sat_test_pos(4u32)], vec![sv_sat_test_neg(4u32), sv_sat_test_pos(5u32)], vec![sv_sat_test_neg(4u32), sv_sat_test_neg(5u32)]]);
+    let made = sv_sat_of(&chain);
+    if !(made.is_some()) { nikaia_std::abort::assertion_failed("assert(made != null)", None, &[("made", (&&nikaia_std::abort::Operand(&(made))).shown()), ]) };
+    let mut s = match made { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+    let answer = s.solve(100);
+    let mut out: String = format!("chain: {}\n", sv_sat_test_answer_text(&answer));
+    for step in s.book.log.steps.iter() {
+        match step {
+            SvStep::Learn(lits, hints) => {
+                let text = hints.iter().copied().join(" ");
+                out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  learn {} by hints [{}]\n", sv_sat_test_lits_text(lits), text)));
+            },
+            _ => { },
+        }
+    }
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  sv_check: {}\n", sv_sat_test_verdict(&chain, &s.book.log.steps))));
+    let expected = vec!["chain: unsat", "  learn [x0] by hints [0 1 2 3]", "  learn [x4] by hints [7 4]", "  learn [x5] by hints [8 5]", "  learn [] by hints [8 9 6]", "  sv_check: accepted (11 steps)"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
+    let random = sv_sat_test_random3(150u32, 600u32, 7);
+    let made = sv_sat_of(&random);
+    if !(made.is_some()) { nikaia_std::abort::assertion_failed("assert(made != null)", None, &[("made", (&&nikaia_std::abort::Operand(&(made))).shown()), ]) };
+    let mut s = match made { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+    let out = sv_sat_test_run("random 3-SAT, 150 variables, 600 clauses", &random, &mut s, 100000);
+    let expected = vec!["random 3-SAT, 150 variables, 600 clauses: sat", "  work: decisions 990, propagations 24221, conflicts 785, learned 785, deleted 0, restarts 5, reductions 0, compactions 0", "  model: 600 of 600 clauses true"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
+    let six = sv_sat_test_pigeons(6u32, 5u32);
+    let made = sv_sat_of(&six);
+    if !(made.is_some()) { nikaia_std::abort::assertion_failed("assert(made != null)", None, &[("made", (&&nikaia_std::abort::Operand(&(made))).shown()), ]) };
+    let mut small = match made { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+    small.reduce_first = 60;
+    small.reduce_step = 20;
+    small.restart_unit = 20;
+    let out = sv_sat_test_run("pigeonhole 6-into-5, reduced and compacted", &six, &mut small, 1000000);
+    let expected = vec!["pigeonhole 6-into-5, reduced and compacted: unsat", "  work: decisions 291, propagations 2345, conflicts 203, learned 226, deleted 85, restarts 6, reductions 2, compactions 1", "  log: 392 steps, longest hint chain 21", "  sv_check: accepted (392 steps)"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_4() -> Result<(), Box<dyn std::error::Error>> {
+    let hole = sv_sat_test_pigeons(4u32, 3u32);
+    let made = sv_sat_of(&hole);
+    if !(made.is_some()) { nikaia_std::abort::assertion_failed("assert(made != null)", None, &[("made", (&&nikaia_std::abort::Operand(&(made))).shown()), ]) };
+    let mut broken = match made { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+    let answer = broken.solve(100000);
+    if !(answer == SvSatAnswer::Unsat) { nikaia_std::abort::assertion_failed("assert(answer == SvSatAnswer::Unsat)", None, &[("answer", (&&nikaia_std::abort::Operand(&(answer))).shown()), ("SvSatAnswer::Unsat", (&&nikaia_std::abort::Operand(&(SvSatAnswer::Unsat))).shown()), ]) };
+    let mut cut: Vec<SvStep> = vec![];
+    let mut done = false;
+    for step in broken.book.log.steps.iter() {
+        let taken = match step {
+            SvStep::Learn(lits, hints) => {
+                if !done && hints.len() > 1 {
+                    done = true;
+                    SvStep::Learn(lits.copy_owned(), vec![*unsafe { nikaia_std::proven::read(&hints, (0) as usize) }])
+                } else { step.clone() }
+            },
+            _ => step.clone(),
+        };
+        cut.push(taken);
+    }
+    let out = format!("pigeonhole 4-into-3, one learned clause's hints cut to one: {}\n", sv_sat_test_verdict(&hole, &cut));
+    let expected = vec!["pigeonhole 4-into-3, one learned clause's hints cut to one: rejected at step 22: learn: the hints end without a conflict"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_5() -> Result<(), Box<dyn std::error::Error>> {
+    let seven = sv_sat_test_pigeons(7u32, 6u32);
+    let made = sv_sat_of(&seven);
+    if !(made.is_some()) { nikaia_std::abort::assertion_failed("assert(made != null)", None, &[("made", (&&nikaia_std::abort::Operand(&(made))).shown()), ]) };
+    let mut s = match made { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+    let out = sv_sat_test_run("pigeonhole 7-into-6 within 50 conflicts", &seven, &mut s, 50);
+    let expected = vec!["pigeonhole 7-into-6 within 50 conflicts: unknown", "  work: decisions 84, propagations 598, conflicts 50, learned 50, deleted 0, restarts 0, reductions 0, compactions 0"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn pigeonhole_4_into_3_is_unsat_and_its_log_is_accepted() {
+        super::__nikaia_test_0().unwrap()
+    }
+    #[test]
+    fn a_unit_learned_through_a_hint_chain_four_clauses_long_is_replayed() {
+        super::__nikaia_test_1().unwrap()
+    }
+    #[test]
+    fn a_satisfiable_random_3_sat_instance_s_model_holds_on_every_clause() {
+        super::__nikaia_test_2().unwrap()
+    }
+    #[test]
+    fn pigeonhole_6_into_5_reduced_and_compacted_on_the_way_is_still_accepted() {
+        super::__nikaia_test_3().unwrap()
+    }
+    #[test]
+    fn a_log_with_one_learned_clause_s_hints_cut_to_one_is_rejected() {
+        super::__nikaia_test_4().unwrap()
+    }
+    #[test]
+    fn a_search_stopped_by_its_budget_answers_unknown() {
+        super::__nikaia_test_5().unwrap()
+    }
+}

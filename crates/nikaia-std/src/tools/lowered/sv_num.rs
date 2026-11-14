@@ -254,3 +254,142 @@ pub fn sv_delta_text(a: &SvDelta) -> String {
     format!("{}{}{}δ", real, sign, sv_rat_text(&a.k))
 }
 
+#[cfg(test)]
+pub(crate) fn sv_num_test_partner(n: i64) -> Vec<i64> { vec![-2, 1, 5, unsafe { nikaia_std::proven::add::<i64>(1, n % 7) }] }
+
+#[cfg(test)]
+pub(crate) fn sv_num_test_naive(x: &[i64], y: &[i64], j: i64) -> Option<Vec<i64>> {
+    let mut a = *nikaia_std::index::get(&y, nikaia_std::index::at(j));
+    let mut b = *nikaia_std::index::get(&x, nikaia_std::index::at(j));
+    if a < 0 { a = -a; } else { b = -b; }
+    let mut out: Vec<i64> = vec![];
+    let mut i: i64 = 0;
+    while ((i) as usize) < x.len() {
+        out.push(match sv_mul_add(a, *unsafe { nikaia_std::proven::read(&x, (i) as usize) }, b, *nikaia_std::index::get(&y, (i) as usize)) { Some(__nikaia_value) => __nikaia_value, None => return None });
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+    }
+    Some(out)
+}
+
+#[cfg(test)]
+pub(crate) fn sv_num_test_chain(reduce: bool, steps: i64) -> String {
+    let mut c: Vec<i64> = vec![2, 1, 3, 4];
+    let mut n: i64 = 0;
+    let mut largest: i64 = 0;
+    let mut left32: i64 = -1;
+    while n < steps {
+        let f = sv_num_test_partner(n);
+        let j = sv_pick_column(&c, &f, 3, true);
+        if j < 0 { return format!("step {}: no column", n); }
+        let next = if reduce { sv_dense_eliminate(&c, &f, j) } else { sv_num_test_naive(&c, &f, j) };
+        let made = match next { Some(__nikaia_value) => __nikaia_value, None => return format!("step {}: refused, would leave i64 (left 32 bits at step {}, largest so far {})", unsafe { nikaia_std::proven::add::<i64>(n, 1) }, left32, largest) };
+        c = made;
+        largest = nikaia_std::index::or(sv_max_abs(&c), || -1);
+        if left32 < 0 && !sv_fits32(largest) { left32 = unsafe { nikaia_std::proven::add::<i64>(n, 1) }; }
+        if *nikaia_std::index::get(&c, nikaia_std::index::at(j)) != 0 { return format!("step {}: column {} left", n, j); }
+        { let __nikaia_stored = 2; unsafe { nikaia_std::proven::write(&mut c, (j) as usize, __nikaia_stored) }; }
+        n = unsafe { nikaia_std::proven::add::<i64>(n, 1) };
+    }
+    format!("{} steps, largest coefficient {}, within 32 bits: {}", steps, largest, sv_fits32(largest))
+}
+
+#[cfg(test)]
+pub(crate) fn sv_num_test_show(r: Option<&SvRat>) -> String {
+    let v = match r { Some(__nikaia_value) => __nikaia_value, None => return String::from("refused") };
+    sv_rat_text(v)
+}
+
+#[cfg(test)]
+pub(crate) fn sv_num_test_order(a: &SvRat, b: &SvRat) -> String {
+    let c = sv_rat_cmp(a, b);
+    let op = if c < 0 { "<" } else if c > 0 { ">" } else { "=" };
+    format!("{} {} {}", sv_rat_text(a), op, sv_rat_text(b))
+}
+
+#[cfg(test)]
+pub(crate) fn sv_num_test_dorder(a: &SvDelta, b: &SvDelta) -> String {
+    let c = sv_delta_cmp(a, b);
+    let op = if c < 0 { "<" } else if c > 0 { ">" } else { "=" };
+    format!("{} {} {}", sv_delta_text(a), op, sv_delta_text(b))
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    let mut out: String = String::from("");
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== item 1: i64 kept small\n"));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("reduced chain: {}\n", sv_num_test_chain(true, 40))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("unreduced chain: {}\n", sv_num_test_chain(false, 40))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("unreduced chain, longer: {}\n", sv_num_test_chain(false, 80))));
+    let big: i64 = 4611686018427387904i64;
+    let sum = sv_mul_add(1, big, 1, big);
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("2^62 + 2^62: {}\n", if sum.is_none() { "refused" } else { "wrapped" })));
+    let wide: Vec<i64> = vec![3037000500i64, 1];
+    let square = sv_dense_combine(3037000500i64, &wide, 0, &wide);
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("3037000500 * 3037000500: {}\n", if square.is_none() { "refused" } else { "wrapped" })));
+    let least: i64 = -9223372036854775807i64 - 1i64;
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("gcd(-12, 18) = {}, gcd(i64 least, 0): {}\n", nikaia_std::index::or(sv_gcd(-12, 18), || -1), if sv_gcd(least, 0).is_none() { "refused" } else { "wrapped" })));
+    let row: Vec<i64> = vec![6, -9, 12, 3];
+    let shown = sv_reduced(row).iter().copied().join(", ");
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("reduced [6, -9, 12, 3]: [{}]\n", shown)));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("column cost unit {}, 4 vs -6: {}\n", nikaia_std::index::or(sv_column_cost(1, -7), || -1), nikaia_std::index::or(sv_column_cost(4, -6), || -1))));
+    let x: Vec<i64> = vec![4, 1, -6];
+    let y: Vec<i64> = vec![-6, -1, 9];
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("picked column of [4, 1, -6] and [-6, -1, 9]: {}\n", sv_pick_column(&x, &y, 3, true))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("floor(-7/2) = {}, ceil(-7/2) = {}, floor by 0: {}\n", nikaia_std::index::or(sv_floor_div(-7, 2), || 0), nikaia_std::index::or(sv_ceil_div(-7, 2), || 0), if sv_floor_div(1, 0).is_none() { "refused" } else { "?" })));
+    let expected = vec!["== item 1: i64 kept small", "reduced chain: 40 steps, largest coefficient 194, within 32 bits: true", "unreduced chain: 40 steps, largest coefficient 14293651161078, within 32 bits: false", "unreduced chain, longer: step 60: refused, would leave i64 (left 32 bits at step 28, largest so far 7493989779944505334)", "2^62 + 2^62: refused", "3037000500 * 3037000500: refused", "gcd(-12, 18) = 6, gcd(i64 least, 0): refused", "reduced [6, -9, 12, 3]: [2, -3, 4, 1]", "column cost unit 0, 4 vs -6: 6", "picked column of [4, 1, -6] and [-6, -1, 9]: 1", "floor(-7/2) = -4, ceil(-7/2) = -3, floor by 0: refused"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+    let mut out: String = String::from("");
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== item 2: rationals and delta\n"));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("6/-4 = {}, 0/-5 = {}, 1/0: {}\n", sv_num_test_show((sv_rat(6, -4)).as_ref()), sv_num_test_show((sv_rat(0, -5)).as_ref()), sv_num_test_show((sv_rat(1, 0)).as_ref()))));
+    let sixth = nikaia_std::index::or(sv_rat(1, 6), || sv_int(0).into());
+    let tenth = nikaia_std::index::or(sv_rat(1, 10), || sv_int(0).into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("1/6 + 1/10 = {}, 1/6 - 1/10 = {}\n", sv_num_test_show((sv_rat_add(&sixth, &tenth)).as_ref()), sv_num_test_show((sv_rat_sub(&sixth, &tenth)).as_ref()))));
+    let p = nikaia_std::index::or(sv_rat(3037000499i64, 2), || sv_int(0).into());
+    let q = nikaia_std::index::or(sv_rat(2, 3037000499i64), || sv_int(0).into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("3037000499/2 * 2/3037000499 = {}, divided = {}\n", sv_num_test_show((sv_rat_mul(&p, &q)).as_ref()), sv_num_test_show((sv_rat_div(&p, &q)).as_ref()))));
+    let huge = sv_int(9223372036854775807i64);
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("i64 max + 1/2: {}\n", sv_num_test_show((sv_rat_add(&huge, &nikaia_std::index::or(sv_rat(1, 2), || sv_int(0).into()))).as_ref()))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("divided by 0: {}\n", sv_num_test_show((sv_rat_div(&sixth, &sv_int(0))).as_ref()))));
+    let third = nikaia_std::index::or(sv_rat(1, 3), || sv_int(0).into());
+    let half = nikaia_std::index::or(sv_rat(1, 2), || sv_int(0).into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_num_test_order(&third, &half))), "\n"));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_num_test_order(&nikaia_std::index::or(sv_rat_neg(&third), || third.into()), &nikaia_std::index::or(sv_rat_neg(&half), || half.into())))), "\n"));
+    let m: i64 = 9223372036854775807i64;
+    let a = nikaia_std::index::or(sv_rat(unsafe { nikaia_std::proven::sub::<i64>(m, 1) }, m), || sv_int(0).into());
+    let b = nikaia_std::index::or(sv_rat(unsafe { nikaia_std::proven::sub::<i64>(m, 2) }, unsafe { nikaia_std::proven::sub::<i64>(m, 1) }), || sv_int(0).into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_num_test_order(&a, &b))), "\n"));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_num_test_order(&nikaia_std::index::or(sv_rat(-7, 2), || half.into()), &nikaia_std::index::or(sv_rat(-14, 4), || half.into())))), "\n"));
+    let r = nikaia_std::index::or(sv_rat(-7, 2), || half.into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("floor(-7/2) = {}, ceil = {}, integer: {}\n", sv_rat_floor(&r), sv_rat_ceil(&r), sv_rat_is_int(&r))));
+    let five = sv_delta(sv_int(5), sv_int(0));
+    let below = sv_delta(sv_int(5), sv_int(-1));
+    let above = sv_delta(sv_int(5), sv_int(1));
+    let four = sv_delta(sv_int(4), sv_int(1000));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_num_test_dorder(&below, &five))), "\n"));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_num_test_dorder(&five, &above))), "\n"));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_num_test_dorder(&below, &four))), "\n"));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_num_test_dorder(&nikaia_std::index::or(sv_delta_sub(&above, &five), || five.into()), &sv_delta(sv_int(0), sv_int(1))))), "\n"));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("(5 - δ) * -2 = {}\n", sv_delta_text(&nikaia_std::index::or(sv_delta_scale(&below, &sv_int(-2)), || five.into())))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("(5 - δ) + (4 + 1000δ) = {}\n", sv_delta_text(&nikaia_std::index::or(sv_delta_add(&below, &four), || five.into())))));
+    let expected = vec!["== item 2: rationals and delta", "6/-4 = -3/2, 0/-5 = 0, 1/0: refused", "1/6 + 1/10 = 4/15, 1/6 - 1/10 = 1/15", "3037000499/2 * 2/3037000499 = 1, divided = 9223372030926249001/4", "i64 max + 1/2: refused", "divided by 0: refused", "1/3 < 1/2", "-1/3 > -1/2", "9223372036854775806/9223372036854775807 > 9223372036854775805/9223372036854775806", "-7/2 = -7/2", "floor(-7/2) = -4, ceil = -3, integer: false", "5-δ < 5", "5 < 5+δ", "5-δ > 4+1000δ", "δ = δ", "(5 - δ) * -2 = -10+2δ", "(5 - δ) + (4 + 1000δ) = 9+999δ"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn i64_coefficients_are_kept_small_and_never_wrapped() {
+        super::__nikaia_test_0().unwrap()
+    }
+    #[test]
+    fn rationals_and_delta_are_normalised_ordered_and_refuse_overflow() {
+        super::__nikaia_test_1().unwrap()
+    }
+}
