@@ -306,6 +306,7 @@ pub(crate) fn compute(
                 library,
                 workshop,
                 bounds,
+                program: std::cell::OnceCell::new(),
             };
             tree::comptime_computed(&host, here as i64, bound, value, ty, known, typed)
         })
@@ -322,9 +323,59 @@ struct ComputeHost<'a> {
     library: &'a crate::contracts::Ledger,
     workshop: &'a crate::grammar_run::Workshop,
     bounds: Bounds,
+    /// The program's files as one number, worked out at the first question.
+    program: std::cell::OnceCell<u64>,
+}
+
+/// **A hasher written to as text**: what `Debug` prints goes into the hash
+/// without being kept.
+struct HashWriter<'a>(&'a mut std::collections::hash_map::DefaultHasher);
+
+impl std::fmt::Write for HashWriter<'_> {
+    fn write_str(&mut self, text: &str) -> std::fmt::Result {
+        std::hash::Hasher::write(self.0, text.as_bytes());
+        Ok(())
+    }
+}
+
+/// `what` as one number, from everything `Debug` prints of it.
+fn printed_hash(what: &impl std::fmt::Debug) -> u64 {
+    use std::fmt::Write;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let _ = write!(HashWriter(&mut hasher), "{what:?}");
+    std::hash::Hasher::finish(&hasher)
+}
+
+/// What a constant is remembered under: the program, its file, its name,
+/// its written value, its type and the bounds of the run.
+type RememberedKey = (u64, i64, String, u64, u64, u64, u64);
+
+/// At most this many constants are remembered; past it the memory starts over.
+const REMEMBERED_AT_MOST: usize = 4096;
+
+thread_local! {
+    /// **What each constant came to**: the checker, the ledger's
+    /// inference and every run that works a constant out ahead ask the same
+    /// constant of the same program; it is compiled and run once.
+    static REMEMBERED: RefCell<BTreeMap<RememberedKey, Value>> =
+        const { RefCell::new(BTreeMap::new()) };
 }
 
 impl ComputeHost<'_> {
+    /// What `bound` in file `here` of type `ty` is remembered under.
+    fn remembered_key(&self, here: i64, bound: &str, value: &Expr, ty: &Ty) -> RememberedKey {
+        let program = *self.program.get_or_init(|| printed_hash(&self.files));
+        (
+            program,
+            here,
+            bound.to_text(),
+            printed_hash(value),
+            printed_hash(ty),
+            self.bounds.steps,
+            self.bounds.bytes,
+        )
+    }
+
     /// `unit` kept, and its index.
     fn made(&self, unit: Option<Parsed>) -> Option<i64> {
         let mut units = self.units.borrow_mut();
@@ -496,6 +547,22 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
 
     fn leave_ahead(&self, bound: &str) {
         AHEAD.with(|held| held.borrow_mut().remove(bound));
+    }
+
+    fn remembered(&self, here: i64, bound: &str, value: &Expr, ty: &Ty) -> Option<Value> {
+        let key = self.remembered_key(here, bound, value, ty);
+        REMEMBERED.with(|held| held.borrow().get(&key).cloned())
+    }
+
+    fn remember(&self, here: i64, bound: &str, value: &Expr, ty: &Ty, came_to: &Value) {
+        let key = self.remembered_key(here, bound, value, ty);
+        REMEMBERED.with(|held| {
+            let mut held = held.borrow_mut();
+            if held.len() >= REMEMBERED_AT_MOST {
+                held.clear();
+            }
+            held.insert(key, came_to.clone());
+        });
     }
 
     fn comptimes_of(&self, at: i64) -> Vec<tree::ComptimeDeclared> {

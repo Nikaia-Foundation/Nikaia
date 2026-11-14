@@ -826,6 +826,15 @@ pub trait ComptimeComputeHost {
     fn is_ahead(ref self, name: ref String) -> bool sync
     /// `bound` no longer worked out ahead.
     fn leave_ahead(ref self, bound: ref String) sync
+    /// **What `bound`, standing in file `here` with type `ty`, came to
+    /// before** in this program: a run is keyed on the program's files, so the
+    /// same constant asked again (by the ledger, the checker, and each run
+    /// that works it out ahead) is compiled and run once.
+    fn remembered(ref self, here: i64, bound: ref String, value: ref Expr, ty: ref Ty) -> BuildValue? sync
+    /// `came_to` kept as what `bound` in file `here`, written `value`, with
+    /// type `ty` came to. `value` is part of the key: a constant in a turn
+    /// has one name and a value per field.
+    fn remember(ref self, here: i64, bound: ref String, value: ref Expr, ty: ref Ty, came_to: ref BuildValue) sync
     /// The `comptime`s file `at` declares, in order (`comptime_declared_of`).
     fn comptimes_of(ref self, at: i64) -> Vec[ComptimeDeclared] sync
     /// `value` of file `at` folded as literals, with `known` for the constants.
@@ -841,6 +850,10 @@ pub trait ComptimeComputeHost {
 /// call it reaches, by name or on a value.
 pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: String, value: ref Expr, ty: ref Ty, known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync) -> CheckComputed sync {
     let not_here: fn(ref String) -> CheckComputed sync = fn(why) { CheckComputed::NotHere(why.clone()) }
+    match host.remembered(here, bound, value, ty) {
+        null => {},
+        value => return CheckComputed::Value(value),
+    }
     let sub = match host.sub_program(here, bound, value, ty, known, typed) {
         null => {
             // **A callee nothing declares is named** (0.0.113): its result has no
@@ -920,7 +933,10 @@ pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: 
     let mut answer: String = ""
     let wall = host.run_comptime(program, bound, answer) ?? return match host.decode(answer) {
         null => not_here(COMPTIME_NOT_READ),
-        computed => CheckComputed::Value(computed),
+        computed => {
+            host.remember(here, bound, value, ty, computed)
+            CheckComputed::Value(computed)
+        },
     }
     return match wall {
         // A default this run did not have is the default's own refusal,

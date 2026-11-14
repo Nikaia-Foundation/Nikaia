@@ -591,6 +591,8 @@ pub trait ComptimeComputeHost {
     fn enter_ahead(&self, bound: &str) -> bool;
     fn is_ahead(&self, name: &str) -> bool;
     fn leave_ahead(&self, bound: &str);
+    fn remembered(&self, here: i64, bound: &str, value: &Expr, ty: &Ty) -> Option<BuildValue>;
+    fn remember(&self, here: i64, bound: &str, value: &Expr, ty: &Ty, came_to: &BuildValue);
     fn comptimes_of(&self, at: i64) -> Vec<ComptimeDeclared>;
     fn folded(&self, at: i64, value: &Expr, known: &impl Fn(&str) -> Option<BuildValue>) -> Option<BuildValue>;
     fn ty_of(&self, at: i64, written: &Type) -> Ty;
@@ -600,6 +602,10 @@ pub trait ComptimeComputeHost {
 // this was written - see `contracts::sync`.
 pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &str, value: &Expr, ty: &Ty, known: &dyn Fn(&str) -> Option<BuildValue>, typed: &dyn Fn(&str) -> Option<Ty>) -> CheckComputed {
     let not_here: nikaia_std::func::Kept<dyn Fn(&str) -> CheckComputed + std::marker::Send + std::marker::Sync> = nikaia_std::func::Kept(std::sync::Arc::new(move |why| { CheckComputed::NotHere(nikaia_std::block::Text::from(why.to_string())) }));
+    match host.remembered(here, bound, value, ty) {
+        None => { },
+        Some(value) => { return CheckComputed::Value(value); },
+    }
     let sub = match host.sub_program(here, bound, value, ty, &known, &typed) {
         None => {
             match comptime_callee_nothing_declares(host, here, value) {
@@ -662,7 +668,10 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
     let mut answer: String = String::from("");
     let wall = match host.run_comptime(&program, bound, &mut answer) { Some(__nikaia_value) => __nikaia_value, None => return match host.decode(&answer) {
         None => not_here(COMPTIME_NOT_READ),
-        Some(computed) => CheckComputed::Value(computed),
+        Some(computed) => {
+            host.remember(here, bound, value, ty, &computed);
+            CheckComputed::Value(computed)
+        },
     } };
     match wall {
         CheckWall::Refused { ref detail } if detail.contains(AsRef::<str>::as_ref(NOT_COMPUTED_YET)) => not_here("It leaves out an option whose default isn't computed"),
