@@ -463,10 +463,16 @@ jobs:
           - compiler-2
           - compiler-3
           - compiler-4
+          - compiler-slow-solver_cnf
+          - compiler-slow-prove_a_read_after_many_lists
     env:
       SHARD: ${{ matrix.shard }}
       IT_SHARDS: 3
       COMPILER_SHARDS: 5
+      # The programs of tests/compiler that take minutes on their own (one
+      # `nikaia` run over the solver's sources; one proof): each has a
+      # `compiler-slow-NAME` shard and is left out of `compiler-K`.
+      COMPILER_SLOW: solver_cnf prove_a_read_after_many_lists
       # The whole-tree tests of `it`, by shard; every one is skipped in `it-K`.
       HEAVY_MAP_TRUST: map_trust::the_real_tools_package_lowers_the_same_read_backwards
       HEAVY_SYSROOT_CORES: sysroot::the_tools_lower_the_same_on_one_thread_as_on_every_core
@@ -516,8 +522,12 @@ jobs:
         run: |
           set -o pipefail
           # As `cargo test` runs a test binary: with the toolchain's libraries
-          # on the loader's path. A program a test builds with `nikaia run`
-          # links `std` dynamically and was only ever run so.
+          # on the loader's path (a program a test builds with `nikaia run`
+          # links `std` dynamically and was only ever run so), and with
+          # rustup's homes and toolchain fixed, as its proxy sets them (a test
+          # that moves HOME still finds `cargo`, `rustc` and the registry).
+          export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+          export RUSTUP_TOOLCHAIN="$(rustup show active-toolchain | cut -d' ' -f1)"
           sysroot=$(rustc --print sysroot)
           export LD_LIBRARY_PATH="$sysroot/lib:$(rustc --print target-libdir)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
@@ -552,8 +562,15 @@ jobs:
             ;;
           compiler-*)
             k=${SHARD#compiler-}
-            filters=$(ls tests/compiler/tests/*.nika | sed 's|.*/||; s|\.nika$||' | sort |
-              awk -v k="$k" -v n="$COMPILER_SHARDS" 'NR % n == k {printf " --filter %s", $0}')
+            case "$k" in
+            slow-*) filters="--filter ${k#slow-}" ;;
+            *)
+              printf '%s\n' $COMPILER_SLOW | sort >"$RUNNER_TEMP/slow"
+              filters=$(ls tests/compiler/tests/*.nika | sed 's|.*/||; s|\.nika$||' | sort |
+                comm -23 - "$RUNNER_TEMP/slow" |
+                awk -v k="$k" -v n="$COMPILER_SHARDS" 'NR % n == k {printf " --filter %s", $0}')
+              ;;
+            esac
             # As the test `the_compiler_test_package_passes_at_both_settings` runs it.
             env -u CARGO_TARGET_DIR -u RUST_BACKTRACE NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" \
               ./target/release/nikaia test --both-settings --project tests/compiler $filters 2>&1 |
