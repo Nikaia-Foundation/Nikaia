@@ -145,7 +145,6 @@ jobs:
           - compiler-2
           - compiler-3
           - compiler-4
-          - compiler-slow-prove_a_read_after_many_lists
         # **The one-thread lowering runs weekly and by hand only** (CI speed):
         # it is the whole tools package again on one core, the longest shard
         # of a push (7 min), and `heavy-sysroot-pair` lowers the same package
@@ -157,10 +156,6 @@ jobs:
       SHARD: ${{ matrix.shard }}
       IT_SHARDS: 3
       COMPILER_SHARDS: 5
-      # The programs of tests/compiler that take minutes on their own (one
-      # proof): each has a `compiler-slow-NAME` shard and is left out of
-      # `compiler-K`.
-      COMPILER_SLOW: prove_a_read_after_many_lists
       # The whole-tree tests of `it`, by shard; every one is skipped in `it-K`.
       HEAVY_MAP_TRUST: map_trust::the_real_tools_package_lowers_the_same_read_backwards
       HEAVY_SYSROOT_CORES: sysroot::the_tools_lower_the_same_on_one_thread_as_on_every_core
@@ -249,15 +244,8 @@ jobs:
             ;;
           compiler-*)
             k=${SHARD#compiler-}
-            case "$k" in
-            slow-*) filters="--filter ${k#slow-}" ;;
-            *)
-              printf '%s\n' $COMPILER_SLOW | sort >"$RUNNER_TEMP/slow"
-              filters=$(ls tests/compiler/tests/*.nika | sed 's|.*/||; s|\.nika$||' | sort |
-                comm -23 - "$RUNNER_TEMP/slow" |
-                awk -v k="$k" -v n="$COMPILER_SHARDS" 'NR % n == k {printf " --filter %s", $0}')
-              ;;
-            esac
+            filters=$(ls tests/compiler/tests/*.nika | sed 's|.*/||; s|\.nika$||' | sort |
+              awk -v k="$k" -v n="$COMPILER_SHARDS" 'NR % n == k {printf " --filter %s", $0}')
             # As the test `the_compiler_test_package_passes_at_both_settings` runs it.
             # No dump: `nikaia test` builds every one of these programs with rustc
             # itself, so the accepted-sweep would only check and prove them again.
