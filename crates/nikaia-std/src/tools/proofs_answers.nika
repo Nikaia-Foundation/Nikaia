@@ -306,13 +306,10 @@ pub fn proofs_ask(mut t: ProofsThread, arena: ref TermArena, facts: ref Vec[i64]
         recorded = book.entries.get(key)?.clone()
     }
     if recorded != null {
-        // The book holds an entry of the kind this thread found the same
-        // normal form to be: that is what reading it comes to (#1590).
+        // The book's entry is checked (D20), whatever this thread found of
+        // the same normal form before: a kind that agrees says nothing of
+        // whether the entry written there is right.
         let held = recorded?.clone() ?? ProofsEntry::Unknown("")
-        let again = proofs_answered(t, normal, key)
-        if again != null && proofs_agrees(again ?? ProofsAsked::Unknown, held) {
-            return again ?? ProofsAsked::Unknown
-        }
         let asked = proofs_read(normal, held)
         if asked != null {
             t.known.insert(written.clone(), ProofsKnown { key: key.clone(), entry: held.clone(), asked: asked.clone() })
@@ -347,27 +344,6 @@ pub fn proofs_ask(mut t: ProofsThread, arena: ref TermArena, facts: ref Vec[i64]
 fn proofs_answered(t: ref ProofsThread, normal: ref LgNormal, key: ref String) -> ProofsAsked? {
     let held = t.answered.get(key) ?? return null
     return proofs_again(normal, held)
-}
-
-/// Whether `entry` says what `asked` says (#1590): a proof, values that
-/// refute it, or this solver's `unknown`.
-fn proofs_agrees(asked: ref ProofsAsked, entry: ref ProofsEntry) -> bool {
-    return match asked {
-        ProofsAsked::Proved => match entry {
-            ProofsEntry::Proved(_) => true,
-            ProofsEntry::ProvedLog(_) => true,
-            else => false,
-        },
-        ProofsAsked::Refuted(_) => match entry {
-            ProofsEntry::Refuted(_) => true,
-            else => false,
-        },
-        ProofsAsked::Unknown => match entry {
-            ProofsEntry::Unknown(solver) => solver == PROOFS_SOLVER,
-            else => false,
-        },
-        else => false,
-    }
 }
 
 /// Keep what the normal form `key` came to (#1590): of an entry only values

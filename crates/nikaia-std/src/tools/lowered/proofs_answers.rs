@@ -236,8 +236,6 @@ pub fn proofs_ask(t: &mut ProofsThread, arena: &TermArena, facts: &[i64], goal: 
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || ProofsEntry::Unknown(String::from("")));
-        let again = proofs_answered(&t, &normal, &key);
-        if again.is_some() && proofs_agrees(nikaia_std::index::or(again.as_ref(), || &ProofsAsked::Unknown), &held) { return nikaia_std::index::or(again, || ProofsAsked::Unknown); }
         let asked = proofs_read(&normal, &held);
         if asked.is_some() {
             t.known.insert(nikaia_std::block::Text::from(written.to_string()), ProofsKnown { key: nikaia_std::block::Text::from(key.to_string()), entry: held.clone(), asked: asked.as_ref().unwrap().clone() });
@@ -265,18 +263,6 @@ pub fn proofs_ask(t: &mut ProofsThread, arena: &TermArena, facts: &[i64], goal: 
 pub(crate) fn proofs_answered(t: &ProofsThread, normal: &LgNormal, key: &str) -> Option<ProofsAsked> {
     let held = match t.answered.get(key) { Some(__nikaia_value) => __nikaia_value, None => return None };
     proofs_again(normal, held)
-}
-
-pub(crate) fn proofs_agrees(asked: &ProofsAsked, entry: &ProofsEntry) -> bool {
-    match asked {
-        ProofsAsked::Proved => matches!(entry, ProofsEntry::Proved(_) | ProofsEntry::ProvedLog(_)),
-        ProofsAsked::Refuted(_) => matches!(entry, ProofsEntry::Refuted(_)),
-        ProofsAsked::Unknown => match entry {
-            ProofsEntry::Unknown(solver) => solver == PROOFS_SOLVER,
-            _ => false,
-        },
-        _ => false,
-    }
 }
 
 pub(crate) fn proofs_remember(t: &mut ProofsThread, key: &str, asked: &ProofsAsked, entry: Option<&ProofsEntry>) {
