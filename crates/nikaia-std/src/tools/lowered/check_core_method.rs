@@ -321,6 +321,7 @@ pub(crate) fn check_core_method_resolved(state: &mut CheckState, world: &CheckWo
             Expr::Field { .. } => check_core_method_text_items(on),
             Expr::Call { .. } => check_core_method_text_items(on),
             Expr::MethodCall { .. } => check_core_method_text_items(on),
+            Expr::Index { .. } => check_core_method_text_items(on),
             _ => false,
         };
         if text { state.facts.text_in_lists.insert(id_of(receiver) as i64); }

@@ -444,6 +444,9 @@ fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, on: 
             // a `-> String from s`): asked as text where the list holds text.
             Expr::Call { .. } => check_core_method_text_items(on),
             Expr::MethodCall { .. } => check_core_method_text_items(on),
+            // An element of a list of text may be a view (`parts[0]` of a
+            // `Vec[ref String]`, #1603): asked as text where the list holds text.
+            Expr::Index { .. } => check_core_method_text_items(on),
             else => false,
         }
         if text {
