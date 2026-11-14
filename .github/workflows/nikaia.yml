@@ -515,6 +515,11 @@ jobs:
           NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
         run: |
           set -o pipefail
+          # As `cargo test` runs a test binary: with the toolchain's libraries
+          # on the loader's path. A program a test builds with `nikaia run`
+          # links `std` dynamically and was only ever run so.
+          sysroot=$(rustc --print sysroot)
+          export LD_LIBRARY_PATH="$sysroot/lib:$(rustc --print target-libdir)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
           itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
           heavy="$HEAVY_MAP_TRUST $HEAVY_SYSROOT_CORES $HEAVY_SYSROOT_PAIR $HEAVY_CORPUS $HEAVY_REST $HEAVY_ELSEWHERE"
