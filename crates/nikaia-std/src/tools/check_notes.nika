@@ -160,7 +160,9 @@ impl CheckState {
 
     /// **`NK1118`: a division, or a remainder, by a constant zero.**
     pub fn divisor_is_not_zero(ref mut self, world: ref CheckWorld, op: BinaryOp, rhs: ref Expr, span: ref Span) sync {
-        if !note_a_division(op) {
+        // **Behind a short-circuit guard the division may never run**
+        // (#1567): the walk reads the guard and asks `d != 0` there.
+        if !note_a_division(op) || self.flow.short_circuited > 0 {
             return
         }
         let divisor = self.constant_of(world, rhs) ?? return

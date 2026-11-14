@@ -1,0 +1,38 @@
+// #1128: several `nikaia run` of one script at the same moment, each round
+// with a change that makes its program new, so every run of the round
+// compiles it and puts it in the run cache while the others start it. Two
+// races made a run fail: one that put its program in place found it removed
+// by the next (exit 1, nothing on stdout, "running …: No such file"), and
+// one that read the kept project's copy of the script while another rewrote
+// it in place compiled an empty program (rustc: "`main` function not found").
+// The cache is the test's own and held small, so it prunes as a full one does.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let script = f"{tmp}/same_script_at_once.nika"
+    let runs = 8
+    let rounds = 16
+    let mut missing = 0
+    let cache = f"NIKAIA_CACHE_DIR={tmp}/cache NIKAIA_CACHE_LIMIT=64M"
+    for round in 0..<rounds {
+        fs::write(script.clone(), fs::Root::Anywhere, "fn main() throws {\n" + f"    println(\"round {round}\")\n" + "}\n")
+        let all = process::run("sh", ["-c", f"for i in $(seq {runs}); do {cache} \"$0\" run \"$1\" > \"$2/out$i\" 2> \"$2/err$i\" & done; wait; cat \"$2\"/out*", nikaia.clone(), script.clone(), tmp.clone()])
+        let printed = all.stdout.lines().filter(fn(line) { line == f"round {round}" }).count()
+        if printed != runs {
+            missing += runs - printed
+            let said = process::run("sh", ["-c", "cat \"$0\"/err* | grep -v '^ *$' | grep -m 1 -A 2 -i 'error'", tmp.clone()]).stdout.trim().clone()
+            println(f"round {round}: {printed} of {runs} runs printed their line: {said.replace(tmp.clone(), "T")}")
+        }
+    }
+    println(f"runs that printed nothing: {missing}")
+    process::run("rm", ["-rf", tmp])
+}

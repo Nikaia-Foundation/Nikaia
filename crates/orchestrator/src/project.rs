@@ -326,7 +326,21 @@ pub fn write_if_changed(path: &Path, contents: &str) -> Result<bool> {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("creating {}", parent.display()))?;
     }
-    std::fs::write(path, contents).with_context(|| format!("writing {}", path.display()))?;
+    // **Whole or not at all** (#1128): a run of the same file at the same
+    // moment reads what this writes - the kept project's copy of the script -
+    // and a write in place let it read the file empty, a program with no
+    // `main`. Written beside it under a name no other build uses, then
+    // renamed over it.
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".{}.{n}.partial", std::process::id()));
+    let partial = path.with_file_name(name);
+    std::fs::write(&partial, contents).with_context(|| format!("writing {}", partial.display()))?;
+    if let Err(error) = std::fs::rename(&partial, path) {
+        let _ = std::fs::remove_file(&partial);
+        return Err(error).with_context(|| format!("writing {}", path.display()));
+    }
     Ok(true)
 }
 

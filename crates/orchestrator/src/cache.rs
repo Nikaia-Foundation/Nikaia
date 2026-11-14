@@ -848,16 +848,47 @@ pub fn use_entry(entry: &Path) {
     hold(entry);
 }
 
-/// Take the entry's lock shared, and keep it.
+/// **Take the entry's lock shared, and keep it.**
+///
+/// A [`prune`] that holds the entry exclusively is removing it: this waits
+/// for it, and when the entry it held is gone (its lock file no longer the one
+/// at the path), makes the entry again and holds that. Taken without waiting,
+/// a build that met a prune went on unheld in a directory being removed, and
+/// a run of the same file at the same moment found its files gone (#1128).
 fn hold(entry: &Path) {
-    let Ok(file) = open_lock(entry) else {
+    for _ in 0..8 {
+        let Ok(file) = open_lock(entry) else {
+            touch(entry);
+            continue;
+        };
+        if !lock::shared(&file) && !lock::shared_waiting(&file) {
+            return;
+        }
+        if !lock::still_at(&file, &entry.join(LOCK)) {
+            touch(entry);
+            continue;
+        }
+        if let Ok(mut held) = HELD.lock() {
+            held.push(file);
+        }
         return;
-    };
-    if lock::shared(&file)
-        && let Ok(mut held) = HELD.lock()
-    {
-        held.push(file);
     }
+}
+
+/// **Hold the lock file `path` alone until the result is dropped**: what a
+/// step that reads and writes several files of a directory takes, so builds of
+/// the same thing at the same moment take turns and the later one finds the
+/// earlier one's result (#1128). `None` where the lock cannot be had; the
+/// caller then goes on unlocked, as before.
+pub fn alone(path: &Path) -> Option<std::fs::File> {
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
+        .ok()?;
+    lock::exclusive_waiting(&file).then_some(file)
 }
 
 fn open_lock(entry: &Path) -> std::io::Result<std::fs::File> {
@@ -1035,6 +1066,26 @@ mod lock {
         flock(file, FlockOperation::NonBlockingLockExclusive).is_ok()
     }
 
+    /// Shared, waiting until no exclusive holder is left.
+    pub fn shared_waiting(file: &std::fs::File) -> bool {
+        flock(file, FlockOperation::LockShared).is_ok()
+    }
+
+    /// Exclusive, waiting until every other holder is gone.
+    pub fn exclusive_waiting(file: &std::fs::File) -> bool {
+        flock(file, FlockOperation::LockExclusive).is_ok()
+    }
+
+    /// Whether `path` still names `file`: a prune that removed the entry
+    /// took its lock file with it.
+    pub fn still_at(file: &std::fs::File, path: &std::path::Path) -> bool {
+        use std::os::unix::fs::MetadataExt;
+        match (file.metadata(), std::fs::metadata(path)) {
+            (Ok(held), Ok(named)) => held.dev() == named.dev() && held.ino() == named.ino(),
+            _ => false,
+        }
+    }
+
     /// With locks, a lock says whether an entry is in use.
     pub fn recently_used(_: std::time::SystemTime) -> bool {
         false
@@ -1050,6 +1101,18 @@ mod lock {
     }
 
     pub fn exclusive(_: &std::fs::File) -> bool {
+        true
+    }
+
+    pub fn shared_waiting(_: &std::fs::File) -> bool {
+        true
+    }
+
+    pub fn exclusive_waiting(_: &std::fs::File) -> bool {
+        true
+    }
+
+    pub fn still_at(_: &std::fs::File, _: &std::path::Path) -> bool {
         true
     }
 

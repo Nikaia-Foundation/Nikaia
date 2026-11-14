@@ -57,6 +57,13 @@ pub(crate) fn compile(
         )
         .as_bytes(),
     );
+    // **One build of this program at a time** (#1128): runs of the same file
+    // at the same moment share the source, the key, the program and `rustc`'s
+    // incremental directory, and two that differ (one with `-O`) could leave
+    // the key of one beside the program of the other. The lock is held until
+    // the program is in place; a run that waited finds it built below.
+    let _ = std::fs::create_dir_all(dir);
+    let _alone = orchestrator::cache::alone(&dir.join("lock"));
     // **Built before from the same Rust**: what `rustc` said then is said
     // again, as Cargo replays a fresh crate's warnings.
     if binary.is_file() && std::fs::read_to_string(&key_file).is_ok_and(|held| held == key) {
@@ -148,7 +155,10 @@ pub(crate) fn compile(
             messages,
         }));
     }
-    let _ = std::fs::remove_file(&binary);
+    // **Renamed over the old program, never removed first** (#1128): a run
+    // of the same file at the same moment may have this path in hand, and a
+    // removal before the rename left it nothing to start. The rename puts the
+    // new program in place at once; one started already keeps the old.
     std::fs::rename(&built, &binary)
         .with_context(|| format!("moving {} to {}", built.display(), binary.display()))?;
     let _ = std::fs::remove_dir_all(&scratch);

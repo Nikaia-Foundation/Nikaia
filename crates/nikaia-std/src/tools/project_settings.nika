@@ -270,6 +270,8 @@ pub trait ProjectSettingsHost {
     fn native_cpu(ref self, triple: ref String) -> String sync throws
     /// Whether `to` became a hard link to `from`.
     fn hard_link(ref self, from: ref fs::Path, to: ref fs::Path) -> bool sync
+    /// A path beside `path` that no other build writes at the same time.
+    fn unique_beside(ref self, path: ref fs::Path) -> fs::Path sync
 }
 
 /// **Every switch's word, checked**, before anything is read, so a mistyped
@@ -491,10 +493,20 @@ pub fn project_settings_own_copy[H: ProjectSettingsHost](root: ref fs::Path, var
     let file = built.file_name() ?? throw ProjectSettingsRefusal::Refused("a program has a file name")
     let name = file.display().replacen(f"-{project_settings_root_tag(root, variant, host)}", "", 1)
     let own = dir.join(name)
-    fs::remove(own, fs::Root::Anywhere) catch {}
-    if !host.hard_link(built, own) {
-        fs::copy(built, own, fs::Root::Anywhere) catch { throw ProjectSettingsRefusal::Refused(f"copying {built.display()} to {own.display()}") }
+    // **Made beside it and renamed into place, never removed first** (#1128):
+    // a run of the same program at the same moment may have `own` in hand, and
+    // a removal before the link left it nothing to start. Where `own` is a
+    // link to the same file already, the rename does nothing, and the name
+    // made here is taken away after it.
+    let partial = host.unique_beside(own)
+    if !host.hard_link(built, partial) {
+        fs::copy(built, partial, fs::Root::Anywhere) catch { throw ProjectSettingsRefusal::Refused(f"copying {built.display()} to {own.display()}") }
     }
+    fs::rename(partial, own, fs::Root::Anywhere) catch {
+        fs::remove(partial, fs::Root::Anywhere) catch {}
+        throw ProjectSettingsRefusal::Refused(f"moving {partial.display()} to {own.display()}")
+    }
+    fs::remove(partial, fs::Root::Anywhere) catch {}
     return own
 }
 

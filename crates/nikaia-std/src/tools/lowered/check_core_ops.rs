@@ -326,7 +326,11 @@ pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &Check
         None => None,
     };
     let mut walked_right: Ty = Ty::Unknown;
-    if check_core_ops_logical(&op) { walked_right = check_core_ops_proved_expr(state, world, host, lhs, check_core_ops_and(&op), rhs, span); } else { walked_right = check_core_expr(state, world, host, rhs, span); }
+    if check_core_ops_logical(&op) {
+        state.flow.short_circuited += 1;
+        walked_right = check_core_ops_proved_expr(state, world, host, lhs, check_core_ops_and(&op), rhs, span);
+        state.flow.short_circuited -= 1;
+    } else { walked_right = check_core_expr(state, world, host, rhs, span); }
     let byte = check_core_ops_named("u8");
     let mut left: Ty = walked_left;
     if value_of_a_copy(&walked_right.unseen()) == byte && state.text_literal(world, &byte, lhs, false).is_some() { left = byte.clone(); }

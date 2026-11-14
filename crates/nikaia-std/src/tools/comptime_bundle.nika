@@ -181,6 +181,11 @@ pub fn comptime_bundle_bundle[H: ComptimeBundleHost](host: ref H) -> ComptimeBun
 pub fn comptime_bundle_run_bundle[H: ComptimeBundleHost](host: ref H) -> ComptimeBundle throws {
     let (manifest, source) = comptime_bundle_bundle_text(ComptimeBundleFlavour::Run, host)
     let at = comptime_bundle_bundle_dir(ComptimeBundleFlavour::Run, manifest, source, host)
+    // **Held before the record is read** (#1128): a program found from the
+    // record links against the bundle and loads it, and a prune by a build
+    // beside this one removed the bundle unheld under it (rustc then found
+    // no `main`). Holding it also dates its last use, which only a rebuild did.
+    host.use_entry(at)
     let record = at.join("built")
     let fingerprint = comptime_bundle_run_fingerprint(host)
     let held = fs::read_to_string(record, fs::Root::Anywhere) catch { "" }

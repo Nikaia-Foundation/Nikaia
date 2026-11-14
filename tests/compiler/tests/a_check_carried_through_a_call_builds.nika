@@ -1,0 +1,32 @@
+// #1568 (ADR-269 D8, ADR-395 D1): a check carried through a function in
+// between builds where the call keeps it: `h(1)`, a guard in `h` that rules
+// the zero out, recursion (not carried around the cycle), and arguments the
+// walk does not know. The refused calls:
+// `a_check_carried_through_a_call_is_refused_where_the_arguments_break_it`.
+
+fn f(d: i64) -> i64 {
+	return 10 / d
+}
+
+fn h(d: i64) -> i64 {
+	return f(d)
+}
+
+fn guarded(d: i64) -> i64 {
+	if d == 0 {
+		return 0
+	}
+	return f(d)
+}
+
+fn r(n: i64) -> i64 {
+	if n > 5 {
+		return f(n)
+	}
+	return r(n + 1)
+}
+
+fn main() throws {
+	let n = "12".len() as i64
+	println(f"{h(1)} {h(n)} {guarded(0)} {r(0)}")
+}
