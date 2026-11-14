@@ -617,15 +617,15 @@ fn project_tests_batch_carrier() -> String {
 /// that holds it and its entry. A batch whose build fails is split in two and
 /// each half built again, down to a few programs; what is in no batch is built
 /// alone by `project_tests_program_test`. A program with a `.bounds` or
-/// `.asserts` report is never batched (the report is asked for at its build),
-/// and nothing is where there are too few programs or `NIKAIA_TEST_NO_BATCH`
-/// is set.
+/// `.asserts` report is batched too: the report is checked once per program
+/// (`project_tests_reports`), not at its build. Nothing is batched where there
+/// are too few programs or `NIKAIA_TEST_NO_BATCH` is set.
 pub fn project_tests_batches[H: ProjectTestsProgramHost](host: ref H, programs: ref Vec[ProgramTest], root: ref fs::Path, setting: String, own: ref fs::Path) -> collections::BTreeMap[String, ProjectTestsBatched] throws {
     let mut found: collections::BTreeMap[String, ProjectTestsBatched] = collections::BTreeMap()
     if env::var("NIKAIA_TEST_NO_BATCH") != null {
         return found
     }
-    let wanted: Vec[ProgramTest] = programs.iter().filter(fn(program) { program.bounds == null && program.asserts == null }).map(fn(program) { program.clone() }).collect()
+    let wanted: Vec[ProgramTest] = programs.iter().map(fn(program) { program.clone() }).collect()
     if wanted.len() < project_tests_batch_least() {
         return found
     }
@@ -709,6 +709,58 @@ fn project_tests_joined(first: ref Bytes, then: ref Bytes) -> Bytes {
     return Bytes(all)
 }
 
+/// **The package a test program is built as**, in `own`: `project/` with the
+/// manifest and `src/main.nika`, and nothing a program before it left but
+/// the package's `target/`. Its entry.
+fn project_tests_prepared[H: ProjectTestsProgramHost](host: ref H, program: ref ProgramTest, root: ref fs::Path, own: ref fs::Path) -> fs::Path throws {
+    let project = own.join("project")
+    project_tests_empty_but(own, "project")
+    project_tests_empty_but(project, "target")
+    fs::create_dir(project.join("src"), fs::Root::Anywhere; recursive: true)
+    let source = program.dir.join(f"{program.name}.nika")
+    let entry = project.join("src").join("main.nika")
+    fs::copy(source, entry, fs::Root::Anywhere) catch { throw ProjectTestsRefusal::Refused(f"copying {source.display()}: {error}") }
+    let dependency: String = match host.package_name(root) {
+        null => "",
+        name => {
+            let at = project_members_canonical(root).display()
+            f"\n[dependencies]\n{name} = {{ path = {at:?} }}\n"
+        }
+    }
+    fs::write(project.join("nikaia.toml"), fs::Root::Anywhere, f"[package]\nname = \"program_test\"\nversion = \"0.1.0\"\n{dependency}")
+    return entry
+}
+
+/// **A test program's `--bounds` and `--asserts` reports**, each empty where
+/// the test expects none.
+pub struct ProjectTestsReports {
+    pub bounds: String,
+    pub asserts: String,
+}
+
+/// **The reports a test program's `.bounds` and `.asserts` expect** (#1069,
+/// ADR-269 D7), as `check --bounds` and `check --asserts` compute them for
+/// the program in a package prepared in `own`. **Once per program, not once
+/// per setting**: what is proved does not depend on the build's settings
+/// (ADR-306 D14, ADR-361 D14), and a check of a program that stresses the
+/// prover is the longest part of its test. Nothing is checked for a program
+/// that expects neither.
+pub fn project_tests_reports[H: ProjectTestsProgramHost](host: ref H, program: ref ProgramTest, root: ref fs::Path, own: ref fs::Path) -> ProjectTestsReports throws {
+    let mut found = ProjectTestsReports { bounds: "", asserts: "" }
+    if program.bounds == null && program.asserts == null {
+        return found
+    }
+    let entry = project_tests_prepared(host, program, root, own)
+    let written = f"tests/{program.name}.nika"
+    if program.bounds != null {
+        found.bounds = project_tests_relocated(host.explained(["--bounds"], entry, own), entry, written, root)
+    }
+    if program.asserts != null {
+        found.asserts = project_tests_relocated(host.explained(["--asserts"], entry, own), entry, written, root)
+    }
+    return found
+}
+
 /// **Build and run one test program** in a package of its own, in a directory
 /// of its own: the package it tests is its dependency, so `use` reaches it. A
 /// refusal is the outcome (`ended_well` false, `stderr` the message with the
@@ -729,22 +781,9 @@ fn project_tests_joined(first: ref Bytes, then: ref Bytes) -> Bytes {
 /// process replaced by the program, #281). What the run wrote before the
 /// program started, the build's warnings, is the build's standard error with
 /// Cargo kept quiet as `run` keeps it (`CARGO_TERM_QUIET`).
-pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, program: ref ProgramTest, root: ref fs::Path, setting: String, own: ref fs::Path, batched: ProjectTestsBatched?) -> ProjectTestsOutcome throws {
+pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, program: ref ProgramTest, root: ref fs::Path, setting: String, own: ref fs::Path, batched: ProjectTestsBatched?, reports: ref ProjectTestsReports) -> ProjectTestsOutcome throws {
     let project = own.join("project")
-    project_tests_empty_but(own, "project")
-    project_tests_empty_but(project, "target")
-    fs::create_dir(project.join("src"), fs::Root::Anywhere; recursive: true)
-    let source = program.dir.join(f"{program.name}.nika")
-    let entry = project.join("src").join("main.nika")
-    fs::copy(source, entry, fs::Root::Anywhere) catch { throw ProjectTestsRefusal::Refused(f"copying {source.display()}: {error}") }
-    let dependency: String = match host.package_name(root) {
-        null => "",
-        name => {
-            let at = project_members_canonical(root).display()
-            f"\n[dependencies]\n{name} = {{ path = {at:?} }}\n"
-        }
-    }
-    fs::write(project.join("nikaia.toml"), fs::Root::Anywhere, f"[package]\nname = \"program_test\"\nversion = \"0.1.0\"\n{dependency}")
+    let entry = project_tests_prepared(host, program, root, own)
     let written = f"tests/{program.name}.nika"
     // **Run from the batch, where it is in one** (`project_tests_batches`):
     // a pass that wrote nothing on standard error is the verdict; anything
@@ -755,25 +794,16 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
         null => {},
         batch => {
             let out = host.ran_batched(batch.binary, program.name, root, own, program.stdin)
-            let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(out.stderr, batch.entry, written, root))
+            let ran = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(out.stderr, batch.entry, written, root))
+            let outcome = project_tests_bounds_outcome(program, ran, reports.bounds.clone(), reports.asserts.clone())
             if outcome.passed && out.stderr.len() == 0 {
                 return outcome
             }
             project_tests_empty_but(own, "project")
         },
     }
-    // **The `--bounds` report a `.bounds` expects** (#1069), as `check
-    // --bounds` computes it for the program; what is proved does not depend
-    // on the build's settings (ADR-306 D14, ADR-361 D14).
-    let mut report: String = ""
-    if program.bounds != null {
-        report = project_tests_relocated(host.explained(["--bounds"], entry, own), entry, written, root)
-    }
-    // **The `--asserts` report an `.asserts` expects** (ADR-269 D7).
-    let mut asserts: String = ""
-    if program.asserts != null {
-        asserts = project_tests_relocated(host.explained(["--asserts"], entry, own), entry, written, root)
-    }
+    let report = reports.bounds.clone()
+    let asserts = reports.asserts.clone()
     let built = host.compiler("build", setting, project, own, own, Bytes([]))
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, project_tests_relocated(built.stderr, entry, written, root))

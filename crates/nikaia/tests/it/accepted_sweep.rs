@@ -37,7 +37,7 @@
 use crate::common;
 #[allow(unused_imports)]
 use nikaia_std::block::names::{String, ToText, Vec, format, vec};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
@@ -74,7 +74,38 @@ struct Dumped {
     path: PathBuf,
 }
 
+/// The sources of the repository's files that another step already builds with
+/// `rustc`: `tests/compiler` (`nikaia test` in the compiler shards) and std's
+/// tools (lowered by `lower-std`, compiled into `nikaia`). A corpus test that
+/// checks every file of the tree dumps them too; sweeping them again would be
+/// the same work twice (CI speed, 2026-11-14).
+fn built_elsewhere() -> BTreeSet<std::string::String> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut sources = BTreeSet::new();
+    let mut walk = vec![
+        root.join("tests/compiler"),
+        root.join("crates/nikaia-std/src"),
+    ];
+    while let Some(dir) = walk.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk.push(path);
+            } else if path.extension().is_some_and(|e| e == "nika")
+                && let Ok(text) = std::fs::read_to_string(&path)
+            {
+                sources.insert(text);
+            }
+        }
+    }
+    sources
+}
+
 fn dumped(dir: &Path) -> Vec<Dumped> {
+    let elsewhere = built_elsewhere();
     let mut by_hash: BTreeMap<String, Dumped> = BTreeMap::new();
     for entry in std::fs::read_dir(dir)
         .expect("the dump directory")
@@ -92,6 +123,9 @@ fn dumped(dir: &Path) -> Vec<Dumped> {
         let Some((test, hash)) = stem.rsplit_once('-') else {
             continue;
         };
+        if std::fs::read_to_string(&path).is_ok_and(|text| elsewhere.contains(&text)) {
+            continue;
+        }
         by_hash
             .entry(hash.to_text())
             .or_insert_with(|| Dumped {

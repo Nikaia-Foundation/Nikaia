@@ -7,9 +7,9 @@ name: Nikaia
 #
 # **`develop` is where every change lands at once; `main` is what was tested**
 # (#437). A push to `develop` runs everything, and when every job passed,
-# `promote` moves `main` forward to that commit. Runs on `develop` queue rather
-# than cancel, so `main` moves on with every finished run however often
-# `develop` is pushed.
+# `promote` moves `main` forward to that commit. A run whose commit a newer
+# develop commit already contains does nothing when it starts (`changes`): the
+# newer run tests its changes too, and the runners stay free for that one.
 #
 # **The driver's suite runs here, on a `ci/<lane>` branch** (owner,
 # 2026-11-01): `scripts/drive.nika` force-pushes the commit it would push to
@@ -54,6 +54,7 @@ jobs:
       arm64: ${{ steps.tested.outputs.arm64 || steps.decide.outputs.arm64 }}
       docs: ${{ steps.tested.outputs.docs || steps.decide.outputs.docs }}
       examples: ${{ steps.tested.outputs.examples || steps.decide.outputs.examples }}
+      superseded: ${{ steps.tested.outputs.superseded }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -66,8 +67,9 @@ jobs:
 
       # A develop commit the driver's suite already ran green on a `ci/` branch
       # (header) is not tested again: every build and test job is off and
-      # `promote` moves main onto it.
-      - name: Tested on a ci/ branch
+      # `promote` moves main onto it. A superseded commit is skipped the same
+      # way, but `promote` leaves main to the newer run.
+      - name: Tested on a ci/ branch or superseded
         id: tested
         if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
         env:
@@ -75,8 +77,17 @@ jobs:
         run: |
           n=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&status=success&per_page=50" \
             --jq '[.workflow_runs[] | select(.name == "Nikaia" and (.head_branch | startswith("ci/")))] | length' || echo 0)
+          # A newer develop commit already contains this one: its run tests
+          # all of this one's changes, so this run does nothing and leaves
+          # main to that run (no runners spent on an answer that is moot).
+          git fetch -q origin develop
+          if [ "$(git rev-parse origin/develop)" != "$GITHUB_SHA" ] && git merge-base --is-ancestor "$GITHUB_SHA" origin/develop; then
+            echo "$GITHUB_SHA is superseded by $(git rev-parse origin/develop): its run tests this one's changes"
+            echo "superseded=true" >>"$GITHUB_OUTPUT"
+            n=1
+          fi
           if [ "${n:-0}" -gt 0 ]; then
-            echo "$GITHUB_SHA ran green on a ci/ branch: not tested again"
+            echo "$GITHUB_SHA ran green on a ci/ branch or is superseded: not tested again"
             for k in unsafe floor arm64 examples; do echo "$k=false" >>"$GITHUB_OUTPUT"; done
             echo "docs=true" >>"$GITHUB_OUTPUT"
             echo "done=true" >>"$GITHUB_OUTPUT"
@@ -261,6 +272,7 @@ jobs:
     if: >-
       always() && github.event_name == 'push' && github.ref == 'refs/heads/develop'
       && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+      && needs.changes.outputs.superseded != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -466,6 +478,13 @@ jobs:
           - compiler-4
           - compiler-slow-solver_cnf
           - compiler-slow-prove_a_read_after_many_lists
+        # **The one-thread lowering runs weekly and by hand only** (CI speed):
+        # it is the whole tools package again on one core, the longest shard
+        # of a push (7 min), and `heavy-sysroot-pair` lowers the same package
+        # on every core against the committed bytes on every push, with a
+        # different interleaving of files on threads each time.
+        exclude:
+          - shard: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'none' || 'heavy-sysroot-cores' }}
     env:
       SHARD: ${{ matrix.shard }}
       IT_SHARDS: 3
@@ -485,7 +504,6 @@ jobs:
       HEAVY_REST: >-
         project::the_http_package_serves_its_example
         bytes::the_corpus_needs_no_tether
-        send::no_program_in_the_repository_has_a_crossing_refused
         contracts::a_toolchain_module_is_not_part_of_std
         fmt::every_nika_file_formats_to_the_same_tree_and_a_fixed_point
       HEAVY_ELSEWHERE: nikaia_test::the_compiler_test_package_passes_at_both_settings
@@ -573,7 +591,9 @@ jobs:
               ;;
             esac
             # As the test `the_compiler_test_package_passes_at_both_settings` runs it.
-            env -u CARGO_TARGET_DIR -u RUST_BACKTRACE NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" \
+            # No dump: `nikaia test` builds every one of these programs with rustc
+            # itself, so the accepted-sweep would only check and prove them again.
+            env -u CARGO_TARGET_DIR -u RUST_BACKTRACE -u NIKAIA_DUMP_ACCEPTED NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" \
               ./target/release/nikaia test --both-settings --project tests/compiler $filters 2>&1 |
               tee "$RUNNER_TEMP/test.log"
             ;;

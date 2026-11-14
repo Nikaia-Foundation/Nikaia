@@ -2898,16 +2898,22 @@ fn run_program_tests<'a>(
                     let Some(program) = programs.get(k) else {
                         break;
                     };
-                    let outcomes = settings
-                        .iter()
-                        .zip(place)
-                        .zip(batches)
-                        .map(|((setting, place), batch)| {
-                            let batched = batch.get(&program.name);
-                            run_program_test(program, root, setting, &place.0, batched)
-                                .map(|outcome| (setting.clone(), outcome))
-                        })
-                        .collect::<Result<Vec<_>>>();
+                    // The reports once per program, not once per setting.
+                    let outcomes =
+                        program_reports(program, root, &place[0].0).and_then(|reports| {
+                            settings
+                                .iter()
+                                .zip(place)
+                                .zip(batches)
+                                .map(|((setting, place), batch)| {
+                                    let batched = batch.get(&program.name);
+                                    run_program_test(
+                                        program, root, setting, &place.0, batched, &reports,
+                                    )
+                                    .map(|outcome| (setting.clone(), outcome))
+                                })
+                                .collect::<Result<Vec<_>>>()
+                        });
                     if send.send((k, outcomes)).is_err() {
                         break;
                     }
@@ -2954,14 +2960,35 @@ fn run_program_test(
     setting: &str,
     own: &Path,
     batched: Option<&project_tests::ProjectTestsBatched>,
+    reports: &project_tests::ProjectTestsReports,
 ) -> Result<Outcome> {
     let host = ProgramHost {
         exe: std::env::current_exe().context("finding this compiler")?,
         failed: RefCell::new(None),
     };
     match block_on(project_tests::project_tests_program_test(
-        &host, test, root, setting, own, batched,
+        &host, test, root, setting, own, batched, reports,
     )) {
+        Ok(outcome) => Ok(outcome),
+        Err(error) => Err(host
+            .failed
+            .into_inner()
+            .unwrap_or_else(|| anyhow!("{error}"))),
+    }
+}
+
+/// `project_tests_reports` (`tools/project_tests.nika`): the `--bounds` and
+/// `--asserts` reports of one test program, checked once in `own`.
+fn program_reports(
+    test: &ProgramTest,
+    root: &Path,
+    own: &Path,
+) -> Result<project_tests::ProjectTestsReports> {
+    let host = ProgramHost {
+        exe: std::env::current_exe().context("finding this compiler")?,
+        failed: RefCell::new(None),
+    };
+    match block_on(project_tests::project_tests_reports(&host, test, root, own)) {
         Ok(outcome) => Ok(outcome),
         Err(error) => Err(host
             .failed
