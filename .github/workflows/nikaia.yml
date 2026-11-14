@@ -55,11 +55,17 @@ jobs:
       docs: ${{ steps.tested.outputs.docs || steps.decide.outputs.docs }}
       examples: ${{ steps.tested.outputs.examples || steps.decide.outputs.examples }}
       superseded: ${{ steps.tested.outputs.superseded }}
+      unsafe_crates: ${{ steps.crates.outputs.list }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # The crates under crates/unsafe, for the `unsafe_crates` matrix.
+      - name: List the unsafe crates
+        id: crates
+        run: echo "list=$(ls -d crates/unsafe/*/ | jq -R . | jq -sc .)" >>"$GITHUB_OUTPUT"
 
       # One line per run: the supervisor counts the CPU models the pool gives.
       - name: Runner CPU
@@ -325,10 +331,15 @@ jobs:
   #
   # Only where one of them, or the script that checks them, changed: nothing
   # outside a crate is in its build.
+  # One runner per crate: the fifteen one after another took 29 minutes.
   unsafe_crates:
     needs: changes
     if: needs.changes.outputs.unsafe == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: ${{ fromJSON(needs.changes.outputs.unsafe_crates) }}
     # A hang is a failure, in an hour and a half (see `arm64`).
     timeout-minutes: 90
     steps:
@@ -342,7 +353,7 @@ jobs:
           cargo +nightly miri setup
 
       - name: Check every crate under crates/unsafe
-        run: sh scripts/check-unsafe-crates.sh
+        run: sh scripts/check-unsafe-crates.sh "${{ matrix.crate }}"
 
   # **Build once, test in parallel** (the owner's goal, 2026-11-14: a run in
   # minutes, not 40-70). The full suite was one `cargo test` on four threads:
