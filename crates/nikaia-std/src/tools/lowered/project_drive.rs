@@ -85,7 +85,7 @@ pub trait ProjectDriveHost {
     fn entry(&self) -> fs::Path;
     fn explain_if_asked(&self) -> Result<(), Box<dyn std::error::Error>>;
     fn drive_members(&self) -> Result<Vec<ProjectMembersMember>, Box<dyn std::error::Error>>;
-    fn lower_member(&self, at: i64, no_cache: bool, crate_root: &str) -> Result<ProjectDriveLowered, Box<dyn std::error::Error>>;
+    fn lower_member(&self, at: i64, no_cache: bool, writes: bool, crate_root: &str) -> Result<ProjectDriveLowered, Box<dyn std::error::Error>>;
     fn check_libraries(&self, at: i64, own: &[fs::Path]) -> Result<Vec<String>, Box<dyn std::error::Error>>;
     fn write_ledgers(&self, at: i64, locked: bool) -> Result<(), Box<dyn std::error::Error>>;
     fn tests_build(&self) -> bool;
@@ -200,10 +200,11 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     for at in order.iter() {
         let at = nikaia_std::num::value(at);
         let member = (*nikaia_std::index::get(&members, nikaia_std::index::at(at))).clone();
-        let lowered = host.lower_member(at, no_cache, &project_drive_crate_root(host, crate_build && at == 0))?;
+        let writes = !(at == 0 && host.tests_build()) && member.fetched.is_none();
+        let lowered = host.lower_member(at, no_cache, writes, &project_drive_crate_root(host, crate_build && at == 0))?;
         let own: Vec<fs::Path> = lowered.sources.iter().filter(|&s| { nikaia_std::fs::path::starts_with(&(s), &member.root) && !members.iter().any(|other| { !nikaia_std::fs::path::same(&(other.root), &(member.root)) && nikaia_std::fs::path::starts_with(&(other.root), &member.root) && nikaia_std::fs::path::starts_with(&(s), &other.root) }) }).map(|s| { nikaia_std::fs::path::clone(&(s)) }).collect::<Vec<_>>();
         for flag in host.check_libraries(at, &own)? { if !nikaia_std::list::contains(&link_flags, &flag) { link_flags.push(nikaia_std::block::Text::from(flag.to_string())); } }
-        if !(at == 0 && host.tests_build()) && member.fetched.is_none() { host.write_ledgers(at, locked)?; }
+        if writes { host.write_ledgers(at, locked)?; }
         if at == 0 && !host.tests_build() { host.write_publishable()?; }
         if at == 0 {
             host.eprint(&lowered.notes);
@@ -757,8 +758,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple55848| {
-        let (a, b) = __nikaia_tuple55848;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple56190| {
+        let (a, b) = __nikaia_tuple56190;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {

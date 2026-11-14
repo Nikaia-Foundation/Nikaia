@@ -1,0 +1,51 @@
+// #1569, ADR-270 D4, D21, D22: a cache hit asks the prover
+// nothing, so it can neither write `nikaia.proofs` nor refuse it under
+// `--locked`. A build that searched a question its file did not hold was
+// recorded in the cache all the same, and the next build was that hit: a
+// second `--locked` passed and a plain build left the entry unwritten. Only
+// a lowering whose proofs the file already holds is recorded now.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
+		],
+	).stdout.trim().clone()
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+// The entries `nikaia.proofs` holds (its lines that are not comments).
+fn entries(tmp: String) -> String throws {
+	return process::run("sh", ["-c", "grep -vc '^#' nikaia.proofs"]; dir: tmp.clone()).stdout.trim().clone()
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let nikaia = toolchain()
+	let cache = f"{tmp}/cache"
+	process::run("mkdir", ["-p", f"{tmp}/p/src"])
+	let p = f"{tmp}/p"
+	fs::write(f"{p}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"asks\"\nversion = \"0.1.0\"\n")
+	fs::write(f"{p}/src/main.nika", fs::Root::Anywhere, "fn step(a: i64) -> i64 sync {\n\tif a > 0 && a < 100 {\n\t\tassert(a + 1 > 1)\n\t\treturn a + 1\n\t}\n\treturn 0\n}\n\nfn main() throws {\n\tprintln(step(4))\n}\n")
+	let first = process::run(nikaia, ["build"]; dir: p.clone(), env: [("RUST_BACKTRACE", "0"), ("NIKAIA_CACHE_DIR", cache.clone())])
+	println(f"built: {first.code}, entries: {entries(p)}")
+	// One entry dropped: the file holds no answer for its question.
+	process::run("sed", ["-i", "$d", "nikaia.proofs"]; dir: p.clone())
+	let locked = process::run(nikaia, ["build", "--locked"]; dir: p.clone(), env: [("RUST_BACKTRACE", "0"), ("NIKAIA_CACHE_DIR", cache.clone())])
+	println(f"--locked without one entry: {locked.code}, refused: {locked.stderr.contains("1 question was searched")}")
+	let again = process::run(nikaia, ["build", "--locked"]; dir: p.clone(), env: [("RUST_BACKTRACE", "0"), ("NIKAIA_CACHE_DIR", cache.clone())])
+	println(f"--locked again, warm cache: {again.code}, refused: {again.stderr.contains("1 question was searched")}")
+	let plain = process::run(nikaia, ["build"]; dir: p.clone(), env: [("RUST_BACKTRACE", "0"), ("NIKAIA_CACHE_DIR", cache.clone())])
+	println(f"build, warm cache: {plain.code}, entries: {entries(p)}")
+	let settled = process::run(nikaia, ["build", "--locked"]; dir: p.clone(), env: [("RUST_BACKTRACE", "0"), ("NIKAIA_CACHE_DIR", cache.clone())])
+	println(f"--locked with the entry: {settled.code}")
+	process::run("rm", ["-rf", tmp])
+}

@@ -29,6 +29,7 @@ pub trait ProjectLowerHost {
     fn export(&self) -> Result<(), Box<dyn std::error::Error>>;
     fn cached(&self) -> Option<ProjectLowerArtifacts>;
     fn record(&self, made: &ProjectLowerArtifacts);
+    fn proofs_settled(&self) -> bool;
     fn in_the_wrapper(&self) -> bool;
     fn eprint(&self, text: &str);
     fn check_units(&self) -> Result<String, Box<dyn std::error::Error>>;
@@ -93,7 +94,7 @@ pub(crate) fn project_lower_made<H: ProjectLowerHost>(host: &H) -> Result<Projec
         warnings = format!("{}{}", warnings, line);
     }
     let made = ProjectLowerArtifacts { rust, ledger: text, derived, warnings };
-    host.record(&made);
+    if host.proofs_settled() { host.record(&made); }
     Ok(made)
 }
 

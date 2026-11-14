@@ -61,6 +61,11 @@ pub trait ProjectLowerHost {
     fn cached(ref self) -> ProjectLowerArtifacts? sync
     /// Records `made` in the cache and saves it; a failure is a warning.
     fn record(ref self, made: ref ProjectLowerArtifacts) sync
+    /// Whether the proofs this lowering leaves need no change to the
+    /// committed `nikaia.proofs`: nothing was searched and the file holds
+    /// exactly the entries the questions asked. True where the build writes
+    /// no `nikaia.proofs` for this lowering (#1569).
+    fn proofs_settled(ref self) -> bool sync
     /// Whether a warning was already said in this build (the wrapper's marker,
     /// or once per process).
     fn in_the_wrapper(ref self) -> bool sync
@@ -185,7 +190,15 @@ fn project_lower_made[H: ProjectLowerHost](host: ref H) -> ProjectLowerArtifacts
 
     // **What the build actually read** (ADR-021 D13, ADR-310 D10).
     let made = ProjectLowerArtifacts { rust: rust, ledger: text, derived: derived, warnings: warnings }
-    host.record(made)
+    // **Only a lowering whose proofs are settled is recorded** (ADR-270 D4,
+    // D22, #1569): a hit asks no question, so it can neither write
+    // `nikaia.proofs` nor refuse it under `--locked`. The committed proofs
+    // are in the key, so a hit then means the file is already what this
+    // build would write; a lowering that searched or found stale entries
+    // stays a miss until the file is written.
+    if host.proofs_settled() {
+        host.record(made)
+    }
     return made
 }
 
