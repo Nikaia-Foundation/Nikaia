@@ -192,7 +192,9 @@ impl Table {
 }
 
 fn main() throws {
-    let path = cli::args().nth(1) ?? "measurements.txt"
+    // The command line is untrusted too (ADR-399 D1); `trusted: true` says
+    // the challenge's runner chose it, so the maps keep the fast hash (D3).
+    let path = cli::args(trusted: true).nth(1) ?? "measurements.txt"
     // The measurements are the file `brc.sh` generated: who wrote them is known,
     // so the table takes the fast hash (ADR-365 D2).
     let b = fs::map(ref path, fs::Root::Anywhere; trusted: true) catch {

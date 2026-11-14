@@ -533,6 +533,17 @@ impl ProverState {
                 return outcome
             }
             let first = tainted_name ?? ""
+            let guard = f"Check it where it arrives, with a guard the program handles: `throw BadInput({first}) if !({written})`, or `return … if !({written})`. After that line, this `assert` is proved."
+            // **A word of the command line has three ways out** (ADR-399
+            // D2, D3): the guard, taking it as a parameter of `main`, whose
+            // preconditions are checked where the words arrive, or the
+            // marker that says the operator chose them.
+            let from_the_command_line = (scope.sources[first]?.clone() ?? "") == "cli::args"
+            let help = if from_the_command_line {
+                f"{guard} Or take the word as a parameter of `main`: an `assert` about it there is checked where the words arrive (ADR-360 D4). Or write `cli::args(trusted: true)` where the operator chooses the command line."
+            } else {
+                guard
+            }
             outcome.findings.push(Finding {
                 code: "NK1202",
                 span: span,
@@ -541,7 +552,7 @@ impl ProverState {
                     f"`{first}` comes from outside the program, so nothing the compiler can see says what it holds.",
                     "That it is wrong is a case the program has to handle, not a defect an `assert` catches.",
                 ],
-                help: f"Check it where it arrives, with a guard the program handles: `throw BadInput({first}) if !({written})`, or `return … if !({written})`. After that line, this `assert` is proved.",
+                help: help,
                 warning: false,
                 labels: [],
             })

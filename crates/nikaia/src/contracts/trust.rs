@@ -261,6 +261,19 @@ fn join(
             }
         }
     }
+    // **`main`'s parameters are words of the command line**
+    // ([ADR-399](../../../docs/specification/adr/adr-399.md) D1): a source
+    // with no call to see, and no marker (`tools/trust.nika`).
+    if package
+        .iter()
+        .any(|file| nikaia_std::tools::trust::takes_the_command_line(&file.program, &file.interner))
+    {
+        reasons.push(Reason {
+            source: nikaia_std::tools::trust::main_parameters_source(),
+            provenance: Provenance::Untrusted,
+            marked: None,
+        });
+    }
     if unresolved {
         reasons.push(Reason {
             source: UNRESOLVED.to_text(),
