@@ -122,6 +122,10 @@ impl project_settings::ProjectSettingsHost for SettingsHost {
     fn hard_link(&self, from: &Path, to: &Path) -> bool {
         std::fs::hard_link(from, to).is_ok()
     }
+
+    fn unique_beside(&self, path: &Path) -> PathBuf {
+        crate::comptime_run::unique_beside(path)
+    }
 }
 
 /// `--optimization`'s words to what they decide

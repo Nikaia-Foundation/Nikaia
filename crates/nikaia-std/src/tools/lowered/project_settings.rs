@@ -166,6 +166,7 @@ pub trait ProjectSettingsHost {
     fn env_var(&self, name: &str) -> Option<String>;
     fn native_cpu(&self, triple: &str) -> Result<String, Box<dyn std::error::Error>>;
     fn hard_link(&self, from: &std::path::Path, to: &std::path::Path) -> bool;
+    fn unique_beside(&self, path: &std::path::Path) -> fs::Path;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -331,16 +332,27 @@ pub fn project_settings_own_copy<H: ProjectSettingsHost>(root: &std::path::Path,
     let file = match nikaia_std::fs::path::file_name(&(built)) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(String::from("a program has a file name")), &"project_settings_own_copy")) };
     let name = nikaia_std::search::replacen(&nikaia_std::fs::path::display(&(file)), &format!("-{}", project_settings_root_tag(root, variant, host)), &"", 1);
     let own = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name)));
-    match fs::remove(&own, &fs::Root::Anywhere, false) {
-        Ok(_) => {},
-        Err(_error) => { },
-    };
-    if !host.hard_link(built, &own) {
-        match fs::copy(built, &own, &fs::Root::Anywhere) {
+    let partial = host.unique_beside(&own);
+    if !host.hard_link(built, &partial) {
+        match fs::copy(built, &partial, &fs::Root::Anywhere) {
             Ok(_) => {},
             Err(_error) => { return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("copying {} to {}", nikaia_std::fs::path::display(&(built)), nikaia_std::fs::path::display(&(own)))), &"project_settings_own_copy")); },
         };
     }
+    match fs::rename(&partial, &own, &fs::Root::Anywhere) {
+        Ok(_) => {},
+        Err(_error) => {
+            match fs::remove(&partial, &fs::Root::Anywhere, false) {
+                Ok(_) => {},
+                Err(_error) => { },
+            };
+            return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("moving {} to {}", nikaia_std::fs::path::display(&(partial)), nikaia_std::fs::path::display(&(own)))), &"project_settings_own_copy"));
+        },
+    };
+    match fs::remove(&partial, &fs::Root::Anywhere, false) {
+        Ok(_) => {},
+        Err(_error) => { },
+    };
     Ok(own)
 }
 
