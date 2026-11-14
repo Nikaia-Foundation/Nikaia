@@ -339,8 +339,9 @@ jobs:
   # alone took 38 minutes. Now `build` compiles the workspace and every test
   # binary once and hands `target/release` on as an artifact; each `test`
   # shard runs its part of the binaries directly (no second `cargo`, which
-  # would rebuild every workspace crate after a fresh checkout), and `sweep`
-  # runs the accepted-programs sweep on the dumps of all shards.
+  # would rebuild every workspace crate after a fresh checkout) and sweeps
+  # the programs its tests accepted; `sweep` checks the allow-list against
+  # the dumps of all shards.
   #
   # One leg because there is one toolchain (ADR-001 D1): `rust-toolchain.toml`
   # names it and `rustup show` installs exactly that.
@@ -515,7 +516,7 @@ jobs:
         run: tar -I zstd -xf "$RUNNER_TEMP/release.tar.zst"
 
       # Each one-file program a checker test accepts is written to the dump
-      # the `sweep` job reads (#705).
+      # this shard sweeps (#705).
       - name: Test
         env:
           NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
@@ -601,6 +602,26 @@ jobs:
           # (ADR-268 D2, D6): a change to its src/ that leaves them stale fails.
           (cd tests/compiler && nikaia build --locked)
 
+      # The accepted-programs sweep (#705) of this shard's own dump, right
+      # after its tests: no job waits for the slowest shard to sweep them all.
+      - name: Accepted-programs sweep of this shard (accepted-sweep)
+        if: success() || failure()
+        env:
+          NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
+          NIKAIA_SWEEP_PART: '1'
+        run: |
+          set -o pipefail
+          mkdir -p "$NIKAIA_DUMP_ACCEPTED"
+          echo "$(ls "$NIKAIA_DUMP_ACCEPTED" | wc -l) dumped programs"
+          it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
+          itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
+          (cd "$itdir" && "$it" accepted_sweep:: --ignored) 2>&1 | tee "$RUNNER_TEMP/sweep.log"
+
+      - name: Name the sweep's failures
+        if: failure()
+        run: |
+          grep -E '^[0-9a-f]{16} \(|^error(\[E[0-9]+\])?:|^[0-9]+ programs: |panicked at' "$RUNNER_TEMP/sweep.log" | head -60 | sed 's/^/::error::/' || true
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -609,26 +630,19 @@ jobs:
           retention-days: 1
           if-no-files-found: ignore
 
-  # **Every program a checker test accepts compiles in `rustc`** (#705): the
-  # dumps of all shards (content-addressed names, so they merge), lowered and
-  # checked by `rustc --emit=metadata` in batches. A refusal not on the test's
-  # allow-list fails, and so does an entry that compiles.
+  # **Every entry of the sweep's allow-list is still checked** (#705). Each
+  # shard sweeps its own dump (`NIKAIA_SWEEP_PART`) and judges only the
+  # entries that dump holds; whether an entry is in no dump at all - no test
+  # checks that program any more - needs the dumps of all shards. It reads
+  # their file names only, so it takes seconds after the slowest shard.
   sweep:
     needs: test
     if: always() && needs.test.result != 'skipped' && needs.test.result != 'cancelled'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
-      - name: Install the toolchain the repository names
-        run: rustup show
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: release-build
-          path: ${{ runner.temp }}
 
       - uses: actions/download-artifact@v4
         with:
@@ -636,21 +650,15 @@ jobs:
           path: ${{ runner.temp }}/accepted
           merge-multiple: true
 
-      - name: Accepted-programs sweep (accepted-sweep)
-        env:
-          NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
+      - name: Every allow-list entry is in some shard's dump
         run: |
-          set -o pipefail
-          tar -I zstd -xf "$RUNNER_TEMP/release.tar.zst"
-          echo "$(ls "$NIKAIA_DUMP_ACCEPTED" | wc -l) dumped programs"
-          it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
-          itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
-          (cd "$itdir" && "$it" accepted_sweep:: --ignored) 2>&1 | tee "$RUNNER_TEMP/sweep.log"
-
-      # The sweep's log is not readable outside GitHub's page: each failing
-      # program, its first `rustc` error, a stale allow-list entry and the
-      # panic become annotations.
-      - name: Name the sweep's failures
-        if: failure()
-        run: |
-          grep -E '^[0-9a-f]{16} \(|^error(\[E[0-9]+\])?:|^[0-9]+ programs: |holds no program|panicked at' "$RUNNER_TEMP/sweep.log" | head -60 | sed 's/^/::error::/' || true
+          mkdir -p "$RUNNER_TEMP/accepted"
+          echo "$(ls "$RUNNER_TEMP/accepted" | wc -l) dumped programs"
+          status=0
+          for hash in $(sed -n '/^const KNOWN/,/^];/p' crates/nikaia/tests/it/accepted_sweep.rs | grep -o '"[0-9a-f]\{16\}"' | tr -d '"'); do
+            if ! ls "$RUNNER_TEMP/accepted" | grep -q -- "-$hash\.nika$"; then
+              echo "::error::$hash is no longer checked by any test: take it off the allow-list in crates/nikaia/tests/it/accepted_sweep.rs"
+              status=1
+            fi
+          done
+          exit $status

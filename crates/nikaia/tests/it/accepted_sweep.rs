@@ -28,6 +28,11 @@
 //! record that leaves it to `rustc`. The test fails on a refusal not on it, on
 //! an entry that compiles now, and on an entry no test checks any more: the
 //! list says exactly what is still broken.
+//!
+//! **One shard's part** (`NIKAIA_SWEEP_PART` set): CI runs the sweep in each
+//! test shard on that shard's own dump, so no job waits for all shards. A
+//! shard sees only part of the programs, so an entry its dump does not hold is
+//! not its to judge; the `sweep` job checks that every entry is in some dump.
 
 use crate::common;
 #[allow(unused_imports)]
@@ -215,7 +220,12 @@ fn every_program_a_checker_test_accepts_compiles() {
         std::env::var_os("NIKAIA_DUMP_ACCEPTED")
             .expect("NIKAIA_DUMP_ACCEPTED names the directory the suite dumped into"),
     );
+    let part = std::env::var_os("NIKAIA_SWEEP_PART").is_some();
     let programs = dumped(&dir);
+    if part && programs.is_empty() {
+        eprintln!("{} holds no program: nothing for this shard", dir.display());
+        return;
+    }
     assert!(
         !programs.is_empty(),
         "{} holds no program: was the suite run with NIKAIA_DUMP_ACCEPTED?",
@@ -282,6 +292,9 @@ fn every_program_a_checker_test_accepts_compiles() {
     }
     for (hash, why) in &known {
         if refused.contains_key(*hash) {
+            continue;
+        }
+        if part && !by_hash.contains_key(hash) {
             continue;
         }
         if compiled.contains_key(hash) {
