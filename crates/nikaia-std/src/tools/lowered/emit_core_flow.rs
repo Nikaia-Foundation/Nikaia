@@ -660,6 +660,19 @@ impl EmitState {
                         }
                         let plain = a_number(part);
                         let wrapped = !plain && (emit_flow_operated(part) || self.ends_in_a_cast(world, part));
+                        let somed = match self.facts.wrapped.get(&node_key(part)) {
+                            None => false,
+                            Some(FactWrap::Constructor) => !plain,
+                            _ => false,
+                        };
+                        if somed {
+                            out.push("Some(");
+                            if wrapped { out.push("("); }
+                            self.emit_expr_as_written(world, walk, out, host, part, depth, flow, scope)?;
+                            if wrapped { out.push(")"); }
+                            out.push(".into())");
+                            continue;
+                        }
                         if wrapped { out.push("("); }
                         self.emit_expr(world, walk, out, host, part, depth, flow, scope)?;
                         if wrapped { out.push(")"); }

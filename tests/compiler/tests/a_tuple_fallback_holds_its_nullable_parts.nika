@@ -1,0 +1,44 @@
+// #1570: a tuple or list written out as the fallback of a `??` holds its
+// `T?` parts as `T?`, as the same tuple returned or bound by a `let` does.
+
+fn numbers(x: (i64, i64?)?) -> (i64, i64?) {
+    return x ?? (5, 5)
+}
+
+fn bound(x: (i64, i64?)?) -> (i64, i64?) {
+    let y: (i64, i64?) = x ?? (5, 6)
+    return y
+}
+
+fn text_first(x: (String?, i64)?) -> (String?, i64) {
+    return x ?? ("b", 8)
+}
+
+fn computed(x: (i64, i64?)?, z: i64) -> (i64, i64?) {
+    return x ?? (z, z + 1)
+}
+
+fn listed(x: Vec[i64?]?) -> Vec[i64?] {
+    return x ?? [1, 2]
+}
+
+fn branched(x: (i64, i64?)?, c: bool) -> (i64, i64?) {
+    return x ?? if c { (1, 2) } else { (3, null) }
+}
+
+fn main() throws {
+    let a = numbers(null)
+    println(f"{a.0} {a.1 ?? 0}")
+    let given = numbers((1, null))
+    println(f"{given.0} {given.1 ?? 0}")
+    let b = bound(null)
+    println(f"{b.1 ?? 0}")
+    let t = text_first(null)
+    println(f"{t.0 ?? "-"} {t.1}")
+    let c = computed(null, 3)
+    println(f"{c.1 ?? 0}")
+    let l = listed(null)
+    println(f"{l.len()}")
+    let d = branched(null, true)
+    println(f"{d.0} {d.1 ?? 0}")
+}

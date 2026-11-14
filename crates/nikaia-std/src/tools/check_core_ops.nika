@@ -1105,6 +1105,12 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     if nullable && !lends && !other.is_a_view() && !state.jumps(world, fallback) && a_name_or_a_field(fallback) && !state.facts.view_fallbacks.contains(id_of(fallback) as i64) {
         state.hands_over(world, fallback, other, "given to `??` as its fallback", span)
     }
+    // **A tuple or list written out as the fallback holds its `T?` parts as
+    // `T?`** (Part I 3.5, #1570): `x ?? (5, 5)` for an `(i64, i64?)?` is
+    // `(5, Some(5))`, as the same tuple returned or bound by a `let` is.
+    if nullable && !check_core_ops_nullable(other) && !state.jumps(world, fallback) {
+        check_overflow_list_into_nullables(state, fallback, other, inner)
+    }
     // **`a ?? b` where `b` may be `null` too is a `T?`** (Part I 3.5).
     if nullable && check_core_ops_nullable(other) {
         state.facts.optional_fallbacks.insert(id_of(expr) as i64)
