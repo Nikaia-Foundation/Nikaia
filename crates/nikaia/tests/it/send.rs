@@ -42,6 +42,7 @@
 //! the type that needed it.
 
 #[allow(unused_imports)]
+use crate::common;
 use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -158,17 +159,16 @@ fn refused_at(source: &str, user_parallelism: &str) -> Option<String> {
 #[test]
 fn no_program_in_the_repository_has_a_crossing_refused() {
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    let mut checked = 0;
-    let mut reported = String::new();
-
-    for path in every_program(&repo_root()) {
-        let source = std::fs::read_to_string(&path).expect("read the program");
-        let Ok(parsed) = parse_to_ast(&source) else {
-            // A probe that is not meant to parse is not this test's business.
-            continue;
-        };
+    // Each program is checked on its own, so on every core (CI speed,
+    // 2026-11-14); `None` for a probe that is not meant to parse, which is not
+    // this test's business.
+    let programs = every_program(&repo_root());
+    let said: Vec<Option<String>> = common::in_parallel(&programs, |path| {
+        let source = std::fs::read_to_string(path).expect("read the program");
+        let parsed = parse_to_ast(&source).ok()?;
         let own = Ledger::infer(&parsed);
         let name = path.display().to_text();
+        let mut reported = String::new();
         for finding in check::check(&parsed, &own, &library)
             .findings
             .iter()
@@ -178,8 +178,10 @@ fn no_program_in_the_repository_has_a_crossing_refused() {
                 finding, &name, &source,
             ));
         }
-        checked += 1;
-    }
+        Some(reported)
+    });
+    let checked = said.iter().flatten().count();
+    let reported: String = said.into_iter().flatten().collect();
 
     assert!(checked >= 12, "only {checked} programs were checked");
     assert!(

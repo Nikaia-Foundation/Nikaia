@@ -262,7 +262,7 @@ fn an_owned_result_is_left_alone() {
 fn the_corpus_needs_no_tether() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let library = Ledger::parse(STD).expect("std's ledger");
-    let mut refused = Vec::new();
+    let mut programs = Vec::new();
     let mut walk = vec![root];
     while let Some(dir) = walk.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -284,20 +284,29 @@ fn the_corpus_needs_no_tether() {
             if path.extension().and_then(|e| e.to_str()) != Some("nika") {
                 continue;
             }
-            let Ok(text) = std::fs::read_to_string(&path) else {
-                continue;
-            };
-            let Ok(parsed) = parse_to_ast(&text) else {
-                continue;
-            };
-            let own = Ledger::infer(&parsed);
-            for finding in nikaia::check::check(&parsed, &own, &library).findings {
-                if finding.code == "NK2303" {
-                    refused.push(format!("{}: {}", path.display(), finding.message));
-                }
-            }
+            programs.push(path);
         }
     }
+    // Each program is checked on its own, so on every core (CI speed,
+    // 2026-11-14).
+    let refused: Vec<String> = common::in_parallel(&programs, |path| {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return Vec::new();
+        };
+        let Ok(parsed) = parse_to_ast(&text) else {
+            return Vec::new();
+        };
+        let own = Ledger::infer(&parsed);
+        nikaia::check::check(&parsed, &own, &library)
+            .findings
+            .into_iter()
+            .filter(|finding| finding.code == "NK2303")
+            .map(|finding| format!("{}: {}", path.display(), finding.message))
+            .collect::<Vec<_>>()
+    })
+    .into_iter()
+    .flatten()
+    .collect();
     assert!(refused.is_empty(), "tethered:\n{}", refused.join("\n"));
 }
 

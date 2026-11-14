@@ -432,3 +432,35 @@ pub fn checked(
         &reads(),
     )
 }
+
+/// **`work` over `items` on every core**, the results in the order of the
+/// items (CI speed, 2026-11-14): a test that checks every program of the
+/// repository one after another took minutes on one thread of four.
+pub fn in_parallel<T: Sync, R: Send>(items: &[T], work: impl Fn(&T) -> R + Sync) -> Vec<R> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let next = AtomicUsize::new(0);
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let mut done: Vec<(usize, R)> = std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..threads.min(items.len().max(1)))
+            .map(|_| {
+                scope.spawn(|| {
+                    let mut mine = Vec::new();
+                    loop {
+                        let at = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(item) = items.get(at) else {
+                            break;
+                        };
+                        mine.push((at, work(item)));
+                    }
+                    mine
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|worker| worker.join().expect("a worker thread"))
+            .collect()
+    });
+    done.sort_by_key(|(at, _)| *at);
+    done.into_iter().map(|(_, result)| result).collect()
+}

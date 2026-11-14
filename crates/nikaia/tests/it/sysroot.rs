@@ -97,27 +97,23 @@ fn the_committed_rust_is_what_this_compiler_lowers() {
 ///
 /// **The toolchain's own package is not compared** (ADR-363 D1): no program
 /// links it, only the compiler runs it, and it is lowered at `yes`, which is
-/// correct at one thread too. What is checked for it instead is that the
-/// committed file is the package lowered at `yes`.
+/// correct at one thread too. That the committed files of it and of `std`'s
+/// run-time package (#723) are the package lowered at `yes` is
+/// `the_committed_rust_is_what_this_compiler_lowers`'s check (`lower_tools`
+/// is `tools_build()`, at `yes`); it is not lowered a second time here (CI
+/// speed, 2026-11-14: a whole lowering of the tools is minutes).
 #[test]
 fn stds_nikaia_half_lowers_the_same_at_both_switches() {
     let sysroot = Sysroot::resolve();
     let sequential = Build::parse("x86_64-linux", "no", "yes").expect("a switch that exists");
     let concurrent = Build::parse("x86_64-linux", "yes", "yes").expect("a switch that exists");
-
-    // `std`'s run-time package (#723) is lowered as the tools are, at `yes`,
-    // which is correct at one thread too.
-    for package in [sysroot.tools_dir(), sysroot.runtime_dir()] {
-        let at = sysroot::tools_lowered_path(&package);
-        let drifted = sysroot::lower_tools_at(&package, sysroot::tools_build())
-            .expect("the package lowers at `yes`")
-            .drift(&package);
-        assert!(
-            drifted.is_empty(),
-            "{drifted:?} of {} is not the package lowered at `user_parallelism = yes` (ADR-363 D1).",
-            at.display(),
-        );
-    }
+    assert!(
+        matches!(
+            sysroot::tools_build().user_parallelism,
+            nikaia::emit::UserParallelism::Yes
+        ),
+        "the committed packages are checked at `tools_build()`, which has to be `yes` (ADR-363 D1)"
+    );
     for nika in sysroot.std_modules().expect("std's Nikaia modules") {
         let source = std::fs::read_to_string(&nika).expect("the source reads");
         let parsed = nikaia::parser::parse_to_ast(&source).expect("std's Nikaia half parses");

@@ -402,23 +402,47 @@ fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
         read.absorb(Some("json"), json_own.clone());
         own.absorb(Some("json"), json_own);
         let packages: BTreeSet<String> = BTreeSet::from(["json".to_text()]);
-        for (at, (_, parsed)) in tools.iter().enumerate() {
-            let beside: Vec<&nikaia::parser::Parsed> = tools
-                .iter()
-                .enumerate()
-                .filter(|(other, _)| *other != at)
-                .map(|(_, (_, p))| p)
+        // **On every core** (CI speed, 2026-11-14): each file is checked on
+        // its own against the same package, so the files are shared out to
+        // threads and their counts added; one thread took eight minutes.
+        let next = std::sync::atomic::AtomicUsize::new(0);
+        let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+        let counted: Vec<usize> = std::thread::scope(|scope| {
+            let workers: Vec<_> = (0..threads)
+                .map(|_| {
+                    scope.spawn(|| {
+                        let mut sum = 0usize;
+                        loop {
+                            let at = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            let Some((_, parsed)) = tools.get(at) else {
+                                break;
+                            };
+                            let beside: Vec<&nikaia::parser::Parsed> = tools
+                                .iter()
+                                .enumerate()
+                                .filter(|(other, _)| *other != at)
+                                .map(|(_, (_, p))| p)
+                                .collect();
+                            let checked = nikaia::check::check_against(
+                                parsed, &beside, &own, &read, &packages, &newly, &reads,
+                            );
+                            sum += checked
+                                .methods
+                                .values()
+                                .map(|c| c.unanswered as usize)
+                                .sum::<usize>();
+                        }
+                        sum
+                    })
+                })
                 .collect();
-            let checked = nikaia::check::check_against(
-                parsed, &beside, &own, &read, &packages, &newly, &reads,
-            );
-            files += 1;
-            unanswered += checked
-                .methods
-                .values()
-                .map(|c| c.unanswered as usize)
-                .sum::<usize>();
-        }
+            workers
+                .into_iter()
+                .map(|worker| worker.join().expect("a checking thread"))
+                .collect()
+        });
+        files += tools.len();
+        unanswered += counted.iter().sum::<usize>();
     }
     assert!(files >= 18, "only {files} programs were read");
     assert!(

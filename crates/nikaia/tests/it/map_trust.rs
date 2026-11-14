@@ -772,6 +772,12 @@ fn the_tools_package_lowers_the_same_whatever_the_file_order() {
 
 /// **The compiler's own tools package**, read backwards, lowers to the same
 /// sections.
+///
+/// **Forward is what is committed** (CI speed, 2026-11-14): the committed
+/// files are the package lowered in file order at `tools_build()`, which
+/// `sysroot::the_committed_rust_is_what_this_compiler_lowers` holds them to,
+/// so this lowers the package once, backwards, and not a second time forwards
+/// (a whole lowering of the tools is minutes).
 #[test]
 fn the_real_tools_package_lowers_the_same_read_backwards() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../nikaia-std/src/tools");
@@ -781,11 +787,9 @@ fn the_real_tools_package_lowers_the_same_read_backwards() {
         .filter(|path| path.extension().is_some_and(|e| e == "nika"))
         .collect();
     paths.sort();
-    let forward = nikaia::sysroot::lower_tools_files(&paths, Default::default())
-        .expect("forward")
-        .to_text();
+    let forward = nikaia::sysroot::Package::committed(&dir).to_text();
     paths.reverse();
-    let backward = nikaia::sysroot::lower_tools_files(&paths, Default::default())
+    let backward = nikaia::sysroot::lower_tools_files(&paths, nikaia::sysroot::tools_build())
         .expect("backward")
         .to_text();
     assert!(sections(&forward) == sections(&backward));
