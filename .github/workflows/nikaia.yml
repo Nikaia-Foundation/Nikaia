@@ -142,8 +142,8 @@ jobs:
   # stays one. The `unsafe` crates run too: atomics and memory ordering are
   # where a weaker memory model than x86's would show.
   #
-  # On every push to main and weekly; on a pull request only where the runtime,
-  # an `unsafe` crate or a dependency changed (`scripts/ci-changes.sh`).
+  # Weekly, and on a push or pull request only where the runtime, an `unsafe`
+  # crate or a dependency changed (`scripts/ci-changes.sh`).
   arm64:
     needs: changes
     if: needs.changes.outputs.arm64 == 'true'
@@ -177,8 +177,8 @@ jobs:
       - name: Build the tests
         run: cargo test --workspace --release --no-run
 
-      # The accepted-programs sweep (#705) runs here when this job runs: it
-      # ends earlier than `bootstrap_compiler`, which then skips the sweep.
+      # The accepted-programs sweep (#705) runs here too, on this machine's
+      # dump; the `sweep` job runs it on x86.
       - name: Test
         env:
           NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
@@ -257,7 +257,7 @@ jobs:
   # alone. A push that is not a fast-forward is refused, so a commit that landed
   # on `main` some other way stops the promotion until `develop` has it.
   promote:
-    needs: [changes, arm64, unsafe_crates, bootstrap_compiler, examples]
+    needs: [changes, arm64, unsafe_crates, build, lint, test, sweep, examples]
     if: >-
       always() && github.event_name == 'push' && github.ref == 'refs/heads/develop'
       && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
@@ -332,26 +332,27 @@ jobs:
       - name: Check every crate under crates/unsafe
         run: sh scripts/check-unsafe-crates.sh
 
-  # The compiler, on the toolchain a clone of this repository builds with.
+  # **Build once, test in parallel** (the owner's goal, 2026-11-14: a run in
+  # minutes, not 40-70). The full suite was one `cargo test` on four threads:
+  # the 2885 short tests were done after 27 minutes, and twelve whole-tree
+  # tests held the step to 43 - the compiler's test package at both settings
+  # alone took 38 minutes. Now `build` compiles the workspace and every test
+  # binary once and hands `target/release` on as an artifact; each `test`
+  # shard runs its part of the binaries directly (no second `cargo`, which
+  # would rebuild every workspace crate after a fresh checkout), and `sweep`
+  # runs the accepted-programs sweep on the dumps of all shards.
   #
-  # There is one leg because there is one toolchain (ADR-001 D1): nothing in the
-  # workspace needs a nightly, so everything runs on `rust-toolchain.toml`'s
-  # stable - the `rust` backend, the interpreter, projects, the ledger, the whole
-  # test suite.
-  bootstrap_compiler:
+  # One leg because there is one toolchain (ADR-001 D1): `rust-toolchain.toml`
+  # names it and `rustup show` installs exactly that.
+  build:
     needs: changes
     if: needs.changes.outputs.docs != 'true'
     runs-on: ubuntu-latest
-    # A hang is a failure, in an hour and a half (see `arm64`).
-    timeout-minutes: 90
+    timeout-minutes: 60
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Version pinning per ADR-001 D1: `rust-toolchain.toml` is the single
-      # source of truth for the channel and its components, and `rustup show`
-      # installs exactly what it names, so nothing is duplicated here and
-      # nothing can drift.
       - name: Install the toolchain the repository names
         run: rustup show
 
@@ -365,94 +366,259 @@ jobs:
           key: ${{ runner.os }}-cargo-stable-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: ${{ runner.os }}-cargo-stable-
 
-      - name: Verify Environment
+      - name: Build the workspace
+        run: cargo build --workspace --release
+
+      # Every test binary and the directory cargo would run it in (its
+      # package's), one per line: what the shards run.
+      - name: Build the tests
         run: |
-          rustc --version
-          cargo --version
-          echo "Nikaia Experiment: Environment Ready"
+          set -o pipefail
+          cargo test --workspace --release --no-run --message-format=json |
+            jq -r 'select(.reason == "compiler-artifact" and .profile.test == true and .executable != null)
+                   | "\(.executable)\t\(.manifest_path | sub("/Cargo.toml$"; ""))"' |
+            sort -u >target/release/test-binaries.tsv
+          cat target/release/test-binaries.tsv
+
+      # The compiler, `std`'s rlibs (the tests hand emitted programs to rustc
+      # with `--extern` into `deps/`) and the test binaries; not cargo's
+      # bookkeeping. Every shard runs on the same path, so the paths compiled
+      # into the binaries (`CARGO_BIN_EXE_nikaia`, the checkout) hold there.
+      - name: Pack the build
+        run: tar --exclude=target/release/incremental --exclude=target/release/.fingerprint -I 'zstd -T0 -1' -cf "$RUNNER_TEMP/release.tar.zst" target/release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-build
+          path: ${{ runner.temp }}/release.tar.zst
+          retention-days: 1
+          compression-level: 0
+
+  # The cheap checks, beside `build` rather than in front of the tests:
+  # formatting, ADR citations, badges and clippy need no release build.
+  lint:
+    needs: changes
+    if: needs.changes.outputs.docs != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install the toolchain the repository names
+        run: rustup show
+
+      - name: Cache cargo registry and the clippy build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: ${{ runner.os }}-cargo-clippy-
 
       - name: Check formatting
         run: cargo fmt --all --check
 
       # A decision is only citable if its number is stable, so a dangling
-      # `ADR-023 D7` is as much a defect as a dangling link. 700+ citations
-      # live in the compiler's own comments and tests.
+      # `ADR-023 D7` is as much a defect as a dangling link.
       - name: Check ADR citations resolve
         run: python3 scripts/check-adr-refs.py
 
-      # The README's badges are drawn from the specification's version line and
-      # the self-hosting count. The pre-commit hook redraws them, but a session
-      # without the hook that edits the SVG by hand changes its title and not the
-      # text a reader sees: the README showed 0.0.437 at 0.0.451.
+      # The README's badges are drawn from the specification's version line
+      # and the self-hosting count; a hand-edited SVG drifts.
       - name: Check the README's badges are current
         run: python3 scripts/badges.py --check
-
-      - name: Build the workspace
-        run: cargo build --workspace --release
 
       - name: No clippy warnings
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: Build the tests
-        run: cargo test --workspace --release --no-run
+  # **The suite, in shards that run at once.** `it-K` is every K-th short
+  # test of the `it` binary (round-robin over the sorted names, so each module
+  # spreads over all three), `it-0` also every other test binary; `heavy-*`
+  # are the whole-tree tests, two or three to a runner where they fit beside
+  # each other; `compiler-K` is every K-th program of `tests/compiler`, at
+  # both settings - the test `the_compiler_test_package_passes_at_both_settings`
+  # runs that package in one go and is skipped in the `it` shards for it.
+  # A new whole-tree test that makes an `it` shard slow belongs in `HEAVY`.
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - it-0
+          - it-1
+          - it-2
+          - heavy-map-trust
+          - heavy-sysroot-cores
+          - heavy-sysroot-pair
+          - heavy-corpus
+          - heavy-rest
+          - compiler-0
+          - compiler-1
+          - compiler-2
+          - compiler-3
+          - compiler-4
+    env:
+      SHARD: ${{ matrix.shard }}
+      IT_SHARDS: 3
+      COMPILER_SHARDS: 5
+      # The whole-tree tests of `it`, by shard; every one is skipped in `it-K`.
+      HEAVY_MAP_TRUST: map_trust::the_real_tools_package_lowers_the_same_read_backwards
+      HEAVY_SYSROOT_CORES: sysroot::the_tools_lower_the_same_on_one_thread_as_on_every_core
+      HEAVY_SYSROOT_PAIR: >-
+        sysroot::the_committed_rust_is_what_this_compiler_lowers
+        sysroot::stds_nikaia_half_lowers_the_same_at_both_switches
+      HEAVY_CORPUS: >-
+        sequences::the_corpus_has_no_more_unanswered_method_calls_than_it_had
+        language::the_build_time_package_passes_its_own_tests
+      HEAVY_REST: >-
+        project::the_http_package_serves_its_example
+        bytes::the_corpus_needs_no_tether
+        send::no_program_in_the_repository_has_a_crossing_refused
+        contracts::a_toolchain_module_is_not_part_of_std
+        fmt::every_nika_file_formats_to_the_same_tree_and_a_fixed_point
+      HEAVY_ELSEWHERE: nikaia_test::the_compiler_test_package_passes_at_both_settings
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      # Every failure at once, rather than the first test binary's. Each
-      # one-file program a checker test accepts is written to the dump the
-      # next step reads (#705).
+      - name: Install the toolchain the repository names
+        run: rustup show
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-build
+          path: ${{ runner.temp }}
+
+      - name: Unpack the build
+        run: tar -I zstd -xf "$RUNNER_TEMP/release.tar.zst"
+
+      # Each one-file program a checker test accepts is written to the dump
+      # the `sweep` job reads (#705).
       - name: Test
         env:
           NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
         run: |
           set -o pipefail
-          cargo test --workspace --release --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/test.log"
+          it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
+          itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
+          heavy="$HEAVY_MAP_TRUST $HEAVY_SYSROOT_CORES $HEAVY_SYSROOT_PAIR $HEAVY_CORPUS $HEAVY_REST $HEAVY_ELSEWHERE"
+          run_it() { (cd "$itdir" && "$it" --exact "$@"); }
+          case "$SHARD" in
+          it-*)
+            k=${SHARD#it-}
+            (cd "$itdir" && "$it" --list --format terse) | sed -n 's/: test$//p' | sort >"$RUNNER_TEMP/all"
+            printf '%s\n' $heavy | sort >"$RUNNER_TEMP/heavy"
+            comm -23 "$RUNNER_TEMP/all" "$RUNNER_TEMP/heavy" |
+              awk -v k="$k" -v n="$IT_SHARDS" 'NR % n == k' >"$RUNNER_TEMP/mine"
+            echo "$(wc -l <"$RUNNER_TEMP/mine") of $(wc -l <"$RUNNER_TEMP/all") tests of it"
+            status=0
+            xargs -a "$RUNNER_TEMP/mine" -d '\n' sh -c 'd=$0 b=$1; shift; cd "$d" && exec "$b" --exact "$@"' "$itdir" "$it" 2>&1 |
+              tee "$RUNNER_TEMP/test.log" || status=1
+            if [ "$k" = 0 ]; then
+              while IFS="$(printf '\t')" read -r bin dir; do
+                [ "$bin" = "$it" ] && continue
+                echo "::group::$bin"
+                (cd "$dir" && "$bin") 2>&1 | tee -a "$RUNNER_TEMP/test.log" || status=1
+                echo "::endgroup::"
+              done <target/release/test-binaries.tsv
+            fi
+            exit $status
+            ;;
+          heavy-*)
+            var=HEAVY_$(echo "${SHARD#heavy-}" | tr 'a-z-' 'A-Z_')
+            eval "names=\$$var"
+            run_it $names 2>&1 | tee "$RUNNER_TEMP/test.log"
+            ;;
+          compiler-*)
+            k=${SHARD#compiler-}
+            filters=$(ls tests/compiler/tests/*.nika | sed 's|.*/||; s|\.nika$||' | sort |
+              awk -v k="$k" -v n="$COMPILER_SHARDS" 'NR % n == k {printf " --filter %s", $0}')
+            # As the test `the_compiler_test_package_passes_at_both_settings` runs it.
+            env -u CARGO_TARGET_DIR -u RUST_BACKTRACE NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" \
+              ./target/release/nikaia test --both-settings --project tests/compiler $filters 2>&1 |
+              tee "$RUNNER_TEMP/test.log"
+            ;;
+          esac
 
       - name: Name the failing tests
         if: failure()
         run: |
-          grep -E '^test .* FAILED' "$RUNNER_TEMP/test.log" | sed 's/^/::error::/' || true
+          grep -E '^test .* FAILED|\.\.\. FAILED' "$RUNNER_TEMP/test.log" | sed 's/^/::error::/' | head -50 || true
           awk '/^failures:$/{f=1;next} /^test result/{f=0} f&&/^    /{print "::error::failed: "$1}' "$RUNNER_TEMP/test.log" | sort -u | head -50 || true
 
-      # **Every program a checker test accepts compiles in `rustc`** (#705):
-      # lowered and checked by `rustc --emit=metadata`, in batches. A refusal
-      # not on the test's allow-list fails, and so does an entry that compiles.
+      # What were the bootstrap job's last steps; they need the compiler only.
+      - name: The samples, the page examples and the ledgers
+        if: matrix.shard == 'it-1'
+        env:
+          NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
+        run: |
+          export PATH="$PWD/target/release:$PATH"
+          for sample in tests/samples/*.nika; do
+            echo "::group::$sample"
+            nikaia interpret "$sample"
+            echo "::endgroup::"
+          done
+          (cd tests/page-examples && nikaia test)
+          # The ledgers of tests/compiler are committed like a lockfile
+          # (ADR-268 D2, D6): a change to its src/ that leaves them stale fails.
+          (cd tests/compiler && nikaia build --locked)
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accepted-${{ matrix.shard }}
+          path: ${{ runner.temp }}/accepted
+          retention-days: 1
+          if-no-files-found: ignore
+
+  # **Every program a checker test accepts compiles in `rustc`** (#705): the
+  # dumps of all shards (content-addressed names, so they merge), lowered and
+  # checked by `rustc --emit=metadata` in batches. A refusal not on the test's
+  # allow-list fails, and so does an entry that compiles.
+  sweep:
+    needs: test
+    if: always() && needs.test.result != 'skipped' && needs.test.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install the toolchain the repository names
+        run: rustup show
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-build
+          path: ${{ runner.temp }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: accepted-*
+          path: ${{ runner.temp }}/accepted
+          merge-multiple: true
+
       - name: Accepted-programs sweep (accepted-sweep)
-        if: needs.changes.outputs.arm64 != 'true'
         env:
           NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
         run: |
           set -o pipefail
-          cargo test --release -p nikaia --test it accepted_sweep:: -- --ignored 2>&1 | tee "$RUNNER_TEMP/sweep.log"
+          tar -I zstd -xf "$RUNNER_TEMP/release.tar.zst"
+          echo "$(ls "$NIKAIA_DUMP_ACCEPTED" | wc -l) dumped programs"
+          it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
+          itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
+          (cd "$itdir" && "$it" accepted_sweep:: --ignored) 2>&1 | tee "$RUNNER_TEMP/sweep.log"
 
-      # The sweep's log is not readable outside GitHub's page, so its red was
-      # invisible (runs from c7e5b66 on): each failing program, its first
-      # `rustc` error, a stale allow-list entry and the panic become annotations.
+      # The sweep's log is not readable outside GitHub's page: each failing
+      # program, its first `rustc` error, a stale allow-list entry and the
+      # panic become annotations.
       - name: Name the sweep's failures
         if: failure()
         run: |
           grep -E '^[0-9a-f]{16} \(|^error(\[E[0-9]+\])?:|^[0-9]+ programs: |holds no program|panicked at' "$RUNNER_TEMP/sweep.log" | head -60 | sed 's/^/::error::/' || true
-
-      # The driver needs a file, so run it on the samples rather than bare
-      # `cargo run`, which only refuses with nothing to do. `interpret` runs
-      # each one (ADR-260 D3).
-      - name: Run Nikaia Driver (The Magic)
-        run: |
-          for sample in tests/samples/*.nika; do
-            echo "::group::$sample"
-            ./target/release/nikaia interpret "$sample"
-            echo "::endgroup::"
-          done
-
-      # Every `nika` example of website/ and guide/ against
-      # tests/page-examples/EXPECTED.txt (see the `examples` job).
-      - name: The examples of the website and the guide
-        run: |
-          export PATH="$PWD/target/release:$PATH"
-          cd tests/page-examples && nikaia test
-
-      # The ledgers of tests/compiler (`nikaia.contracts`, `nikaia.proofs`,
-      # `nikaia.derived`) are committed like a lockfile (ADR-268 D2, D6):
-      # a change to its src/ that leaves them stale fails here.
-      - name: The ledgers of tests/compiler are current
-        run: |
-          export PATH="$PWD/target/release:$PATH"
-          cd tests/compiler && nikaia build --locked

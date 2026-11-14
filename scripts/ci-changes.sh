@@ -13,9 +13,9 @@
 # * `arm64` - the whole suite on a 64-bit ARM machine. Nothing in the tree
 #   names that architecture, so what it can break is what differs between
 #   machines underneath: the runtime and its `unsafe` crates (atomics, memory
-#   ordering, io_uring, mmap), and the dependencies. It runs on every push to
-#   develop or main and weekly; on a pull request only where one of those
-#   changed.
+#   ordering, io_uring, mmap), and the dependencies. It runs weekly, and on
+#   any push or pull request only where one of those changed (owner,
+#   2026-11-14: a run in minutes; the job took 57 of them on every push).
 #
 # * `docs` - the change touches only documentation: Markdown outside
 #   docs/specification/, CHANGELOG.md and the code trees (crates/, packages/,
@@ -28,7 +28,7 @@
 #   (a ```nika fence, or a `<code class="language-nika">`), so the examples
 #   job builds the compiler and compares every example with
 #   tests/page-examples/EXPECTED.txt. A change to the prose around them needs no
-#   compiler. Without `docs` the examples run inside bootstrap_compiler.
+#   compiler. Without `docs` the examples run in a `test` shard.
 #
 # Everything is on for a manual run, a scheduled one, a first push of a branch
 # (but a `ci/` branch: it is compared with main like develop)
@@ -130,9 +130,10 @@ elif git diff "$BASE" HEAD -- crates/nikaia/src/emit/mod.rs | grep -q '^[+-]pub 
 else
     echo "floor=false" >>"$out"
 fi
-if [ "$trunk" = true ] || { [ "$EVENT" = "push" ] && [ "$REF" = "refs/heads/main" ]; }; then
-    echo "arm64=true" >>"$out"
-elif echo "$changed" | grep -q '^crates/nikaia-std/\|^crates/unsafe/\|Cargo\.toml$\|^Cargo\.lock$\|^rust-toolchain\.toml$'; then
+# The compiler's own Nikaia (`crates/nikaia-std/src/tools/`) is lowering and
+# checking, the same on every architecture: it does not start the job.
+if echo "$changed" | grep -v '^crates/nikaia-std/src/tools/' |
+    grep -q '^crates/nikaia-std/\|^crates/unsafe/\|Cargo\.toml$\|^Cargo\.lock$\|^rust-toolchain\.toml$'; then
     echo "arm64=true" >>"$out"
 else
     echo "arm64=false" >>"$out"
