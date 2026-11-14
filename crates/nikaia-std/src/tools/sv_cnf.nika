@@ -482,3 +482,378 @@ fn sv_cnf_overflow_lit(mut why: LgWhy) -> i64? {
 	why.unknown = LgUnknown::Overflow
 	return null
 }
+
+// --- Tests: the Tseitin input against the formula (moved from
+// `tests/compiler/tests/solver_cnf.nika`, which compiled these files anew in a
+// program of its own on every run) ---
+
+fn sv_cnf_test_int(arena: ref TermArena, id: i64, env: ref collections::BTreeMap[String, i64]) -> i64 {
+	return match arena.at(id) {
+		SolverTerm::Int(n) => n,
+		SolverTerm::Var(name) => env.get(name) ?? 0,
+		SolverTerm::Add(a, b) => sv_cnf_test_int(arena, a, env) + sv_cnf_test_int(arena, b, env),
+		SolverTerm::Sub(a, b) => sv_cnf_test_int(arena, a, env) - sv_cnf_test_int(arena, b, env),
+		SolverTerm::Neg(a) => -sv_cnf_test_int(arena, a, env),
+		SolverTerm::Mul(a, b) => sv_cnf_test_int(arena, a, env) * sv_cnf_test_int(arena, b, env),
+		SolverTerm::Quot(a, k) => sv_cnf_test_int(arena, a, env) / k,
+		else => 0,
+	}
+}
+
+fn sv_cnf_test_bool(arena: ref TermArena, id: i64, env: ref collections::BTreeMap[String, i64]) -> bool {
+	return match arena.at(id) {
+		SolverTerm::Bool(b) => b,
+		SolverTerm::Not(a) => !sv_cnf_test_bool(arena, a, env),
+		SolverTerm::And(items) => {
+			let mut all = true
+			for item in items {
+				all = all && sv_cnf_test_bool(arena, item, env)
+			}
+			all
+		},
+		SolverTerm::Or(items) => {
+			let mut any = false
+			for item in items {
+				any = any || sv_cnf_test_bool(arena, item, env)
+			}
+			any
+		},
+		SolverTerm::Le(a, b) => sv_cnf_test_int(arena, a, env) <= sv_cnf_test_int(arena, b, env),
+		SolverTerm::Lt(a, b) => sv_cnf_test_int(arena, a, env) < sv_cnf_test_int(arena, b, env),
+		SolverTerm::Ge(a, b) => sv_cnf_test_int(arena, a, env) >= sv_cnf_test_int(arena, b, env),
+		SolverTerm::Gt(a, b) => sv_cnf_test_int(arena, a, env) > sv_cnf_test_int(arena, b, env),
+		SolverTerm::Eq(a, b) => sv_cnf_test_int(arena, a, env) == sv_cnf_test_int(arena, b, env),
+		SolverTerm::Ne(a, b) => sv_cnf_test_int(arena, a, env) != sv_cnf_test_int(arena, b, env),
+		else => false,
+	}
+}
+
+// `2·x - y + 4` with the columns' names.
+fn sv_cnf_test_row(r: ref SvRow, names: ref Vec[String]) -> String {
+	let mut out = ""
+	let mut i = 0
+	while i < r.cols.len() {
+		let k = r.ks[i]
+		let name = names[r.cols[i] as i64].clone()
+		let size = if k < 0 { -k } else { k }
+		let sign = if k < 0 { if i == 0 { "-" } else { " - " } } else { if i == 0 { "" } else { " + " } }
+		let factor = if size == 1 { "" } else { f"{size}·" }
+		out = out + sign + factor + name
+		i += 1
+	}
+	if r.constant > 0 {
+		out = out + f" + {r.constant}"
+	} else if r.constant < 0 {
+		out = out + f" - {-r.constant}"
+	}
+	return out
+}
+
+fn sv_cnf_test_lit(l: u32) -> String {
+	return if l % 2 == 0 { f"a{l / 2}" } else { f"-a{l / 2}" }
+}
+
+// Whether every clause holds where the columns have `values` and the
+// definitions the bits of `bits`.
+fn sv_cnf_test_holds(cnf: ref SvCnf, values: ref Vec[i64], bits: i64) -> bool {
+	let mut truth: Vec[bool] = []
+	let mut d = 0
+	let mut a = 0
+	while a < cnf.query.atoms.len() {
+		if cnf.definition[a] {
+			truth.push((bits / (1 << d)) % 2 == 1)
+			d += 1
+		} else {
+			let atom = cnf.query.atoms[a].clone()
+			let mut sum = atom.row.constant
+			let mut i = 0
+			while i < atom.row.cols.len() {
+				sum += atom.row.ks[i] * values[atom.row.cols[i] as i64]
+				i += 1
+			}
+			truth.push(match atom.rel {
+				SvRel::Lt => sum < 0,
+				else => sum <= 0,
+			})
+		}
+		a += 1
+	}
+	for clause in cnf.query.clauses {
+		let mut ok = false
+		for l in clause {
+			let t = truth[(l / 2) as i64]
+			let positive = l % 2 == 0
+			if positive == t {
+				ok = true
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// Whether some value of the free columns (`free`, from `at` on, in -3..3)
+// and of the definitions makes every clause hold.
+fn sv_cnf_test_extends(cnf: ref SvCnf, mut values: Vec[i64], free: ref Vec[i64], at: i64) -> bool {
+	if at == free.len() {
+		let mut defs = 0
+		for d in cnf.definition {
+			if d {
+				defs += 1
+			}
+		}
+		let mut bits = 0
+		while bits < (1 << defs) {
+			if sv_cnf_test_holds(cnf, values, bits) {
+				return true
+			}
+			bits += 1
+		}
+		return false
+	}
+	let mut v = -3
+	while v <= 3 {
+		values[free[at]] = v
+		if sv_cnf_test_extends(cnf, values, free, at + 1) {
+			return true
+		}
+		v += 1
+	}
+	return false
+}
+
+// The clauses of `facts` and not `goal`, as lines, and held against the
+// formula on every value of its variables in -2..2.
+fn sv_cnf_test_show(name: String, arena: ref TermArena, facts: Vec[i64], goal: i64) -> String {
+	let mut out = f"{name}\n"
+	let mut why = lg_why()
+	let made = sv_cnf(arena, facts, goal, why)
+	let cnf = made ?? {
+		let reason = match why.unknown {
+			LgUnknown::OutsideTheTheory => "outside the theory",
+			LgUnknown::Overflow => "overflow",
+			else => "unknown",
+		}
+		return out + f"  refused: {reason}\n"
+	}
+	let mut a = 0
+	while a < cnf.query.atoms.len() {
+		let atom = cnf.query.atoms[a].clone()
+		if cnf.definition[a] {
+			out = out + f"  a{a}: definition {sv_cnf_test_row(atom.row, cnf.names)} <= 0\n"
+		} else {
+			let rel = match atom.rel {
+				SvRel::Lt => "<",
+				SvRel::Le => "<=",
+				SvRel::Eq => "=",
+			}
+			out = out + f"  a{a}: {sv_cnf_test_row(atom.row, cnf.names)} {rel} 0\n"
+		}
+		a += 1
+	}
+	let mut texts: Vec[String] = []
+	for clause in cnf.query.clauses {
+		let mut parts: Vec[String] = []
+		for l in clause {
+			parts.push(sv_cnf_test_lit(l))
+		}
+		texts.push(f"[{parts.join(" ")}]")
+	}
+	out = out + f"  clauses: {texts.join(" ")}\n"
+	// The variables of the formula, the free columns and their places.
+	let mut vars: Vec[i64] = []
+	let mut free: Vec[i64] = []
+	let mut c = 0
+	while c < cnf.names.len() {
+		let n = cnf.names[c].clone()
+		if n.starts_with("quot#") {
+			free.push(c)
+		} else if !n.starts_with("def#") {
+			vars.push(c)
+		}
+		c += 1
+	}
+	let mut total = 1
+	for _ in vars {
+		total = total * 5
+	}
+	let mut agree = 0
+	let mut models = 0
+	let mut code = 0
+	while code < total {
+		let mut values: Vec[i64] = []
+		for _ in cnf.names {
+			values.push(0)
+		}
+		let mut env: collections::BTreeMap[String, i64] = collections::BTreeMap()
+		let mut rest = code
+		for v in vars {
+			values[v] = rest % 5 - 2
+			env.insert(cnf.names[v].clone(), rest % 5 - 2)
+			rest = rest / 5
+		}
+		let mut formula = !sv_cnf_test_bool(arena, goal, env)
+		for f in facts {
+			formula = formula && sv_cnf_test_bool(arena, f, env)
+		}
+		if formula {
+			models += 1
+		}
+		if formula == sv_cnf_test_extends(cnf, values, free, 0) {
+			agree += 1
+		}
+		code += 1
+	}
+	return out + f"  agree on {agree} of {total} values; the formula holds on {models}\n"
+}
+
+test "the clauses of a query agree with its formula on every small value" {
+	let mut t = TermArena::empty()
+	let x = t.var("x")
+	let y = t.var("y")
+	let z = t.var("z")
+	let zero = t.int(0)
+	let one = t.int(1)
+	let two = t.int(2)
+	let no = t.boolean(false)
+	let yes = t.boolean(true)
+	let mut out: String = ""
+
+	let y1 = t.add(y, one)
+	let lt = t.lt(x, y)
+	let eq = t.equal(x, y1)
+	let not_eq = t.not(eq)
+	let first = t.or([lt, not_eq])
+	out = out + sv_cnf_test_show("x < y or not x = y + 1", t, [first], no)
+
+	let ne = t.unequal(x, y)
+	out = out + sv_cnf_test_show("x != y", t, [ne], no)
+	let not_ne = t.not(ne)
+	out = out + sv_cnf_test_show("not x != y", t, [not_ne], no)
+
+	let x0 = t.le(x, zero)
+	let y0 = t.le(y, zero)
+	let both = t.and([x0, y0])
+	let x2 = t.ge(x, two)
+	let y_lt = t.lt(y, one)
+	let not_y = t.not(y_lt)
+	let other = t.and([x2, not_y])
+	let z1 = t.equal(z, one)
+	let nested = t.or([both, other, z1])
+	out = out + sv_cnf_test_show("x <= 0 and y <= 0, or x >= 2 and not y < 1, or z = 1", t, [nested], no)
+
+	let le = t.le(x, y)
+	let gt = t.lt(y, x)
+	out = out + sv_cnf_test_show("x <= y, y < x: one atom", t, [le, gt], no)
+
+	let gz = t.gt(x, zero)
+	let inner = t.or([no, gz])
+	let folded = t.and([yes, inner])
+	out = out + sv_cnf_test_show("true and (false or x > 0)", t, [folded], no)
+	let xx = t.sub(x, x)
+	let minus = t.int(-1)
+	let never = t.le(xx, minus)
+	out = out + sv_cnf_test_show("x - x <= -1", t, [never], no)
+
+	let q = t.quot(x, 2)
+	let q1 = t.ge(q, one)
+	out = out + sv_cnf_test_show("x / 2 >= 1", t, [q1], no)
+
+	let nonneg = t.ge(x, zero)
+	let pos = t.gt(x, zero)
+	let is0 = t.equal(x, zero)
+	let goal = t.or([pos, is0])
+	out = out + sv_cnf_test_show("x >= 0, goal x > 0 or x = 0", t, [nonneg], goal)
+
+	let xy = t.mul(x, y)
+	let product = t.le(xy, one)
+	out = out + sv_cnf_test_show("x * y <= 1", t, [product], no)
+
+	let expected = [
+		"x < y or not x = y + 1",
+		"  a0: x - y + 1 <= 0",
+		"  a1: x - y - 1 <= 0",
+		"  a2: x - y <= 0",
+		"  a3: definition def#0 <= 0",
+		"  clauses: [-a1 a2 -a3] [a1 a3] [-a2 a3] [a0 a3]",
+		"  agree on 25 of 25 values; the formula holds on 21",
+		"x != y",
+		"  a0: x - y + 1 <= 0",
+		"  a1: x - y <= 0",
+		"  clauses: [a0 -a1]",
+		"  agree on 25 of 25 values; the formula holds on 20",
+		"not x != y",
+		"  a0: x - y + 1 <= 0",
+		"  a1: x - y <= 0",
+		"  clauses: [-a0] [a1]",
+		"  agree on 25 of 25 values; the formula holds on 5",
+		"x <= 0 and y <= 0, or x >= 2 and not y < 1, or z = 1",
+		"  a0: x <= 0",
+		"  a1: y <= 0",
+		"  a2: definition def#0 <= 0",
+		"  a3: x - 1 <= 0",
+		"  a4: definition def#1 <= 0",
+		"  a5: z - 1 <= 0",
+		"  a6: z <= 0",
+		"  a7: definition def#2 <= 0",
+		"  clauses: [-a0 -a1 -a2] [a0 a2] [a1 a2] [a1 a3 -a4] [-a1 a4] [-a3 a4] [-a5 a6 -a7] [a5 a7] [-a6 a7] [-a2 -a4 -a7]",
+		"  agree on 125 of 125 values; the formula holds on 69",
+		"x <= y, y < x: one atom",
+		"  a0: x - y <= 0",
+		"  clauses: [a0] [-a0]",
+		"  agree on 25 of 25 values; the formula holds on 0",
+		"true and (false or x > 0)",
+		"  a0: x <= 0",
+		"  clauses: [-a0]",
+		"  agree on 5 of 5 values; the formula holds on 2",
+		"x - x <= -1",
+		"  clauses: []",
+		"  agree on 1 of 1 values; the formula holds on 0",
+		"x / 2 >= 1",
+		"  a0: quot#32 <= 0",
+		"  a1: x + 1 <= 0",
+		"  a2: 2·quot#32 - x <= 0",
+		"  a3: 2·quot#32 - x + 2 <= 0",
+		"  a4: definition def#0 <= 0",
+		"  a5: definition def#1 <= 0",
+		"  a6: 2·quot#32 - x + 1 <= 0",
+		"  a7: 2·quot#32 - x - 1 <= 0",
+		"  a8: definition def#2 <= 0",
+		"  a9: definition def#3 <= 0",
+		"  clauses: [-a0] [-a2 a3 -a4] [a2 a4] [-a3 a4] [a1 -a4 -a5] [-a1 a5] [a4 a5] [a5] [a6 -a7 -a8] [-a6 a8] [a7 a8] [-a1 -a8 -a9] [a1 a9] [a8 a9] [a9]",
+		"  agree on 5 of 5 values; the formula holds on 1",
+		"x >= 0, goal x > 0 or x = 0",
+		"  a0: x + 1 <= 0",
+		"  a1: x <= 0",
+		"  clauses: [-a0] [a1] [a0 -a1]",
+		"  agree on 5 of 5 values; the formula holds on 0",
+		"x * y <= 1",
+		"  refused: outside the theory",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+/// The clauses of `x <= y, y < x` to the SAT core: refuted by their Boolean
+/// structure alone, and the refutation's log is one `sv_check` accepts.
+test "a query refuted by its clauses alone is unsat and its log checks" {
+	let mut t = TermArena::empty()
+	let x = t.var("x")
+	let y = t.var("y")
+	let no = t.boolean(false)
+	let le = t.le(x, y)
+	let gt = t.lt(y, x)
+	let mut why = lg_why()
+	let made = sv_cnf(t, [le, gt], no, why)
+	assert(made != null)
+	let cnf = made ?? return
+	let mut s = sv_sat_of(cnf.query) ?? {
+		assert(false)
+		return
+	}
+	let answer = s.solve(100)
+	assert(answer == SvSatAnswer::Unsat)
+	let v = sv_check(cnf.query, s.book.log.steps)
+	assert(v.ok)
+}

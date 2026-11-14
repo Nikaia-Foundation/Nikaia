@@ -145,7 +145,6 @@ jobs:
           - compiler-2
           - compiler-3
           - compiler-4
-          - compiler-slow-solver_cnf
           - compiler-slow-prove_a_read_after_many_lists
         # **The one-thread lowering runs weekly and by hand only** (CI speed):
         # it is the whole tools package again on one core, the longest shard
@@ -159,9 +158,9 @@ jobs:
       IT_SHARDS: 3
       COMPILER_SHARDS: 5
       # The programs of tests/compiler that take minutes on their own (one
-      # `nikaia` run over the solver's sources; one proof): each has a
-      # `compiler-slow-NAME` shard and is left out of `compiler-K`.
-      COMPILER_SLOW: solver_cnf prove_a_read_after_many_lists
+      # proof): each has a `compiler-slow-NAME` shard and is left out of
+      # `compiler-K`.
+      COMPILER_SLOW: prove_a_read_after_many_lists
       # The whole-tree tests of `it`, by shard; every one is skipped in `it-K`.
       HEAVY_MAP_TRUST: map_trust::the_real_tools_package_lowers_the_same_read_backwards
       HEAVY_SYSROOT_CORES: sysroot::the_tools_lower_the_same_on_one_thread_as_on_every_core

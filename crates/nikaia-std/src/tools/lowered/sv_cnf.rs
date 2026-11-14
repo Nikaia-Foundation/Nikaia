@@ -335,3 +335,295 @@ pub(crate) fn sv_cnf_overflow_lit(why: &mut LgWhy) -> Option<i64> {
     None
 }
 
+#[cfg(test)]
+pub(crate) fn sv_cnf_test_int(arena: &TermArena, id: i64, env: &collections::BTreeMap<String, i64>) -> i64 {
+    match arena.at(id) {
+        SolverTerm::Int(n) => n,
+        SolverTerm::Var(ref name) => nikaia_std::index::or(env.get(name), || 0),
+        SolverTerm::Add(a, b) => sv_cnf_test_int(arena, a, env) + sv_cnf_test_int(arena, b, env),
+        SolverTerm::Sub(a, b) => sv_cnf_test_int(arena, a, env) - sv_cnf_test_int(arena, b, env),
+        SolverTerm::Neg(a) => -sv_cnf_test_int(arena, a, env),
+        SolverTerm::Mul(a, b) => sv_cnf_test_int(arena, a, env) * sv_cnf_test_int(arena, b, env),
+        SolverTerm::Quot(a, k) => sv_cnf_test_int(arena, a, env) / k,
+        _ => 0,
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn sv_cnf_test_bool(arena: &TermArena, id: i64, env: &collections::BTreeMap<String, i64>) -> bool {
+    match arena.at(id) {
+        SolverTerm::Bool(b) => b,
+        SolverTerm::Not(a) => !sv_cnf_test_bool(arena, a, env),
+        SolverTerm::And(ref items) => {
+            let mut all = true;
+            for item in items.iter() {
+                let item = nikaia_std::num::value(item);
+                all = all && sv_cnf_test_bool(arena, item, env);
+            }
+            all
+        },
+        SolverTerm::Or(ref items) => {
+            let mut any = false;
+            for item in items.iter() {
+                let item = nikaia_std::num::value(item);
+                any = any || sv_cnf_test_bool(arena, item, env);
+            }
+            any
+        },
+        SolverTerm::Le(a, b) => sv_cnf_test_int(arena, a, env) <= sv_cnf_test_int(arena, b, env),
+        SolverTerm::Lt(a, b) => sv_cnf_test_int(arena, a, env) < sv_cnf_test_int(arena, b, env),
+        SolverTerm::Ge(a, b) => sv_cnf_test_int(arena, a, env) >= sv_cnf_test_int(arena, b, env),
+        SolverTerm::Gt(a, b) => sv_cnf_test_int(arena, a, env) > sv_cnf_test_int(arena, b, env),
+        SolverTerm::Eq(a, b) => sv_cnf_test_int(arena, a, env) == sv_cnf_test_int(arena, b, env),
+        SolverTerm::Ne(a, b) => sv_cnf_test_int(arena, a, env) != sv_cnf_test_int(arena, b, env),
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn sv_cnf_test_row(r: &SvRow, names: &[String]) -> String {
+    let mut out = String::from("");
+    let mut i: i64 = 0;
+    while ((i) as usize) < r.cols.len() {
+        let k = *nikaia_std::index::get(&r.ks, (i) as usize);
+        let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(*unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) } as i64))).to_string());
+        let size = if k < 0 { -k } else { k };
+        let sign = if k < 0 { if i == 0 { "-" } else { " - " } } else if i == 0 { "" } else { " + " };
+        let factor = if size == 1 { String::from("") } else { format!("{}·", size) };
+        out = nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sign)), factor)), name));
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+    }
+    if r.constant > 0 { out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!(" + {}", r.constant))); } else if r.constant < 0 { out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!(" - {}", -r.constant))); }
+    out
+}
+
+#[cfg(test)]
+pub(crate) fn sv_cnf_test_lit(l: u32) -> String { if l % 2u32 == 0u32 { format!("a{}", l / 2u32) } else { format!("-a{}", l / 2u32) } }
+
+#[cfg(test)]
+pub(crate) fn sv_cnf_test_holds(cnf: &SvCnf, values: &[i64], bits: i64) -> bool {
+    let mut truth: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut d = 0;
+    let mut a: i64 = 0;
+    while ((a) as usize) < cnf.query.atoms.len() {
+        if *nikaia_std::index::get(&cnf.definition, (a) as usize) {
+            truth.push(bits / (1 << d) % 2 == 1);
+            d += 1;
+        } else {
+            let atom = (*unsafe { nikaia_std::proven::read(&cnf.query.atoms, (a) as usize) }).clone();
+            let mut sum = atom.row.constant;
+            let mut i: i64 = 0;
+            while ((i) as usize) < atom.row.cols.len() {
+                sum += *nikaia_std::index::get(&atom.row.ks, (i) as usize) * *nikaia_std::index::get(&values, nikaia_std::index::at(*unsafe { nikaia_std::proven::read(&atom.row.cols, (i) as usize) } as i64));
+                i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+            }
+            truth.push(match atom.rel {
+                SvRel::Lt => sum < 0,
+                _ => sum <= 0,
+            });
+        }
+        a = unsafe { nikaia_std::proven::add::<i64>(a, 1) };
+    }
+    for clause in cnf.query.clauses.iter() {
+        let mut ok = false;
+        for l in clause.iter() {
+            let l = nikaia_std::num::value(l);
+            let t = *nikaia_std::index::get(&truth, nikaia_std::index::at((l / 2u32) as i64));
+            let positive = l % 2u32 == 0u32;
+            if positive == t { ok = true; }
+        }
+        if !ok { return false; }
+    }
+    true
+}
+
+#[cfg(test)]
+pub(crate) fn sv_cnf_test_extends(cnf: &SvCnf, values: &mut Vec<i64>, free: &[i64], at: i64) -> bool {
+    if at == free.len() as i64 {
+        let mut defs = 0;
+        for d in cnf.definition.iter() {
+            let d = nikaia_std::num::value(d);
+            if d { defs += 1; }
+        }
+        let mut bits: i64 = 0;
+        while bits < 1 << defs {
+            if sv_cnf_test_holds(cnf, &values, bits) { return true; }
+            bits += 1;
+        }
+        return false;
+    }
+    let mut v: i64 = -3;
+    while v <= 3 {
+        { let __nikaia_stored = v; nikaia_std::index::set(&mut *values, nikaia_std::index::at(*nikaia_std::index::get(&free, nikaia_std::index::at(at))), __nikaia_stored); }
+        if sv_cnf_test_extends(cnf, values, free, unsafe { nikaia_std::proven::add::<i64>(at, 1) }) { return true; }
+        v = unsafe { nikaia_std::proven::add::<i64>(v, 1) };
+    }
+    false
+}
+
+#[cfg(test)]
+pub(crate) fn sv_cnf_test_show(name: &str, arena: &TermArena, facts: &[i64], goal: i64) -> String {
+    let mut out = format!("{}\n", name);
+    let mut why = lg_why();
+    let made = sv_cnf(arena, &facts, goal, &mut why);
+    let cnf = match made { Some(__nikaia_value) => __nikaia_value, None => {
+        let reason = match why.unknown {
+            LgUnknown::OutsideTheTheory => "outside the theory",
+            LgUnknown::Overflow => "overflow",
+            _ => "unknown",
+        };
+        return nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  refused: {}\n", reason)));
+    } };
+    let mut a: i64 = 0; #[allow(clippy::redundant_locals)] let cnf = cnf;
+    while ((a) as usize) < cnf.query.atoms.len() {
+        let atom = (*unsafe { nikaia_std::proven::read(&cnf.query.atoms, (a) as usize) }).clone();
+        if *nikaia_std::index::get(&cnf.definition, (a) as usize) { out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  a{}: definition {} <= 0\n", a, sv_cnf_test_row(&atom.row, &cnf.names)))); } else {
+            let rel = match atom.rel {
+                SvRel::Lt => "<",
+                SvRel::Le => "<=",
+                SvRel::Eq => "=",
+            };
+            out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  a{}: {} {} 0\n", a, sv_cnf_test_row(&atom.row, &cnf.names), rel)));
+        }
+        a = unsafe { nikaia_std::proven::add::<i64>(a, 1) };
+    }
+    let mut texts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let cnf = cnf;
+    for clause in cnf.query.clauses.iter() {
+        let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for l in clause.iter() {
+            let l = nikaia_std::num::value(l);
+            parts.push(sv_cnf_test_lit(l));
+        }
+        texts.push(format!("[{}]", nikaia_std::block::Text::from(parts.join(" "))));
+    }
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  clauses: {}\n", nikaia_std::block::Text::from(texts.join(" ")))));
+    let mut vars: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut free: Vec<i64> = vec![];
+    let mut c: i64 = 0; #[allow(clippy::redundant_locals)] let cnf = cnf;
+    while c < cnf.names.len() as i64 {
+        let n = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&cnf.names, (c) as usize) }).to_string());
+        if n.starts_with("quot#") { free.push(c); } else if !n.starts_with("def#") { vars.push(c); }
+        c = unsafe { nikaia_std::proven::add::<i64>(c, 1) };
+    }
+    let mut total: i64 = 1; #[allow(clippy::redundant_locals)] let cnf = cnf;
+    for _ in vars.iter() { total = total * 5; }
+    let mut agree = 0; #[allow(clippy::redundant_locals)] let cnf = cnf;
+    let mut models = 0; #[allow(clippy::redundant_locals)] let cnf = cnf;
+    let mut code: i64 = 0; #[allow(clippy::redundant_locals)] let cnf = cnf;
+    while code < total {
+        let mut values: Vec<i64> = vec![];
+        for _ in cnf.names.iter() { values.push(0); }
+        let mut env: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+        let mut rest: i64 = code;
+        for v in vars.iter() {
+            let v = nikaia_std::num::value(v);
+            { let __nikaia_stored = unsafe { nikaia_std::proven::sub::<i64>(rest % 5, 2) }; unsafe { nikaia_std::proven::write(&mut values, (v) as usize, __nikaia_stored) }; }
+            env.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&cnf.names, (v) as usize) }).to_string()), unsafe { nikaia_std::proven::sub::<i64>(rest % 5, 2) });
+            rest = rest / 5;
+        }
+        let mut formula = !sv_cnf_test_bool(arena, goal, &env);
+        for f in facts.iter() {
+            let f = nikaia_std::num::value(f);
+            formula = formula && sv_cnf_test_bool(arena, f, &env);
+        }
+        if formula { models += 1; }
+        if formula == sv_cnf_test_extends(&cnf, &mut values, &free, 0) { agree += 1; }
+        code += 1;
+    }
+    nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  agree on {} of {} values; the formula holds on {}\n", agree, total, models)))
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    let mut t = TermArena::empty();
+    let x = t.var("x");
+    let y = t.var("y");
+    let z = t.var("z");
+    let zero = t.int(0);
+    let one = t.int(1);
+    let two = t.int(2);
+    let no = t.boolean(false);
+    let yes = t.boolean(true);
+    let mut out: String = String::from("");
+    let y1 = t.add(y, one);
+    let lt = t.lt(x, y);
+    let eq = t.equal(x, y1);
+    let not_eq = t.not(eq);
+    let first = t.or(vec![lt, not_eq]);
+    out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_cnf_test_show("x < y or not x = y + 1", &t, &vec![first], no))); __nikaia_value };
+    let ne = t.unequal(x, y);
+    out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_cnf_test_show("x != y", &t, &vec![ne], no))); __nikaia_value };
+    let not_ne = t.not(ne);
+    out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_cnf_test_show("not x != y", &t, &vec![not_ne], no))); __nikaia_value };
+    let x0 = t.le(x, zero);
+    let y0 = t.le(y, zero);
+    let both = t.and(vec![x0, y0]);
+    let x2 = t.ge(x, two);
+    let y_lt = t.lt(y, one);
+    let not_y = t.not(y_lt);
+    let other = t.and(vec![x2, not_y]);
+    let z1 = t.equal(z, one);
+    let nested = t.or(vec![both, other, z1]);
+    out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_cnf_test_show("x <= 0 and y <= 0, or x >= 2 and not y < 1, or z = 1", &t, &vec![nested], no))); __nikaia_value };
+    let le = t.le(x, y);
+    let gt = t.lt(y, x);
+    out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_cnf_test_show("x <= y, y < x: one atom", &t, &vec![le, gt], no))); __nikaia_value };
+    let gz = t.gt(x, zero);
+    let inner = t.or(vec![no, gz]);
+    let folded = t.and(vec![yes, inner]);
+    out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_cnf_test_show("true and (false or x > 0)", &t, &vec![folded], no))); __nikaia_value };
+    let xx = t.sub(x, x);
+    let minus = t.int(-1);
+    let never = t.le(xx, minus);
+    out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_cnf_test_show("x - x <= -1", &t, &vec![never], no))); __nikaia_value };
+    let q = t.quot(x, 2);
+    let q1 = t.ge(q, one);
+    out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_cnf_test_show("x / 2 >= 1", &t, &vec![q1], no))); __nikaia_value };
+    let nonneg = t.ge(x, zero);
+    let pos = t.gt(x, zero);
+    let is0 = t.equal(x, zero);
+    let goal = t.or(vec![pos, is0]);
+    out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_cnf_test_show("x >= 0, goal x > 0 or x = 0", &t, &vec![nonneg], goal))); __nikaia_value };
+    let xy = t.mul(x, y);
+    let product = t.le(xy, one);
+    out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_cnf_test_show("x * y <= 1", &t, &vec![product], no))); __nikaia_value };
+    let expected = vec!["x < y or not x = y + 1", "  a0: x - y + 1 <= 0", "  a1: x - y - 1 <= 0", "  a2: x - y <= 0", "  a3: definition def#0 <= 0", "  clauses: [-a1 a2 -a3] [a1 a3] [-a2 a3] [a0 a3]", "  agree on 25 of 25 values; the formula holds on 21", "x != y", "  a0: x - y + 1 <= 0", "  a1: x - y <= 0", "  clauses: [a0 -a1]", "  agree on 25 of 25 values; the formula holds on 20", "not x != y", "  a0: x - y + 1 <= 0", "  a1: x - y <= 0", "  clauses: [-a0] [a1]", "  agree on 25 of 25 values; the formula holds on 5", "x <= 0 and y <= 0, or x >= 2 and not y < 1, or z = 1", "  a0: x <= 0", "  a1: y <= 0", "  a2: definition def#0 <= 0", "  a3: x - 1 <= 0", "  a4: definition def#1 <= 0", "  a5: z - 1 <= 0", "  a6: z <= 0", "  a7: definition def#2 <= 0", "  clauses: [-a0 -a1 -a2] [a0 a2] [a1 a2] [a1 a3 -a4] [-a1 a4] [-a3 a4] [-a5 a6 -a7] [a5 a7] [-a6 a7] [-a2 -a4 -a7]", "  agree on 125 of 125 values; the formula holds on 69", "x <= y, y < x: one atom", "  a0: x - y <= 0", "  clauses: [a0] [-a0]", "  agree on 25 of 25 values; the formula holds on 0", "true and (false or x > 0)", "  a0: x <= 0", "  clauses: [-a0]", "  agree on 5 of 5 values; the formula holds on 2", "x - x <= -1", "  clauses: []", "  agree on 1 of 1 values; the formula holds on 0", "x / 2 >= 1", "  a0: quot#32 <= 0", "  a1: x + 1 <= 0", "  a2: 2·quot#32 - x <= 0", "  a3: 2·quot#32 - x + 2 <= 0", "  a4: definition def#0 <= 0", "  a5: definition def#1 <= 0", "  a6: 2·quot#32 - x + 1 <= 0", "  a7: 2·quot#32 - x - 1 <= 0", "  a8: definition def#2 <= 0", "  a9: definition def#3 <= 0", "  clauses: [-a0] [-a2 a3 -a4] [a2 a4] [-a3 a4] [a1 -a4 -a5] [-a1 a5] [a4 a5] [a5] [a6 -a7 -a8] [-a6 a8] [a7 a8] [-a1 -a8 -a9] [a1 a9] [a8 a9] [a9]", "  agree on 5 of 5 values; the formula holds on 1", "x >= 0, goal x > 0 or x = 0", "  a0: x + 1 <= 0", "  a1: x <= 0", "  clauses: [-a0] [a1] [a0 -a1]", "  agree on 5 of 5 values; the formula holds on 0", "x * y <= 1", "  refused: outside the theory"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+    let mut t = TermArena::empty();
+    let x = t.var("x");
+    let y = t.var("y");
+    let no = t.boolean(false);
+    let le = t.le(x, y);
+    let gt = t.lt(y, x);
+    let mut why = lg_why();
+    let made = sv_cnf(&t, &vec![le, gt], no, &mut why);
+    if !(made.is_some()) { nikaia_std::abort::assertion_failed("assert(made != null)", None, &[("made", (&&nikaia_std::abort::Operand(&(made))).shown()), ]) };
+    let cnf = match made { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+    let mut s = match sv_sat_of(&cnf.query) { Some(__nikaia_value) => __nikaia_value, None => {
+        if !(false) { nikaia_std::abort::assertion_failed("assert(false)", None, &[]) };
+        return Ok(());
+    } };
+    let answer = s.solve(100);
+    if !(answer == SvSatAnswer::Unsat) { nikaia_std::abort::assertion_failed("assert(answer == SvSatAnswer::Unsat)", None, &[("answer", (&&nikaia_std::abort::Operand(&(answer))).shown()), ("SvSatAnswer::Unsat", (&&nikaia_std::abort::Operand(&(SvSatAnswer::Unsat))).shown()), ]) };
+    let v = sv_check(&cnf.query, &s.book.log.steps);
+    if !(v.ok) { nikaia_std::abort::assertion_failed("assert(v.ok)", None, &[]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn the_clauses_of_a_query_agree_with_its_formula_on_every_small_value() {
+        super::__nikaia_test_0().unwrap()
+    }
+    #[test]
+    fn a_query_refuted_by_its_clauses_alone_is_unsat_and_its_log_checks() {
+        super::__nikaia_test_1().unwrap()
+    }
+}

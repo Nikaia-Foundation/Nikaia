@@ -342,6 +342,7 @@ pub mod runtime {
     clippy::unnecessary_cast,
     clippy::vec_init_then_push,
     clippy::manual_split_once,
+    clippy::cmp_owned,
     unreachable_patterns
 )]
 /// **The compiler's Nikaia** (ADR-294), behind the `compiler` feature (#723):
