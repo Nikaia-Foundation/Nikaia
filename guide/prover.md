@@ -315,7 +315,7 @@ and the check stays.
 
 The prover reads whole numbers and the shapes listed above. A claim outside them is not
 false; the prover cannot say anything about it yet, so the claim is refused or its check
-stays. Each `assert` in this program is true for every call `main` makes, and six of them
+stays. Each `assert` in this program is true for every call `main` makes, and five of them
 lie outside what the prover reads today:
 
 ```nika
@@ -328,12 +328,6 @@ fn area(w: int, h: int) -> int {
     let a = w * h
     assert(a >= 0)                      // a product of two names
     return a
-}
-
-fn larger(a: int, b: int) -> int {
-    let r = if a > b { a } else { b }
-    assert(r >= a)                      // an `if` used as a value
-    return r
 }
 
 fn ratio(a: f64, b: f64) -> f64 {
@@ -363,7 +357,7 @@ fn greeting(name: String) -> String {
 
 fn main() throws {
     let mut c = Counter { n: 0 }
-    println(f"{area(4, 5)} {larger(3, 9)} {ratio(1.0, 4.0)} {total([1, 2])} {bump(c)}")
+    println(f"{area(4, 5)} {ratio(1.0, 4.0)} {total([1, 2])} {bump(c)}")
     println(greeting("Ada"))
 }
 ```
@@ -372,22 +366,20 @@ The report, followed by one `NK1300` error per refused claim (left out here):
 
 ```text
 $ nikaia check --asserts limits.nika
-asserts in limits.nika: 7 - not proved 6 (refused 6, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 1 (proved 0, preconditions proved at every call 1)
-  limits.nika:8  assert(a >= 0)  refused, not proved: `a` is not a whole number the prover reads
-  limits.nika:14  assert(r >= a)  refused, not proved: `r` is not a whole number the prover reads
-  limits.nika:19  assert(b > 0.0)  refused, not proved: `b` is not a whole number the prover reads
-  limits.nika:26  assert(x >= 0)  refused, not proved: `x` is not a whole number the prover reads
-  limits.nika:33  assert(c.n >= 0)  refused, not proved: `c` is not a whole number the prover reads
-  limits.nika:39  assert(name.starts_with("A"))  refused, not proved: it is not a comparison of whole numbers the prover reads
+asserts in limits.nika: 6 - not proved 5 (refused 5, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 1 (proved 0, preconditions proved at every call 1); derived from the callers 1
+  limits.nika:8  assert(a >= 0)  refused, not proved: nothing before it shows it
+  limits.nika:13  assert(b > 0.0)  refused, not proved: `b` is not a whole number the prover reads
+  limits.nika:20  assert(x >= 0)  refused, not proved: `x` is not a whole number the prover reads
+  limits.nika:27  assert(c.n >= 0)  refused, not proved: `c` is not a whole number the prover reads
+  limits.nika:33  assert(name.starts_with("A"))  refused, not proved: it is not a comparison of whole numbers the prover reads
   limits.nika:6  assert(w >= 0 && h >= 0)  precondition of `area`: proved at every call the compiler sees; any other reaches the entry that checks it
+  limits.nika  derived  area: 0 <= w, w <= h, w < h, 0 <= h, proved at the calls on lines 39
 ```
 
 In order, the prover today does not reason about:
 
 * the product of two names, such as `w * h`: its logic is linear arithmetic, so a product is
   a value it knows nothing about;
-* the value of an `if` used as an expression; the same choice written as a `let mut` changed
-  in each branch is followed (see `price` in [Contracts](contracts.md#a-loop-needs-no-invariant));
 * floating-point numbers;
 * what the elements of a list hold: a claim about every element would need a quantifier,
   which its logic does not have;

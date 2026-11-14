@@ -53,7 +53,7 @@ guide/prover.md #3 lowered (as written)  fn evens(xs: Vec[int]) -> i64 {
 guide/prover.md #4 lowered (as written)  fn probe(xs: Vec[i64], h: i64) -> i64 {
 guide/prover.md #5 lowered (as written)  fn first(xs: Vec[int]) -> int {
 guide/prover.md #6 refused (as written) [NK1207]  fn first(xs: Vec[int]) -> int {
-guide/prover.md #7 refused (as written) [NK1300,NK1300,NK1300,NK1300,NK1300,NK1300]  struct Counter {
+guide/prover.md #7 refused (as written) [NK1300,NK1300,NK1300,NK1300,NK1300]  struct Counter {
 guide/prover.md #8 refused (as written) [NK1300]  fn percent(part: int, whole: int) -> int {
 guide/prover.md #9 refused (as written) [NK1300]  fn is_sorted(xs: Vec[int]) -> bool {
 guide/syntax.md #1 lowered (a body)  let x = 10          // immutable: x cannot be assigned …
