@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1376] — 2026-11-14
+
+**Builders' changes (#1595, #1596)**
+- Using a value after handing it to an option that keeps it (`process::run(...; env: e)`, an own function's or method's option) is now NK2105 with a `.clone()` hint, instead of an internal compiler error from rustc.
+- The prover follows a list element as a name (ADR-306 D33): `let mut xs = [2147483647, 0]; xs[0] += k` is refused at a call with k 1 (NK1207), a guard on xs[c] proves xs[c] += 1, and any write through an index, a changing method or a change of c drops what is known.
+
 ## [0.0.1375] — 2026-11-14
 
 **Builders' changes (#1128, #1358, #1361, #1385, #1388, #1445, #1449, #1460, #1476, #1567, #1568, #1569, #1570, #1586, #1588, #1590, #1592)**
