@@ -1011,6 +1011,7 @@ fn a_grammar_rule_type_takes_the_hasher_the_package_fills() {
     // The log is read as a file the program vouches for (ADR-365 D2), so the
     // package fills its maps with trusted keys and the rule's type is `Fast`.
     let source = example
+        .replace("cli::args().nth(1)", "cli::args(trusted: true).nth(1)")
         .replace(
             "fs::map(path, fs::Root::Anywhere)",
             "fs::map(path, fs::Root::Anywhere; trusted: true)",
