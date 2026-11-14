@@ -1,0 +1,356 @@
+name: Suite
+
+# **The suite of one architecture: build once, test in shards, sweep**
+# (#437, the owner's goal of 2026-11-14: a run in minutes). `nikaia.yml` calls
+# it once for x86-64 and, where `scripts/ci-changes.sh` says so, once for
+# 64-bit ARM, with the same jobs, the same shards and the same scripts: one
+# definition, so the two cannot drift. Each architecture builds once - its
+# binaries cannot run on the other - and its shards reuse that build.
+#
+# 64-bit ARM (aarch64 Linux: Graviton, Ampere, a Raspberry Pi 4/5, Apple
+# silicon under Linux): nothing in the tree names the architecture - no
+# `asm!`, no `target_arch`, and the triple the `target` switch names is never
+# handed to `rustc` - so a build there is a native build, and its leg is what
+# says it stays one. The `unsafe` crates' tests run there too (`unsafe_native`):
+# atomics and memory ordering are where a weaker memory model than x86's would
+# show. Their lints and Miri run once, on x86 (`unsafe_crates` in nikaia.yml).
+#
+# What does not depend on the architecture runs on x86 only: the samples, the
+# page examples and the ledgers (`it-1`), and the sweep's allow-list check
+# reads file names, once, for the x86 leg.
+on:
+  workflow_call:
+    inputs:
+      arch:
+        description: "x64 or arm64: names the artifacts and the cache"
+        required: true
+        type: string
+      runner:
+        description: "the runner label of that architecture"
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # **Build once, test in parallel** (the owner's goal, 2026-11-14: a run in
+  # minutes, not 40-70). The full suite was one `cargo test` on four threads:
+  # the 2885 short tests were done after 27 minutes, and twelve whole-tree
+  # tests held the step to 43 - the compiler's test package at both settings
+  # alone took 38 minutes. Now `build` compiles the workspace and every test
+  # binary once and hands `target/release` on as an artifact; each `test`
+  # shard runs its part of the binaries directly (no second `cargo`, which
+  # would rebuild every workspace crate after a fresh checkout) and sweeps
+  # the programs its tests accepted; `sweep` checks the allow-list against
+  # the dumps of all shards.
+  #
+  # One toolchain per leg (ADR-001 D1): `rust-toolchain.toml` names it and
+  # `rustup show` installs exactly that.
+  build:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install the toolchain the repository names
+        run: rustup show
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-stable-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-stable-
+
+      - name: Build the workspace
+        run: cargo build --workspace --release
+
+      # Every test binary and the directory cargo would run it in (its
+      # package's), one per line: what the shards run.
+      - name: Build the tests
+        run: |
+          set -o pipefail
+          cargo test --workspace --release --no-run --message-format=json |
+            jq -r 'select(.reason == "compiler-artifact" and .profile.test == true and .executable != null)
+                   | "\(.executable)\t\(.manifest_path | sub("/Cargo.toml$"; ""))"' |
+            sort -u >target/release/test-binaries.tsv
+          cat target/release/test-binaries.tsv
+
+      # The compiler, `std`'s rlibs (the tests hand emitted programs to rustc
+      # with `--extern` into `deps/`) and the test binaries; not cargo's
+      # bookkeeping. Every shard runs on the same path, so the paths compiled
+      # into the binaries (`CARGO_BIN_EXE_nikaia`, the checkout) hold there.
+      - name: Pack the build
+        run: tar --exclude=target/release/incremental --exclude=target/release/.fingerprint -I 'zstd -T0 -1' -cf "$RUNNER_TEMP/release.tar.zst" target/release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-build-${{ inputs.arch }}
+          path: ${{ runner.temp }}/release.tar.zst
+          retention-days: 1
+          compression-level: 0
+
+  # The `unsafe` crates' own tests on ARM, natively, beside the build (the
+  # memory-model check; lints and Miri run on x86 in nikaia.yml).
+  unsafe_native:
+    if: inputs.arch == 'arm64'
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install the toolchain the repository names
+        run: rustup show
+
+      - name: Test the unsafe crates
+        run: |
+          for dir in crates/unsafe/*/; do
+            echo "::group::$dir"
+            (cd "$dir" && cargo test --quiet --all-features)
+            echo "::endgroup::"
+          done
+
+  # **The suite, in shards that run at once.** `it-K` is every K-th short
+  # test of the `it` binary (round-robin over the sorted names, so each module
+  # spreads over all three), `it-0` also every other test binary; `heavy-*`
+  # are the whole-tree tests, two or three to a runner where they fit beside
+  # each other; `compiler-K` is every K-th program of `tests/compiler`, at
+  # both settings - the test `the_compiler_test_package_passes_at_both_settings`
+  # runs that package in one go and is skipped in the `it` shards for it.
+  # A new whole-tree test that makes an `it` shard slow belongs in `HEAVY`.
+  test:
+    needs: build
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - it-0
+          - it-1
+          - it-2
+          - heavy-map-trust
+          - heavy-sysroot-cores
+          - heavy-sysroot-pair
+          - heavy-corpus
+          - heavy-rest
+          - compiler-0
+          - compiler-1
+          - compiler-2
+          - compiler-3
+          - compiler-4
+          - compiler-slow-solver_cnf
+          - compiler-slow-prove_a_read_after_many_lists
+        # **The one-thread lowering runs weekly and by hand only** (CI speed):
+        # it is the whole tools package again on one core, the longest shard
+        # of a push (7 min), and `heavy-sysroot-pair` lowers the same package
+        # on every core against the committed bytes on every push, with a
+        # different interleaving of files on threads each time.
+        exclude:
+          - shard: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'none' || 'heavy-sysroot-cores' }}
+    env:
+      SHARD: ${{ matrix.shard }}
+      IT_SHARDS: 3
+      COMPILER_SHARDS: 5
+      # The programs of tests/compiler that take minutes on their own (one
+      # `nikaia` run over the solver's sources; one proof): each has a
+      # `compiler-slow-NAME` shard and is left out of `compiler-K`.
+      COMPILER_SLOW: solver_cnf prove_a_read_after_many_lists
+      # The whole-tree tests of `it`, by shard; every one is skipped in `it-K`.
+      HEAVY_MAP_TRUST: map_trust::the_real_tools_package_lowers_the_same_read_backwards
+      HEAVY_SYSROOT_CORES: sysroot::the_tools_lower_the_same_on_one_thread_as_on_every_core
+      HEAVY_SYSROOT_PAIR: >-
+        sysroot::the_committed_rust_is_what_this_compiler_lowers
+      HEAVY_CORPUS: >-
+        sequences::the_corpus_has_no_more_unanswered_method_calls_than_it_had
+        language::the_build_time_package_passes_its_own_tests
+      HEAVY_REST: >-
+        project::the_http_package_serves_its_example
+        bytes::the_corpus_needs_no_tether
+        contracts::a_toolchain_module_is_not_part_of_std
+        fmt::every_nika_file_formats_to_the_same_tree_and_a_fixed_point
+      HEAVY_ELSEWHERE: nikaia_test::the_compiler_test_package_passes_at_both_settings
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install the toolchain the repository names
+        run: rustup show
+
+      # The crates.io sources the tests' own Cargo builds read offline (a
+      # test that builds a Rust library resolves `winnow`'s dependencies).
+      - name: Restore the cargo registry
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-stable-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-stable-
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-build-${{ inputs.arch }}
+          path: ${{ runner.temp }}
+
+      - name: Unpack the build
+        run: tar -I zstd -xf "$RUNNER_TEMP/release.tar.zst"
+
+      # Each one-file program a checker test accepts is written to the dump
+      # this shard sweeps (#705).
+      - name: Test
+        env:
+          NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
+        run: |
+          set -o pipefail
+          # As `cargo test` runs a test binary: with the toolchain's libraries
+          # on the loader's path (a program a test builds with `nikaia run`
+          # links `std` dynamically and was only ever run so), and with
+          # rustup's homes and toolchain fixed, as its proxy sets them (a test
+          # that moves HOME still finds `cargo`, `rustc` and the registry).
+          export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+          export RUSTUP_TOOLCHAIN="$(rustup show active-toolchain | cut -d' ' -f1)"
+          sysroot=$(rustc --print sysroot)
+          export LD_LIBRARY_PATH="$sysroot/lib:$(rustc --print target-libdir)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
+          itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
+          heavy="$HEAVY_MAP_TRUST $HEAVY_SYSROOT_CORES $HEAVY_SYSROOT_PAIR $HEAVY_CORPUS $HEAVY_REST $HEAVY_ELSEWHERE"
+          run_it() { (cd "$itdir" && "$it" --exact "$@"); }
+          case "$SHARD" in
+          it-*)
+            k=${SHARD#it-}
+            (cd "$itdir" && "$it" --list --format terse) | sed -n 's/: test$//p' | sort >"$RUNNER_TEMP/all"
+            printf '%s\n' $heavy | sort >"$RUNNER_TEMP/heavy"
+            comm -23 "$RUNNER_TEMP/all" "$RUNNER_TEMP/heavy" |
+              awk -v k="$k" -v n="$IT_SHARDS" 'NR % n == k' >"$RUNNER_TEMP/mine"
+            echo "$(wc -l <"$RUNNER_TEMP/mine") of $(wc -l <"$RUNNER_TEMP/all") tests of it"
+            status=0
+            xargs -a "$RUNNER_TEMP/mine" -d '\n' sh -c 'd=$0 b=$1; shift; cd "$d" && exec "$b" --exact "$@"' "$itdir" "$it" 2>&1 |
+              tee "$RUNNER_TEMP/test.log" || status=1
+            if [ "$k" = 0 ]; then
+              while IFS="$(printf '\t')" read -r bin dir; do
+                [ "$bin" = "$it" ] && continue
+                echo "::group::$bin"
+                (cd "$dir" && "$bin") 2>&1 | tee -a "$RUNNER_TEMP/test.log" || status=1
+                echo "::endgroup::"
+              done <target/release/test-binaries.tsv
+            fi
+            exit $status
+            ;;
+          heavy-*)
+            var=HEAVY_$(echo "${SHARD#heavy-}" | tr 'a-z-' 'A-Z_')
+            eval "names=\$$var"
+            run_it $names 2>&1 | tee "$RUNNER_TEMP/test.log"
+            ;;
+          compiler-*)
+            k=${SHARD#compiler-}
+            case "$k" in
+            slow-*) filters="--filter ${k#slow-}" ;;
+            *)
+              printf '%s\n' $COMPILER_SLOW | sort >"$RUNNER_TEMP/slow"
+              filters=$(ls tests/compiler/tests/*.nika | sed 's|.*/||; s|\.nika$||' | sort |
+                comm -23 - "$RUNNER_TEMP/slow" |
+                awk -v k="$k" -v n="$COMPILER_SHARDS" 'NR % n == k {printf " --filter %s", $0}')
+              ;;
+            esac
+            # As the test `the_compiler_test_package_passes_at_both_settings` runs it.
+            # No dump: `nikaia test` builds every one of these programs with rustc
+            # itself, so the accepted-sweep would only check and prove them again.
+            env -u CARGO_TARGET_DIR -u RUST_BACKTRACE -u NIKAIA_DUMP_ACCEPTED NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" \
+              ./target/release/nikaia test --both-settings --project tests/compiler $filters 2>&1 |
+              tee "$RUNNER_TEMP/test.log"
+            ;;
+          esac
+
+      - name: Name the failing tests
+        if: failure()
+        run: |
+          grep -E '^test .* FAILED|\.\.\. FAILED' "$RUNNER_TEMP/test.log" | sed 's/^/::error::/' | head -50 || true
+          awk '/^failures:$/{f=1;next} /^test result/{f=0} f&&/^    /{print "::error::failed: "$1}' "$RUNNER_TEMP/test.log" | sort -u | head -50 || true
+
+      # What were the bootstrap job's last steps; they need the compiler only.
+      - name: The samples, the page examples and the ledgers
+        if: matrix.shard == 'it-1' && inputs.arch == 'x64'
+        env:
+          NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
+        run: |
+          export PATH="$PWD/target/release:$PATH"
+          for sample in tests/samples/*.nika; do
+            echo "::group::$sample"
+            nikaia interpret "$sample"
+            echo "::endgroup::"
+          done
+          (cd tests/page-examples && nikaia test)
+          # The ledgers of tests/compiler are committed like a lockfile
+          # (ADR-268 D2, D6): a change to its src/ that leaves them stale fails.
+          (cd tests/compiler && nikaia build --locked)
+
+      # The accepted-programs sweep (#705) of this shard's own dump, right
+      # after its tests: no job waits for the slowest shard to sweep them all.
+      - name: Accepted-programs sweep of this shard (accepted-sweep)
+        if: success() || failure()
+        env:
+          NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
+          NIKAIA_SWEEP_PART: '1'
+        run: |
+          set -o pipefail
+          mkdir -p "$NIKAIA_DUMP_ACCEPTED"
+          echo "$(ls "$NIKAIA_DUMP_ACCEPTED" | wc -l) dumped programs"
+          it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
+          itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
+          (cd "$itdir" && "$it" accepted_sweep:: --ignored) 2>&1 | tee "$RUNNER_TEMP/sweep.log"
+
+      - name: Name the sweep's failures
+        if: failure()
+        run: |
+          grep -E '^[0-9a-f]{16} \(|^error(\[E[0-9]+\])?:|^[0-9]+ programs: |panicked at' "$RUNNER_TEMP/sweep.log" | head -60 | sed 's/^/::error::/' || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accepted-${{ inputs.arch }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/accepted
+          retention-days: 1
+          if-no-files-found: ignore
+
+  # **Every entry of the sweep's allow-list is still checked** (#705). Each
+  # shard sweeps its own dump (`NIKAIA_SWEEP_PART`) and judges only the
+  # entries that dump holds; whether an entry is in no dump at all - no test
+  # checks that program any more - needs the dumps of all shards. It reads
+  # their file names only, so it takes seconds after the slowest shard, and
+  # runs for the x86 leg only: which programs the tests emit does not depend
+  # on the architecture, and the ARM leg skips the samples, whose programs
+  # are in the list too.
+  sweep:
+    needs: test
+    if: always() && inputs.arch == 'x64' && needs.test.result != 'skipped' && needs.test.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: accepted-${{ inputs.arch }}-*
+          path: ${{ runner.temp }}/accepted
+          merge-multiple: true
+
+      - name: Every allow-list entry is in some shard's dump
+        run: |
+          mkdir -p "$RUNNER_TEMP/accepted"
+          echo "$(ls "$RUNNER_TEMP/accepted" | wc -l) dumped programs"
+          status=0
+          for hash in $(sed -n '/^const KNOWN/,/^];/p' crates/nikaia/tests/it/accepted_sweep.rs | grep -o '"[0-9a-f]\{16\}"' | tr -d '"'); do
+            if ! ls "$RUNNER_TEMP/accepted" | grep -q -- "-$hash\.nika$"; then
+              echo "::error::$hash is no longer checked by any test: take it off the allow-list in crates/nikaia/tests/it/accepted_sweep.rs"
+              status=1
+            fi
+          done
+          exit $status

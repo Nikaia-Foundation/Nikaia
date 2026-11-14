@@ -1,9 +1,11 @@
 #!/bin/sh
 # Every crate under crates/unsafe/ holds one `unsafe` topic and is checked on
 # its own (ADR-218): its tests and lints on stable, and Miri under both of its
-# aliasing models on nightly.
+# aliasing models on nightly. With arguments, only those crate directories
+# (CI checks each crate on its own runner, side by side).
 set -e
-for dir in crates/unsafe/*/; do
+[ $# -gt 0 ] || set -- crates/unsafe/*/
+for dir in "$@"; do
     echo "== $dir"
     (
         cd "$dir"
