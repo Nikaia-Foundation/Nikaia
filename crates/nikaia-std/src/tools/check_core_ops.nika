@@ -503,7 +503,9 @@ pub fn check_core_ops_binary[H: CheckHost](mut state: CheckState, world: ref Che
     state.flow.reaching = reach?.clone()
     let mut walked_right: Ty = Ty::Unknown
     if check_core_ops_logical(op) {
+        state.flow.short_circuited += 1
         walked_right = check_core_ops_proved_expr(state, world, host, lhs, check_core_ops_and(op), rhs, span)
+        state.flow.short_circuited -= 1
     } else {
         walked_right = check_core_expr(state, world, host, rhs, span)
     }

@@ -1,0 +1,9 @@
+// #1567: a divisor the checker folds to zero on the right of `&&` / `||`
+// runs only where the left side lets it, so it is no certain `NK1118`; the
+// walk reads the guard and proves `d != 0` there.
+
+fn main() throws {
+	let d = 0
+	println(f"{d == 0 || 10 / d > 1}")
+	println(f"{d != 0 && 10 % d > 1}")
+}

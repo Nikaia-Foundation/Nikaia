@@ -107,7 +107,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn divisor_is_not_zero(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, rhs: &Expr, span: &Span) {
-        if !note_a_division(&op) { return; }
+        if !note_a_division(&op) || self.flow.short_circuited > 0 { return; }
         let divisor = match self.constant_of(world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return };
         if divisor.beyond || divisor.value.magnitude != 0u64 { return; }
         self.facts.zero_divisors.insert(id_of(rhs) as i64);
