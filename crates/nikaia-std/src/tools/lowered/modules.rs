@@ -383,6 +383,14 @@ pub fn modules_reach_of(items: &[Spanned<Item>], words: &winnow_grammar::Interne
                     }
                 }
             },
+            Item::Struct { name, is_public, is_extern, .. } => {
+                let is_extern = *is_extern; let is_public = *is_public; let name = *name;
+                if !is_public && !is_extern { called = nikaia_std::block::Text::from(words.resolve(name).to_string()); }
+            },
+            Item::Enum { name, is_public, is_extern, .. } => {
+                let is_extern = *is_extern; let is_public = *is_public; let name = *name;
+                if !is_public && !is_extern { called = nikaia_std::block::Text::from(words.resolve(name).to_string()); }
+            },
             Item::Test { .. } => { is_test = true; },
             _ => { },
         }
@@ -392,6 +400,12 @@ pub fn modules_reach_of(items: &[Spanned<Item>], words: &winnow_grammar::Interne
     }
     let mut k: i64 = 0;
     for (word, start) in modules_call_starts(source) {
+        while ((k) as usize) < items.len() && start >= unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span.end as i64 { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
+        if ((k) as usize) >= items.len() { break; }
+        if start >= unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span.start as i64 { (*unsafe { nikaia_std::proven::slot(&mut calls, (k) as usize) }).insert(nikaia_std::block::Text::from(word.to_string())); }
+    }
+    k = 0;
+    for (word, start) in modules_type_words(source) {
         while ((k) as usize) < items.len() && start >= unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span.end as i64 { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
         if ((k) as usize) >= items.len() { break; }
         if start >= unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span.start as i64 { (*unsafe { nikaia_std::proven::slot(&mut calls, (k) as usize) }).insert(nikaia_std::block::Text::from(word.to_string())); }
@@ -482,6 +496,31 @@ pub(crate) fn modules_call_starts(text: &str) -> Vec<(String, i64)> {
     out
 }
 
+pub(crate) fn modules_type_words(text: &str) -> Vec<(String, i64)> {
+    let mut out: Vec<(String, i64)> = vec![];
+    let mut word: String = String::from("");
+    let mut start = 0;
+    let mut before: i64 = 32;
+    let mut at = 0;
+    for b in text.bytes() {
+        let c = b as i64;
+        let in_word = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95;
+        if in_word {
+            if word.is_empty() { start = at; }
+            word.push_str(&format!("{}", (u8::try_from(c).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char));
+        } else {
+            if !word.is_empty() {
+                let first = nikaia_std::index::or(word.bytes().next(), || 0);
+                if before != 46 && first >= 65 && first <= 90 { out.push((nikaia_std::block::Text::from(word.to_string()), start)); }
+                word = String::from("");
+            }
+            before = c;
+        }
+        at += 1;
+    }
+    out
+}
+
 pub(crate) fn modules_close_over(names: &mut collections::BTreeSet<String>, candidates: &collections::BTreeMap<String, i64>, mentions: &[collections::BTreeSet<String>]) {
     loop {
         let mut added: Vec<String> = vec![];
@@ -510,6 +549,8 @@ pub fn modules_mark_test_only(items: &mut Vec<Spanned<Item>>, only_tests: &colle
                     None => { },
                 }
             },
+            Item::Struct { name, .. } => { marked = only_tests.contains(words.resolve(name)); },
+            Item::Enum { name, .. } => { marked = only_tests.contains(words.resolve(name)); },
             _ => { },
         }
         if marked {
@@ -973,6 +1014,16 @@ pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(test)]
+pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
+    let a = modules_reach_test_file(&vec![("ARun", false, vec![]), ("a_check", false, vec!["ARun"]), ("AKept", false, vec![]), ("", false, vec!["AKept"])]);
+    let b = modules_reach_test_file(&vec![("", true, vec!["a_check", "AKept"])]);
+    let found = modules_only_tests_package(&vec![a, b]);
+    let out = modules_reach_test_shown(&found);
+    if !(out == "[ARun a_check]\n[]\n") { nikaia_std::abort::assertion_failed("assert(out == \"[ARun a_check]\\n[]\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ]) };
+    Ok(())
+}
+
 
 #[cfg(test)]
 mod nikaia_tests {
@@ -987,5 +1038,9 @@ mod nikaia_tests {
     #[test]
     fn a_name_two_files_declare_is_never_test_only_1160() {
         super::__nikaia_test_2().unwrap()
+    }
+    #[test]
+    fn a_type_only_test_only_helpers_name_is_test_only_one_an_impl_names_is_not_1160() {
+        super::__nikaia_test_3().unwrap()
     }
 }

@@ -627,10 +627,11 @@ pub fn modules_test_only_mark() -> String {
 
 /// **What one file of a package gives the test-only reach** (#1160), item by
 /// item in the file's order: the name of each private function without a
-/// receiver (`""` for any other item), whether the item is a `test` block,
-/// and the plain names its text calls (`modules_call_starts`), in a comment
-/// or a string too. The files of a package share one namespace, so the reach
-/// is worked out over all of them (`modules_only_tests_package`).
+/// receiver and of each private struct or enum (`""` for any other item),
+/// whether the item is a `test` block, and the plain names its text calls
+/// (`modules_call_starts`) or the type names it writes (`modules_type_words`),
+/// in a comment or a string too. The files of a package share one namespace,
+/// so the reach is worked out over all of them (`modules_only_tests_package`).
 pub struct ModulesReach {
     names: Vec[String],
     tests: Vec[bool],
@@ -655,6 +656,16 @@ pub fn modules_reach_of(items: ref Vec[Spanned[Item]], words: ref winnow_grammar
                     }
                 }
             },
+            Item::Struct { name, is_public, is_extern, .. } => {
+                if !is_public && !is_extern {
+                    called = words.resolve(name).clone()
+                }
+            },
+            Item::Enum { name, is_public, is_extern, .. } => {
+                if !is_public && !is_extern {
+                    called = words.resolve(name).clone()
+                }
+            },
             Item::Test { .. } => { is_test = true },
             else => {},
         }
@@ -676,13 +687,27 @@ pub fn modules_reach_of(items: ref Vec[Spanned[Item]], words: ref winnow_grammar
             calls[k].insert(word.clone())
         }
     }
+    // A type is named, not called: each word that starts with a capital.
+    k = 0
+    for (word, start) in modules_type_words(source) {
+        while k < items.len() && start >= items[k].span.end as i64 {
+            k += 1
+        }
+        if k >= items.len() {
+            break
+        }
+        if start >= items[k].span.start as i64 {
+            calls[k].insert(word.clone())
+        }
+    }
     return ModulesReach { names: names, tests: tests, calls: calls }
 }
 
-/// **The private functions of a package that only `test` blocks reach**
-/// (#1160), by name, one set per file of `parts` (`modules_reach_of`): a
-/// function without a receiver and not `pub`, called by a `test` block of any
-/// file or by another such function, and by nothing else - no other item of
+/// **The private functions and types of a package that only `test` blocks
+/// reach** (#1160), by name, one set per file of `parts` (`modules_reach_of`):
+/// a function without a receiver and not `pub`, or a struct or an enum not
+/// `pub` (an `impl` of it is no test, so keeps it), called or named by a
+/// `test` block of any file or by another such item, and by nothing else - no other item of
 /// any file. A name two files declare is no such function. A local of the
 /// same name (`let foreign = ...`, `ours[i]`) is no call. Lowered under
 /// `#[cfg(test)]`, such a function is not dead code to a build without the
@@ -796,6 +821,38 @@ fn modules_call_starts(text: ref String) -> Vec[(String, i64)] {
     return out
 }
 
+// Each word of `text` that starts with a capital, not after a `.`, with the
+// byte it starts at: the names of types. A word in a comment or a string
+// counts too.
+fn modules_type_words(text: ref String) -> Vec[(String, i64)] {
+    let mut out: Vec[(String, i64)] = []
+    let mut word: String = ""
+    let mut start = 0
+    let mut before = 32
+    let mut at = 0
+    for b in text.bytes() {
+        let c = b as i64
+        let in_word = (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95
+        if in_word {
+            if word.is_empty() {
+                start = at
+            }
+            word.push_str(f"{(c as u8) as char}")
+        } else {
+            if !word.is_empty() {
+                let first = word.bytes().next() ?? 0
+                if before != 46 && first >= 65 && first <= 90 {
+                    out.push((word.clone(), start))
+                }
+                word = ""
+            }
+            before = c
+        }
+        at += 1
+    }
+    return out
+}
+
 // `names` with every candidate a candidate in it mentions, until nothing new
 // is added.
 fn modules_close_over(mut names: collections::BTreeSet[String], candidates: ref collections::BTreeMap[String, i64], mentions: ref Vec[collections::BTreeSet[String]]) {
@@ -840,6 +897,12 @@ pub fn modules_mark_test_only(mut items: Vec[Spanned[Item]], only_tests: ref col
                     },
                     null => {},
                 }
+            },
+            Item::Struct { name, .. } => {
+                marked = only_tests.contains(words.resolve(name))
+            },
+            Item::Enum { name, .. } => {
+                marked = only_tests.contains(words.resolve(name))
             },
             else => {},
         }
@@ -1517,4 +1580,12 @@ test "a name two files declare is never test-only (#1160)" {
     let found = modules_only_tests_package([a, b])
     let out = modules_reach_test_shown(found)
     assert(out == "[]\n[]\n")
+}
+
+test "a type only test-only helpers name is test-only, one an impl names is not (#1160)" {
+    let a = modules_reach_test_file([("ARun", false, []), ("a_check", false, ["ARun"]), ("AKept", false, []), ("", false, ["AKept"])])
+    let b = modules_reach_test_file([("", true, ["a_check", "AKept"])])
+    let found = modules_only_tests_package([a, b])
+    let out = modules_reach_test_shown(found)
+    assert(out == "[ARun a_check]\n[]\n")
 }
