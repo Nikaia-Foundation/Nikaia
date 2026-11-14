@@ -747,13 +747,16 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     fs::write(project.join("nikaia.toml"), fs::Root::Anywhere, f"[package]\nname = \"program_test\"\nversion = \"0.1.0\"\n{dependency}")
     let written = f"tests/{program.name}.nika"
     // **Run from the batch, where it is in one** (`project_tests_batches`):
-    // a pass there is the verdict; anything else is built and run alone.
+    // a pass that wrote nothing on standard error is the verdict; anything
+    // else is built and run alone. What a run writes there - a panic's place,
+    // a warning of the build - names the batch's Rust, which is not the
+    // program's own and differs between the settings.
     match batched {
         null => {},
         batch => {
             let out = host.ran_batched(batch.binary, program.name, root, own, program.stdin)
             let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(out.stderr, batch.entry, written, root))
-            if outcome.passed {
+            if outcome.passed && out.stderr.len() == 0 {
                 return outcome
             }
             project_tests_empty_but(own, "project")

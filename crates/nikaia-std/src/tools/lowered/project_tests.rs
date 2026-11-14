@@ -611,7 +611,7 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
         Some(batch) => {
             let out = host.ran_batched(&batch.binary, &program.name, root, own, &program.stdin)?;
             let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&out.stderr, &batch.entry, &written, root));
-            if outcome.passed { return Ok(outcome); }
+            if outcome.passed && out.stderr.is_empty() { return Ok(outcome); }
             project_tests_empty_but(own, "project")?;
         },
     }
