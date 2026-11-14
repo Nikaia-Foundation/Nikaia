@@ -369,3 +369,121 @@ fn sv_nl_candidates(defs: ref Vec[SvNl], values: ref collections::BTreeMap[Strin
 	}
 	return out
 }
+
+// --- Tests: non-linear terms as the measuring rod answers them (moved from
+// `tests/compiler/tests/solver_nonlinear.nika`, which compiled the solver anew
+// in a program of its own on every run): each line is the runner's answer,
+// then the lemmas the last round used and, where one has a number, the check
+// of the proof with it changed by one (the checker re-derives another formula
+// and the log fails on it). `irrational` (`x*x = 2`) has no rational model:
+// the loop gives up after its rounds ---
+
+// The lemmas of `source`'s last round and, where one has a number, the check
+// of the proof with it changed.
+fn sv_nl_test_lemmas(source: String) -> String {
+	let mut reals: collections::BTreeSet[String] = collections::BTreeSet()
+	let mut defs: Vec[SvNl] = []
+	let script = match sv_smtlib_script(source) {
+		SvSmtRead::Script(s, sorts) => {
+			reals = sorts.reals.clone()
+			defs = sorts.nl.clone()
+			s.clone()
+		},
+		SvSmtRead::Failed(_) => {
+			return ""
+		},
+	}
+	let mut arena = script.arena.clone()
+	let goal = arena.boolean(false)
+	let nl = sv_nl_engine(arena, script.assertions, goal, lg_budget(), "both", reals, "", defs) ?? return ""
+	let mut names: Vec[String] = []
+	for l in nl.lemmas {
+		names.push(l.schema.clone())
+	}
+	let out = f"; lemmas [{names.join(", ")}]"
+	let steps = match nl.run.driven {
+		SvDriven::Proved(_, s) => s.clone(),
+		else => {
+			return out
+		},
+	}
+	let mut changed = nl.lemmas.clone()
+	for i in 0..<changed.len() {
+		let s = changed[i].schema.clone()
+		if s == "point" || s == "tangent" || s == "pow2-point" {
+			changed[i].a = sv_rat_add(changed[i].a, sv_int(1)) ?? return out
+		} else if s == "divpoint" || s == "division" {
+			changed[i].b = sv_rat_add(changed[i].b, sv_int(1)) ?? return out
+		} else {
+			continue
+		}
+		let verdict = match sv_lemma_check(arena, script.assertions, goal, reals, defs, changed, steps) {
+			null => "refused (not an instance)",
+			v => if v.ok { "accepted" } else { "refused" },
+		}
+		return f"{out}; changed {s}: {verdict}"
+	}
+	return out
+}
+
+// A script of `logic` and `status` over the constants `names` of `sort`.
+fn sv_nl_test_script(logic: String, status: String, sort: String, names: String, asserts: String) -> String {
+	let mut text = f"(set-logic {logic})\n(set-info :status {status})\n"
+	for n in names.split(" ") {
+		text = text + f"(declare-const {n} {sort})\n"
+	}
+	return text + asserts + "(check-sat)\n"
+}
+
+// One line per file: the runner's answer, then the lemmas.
+fn sv_nl_test_lines(files: Vec[(String, String)]) -> String {
+	let mut out: String = ""
+	for (name, text) in files {
+		out = out + f"{name}.smt2: {sv_line(text.clone(), "new")}{sv_nl_test_lemmas(text)}\n"
+	}
+	return out
+}
+
+test "non-linear terms are abstracted and refined with lemmas" {
+	let files = [
+		("sat-abstraction", sv_nl_test_script("QF_NIA", "sat", "Int", "x y", "(assert (= (* x y) 0))\n(assert (= x 0))\n")),
+		("unsat-abstraction", sv_nl_test_script("QF_NIA", "unsat", "Int", "x y", "(assert (> (* x y) 5))\n(assert (< (* y x) 3))\n")),
+		("sat-repaired", sv_nl_test_script("QF_NIA", "sat", "Int", "x y", "(assert (= (int.pow2 x) 8))\n(assert (> y x))\n")),
+		("sat-refined", sv_nl_test_script("QF_NIA", "sat", "Int", "x y", "(assert (= (- x y) (int.pow2 x)))\n")),
+		("arguments", sv_nl_test_script("QF_NIA", "unsat", "Int", "x y", "(assert (= (* (+ x 1) (* 2 y)) 6))\n(assert (= x 0))\n(assert (= y 2))\n")),
+		("square", sv_nl_test_script("QF_NRA", "unsat", "Real", "x", "(assert (< (* x x) 0))\n")),
+		("division", sv_nl_test_script("QF_NIA", "unsat", "Int", "x", "(assert (= (mod x 3) 4))\n")),
+		("remainder", sv_nl_test_script("QF_NIA", "unsat", "Int", "x", "(assert (= (div x 3) 2))\n(assert (= (mod x 3) 1))\n(assert (distinct x 7))\n")),
+		("free", sv_nl_test_script("QF_NRA", "unsat", "Real", "x y", "(assert (= (/ x 0) 1))\n(assert (= (/ y 0) 2))\n(assert (= x y))\n")),
+		("point", sv_nl_test_script("QF_NIA", "unsat", "Int", "x y", "(assert (= x 3))\n(assert (= y 2))\n(assert (= (* x y) 7))\n")),
+		("irrational", sv_nl_test_script("QF_NRA", "sat", "Real", "x", "(assert (= (* x x) 2))\n")),
+	]
+	let out = sv_nl_test_lines(files)
+	let expected = [
+		"sat-abstraction.smt2: refuted 1; lemmas []",
+		"unsat-abstraction.smt2: proved 1; lemmas []",
+		"sat-repaired.smt2: refuted 2; lemmas []",
+		"sat-refined.smt2: refuted 5; lemmas [pow2-low]",
+		"arguments.smt2: proved 3; lemmas [tangent]; changed tangent: refused",
+		"square.smt2: proved 2; lemmas [square]",
+		"division.smt2: proved 1; lemmas [division]; changed division: refused",
+		"remainder.smt2: proved 4; lemmas [division]; changed division: refused",
+		"free.smt2: proved 3; lemmas [congruence, congruence]",
+		"point.smt2: proved 1; lemmas [tangent]; changed tangent: refused",
+		"irrational.smt2: unknown (non-linear, budget) 93; lemmas [zero, tangent, tangent, tangent, tangent, tangent, tangent]",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "a parallel let and a zero denominator are refused with their place" {
+	let files = [
+		("parallel-let", sv_nl_test_script("QF_LIA", "unknown", "Int", "x", "(assert (let ((a x) (b (+ a x))) (> b a)))\n")),
+		("zero-denominator", sv_nl_test_script("QF_LRA", "unknown", "Real", "x y", "(assert (= (+ x y) 5/0))\n")),
+	]
+	let out = sv_nl_test_lines(files)
+	let expected = [
+		"parallel-let.smt2: malformed (a is unbound: a parallel let binds its names only in its body, in assertion 1) 0",
+		"zero-denominator.smt2: malformed (the literal 5/0 has a zero denominator, in assertion 1) 0",
+	]
+	assert(out == expected.join("\n") + "\n")
+}

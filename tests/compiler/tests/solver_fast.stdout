@@ -1,7 +1,0 @@
-interval-unsat.smt2: proved 1/interval
-interval-sat.smt2: refuted 1/interval
-interval-round.smt2: proved 1/interval
-difference-unsat.smt2: proved 4/difference
-difference-sat.smt2: refuted 3/difference
-difference-wide.smt2: proved 12/difference
-choice.smt2: refuted 3

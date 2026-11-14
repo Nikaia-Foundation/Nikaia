@@ -598,3 +598,58 @@ pub(crate) fn sv_real_model_holds(arena: &TermArena, facts: &[i64], goal: i64, v
     !at_goal
 }
 
+#[cfg(test)]
+pub(crate) fn sv_smt_test_family(n: i64, k: i64, total: i64, status: &str, extra: &str) -> String {
+    let mut text = format!("(set-logic QF_LIA)\n(set-info :status {})\n", status);
+    let mut terms: String = String::from("");
+    for i in 1..n + 1 {
+        text = nikaia_std::block::Text::from(nikaia_std::concat::plus(text, format!("(declare-const x{} Int)\n", i)));
+        terms = nikaia_std::block::Text::from(nikaia_std::concat::plus(terms, format!(" x{}", i)));
+    }
+    for i in 1..n + 1 { text = nikaia_std::block::Text::from(nikaia_std::concat::plus(text, format!("(assert (or (= x{} 0) (= x{} {})))\n", i, i, k))); }
+    nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(text, extra)), format!("(assert (= (+{}) {}))\n(check-sat)\n", terms, total)))
+}
+
+#[cfg(test)]
+pub(crate) fn sv_smt_test_lines(files: &[(String, String)]) -> String {
+    let mut out: String = String::from("");
+    for (name, source) in files.iter() {
+        let simplex = sv_line(&nikaia_std::block::Text::from(source.to_string()), "new-simplex");
+        let fm = sv_line(&nikaia_std::block::Text::from(source.to_string()), "new-fm");
+        let both = sv_line(&nikaia_std::block::Text::from(source.to_string()), "new");
+        out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{}.smt2: simplex {}; fm {}; both {}\n", name, simplex, fm, both)));
+        for line in sv_line_stats(source, "new", true).lines() { if line.starts_with("stats:") { out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  {}\n", line))); } }
+    }
+    out
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    let files: Vec<(String, String)> = vec![(String::from("bits-20"), sv_smt_test_family(20, 1, 21, "unsat", "")), (String::from("bits-sat"), sv_smt_test_family(12, 1, 5, "sat", "(assert (<= (+ x1 x2 x3) 1))\n(assert (>= (+ x4 x5) 2))\n"))];
+    let out = sv_smt_test_lines(&files);
+    let expected = vec!["bits-20.smt2: simplex proved 344; fm proved 402; both proved 344", "  stats: conflicts 19, theory conflicts 19, lemmas 41 (repeated 0), decisions 325, restarts 0", "bits-sat.smt2: simplex refuted 49; fm refuted 72; both refuted 49", "  stats: conflicts 9, theory conflicts 0, lemmas 34 (repeated 0), decisions 29, restarts 0"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+    let files: Vec<(String, String)> = vec![(String::from("threes-10"), sv_smt_test_family(10, 3, 16, "unsat", "")), (String::from("branch-depth"), String::from("(set-logic QF_LIA)\n(set-info :status sat)\n(declare-fun x () Int)\n(declare-fun x6 () Int)\n(declare-fun x4 () Int)\n(assert (and (= 0 (+ x6 1 (* 2 x4))) (= 0 (+ (* x 51725) (* x6 241)))))\n(check-sat)\n")), (String::from("bounds"), String::from("(set-logic QF_LIA)\n(set-info :status unsat)\n(declare-const x Int)\n(declare-const y Int)\n(assert (or (< x 0) (> x 10)))\n(assert (<= 0 x 10))\n(assert (= y (+ x 1)))\n(check-sat)\n"))];
+    let out = sv_smt_test_lines(&files);
+    let expected = vec!["threes-10.smt2: simplex proved 1; fm proved 1; both proved 1", "  stats: conflicts 0, theory conflicts 1, lemmas 1 (repeated 0), decisions 0, restarts 0", "branch-depth.smt2: simplex refuted 2; fm refuted 2; both refuted 2", "  stats: conflicts 0, theory conflicts 0, lemmas 0 (repeated 0), decisions 0, restarts 0", "bounds.smt2: simplex proved 0/pre:l2f0; fm proved 0/pre:l2f0; both proved 0/pre:l2f0", "  stats: conflicts 1, theory conflicts 0, lemmas 0 (repeated 0), decisions 0, restarts 0"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn two_way_disjunctions_are_searched_with_learned_clauses_over_each_theory() {
+        super::__nikaia_test_0().unwrap()
+    }
+    #[test]
+    fn a_congruence_a_deep_equality_and_contradicting_bounds_are_answered_before_or_without_search() {
+        super::__nikaia_test_1().unwrap()
+    }
+}

@@ -2975,6 +2975,17 @@ mod sv_proof_lowered {
 pub use sv_proof_lowered::*;
 
 #[allow(unsafe_code)]
+mod sv_rod_line_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/sv_rod_line.rs");
+}
+#[allow(unused_imports)]
+pub use sv_rod_line_lowered::*;
+
+#[allow(unsafe_code)]
 mod sv_row_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -4261,6 +4272,7 @@ pub mod sv_proof {
     #[allow(unused_imports)]
     pub use super::{SvRel, SvAtom, SvQuery, SvSrc, SvStep, SvLog, SvBook, SvClause, SvAsserted, SvExtended};
 }
+pub mod sv_rod_line {}
 pub mod sv_row {
     #[allow(unused_imports)]
     pub use super::{SvRow, SvTerm, sv_row_pick, sv_row_eval, SvVars};

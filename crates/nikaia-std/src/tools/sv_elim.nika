@@ -20,6 +20,8 @@
 // equality whose coefficients' gcd does not divide its constant shows as two
 // bounds whose sum is a positive constant: the GCD test, a Farkas lemma.
 
+use std::collections
+
 /// Whether `r` and `s` have the same columns with opposite coefficients.
 fn sv_opposite(r: ref SvRow, s: ref SvRow) -> bool {
 	if r.cols != s.cols {
@@ -397,4 +399,361 @@ fn sv_eliminate(
 		solved.push(SvSolved { column: x, row: row })
 	}
 	return SvChecked::Consistent
+}
+
+// --- Tests: exact equality elimination as the CDCL(T) engine uses it (moved
+// from `tests/compiler/tests/solver_parity.nika`, which compiled the solver
+// anew in a program of its own on every run): queries Fourier-Motzkin leaves
+// unknown over the integers - an even and an odd value of one `x`, a gcd that
+// does not divide, a sum of n values in `{-1, 1}` for n = 2..12, odd n
+// answered with a model, even n proved with a log that grows linearly in n
+// through `q = ⌊(x+1)/2⌋` per value (#1284 item 2) - answered over the
+// simplex alone, over Fourier-Motzkin with the elimination and its extension,
+// and over both, each proof a log `sv_check` replays ---
+
+// Each query answered over the simplex, over Fourier-Motzkin with the exact
+// equality elimination, and over both, the log of a proof replayed by
+// `sv_check`.
+fn sv_elim_test_answer_kind(answer: ref LgAnswer) -> String {
+	return match answer {
+		LgAnswer::Proved { .. } => "proved",
+		LgAnswer::Refuted { .. } => "refuted",
+		LgAnswer::Unknown { why } => sv_unknown(why),
+	}
+}
+
+fn sv_elim_test_engine(arena: ref TermArena, facts: ref Vec[i64], goal: i64, theory: String) -> String {
+	let run = sv_smt_engine(arena, facts, goal, lg_budget(), theory)
+	return match run.driven {
+		SvDriven::Proved(query, steps) => {
+			let v = sv_check(query, steps)
+			if v.ok { f"proved, log of {steps.len()} steps checked" } else { f"log rejected: {v.reason}" }
+		},
+		SvDriven::Answer(answer) => sv_elim_test_answer_kind(answer),
+		SvDriven::RealModel(_) => "refuted",
+	}
+}
+
+fn sv_elim_test_both(name: String, source: String) -> String {
+	let script = match lg_smtlib_read(source) {
+		LgRead::Script(s) => s.clone(),
+		LgRead::Failed(_) => {
+			return f"{name}: unreadable\n"
+		},
+	}
+	let mut arena = script.arena.clone()
+	let goal = arena.boolean(false)
+	let simplex = sv_elim_test_engine(arena, script.assertions, goal, "simplex")
+	let fm = sv_elim_test_engine(arena, script.assertions, goal, "fm")
+	let both = sv_elim_test_engine(arena, script.assertions, goal, "both")
+	return f"{name}: simplex {simplex}; fm {fm}; both {both}\n"
+}
+
+// `Σ xᵢ = 1` over `n` values `xᵢ ∈ {-1, 1}`: unsat for an even `n`.
+fn sv_elim_test_sum(n: i64) -> String {
+	let mut text: String = "(set-logic QF_LIA)\n"
+	let mut terms: String = ""
+	for i in 1..<n + 1 {
+		text = text + f"(declare-const x{i} Int)\n"
+		terms = terms + f" x{i}"
+	}
+	for i in 1..<n + 1 {
+		text = text + f"(assert (or (= x{i} (- 1)) (= x{i} 1)))\n"
+	}
+	return text + f"(assert (= (+{terms}) 1))\n(check-sat)\n"
+}
+
+test "an even and odd value and a gcd that does not divide are proved with a checked log" {
+	let decl = "(set-logic QF_LIA)\n(declare-const x Int)\n(declare-const n Int)\n(declare-const m Int)\n"
+	let files: Vec[(String, String)] = [
+		("even-odd", decl + "(assert (= x (* 2 n)))\n(assert (= x (+ (* 2 m) 1)))\n(check-sat)\n"),
+		("gcd", decl + "(assert (= (+ (* 6 x) (* 9 n)) (+ (* 3 m) 2)))\n(check-sat)\n"),
+		("even-even", decl + "(assert (= x (* 2 n)))\n(assert (= x (+ (* 4 m) 2)))\n(check-sat)\n"),
+	]
+	let mut out: String = ""
+	for (name, text) in files {
+		out = out + sv_elim_test_both(f"{name}.smt2", text)
+	}
+	let expected = [
+		"even-odd.smt2: simplex proved, log of 10 steps checked; fm proved, log of 10 steps checked; both proved, log of 10 steps checked",
+		"gcd.smt2: simplex proved, log of 4 steps checked; fm proved, log of 4 steps checked; both proved, log of 4 steps checked",
+		"even-even.smt2: simplex refuted; fm refuted; both refuted",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "sums of n values in {-1, 1} are refuted for odd n and proved with a linear log for even n" {
+	let mut out: String = ""
+	for n in 2..<13 {
+		out = out + sv_elim_test_both(f"sum-{n}.smt2", sv_elim_test_sum(n))
+	}
+	let expected = [
+		"sum-2.smt2: simplex proved, log of 54 steps checked; fm proved, log of 56 steps checked; both proved, log of 54 steps checked",
+		"sum-3.smt2: simplex refuted; fm refuted; both refuted",
+		"sum-4.smt2: simplex proved, log of 100 steps checked; fm proved, log of 106 steps checked; both proved, log of 100 steps checked",
+		"sum-5.smt2: simplex refuted; fm refuted; both refuted",
+		"sum-6.smt2: simplex proved, log of 146 steps checked; fm proved, log of 156 steps checked; both proved, log of 146 steps checked",
+		"sum-7.smt2: simplex refuted; fm refuted; both refuted",
+		"sum-8.smt2: simplex proved, log of 192 steps checked; fm proved, log of 206 steps checked; both proved, log of 192 steps checked",
+		"sum-9.smt2: simplex refuted; fm refuted; both refuted",
+		"sum-10.smt2: simplex proved, log of 238 steps checked; fm proved, log of 256 steps checked; both proved, log of 238 steps checked",
+		"sum-11.smt2: simplex refuted; fm refuted; both refuted",
+		"sum-12.smt2: simplex proved, log of 284 steps checked; fm proved, log of 306 steps checked; both proved, log of 284 steps checked",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+// --- Tests: equalities without overflow (moved from
+// `tests/compiler/tests/solver_omega.nika`, which compiled the solver anew in
+// a program of its own on every run): the exact theory eliminates an
+// equality through its coefficient of least magnitude with Pugh's symmetric
+// step, an `Extend` with `m = |a| + 1` whose two bounds, combined with the
+// equality's sides and one rounded, give a unit column; then the columns the
+// steps introduced are reduced pairwise, each an `Extend` with `m = 1`. Each
+// line counts the log's steps by kind and says whether `sv_check` replays it ---
+
+fn sv_omega_test_row1(ks: Vec[i64], c: i64) -> SvRow {
+	let mut terms: Vec[SvTerm] = []
+	let mut i: u32 = 0
+	for k in ks {
+		terms.push(SvTerm { col: i, k: k })
+		i += 1
+	}
+	return sv_row_of(terms, c) ?? sv_row_constant(0)
+}
+
+fn sv_omega_test_le(ks: Vec[i64], c: i64) -> SvAtom {
+	return SvAtom { row: sv_omega_test_row1(ks, c), rel: SvRel::Le }
+}
+
+// `Σ ks_i·x_i + c = 0` as two atoms, `<=` and `>=`, as the reader gives
+// an equality to the exact theory.
+fn sv_omega_test_eq(mut atoms: Vec[SvAtom], ks: Vec[i64], c: i64) {
+	let mut neg: Vec[i64] = []
+	for k in ks {
+		neg.push(-k)
+	}
+	atoms.push(sv_omega_test_le(ks, c))
+	atoms.push(sv_omega_test_le(neg, -c))
+}
+
+// `lo <= x_i <= hi` as two atoms, `x_i` of `n` columns.
+fn sv_omega_test_boxed(mut atoms: Vec[SvAtom], n: i64, i: i64, lo: i64, hi: i64) {
+	let mut down: Vec[i64] = []
+	let mut up: Vec[i64] = []
+	let mut j = 0
+	while j < n {
+		down.push(if j == i { -1 } else { 0 })
+		up.push(if j == i { 1 } else { 0 })
+		j += 1
+	}
+	atoms.push(sv_omega_test_le(down, lo))
+	atoms.push(sv_omega_test_le(up, -hi))
+}
+
+// The log's steps by kind.
+fn sv_omega_test_kinds(steps: ref Vec[SvStep]) -> String {
+	let mut e = 0
+	let mut c = 0
+	let mut r = 0
+	let mut f = 0
+	let mut l = 0
+	for st in steps {
+		match st {
+			SvStep::Extend(..) => { e += 1 },
+			SvStep::Combine(..) => { c += 1 },
+			SvStep::Round(..) => { r += 1 },
+			SvStep::Farkas(..) => { f += 1 },
+			SvStep::Learn(..) => { l += 1 },
+			else => {},
+		}
+	}
+	return f"{e} extend, {c} combine, {r} round, {f} farkas, {l} learn"
+}
+
+// The log with one step broken: `divisor` the first extension's divisor
+// one too large, `round` the first rounding by 1 (none).
+fn sv_omega_test_broken(steps: ref Vec[SvStep], how: String) -> Vec[SvStep] {
+	let mut out: Vec[SvStep] = []
+	let mut extends = 0
+	let mut rounds = 0
+	for st in steps {
+		let mut next = st.clone()
+		match st {
+			SvStep::Extend(l, m, q) => {
+				extends += 1
+				if how == "divisor" && extends == 1 {
+					next = SvStep::Extend(l.clone(), m + 1, q)
+				}
+			},
+			SvStep::Round(id, d) => {
+				rounds += 1
+				if how == "round" && rounds == 1 {
+					next = SvStep::Round(id, 1)
+				}
+			},
+			else => {},
+		}
+		out.push(next)
+	}
+	return out
+}
+
+// Whether every atom holds under `values` (the columns by name).
+fn sv_omega_test_holds(atoms: ref Vec[SvAtom], names: ref Vec[String], values: ref collections::BTreeMap[String, i64]) -> bool {
+	for a in atoms {
+		let mut sum = a.row.constant
+		let mut i = 0
+		while i < a.row.cols.len() {
+			let name = names[a.row.cols[i] as i64].clone()
+			let v = values.get(name) ?? return false
+			sum = sum + a.row.ks[i] * v
+			i += 1
+		}
+		if sum > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Every atom asserted to the exact theory at one level, then a final check;
+// a conflict closed by one learned clause and the log replayed, broken as
+// `how` says where it is not `""`.
+fn sv_omega_test_run(title: String, names: Vec[String], atoms: Vec[SvAtom], how: String) -> String {
+	let mut out: String = ""
+	let n = atoms.len()
+	let mut clauses: Vec[Vec[u32]] = []
+	let mut a: u32 = 0
+	while (a as i64) < n {
+		clauses.push([sv_lit(a, false)])
+		a += 1
+	}
+	let query = SvQuery { atoms: atoms.clone(), clauses: clauses, columns: names.len().checked_u32() ?? 0, reals: [] }
+	let mut book = sv_book(query) ?? return "no book"
+	let mut inputs: Vec[u32] = []
+	let mut i: u32 = 0
+	while (i as i64) < n {
+		inputs.push(book.input(i))
+		i += 1
+	}
+	let budget = lg_budget()
+	let mut theory = sv_theory(names.clone())
+	theory.push_level()
+	let mut got = SvChecked::Consistent
+	let mut j: u32 = 0
+	while (j as i64) < n {
+		got = theory.assert(sv_lit(j, false), book)
+		match got {
+			SvChecked::Consistent => {},
+			else => {
+				break
+			},
+		}
+		j += 1
+	}
+	match got {
+		SvChecked::Consistent => {
+			got = theory.check(true, budget, book)
+		},
+		else => {},
+	}
+	let label = if how == "" { title.clone() } else { f"{title}, {how}" }
+	match got {
+		SvChecked::Conflict(c) => {
+			let mut hints: Vec[u32] = []
+			for l in c.lits {
+				hints.push(inputs[(l / 2) as i64])
+			}
+			hints.push(c.id)
+			book.learn([], hints)
+			let steps = if how == "" { book.log.steps.clone() } else { sv_omega_test_broken(book.log.steps, how) }
+			let v = sv_check(query, steps)
+			let said = if v.ok { "checked" } else { f"rejected at {v.step}: {v.reason}" }
+			out = out + f"  {label}: conflict; {sv_omega_test_kinds(steps)}; {said}\n"
+		},
+		SvChecked::Consistent => {
+			let model = theory.model()
+			let mut values: Vec[String] = []
+			for name in names {
+				let v = model.get(name.clone()) ?? 0
+				values.push(f"{name} = {v}")
+			}
+			let ok = if sv_omega_test_holds(atoms, names, model) { "the atoms hold" } else { "an atom fails" }
+			out = out + f"  {label}: consistent, {values.join(", ")}; {ok}\n"
+		},
+		SvChecked::Unknown(why) => {
+			out = out + f"  {label}: {sv_unknown(why)}\n"
+		},
+		else => {
+			out = out + f"  {label}: lemmas\n"
+		},
+	}
+	return out
+}
+
+// The problem that overflowed i64 before (`replay-early-close-depth-range` of
+// `tests/solver/qflia`): two equalities with five-digit coefficients over
+// `[-5, 5]`.
+fn sv_omega_test_big() -> Vec[SvAtom] {
+	let mut big: Vec[SvAtom] = []
+	sv_omega_test_eq(big, [70241, 76389, 66512, 11267, 9158], -82)
+	sv_omega_test_eq(big, [55644, 74117, -29262, -76416, -75644], 175)
+	let mut v = 0
+	while v < 5 {
+		sv_omega_test_boxed(big, 5, v, -5, 5)
+		v += 1
+	}
+	return big
+}
+
+test "two equalities with five-digit coefficients are refuted without overflow" {
+	let names: Vec[String] = ["a", "b", "c", "d", "e"]
+	let mut out: String = "70241a + 76389b + 66512c + 11267d + 9158e = 82, 55644a + 74117b - 29262c - 76416d - 75644e = -175, -5 <= a..e <= 5\n"
+	out = out + sv_omega_test_run("exact", names, sv_omega_test_big(), "")
+	let expected = [
+		"70241a + 76389b + 66512c + 11267d + 9158e = 82, 55644a + 74117b - 29262c - 76416d - 75644e = -175, -5 <= a..e <= 5",
+		"  exact: conflict; 31 extend, 360 combine, 18 round, 1 farkas, 1 learn; checked",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "the omega test's example is consistent and its model holds" {
+	let mut out: String = "7x + 12y + 31z = 17, 3x + 5y + 14z = 7, 1 <= x <= 40, -50 <= y <= 50\n"
+	let mut omega: Vec[SvAtom] = []
+	sv_omega_test_eq(omega, [7, 12, 31], -17)
+	sv_omega_test_eq(omega, [3, 5, 14], -7)
+	sv_omega_test_boxed(omega, 3, 0, 1, 40)
+	sv_omega_test_boxed(omega, 3, 1, -50, 50)
+	out = out + sv_omega_test_run("exact", ["x", "y", "z"], omega, "")
+	let expected = [
+		"7x + 12y + 31z = 17, 3x + 5y + 14z = 7, 1 <= x <= 40, -50 <= y <= 50",
+		"  exact: consistent, x = 12, y = -3, z = -1; the atoms hold",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "an equality whose gcd does not divide is refuted by the GCD test alone" {
+	let mut out: String = "4x + 6y = 5\n"
+	let mut gcd: Vec[SvAtom] = []
+	sv_omega_test_eq(gcd, [4, 6], -5)
+	out = out + sv_omega_test_run("exact", ["x", "y"], gcd, "")
+	let expected = [
+		"4x + 6y = 5",
+		"  exact: conflict; 0 extend, 2 combine, 2 round, 1 farkas, 1 learn; checked",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "the elimination's log broken twice is rejected each time" {
+	let names: Vec[String] = ["a", "b", "c", "d", "e"]
+	let mut out: String = "broken: the first extension's divisor one too large, the first rounding by 1 (none)\n"
+	out = out + sv_omega_test_run("exact", names.clone(), sv_omega_test_big(), "divisor")
+	out = out + sv_omega_test_run("exact", names, sv_omega_test_big(), "round")
+	let expected = [
+		"broken: the first extension's divisor one too large, the first rounding by 1 (none)",
+		"  exact, divisor: conflict; 31 extend, 360 combine, 18 round, 1 farkas, 1 learn; rejected at 17: round: the coefficient -9160 of x5 is not divisible by 9159",
+		"  exact, round: conflict; 31 extend, 360 combine, 18 round, 1 farkas, 1 learn; rejected at 39: round: the coefficient -707520802296 of x0 is not divisible by 298",
+	]
+	assert(out == expected.join("\n") + "\n")
 }

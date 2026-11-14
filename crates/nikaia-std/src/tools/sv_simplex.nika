@@ -1509,3 +1509,673 @@ pub struct SvViolation {
 	pub var: i64,
 	pub below: bool,
 }
+
+// --- Tests: the simplex theory (moved from
+// `tests/compiler/tests/solver_simplex.nika`, which compiled the solver anew
+// in a program of its own on every run): the theory interface's calls one by
+// one on three bounds over one column, then problems asserted whole and
+// checked. Each conflict is a Farkas lemma, and its log, closed by one
+// learned clause, is replayed by `sv_check`; an integer column goes by
+// branch-and-bound, each split a D5 step; a literal implied through a row is
+// explained by a Farkas lemma; one problem runs under Bland's rule from the
+// start and under the smallest-coefficient rule alone; coefficients near
+// 2^40 answer *unknown (overflow)*, never a wrong answer ---
+
+fn sv_simplex_test_row1(ks: Vec[i64], c: i64) -> SvRow {
+	let mut terms: Vec[SvTerm] = []
+	let mut i: u32 = 0
+	for k in ks {
+		terms.push(SvTerm { col: i, k: k })
+		i += 1
+	}
+	return sv_row_of(terms, c) ?? sv_row_constant(0)
+}
+
+fn sv_simplex_test_le(ks: Vec[i64], c: i64) -> SvAtom {
+	return SvAtom { row: sv_simplex_test_row1(ks, c), rel: SvRel::Le }
+}
+
+fn sv_simplex_test_lt(ks: Vec[i64], c: i64) -> SvAtom {
+	return SvAtom { row: sv_simplex_test_row1(ks, c), rel: SvRel::Lt }
+}
+
+fn sv_simplex_test_eq(ks: Vec[i64], c: i64) -> SvAtom {
+	return SvAtom { row: sv_simplex_test_row1(ks, c), rel: SvRel::Eq }
+}
+
+fn sv_simplex_test_lits_text(ls: ref Vec[u32]) -> String {
+	let mut parts: Vec[String] = []
+	for l in ls {
+		parts.push(f"{l}")
+	}
+	return "[" + parts.join(", ") + "]"
+}
+
+fn sv_simplex_test_said_by(checked: ref SvChecked) -> String {
+	return match checked {
+		SvChecked::Consistent => "consistent",
+		SvChecked::Conflict(c) => f"conflict {sv_simplex_test_lits_text(c.lits)}",
+		SvChecked::Lemmas(ls) => f"{ls.len()} lemmas",
+		SvChecked::Unknown(why) => sv_unknown(why),
+	}
+}
+
+fn sv_simplex_test_model_text(m: ref collections::BTreeMap[String, i64]) -> String {
+	let mut parts: Vec[String] = []
+	for (name, v) in m {
+		parts.push(f"{name} = {v}")
+	}
+	return parts.join(", ")
+}
+
+// Every atom asserted as it stands, one level, then a final check; a
+// conflict closed by one learned clause and the log replayed.
+fn sv_simplex_test_scenario(title: String, names: Vec[String], atoms: Vec[SvAtom], bland_after: i64) -> String {
+	let mut out: String = ""
+	let n = atoms.len()
+	let mut clauses: Vec[Vec[u32]] = []
+	let mut a: u32 = 0
+	while (a as i64) < n {
+		clauses.push([sv_lit(a, false)])
+		a += 1
+	}
+	let query = SvQuery { atoms: atoms, clauses: clauses, columns: names.len().checked_u32() ?? 0, reals: [] }
+	let mut book = sv_book(query) ?? return out + "no value"
+	let mut inputs: Vec[u32] = []
+	let mut i: u32 = 0
+	while (i as i64) < n {
+		inputs.push(book.input(i))
+		i += 1
+	}
+	let budget = lg_budget()
+	let mut theory = sv_simplex(names)
+	theory.bland_after = bland_after
+	theory.push_level()
+	let mut got = SvChecked::Consistent
+	let mut j: u32 = 0
+	while (j as i64) < n {
+		got = theory.assert(sv_lit(j, false), book)
+		match got {
+			SvChecked::Consistent => {},
+			else => {
+				break
+			},
+		}
+		j += 1
+	}
+	match got {
+		SvChecked::Consistent => {
+			got = theory.check(true, budget, book)
+		},
+		else => {},
+	}
+	let work = f"{theory.pivots} pivots, {theory.splits} splits"
+	match got {
+		SvChecked::Conflict(c) => {
+			let mut hints: Vec[u32] = []
+			for l in c.lits {
+				hints.push(inputs[(l / 2) as i64])
+			}
+			hints.push(c.id)
+			book.learn([], hints)
+			let v = sv_check(query, book.log.steps)
+			let said = if v.ok { "checked" } else { f"rejected at {v.step}: {v.reason}" }
+			out = out + f"{title}: conflict {sv_simplex_test_lits_text(c.lits)}, {work}, log of {book.log.steps.len()} steps {said}\n"
+		},
+		SvChecked::Consistent => {
+			out = out + f"{title}: consistent, {sv_simplex_test_model_text(theory.model())}, {work}\n"
+		},
+		else => {
+			out = out + f"{title}: {sv_simplex_test_said_by(got)}, {work}\n"
+		},
+	}
+	return out
+}
+
+fn sv_simplex_test_calls() -> String {
+	let mut out: String = ""
+	let atoms = [sv_simplex_test_le([1], -2), sv_simplex_test_le([1], -5), sv_simplex_test_le([-1], 3)]
+	let query = SvQuery { atoms: atoms, clauses: [[0], [4]], columns: 1, reals: [] }
+	let mut book = sv_book(query) ?? return out + "no value"
+	let c0 = book.input(0)
+	let c1 = book.input(1)
+	let budget = lg_budget()
+	let mut theory = sv_simplex(["x"])
+	theory.push_level()
+	out = out + f"assert x <= 2: {sv_simplex_test_said_by(theory.assert(0, book))}\n"
+	let implied = theory.propagate(book)
+	out = out + f"propagate: {sv_simplex_test_lits_text(implied)}\n"
+	let why = theory.explain(2, book) ?? return out + "no value"
+	out = out + f"explain x <= 5: {sv_simplex_test_lits_text(why.lits)}\n"
+	let first = theory.check(true, budget, book)
+	out = out + f"check: {sv_simplex_test_said_by(first)}, model {sv_simplex_test_model_text(theory.model())}\n"
+	theory.push_level()
+	let conflict = theory.assert(4, book)
+	out = out + f"assert x >= 3 at level {theory.level()}: {sv_simplex_test_said_by(conflict)}\n"
+	theory.backtrack(1)
+	let again = theory.check(true, budget, book)
+	out = out + f"backtrack to 1, check: {sv_simplex_test_said_by(again)}, shared {sv_simplex_test_lits_text(theory.shared())}\n"
+	match conflict {
+		SvChecked::Conflict(c) => {
+			book.learn([], [c0, c1, c.id])
+		},
+		else => {},
+	}
+	let v = sv_check(query, book.log.steps)
+	let said = if v.ok { "checked" } else { v.reason.clone() }
+	out = out + f"log of {book.log.steps.len()} steps: {said}\n"
+	return out
+}
+
+// Propagation through a row: x <= 1 and y <= 1 bound the slack of x + y, so
+// x + y <= 4 is implied; its explanation is a Farkas lemma, and the log closed
+// against the negated atom is replayed.
+fn sv_simplex_test_through_a_row() -> String {
+	let mut out: String = ""
+	let atoms = [sv_simplex_test_le([1], -1), sv_simplex_test_le([0, 1], -1), sv_simplex_test_le([1, 1], -4)]
+	let query = SvQuery { atoms: atoms, clauses: [[0], [2], [5]], columns: 2, reals: [] }
+	let mut book = sv_book(query) ?? return out + "no value"
+	let c0 = book.input(0)
+	let c1 = book.input(1)
+	let c2 = book.input(2)
+	let mut theory = sv_simplex(["x", "y"])
+	theory.push_level()
+	theory.assert(0, book)
+	theory.assert(2, book)
+	let implied = theory.propagate(book)
+	out = out + f"x <= 1, y <= 1, propagate: {sv_simplex_test_lits_text(implied)}\n"
+	let why = theory.explain(4, book) ?? return out + "no value"
+	out = out + f"explain x + y <= 4: {sv_simplex_test_lits_text(why.lits)}\n"
+	book.learn([], [c0, c1, c2, why.id])
+	let v = sv_check(query, book.log.steps)
+	let said = if v.ok { "checked" } else { f"rejected at {v.step}: {v.reason}" }
+	out = out + f"log of {book.log.steps.len()} steps: {said}\n"
+	return out
+}
+
+test "the simplex's interface calls one by one leave a log sv_check replays" {
+	let out = sv_simplex_test_calls()
+	let expected = [
+		"assert x <= 2: consistent",
+		"propagate: [2, 5]",
+		"explain x <= 5: [1, 2]",
+		"check: consistent, model x = 0",
+		"assert x >= 3 at level 2: conflict [1, 5]",
+		"backtrack to 1, check: consistent, shared []",
+		"log of 5 steps: checked",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "problems asserted whole are answered with a model or a checked conflict" {
+	let mut out: String = ""
+	out = out + sv_simplex_test_scenario("x + y >= 5, x <= 2, y <= 2", ["x", "y"], [sv_simplex_test_le([-1, -1], 5), sv_simplex_test_le([1], -2), sv_simplex_test_le([0, 1], -2)], 64)
+	out = out + sv_simplex_test_scenario("x + y < 3, x >= 1, y >= 2", ["x", "y"], [sv_simplex_test_lt([1, 1], -3), sv_simplex_test_le([-1], 1), sv_simplex_test_le([0, -1], 2)], 64)
+	out = out + sv_simplex_test_scenario("x + y <= 3, x >= 1, y >= 2", ["x", "y"], [sv_simplex_test_le([1, 1], -3), sv_simplex_test_le([-1], 1), sv_simplex_test_le([0, -1], 2)], 64)
+	out = out + sv_simplex_test_scenario("2x = 1", ["x"], [sv_simplex_test_eq([2], -1)], 64)
+	out = out + sv_simplex_test_scenario("2x + 3y = 7, x >= 0, y >= 0", ["x", "y"], [sv_simplex_test_eq([2, 3], -7), sv_simplex_test_le([-1], 0), sv_simplex_test_le([0, -1], 0)], 64)
+	out = out + sv_simplex_test_scenario("1 <= 3x - 3y <= 2, 0 <= x, y <= 3", ["x", "y"], [sv_simplex_test_le([-3, 3], 1), sv_simplex_test_le([3, -3], -2), sv_simplex_test_le([-1], 0), sv_simplex_test_le([1], -3), sv_simplex_test_le([0, -1], 0), sv_simplex_test_le([0, 1], -3)], 64)
+	let expected = [
+		"x + y >= 5, x <= 2, y <= 2: conflict [1, 3, 5], 2 pivots, 0 splits, log of 5 steps checked",
+		"x + y < 3, x >= 1, y >= 2: conflict [1, 3, 5], 0 pivots, 0 splits, log of 5 steps checked",
+		"x + y <= 3, x >= 1, y >= 2: consistent, x = 1, y = 2, 0 pivots, 0 splits",
+		"2x = 1: conflict [1], 0 pivots, 1 splits, log of 6 steps checked",
+		"2x + 3y = 7, x >= 0, y >= 0: consistent, x = 2, y = 1, 2 pivots, 0 splits",
+		"1 <= 3x - 3y <= 2, 0 <= x, y <= 3: conflict [1, 3], 1 pivots, 0 splits, log of 15 steps checked",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "a literal implied through a row is explained by a Farkas lemma" {
+	let out = sv_simplex_test_through_a_row()
+	let expected = [
+		"x <= 1, y <= 1, propagate: [4]",
+		"explain x + y <= 4: [1, 3, 4]",
+		"log of 5 steps: checked",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "both pivot rules answer alike and coefficients near 2^40 answer unknown" {
+	let mut out: String = ""
+	out = out + sv_simplex_test_scenario("the same, Bland's rule from the start", ["x", "y"], [sv_simplex_test_le([-3, 3], 1), sv_simplex_test_le([3, -3], -2), sv_simplex_test_le([-1], 0), sv_simplex_test_le([1], -3), sv_simplex_test_le([0, -1], 0), sv_simplex_test_le([0, 1], -3)], 0)
+	out = out + sv_simplex_test_scenario("the same, smallest coefficient only", ["x", "y"], [sv_simplex_test_le([-3, 3], 1), sv_simplex_test_le([3, -3], -2), sv_simplex_test_le([-1], 0), sv_simplex_test_le([1], -3), sv_simplex_test_le([0, -1], 0), sv_simplex_test_le([0, 1], -3)], 1000000)
+	out = out + sv_simplex_test_scenario("two equalities, coefficients near 2^40", ["x", "y", "z"], [sv_simplex_test_eq([1099511627689, 1099511627791, 1099511627773], -1), sv_simplex_test_eq([1099511627497, -1099511627543, 1099511627531], -3), sv_simplex_test_le([-1], 0), sv_simplex_test_le([0, -1], 0), sv_simplex_test_le([0, 0, -1], 0)], 64)
+	let expected = [
+		"the same, Bland's rule from the start: conflict [1, 3], 1 pivots, 0 splits, log of 15 steps checked",
+		"the same, smallest coefficient only: conflict [1, 3], 1 pivots, 0 splits, log of 15 steps checked",
+		"two equalities, coefficients near 2^40: unknown (overflow), 0 pivots, 0 splits",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+// --- Tests: real variables (moved from `tests/compiler/tests/solver_real.nika`,
+// which compiled the solver anew in a program of its own on every run): the
+// engine reads the sorts `sv_smtlib` gives. `2x = 1` has the model x = 1/2
+// over the reals and is proved over the integers; `x < 1 and x > 0` has a
+// model strictly inside, `δ` replaced by a rational; `x < 0 and x > 0` is
+// proved by a Farkas sum the checker accepts; Fourier-Motzkin answers a real
+// script *unknown (theory)*. Then `sv_check` accepts a split and a rounding
+// on an integer row and refuses them on a real one ---
+
+// Each file answered over both theories, the sorts taken; then the lines
+// the measuring rod writes for it.
+fn sv_real_test_answer(source: String) -> String {
+	let mut reals: collections::BTreeSet[String] = collections::BTreeSet()
+	let script = match sv_smtlib_script(source) {
+		SvSmtRead::Script(s, sorts) => {
+			reals = sorts.reals.clone()
+			s.clone()
+		},
+		else => {
+			return "unreadable"
+		},
+	}
+	let mut arena = script.arena.clone()
+	let goal = arena.boolean(false)
+	let run = sv_smt_engine_sorted(arena, script.assertions, goal, lg_budget(), "both", reals)
+	return match run.driven {
+		SvDriven::Proved(query, steps) => {
+			let v = sv_check(query, steps)
+			if v.ok { f"proved, log of {steps.len()} steps checked" } else { f"log rejected: {v.reason}" }
+		},
+		SvDriven::RealModel(values) => {
+			let mut parts: Vec[String] = []
+			for (name, v) in values {
+				parts.push(f"{name} = {sv_rat_text(v)}")
+			}
+			let held = sv_real_model_holds(arena, script.assertions, goal, values)
+			let checked = if held { "checked" } else { "rejected" }
+			f"refuted, model {parts.join(", ")} {checked}"
+		},
+		SvDriven::Answer(LgAnswer::Refuted { .. }) => "refuted over the integers",
+		SvDriven::Answer(LgAnswer::Unknown { why }) => sv_unknown(why),
+		SvDriven::Answer(_) => "proved without a log",
+	}
+}
+
+fn sv_real_test_each(name: String, source: String) -> String {
+	let mut out: String = f"{name}: {sv_real_test_answer(source.clone())}\n"
+	let simplex = sv_line(source.clone(), "new-simplex")
+	let fm = sv_line(source.clone(), "new-fm")
+	let both = sv_line(source.clone(), "new")
+	let old = sv_line(source, "fm")
+	out = out + f"  rod: simplex {simplex}; new-fm {fm}; both {both}; fm {old}\n"
+	return out
+}
+
+fn sv_real_test_row(ks: Vec[i64], c: i64) -> SvRow {
+	let mut cols: Vec[u32] = []
+	let mut out: Vec[i64] = []
+	let mut i: u32 = 0
+	for k in ks {
+		if k != 0 {
+			cols.push(i)
+			out.push(k)
+		}
+		i += 1
+	}
+	return SvRow { cols: cols, ks: out, constant: c }
+}
+
+fn sv_real_test_units(atoms: Vec[SvAtom], columns: u32, reals: Vec[u32]) -> SvQuery {
+	let mut clauses: Vec[Vec[u32]] = []
+	let mut a: u32 = 0
+	for _ in atoms {
+		clauses.push([sv_lit(a, false)])
+		a += 1
+	}
+	return SvQuery { atoms: atoms, clauses: clauses, columns: columns, reals: reals }
+}
+
+// 2x <= 1 and 2x >= 1.
+fn sv_real_test_half(reals: Vec[u32]) -> SvQuery {
+	return sv_real_test_units(
+		[SvAtom { row: sv_real_test_row([2], -1), rel: SvRel::Le }, SvAtom { row: sv_real_test_row([-2], 1), rel: SvRel::Le }],
+		1,
+		reals,
+	)
+}
+
+// Refuted by the split x <= 0 or x >= 1, each side by a Farkas sum.
+fn sv_real_test_split_log(query: ref SvQuery) -> SvLog {
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let a = log.input(0)
+	let b = log.input(1)
+	let s = log.split(sv_real_test_row([1], 0), sv_real_test_row([-1], 1))
+	let low = log.farkas(
+		[sv_lit(1, true), sv_lit(2, true)],
+		[SvSrc::Lit(sv_lit(1, false)), SvSrc::Lit(sv_lit(2, false))],
+		[1, 2],
+		1,
+	)
+	let high = log.farkas(
+		[sv_lit(0, true), sv_lit(3, true)],
+		[SvSrc::Lit(sv_lit(0, false)), SvSrc::Lit(sv_lit(3, false))],
+		[1, 2],
+		1,
+	)
+	log.learn([], [a, b, low, high, s])
+	return log
+}
+
+// Refuted by rounding each bound: x <= 0 and x >= 1.
+fn sv_real_test_round_log(query: ref SvQuery) -> SvLog {
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let a = log.input(0)
+	let b = log.input(1)
+	let up = log.combine([SvSrc::Lit(sv_lit(0, false))], [1])
+	let r1 = log.round(up, 2)
+	let down = log.combine([SvSrc::Lit(sv_lit(1, false))], [1])
+	let r2 = log.round(down, 2)
+	let f = log.farkas([sv_lit(0, true), sv_lit(1, true)], [SvSrc::Fact(r1), SvSrc::Fact(r2)], [1, 1], 1)
+	log.learn([], [a, b, f])
+	return log
+}
+
+// x < 0 and x > 0 over the reals: their Farkas sum is 0 < 0.
+fn sv_real_test_empty() -> SvQuery {
+	return sv_real_test_units(
+		[SvAtom { row: sv_real_test_row([1], 0), rel: SvRel::Lt }, SvAtom { row: sv_real_test_row([-1], 0), rel: SvRel::Lt }],
+		1,
+		[0],
+	)
+}
+
+fn sv_real_test_empty_log(query: ref SvQuery) -> SvLog {
+	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0 }
+	let a = log.input(0)
+	let b = log.input(1)
+	let f = log.farkas(
+		[sv_lit(0, true), sv_lit(1, true)],
+		[SvSrc::Lit(sv_lit(0, false)), SvSrc::Lit(sv_lit(1, false))],
+		[1, 1],
+		1,
+	)
+	log.learn([], [a, b, f])
+	return log
+}
+
+test "real scripts are answered with rational models and checked proofs" {
+	let real = "(set-logic QF_LRA)\n(declare-const x Real)\n"
+	let files = [
+		("half", f"{real}(set-info :status sat)\n(assert (= (* 2 x) 1))\n(check-sat)\n"),
+		(
+			"half-int",
+			"(set-logic QF_LIA)\n(set-info :status unsat)\n(declare-const x Int)\n(assert (= (* 2 x) 1))\n(check-sat)\n",
+		),
+		(
+			"inside",
+			f"{real}(set-info :status sat)\n(assert (< x 1))\n(assert (> x 0))\n(check-sat)\n",
+		),
+		(
+			"empty",
+			f"{real}(set-info :status unsat)\n(assert (< x 0))\n(assert (> x 0))\n(check-sat)\n",
+		),
+		(
+			"mixed",
+			"(set-logic QF_LIRA)\n(set-info :status sat)\n(declare-const x Real)\n(declare-const n Int)\n(assert (= (* 3 x) n))\n(assert (< 0 x 1))\n(check-sat)\n",
+		),
+	]
+	let mut out: String = ""
+	for (name, text) in files {
+		out = out + sv_real_test_each(f"{name}.smt2", text)
+	}
+	let expected = [
+		"half.smt2: refuted, model x = 1/2 checked",
+		"  rod: simplex refuted 2; new-fm unknown (theory) 0; both refuted 2; fm unknown (theory) 0",
+		"half-int.smt2: proved, log of 4 steps checked",
+		"  rod: simplex proved 1/interval; new-fm proved 1/interval; both proved 1/interval; fm proved 1",
+		"inside.smt2: refuted, model x = 1/2 checked",
+		"  rod: simplex refuted 2; new-fm unknown (theory) 0; both refuted 2; fm unknown (theory) 0",
+		"empty.smt2: proved, log of 4 steps checked",
+		"  rod: simplex proved 0; new-fm unknown (theory) 0; both proved 0; fm unknown (theory) 0",
+		"mixed.smt2: refuted, model n = 1, x = 1/3 checked",
+		"  rod: simplex refuted 2; new-fm unknown (theory) 0; both refuted 2; fm unknown (theory) 0",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "a split and a rounding are accepted on an integer row and refused on a real one" {
+	// The report is `sv_check_test_report` of `sv_check.nika`'s tests.
+	let mut out: String = ""
+	out = out + sv_check_test_report("2x = 1, x integer: split", sv_real_test_half([]), sv_real_test_split_log(sv_real_test_half([])))
+	out = out + sv_check_test_report("2x = 1, x real: split", sv_real_test_half([0]), sv_real_test_split_log(sv_real_test_half([0])))
+	out = out + sv_check_test_report("2x = 1, x integer: round", sv_real_test_half([]), sv_real_test_round_log(sv_real_test_half([])))
+	out = out + sv_check_test_report("2x = 1, x real: round", sv_real_test_half([0]), sv_real_test_round_log(sv_real_test_half([0])))
+	out = out + sv_check_test_report("x < 0 and x > 0, x real: farkas", sv_real_test_empty(), sv_real_test_empty_log(sv_real_test_empty()))
+	let expected = [
+		"2x = 1, x integer: split: accepted (6 steps)",
+		"2x = 1, x real: split: rejected at step 2: split: x0 is real, and an integer step may not touch it",
+		"2x = 1, x integer: round: accepted (8 steps)",
+		"2x = 1, x real: round: rejected at step 3: round: x0 is real, and an integer step may not touch it",
+		"x < 0 and x > 0, x real: farkas: accepted (4 steps)",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+// --- Tests: certified cuts (moved from `tests/compiler/tests/solver_cuts.nika`,
+// which compiled the solver anew in a program of its own on every run):
+// problems over the simplex whose rational relaxation holds and whose
+// integer one does not, refuted by the GCD test of a tableau row (`gcd`), by
+// Gomory's fractional cut (`cg`, a Chvátal-Gomory derivation: a combination
+// rounded) and by Gomory's mixed-integer cut (`gmi`, a split cut: the split,
+// one Farkas lemma per side, and the resolution), and by branch-and-bound
+// alone (`branch`) for comparison. Each line counts the log's steps by kind
+// and says whether `sv_check` replays it; the simplex is exact, so a cut is
+// written as it was found ---
+
+fn sv_cuts_test_row1(ks: Vec[i64], c: i64) -> SvRow {
+	let mut terms: Vec[SvTerm] = []
+	let mut i: u32 = 0
+	for k in ks {
+		terms.push(SvTerm { col: i, k: k })
+		i += 1
+	}
+	return sv_row_of(terms, c) ?? sv_row_constant(0)
+}
+
+fn sv_cuts_test_le(ks: Vec[i64], c: i64) -> SvAtom {
+	return SvAtom { row: sv_cuts_test_row1(ks, c), rel: SvRel::Le }
+}
+
+fn sv_cuts_test_eq(ks: Vec[i64], c: i64) -> SvAtom {
+	return SvAtom { row: sv_cuts_test_row1(ks, c), rel: SvRel::Eq }
+}
+
+// The log's steps by kind: Farkas, Combine, Round, Split, Learn.
+fn sv_cuts_test_kinds(steps: ref Vec[SvStep]) -> String {
+	let mut f = 0
+	let mut c = 0
+	let mut r = 0
+	let mut s = 0
+	let mut l = 0
+	for st in steps {
+		match st {
+			SvStep::Farkas(..) => { f += 1 },
+			SvStep::Combine(..) => { c += 1 },
+			SvStep::Round(..) => { r += 1 },
+			SvStep::Split(..) => { s += 1 },
+			SvStep::Learn(..) => { l += 1 },
+			else => {},
+		}
+	}
+	return f"{f} farkas, {c} combine, {r} round, {s} split, {l} learn"
+}
+
+// The log with one step broken: `round` the first rounding by 1, `strong`
+// the cut's split (the second) one too strong.
+fn sv_cuts_test_broken(steps: ref Vec[SvStep], how: String) -> Vec[SvStep] {
+	let mut out: Vec[SvStep] = []
+	let mut rounds = 0
+	let mut splits = 0
+	for st in steps {
+		let mut next = st.clone()
+		match st {
+			SvStep::Round(id, d) => {
+				rounds += 1
+				if how == "round" && rounds == 1 {
+					next = SvStep::Round(id, 1)
+				}
+			},
+			SvStep::Split(a, b) => {
+				splits += 1
+				if how == "strong" && splits == 2 {
+					let hold = sv_row_sum(1, a, 1, sv_row_constant(1)) ?? a.clone()
+					let fail = sv_row_sum(1, b, 1, sv_row_constant(-1)) ?? b.clone()
+					next = SvStep::Split(hold, fail)
+				}
+			},
+			else => {},
+		}
+		out.push(next)
+	}
+	return out
+}
+
+// Every atom asserted, one level, then a final check under `kind`
+// (`gcd`: the GCD test alone; `cg`, `gmi`: the test and that cut;
+// `branch`: neither); a conflict closed by one learned clause, the log
+// replayed, broken as `how` says where it is not `""`.
+fn sv_cuts_test_run(title: String, names: Vec[String], atoms: Vec[SvAtom], kind: String, how: String) -> String {
+	let mut out: String = ""
+	let n = atoms.len()
+	let mut clauses: Vec[Vec[u32]] = []
+	let mut a: u32 = 0
+	while (a as i64) < n {
+		clauses.push([sv_lit(a, false)])
+		a += 1
+	}
+	let query = SvQuery { atoms: atoms, clauses: clauses, columns: names.len().checked_u32() ?? 0, reals: [] }
+	let mut book = sv_book(query) ?? return "no book"
+	let mut inputs: Vec[u32] = []
+	let mut i: u32 = 0
+	while (i as i64) < n {
+		inputs.push(book.input(i))
+		i += 1
+	}
+	let budget = lg_budget()
+	let mut theory = sv_simplex(names)
+	theory.gcd_test = kind != "branch"
+	theory.cut_kind = if kind == "cg" || kind == "gmi" { kind.clone() } else { "none" }
+	theory.push_level()
+	let mut got = SvChecked::Consistent
+	let mut j: u32 = 0
+	while (j as i64) < n {
+		got = theory.assert(sv_lit(j, false), book)
+		match got {
+			SvChecked::Consistent => {},
+			else => {
+				break
+			},
+		}
+		j += 1
+	}
+	match got {
+		SvChecked::Consistent => {
+			got = theory.check(true, budget, book)
+		},
+		else => {},
+	}
+	let work = f"{theory.splits} splits, {theory.cuts} cuts, {theory.gcd_conflicts} gcd"
+	match got {
+		SvChecked::Conflict(c) => {
+			let mut hints: Vec[u32] = []
+			for l in c.lits {
+				hints.push(inputs[(l / 2) as i64])
+			}
+			hints.push(c.id)
+			book.learn([], hints)
+			let steps = if how == "" { book.log.steps.clone() } else { sv_cuts_test_broken(book.log.steps, how) }
+			let v = sv_check(query, steps)
+			let said = if v.ok { "checked" } else { f"rejected at {v.step}: {v.reason}" }
+			let label = if how == "" { kind.clone() } else { f"{kind}, {how}" }
+			out = out + f"  {label}: conflict, {work}; {sv_cuts_test_kinds(steps)}; {said}\n"
+		},
+		SvChecked::Consistent => {
+			let mut values: Vec[String] = []
+			for (name, v) in theory.model() {
+				values.push(f"{name} = {v}")
+			}
+			out = out + f"  {kind}: consistent, {values.join(", ")}, {work}\n"
+		},
+		SvChecked::Unknown(why) => {
+			out = out + f"  {kind}: {sv_unknown(why)}, {work}\n"
+		},
+		else => {
+			out = out + f"  {kind}: lemmas, {work}\n"
+		},
+	}
+	return out
+}
+
+fn sv_cuts_test_every(title: String, names: Vec[String], atoms: Vec[SvAtom]) -> String {
+	let mut out: String = ""
+	out = out + title + "\n"
+	for kind in ["gcd", "cg", "gmi", "branch"] {
+		out = out + sv_cuts_test_run(title.clone(), names.clone(), atoms.clone(), kind.to_string(), "")
+	}
+	return out
+}
+
+test "x = y, x + y - 2z = 1 is refuted by the GCD test, branching alone runs out of cases" {
+	let out = sv_cuts_test_every("x = y, x + y - 2z = 1", ["x", "y", "z"], [sv_cuts_test_eq([1, -1], 0), sv_cuts_test_eq([1, 1, -2], -1)])
+	let expected = [
+		"x = y, x + y - 2z = 1",
+		"  gcd: conflict, 0 splits, 0 cuts, 1 gcd; 1 farkas, 2 combine, 2 round, 0 split, 1 learn; checked",
+		"  cg: conflict, 0 splits, 0 cuts, 1 gcd; 1 farkas, 2 combine, 2 round, 0 split, 1 learn; checked",
+		"  gmi: conflict, 0 splits, 0 cuts, 1 gcd; 1 farkas, 2 combine, 2 round, 0 split, 1 learn; checked",
+		"  branch: unknown (cases), 1024 splits, 0 cuts, 0 gcd",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "the band 1 <= 3x - 3y <= 2 is refuted by one mixed-integer cut where branching takes six splits" {
+	let out = sv_cuts_test_every("1 <= 3x - 3y <= 2, 0 <= x, y <= 3", ["x", "y"], [sv_cuts_test_le([-3, 3], 1), sv_cuts_test_le([3, -3], -2), sv_cuts_test_le([-1], 0), sv_cuts_test_le([1], -3), sv_cuts_test_le([0, -1], 0), sv_cuts_test_le([0, 1], -3)])
+	let expected = [
+		"1 <= 3x - 3y <= 2, 0 <= x, y <= 3",
+		"  gcd: conflict, 6 splits, 0 cuts, 0 gcd; 7 farkas, 0 combine, 0 round, 6 split, 7 learn; checked",
+		"  cg: conflict, 6 splits, 0 cuts, 0 gcd; 7 farkas, 0 combine, 0 round, 6 split, 7 learn; checked",
+		"  gmi: conflict, 0 splits, 1 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 4 learn; checked",
+		"  branch: conflict, 6 splits, 0 cuts, 0 gcd; 7 farkas, 0 combine, 0 round, 6 split, 7 learn; checked",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "the band 1 <= 3x + 5y <= 2 is refuted by one fractional or one mixed-integer cut" {
+	let out = sv_cuts_test_every("1 <= 3x + 5y <= 2, 0 <= x, y <= 1", ["x", "y"], [sv_cuts_test_le([-3, -5], 1), sv_cuts_test_le([3, 5], -2), sv_cuts_test_le([-1], 0), sv_cuts_test_le([1], -1), sv_cuts_test_le([0, -1], 0), sv_cuts_test_le([0, 1], -1)])
+	let expected = [
+		"1 <= 3x + 5y <= 2, 0 <= x, y <= 1",
+		"  gcd: conflict, 2 splits, 0 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 3 learn; checked",
+		"  cg: conflict, 0 splits, 1 cuts, 0 gcd; 1 farkas, 1 combine, 1 round, 0 split, 1 learn; checked",
+		"  gmi: conflict, 0 splits, 1 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 4 learn; checked",
+		"  branch: conflict, 2 splits, 0 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 3 learn; checked",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "the equation 2x + 3y = 7 is consistent under every kind of cut" {
+	let out = sv_cuts_test_every("2x + 3y = 7, x >= 0, y >= 0", ["x", "y"], [sv_cuts_test_eq([2, 3], -7), sv_cuts_test_le([-1], 0), sv_cuts_test_le([0, -1], 0)])
+	let expected = [
+		"2x + 3y = 7, x >= 0, y >= 0",
+		"  gcd: consistent, x = 2, y = 1, 2 splits, 0 cuts, 0 gcd",
+		"  cg: consistent, x = 2, y = 1, 0 splits, 1 cuts, 0 gcd",
+		"  gmi: consistent, x = 2, y = 1, 0 splits, 1 cuts, 0 gcd",
+		"  branch: consistent, x = 2, y = 1, 2 splits, 0 cuts, 0 gcd",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "a cut's log with a rounding left out or the cut made too strong is rejected" {
+	let mut out: String = "broken: the first rounding by 1 (none), the mixed-integer cut one too strong\n"
+	out = out + sv_cuts_test_run("", ["x", "y", "z"], [sv_cuts_test_eq([1, -1], 0), sv_cuts_test_eq([1, 1, -2], -1)], "gcd", "round")
+	out = out + sv_cuts_test_run("", ["x", "y"], [sv_cuts_test_le([-3, -5], 1), sv_cuts_test_le([3, 5], -2), sv_cuts_test_le([-1], 0), sv_cuts_test_le([1], -1), sv_cuts_test_le([0, -1], 0), sv_cuts_test_le([0, 1], -1)], "cg", "round")
+	out = out + sv_cuts_test_run("", ["x", "y"], [sv_cuts_test_le([-3, -5], 1), sv_cuts_test_le([3, 5], -2), sv_cuts_test_le([-1], 0), sv_cuts_test_le([1], -1), sv_cuts_test_le([0, -1], 0), sv_cuts_test_le([0, 1], -1)], "gmi", "strong")
+	let expected = [
+		"broken: the first rounding by 1 (none), the mixed-integer cut one too strong",
+		"  gcd, round: conflict, 0 splits, 0 cuts, 1 gcd; 1 farkas, 2 combine, 2 round, 0 split, 1 learn; rejected at 6: farkas: x1 is left in the combination",
+		"  cg, round: conflict, 0 splits, 1 cuts, 0 gcd; 1 farkas, 1 combine, 1 round, 0 split, 1 learn; rejected at 8: farkas: x0 is left in the combination",
+		"  gmi, strong: conflict, 0 splits, 1 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 4 learn; rejected at 8: farkas: the combination ends in 0 <= 0, no contradiction",
+	]
+	assert(out == expected.join("\n") + "\n")
+}

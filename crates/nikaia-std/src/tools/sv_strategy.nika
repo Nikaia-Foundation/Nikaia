@@ -419,3 +419,87 @@ pub fn sv_strategy_run(
 		stats: run.stats.clone(),
 	}
 }
+
+// --- Tests: the features of a query and the pipeline they pick, as the
+// measuring rod sees them (moved from `tests/compiler/tests/solver_strategy.nika`,
+// which compiled the solver anew in a program of its own on every run).
+// `problem__003` has unit clauses only, ten columns per atom and no interval
+// or difference atom: it gets the walk first. `choice` has a disjunction: the
+// search, the walk after it should the search end unknown. `real` has a real
+// column: the simplex alone, no walk (D27). Each file's lines end with the
+// runner's; then the parameter set's version, and a setting by name that
+// takes and two that do not ---
+
+// The features and the pick of the query of `source`, the file `name`, then
+// the runner's line.
+fn sv_strategy_test_each(name: String, source: String) -> String {
+	let mut reals: collections::BTreeSet[String] = collections::BTreeSet()
+	let script = match sv_smtlib_script(source.clone()) {
+		SvSmtRead::Script(s, sorts) => {
+			reals = sorts.reals.clone()
+			s.clone()
+		},
+		else => {
+			return f"{name}: unreadable\n"
+		},
+	}
+	let mut arena = script.arena.clone()
+	let goal = arena.boolean(false)
+	let mut why = lg_why()
+	let line = sv_line(source, "new")
+	let read = sv_cnf_sorted(arena, script.assertions, goal, reals, why)
+	if read == null {
+		return f"{name}: no query; {line}\n"
+	}
+	let cnf = read ?? return ""
+	let features = sv_features(cnf)
+	let picked = sv_strategy_pick(features, sv_params())
+	return f"{name}: {sv_features_shown(features)}\n  picks {sv_params_shown(picked)}; {line}\n"
+}
+
+test "each query's features pick its pipeline" {
+	// `problem__003` and the file helper are the walk's tests' (`sv_walk.nika`).
+	let files = [
+		("problem__003", sv_walk_test_problem003()),
+		(
+			"choice",
+			sv_walk_test_smt(
+				"sat",
+				"Int",
+				["x", "y"],
+				"(assert (or (< x 0) (> x 10)))\n(assert (<= (- x y) 2))\n",
+			),
+		),
+		("real", sv_walk_test_smt("sat", "Real", ["x", "y"], "(assert (< 0 x 1))\n(assert (= (+ x y) 2))\n")),
+	]
+	let mut out: String = ""
+	for (name, text) in files {
+		out = out + sv_strategy_test_each(f"{name}.smt2", text)
+	}
+	let expected = [
+		"problem__003.smt2: columns 10 reals 0 atoms 20 clauses 20 disjunctions 0 nonzeros 134 interval 0‰ difference 0‰ coefficient 66 constant 39 boolean 20",
+		"  picks walk-first, search/both+walk; refuted 2/walk",
+		"choice.smt2: columns 2 reals 0 atoms 3 clauses 2 disjunctions 1 nonzeros 4 interval 666‰ difference 333‰ coefficient 1 constant 10 boolean 3",
+		"  picks search/both+walk; refuted 3",
+		"real.smt2: columns 2 reals 2 atoms 4 clauses 4 disjunctions 0 nonzeros 6 interval 500‰ difference 0‰ coefficient 1 constant 2 boolean 4",
+		"  picks search/simplex; refuted 2",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "a parameter set takes a setting by name and refuses one out of range or unknown" {
+	let mut out: String = ""
+	let mut p = sv_params()
+	out = out + f"parameters {p.version}\n"
+	for setting in ["noise=50,walk_first=500", "noise=2000", "speed=3"] {
+		let took = sv_params_set_all(p, setting)
+		out = out + f"  {setting}: {took}, noise {p.walk.noise}, walk_first {p.walk_first}\n"
+	}
+	let expected = [
+		"parameters sv-params-1",
+		"  noise=50,walk_first=500: true, noise 50, walk_first 500",
+		"  noise=2000: false, noise 50, walk_first 500",
+		"  speed=3: false, noise 50, walk_first 500",
+	]
+	assert(out == expected.join("\n") + "\n")
+}

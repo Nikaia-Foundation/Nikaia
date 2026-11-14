@@ -211,3 +211,64 @@ pub fn sv_strategy_run(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgB
     SvEngineRun { driven: SvDriven::Answer(answer), work: run.work + sv_walk_units(walk.moves, &p.walk), path: sv_strategy_path(&run.path, "walk"), carried: vec![], stats: run.stats.clone() }
 }
 
+#[cfg(test)]
+pub(crate) fn sv_strategy_test_each(name: &str, source: &str) -> String {
+    let mut reals: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let script = match sv_smtlib_script(&nikaia_std::block::Text::from(source.to_string())) {
+        SvSmtRead::Script(ref s, ref sorts) => {
+            reals = sorts.reals.copy_owned();
+            s.clone()
+        },
+        _ => { return format!("{}: unreadable\n", name); },
+    };
+    let mut arena = script.arena.clone();
+    let goal = arena.boolean(false);
+    let mut why = lg_why();
+    let line = sv_line(source, "new");
+    let read = sv_cnf_sorted(&arena, &script.assertions, goal, &reals, &mut why);
+    if read.is_none() { return format!("{}: no query; {}\n", name, line); }
+    let cnf = match read { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+    let features = sv_features(&cnf);
+    let picked = sv_strategy_pick(&features, &sv_params());
+    format!("{}: {}\n  picks {}; {}\n", name, sv_features_shown(&features), sv_params_shown(&picked), line)
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+    let files = nikaia_std::block::List::from_array_in([("problem__003", sv_walk_test_problem003()), ("choice", sv_walk_test_smt("sat", "Int", &vec!["x", "y"], "(assert (or (< x 0) (> x 10)))\n(assert (<= (- x y) 2))\n")), ("real", sv_walk_test_smt("sat", "Real", &vec!["x", "y"], "(assert (< 0 x 1))\n(assert (= (+ x y) 2))\n"))], nikaia_std::block::Place::Block);
+    let mut out: String = String::from("");
+    for (name, text) in files.iter() {
+        let name = *name;
+        out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_strategy_test_each(&format!("{}.smt2", name), text)));
+    }
+    let expected = vec!["problem__003.smt2: columns 10 reals 0 atoms 20 clauses 20 disjunctions 0 nonzeros 134 interval 0‰ difference 0‰ coefficient 66 constant 39 boolean 20", "  picks walk-first, search/both+walk; refuted 2/walk", "choice.smt2: columns 2 reals 0 atoms 3 clauses 2 disjunctions 1 nonzeros 4 interval 666‰ difference 333‰ coefficient 1 constant 10 boolean 3", "  picks search/both+walk; refuted 3", "real.smt2: columns 2 reals 2 atoms 4 clauses 4 disjunctions 0 nonzeros 6 interval 500‰ difference 0‰ coefficient 1 constant 2 boolean 4", "  picks search/simplex; refuted 2"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+    let mut out: String = String::from("");
+    let mut p = sv_params();
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("parameters {}\n", p.version)));
+    for setting in ["noise=50,walk_first=500", "noise=2000", "speed=3"] {
+        let took = sv_params_set_all(&mut p, setting);
+        out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  {}: {}, noise {}, walk_first {}\n", setting, took, p.walk.noise, p.walk_first)));
+    }
+    let expected = vec!["parameters sv-params-1", "  noise=50,walk_first=500: true, noise 50, walk_first 500", "  noise=2000: false, noise 50, walk_first 500", "  speed=3: false, noise 50, walk_first 500"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod nikaia_tests {
+    #[test]
+    fn each_query_s_features_pick_its_pipeline() {
+        super::__nikaia_test_0().unwrap()
+    }
+    #[test]
+    fn a_parameter_set_takes_a_setting_by_name_and_refuses_one_out_of_range_or_unknown() {
+        super::__nikaia_test_1().unwrap()
+    }
+}
