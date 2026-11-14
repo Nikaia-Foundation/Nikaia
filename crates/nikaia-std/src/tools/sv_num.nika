@@ -359,3 +359,172 @@ pub fn sv_delta_text(a: ref SvDelta) -> String {
 	}
 	return f"{real}{sign}{sv_rat_text(a.k)}δ"
 }
+
+// --- Tests: the solver's numbers (moved from
+// `tests/compiler/tests/solver_num.nika`, which compiled this file anew in a
+// program of its own on every run): a 40-step elimination chain stays within
+// 32 bits where the same chain without the gcd leaves them at step 28 and is
+// refused, not wrapped, at step 60; rationals normalised and compared without
+// overflow; `δ` orders strict bounds ---
+
+// The other bound of step `n`, reduced (gcd 1): its first column, `-2`,
+// cancels the current row's `2`; the others have the row's sign, so the
+// first is the only column two bounds may be combined on.
+fn sv_num_test_partner(n: i64) -> Vec[i64] {
+	return [-2, 1, 5, 1 + n % 7]
+}
+
+// Without the gcd: the multipliers are the two coefficients themselves.
+fn sv_num_test_naive(x: ref Vec[i64], y: ref Vec[i64], j: i64) -> Vec[i64]? {
+	let mut a = y[j]
+	let mut b = x[j]
+	if a < 0 { a = -a } else { b = -b }
+	let mut out: Vec[i64] = []
+	let mut i = 0
+	while i < x.len() {
+		out.push(sv_mul_add(a, x[i], b, y[i]) ?? return null)
+		i += 1
+	}
+	return out
+}
+
+fn sv_num_test_chain(reduce: bool, steps: i64) -> String {
+	let mut c: Vec[i64] = [2, 1, 3, 4]
+	let mut n = 0
+	let mut largest: i64 = 0
+	let mut left32: i64 = -1
+	while n < steps {
+		let f = sv_num_test_partner(n)
+		let j = sv_pick_column(c, f, 3, true)
+		if j < 0 {
+			return f"step {n}: no column"
+		}
+		let next = if reduce { sv_dense_eliminate(c, f, j) } else { sv_num_test_naive(c, f, j) }
+		let made = next ?? return f"step {n + 1}: refused, would leave i64 (left 32 bits at step {left32}, largest so far {largest})"
+		c = made
+		largest = sv_max_abs(c) ?? -1
+		if left32 < 0 && !sv_fits32(largest) {
+			left32 = n + 1
+		}
+		if c[j] != 0 {
+			return f"step {n}: column {j} left"
+		}
+		// The eliminated column comes back with the next bound.
+		c[j] = 2
+		n += 1
+	}
+	return f"{steps} steps, largest coefficient {largest}, within 32 bits: {sv_fits32(largest)}"
+}
+
+fn sv_num_test_show(r: SvRat?) -> String {
+	let v = r ?? return "refused"
+	return sv_rat_text(v)
+}
+
+fn sv_num_test_order(a: ref SvRat, b: ref SvRat) -> String {
+	let c = sv_rat_cmp(a, b)
+	let op = if c < 0 { "<" } else if c > 0 { ">" } else { "=" }
+	return f"{sv_rat_text(a)} {op} {sv_rat_text(b)}"
+}
+
+fn sv_num_test_dorder(a: ref SvDelta, b: ref SvDelta) -> String {
+	let c = sv_delta_cmp(a, b)
+	let op = if c < 0 { "<" } else if c > 0 { ">" } else { "=" }
+	return f"{sv_delta_text(a)} {op} {sv_delta_text(b)}"
+}
+
+test "i64 coefficients are kept small and never wrapped" {
+	let mut out: String = ""
+	out = out + "== item 1: i64 kept small\n"
+	out = out + f"reduced chain: {sv_num_test_chain(true, 40)}\n"
+	out = out + f"unreduced chain: {sv_num_test_chain(false, 40)}\n"
+	out = out + f"unreduced chain, longer: {sv_num_test_chain(false, 80)}\n"
+	let big: i64 = 4611686018427387904
+	let sum = sv_mul_add(1, big, 1, big)
+	out = out + f"2^62 + 2^62: {if sum == null { "refused" } else { "wrapped" }}\n"
+	let wide: Vec[i64] = [3037000500, 1]
+	let square = sv_dense_combine(3037000500, wide, 0, wide)
+	out = out + f"3037000500 * 3037000500: {if square == null { "refused" } else { "wrapped" }}\n"
+	let least: i64 = -9223372036854775807 - 1
+	out = out + f"gcd(-12, 18) = {sv_gcd(-12, 18) ?? -1}, gcd(i64 least, 0): {if sv_gcd(least, 0) == null { "refused" } else { "wrapped" }}\n"
+	let row: Vec[i64] = [6, -9, 12, 3]
+	let shown = sv_reduced(row).iter().join(", ")
+	out = out + f"reduced [6, -9, 12, 3]: [{shown}]\n"
+	out = out + f"column cost unit {sv_column_cost(1, -7) ?? -1}, 4 vs -6: {sv_column_cost(4, -6) ?? -1}\n"
+	let x: Vec[i64] = [4, 1, -6]
+	let y: Vec[i64] = [-6, -1, 9]
+	out = out + f"picked column of [4, 1, -6] and [-6, -1, 9]: {sv_pick_column(x, y, 3, true)}\n"
+	out = out + f"floor(-7/2) = {sv_floor_div(-7, 2) ?? 0}, ceil(-7/2) = {sv_ceil_div(-7, 2) ?? 0}, floor by 0: {if sv_floor_div(1, 0) == null { "refused" } else { "?" }}\n"
+
+	let expected = [
+		"== item 1: i64 kept small",
+		"reduced chain: 40 steps, largest coefficient 194, within 32 bits: true",
+		"unreduced chain: 40 steps, largest coefficient 14293651161078, within 32 bits: false",
+		"unreduced chain, longer: step 60: refused, would leave i64 (left 32 bits at step 28, largest so far 7493989779944505334)",
+		"2^62 + 2^62: refused",
+		"3037000500 * 3037000500: refused",
+		"gcd(-12, 18) = 6, gcd(i64 least, 0): refused",
+		"reduced [6, -9, 12, 3]: [2, -3, 4, 1]",
+		"column cost unit 0, 4 vs -6: 6",
+		"picked column of [4, 1, -6] and [-6, -1, 9]: 1",
+		"floor(-7/2) = -4, ceil(-7/2) = -3, floor by 0: refused",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+test "rationals and delta are normalised, ordered and refuse overflow" {
+	let mut out: String = ""
+	out = out + "== item 2: rationals and delta\n"
+	out = out + f"6/-4 = {sv_num_test_show(sv_rat(6, -4))}, 0/-5 = {sv_num_test_show(sv_rat(0, -5))}, 1/0: {sv_num_test_show(sv_rat(1, 0))}\n"
+	let sixth = sv_rat(1, 6) ?? sv_int(0)
+	let tenth = sv_rat(1, 10) ?? sv_int(0)
+	out = out + f"1/6 + 1/10 = {sv_num_test_show(sv_rat_add(sixth, tenth))}, 1/6 - 1/10 = {sv_num_test_show(sv_rat_sub(sixth, tenth))}\n"
+	let p = sv_rat(3037000499, 2) ?? sv_int(0)
+	let q = sv_rat(2, 3037000499) ?? sv_int(0)
+	out = out + f"3037000499/2 * 2/3037000499 = {sv_num_test_show(sv_rat_mul(p, q))}, divided = {sv_num_test_show(sv_rat_div(p, q))}\n"
+	let huge = sv_int(9223372036854775807)
+	out = out + f"i64 max + 1/2: {sv_num_test_show(sv_rat_add(huge, sv_rat(1, 2) ?? sv_int(0)))}\n"
+	out = out + f"divided by 0: {sv_num_test_show(sv_rat_div(sixth, sv_int(0)))}\n"
+	let third = sv_rat(1, 3) ?? sv_int(0)
+	let half = sv_rat(1, 2) ?? sv_int(0)
+	out = out + sv_num_test_order(third, half) + "\n"
+	out = out + sv_num_test_order(sv_rat_neg(third) ?? third, sv_rat_neg(half) ?? half) + "\n"
+	let m: i64 = 9223372036854775807
+	let a = sv_rat(m - 1, m) ?? sv_int(0)
+	let b = sv_rat(m - 2, m - 1) ?? sv_int(0)
+	out = out + sv_num_test_order(a, b) + "\n"
+	out = out + sv_num_test_order(sv_rat(-7, 2) ?? half, sv_rat(-14, 4) ?? half) + "\n"
+	let r = sv_rat(-7, 2) ?? half
+	out = out + f"floor(-7/2) = {sv_rat_floor(r)}, ceil = {sv_rat_ceil(r)}, integer: {sv_rat_is_int(r)}\n"
+	let five = sv_delta(sv_int(5), sv_int(0))
+	let below = sv_delta(sv_int(5), sv_int(-1))
+	let above = sv_delta(sv_int(5), sv_int(1))
+	let four = sv_delta(sv_int(4), sv_int(1000))
+	out = out + sv_num_test_dorder(below, five) + "\n"
+	out = out + sv_num_test_dorder(five, above) + "\n"
+	out = out + sv_num_test_dorder(below, four) + "\n"
+	out = out + sv_num_test_dorder(sv_delta_sub(above, five) ?? five, sv_delta(sv_int(0), sv_int(1))) + "\n"
+	out = out + f"(5 - δ) * -2 = {sv_delta_text(sv_delta_scale(below, sv_int(-2)) ?? five)}\n"
+	out = out + f"(5 - δ) + (4 + 1000δ) = {sv_delta_text(sv_delta_add(below, four) ?? five)}\n"
+
+	let expected = [
+		"== item 2: rationals and delta",
+		"6/-4 = -3/2, 0/-5 = 0, 1/0: refused",
+		"1/6 + 1/10 = 4/15, 1/6 - 1/10 = 1/15",
+		"3037000499/2 * 2/3037000499 = 1, divided = 9223372030926249001/4",
+		"i64 max + 1/2: refused",
+		"divided by 0: refused",
+		"1/3 < 1/2",
+		"-1/3 > -1/2",
+		"9223372036854775806/9223372036854775807 > 9223372036854775805/9223372036854775806",
+		"-7/2 = -7/2",
+		"floor(-7/2) = -4, ceil = -3, integer: false",
+		"5-δ < 5",
+		"5 < 5+δ",
+		"5-δ > 4+1000δ",
+		"δ = δ",
+		"(5 - δ) * -2 = -10+2δ",
+		"(5 - δ) + (4 + 1000δ) = 9+999δ",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
