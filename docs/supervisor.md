@@ -1,7 +1,12 @@
 # The main session (supervisor)
 
-What only the main session does: the session that starts the agents, talks to
-the owner and holds the versions. Builders do not need this file; the rules
+What only the main session does. **The supervisor is the session that runs the
+driver** (`scripts/drive.nika`; owner, 2026-11-14): it starts the agents,
+talks to the owner and holds the versions. Other sessions working at the same
+time (a solver, a CI session) are not the supervisor, even when they started
+agents of their own; they leave what this file gives the supervisor (versions,
+`CHANGELOG.md`, badges, `docs/tokenspeed.md`, new `NK` codes) to the session
+running the driver. Builders do not need this file; the rules
 for everyone are in `CLAUDE.md`. Since the owner removed the architect role
 (2026-11-01) the supervisor also writes the briefs, keeps the lanes and the
 issues and decides obvious language gaps (*Language decisions*); anything else
