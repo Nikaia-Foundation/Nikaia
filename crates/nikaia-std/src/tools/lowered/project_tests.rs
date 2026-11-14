@@ -586,7 +586,7 @@ pub(crate) fn project_tests_joined(first: &[u8], then: &[u8]) -> Bytes {
     Bytes(all)
 }
 
-pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, setting: &str, own: &std::path::Path, batched: Option<&ProjectTestsBatched>) -> Result<ProjectTestsOutcome, Box<dyn std::error::Error>> {
+pub(crate) async fn project_tests_prepared<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, own: &std::path::Path) -> Result<fs::Path, Box<dyn std::error::Error>> {
     let project = nikaia_std::fs::path::join(&(own), std::path::Path::new(&("project")));
     project_tests_empty_but(own, "project")?;
     project_tests_empty_but(&project, "target")?;
@@ -595,7 +595,7 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     let entry = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(project), std::path::Path::new(&("src")))), std::path::Path::new(&("main.nika")));
     match fs::copy(&source, &entry, &fs::Root::Anywhere) {
         Ok(_) => {},
-        Err(error) => { return Err(nikaia_std::error::raise(ProjectTestsRefusal::Refused(format!("copying {}: {}", nikaia_std::fs::path::display(&(source)), error)), &"project_tests_program_test")); },
+        Err(error) => { return Err(nikaia_std::error::raise(ProjectTestsRefusal::Refused(format!("copying {}: {}", nikaia_std::fs::path::display(&(source)), error)), &"project_tests_prepared")); },
     };
     let dependency: String = match host.package_name(root)? {
         None => String::from(""),
@@ -605,6 +605,28 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
         },
     };
     fs::write(&nikaia_std::fs::path::join(&(project), std::path::Path::new(&("nikaia.toml"))), &fs::Root::Anywhere, format!("[package]\nname = \"program_test\"\nversion = \"0.1.0\"\n{}", dependency), false, true).await?;
+    Ok(entry)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectTestsReports {
+    pub bounds: String,
+    pub asserts: String,
+}
+
+pub async fn project_tests_reports<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, own: &std::path::Path) -> Result<ProjectTestsReports, Box<dyn std::error::Error>> {
+    let mut found = ProjectTestsReports { bounds: String::from(""), asserts: String::from("") };
+    if program.bounds.is_none() && program.asserts.is_none() { return Ok(found); }
+    let entry = project_tests_prepared(host, program, root, own).await?;
+    let written = format!("tests/{}.nika", program.name);
+    if program.bounds.is_some() { found.bounds = project_tests_relocated(&host.explained(&vec![String::from("--bounds")], &entry, own)?, &entry, &written, root); }
+    if program.asserts.is_some() { found.asserts = project_tests_relocated(&host.explained(&vec![String::from("--asserts")], &entry, own)?, &entry, &written, root); }
+    Ok(found)
+}
+
+pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, setting: &str, own: &std::path::Path, batched: Option<&ProjectTestsBatched>, reports: &ProjectTestsReports) -> Result<ProjectTestsOutcome, Box<dyn std::error::Error>> {
+    let project = nikaia_std::fs::path::join(&(own), std::path::Path::new(&("project")));
+    let entry = project_tests_prepared(host, program, root, own).await?;
     let written = format!("tests/{}.nika", program.name);
     match batched {
         None => { },
@@ -615,10 +637,8 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
             project_tests_empty_but(own, "project")?;
         },
     }
-    let mut report: String = String::from("");
-    if program.bounds.is_some() { report = project_tests_relocated(&host.explained(&vec![String::from("--bounds")], &entry, own)?, &entry, &written, root); }
-    let mut asserts: String = String::from("");
-    if program.asserts.is_some() { asserts = project_tests_relocated(&host.explained(&vec![String::from("--asserts")], &entry, own)?, &entry, &written, root); }
+    let report = nikaia_std::block::Text::from(reports.bounds.to_string());
+    let asserts = nikaia_std::block::Text::from(reports.asserts.to_string());
     let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]))?;
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, &project_tests_relocated(&built.stderr, &entry, &written, root));
