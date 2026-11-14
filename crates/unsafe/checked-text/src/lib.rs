@@ -344,19 +344,21 @@ mod tests {
         let edges: [u8; 12] = [
             0x00, 0x41, 0x7F, 0x80, 0xBF, 0xC0, 0xC2, 0xDF, 0xE0, 0xED, 0xF0, 0xF4,
         ];
-        let mut cases: Vec<Vec<u8>> = Vec::new();
+        // Each case is its bytes and their count, so that building the set
+        // allocates once: under Miri, a heap block per case cost minutes.
+        let mut cases: Vec<([u8; 4], usize)> = Vec::new();
         for a in 0..=255u8 {
-            cases.push(vec![a]);
+            cases.push(([a, 0, 0, 0], 1));
             for b in 0..=255u8 {
-                cases.push(vec![a, b]);
+                cases.push(([a, b, 0, 0], 2));
             }
         }
         for &a in &[0xE0u8, 0xE1, 0xED, 0xEF, 0xF0, 0xF1, 0xF4, 0xF5] {
             for b in 0x7Fu8..=0xC1 {
                 for &c in &edges {
-                    cases.push(vec![a, b, c]);
+                    cases.push(([a, b, c, 0], 3));
                     for &d in &edges {
-                        cases.push(vec![a, b, c, d]);
+                        cases.push(([a, b, c, d], 4));
                     }
                 }
             }
@@ -367,10 +369,10 @@ mod tests {
         // Miri a spread of them is checked - what it adds is the memory model,
         // and the whole set runs on every `cargo test`.
         let stride = if cfg!(miri) { 211 } else { 1 };
-        for case in cases.iter().step_by(stride) {
+        for (case, len) in cases.iter().step_by(stride) {
             for (head, tail) in [(0, 0), (100, 0), (61, 70), (127, 3)] {
                 let mut bytes = ascii(head);
-                bytes.extend_from_slice(case);
+                bytes.extend_from_slice(&case[..*len]);
                 bytes.extend(ascii(tail));
                 assert_eq!(piece(&bytes), serial(&bytes), "{bytes:02X?}");
             }
