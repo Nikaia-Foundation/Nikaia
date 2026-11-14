@@ -43,9 +43,9 @@
 
 #[allow(unused_imports)]
 use crate::common;
-use nikaia_std::block::names::{String, ToText, Vec, format, vec};
+use nikaia_std::block::names::{String, ToText, Vec, format};
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use nikaia::check::{self, Finding};
 use nikaia::contracts::order;
@@ -53,10 +53,6 @@ use nikaia::contracts::send::{self, Crossing};
 use nikaia::contracts::ty::TyOps;
 use nikaia::contracts::{Ledger, LedgerOps, STD, ty::Ty};
 use nikaia::parser::parse_to_ast;
-
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
 
 fn findings(source: &str) -> Vec<Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -149,66 +145,9 @@ fn refused_at(source: &str, user_parallelism: &str) -> Option<String> {
 
 // --- the guard ---------------------------------------------------------------
 
-/// No program in the repository has a crossing refused.
-///
-/// Part III C.4's property, for this check: it never rejects a program that is
-/// correct. Every `.nika` there is, including the ones in subdirectories that
-/// the type checker's own guard does not walk - `examples/inventory`, and the
-/// three projects of the ADR-303 D7 experiment, which are the programs that
-/// actually hand values to a foreign runtime.
-#[test]
-fn no_program_in_the_repository_has_a_crossing_refused() {
-    let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    // Each program is checked on its own, so on every core (CI speed,
-    // 2026-11-14); `None` for a probe that is not meant to parse, which is not
-    // this test's business.
-    let programs = every_program(&repo_root());
-    let said: Vec<Option<String>> = common::in_parallel(&programs, |path| {
-        let source = std::fs::read_to_string(path).expect("read the program");
-        let parsed = parse_to_ast(&source).ok()?;
-        let own = Ledger::infer(&parsed);
-        let name = path.display().to_text();
-        let mut reported = String::new();
-        for finding in check::check(&parsed, &own, &library)
-            .findings
-            .iter()
-            .filter(|f| f.code.starts_with("NK25"))
-        {
-            reported.push_str(&nikaia::diagnostics::render_finding(
-                finding, &name, &source,
-            ));
-        }
-        Some(reported)
-    });
-    let checked = said.iter().flatten().count();
-    let reported: String = said.into_iter().flatten().collect();
-
-    assert!(checked >= 12, "only {checked} programs were checked");
-    assert!(
-        reported.is_empty(),
-        "a program in the repository was refused a crossing:\n{reported}"
-    );
-}
-
-fn every_program(root: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    let mut pending = vec![root.join("examples"), root.join("crates/nikaia-std/src")];
-    while let Some(dir) = pending.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path.extension().and_then(|e| e.to_str()) == Some("nika") {
-                out.push(path);
-            }
-        }
-    }
-    out.sort();
-    out
-}
+// No program in the repository has a crossing refused: held by
+// `bytes::the_corpus_needs_no_tether`, in the same check of the tree as its
+// own claim (CI speed, 2026-11-14).
 
 /// An ordinary value crosses into a task, and nothing is said about it.
 ///

@@ -258,12 +258,19 @@ fn an_owned_result_is_left_alone() {
 
 /// **And nothing in the corpus reaches it**, which is the claim that makes this
 /// change safe to make at all: the whole tree is the free case.
+///
+/// **The same pass holds the crossing guard** (Part III C.4, ADR-282): no
+/// program in `examples/` or std's sources has a crossing refused (`NK25..`),
+/// including the projects of the ADR-303 D7 experiment, which actually hand
+/// values to a foreign runtime. One check of the tree for both claims: each was
+/// a walk of its own over the same files (CI speed, 2026-11-14).
 #[test]
 fn the_corpus_needs_no_tether() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let library = Ledger::parse(STD).expect("std's ledger");
+    let crossing_guarded = [root.join("examples"), root.join("crates/nikaia-std/src")];
     let mut programs = Vec::new();
-    let mut walk = vec![root];
+    let mut walk = vec![root.clone()];
     while let Some(dir) = walk.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
@@ -288,26 +295,38 @@ fn the_corpus_needs_no_tether() {
         }
     }
     // Each program is checked on its own, so on every core (CI speed,
-    // 2026-11-14).
-    let refused: Vec<String> = common::in_parallel(&programs, |path| {
-        let Ok(text) = std::fs::read_to_string(path) else {
-            return Vec::new();
-        };
-        let Ok(parsed) = parse_to_ast(&text) else {
-            return Vec::new();
-        };
+    // 2026-11-14): its tethers, and its crossings where the guard holds.
+    // `None` for a file that does not read or parse (a probe meant not to).
+    let said: Vec<Option<(Vec<String>, String, bool)>> = common::in_parallel(&programs, |path| {
+        let text = std::fs::read_to_string(path).ok()?;
+        let parsed = parse_to_ast(&text).ok()?;
         let own = Ledger::infer(&parsed);
-        nikaia::check::check(&parsed, &own, &library)
-            .findings
-            .into_iter()
-            .filter(|finding| finding.code == "NK2303")
-            .map(|finding| format!("{}: {}", path.display(), finding.message))
-            .collect::<Vec<_>>()
-    })
-    .into_iter()
-    .flatten()
-    .collect();
+        let guarded = crossing_guarded.iter().any(|dir| path.starts_with(dir));
+        let name = path.display().to_text();
+        let mut tethered = Vec::new();
+        let mut crossings = String::new();
+        for finding in nikaia::check::check(&parsed, &own, &library).findings {
+            if finding.code == "NK2303" {
+                tethered.push(format!("{}: {}", path.display(), finding.message));
+            } else if guarded && finding.code.starts_with("NK25") {
+                crossings.push_str(&nikaia::diagnostics::render_finding(&finding, &name, &text));
+            }
+        }
+        Some((tethered, crossings, guarded))
+    });
+    let said: Vec<(Vec<String>, String, bool)> = said.into_iter().flatten().collect();
+    let refused: Vec<String> = said.iter().flat_map(|(t, _, _)| t.clone()).collect();
     assert!(refused.is_empty(), "tethered:\n{}", refused.join("\n"));
+    let guarded = said.iter().filter(|(_, _, g)| *g).count();
+    assert!(
+        guarded >= 12,
+        "only {guarded} programs were checked for crossings"
+    );
+    let crossings: String = said.iter().map(|(_, c, _)| c.as_str()).collect();
+    assert!(
+        crossings.is_empty(),
+        "a program in the repository was refused a crossing:\n{crossings}"
+    );
 }
 
 // ---------------------------------------------------------------------------

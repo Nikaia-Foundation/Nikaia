@@ -485,7 +485,6 @@ jobs:
       HEAVY_REST: >-
         project::the_http_package_serves_its_example
         bytes::the_corpus_needs_no_tether
-        send::no_program_in_the_repository_has_a_crossing_refused
         contracts::a_toolchain_module_is_not_part_of_std
         fmt::every_nika_file_formats_to_the_same_tree_and_a_fixed_point
       HEAVY_ELSEWHERE: nikaia_test::the_compiler_test_package_passes_at_both_settings
