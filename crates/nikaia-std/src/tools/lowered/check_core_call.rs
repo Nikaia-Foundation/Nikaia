@@ -473,6 +473,7 @@ pub(crate) fn check_core_call_described<H: CheckHost>(state: &mut CheckState, wo
     let result = check_crossings_arguments(state, world, host, key, name, contract, args, found, &typed_options, span);
     state.flow.option_values = vec![];
     state.flow.option_literals = vec![];
+    check_core_call_options_handed_over(state, world, contract, name, config, &typed_options, span);
     let bound = argument_bindings(contract, found);
     check_crossings_a_call_that_hands_its_number_back(state, world, contract, &bound, args);
     state.a_bound_the_argument_does_not_meet(world, key, &bound, span);
@@ -500,6 +501,32 @@ pub(crate) fn check_core_call_option_texts(state: &mut CheckState, world: &Check
                 { let __nikaia_stored = (nikaia_std::block::Text::from(name.to_string()), ty); unsafe { nikaia_std::proven::write(&mut out, (index) as usize, __nikaia_stored) }; }
             }
         }
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_options_handed_over(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, written: &str, config: &[ConfigArg], passed: &[(String, Ty)], span: &Span) {
+    let moved = check_core_call_moving_options(&state, contract, written, passed);
+    for option in config.iter() {
+        let name = world.words.resolve(option.name);
+        let found = match moved.iter().find(|m| { m.0 == name }) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        state.hands_over(world, &option.value, &found.1, &format!("passed as the option `{}` of `{}`, which keeps it", name, written), span);
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_call_moving_options(state: &CheckState, contract: &FnContract, written: &str, passed: &[(String, Ty)]) -> Vec<(String, Ty)> {
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    if state.foreign_names.contains(written) { return vec![]; }
+    let options = lowered_options(contract);
+    let mut out: Vec<(String, Ty)> = vec![];
+    for (name, ty) in passed.iter() {
+        let declared = match options.iter().find(|&o| { o.name == *name }) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if declared.ty.is_a_view() || nikaia_std::list::contains(&signature.mutable, &name) { continue; }
+        out.push((nikaia_std::block::Text::from(name.to_string()), ty.clone()));
     }
     out
 }

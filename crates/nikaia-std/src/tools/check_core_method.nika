@@ -987,6 +987,14 @@ pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWo
     let walked = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span)
     let found = check_core_method_deadline(state, world, receiver, config, walked)
     state.flow.method_passed.remove(id_of(receiver) as i64)
+    // **What an option keeps, it is given** (#1595), as at a function's.
+    for (name, ty, to) in state.flow.method_moved.remove(id_of(receiver) as i64) ?? [] {
+        for option in config {
+            if world.words.resolve(option.name) == name {
+                state.hands_over(world, option.value, ty, to, span)
+            }
+        }
+    }
     if code_keys.len() > 0 {
         let last = args.len() as i64 - 1
         check_core_places_stored_keys(state, world, host, args[last], code_keys)
