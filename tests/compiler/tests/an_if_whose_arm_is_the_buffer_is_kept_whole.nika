@@ -1,0 +1,32 @@
+// #1599: `let help = if c { f"{guard} …" } else { guard }`, then pushed. The
+// keep plan lent `guard` out of a frame, so one arm was a view and the other
+// owned text, and rustc refused the `if` (NK1343). An `if`, `match` or block
+// whose every tail is the buffer or text made here is made here.
+fn pick(tainted: String?, more: bool) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let first = tainted ?? ""
+    let guard = f"Check {first} here."
+    let help = if more { f"{guard} Or more." } else { guard }
+    out.push(help)
+    return out
+}
+
+fn chosen(word: String, n: i64) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let base = f"<{word}>"
+    let said = match n {
+        0 => base,
+        1 => f"{base} once",
+        else => f"{base} {n} times",
+    }
+    out.push(said)
+    return out
+}
+
+fn main() throws {
+    println(pick("a", true)[0])
+    println(pick("b", false)[0])
+    println(chosen("x", 0)[0])
+    println(chosen("y", 1)[0])
+    println(chosen("z", 3)[0])
+}

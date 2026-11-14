@@ -654,7 +654,69 @@ fn made_here(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Ty
     if !is_the_buffer(value, ask, walk) && declares_text(ask.names, ty) {
         return Buffer::Named("String")
     }
+    // **An `if`, a `match` or a block each of whose tails is a buffer** (#1599):
+    // `let help = if c { f"{guard} …" } else { guard }` binds text of this
+    // frame's own, built in one arm and moved in the other, as `let help =
+    // guard` moves; it is no view of `guard`, which a later `xs.push(help)`
+    // would otherwise put in the frame's keep as a view.
+    let tails = tails_made_here(names, value, at, ask, unaliased, walk)
+    if tails != null {
+        return Buffer::Named(tails ?? "")
+    }
     return found
+}
+
+// The buffer type every tail of an `if` (with an `else`), a `match` or a
+// block makes, where each is made here or is a buffer moved whole and at
+// least one is made here; else null.
+fn tails_made_here(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, at: i64, ask: ref BufferAsk, unaliased: fn(ref String) -> String sync, walk: ref BufferWalk) -> String? {
+    let mut tails: Vec[Expr] = []
+    match value {
+        Expr::If { then_branch, else_branch, .. } => {
+            let other = else_branch ?? return null
+            tails.push(ending_of(then_branch) ?? return null)
+            tails.push(ending_of(other) ?? return null)
+        }
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                tails.push(arm.body.clone())
+            }
+        }
+        Expr::Block(block, _) => tails.push(ending_of(block) ?? return null),
+        else => return null,
+    }
+    let mut made: String? = null
+    for tail in tails {
+        if is_the_buffer(tail, ask, walk) {
+            continue
+        }
+        let inner = match tail {
+            Expr::If { .. } => tails_made_here(names, tail, at, ask, unaliased, walk),
+            Expr::Match { .. } => tails_made_here(names, tail, at, ask, unaliased, walk),
+            Expr::Block(_, _) => tails_made_here(names, tail, at, ask, unaliased, walk),
+            else => match made_here(names, tail, null, at, ask, unaliased, walk) {
+                Buffer::Named(buffer) => buffer.clone(),
+                else => null,
+            },
+        }
+        let ty = inner ?? return null
+        if made != null && made != ty {
+            return null
+        }
+        made = ty
+    }
+    return made
+}
+
+// The expression a block ends with, where it ends with one.
+fn ending_of(block: ref Block) -> Expr? {
+    if block.stmts.len() == 0 {
+        return null
+    }
+    return match block.stmts[block.stmts.len() - 1].node {
+        Stmt::Expr(value) => value.clone(),
+        else => null,
+    }
 }
 
 // **Text a method of this package hands back as its own** (#933), as a
