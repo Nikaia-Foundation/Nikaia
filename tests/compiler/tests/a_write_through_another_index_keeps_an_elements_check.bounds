@@ -1,0 +1,6 @@
+bounds in tests/a_write_through_another_index_keeps_an_elements_check.nika: 3 indexes, 3 proved; 1 operations, 0 proved
+     9  xs[j]       proved
+    11  xs[0] += k  checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+    11  xs[0]       proved
+    12  xs[0]       proved
+  derived  bump: 0 <= j, proved at the calls on lines 16

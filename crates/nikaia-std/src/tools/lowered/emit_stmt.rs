@@ -170,18 +170,18 @@ impl EmitState {
         let mut pos: i64 = 0;
         while ((pos) as usize) < order.len() {
             let i = *unsafe { nikaia_std::proven::read(&order, (pos) as usize) };
-            if i < last && ((unsafe { nikaia_std::proven::add::<i64>(pos, 1) }) as usize) < order.len() && *unsafe { nikaia_std::proven::read(&order, (nikaia_std::proven::add::<i64>(pos, 1)) as usize) } == i + 1 && emit_filled_at_once(world, &self.own_contracts, &self.own_methods, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).node) {
-                let args = emit_resize_args(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).node);
+            if i < last && ((unsafe { nikaia_std::proven::add::<i64>(pos, 1) }) as usize) < order.len() && *unsafe { nikaia_std::proven::read(&order, (nikaia_std::proven::add::<i64>(pos, 1)) as usize) } == unsafe { nikaia_std::proven::add::<i64>(i, 1) } && emit_filled_at_once(world, &self.own_contracts, &self.own_methods, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node, &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::add::<i64>(i, 1)) as usize) }.node) {
+                let args = emit_resize_args(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(i, 1) })).node);
                 if args.len() == 2 {
                     let mut declared = EmitOut::empty();
                     let st = declared.mark();
-                    self.emit_stmt(world, walk, &mut declared, host, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, depth + 1, &tail.at(i, last), flow, scope)?;
-                    declared.record(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, st);
+                    self.emit_stmt(world, walk, &mut declared, host, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node, &unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span, depth + 1, &tail.at(i, last), flow, scope)?;
+                    declared.record(&unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span, st);
                     let plain = declared.buf.strip_suffix("vec![];");
                     let placed = declared.buf.strip_suffix("nikaia_std::block::list(nikaia_std::block::Place::Block);");
                     let head = nikaia_std::index::or_maybe(plain, || placed);
                     if head.is_some() {
-                        let beside = flow.at(nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).span.start as i64);
+                        let beside = flow.at(unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::add::<i64>(i, 1)) as usize) }.span.start as i64);
                         let mut value = EmitOut::empty();
                         self.emit_expr(world, walk, &mut value, host, *unsafe { nikaia_std::proven::read(&args, (1) as usize) }, depth + 1, beside, scope)?;
                         let mut count = EmitOut::empty();
@@ -193,8 +193,8 @@ impl EmitState {
                         out.push(&inner_pad);
                         let st = out.mark();
                         if plain.is_some() { out.push(&format!("{}vec![{}; {}];", nikaia_std::index::or(head, || ""), value.buf, count.buf)); } else { out.push(&format!("{}nikaia_std::block::List::from_elem_in({}, {}, nikaia_std::block::Place::Block);", nikaia_std::index::or(head, || ""), value.buf, count.buf)); }
-                        out.record(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, st);
-                        out.push(&self.emit_stmt_late_puts(walk, &scope.function, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).span.start as i64));
+                        out.record(&unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span, st);
+                        out.push(&self.emit_stmt_late_puts(walk, &scope.function, unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::add::<i64>(i, 1)) as usize) }.span.start as i64));
                         out.push("\n");
                         pos = unsafe { nikaia_std::proven::add::<i64>(pos, 2) };
                         continue;
@@ -207,8 +207,8 @@ impl EmitState {
             walk.async_keeps = i < last;
             let before = walk.async_rests.len() as i64;
             let st = out.mark();
-            self.emit_stmt(world, walk, out, host, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, depth + 1, &here, flow, scope)?;
-            out.record(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, st);
+            self.emit_stmt(world, walk, out, host, &unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.node, &unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span, depth + 1, &here, flow, scope)?;
+            out.record(&unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span, st);
             let ending = i == last && (walk.async_rests.len() as i64) > rests;
             if ending && here.is_value() {
                 let mut at = st;
@@ -221,9 +221,9 @@ impl EmitState {
                 out.insert_at(at, "let __nikaia_rested = { ");
                 out.push(" };");
             }
-            out.push(&self.emit_stmt_late_puts(walk, &scope.function, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64));
-            self.emit_view_list_drops(out, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64);
-            self.emit_view_list_rebinds(out, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64);
+            out.push(&self.emit_stmt_late_puts(walk, &scope.function, unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span.start as i64));
+            self.emit_view_list_drops(out, unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span.start as i64);
+            self.emit_view_list_rebinds(out, unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span.start as i64);
             out.push("\n");
             pos += 1;
         }

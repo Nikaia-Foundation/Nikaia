@@ -72,7 +72,7 @@ pub(crate) fn lg_search(indexed: &LgIndexed, state: &LgBranch, budget: &LgBudget
         let here = *unsafe { nikaia_std::proven::read(&state.open_ors, (index) as usize) };
         let best = *nikaia_std::index::get(&state.open_ors, nikaia_std::index::at(at));
         let fewer = ((*nikaia_std::index::get(&indexed.ors, nikaia_std::index::at(here))).len() as i64) < (*nikaia_std::index::get(&indexed.ors, nikaia_std::index::at(best))).len() as i64;
-        let same = ((*nikaia_std::index::get(&indexed.ors, nikaia_std::index::at(here))).len() as i64) == (*nikaia_std::index::get(&indexed.ors, nikaia_std::index::at(best))).len() as i64;
+        let same = ((*unsafe { nikaia_std::proven::read(&indexed.ors, (here) as usize) }).len() as i64) == (*unsafe { nikaia_std::proven::read(&indexed.ors, (best) as usize) }).len() as i64;
         if fewer || same && here < best { at = index; }
         index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }

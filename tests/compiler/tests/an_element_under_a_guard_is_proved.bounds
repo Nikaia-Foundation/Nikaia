@@ -1,0 +1,6 @@
+bounds in tests/an_element_under_a_guard_is_proved.nika: 3 indexes, 3 proved; 1 operations, 1 proved
+     8  xs[c]       proved
+     9  xs[c] += 1  proved
+     9  xs[c]       proved
+    11  xs[c]       proved
+  derived  bump: 0 <= c, proved at the calls on lines 17
