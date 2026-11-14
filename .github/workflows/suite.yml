@@ -67,11 +67,11 @@ jobs:
           key: ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-stable-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-stable-
 
-      - name: Build the workspace
-        run: cargo build --workspace --release
-
       # Every test binary and the directory cargo would run it in (its
-      # package's), one per line: what the shards run.
+      # package's), one per line: what the shards run. The tests are built
+      # first, in one cargo run with the libraries and the binaries the
+      # integration tests start, so rustc compiles `std`'s test harness
+      # beside its library instead of after the whole workspace.
       - name: Build the tests
         run: |
           set -o pipefail
@@ -80,6 +80,10 @@ jobs:
                    | "\(.executable)\t\(.manifest_path | sub("/Cargo.toml$"; ""))"' |
             sort -u >target/release/test-binaries.tsv
           cat target/release/test-binaries.tsv
+
+      # What the test run did not need (the bench binaries): only links.
+      - name: Build the rest of the workspace
+        run: cargo build --workspace --release
 
       # The compiler, `std`'s rlibs (the tests hand emitted programs to rustc
       # with `--extern` into `deps/`) and the test binaries; not cargo's
