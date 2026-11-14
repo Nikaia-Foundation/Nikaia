@@ -1472,8 +1472,8 @@ it means.
 
 Every input carries a **provenance**, because the compiler knows where a buffer came from (Part I 6.6):
 
-* **Untrusted**: someone the program cannot vouch for may have chosen these bytes. HTTP requests, sockets, IPC, rows read back from a database, standard input, every file read while the program runs, and the environment ([ADR-397](adr/adr-397.md)).
-* **Trusted**: the operator chose these bytes. Command-line arguments, the project's assets read while building (`asset("…")`), and a source marked `trusted: true` ([ADR-365](adr/adr-365.md)).
+* **Untrusted**: someone the program cannot vouch for may have chosen these bytes. HTTP requests, sockets, IPC, rows read back from a database, standard input, every file read while the program runs, the environment ([ADR-397](adr/adr-397.md)) and the command line, `cli::args()` and `main`'s parameters ([ADR-399](adr/adr-399.md)).
+* **Trusted**: the build or the operator chose these bytes. The project's assets read while building (`asset("…")`) and a source marked `trusted: true` ([ADR-365](adr/adr-365.md)).
 
 A value inherits the provenance of the buffer it comes from, and a collection takes the most cautious provenance of everything put into it. Where the compiler cannot tell, across a dynamic call or from a foreign library, the answer is Untrusted.
 
@@ -1501,7 +1501,6 @@ let data = fs::map(path, fs::Root::Anywhere; trusted: true)
 ```text
 $ nikaia lower 1brc.nika --trust
 input provenance: trusted
-    cli::args is trusted
     fs::map is trusted: `trusted: true` at 1brc.nika:7
 hash for a map keyed by the input: fast, fixed seed - no adversary chooses these keys
 ```
@@ -1521,7 +1520,7 @@ An untrusted map is seeded randomly, so **its iteration order is not stable betw
   value. A text whose shape has to be explained when it is wrong is a grammar's
   to read, with `dec[T](p)` (Part II 10.8).
 * **`json`** (an official package, 17.3): serialization using compile-time code generation, with zero-allocation parsing where possible.
-* **`std::cli`**: parsers for command-line arguments, environment variables and ANSI terminal colours. It reads the words into `main`'s parameters and checks `main`'s preconditions before the body runs (Part I 5.5); `cli::args()` returns every word as given.
+* **`std::cli`**: parsers for command-line arguments, environment variables and ANSI terminal colours. It reads the words into `main`'s parameters and checks `main`'s preconditions before the body runs (Part I 5.5); `cli::args()` returns every word as given. The words are untrusted, `main`'s parameters too, unless read with `cli::args(trusted: true)` ([ADR-399](adr/adr-399.md)).
 * **`std::env`**: the process's environment. `env::var(name: String) -> String?` is the
   variable's value, null where it is unset, empty or not Unicode; `env::temp_dir() -> fs::Path`
   is the directory for temporary files; `env::current_exe() -> fs::Path?` is the path of the running
