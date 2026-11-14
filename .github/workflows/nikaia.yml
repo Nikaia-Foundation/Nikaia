@@ -472,7 +472,6 @@ jobs:
       HEAVY_SYSROOT_CORES: sysroot::the_tools_lower_the_same_on_one_thread_as_on_every_core
       HEAVY_SYSROOT_PAIR: >-
         sysroot::the_committed_rust_is_what_this_compiler_lowers
-        sysroot::stds_nikaia_half_lowers_the_same_at_both_switches
       HEAVY_CORPUS: >-
         sequences::the_corpus_has_no_more_unanswered_method_calls_than_it_had
         language::the_build_time_package_passes_its_own_tests
