@@ -1,0 +1,9 @@
+error[NK1118]: This divides by zero.
+  --> tests/a_zero_divisor_in_a_live_branch_is_refused.nika:7:3
+   |
+ 7 | 		println(f"{10 / d}")
+   |   ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Dividing by zero would stop the program, and here it's certain to happen.
+   = help: If the divisor can really be zero, check it before dividing.
+1 type error

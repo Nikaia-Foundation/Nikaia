@@ -62,6 +62,55 @@ impl CheckState {
         return checked_constant(folded)
     }
 
+    /// **What a condition comes to when it folds** (#1588): `true`, `false`,
+    /// a comparison of two constant integers, and `!`, `&&` and `||` over
+    /// those; `null` for anything else. A branch whose condition folds the
+    /// other way never runs.
+    pub fn condition_constant(ref self, world: ref CheckWorld, cond: ref Expr) -> bool? sync {
+        return match cond {
+            Expr::LitBool(value, _) => value,
+            Expr::Unary { op, expr, .. } => self.condition_negated(world, op, expr),
+            Expr::Binary { op, lhs, rhs, .. } => self.condition_combined(world, op, lhs, rhs),
+            else => null,
+        }
+    }
+
+    fn condition_negated(ref self, world: ref CheckWorld, op: ref UnaryOp, inner: ref Expr) -> bool? sync {
+        return null if op != UnaryOp::Not
+        let value = self.condition_constant(world, inner) ?? return null
+        return !value
+    }
+
+    fn condition_combined(ref self, world: ref CheckWorld, op: ref BinaryOp, lhs: ref Expr, rhs: ref Expr) -> bool? sync {
+        if op == BinaryOp::And || op == BinaryOp::Or {
+            let left = self.condition_constant(world, lhs)
+            let right = self.condition_constant(world, rhs)
+            let and = op == BinaryOp::And
+            // One side alone can decide: `false && _`, `true || _`.
+            if (left ?? and) != and || (right ?? and) != and {
+                return !and
+            }
+            let a = left ?? return null
+            let b = right ?? return null
+            return if and { a && b } else { a || b }
+        }
+        let a = self.constant_of(world, lhs) ?? return null
+        let b = self.constant_of(world, rhs) ?? return null
+        if a.beyond || b.beyond {
+            return null
+        }
+        let order = integer_order(a.value, b.value)
+        return match op {
+            BinaryOp::Eq => order == 0,
+            BinaryOp::Ne => order != 0,
+            BinaryOp::Lt => order < 0,
+            BinaryOp::Le => order <= 0,
+            BinaryOp::Gt => order > 0,
+            BinaryOp::Ge => order >= 0,
+            else => null,
+        }
+    }
+
     fn a_name_folded(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol) -> Folded sync {
         let written = world.words.resolve(name)
         let local = self.binding(written) ?? return Folded::Nothing

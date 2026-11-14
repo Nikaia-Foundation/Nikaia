@@ -1,7 +1,7 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1374 (Draft)
-**Date:** 2026-11-10
+**Version:** 0.0.1375 (Draft)
+**Date:** 2026-11-14
 
 ---
 
@@ -1524,10 +1524,20 @@ An untrusted map is seeded randomly, so **its iteration order is not stable betw
 * **`std::env`**: the process's environment. `env::var(name: String) -> String?` is the
   variable's value, null where it is unset, empty or not Unicode; `env::temp_dir() -> fs::Path`
   is the directory for temporary files; `env::current_exe() -> fs::Path?` is the path of the running
-  program, null where the platform cannot give it. All three are `sync`, and none has a `touches` line, so a
-  read of the environment orders against every other effect (13.5). A variable's value is untrusted, as
-  standard input is (17.1, [ADR-397](adr/adr-397.md)): `env::var(name; trusted: true)` says the operator
-  chose it, and the ledger records the marker.
+  program, null where the platform cannot give it. `env::vars(prefix: String) -> [(String, String)]`
+  lists every variable whose name starts with `prefix`, as (name, value) pairs sorted by name. The
+  prefix is required, so a program asks for the variables it uses and not for every secret beside them;
+  `env::vars("")` lists all of them, and says so. It sees what `env::var` sees: a variable that is empty
+  or not Unicode is left out, never a panic, so the list holds no name `env::var` calls null. All four are
+  `sync`, and none has a `touches` line, so a read of the environment orders against every other effect
+  (13.5). A variable's value is untrusted, as standard input is (17.1, [ADR-397](adr/adr-397.md)):
+  `env::var(name; trusted: true)` and `env::vars(prefix; trusted: true)` say the operator chose it, and
+  the ledger records the marker. `std` does not change the environment of the running program (no
+  `set_var`): a child gets another one through `process::run`'s `env:`, `env_clear:` and `env_remove:`
+  ([ADR-243](adr/adr-243.md) D5).
+  **The values may be secrets** (tokens, passwords, keys): do not print, log or send the list as it
+  is. A program started by a CGI-style host, or with more rights than its caller, gets an environment the
+  caller chose.
 * **`std::net`**: low-level TCP sockets for building custom protocols — `listen`,
   `connect`, `accept`, `read`, `write`. Everything that waits gives the thread up,
   so one thread serves many connections at either setting of `user_parallelism`.

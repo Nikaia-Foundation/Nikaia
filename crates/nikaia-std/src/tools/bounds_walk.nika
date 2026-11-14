@@ -1215,6 +1215,14 @@ fn bounding_end_write(
 		return
 	}
 	let mut below: collections::BTreeSet[String] = collections::BTreeSet()
+	// **Only the lists an end can still be** are asked about (#1590): what
+	// the key's writes so far this pass were proved below, and on a pass
+	// that proves, of the ends assumed; the rest is dropped by the
+	// intersection below or by the round's own (`bounds_rounds`).
+	let mut only = walk.written_ends.get(key)?.clone()
+	if only == null && !walk.collecting {
+		only = walk.assumed_ends.get(key)?.clone() ?? collections::BTreeSet()
+	}
 	let term = bounding_lin(walk, value, facts, context, program, words)
 	if term != null {
 		let v = term ?? 0
@@ -1225,6 +1233,9 @@ fn bounding_end_write(
 		let zero = walk.arena.int(0)
 		for name in read {
 			let list = name.strip_suffix(".len()") ?? continue
+			if only != null && !(only?.contains(list) ?? false) {
+				continue
+			}
 			if !bounding_end_list(walk, list, key) {
 				continue
 			}

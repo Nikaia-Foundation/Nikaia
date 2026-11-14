@@ -11,6 +11,16 @@ inference = "described"
 # (ADR-388 D3): a program makes the table its grammar interns into and reads
 # its symbols back.
 
+# A name interned into the table (#1592): the text tiers declare a `let`
+# with a type of `std`'s ledger the file never wrote. The table is shared
+# (`&self`), so interning reads it as a view.
+[fn."winnow_grammar::InternerContext::intern_string"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref winnow_grammar::InternerContext, text: ref String) -> winnow_grammar::Symbol"
+
 # The id every expression node of the tree carries (ADR-340, #558): a `u32`
 # the parser gives, compared as equal whatever the number (D3), so a key is
 # `get`, never the id itself.
