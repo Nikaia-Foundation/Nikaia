@@ -291,6 +291,16 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
         Stmt::Assign { target, op, value } => {
             prover_expr(walk, target, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
             prover_expr(walk, value, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+            if op.is_some() {
+                let given: BinaryOp = nikaia_std::index::or(match op {
+                    Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+                    None => None,
+                }, || BinaryOp::Add);
+                if given == BinaryOp::Add || given == BinaryOp::Sub || given == BinaryOp::Mul || given == BinaryOp::Div || given == BinaryOp::Rem {
+                    let written_out = Expr::Binary { op: given, lhs: Box::new(target.clone()), rhs: Box::new(value.clone()), span, grouped: false, id: fresh_id() };
+                    prover_unwritten_check(walk, &written_out, span, &scope, &nested, words, library, &holes_of, &ask, &model, &written_of);
+                }
+            }
             match target {
                 Expr::Variable(name, _) => {
                     let name = *name;

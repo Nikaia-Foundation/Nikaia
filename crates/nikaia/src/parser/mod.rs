@@ -2917,6 +2917,7 @@ grammar! {
           | "-=" -> { Some(BinaryOp::Sub) }
           | "*=" -> { Some(BinaryOp::Mul) }
           | "/=" -> { Some(BinaryOp::Div) }
+          | "%=" -> { Some(BinaryOp::Rem) }
           | "&=" -> { Some(BinaryOp::BitAnd) }
           | "|=" -> { Some(BinaryOp::BitOr) }
           | "^=" -> { Some(BinaryOp::BitXor) }

@@ -726,6 +726,7 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     }
     let lends = place && state.a_coalesce_that_may_lend(world, &left, fallback, &other).is_some();
     if nullable && !lends && !other.is_a_view() && !state.jumps(world, fallback) && a_name_or_a_field(fallback) && !state.facts.view_fallbacks.contains(&(id_of(fallback) as i64)) { state.hands_over(world, fallback, &other, "given to `??` as its fallback", span); }
+    if nullable && !check_core_ops_nullable(&other) && !state.jumps(world, fallback) { check_overflow_list_into_nullables(state, fallback, &other, &inner); }
     if nullable && check_core_ops_nullable(&other) {
         state.facts.optional_fallbacks.insert(id_of(expr) as i64);
         state.a_map_read_kept(world, &other, &left, fallback, span);

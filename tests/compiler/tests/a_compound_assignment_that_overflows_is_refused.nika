@@ -1,0 +1,22 @@
+// #1586 (ADR-395): `x op= k` is `x = x op k`, and is refused where the
+// operation written out is: a sum of constants past its type is NK1116, a
+// constant divisor of zero NK1118, on a name and on a slot. What the prover
+// shows: `a_compound_assignment_shown_to_overflow_is_refused`.
+
+fn main() throws {
+	let mut a: i64 = 9223372036854775807
+	a += 1
+	let mut b: i64 = 9223372036854775807
+	b = b + 1
+	let mut c: i32 = -2147483648
+	c -= 1
+	let mut e: u8 = 200
+	e *= 2
+	let mut f: i32 = 5
+	f /= 0
+	let mut g: i32 = 5
+	g %= 0
+	let mut xs: Vec[i32] = [1, 2]
+	xs[1] /= 0
+	println(f"{a} {b} {c} {e} {f} {g} {xs[1]}")
+}

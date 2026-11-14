@@ -1318,6 +1318,11 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         state.shift_count_fits(world, &o.clone(), target, &value_of_a_copy(&into.unseen()), value, span);
     }
+    if op.is_some() && !check_core_stmt_a_shift(std::convert::identity(op)) {
+        let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
+        state.divisor_is_not_zero(world, &o.clone(), value, span);
+        state.an_operation_that_overflows(world, &o.clone(), target, value, None, span);
+    }
     state.assigned_followed(world, target, op, value);
     if op.is_none() {
         let lent = check_core_stmt_a_name(target) && into.is_a_view() && state.lent_views_assigned(world, value, &found);
