@@ -1038,6 +1038,12 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let result = check_crossings_arguments(state, world, host, key, &written, contract, args, &found, &passed, span);
     state.flow.option_values = vec![];
     state.flow.option_literals = vec![];
+    let moving = check_core_call_moving_options(&state, contract, &written, &passed);
+    if !moving.is_empty() {
+        let mut told: Vec<(String, Ty, String)> = vec![];
+        for (name, ty) in moving.iter() { told.push((nikaia_std::block::Text::from(name.to_string()), ty.clone(), format!("passed as the option `{}` of `{}`, which keeps it", name, written))); }
+        state.flow.method_moved.insert(id_of(receiver) as i64, told);
+    }
     state.a_lookup_key_lent(world, key, on, args, &found);
     let an_entry = key == "collections::HashMap::entry" || key == "collections::BTreeMap::entry";
     let map_keys: Ty = nikaia_std::index::or(match bound.get("K") {

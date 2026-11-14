@@ -444,6 +444,9 @@ fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, on: 
             // a `-> String from s`): asked as text where the list holds text.
             Expr::Call { .. } => check_core_method_text_items(on),
             Expr::MethodCall { .. } => check_core_method_text_items(on),
+            // An element of a list of text may be a view (`parts[0]` of a
+            // `Vec[ref String]`, #1603): asked as text where the list holds text.
+            Expr::Index { .. } => check_core_method_text_items(on),
             else => false,
         }
         if text {
@@ -987,6 +990,14 @@ pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWo
     let walked = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span)
     let found = check_core_method_deadline(state, world, receiver, config, walked)
     state.flow.method_passed.remove(id_of(receiver) as i64)
+    // **What an option keeps, it is given** (#1595), as at a function's.
+    for (name, ty, to) in state.flow.method_moved.remove(id_of(receiver) as i64) ?? [] {
+        for option in config {
+            if world.words.resolve(option.name) == name {
+                state.hands_over(world, option.value, ty, to, span)
+            }
+        }
+    }
     if code_keys.len() > 0 {
         let last = args.len() as i64 - 1
         check_core_places_stored_keys(state, world, host, args[last], code_keys)

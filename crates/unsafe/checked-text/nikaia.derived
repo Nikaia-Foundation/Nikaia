@@ -7,4 +7,4 @@ toolchain = "nikaia 0.1.0"
 inference = "described-from-signatures"
 
 [sources]
-"src/lib.rs" = "d873081f8d9fa436b68030c324dbb3837808f86da30a1945d24faad93b21c91d"
+"src/lib.rs" = "5d103bcc9af24e4401bebf2e21eee161a0b228570b8e8b76a2ecf1c7aa1f2224"

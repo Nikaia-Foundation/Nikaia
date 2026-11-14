@@ -366,7 +366,13 @@ fn package_ledger_checked(
     }
 
     let parsed: Vec<&Parsed> = units.iter().map(|u| &u.parsed).collect();
-    let (mut own, checked, noted) = crate::contracts::Ledger::infer_package_noted(&parsed, library);
+    // A dependency's ledger is inferred from its own `nikaia.proofs` and
+    // kept out of this build's (ADR-270 D23).
+    let infer = || crate::contracts::Ledger::infer_package_noted(&parsed, library);
+    let (mut own, checked, noted) = match (dependency, units.first()) {
+        (Some(_), Some(first)) => crate::proofs::for_package(&first.path, infer),
+        _ => infer(),
+    };
     // **What these entries are an answer about** (D3), recorded here because
     // this is the only place that has both the answer and the files it came
     // from - and recorded for every package, so that the ledger a dependency's

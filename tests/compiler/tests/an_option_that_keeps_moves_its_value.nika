@@ -1,0 +1,43 @@
+// An owned value handed to an option the callee does not lend moves, as one
+// handed to a parameter does (ADR-293 D29, #1595): a later use is NK2105,
+// not a rustc refusal. A `std` option, an own function's and an own method's.
+use std::process
+
+fn make() -> String {
+    let mut s = String()
+    s.push_str("hi")
+    s
+}
+
+struct Held {
+    n: i64,
+    item: String,
+}
+
+fn keep(n: i64; name: String = "x") -> Held {
+    Held { n: n, item: name }
+}
+
+impl Held {
+    fn put(mut self, n: i64; name: String = "x") {
+        self.n = n
+        self.item = name
+    }
+}
+
+fn main() throws {
+    let v = make()
+    let e: Vec[(String, String)] = [("A", v)]
+    let r = process::run("sh", ["-c", "echo $A"]; env: e)
+    print(r.stdout)
+    println(e.len())
+    let w = make()
+    let held = keep(1; name: w)
+    println(held.item)
+    println(w)
+    let u = make()
+    let mut again = Held { n: 2, item: make() }
+    again.put(3; name: u)
+    println(again.item)
+    println(u)
+}

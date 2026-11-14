@@ -422,7 +422,17 @@ pub fn check_core_flow_if[H: CheckHost](mut state: CheckState, world: ref CheckW
     state.flow.next_choice += 1
     state.branch.push((choice, 0))
     let from = state.taken_so_far()
+    // **A branch the condition rules out never runs** (#1588): a divisor
+    // folded to zero there is no certain `NK1118`; the walk reads the guard.
+    let folded = state.condition_constant(world, cond)
+    let then_dead = !(folded ?? true)
+    if then_dead {
+        state.flow.short_circuited += 1
+    }
     let then = check_core_flow_proved_block(state, world, host, cond, true, then_branch)
+    if then_dead {
+        state.flow.short_circuited -= 1
+    }
     // **A `continue` or a `break` leaves the turn as a `return` leaves the
     // function**.
     let leaves = check_core_flow_leaves(state, world, then_branch)
@@ -432,7 +442,14 @@ pub fn check_core_flow_if[H: CheckHost](mut state: CheckState, world: ref CheckW
     let mut else_leaves = false
     if else_branch != null {
         let otherwise: ref Block = else_branch ?? then_branch
+        let else_dead = folded ?? false
+        if else_dead {
+            state.flow.short_circuited += 1
+        }
         branches = check_core_flow_else(state, world, host, expr, cond, then_branch, then, otherwise, choice, span)
+        if else_dead {
+            state.flow.short_circuited -= 1
+        }
         else_leaves = check_core_flow_leaves(state, world, otherwise)
     }
     state.stamped_condition = outer_condition

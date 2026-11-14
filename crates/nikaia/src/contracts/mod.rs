@@ -756,7 +756,7 @@ impl InferHost<'_> {
         // The largest first, so no core is left with a long file at the end.
         let mut order: Vec<usize> = (0..units.len()).collect();
         order.sort_by_key(|at| std::cmp::Reverse(units[*at].program.items.len()));
-        crate::sysroot::in_parallel(&order, None, check)
+        crate::proofs::in_parallel(&order, None, check)
     }
 
     /// Each pass's time, to stderr, beside `lower-std`'s phases.

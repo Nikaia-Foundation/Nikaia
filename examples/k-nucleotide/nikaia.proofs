@@ -3,6 +3,7 @@
 # question in normal form, and `proved` with its certificate,
 # `refuted` with its model, or `unknown` with the solver that gave up.
 # Every entry is checked when it is read; a wrong one is searched again.
+0d8b3798f04a0a4a91952b5ef0267369c7f861a4c8fd6d46c0cf609eb4b916b9 refuted v0=-1
 21441aab6959680ff4dd035bae2ce2ddf5811eabc1a1bccdf7f6ed3ff0ff1359 refuted v0=0,v1=1,v2=0,v3=0,v4=0,v5=0,v6=4611686018427387905
 3a10a4dfa4c0d7cd9ce4b5e2e669a5c8811f01bc87afdc2b3df23635127fba43 proved R(h3,h4,c1:1:0:1)
 5cc4de33c1c082ec0265749eae499df0d8c296977f21b2c8d681d142a37a1b2a refuted v0=0,v1=0,v2=-4611686018427387905
@@ -17,3 +18,4 @@ ad656e6537b174f68f669d024f92ac47d2fc538969ef9170961acdce9ddddc65 refuted v0=0,v1
 b1cfdb6a657fc0b228c962985f4ea3e4c848c37d17a45a29b2ed65912ab105bb refuted v0=0,v1=1,v2=0,v3=0,v4=4611686018427387905,v5=0
 bb6807fe17e43540436ca788e92ac9cf2e535f744de0a6936380015333ec549d proved R(h2,h4,c0:1:1:1)
 f6ea37a246695f69ba5132cf210afcbb28a5bd766f1018418ab33c01de0fcb03 refuted v0=0,v1=-4611686018427387904
+f80a6de4121b38d99e537eb9c2ddc67a594123d92b0f4bfcb84aa0a15d8e6845 proved R(h0,h2,c1:1:0:1)

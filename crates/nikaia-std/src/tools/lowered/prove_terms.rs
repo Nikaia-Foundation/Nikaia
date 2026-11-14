@@ -30,6 +30,11 @@ pub fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &dyn 
             if !var(&path) { return None; }
             Some(built(SolverTerm::Var(path), out))
         },
+        Expr::Index { .. } => {
+            let element = match element_name(expr, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if !var(&element) { return None; }
+            Some(built(SolverTerm::Var(element), out))
+        },
         Expr::Call { .. } => {
             let name = call_result_name(expr);
             let ran = pinned(&name);
@@ -122,6 +127,31 @@ pub fn length_path(list: &Expr, words: &winnow_grammar::InternerContext, var: &i
             return None;
         },
         _ => return None,
+    }
+}
+
+pub fn element_name(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
+    match expr {
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            let list = match path_of(base, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let at = match element_index(index, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Some(format!("{}[{}]", list, at))
+        },
+        _ => None,
+    }
+}
+
+pub fn element_index(index: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
+    match index {
+        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
+        Expr::LitInt { value, negative, .. } => {
+            let negative = *negative; let value = *value;
+            if negative { return None; }
+            let n = match literal_value(value, negative) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Some(format!("{}", n))
+        },
+        _ => None,
     }
 }
 

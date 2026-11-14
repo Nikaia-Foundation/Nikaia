@@ -8,6 +8,41 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1377] — 2026-11-14
+
+**Compare an indexed element of text against a list of text by its text (#1603)**
+- Fixed: `list.contains(parts[0])` with an element of a list of text views no longer ends in an internal error NK1343.
+
+## [0.0.1376] — 2026-11-14
+
+**Builders' changes (#1595, #1596)**
+- Using a value after handing it to an option that keeps it (`process::run(...; env: e)`, an own function's or method's option) is now NK2105 with a `.clone()` hint, instead of an internal compiler error from rustc.
+- The prover follows a list element as a name (ADR-306 D33): `let mut xs = [2147483647, 0]; xs[0] += k` is refused at a call with k 1 (NK1207), a guard on xs[c] proves xs[c] += 1, and any write through an index, a changing method or a change of c drops what is known.
+
+## [0.0.1375] — 2026-11-14
+
+**Builders' changes (#1128, #1358, #1361, #1385, #1388, #1445, #1449, #1460, #1476, #1567, #1568, #1569, #1570, #1586, #1588, #1590, #1592)**
+- Fixed: `nikaia run` of one script from several processes at once (no more missing program, empty program or bundle pruned under a run).
+- The prover reads an inferred whole-number `let` as a written one: a guard on `let n = text::parse_i64(s) ?? 0` proves a claim about `n` without `: i64` (#1358).
+- NK1111 stays quiet about the closing braces of nested JSON in a plain string, `"{\"a\":{}}"`; a real `{{` is still warned, and its help removes only the doubled braces.
+- Prover: a `mut` list keeps its length as a name. A `mut` list parameter whose body only writes elements, or calls `swap`, `sort`, `reverse` or `fill`, has its `len()` read by the prover: its preconditions and indexes are proved, as a `ref` parameter's are.
+- A function that only writes the elements of its `mut` list (or text), and hands it only to such functions, keeps its `len()` at its calls, recursion included: quicksort's `sort` / `partition` preconditions are proved.
+- A loop that writes the elements of a `mut` list parameter no longer loses the list's `len()`, so postconditions proved through that loop hold at the function's calls.
+- Fixed: a view of a String element (list iter, map key, collect of ref $T) is the one text view; it binds to ref String, collects into a Vec, and a written or_insert view stays owned text (#1388)
+- Emit: an index whose position calls a `ref mut` method (or hands a `mut` argument) on the indexed value is worked out first, so `self.rank[self.find(x)]` builds (was rustc E0502).
+- A list of tuples with text literals takes its parameter's type: `[("a", [1])]` written at a call, or bound by a `let` (also an empty list filled later), handed to `ref Vec[(String, Vec[i64])]` or kept by a published function, builds its text as `String` instead of NK1102 (#1449).
+- A list's `get`, `first`, `last` and a map's `get` of a `Symbol` or an enum whose variants hold nothing, unwrapped by `??` or `match` or bound by a typed `let`, is the value and builds (#1460).
+- An overflow the compiler shows happens is refused: an i32, u8, u32 or u64 + - * that goes past its type for a value a call or a branch hands it is NK1207 with that value (ADR-306 D15, ADR-395)
+- A tuple with an optional part handed back as an option, from a `return`, a `match` arm or a fallback, builds (#1476)
+- The checker no longer refuses a division by a constant zero on the right of `&&` / `||` (NK1118); the bounds walk reads the guard there.
+- A check nobody writes (a divisor, an index, a whole number's range) is carried through functions in between: `h(0)` over `fn h(d) { f(d) }` and `f`'s `10 / d` is refused with NK1207, naming `10 / d` in `f`, reached through `h` (ADR-395 D1, ADR-396 D1).
+- A warm cache no longer hides a missing proof: a build that searched a question nikaia.proofs did not hold is not recorded in the cache, so the next build writes the entry, or refuses it under --locked.
+- A tuple or list written out as the fallback of `??` now holds its `T?` parts as `T?` (`x ?? (5, 5)` for `(i64, i64?)?`), as when returned or bound by a `let`; before it was a rustc error.
+- A compound assignment is refused as the operation written out is: `x += k` past its type is NK1116, `x /= 0` and `x %= 0` are NK1118, and one a call makes overflow or divide by zero is NK1207 (ADR-395); `%=` parses
+- The checker no longer refuses a division by a constant zero (NK1118) in an `if` branch whose condition folds to rule it out, such as `if d != 0` after `let d = 0`; a branch that may run still gets NK1118.
+- Faster bounds proofs - an end write asks only about the lists it can be, and a question asked again under new names reuses its answer (check --bounds of a 32-list file: 215 s to 8 s)
+- Text tiers: a `let` of a list literal of text handed whole to a `std` parameter or option that keeps text of its own (`env: e`, `process::run("sh", args)`) builds its literals there, as the same list written at the call does (#1592).
+
 ## [0.0.1374] — 2026-11-10
 
 **Memory budget: weigh a value at a hand-over (ADR-327 D9) (#1540)**

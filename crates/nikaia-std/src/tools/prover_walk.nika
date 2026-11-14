@@ -460,6 +460,7 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             // read past it through the loop's invariant (D2).
             let mut changed = assigned_in(body, words)
             prover_lengths_changed(changed, body, scope, walk.state.readers, words)
+            prover_loop_elements(walk, body, [], scope, words)
             let mut state: Vec[String] = []
             for n in changed {
                 if scope.mutables.contains(n) && scope.ints.contains(n) && !n.ends_with(".len()") {
@@ -1328,6 +1329,7 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
     // What a turn changes is unknown at its head and past the loop.
     let mut changed = assigned_in(body, words)
     prover_lengths_changed(changed, body, scope, walk.state.readers, words)
+    prover_loop_elements(walk, body, bindings, scope, words)
     let mut state: Vec[String] = []
     let mut records: Vec[LoopRecord] = []
     if bindings.len() == 1 {
@@ -3144,6 +3146,7 @@ fn prover_binds_mutable(block: ref Block) -> bool {
 /// assignment see to their own (ADR-361 D9).
 fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut scope: ProverScope, untracked: ref collections::BTreeSet[String], pinned: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) {
     prover_follow_lengths(walk, stmt, span, scope, words)
+    prover_follow_elements(walk, stmt, scope, words)
     match stmt {
         Stmt::Let { names, mutable, ty, value, .. } => {
             if mutable && names.len() == 1 {
@@ -3188,6 +3191,80 @@ fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut 
                 }
             }
         },
+    }
+}
+
+/// **What is known of a list's elements is followed** (ADR-306 D33): an
+/// element `xs[c]` (`c` a name or a literal) is a name while nothing may
+/// have changed it: a write through any index of the list, a method that
+/// may change its items, the list handed on or bound again (D20, D17), or
+/// `c` bound again drop it. A `let` of a list literal then learns
+/// `xs[i] == v` of each item whose value is a term.
+fn prover_follow_elements(mut walk: ProverWalk, stmt: ref Stmt, mut scope: ProverScope, words: ref winnow_grammar::InternerContext) {
+    let mut gone: Vec[String] = []
+    for n in scope.ints {
+        let inner = n.strip_suffix("]") ?? continue
+        let parts: Vec[ref String] = inner.split("[").collect()
+        if parts.len() != 2 {
+            continue
+        }
+        if elements_change(stmt, parts[0], words) || rebinds_in_statement(stmt, parts[1], words) {
+            gone.push(n.clone())
+        }
+    }
+    for n in gone {
+        scope.rebind(walk.arena, n)
+    }
+    match stmt {
+        Stmt::Let { names, value, .. } => {
+            if names.len() != 1 {
+                return
+            }
+            // Not `untracked`: a write through an index, the list handed
+            // on, are the drops above, statement by statement.
+            let list = words.resolve(names[0]).clone()
+            match value {
+                Expr::ListLit { items, .. } => {
+                    for (i, item) in items.iter().enumerate() {
+                        let term = lin_term(item, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? continue
+                        let element = f"{list}[{i}]"
+                        if walk.arena.mentions(term, list) {
+                            continue
+                        }
+                        let at_entry = scope.at_entry(walk.arena, term)
+                        scope.ints.insert(element.clone())
+                        let named = walk.arena.var(element)
+                        scope.facts.push(walk.arena.equal(named, term))
+                        if at_entry != null {
+                            scope.entry.insert(element.clone(), at_entry ?? 0)
+                        }
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+}
+
+/// **An element a loop may change is unknown at the head of a turn**
+/// (ADR-306 D33), and past the loop: one whose list the body may change, or
+/// whose index the body or the loop binds again. The list itself may be kept
+/// (`prover_loop_keeps`); its elements are not.
+fn prover_loop_elements(mut walk: ProverWalk, body: ref Block, counters: ref Vec[winnow_grammar::Symbol], mut scope: ProverScope, words: ref winnow_grammar::InternerContext) {
+    let mut gone: Vec[String] = []
+    for n in scope.ints {
+        let inner = n.strip_suffix("]") ?? continue
+        let parts: Vec[ref String] = inner.split("[").collect()
+        if parts.len() != 2 {
+            continue
+        }
+        if !elements_stay(body, parts[0], words) || rebinds(body, parts[1], words) || any_symbol(counters, parts[1], words) {
+            gone.push(n.clone())
+        }
+    }
+    for n in gone {
+        scope.rebind(walk.arena, n)
     }
 }
 

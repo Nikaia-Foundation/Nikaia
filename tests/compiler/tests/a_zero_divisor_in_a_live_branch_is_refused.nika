@@ -1,0 +1,13 @@
+// #1588: a branch whose condition does not fold may run, so a divisor
+// folded to zero there stays a certain `NK1118`, once, and no `NK1207`.
+
+fn half(x: i64) throws {
+	let d = 0
+	if x > 5 {
+		println(f"{10 / d}")
+	}
+}
+
+fn main() throws {
+	half(7)
+}

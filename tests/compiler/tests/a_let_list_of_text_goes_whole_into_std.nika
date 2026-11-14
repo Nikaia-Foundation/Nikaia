@@ -1,0 +1,18 @@
+// A `let` of a list literal of text, handed whole to `std` where it keeps
+// text of its own (#1592): its literals are built there, as the same list
+// written at the call builds them. An option (`env`), with an owned part
+// beside literals and with literals only, and a parameter (`args`).
+use std::process
+
+fn main() throws {
+    let x = 3
+    let mixed = [("A_1592", "0"), ("B_1592", f"{x}")]
+    let shown = process::run("sh", ["-c", "echo $A_1592 $B_1592"]; env: mixed)
+    print(shown.stdout)
+    let literal = [("C_1592", "c")]
+    let plain = process::run("sh", ["-c", "echo $C_1592"]; env: literal)
+    print(plain.stdout)
+    let args = ["-c", "echo given"]
+    let given = process::run("sh", args)
+    print(given.stdout)
+}

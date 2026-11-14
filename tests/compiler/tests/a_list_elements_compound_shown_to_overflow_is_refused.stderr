@@ -1,0 +1,9 @@
+error[NK1207]: At this call, `xs[0] + k` in `bump` goes past what an `i32` holds every time it is reached.
+   --> tests/a_list_elements_compound_shown_to_overflow_is_refused.nika:13:2
+    |
+ 13 | 	println(bump(1))
+    |  ^^^^^^^^^^^^^^^^
+    |
+    = note: Here `k` is 1.
+    = help: Pass `bump` arguments for which `-2147483648 <= xs[0] + k <= 2147483647` holds, or check them with a guard before the call.
+1 claim shown false

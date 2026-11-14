@@ -264,12 +264,19 @@ pub fn bytes_word_width(method: &str) -> i64 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Seek {
     LengthChanged(String),
+    ElementsChanged(String),
     Rebound(String),
     Mentioned(String),
     Unvisited(collections::BTreeSet<i64>),
 }
 
 pub fn length_stays(body: &Block, list: &str, words: &winnow_grammar::InternerContext) -> bool { !seek_block(body, &Seek::LengthChanged(nikaia_std::block::Text::from(list.to_string())), words) }
+
+pub fn elements_change(stmt: &Stmt, list: &str, words: &winnow_grammar::InternerContext) -> bool { seek_statement(stmt, &Seek::ElementsChanged(nikaia_std::block::Text::from(list.to_string())), words) }
+
+pub fn elements_stay(body: &Block, list: &str, words: &winnow_grammar::InternerContext) -> bool { !seek_block(body, &Seek::ElementsChanged(nikaia_std::block::Text::from(list.to_string())), words) }
+
+pub fn rebinds_in_statement(stmt: &Stmt, name: &str, words: &winnow_grammar::InternerContext) -> bool { seek_statement(stmt, &Seek::Rebound(nikaia_std::block::Text::from(name.to_string())), words) }
 
 pub fn rebinds(body: &Block, name: &str, words: &winnow_grammar::InternerContext) -> bool { seek_block(body, &Seek::Rebound(nikaia_std::block::Text::from(name.to_string())), words) }
 
@@ -313,6 +320,32 @@ pub(crate) fn changes_through(receiver: &Expr, method: &str, list: &str, words: 
     path_within(list, &path)
 }
 
+pub(crate) fn written_place(target: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
+    match target {
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); written_place(base, words) },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); nikaia_std::index::or_maybe(path_of(target, words), || written_place(base, words)) },
+        _ => path_of(target, words),
+    }
+}
+
+pub(crate) fn keeps_items(method: &str) -> bool {
+    match method {
+        "sort" => false,
+        "sort_by" => false,
+        "sort_by_key" => false,
+        "reverse" => false,
+        "swap" => false,
+        "fill" => false,
+        _ => keeps_length(method),
+    }
+}
+
+pub(crate) fn changes_items_through(receiver: &Expr, method: &str, list: &str, words: &winnow_grammar::InternerContext) -> bool {
+    let path = match path_of(receiver, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if path == list { return !keeps_items(method); }
+    path_within(list, &path)
+}
+
 pub(crate) fn is_variable(expr: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> bool {
     match expr {
         Expr::Variable(n, _) => { let n = *n; words.resolve(n) == name },
@@ -332,6 +365,12 @@ pub(crate) fn statement_says(stmt: &Stmt, seek: &Seek, words: &winnow_grammar::I
     match seek {
         Seek::LengthChanged(list) => match stmt {
             Stmt::Assign { target, .. } => holds_path(target, list, words),
+            Stmt::Let { names, .. } => any_symbol(names, &path_root(list), words),
+            Stmt::For { bindings, .. } => any_symbol(bindings, &path_root(list), words),
+            _ => false,
+        },
+        Seek::ElementsChanged(list) => match stmt {
+            Stmt::Assign { target, .. } => path_within(list, &match written_place(target, words) { Some(__nikaia_value) => __nikaia_value, None => return false }),
             Stmt::Let { names, .. } => any_symbol(names, &path_root(list), words),
             Stmt::For { bindings, .. } => any_symbol(bindings, &path_root(list), words),
             _ => false,
@@ -359,6 +398,14 @@ pub(crate) fn expression_says(expr: &Expr, seek: &Seek, words: &winnow_grammar::
         Seek::LengthChanged(list) => match expr {
             Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; changes_through(receiver, words.resolve(method), list, words) || any_holds_path(args, list, words) },
             Expr::SafeMethod { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; changes_through(receiver, words.resolve(method), list, words) || any_holds_path(args, list, words) },
+            Expr::Call { args, .. } => any_holds_path(args, list, words),
+            Expr::Closure { body, .. } => seek_block(body, &Seek::Mentioned(path_root(list)), words),
+            Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); seek_expr(body, &Seek::Mentioned(path_root(list)), words) },
+            _ => false,
+        },
+        Seek::ElementsChanged(list) => match expr {
+            Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; changes_items_through(receiver, words.resolve(method), list, words) || any_holds_path(args, list, words) },
+            Expr::SafeMethod { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; changes_items_through(receiver, words.resolve(method), list, words) || any_holds_path(args, list, words) },
             Expr::Call { args, .. } => any_holds_path(args, list, words),
             Expr::Closure { body, .. } => seek_block(body, &Seek::Mentioned(path_root(list)), words),
             Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); seek_expr(body, &Seek::Mentioned(path_root(list)), words) },

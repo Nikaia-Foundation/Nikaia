@@ -1464,7 +1464,7 @@ pub(crate) fn stored_arguments(contract: &FnContract, named: &str, args: &[Expr]
         let k = parameter_index(contract, *unsafe { nikaia_std::proven::read(&parts, (1) as usize) });
         if place < 0 || k < 0 || place >= args.len() as i64 || k >= args.len() as i64 { continue; }
         if !made_in_the_call(unsafe { nikaia_std::proven::read(&args, (k) as usize) }) || !lends_in(contract, k, &copying) || buffers_view_call(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, unaliased) { continue; }
-        let root = match root_of(ask.names, nikaia_std::index::get(&args, nikaia_std::index::at(place))) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let root = match root_of(ask.names, unsafe { nikaia_std::proven::read(&args, (place) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let id = (walk.statement, format!("{}#{}", named, k));
         if !walk.sources.contains_key(&id) {
             let source = Source::Argument { at: walk.statement, callee: nikaia_std::block::Text::from(named.to_string()), index: k, span: Span { start: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) } };

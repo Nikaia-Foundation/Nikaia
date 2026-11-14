@@ -321,6 +321,7 @@ pub(crate) fn check_core_method_resolved(state: &mut CheckState, world: &CheckWo
             Expr::Field { .. } => check_core_method_text_items(on),
             Expr::Call { .. } => check_core_method_text_items(on),
             Expr::MethodCall { .. } => check_core_method_text_items(on),
+            Expr::Index { .. } => check_core_method_text_items(on),
             _ => false,
         };
         if text { state.facts.text_in_lists.insert(id_of(receiver) as i64); }
@@ -697,6 +698,7 @@ pub fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
     let walked = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span);
     let found = check_core_method_deadline(&state, world, receiver, config, walked);
     state.flow.method_passed.remove(&(id_of(receiver) as i64));
+    for (name, ty, to) in nikaia_std::index::or(state.flow.method_moved.remove(&(id_of(receiver) as i64)), || vec![].into()) { for option in config.iter() { if world.words.resolve(option.name) == name { state.hands_over(world, &option.value, &ty, &to, span); } } }
     if !code_keys.is_empty() {
         let last = unsafe { nikaia_std::proven::sub::<i64>(args.len() as i64, 1) };
         check_core_places_stored_keys(state, world, host, Some(nikaia_std::index::get(&args, nikaia_std::index::at(last))), &code_keys);

@@ -50,6 +50,49 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn condition_constant(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, cond: &Expr) -> Option<bool> {
+        match cond {
+            Expr::LitBool(value, _) => { let value = *value; Some(value) },
+            Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.condition_negated(world, op, expr) },
+            Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); self.condition_combined(world, op, lhs, rhs) },
+            _ => None,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn condition_negated(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &UnaryOp, inner: &Expr) -> Option<bool> {
+        if *op != UnaryOp::Not { return None; }
+        let value = match self.condition_constant(world, inner) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        Some(!value)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn condition_combined(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr) -> Option<bool> {
+        if *op == BinaryOp::And || *op == BinaryOp::Or {
+            let left = self.condition_constant(world, lhs);
+            let right = self.condition_constant(world, rhs);
+            let and = *op == BinaryOp::And;
+            if nikaia_std::index::or(left, || and.into()) != and || nikaia_std::index::or(right, || and.into()) != and { return Some(!and); }
+            let a = match left { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let b = match right { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return Some(if and { a && b } else { a || b });
+        }
+        let a = match self.constant_of(world, lhs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let b = match self.constant_of(world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if a.beyond || b.beyond { return None; }
+        let order = integer_order(&a.value, &b.value);
+        match op {
+            BinaryOp::Eq => Some(order == 0),
+            BinaryOp::Ne => Some(order != 0),
+            BinaryOp::Lt => Some(order < 0),
+            BinaryOp::Le => Some(order <= 0),
+            BinaryOp::Gt => Some(order > 0),
+            BinaryOp::Ge => Some(order >= 0),
+            _ => None,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn a_name_folded(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol) -> Folded {
         let written = world.words.resolve(name);
         let local = match self.binding(written) { Some(__nikaia_value) => __nikaia_value, None => return Folded::Nothing };

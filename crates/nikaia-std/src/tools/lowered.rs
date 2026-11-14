@@ -3296,7 +3296,7 @@ pub mod boundaries {
 }
 pub mod bounds_basic {
     #[allow(unused_imports)]
-    pub use super::{basic_indices, keeps_length, bytes_word_width, length_stays, rebinds, path_of, path_root, path_within};
+    pub use super::{basic_indices, keeps_length, bytes_word_width, length_stays, elements_change, elements_stay, rebinds_in_statement, rebinds, path_of, path_root, path_within};
 }
 pub mod bounds_body {
     #[allow(unused_imports)]
@@ -3451,7 +3451,7 @@ pub mod check_core_args {
 }
 pub mod check_core_call {
     #[allow(unused_imports)]
-    pub use super::{check_core_call_lent, check_core_free_call, signature_type_variables, check_core_call, check_core_tuple};
+    pub use super::{check_core_call_lent, check_core_call_moving_options, check_core_free_call, signature_type_variables, check_core_call, check_core_tuple};
 }
 pub mod check_core_call_on {
     #[allow(unused_imports)]
@@ -4137,7 +4137,7 @@ pub mod project_write {
 }
 pub mod proofs_answers {
     #[allow(unused_imports)]
-    pub use super::{PROOFS_FILE, PROOFS_LONG_DIR, PROOFS_LONG, PROOFS_SOLVER, ProofsAsked, ProofsEntry, ProofsBook, proofs_book_empty, ProofsSoFar, ProofsKnown, ProofsWhere, proofs_nowhere, proofs_where, ProofsThread, proofs_thread, proofs_shown, proofs_written, proofs_ask, PROOFS_DUMP, ProofsSearch, proofs_invariants_here, proofs_record_at, proofs_asked_so_far, proofs_ask_again_from, proofs_place_of, proofs_byte_of, proofs_book_read, proofs_book_render, proofs_book_write, proofs_book_as_recorded, proofs_book_len};
+    pub use super::{PROOFS_FILE, PROOFS_LONG_DIR, PROOFS_LONG, PROOFS_ANSWERED, PROOFS_SOLVER, ProofsAsked, ProofsEntry, ProofsBook, proofs_book_empty, ProofsSoFar, ProofsKnown, ProofsWhere, proofs_nowhere, proofs_where, ProofsThread, proofs_thread, proofs_shown, proofs_written, proofs_ask, PROOFS_DUMP, ProofsSearch, proofs_invariants_here, proofs_record_at, proofs_asked_so_far, proofs_ask_again_from, proofs_book_for_worker, proofs_book_merge, proofs_place_of, proofs_byte_of, proofs_book_read, proofs_book_render, proofs_book_write, proofs_book_as_recorded, proofs_book_len};
 }
 pub mod proofs_book {
     #[allow(unused_imports)]
@@ -4149,7 +4149,7 @@ pub mod prove_run {
 }
 pub mod prove_terms {
     #[allow(unused_imports)]
-    pub use super::{lin_term, text_literal_length, length_path, divisor_name, call_result_name, claim_term, nothing_pinned, folded_whole};
+    pub use super::{lin_term, text_literal_length, length_path, element_name, element_index, divisor_name, call_result_name, claim_term, nothing_pinned, folded_whole};
 }
 pub mod prove_text {
     #[allow(unused_imports)]
