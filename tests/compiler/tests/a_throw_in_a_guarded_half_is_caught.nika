@@ -1,0 +1,57 @@
+// **A `throw` in a `catch`'s guarded half is an error source of that
+// `catch`** (Part I 7.1, #1635), as a failing call there is: the `catch`
+// has something to handle (no NK1134) and its handler stands in for the
+// value where the `throw` runs, in a function that does not fail itself; a
+// `throw` in a nested `catch`'s handler is caught by the outer one.
+enum Bad { Oops, Worse }
+
+impl Error for Bad {
+    fn message(self) -> String {
+        return "oops"
+    }
+}
+
+fn fails(c: bool) -> i64 throws {
+    if c {
+        throw Bad::Worse
+    }
+    return 10
+}
+
+fn pick(c: bool) -> i64 {
+    return (if c { throw Bad::Oops } else { 1 }) catch { 2 }
+}
+
+fn in_a_block(c: bool) -> i64 {
+    return {
+        if c {
+            throw Bad::Oops
+        }
+        5
+    } catch { 6 }
+}
+
+fn beside_a_call(c: bool, d: bool) -> i64 {
+    return (if c { throw Bad::Oops } else { fails(d) }) catch {
+        match error {
+            Bad::Oops => 3,
+            else => 4,
+        }
+    }
+}
+
+fn in_a_nested_handler(c: bool) -> i64 {
+    return ((fails(true) catch { if c { throw Bad::Oops } else { 7 } }) + 1) catch { 9 }
+}
+
+fn main() throws {
+    println(pick(true))
+    println(pick(false))
+    println(in_a_block(true))
+    println(in_a_block(false))
+    println(beside_a_call(true, false))
+    println(beside_a_call(false, true))
+    println(beside_a_call(false, false))
+    println(in_a_nested_handler(true))
+    println(in_a_nested_handler(false))
+}

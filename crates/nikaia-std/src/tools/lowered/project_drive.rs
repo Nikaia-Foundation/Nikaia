@@ -112,6 +112,7 @@ pub trait ProjectDriveHost {
     fn settings_env(&self) -> Vec<(String, String)>;
     fn root_tag(&self) -> String;
     fn shown_as(&self) -> Option<(String, String)>;
+    fn entry_without_main(&self) -> Option<String>;
     fn allowlist(&self) -> Result<Option<fs::Path>, Box<dyn std::error::Error>>;
     fn cpu_rustflags(&self) -> Result<Option<String>, Box<dyn std::error::Error>>;
     fn make_cargo(&self, manifest: &std::path::Path, env: &[(String, String)], unset: &[String], shared: bool) -> Result<(), Box<dyn std::error::Error>>;
@@ -187,6 +188,13 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
             Err(_error) => { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Refused(not_there), &"project_drive_drive_to")) },
         };
         if !meta.is_file() { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Refused(not_there), &"project_drive_drive_to")); }
+    }
+    let program = !rust_library && !host.is_library() && !host.tests_build();
+    if program && (subcommand == "build" || subcommand == "run") {
+        match host.entry_without_main() {
+            None => { },
+            Some(ref source) => { return Ok((project_drive_no_main(host, &entry, source), None)); },
+        }
     }
     host.explain_if_asked()?;
     let members = host.drive_members()?;
@@ -273,6 +281,16 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     let mut code = built_code;
     host.settle();
     host.report(&messages)?;
+    if code != 0 {
+        match env::var(&project_batch_var()) {
+            None => { },
+            Some(list) => {
+                let path: fs::Path = std::path::PathBuf::from(list);
+                let said = nikaia_std::fs::path::with_extension(&(path), std::path::Path::new(&("said")));
+                host.write_if_changed(&said, &messages)?;
+            },
+        }
+    }
     if code == 0 && subcommand != "check" {
         match header {
             None => { },
@@ -649,6 +667,20 @@ pub(crate) async fn project_drive_written(path: &std::path::Path, text: &str) ->
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn project_drive_no_main<H: ProjectDriveHost>(host: &H, entry: &std::path::Path, source: &str) -> i32 {
+    let path = match host.shown_as() {
+        None => nikaia_std::fs::path::display(&(entry)),
+        Some((_, written)) => written,
+    };
+    let message = format!("A program starts at its `fn main`, and `{}` declares none.", path);
+    let help: String = String::from("Add `fn main()` to it, or, for a package that is built as a library, name the library under `[build]`: `artifact = \"rust-library\"` or `artifact = \"c-library\"`.");
+    let shown = Shown { warning: false, code: String::from("NK1351"), message, notes: vec![], help: Some(help), span: Span { start: 0, end: 0 }, labels: vec![] };
+    host.eprint(&rendered(&shown, &path, source));
+    1
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn project_drive_features_refused<H: ProjectDriveHost>(host: &H, refusal: &FeaturesRefusal) -> i32 {
     let (path, toml) = host.manifest_text();
     let span = features_span(&toml, &refusal.feature, &refusal.entry);
@@ -726,6 +758,7 @@ pub trait ProjectDriveWrapperHost {
     fn run(&self) -> Result<i32, Box<dyn std::error::Error>>;
     fn crate_name(&self) -> Option<String>;
     fn lower(&self, source: &std::path::Path, no_cache: bool, allowlist: Option<&std::path::Path>, shown: Option<&str>, program: bool) -> Result<(String, Vec<fs::Path>), Box<dyn std::error::Error>>;
+    fn lower_batch(&self, sources: &[fs::Path], roots: &[String], no_cache: bool) -> Vec<Option<(String, Vec<fs::Path>)>>;
     fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), Box<dyn std::error::Error>>;
     fn replace_source(&self, generated: &std::path::Path);
     fn args(&self) -> Vec<String>;
@@ -758,8 +791,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple56190| {
-        let (a, b) = __nikaia_tuple56190;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple58869| {
+        let (a, b) = __nikaia_tuple58869;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {

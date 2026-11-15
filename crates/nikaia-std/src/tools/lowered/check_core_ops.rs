@@ -850,10 +850,24 @@ pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &Chec
         }, || CheckPromises { may_pause: true, may_fail: true });
         state.handed_over = Some(CheckHanded { pauses: false, fails: false, caught: false, promised: held });
     }
+    let stored_failing = nikaia_std::index::or(promised.as_ref().map(|__nikaia_it| __nikaia_it.may_fail), || false);
+    let was_caught = state.flow.caught;
+    let enclosing: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    if stored_failing {
+        state.flow.caught = true;
+        state.flow.guarded = None;
+    }
     let outer = check_core_lambda_enter(state);
     let walked = check_core_block(state, world, host, body);
     state.a_map_read_handed_back(world, &walked, body);
     let tail = check_core_lambda_leave(state, (outer).as_ref(), &walked, body);
+    if stored_failing {
+        state.flow.caught = was_caught;
+        state.flow.guarded = enclosing;
+    }
     if promised.is_some() {
         let fails = nikaia_std::index::or(state.handed_over.as_ref().map(|__nikaia_it| __nikaia_it.fails), || false);
         state.handed_over = outer_handed;

@@ -92,8 +92,9 @@ pub(crate) fn methods_into(resolved: Option<&MethodsCalled>, own: &Ledger, libra
     }
 }
 
-pub fn stored_throws(field: &str, resolved: &collections::BTreeSet<String>, unresolved: bool, free: &collections::BTreeSet<String>, own: &Ledger, library: &Ledger, graph: &mut ThrowsGraph) {
-    let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+#[allow(clippy::too_many_arguments)]
+pub fn stored_throws(field: &str, resolved: &collections::BTreeSet<String>, unresolved: bool, free: &collections::BTreeSet<String>, thrown: &collections::BTreeSet<String>, own: &Ledger, library: &Ledger, graph: &mut ThrowsGraph) {
+    let mut named: collections::BTreeSet<String> = thrown.copy_owned();
     let mut called: collections::BTreeSet<String> = collections::BTreeSet::new();
     if unresolved { named.insert(nikaia_std::block::Text::from(UNNAMED.to_string())); }
     for callee in free.iter() { if callee.starts_with('@') { called.insert(nikaia_std::block::Text::from(nikaia_std::index::or(callee.strip_prefix('@'), || "").to_string())); } else if own.functions.contains_key(callee) { called.insert(nikaia_std::block::Text::from(callee.to_string())); } else if library.functions.contains_key(callee) { named.extend(fails_with_of(library, callee)); } }

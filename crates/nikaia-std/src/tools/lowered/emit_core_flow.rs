@@ -900,6 +900,12 @@ impl EmitState {
             },
             _ => { },
         }
+        if flow.breaks_to >= 0 {
+            out.push(&format!("break '__nikaia_caught_{} Err(nikaia_std::error::raise(", flow.breaks_to));
+            self.emit_expr(world, walk, out, host, inner, depth, flow, scope)?;
+            out.push(&format!(", &{}))", rust_string(&scope.origin)));
+            return Ok(());
+        }
         let passing_on = flow.caught_named && is_the_binding && scope.caught_sum.is_none();
         if passing_on || scope.caught_member.is_some() && is_the_binding {
             let mut held: String = String::from("error");

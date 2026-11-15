@@ -42,7 +42,7 @@ pub(crate) fn derived_scan() -> DerivedScan { DerivedScan { calls: collections::
 
 pub fn no_derived() -> Derived { Derived { functions: collections::BTreeMap::new(), order: vec![], walked: 0, answers: collections::BTreeMap::new(), entry: collections::BTreeMap::new() } }
 
-pub fn derived_of(program: &Program, beside: &[&Program], beside_words: &[&winnow_grammar::InternerContext], words: &winnow_grammar::InternerContext) -> Derived {
+pub fn derived_of(program: &Program, beside: &[&BoundsBeside], words: &winnow_grammar::InternerContext) -> Derived {
     let mut derived = no_derived();
     let mut everywhere = derived_scan();
     let mut called: Vec<collections::BTreeSet<String>> = vec![];
@@ -73,12 +73,9 @@ pub fn derived_of(program: &Program, beside: &[&Program], beside_words: &[&winno
             _ => { derived_item_names(&item.node, words, &mut everywhere.values); },
         }
     }
-    for k in 0..beside.len() as i64 {
-        if ((k) as usize) >= beside_words.len() { return derived; }
-        let mut there = derived_scan();
-        for item in unsafe { nikaia_std::proven::read(&beside, (k) as usize) }.items.iter() { derived_item_names(&item.node, *unsafe { nikaia_std::proven::read(&beside_words, (k) as usize) }, &mut there.values); }
-        for (name, _) in there.calls.iter() { everywhere.values.insert(nikaia_std::block::Text::from(name.to_string())); }
-        for name in there.values.iter() { everywhere.values.insert(nikaia_std::block::Text::from(name.to_string())); }
+    for other in beside.iter() {
+        let other = *other;
+        for name in other.names.iter() { everywhere.values.insert(nikaia_std::block::Text::from(name.to_string())); }
     }
     let mut position: i64 = 0;
     for item in program.items.iter() {
@@ -447,10 +444,9 @@ pub fn derived_rows(around: &Around) -> Vec<String> {
 }
 
 pub fn derived_callees(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
-    let none: Vec<&Program> = vec![];
-    let no_words: Vec<&winnow_grammar::InternerContext> = vec![];
+    let none: Vec<&BoundsBeside> = vec![];
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for (name, _) in derived_of(program, &none, &no_words, words).functions.iter() { out.insert(nikaia_std::block::Text::from(name.to_string())); }
+    for (name, _) in derived_of(program, &none, words).functions.iter() { out.insert(nikaia_std::block::Text::from(name.to_string())); }
     out
 }
 

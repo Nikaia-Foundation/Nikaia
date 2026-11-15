@@ -148,6 +148,10 @@ impl CheckState {
             let added = self.facts.copied_reads.insert(node)
             return
         }
+        if self.flow.list_gets.contains(node) {
+            self.findings.push(check_refusal("NK1102", span, f"This keeps a `{want.text()}` of its own, and a list's `get` is a view of what the list keeps.", ["Nikaia never makes a copy behind your back, so the copy is written where it happens."], "Write `?.clone()` after the read: `xs.get(i)?.clone()`."))
+            return
+        }
         self.findings.push(check_refusal("NK1102", span, f"This keeps a `{want.text()}` of its own, and a map's read is a view of what the map keeps.", ["Nikaia never makes a copy behind your back, so the copy is written where it happens."], "Write `?.clone()` after the read: `m[k]?.clone()`."))
     }
 

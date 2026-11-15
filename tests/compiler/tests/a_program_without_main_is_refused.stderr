@@ -1,0 +1,7 @@
+error[NK1351]: A program starts at its `fn main`, and `tests/a_program_without_main_is_refused.nika` declares none.
+  --> tests/a_program_without_main_is_refused.nika:1:1
+   |
+ 1 | // #1622, Part III 13.3: a program has a `fn main`. A source without one is
+   | ^
+   |
+   = help: Add `fn main()` to it, or, for a package that is built as a library, name the library under `[build]`: `artifact = "rust-library"` or `artifact = "c-library"`.

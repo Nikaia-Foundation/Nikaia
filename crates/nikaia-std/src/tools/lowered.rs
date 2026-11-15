@@ -3296,7 +3296,7 @@ pub mod boundaries {
 }
 pub mod bounds_basic {
     #[allow(unused_imports)]
-    pub use super::{basic_indices, keeps_length, bytes_word_width, length_stays, elements_change, elements_stay, rebinds_in_statement, rebinds, path_of, path_root, path_within};
+    pub use super::{basic_indices, keeps_length, bytes_word_width, length_stays, elements_change, elements_stay, rebinds_in_statement, values_read, rebinds, path_of, path_root, path_within};
 }
 pub mod bounds_body {
     #[allow(unused_imports)]
@@ -3308,7 +3308,7 @@ pub mod bounds_derived {
 }
 pub mod bounds_frame {
     #[allow(unused_imports)]
-    pub use super::{bounds_around, frame_at_call, frame_writes, FieldsSeen, fields_seen};
+    pub use super::{bounds_around, frame_at_call, frame_writes, FieldsSeen, BoundsBeside, bounds_beside, fields_seen};
 }
 pub mod bounds_interval {
     #[allow(unused_imports)]
@@ -4104,7 +4104,7 @@ pub mod paths {
 }
 pub mod project_batch {
     #[allow(unused_imports)]
-    pub use super::{project_batch_var, project_batch_module, project_batch_crate, project_batch_lowered};
+    pub use super::{project_batch_var, project_batch_module, project_batch_ranges, project_batch_cited, project_batch_crate, project_batch_lowered};
 }
 pub mod project_check {
     #[allow(unused_imports)]

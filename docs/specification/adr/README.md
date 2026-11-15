@@ -144,6 +144,7 @@ implementation.
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
 | [views-3](adr-views-3.md) | A parameter that keeps its argument says `keep`, a plain one is lent, the body is checked against it; `ref` leaves the language outside `extern "C"`; views in fields, elements and lets are inferred; a result's source is inferred and may be written `-> T from a \| b`, required where there is no body; `Array[T]` is a view of a run where it does not own; a returned parameter is a view, not kept; `keep` and `from` are not reserved | Accepted | no |
+| [shared-handle-cycles-1](adr-shared-handle-cycles-1.md) | No cycle of handles is built: a store through a `SharedMut` door or into a `Locked` field that can close one is refused (`NK1352`) unless a back field is proved, which is lowered as non-owning; types reaching no `SharedMut` or `Locked`, and `immutable` values, are free of cycles; summaries carry it across functions and packages; graphs use indices; no runtime detection | Accepted | no |
 | [views-2](adr-views-2.md) | `mut` on a `for` binding means what it means on a `let`: `mut` in front of the whole head (`for mut x`, `for mut (a, b)`); over a list or an array the element is a view that writes through (`iter_mut()`), over owned elements it is the loop's own; a key and a set element are refused with their reason; the list is not used in the body. `mut` on one name of a tuple, and so map values in place, refused now, possible later (`NK1307`) | Accepted | no |
 | [views-1](adr-views-1.md) | A part taken out of a `let mut` view of a place (`let mut c = m[k] ?? continue`) is given back before the view's block is left, as out of a `mut` parameter (`NK2108`); lowered as `mem::take`/`mem::replace`; no `std::mem` | Accepted | no |
 | [312](adr-312.md) | A handle on a shared value is duplicated, never moved; it may go into a task of our own but not into code nothing describes, and at one user thread its count is plain. | Accepted | partly: D9's bridge type |
@@ -382,7 +383,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 ## Topics in use
 
-`async`, `catch`, `collections`, `decision-records`, `lambdas`, `regex`, `registry`, `specialization`, `views`, `yaml`.
+`async`, `catch`, `collections`, `decision-records`, `lambdas`, `regex`, `registry`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
 
 ## Reserved numbers
 

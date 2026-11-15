@@ -1,0 +1,9 @@
+error[NK1102]: This keeps a `P?` of its own, and a list's `get` is a view of what the list keeps.
+   --> tests/a_list_get_kept_as_its_own_value_is_refused.nika:17:2
+    |
+ 17 | 	let o: P? = xs.get(0)
+    |  ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Nikaia never makes a copy behind your back, so the copy is written where it happens.
+    = help: Write `?.clone()` after the read: `xs.get(i)?.clone()`.
+1 type error

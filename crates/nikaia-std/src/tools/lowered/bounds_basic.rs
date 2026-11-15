@@ -267,6 +267,7 @@ pub(crate) enum Seek {
     ElementsChanged(String),
     Rebound(String),
     Mentioned(String),
+    ValuesRead(String),
     Unvisited(collections::BTreeSet<i64>),
 }
 
@@ -277,6 +278,10 @@ pub fn elements_change(stmt: &Stmt, list: &str, words: &winnow_grammar::Interner
 pub fn elements_stay(body: &Block, list: &str, words: &winnow_grammar::InternerContext) -> bool { !seek_block(body, &Seek::ElementsChanged(nikaia_std::block::Text::from(list.to_string())), words) }
 
 pub fn rebinds_in_statement(stmt: &Stmt, name: &str, words: &winnow_grammar::InternerContext) -> bool { seek_statement(stmt, &Seek::Rebound(nikaia_std::block::Text::from(name.to_string())), words) }
+
+pub fn values_read(body: &Block, name: &str, words: &winnow_grammar::InternerContext) -> bool { seek_block(body, &Seek::ValuesRead(nikaia_std::block::Text::from(name.to_string())), words) }
+
+pub(crate) fn only_grows_or_measures(method: &str) -> bool { method == "push" || method == "len" || method == "is_empty" }
 
 pub fn rebinds(body: &Block, name: &str, words: &winnow_grammar::InternerContext) -> bool { seek_block(body, &Seek::Rebound(nikaia_std::block::Text::from(name.to_string())), words) }
 
@@ -386,6 +391,10 @@ pub(crate) fn statement_says(stmt: &Stmt, seek: &Seek, words: &winnow_grammar::I
             Stmt::Assign { target, .. } => is_variable(target, name, words),
             _ => false,
         },
+        Seek::ValuesRead(name) => match stmt {
+            Stmt::Assign { target, .. } => is_variable(target, name, words),
+            _ => false,
+        },
         Seek::Unvisited(seen) => match stmt {
             Stmt::Return(value) => unseen_return((value).as_ref(), seen),
             _ => false,
@@ -416,6 +425,10 @@ pub(crate) fn expression_says(expr: &Expr, seek: &Seek, words: &winnow_grammar::
             _ => false,
         },
         Seek::Mentioned(name) => is_variable(expr, name, words),
+        Seek::ValuesRead(name) => match expr {
+            Expr::Closure { params, .. } => any_symbol(params, name, words),
+            _ => is_variable(expr, name, words),
+        },
         Seek::Unvisited(seen) => match expr {
             Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); unseen_return((value).as_ref(), seen) },
             _ => false,
@@ -468,6 +481,16 @@ pub(crate) fn seek_maybe(expr: Option<&Expr>, seek: &Seek, words: &winnow_gramma
 
 pub(crate) fn seek_expr(expr: &Expr, seek: &Seek, words: &winnow_grammar::InternerContext) -> bool {
     if expression_says(expr, seek, words) { return true; }
+    match seek {
+        Seek::ValuesRead(name) => { match expr {
+            Expr::MethodCall { receiver, method, args, config, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                if is_variable(receiver, name, words) && only_grows_or_measures(words.resolve(method)) { return seek_all(args, seek, words) || seek_config(config, seek, words); }
+            },
+            _ => { },
+        }; },
+        _ => { },
+    }
     match expr {
         Expr::Match { value, arms, .. } => { let value = nikaia_std::boxed::open(value); seek_expr(value, seek, words) || seek_arms(arms, seek, words) },
         Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); seek_expr(start, seek, words) || seek_expr(end, seek, words) },

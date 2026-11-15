@@ -882,9 +882,10 @@ impl SvTh for SvSimplex {
 		self.splits += 1
 		let col = self.var_col[v]
 		let value = self.values[v].clone()
-		// `⌊value⌋` in the order with `δ`: `3 - δ` lies below 3.
+		// `⌊value⌋` in the order with `δ`: `3 - δ` lies below 3; below
+		// `i64::MIN` the split leaves `i64` (#1632).
 		let floor = sv_rat_floor(value.c)
-		let k = if value.c.den == 1 && value.k.num < 0 { floor - 1 } else { floor }
+		let k = if value.c.den == 1 && value.k.num < 0 { floor.checked_sub(1) ?? return self.overflow() } else { floor }
 		let le = SvRow {
 			cols: [col.checked_u32() ?? return self.overflow()],
 			ks: [1],
@@ -2176,6 +2177,36 @@ test "a cut's log with a rounding left out or the cut made too strong is rejecte
 		"  gcd, round: conflict, 0 splits, 0 cuts, 1 gcd; 1 farkas, 2 combine, 2 round, 0 split, 1 learn; rejected at 6: farkas: x1 is left in the combination",
 		"  cg, round: conflict, 0 splits, 1 cuts, 0 gcd; 1 farkas, 1 combine, 1 round, 0 split, 1 learn; rejected at 8: farkas: x0 is left in the combination",
 		"  gmi, strong: conflict, 0 splits, 1 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 4 learn; rejected at 8: farkas: the combination ends in 0 <= 0, no contradiction",
+	]
+	assert(out == expected.join("\n") + "\n")
+}
+
+// --- Tests: the split at the bottom of `i64` (#1632). `x + y < -i64::MAX`
+// and `y >= 1` put `x` at `i64::MIN - δ`, whose floor in the order with `δ`
+// is `i64::MIN - 1`: the split answers *unknown (overflow)*, it does not
+// stop the program ---
+
+fn sv_simplex_test_split_at_min(low_first: bool) -> String {
+	let big = sv_simplex_test_lt([1, 1], 9223372036854775807)
+	let low = sv_simplex_test_le([0, -1], 1)
+	let atoms = if low_first { [low, big] } else { [big, low] }
+	let query = SvQuery { atoms: atoms, clauses: [[0], [2]], columns: 2, reals: [] }
+	let mut book = sv_book(query) ?? return "no value"
+	let mut theory = sv_simplex(["x", "y"])
+	theory.cut_kind = "none"
+	theory.gcd_test = false
+	theory.push_level()
+	let a = theory.assert(0, book)
+	let b = theory.assert(2, book)
+	let got = theory.check(true, lg_budget(), book)
+	return f"{sv_simplex_test_said_by(a)}, {sv_simplex_test_said_by(b)}, {sv_simplex_test_said_by(got)}, {theory.splits} splits, {theory.overflows} overflows\n"
+}
+
+test "a split below i64::MIN answers unknown (overflow)" {
+	let out = sv_simplex_test_split_at_min(true) + sv_simplex_test_split_at_min(false)
+	let expected = [
+		"consistent, consistent, unknown (overflow), 1 splits, 1 overflows",
+		"consistent, consistent, unknown (overflow), 1 splits, 1 overflows",
 	]
 	assert(out == expected.join("\n") + "\n")
 }

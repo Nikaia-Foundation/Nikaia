@@ -244,6 +244,12 @@ impl EmitState {
         // with a free that `skip-free-at-exit:on` skips once `main` has ended
         // ([ADR-348](../../docs/specification/adr/adr-348.md) D1). Written
         // here and not in `std`, which has no `unsafe` (ADR-218).
+        //
+        // **A program lowered as a module has none** (#1582): one crate takes
+        // one allocator, and the crate declares it.
+        if self.as_a_module() {
+            return
+        }
         if host.skip_free_at_exit() {
             out.push(emit_program_allocator())
         } else if host.counts_heap() {

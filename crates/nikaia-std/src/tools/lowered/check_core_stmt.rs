@@ -19,6 +19,10 @@ pub(crate) fn check_core_stmt_expects_a_lambda(value: &Expr) -> bool { matches!(
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_fn_type(ty: &Ty) -> bool { matches!(ty, Ty::Fn { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_map_read(value: &Expr) -> bool { matches!(value, Expr::Index { .. } | Expr::MethodCall { .. }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -955,7 +959,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); (!a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner) || check_core_stmt_a_tuple(inner)) && (state.facts.copied_walks.contains(&(id_of(value) as i64)) || state.facts.copied_reads.contains(&(id_of(value) as i64))) },
         _ => false,
     };
-    if of_a_map && !word_copied {
+    if of_a_map && !word_copied && !state.facts.copied_walks.contains(&(id_of(value) as i64)) {
         let kept: Ty = match bound {
             Ty::Nullable(ref inner) => {
                 let inner = nikaia_std::boxed::open(inner);
@@ -1297,7 +1301,9 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
     state.reading_only = outer;
     state.flow.writing_index = false;
     if !code_keys.is_empty() { state.stored_frames.push(CheckStoredCode::empty()); }
+    if op.is_none() && check_core_stmt_expects_a_lambda(value) && check_core_stmt_a_fn_type(&into) { state.flow.lambda_expected = Some(into.clone()); }
     let mut found = check_core_expr(state, world, host, value, span);
+    state.flow.lambda_expected = None;
     if a_child_handle(&found) { state.a_child_handle_leaving_its_group(span, "it is assigned to a place, which may outlive its group"); }
     if !code_keys.is_empty() { check_core_places_stored_keys(state, world, host, Some(value), &code_keys); }
     if op.is_none() {
@@ -1540,11 +1546,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         for from in keys.iter() {
             match *nikaia_std::index::get(&state.stored_code, from) {
                 None => { entry.unresolved = true; },
-                Some(given) => {
-                    entry.resolved.extend(given.resolved.iter().cloned());
-                    entry.unresolved = entry.unresolved || given.unresolved;
-                    entry.free.extend(given.free.iter().cloned());
-                },
+                Some(given) => { entry.meet(given); },
             }
         }
         state.stored_code.insert(to, entry);

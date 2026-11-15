@@ -112,6 +112,10 @@ pub trait ProjectDriveHost {
     fn root_tag(ref self) -> String sync
     /// The entry and the name it is shown as, where a loose file was given.
     fn shown_as(ref self) -> (String, String)? sync
+    /// The entry's text where it declares no `fn main` (Part III 13.3);
+    /// null where it does, or where it cannot be read or parsed, which the
+    /// lowering then reports.
+    fn entry_without_main(ref self) -> String? sync
     /// The allowlist this build reads under, absolute; null where none.
     fn allowlist(ref self) -> fs::Path? sync throws
     /// The `--cpu` flags for `rustc`, null where none.
@@ -224,6 +228,16 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
         let meta = fs::metadata(entry, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Refused(not_there) }
         if !meta.is_file() {
             throw ProjectDriveRefusal::Refused(not_there)
+        }
+    }
+    // **A program has a `fn main`** (Part III 13.3, `NK1351`): refused here,
+    // before anything is lowered, rather than by `rustc` as an internal
+    // error. A library artifact and a test build have no `main` of their own.
+    let program = !rust_library && !host.is_library() && !host.tests_build()
+    if program && (subcommand == "build" || subcommand == "run") {
+        match host.entry_without_main() {
+            null => {},
+            source => return (project_drive_no_main(host, entry, source), null),
         }
     }
 
@@ -447,6 +461,19 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     // program (#724).
     host.settle()
     host.report(messages)
+    // **A batch that failed keeps what rustc said** (#1582), untranslated:
+    // the translation reads the carrier's map, not the batch's modules, and
+    // `nikaia test` finds the programs to leave out from the lines it cites.
+    if code != 0 {
+        match env::var(project_batch_var()) {
+            null => {},
+            list => {
+                let path: fs::Path = list
+                let said = path.with_extension("said")
+                host.write_if_changed(said, messages)
+            },
+        }
+    }
     // **The library and its header, together where a C build looks**
     // (ADR-284 D4, D12): `target/nikaia/c-library/`.
     if code == 0 && subcommand != "check" {
@@ -873,6 +900,20 @@ fn project_drive_written(path: ref fs::Path, text: ref String) throws {
     }
 }
 
+/// **A program without `fn main`** (`NK1351`, Part III 13.3), shown at the
+/// start of the entry under the name it was given as; the exit code.
+fn project_drive_no_main[H: ProjectDriveHost](host: ref H, entry: ref fs::Path, source: ref String) -> i32 sync {
+    let path = match host.shown_as() {
+        null => entry.display(),
+        (_, written) => written,
+    }
+    let message = f"A program starts at its `fn main`, and `{path}` declares none."
+    let help: String = "Add `fn main()` to it, or, for a package that is built as a library, name the library under `[build]`: `artifact = \"rust-library\"` or `artifact = \"c-library\"`."
+    let shown = Shown { warning: false, code: "NK1351", message: message, notes: [], help: help, span: Span { start: 0, end: 0 }, labels: [] }
+    host.eprint(rendered(shown, path, source))
+    return 1
+}
+
 /// **A refusal of `[features]`** (`NK1344`-`NK1347`) shown on its entry in
 /// `nikaia.toml`; the exit code.
 fn project_drive_features_refused[H: ProjectDriveHost](host: ref H, refusal: ref FeaturesRefusal) -> i32 sync {
@@ -1000,6 +1041,13 @@ pub trait ProjectDriveWrapperHost {
     /// writes the allocator that counts each task's heap (ADR-327 D9). The
     /// Rust and the files read.
     fn lower(ref self, source: ref fs::Path, no_cache: bool, allowlist: fs::Path?, shown: String?, program: bool) -> (String, Vec[fs::Path]) sync throws
+    /// **Lowers a batch's programs on every core** (#1582): `sources[k]` as
+    /// [`lower`] lowers a program, but as the module of another crate whose
+    /// path `roots[k]` names (`crate::p{k}`): its `main` and what that names
+    /// are `pub`, and the allocator is left to the crate. A dependency's file
+    /// is checked once for the batch. Nothing for a program that does not
+    /// lower.
+    fn lower_batch(ref self, sources: ref Vec[fs::Path], roots: ref Vec[String], no_cache: bool) -> Vec[(String, Vec[fs::Path])?] sync
     /// Writes `text` to `path` where it differs from what is there.
     fn write_if_changed(ref self, path: ref fs::Path, text: ref String) sync throws
     /// Points the invocation at `generated` in place of the `.nika` source.

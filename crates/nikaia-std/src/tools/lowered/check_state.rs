@@ -345,10 +345,17 @@ pub struct CheckStoredCode {
     pub resolved: collections::BTreeSet<String>,
     pub unresolved: bool,
     pub free: collections::BTreeSet<String>,
+    pub thrown: collections::BTreeSet<String>,
 }
 
 impl CheckStoredCode {
-    pub fn empty() -> CheckStoredCode { CheckStoredCode { resolved: collections::BTreeSet::new(), unresolved: false, free: collections::BTreeSet::new() } }
+    pub fn empty() -> CheckStoredCode { CheckStoredCode { resolved: collections::BTreeSet::new(), unresolved: false, free: collections::BTreeSet::new(), thrown: collections::BTreeSet::new() } }
+    pub fn meet(&mut self, given: &CheckStoredCode) {
+        self.resolved.extend(given.resolved.iter().cloned());
+        self.unresolved = self.unresolved || given.unresolved;
+        self.free.extend(given.free.iter().cloned());
+        self.thrown.extend(given.thrown.iter().cloned());
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

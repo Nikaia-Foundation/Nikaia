@@ -362,6 +362,10 @@ enum Seek {
     Rebound(String),
     /// The name read anywhere, or assigned.
     Mentioned(String),
+    /// The values of this list read (#1587): the name anywhere but as the
+    /// receiver of a method that only grows or measures it, assigned, or
+    /// a lambda's parameter. Asked only of a name the body binds once.
+    ValuesRead(String),
     /// A `return` whose value is not among these nodes (ADR-306 D23).
     Unvisited(collections::BTreeSet[i64]),
 }
@@ -385,6 +389,17 @@ pub fn elements_stay(body: ref Block, list: ref String, words: ref winnow_gramma
 /// Whether `stmt`, or anything inside it, binds `name` again.
 pub fn rebinds_in_statement(stmt: ref Stmt, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     return seek_statement(stmt, Seek::Rebound(name.clone()), words)
+}
+
+/// **Whether `body` may read a value of the list `name`** (#1587): `false`
+/// where the body only pushes to it and asks its length.
+pub fn values_read(body: ref Block, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    return seek_block(body, Seek::ValuesRead(name.clone()), words)
+}
+
+/// The methods that grow or measure a list and read none of its values.
+fn only_grows_or_measures(method: ref String) -> bool {
+    return method == "push" || method == "len" || method == "is_empty"
 }
 
 /// Whether `body` binds `name` again anywhere.
@@ -517,6 +532,10 @@ fn statement_says(stmt: ref Stmt, seek: ref Seek, words: ref winnow_grammar::Int
             Stmt::Assign { target, .. } => is_variable(target, name, words),
             else => false,
         },
+        Seek::ValuesRead(name) => match stmt {
+            Stmt::Assign { target, .. } => is_variable(target, name, words),
+            else => false,
+        },
         Seek::Unvisited(seen) => match stmt {
             Stmt::Return(value) => unseen_return(value, seen),
             else => false,
@@ -548,6 +567,10 @@ fn expression_says(expr: ref Expr, seek: ref Seek, words: ref winnow_grammar::In
             else => false,
         },
         Seek::Mentioned(name) => is_variable(expr, name, words),
+        Seek::ValuesRead(name) => match expr {
+            Expr::Closure { params, .. } => any_symbol(params, name, words),
+            else => is_variable(expr, name, words),
+        },
         Seek::Unvisited(seen) => match expr {
             Expr::Return(value, _) => unseen_return(value, seen),
             else => false,
@@ -625,6 +648,19 @@ fn seek_maybe(expr: ref Expr?, seek: ref Seek, words: ref winnow_grammar::Intern
 fn seek_expr(expr: ref Expr, seek: ref Seek, words: ref winnow_grammar::InternerContext) -> bool {
     if expression_says(expr, seek, words) {
         return true
+    }
+    // A list only grown or measured is not read (`values_read`): past its
+    // name as the receiver, only the arguments are asked.
+    match seek {
+        Seek::ValuesRead(name) => match expr {
+            Expr::MethodCall { receiver, method, args, config, .. } => {
+                if is_variable(receiver, name, words) && only_grows_or_measures(words.resolve(method)) {
+                    return seek_all(args, seek, words) || seek_config(config, seek, words)
+                }
+            },
+            else => {},
+        },
+        else => {},
     }
     return match expr {
         Expr::Match { value, arms, .. } => seek_expr(value, seek, words) || seek_arms(arms, seek, words),

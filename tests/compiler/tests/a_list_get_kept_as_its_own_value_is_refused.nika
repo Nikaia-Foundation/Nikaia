@@ -1,0 +1,22 @@
+// A list's `get` is a view of what the list keeps, so a `P?` of its own
+// is refused with the copy to write, as a map's read is (#1609: rustc
+// refused `Option<&P>` against `Option<P>`).
+struct P {
+	name: String,
+}
+
+fn make() -> P {
+	let mut g = String()
+	g.push_str("a")
+	return P { name: g }
+}
+
+fn main() throws {
+	let mut xs: Vec[P] = []
+	xs.push(make())
+	let o: P? = xs.get(0)
+	match o {
+		null => println("none"),
+		y => println(y.name),
+	}
+}

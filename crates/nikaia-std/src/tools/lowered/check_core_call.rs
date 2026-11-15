@@ -141,7 +141,14 @@ pub(crate) fn check_core_call_kept<H: CheckHost>(state: &mut CheckState, world: 
         } else if fails && (a_param || state.stored_code.contains_key(&key)) {
             check_core_args_a_field_called(state, &current, &key);
             check_core_args_code_said(state, &current, !is_sync, false);
-        } else { check_core_args_code_said(state, &current, !is_sync, fails); }
+        } else {
+            check_core_args_code_said(state, &current, !is_sync, fails);
+            if fails {
+                let mut contract = FnContract::empty();
+                contract.fails_with.push(String::from("?"));
+                state.may_fail_here(world, host, &key, &contract, span);
+            }
+        }
     }
     gives.clone()
 }
@@ -229,6 +236,7 @@ pub(crate) fn check_core_call_from_given<H: CheckHost>(state: &CheckState, world
         if stored.unresolved { set.insert(String::from("?")); }
         for name in stored.free.iter() { check_core_call_set_into(world, name, &mut set); }
         for name in stored.resolved.iter() { check_core_call_set_into(world, name, &mut set); }
+        set.extend(stored.thrown.iter().cloned());
     }
     let mut errors: Vec<String> = vec![];
     for error in set.iter() { errors.push(nikaia_std::block::Text::from(error.to_string())); }
@@ -300,9 +308,7 @@ pub(crate) fn check_core_call_feed_params<H: CheckHost>(state: &mut CheckState, 
         check_core_places_code_into(&state, world, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, &mut stored);
         let place = format!("{}::{}", key, param);
         let mut entry: CheckStoredCode = nikaia_std::index::or(state.stored_code.remove(&place), || CheckStoredCode::empty());
-        entry.resolved.extend(stored.resolved.iter().cloned());
-        entry.unresolved = entry.unresolved || stored.unresolved;
-        entry.free.extend(stored.free.iter().cloned());
+        entry.meet(&stored);
         state.stored_code.insert(place, entry);
     }
 }

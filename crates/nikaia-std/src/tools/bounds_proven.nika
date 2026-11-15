@@ -49,12 +49,11 @@ pub struct BoundsAllProven {
 /// does with them (ADR-306 D14). `facts` are the checker's: what may be read
 /// and proved. `ledgers` answer what a callee ensures (ADR-314 D3);
 /// `nonnegative` are the signed values asked `>= 0` (ADR-285 D32); `beside`
-/// are the package's other files (ADR-391 D1).
+/// is what the package's other files say (`bounds_beside`, ADR-391 D1).
 pub fn bounds_proven(
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
-	beside: ref Vec[ref Program],
-	beside_words: ref Vec[ref winnow_grammar::InternerContext],
+	beside: ref Vec[ref BoundsBeside],
 	facts: ref CheckFacts,
 	ledgers: ref Vec[ref Ledger],
 	nonnegative: ref collections::BTreeSet[i64],
@@ -78,7 +77,7 @@ pub fn bounds_proven(
 	}
 	// What each call may change, each function's frame among it (ADR-306
 	// D17, ADR-391 D2): `tools/bounds_frame.nika`.
-	let around = bounds_around(program, beside, beside_words, ledgers, facts.std_receivers, facts.simd_loads, words)
+	let around = bounds_around(program, beside, ledgers, facts.std_receivers, facts.simd_loads, words)
 	let mut context = BoundsContext {
 		lengths: facts.std_lengths.clone(),
 		sized: facts.sized_lengths.clone(),
@@ -149,7 +148,17 @@ pub fn bounds_proven(
 				// **The invariants that carried a check through a loop** go
 				// into `nikaia.proofs` (ADR-361 D4, D10).
 				record(walked.loops)
+				// **The rules that hold, found once** (#1581): what a body
+				// found serves the bodies after it, until a derived
+				// precondition the walks start from is added.
+				for (of, holding) in walked.held {
+					context.around.held.insert(of.clone(), holding.clone())
+				}
+				let entries = context.around.derived.entry.len()
 				derived_note(context.around, walked)
+				if context.around.derived.entry.len() != entries {
+					context.around.held = collections::BTreeMap()
+				}
 				bp_add(out, walked)
 			},
 			else => {},
@@ -159,6 +168,9 @@ pub fn bounds_proven(
 	// **A grammar's actions, walked like a function's body** (ADR-314 D1),
 	// from what each binding matched.
 	let none: Vec[FnArg] = []
+	// What a grammar binding matched changes every walk: each finds the
+	// rules that hold itself.
+	context.around.held = collections::BTreeMap()
 	for item in program.items {
 		match item.node {
 			Item::Grammar(def) => {
