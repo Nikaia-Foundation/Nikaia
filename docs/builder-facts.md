@@ -69,7 +69,10 @@ together with the specification section and an example test.
   change to them in the tree that is not yours comes from the driver's
   `drive_ledgers` or another run's `ledgers.nika --refresh`, which commits it.
   Leave it unstaged; `nikaia run scripts/ledgers.nika -- --check` says whether
-  your change made them stale (issue-1691).
+  your change made them stale (issue-1691). A stale one is often stale on
+  `develop` already: one run of `ledgers.nika -- --check --tree HEAD --exe
+  $S/old/nikaia` (HEAD's ledgers, the before binary) settles it; stale there
+  too, it is not yours, say so under `Tests:` and do not refresh it (#1712).
 * **A file another agent also edits** goes under the report's `Partial:`,
   not `Files:`: stage only your hunks (`git apply --cached`), and
   `commit.nika` commits what is staged of it without `git add` (#1704).
