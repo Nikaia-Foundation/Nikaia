@@ -1,0 +1,39 @@
+// A `for` element's fields have paths for the prover, through `ref` and by
+// value: `for i in 0..<f.lines.len()` proves `f.lines[i]` where the lines
+// come from outside the program (ADR-396 D1, D4; #1624).
+use std::process
+
+struct F {
+    lines: Vec[String],
+}
+
+fn lent(files: ref Vec[F]) -> i64 {
+    let mut n = 0
+    for f in files {
+        for i in 0..<f.lines.len() {
+            n += f.lines[i].len()
+        }
+    }
+    return n
+}
+
+fn owned(files: Vec[F]) -> i64 {
+    let mut n = 0
+    for f in files {
+        for i in 0..<f.lines.len() {
+            n += f.lines[i].len()
+        }
+    }
+    return n
+}
+
+fn load() -> Vec[F] throws {
+    let text = process::run("echo", ["ab cde"]).stdout
+    return [F { lines: text.split(" ").collect() }]
+}
+
+fn main() throws {
+    let files = load()
+    println(lent(files))
+    println(owned(load()))
+}

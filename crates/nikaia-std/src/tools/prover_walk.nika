@@ -453,8 +453,8 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             }
             false
         },
-        Stmt::For { bindings, iter, body, .. } => {
-            prover_for(walk, bindings, iter, body, span, scope, at, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+        Stmt::For { bindings, mutable, iter, body, .. } => {
+            prover_for(walk, bindings, mutable, iter, body, span, scope, at, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             false
         },
         Stmt::While { cond, body } => {
@@ -1327,7 +1327,7 @@ fn prover_all_plain(exprs: ref Vec[Expr]) -> bool {
 /// a name nothing pins. A `for` over a range whose turn changes whole numbers
 /// the walk follows is the `while` it means (ADR-361 D1): read past it
 /// through its invariant; over anything else what it changes is unknown.
-fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], iter: ref Expr, body: ref Block, span: Span, mut scope: ProverScope, at: ref ProverWhere, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
+fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], mutable: bool, iter: ref Expr, body: ref Block, span: Span, mut scope: ProverScope, at: ref ProverWhere, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     prover_expr(walk, iter, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     let tainted = from_outside(iter, scope.tainted, words, library, walk.state, holes_of)
     // What a turn changes is unknown at its head and past the loop.
@@ -1409,7 +1409,9 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
     }
     // **An element with a length has one** (ADR-396 D4): `for line in
     // s.split("\n")` knows `line.len()`, of which nothing more is known.
-    if bindings.len() == 1 {
+    // Not a `for mut` element: the walk does not follow what its body
+    // changes in it, as a `mut` parameter's fields (#1624).
+    if bindings.len() == 1 && !mutable {
         match walk.state.whole_lets.get(span.start as i64) {
             null => {},
             element => {

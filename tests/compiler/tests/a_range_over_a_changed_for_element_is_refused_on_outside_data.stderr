@@ -1,0 +1,10 @@
+error[NK1302]: `f.lines[i]` is not proved in bounds, and `i` comes from outside the program.
+   --> tests/a_range_over_a_changed_for_element_is_refused_on_outside_data.nika:15:13
+    |
+ 15 |             n += f.lines[i].len()
+    |             ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `i` comes from outside the program: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: The prover cannot state `0 <= i < f.lines.len()` here: a part of it is not a whole number it reads.
+    = help: Check it where it arrives, with a guard the program handles: `throw BadInput(i) if !(0 <= i && i < f.lines.len())`, or the early `return` that rejects it. After that line, the index is proved.
+1 type error

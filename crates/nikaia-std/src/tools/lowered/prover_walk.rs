@@ -324,8 +324,9 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
             }
             false
         },
-        Stmt::For { bindings, iter, body, .. } => {
-            prover_for(walk, bindings, iter, body, span, scope, at, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+        Stmt::For { bindings, mutable, iter, body, .. } => {
+            let mutable = *mutable;
+            prover_for(walk, bindings, mutable, iter, body, span, scope, at, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
             false
         },
         Stmt::While { cond, body } => {
@@ -991,7 +992,7 @@ pub(crate) fn prover_all_plain(exprs: &[Expr]) -> bool {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], iter: &Expr, body: &Block, span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], mutable: bool, iter: &Expr, body: &Block, span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     prover_expr(walk, iter, span, &scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
     let tainted = from_outside(iter, &scope.tainted, words, library, &walk.state, &holes_of);
     let mut changed = assigned_in(body, words);
@@ -1052,7 +1053,7 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
             inner.tainted.insert(n);
         }
     }
-    if bindings.len() == 1 {
+    if bindings.len() == 1 && !mutable {
         match walk.state.whole_lets.get(&(span.start as i64)) {
             None => { },
             Some(element) => {
