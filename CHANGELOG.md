@@ -13,6 +13,9 @@ has no heading here; `CLAUDE.md` draws the line.
 **check: a name proved not null is still bound outside the loop around the proof (NK2105) (#1574)**
 - A name an `if` proved not `null` and then handed over inside a loop it was declared outside of is NK2105 now, through `??` or plainly, instead of a rustc error (NK1343).
 
+**fix: a build and lower-std say every refused file, not only the first (#1508)**
+- A build and `lower-std` say the refusals of every file of a package, not only the first refused file's: a `sync` caller's NK2202 no longer hides the callee's NK1171 it follows from.
+
 ## [0.0.1378] — 2026-11-15
 
 **Re-record the stale ledgers of packages/yaml, packages/json, page-examples and crate-ledger, and guard the packages' with build --locked (#1604)**
