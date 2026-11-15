@@ -1399,6 +1399,15 @@ impl EmitState {
             },
             else => {}
         }
+        // **Into the `catch` it is guarded by** (Part I 7.1, #1635): the
+        // guarded half is a labelled block its failures leave in the box, and
+        // a `throw` there leaves it as a failing call does, with its site.
+        if flow.breaks_to >= 0 {
+            out.push(f"break '__nikaia_caught_{flow.breaks_to} Err(nikaia_std::error::raise(")
+            self.emit_expr(world, walk, out, host, inner, depth, flow, scope)
+            out.push(f", &{rust_string(scope.origin)}))")
+            return
+        }
         let passing_on = flow.caught_named && is_the_binding && scope.caught_sum == null
         if passing_on || (scope.caught_member != null && is_the_binding) {
             // **Back into the variant it came out of**, where the handler is inside

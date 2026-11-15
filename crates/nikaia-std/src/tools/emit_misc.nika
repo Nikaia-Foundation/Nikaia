@@ -255,6 +255,36 @@ impl EmitState {
                 return true
             }
         }
+        // **A `throw` in the guarded half is caught here too** (Part I 7.1,
+        // #1635), the guarded expression itself included; one in a nested
+        // `catch`'s guarded half goes to that `catch`, one in a lambda to the
+        // lambda's caller, and one in a nested handler comes here.
+        let mut elsewhere: collections::BTreeSet[i64] = collections::BTreeSet()
+        for each in visited_in_expr(guarded) {
+            match each {
+                Expr::Closure { .. } => {
+                    for inner in visited_in_expr(each) {
+                        elsewhere.insert(node_key(inner))
+                    }
+                },
+                Expr::TryCatch { expr, .. } => {
+                    for inner in visited_in_expr(expr) {
+                        elsewhere.insert(node_key(inner))
+                    }
+                },
+                else => {},
+            }
+        }
+        for each in visited_in_expr(guarded) {
+            match each {
+                Expr::Throw(_, _) => {
+                    if !elsewhere.contains(node_key(each)) {
+                        return true
+                    }
+                },
+                else => {},
+            }
+        }
         return false
     }
 

@@ -238,6 +238,9 @@ pub struct CheckFlow {
     pub map_read_sites: collections::BTreeSet[i64],
     /// The bindings a `let` made of a map read (#297), by binding.
     pub map_views: collections::BTreeSet[i64],
+    /// Those of `map_read_sites` that are a list's `get`, by the call's id
+    /// (#1609): the same `Option<&T>`, said of a list.
+    pub list_gets: collections::BTreeSet[i64],
     /// A list's `get`, `first` or `last` of a tuple, by the call's id: a view
     /// of the element below (`Option<&T>`).
     pub lent_list_reads: collections::BTreeSet[i64],
@@ -502,6 +505,7 @@ impl CheckFlow {
             lending_let: false,
             map_read_sites: collections::BTreeSet(),
             map_views: collections::BTreeSet(),
+            list_gets: collections::BTreeSet(),
             lent_list_reads: collections::BTreeSet(),
             owned_call_bases: collections::BTreeSet(),
             std_gets: collections::BTreeSet(),

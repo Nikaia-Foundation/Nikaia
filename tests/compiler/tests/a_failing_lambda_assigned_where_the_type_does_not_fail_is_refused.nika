@@ -1,0 +1,20 @@
+// A lambda assigned is weighed against the place's type, as one bound by a
+// `let` is (Part I 7.1, #1627): a failing lambda put into a `fn()` is NK1102,
+// not a `throws` the function around would need.
+enum Bad { Oops }
+
+impl Error for Bad {
+    fn message(self) -> String {
+        return "oops"
+    }
+}
+
+fn fails() throws {
+    throw Bad::Oops
+}
+
+fn main() {
+    let mut g: fn() = fn {}
+    g = fn { fails() }
+    g()
+}

@@ -6,8 +6,10 @@
 // is built `--locked` here, in a copy with no `target/` and its own cache,
 // where no warm entry can hide a question the book does not hold. A change
 // that asks new questions or infers new contracts fails this test until it
-// commits the new entries. Only the ledger verdict is printed: `json` has no
-// `main`, so its Cargo step fails whatever the ledger holds.
+// commits the new entries. Only the ledger verdict is printed. `json` has no
+// `main`, and a program build of it is refused with NK1351 before its ledger
+// is read (#1622, Part III 13.3), so it is checked `--locked` with `rustc`
+// instead, which compares its ledgers the same way.
 use std::fs
 use std::process
 
@@ -34,10 +36,11 @@ fn root() -> String throws {
 	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
 }
 
-// Builds the copy of `{repo}/{dir}` at `{tmp}/{dir}` with `--locked`.
-fn locked(nikaia: String, repo: String, tmp: String, dir: String) throws {
+// Builds (or checks, with `verb`) the copy of `{repo}/{dir}` at `{tmp}/{dir}`
+// with `--locked`.
+fn locked(nikaia: String, repo: String, tmp: String, dir: String, verb: Vec[String]) throws {
 	process::run("sh", ["-c", f"mkdir -p {tmp}/{dir} && tar -C {repo}/{dir} --exclude=./target -cf - . | tar -xf - -C {tmp}/{dir}"])
-	let out = process::run(nikaia, ["build", "--locked"]; dir: f"{tmp}/{dir}", env: [("RUST_BACKTRACE", "0"), ("NIKAIA_CACHE_DIR", f"{tmp}/cache")])
+	let out = process::run(nikaia, verb; dir: f"{tmp}/{dir}", env: [("RUST_BACKTRACE", "0"), ("NIKAIA_CACHE_DIR", f"{tmp}/cache")])
 	println(f"{dir}: ledger current: {!out.stderr.contains("--locked:")}")
 }
 
@@ -45,8 +48,8 @@ fn main() throws {
 	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
 	let nikaia = toolchain()
 	let repo = root()
-	locked(nikaia, repo, tmp, "packages/json")
-	locked(nikaia, repo, tmp, "packages/yaml")
-	locked(nikaia, repo, tmp, "tests/page-examples")
+	locked(nikaia, repo, tmp, "packages/json", ["check", "--rustc", "--locked", "src/main.nika"])
+	locked(nikaia, repo, tmp, "packages/yaml", ["build", "--locked"])
+	locked(nikaia, repo, tmp, "tests/page-examples", ["build", "--locked"])
 	process::run("rm", ["-rf", tmp])
 }

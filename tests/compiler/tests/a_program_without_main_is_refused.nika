@@ -1,0 +1,6 @@
+// #1622, Part III 13.3: a program has a `fn main`. A source without one is
+// refused with NK1351 before anything is lowered, not by rustc as the
+// internal NK1343.
+pub fn f() -> i64 {
+	return 1
+}

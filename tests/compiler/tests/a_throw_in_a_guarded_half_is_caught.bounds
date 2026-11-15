@@ -1,0 +1,2 @@
+bounds in tests/a_throw_in_a_guarded_half_is_caught.nika: 0 indexes, 0 proved; 1 operations, 0 proved
+    44  … + 1    checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

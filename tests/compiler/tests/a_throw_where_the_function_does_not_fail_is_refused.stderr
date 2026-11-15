@@ -1,0 +1,17 @@
+error[NK2605]: This function can fail, because it throws `Bad`.
+   --> tests/a_throw_where_the_function_does_not_fail_is_refused.nika:17:5
+    |
+ 17 |     throw Bad::Oops
+    |     ^^^^^^^^^^^^^^^
+    |
+    = note: A `throw` fails the function it stands in, as a call that can fail does.
+    = help: Add `throws` to `bare`, or handle the failure with `… catch { … }` where it is called.
+error[NK2605]: This function can fail, because it throws `Bad`.
+   --> tests/a_throw_where_the_function_does_not_fail_is_refused.nika:21:21
+    |
+ 21 |     fails() catch { throw Bad::Oops }
+    |                     ^^^^^^^^^^^^^^^
+    |
+    = note: A `throw` fails the function it stands in, as a call that can fail does.
+    = help: Add `throws` to `in_a_handler`, or handle the failure with `… catch { … }` where it is called.
+2 places that can fail without saying so

@@ -262,6 +262,10 @@ struct BoundsWalk {
 	/// The names an end may be read of: the parameters, and the names a
 	/// statement of the body's own block binds once.
 	end_roots: collections::BTreeSet[String],
+	/// **The lists whose values the body never reads** (#1587), only pushed
+	/// to and measured: no end of theirs is asked about, since nothing reads
+	/// one, and each write would ask about every list the facts name.
+	unread: collections::BTreeSet[String],
 	/// A pass that only finds bounds and proves nothing.
 	collecting: bool,
 	/// The first byte of the statement being walked: the key a compound
@@ -705,6 +709,7 @@ fn bounding_new(
 		written_ends: collections::BTreeMap(),
 		steady: bounding_changed(body, context, words),
 		end_roots: collections::BTreeSet(),
+		unread: collections::BTreeSet(),
 		collecting: false,
 		at: 0,
 		growing: collections::BTreeSet(),
@@ -764,6 +769,10 @@ fn bounding_new(
 					let name = words.resolve(symbol)
 					if !walk.shape.twice.contains(name) {
 						walk.end_roots.insert(name.clone())
+						let tracked = walk.shape.roots.contains(name)
+						if tracked && !values_read(body, name, words) {
+							walk.unread.insert(name.clone())
+						}
 					}
 				}
 				let declared = ty ?? continue
@@ -1223,7 +1232,7 @@ fn bounding_end_write(
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
-	if key.contains("[") || key.starts_with(".") {
+	if key.contains("[") || key.starts_with(".") || walk.unread.contains(key) {
 		return
 	}
 	let mut below: collections::BTreeSet[String] = collections::BTreeSet()
