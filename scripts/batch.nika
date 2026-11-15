@@ -91,7 +91,7 @@ fn batch_issue_brief(dir: String, line: String) -> String throws {
     let file = f"{dir}/{name}"
     if !fs::exists(file.clone(), fs::Root::Anywhere) {
         let template = fs::read_to_string("scripts/issue-brief.md", fs::Root::Anywhere)
-        fs::write(file.clone(), fs::Root::Anywhere, template.replace("{N}", n.clone()))
+        fs::write(file.clone(), fs::Root::Anywhere, template.replace("{N}", n))
         let abs = process::run("realpath", [file.clone()]).stdout.trim().clone()
         let text = fs::read_to_string(file.clone(), fs::Root::Anywhere)
         fs::write(file, fs::Root::Anywhere, text.replace("{REPORT}", f"{abs}.report.md"))
@@ -112,7 +112,7 @@ fn batch_run(dir: String) -> String throws {
             if !fs::exists(f"{dir}/{brief}", fs::Root::Anywhere) { return f"CUT {brief}: brief missing" }
             let abs = process::run("realpath", [f"{dir}/{brief}"])
             let path_abs = abs.stdout.trim().clone()
-            return f"NEXT {path_abs} {batch_info(path_abs.clone())}"
+            return f"NEXT {path_abs} {batch_info(path_abs)}"
         }
         let text = fs::read_to_string(path, fs::Root::Anywhere)
         let question = batch_field(text.clone(), "Owner:")

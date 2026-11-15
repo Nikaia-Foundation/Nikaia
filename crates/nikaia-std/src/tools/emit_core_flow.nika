@@ -1509,7 +1509,8 @@ impl EmitState {
     }
 
     fn emit_flow_task[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: i64, body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
-        // **A handle the body names is duplicated, not moved** (ADR-312 D1). The
+        // **A handle the body names is duplicated, not moved** (ADR-312 D1),
+        // where the name is read after the task; else it moves in (D2). The
         // step is written *outside* the future, in a block of its own, so the name
         // the body moves is the new handle and the caller's own survives the
         // `spawn`.

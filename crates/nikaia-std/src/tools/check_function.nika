@@ -896,6 +896,7 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     state.failing_cleanups_said()
     state.a_part_left_out()
     state.concatenated_names_read_again()
+    state.handles_read_again()
     state.data_handed_over_is_used_again()
     state.needless_clones_said()
     state.reads_on_paths.clear()

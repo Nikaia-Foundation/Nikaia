@@ -977,14 +977,44 @@ pub struct SharingWalk {
     pub library_keys: collections::BTreeMap[String, String],
     /// The same for the unit's own ledger, which does not change either.
     pub own_keys: collections::BTreeMap[String, String],
+    /// Where the checker found a handle moved or duplicated.
+    pub moves: SharingMoves,
+}
+
+/// **Which handovers of a handle duplicate it** (ADR-312 D2, D5, #1502), as
+/// the checker decided: at its last use a handle is moved, so `--sharing`
+/// names only the sites where the name is read again. `known` is false
+/// where no check ran (the ledger's inference, the emitter's counts), and
+/// then every handover by value is a site, as before; the sites change no
+/// count, only the report.
+pub struct SharingMoves {
+    pub known: bool,
+    /// Call arguments moved at their last use, by id.
+    pub moved: collections::BTreeSet[i64],
+    /// Values stored into a field or a list and duplicated, by id.
+    pub stored: collections::BTreeSet[i64],
+    /// `P { a }` that duplicates, by the literal and the field.
+    pub stored_fields: collections::BTreeSet[(i64, String)],
+    /// The handles each task duplicates, by its lambda.
+    pub task_handles: collections::BTreeSet[(i64, String)],
+}
+
+/// No check ran: every handover by value counts as a duplication site.
+pub fn sharing_moves_unknown() -> SharingMoves {
+    return SharingMoves { known: false, moved: collections::BTreeSet(), stored: collections::BTreeSet(), stored_fields: collections::BTreeSet(), task_handles: collections::BTreeSet() }
+}
+
+/// What the check of a unit decided about its handles.
+pub fn sharing_moves_of(facts: ref CheckFacts) -> SharingMoves {
+    return SharingMoves { known: true, moved: facts.moved_handles.clone(), stored: facts.stored_handles.clone(), stored_fields: facts.stored_handle_fields.clone(), task_handles: facts.task_handles.clone() }
 }
 
 /// Every `Shared` value in a unit, which count each would get, and the
 /// per-function summary. `ty_of` is the compiler's reading of a written type.
 /// Where nothing can cross, every count is plain (ADR-312 D10), applied to the
 /// finished answer so the duplication sites are kept as they were found.
-pub fn sharing_of(program: ref Program, asked: ref Asked, holes_of: fn(ref Expr) -> Vec[Expr] sync, ty_of: fn(ref Type) -> Ty sync, crossings_are_possible: bool) -> Sharing {
-    let mut walk = SharingWalk { slots: Slots(declared_here(asked.names, program.items)), parallel: collections::BTreeSet(), function: "", scope: collections::BTreeMap(), library_keys: collections::BTreeMap(), own_keys: collections::BTreeMap() }
+pub fn sharing_of(program: ref Program, asked: ref Asked, holes_of: fn(ref Expr) -> Vec[Expr] sync, ty_of: fn(ref Type) -> Ty sync, crossings_are_possible: bool, moves: SharingMoves) -> Sharing {
+    let mut walk = SharingWalk { slots: Slots(declared_here(asked.names, program.items)), parallel: collections::BTreeSet(), function: "", scope: collections::BTreeMap(), library_keys: collections::BTreeMap(), own_keys: collections::BTreeMap(), moves: moves }
     for item in program.items {
         match item.node {
             Item::Fn { .. } => sharing_function(item.node, "", asked, holes_of, ty_of, walk),
@@ -1245,10 +1275,11 @@ fn field_slot(base: ref Expr, field: ref String, asked: ref Asked, mut walk: Sha
 fn sharing_expression(expr: ref Expr, asked: ref Asked, holes_of: fn(ref Expr) -> Vec[Expr] sync, ty_of: fn(ref Type) -> Ty sync, mut walk: SharingWalk) {
     match expr {
         // Part II 11.2: a task runs on a thread of its own, and a task that
-        // uses a handle takes one of its own (ADR-312 D1).
+        // uses a handle takes one of its own (ADR-312 D1), where the name is
+        // read after it (D2).
         Expr::Spawn { body, .. } => {
             for named in names_used_by(body, asked) {
-                if a_handle_by_value(named, walk) {
+                if a_handle_by_value(named, walk) && (!walk.moves.known || walk.moves.task_handles.contains((node_key(body), named.clone()))) {
                     walk.slots.duplicates(walk.function, named, "used by a `spawn` body, which takes a handle of its own")
                 }
                 a_crossing_reaches(named, "a `spawn` body uses it, and a task runs on a thread of its own", null, asked, walk)
@@ -1278,7 +1309,7 @@ fn sharing_expression(expr: ref Expr, asked: ref Asked, holes_of: fn(ref Expr) -
         Expr::StructLit { name, fields, .. } => {
             let owner = asked.names.resolve(name).clone()
             for field in fields {
-                struct_field(owner, field, asked, holes_of, ty_of, walk)
+                struct_field(owner, node_key(expr), field, asked, holes_of, ty_of, walk)
             }
         }
         // **A hole is Nikaia source and is walked like any other** (ADR-309
@@ -1354,6 +1385,14 @@ fn sharing_expression(expr: ref Expr, asked: ref Asked, holes_of: fn(ref Expr) -
         }
         Expr::ListLit { items, .. } => {
             for item in items {
+                // A handle put into a list is duplicated where it is read
+                // again (ADR-312 D1, D2, #1411, #1502).
+                if walk.moves.stored.contains(node_key(item)) {
+                    let named = named_handle(item, asked.names, walk.scope)
+                    if named != null {
+                        walk.slots.duplicates(walk.function, named ?? "", "put into a list, which holds a handle of its own")
+                    }
+                }
                 sharing_expression(item, asked, holes_of, ty_of, walk)
             }
         }
@@ -1384,7 +1423,7 @@ fn a_handle_by_value(named: ref String, walk: ref SharingWalk) -> bool {
 // `Counter { hits }` is the shorthand: the field takes the variable of its own
 // name (Part I 4.1). A handle joins the field's class; a `Shared`-holding
 // field filled from something this walk cannot follow holds the floor.
-fn struct_field(owner: ref String, field: ref FieldInit, asked: ref Asked, holes_of: fn(ref Expr) -> Vec[Expr] sync, ty_of: fn(ref Type) -> Ty sync, mut walk: SharingWalk) {
+fn struct_field(owner: ref String, literal: i64, field: ref FieldInit, asked: ref Asked, holes_of: fn(ref Expr) -> Vec[Expr] sync, ty_of: fn(ref Type) -> Ty sync, mut walk: SharingWalk) {
     let field_name = asked.names.resolve(field.name).clone()
     let value = field.value?.clone() ?? Expr::Variable(field.name, fresh_id())
     let key = f"{owner}.{field_name}"
@@ -1394,6 +1433,16 @@ fn struct_field(owner: ref String, field: ref FieldInit, asked: ref Asked, holes
         let ty = walk.scope[named]?.clone() ?? return
         walk.slots.note(FIELDS, key, ty, true, false)
         walk.slots.join(slot(walk.function, named), slot(FIELDS, key))
+        // Duplicated where the name is read again (ADR-312 D1, D2, #1502).
+        let mut stored = false
+        if field.value == null {
+            stored = walk.moves.stored_fields.contains((literal, field_name.clone()))
+        } else {
+            stored = walk.moves.stored.contains(node_key(value))
+        }
+        if stored {
+            walk.slots.duplicates(walk.function, named, f"stored in `{key}`, which holds a handle of its own")
+        }
     } else {
         let declared = declared_field_type(owner, field_name, asked)
         if declared != null && holds_shared(declared ?? Ty::Unknown) {
@@ -1468,7 +1517,7 @@ fn sharing_arguments(called: ref SharingCall, args: ref Vec[Expr], config: ref V
             a_lambda_handed_on(described, at, arg, asked, holes_of, ty_of, walk)
             continue
         }
-        a_handle_handed_on(called, described, at, handle ?? "", walk)
+        a_handle_handed_on(called, described, at, handle ?? "", walk.moves.moved.contains(node_key(arg)), walk)
     }
     for setting in config {
         let why = f"it is handed to `{called.callee?.clone() ?? "the callee"}` as the option `{asked.names.resolve(setting.name)}`, and no contract says what happens to a `Shared` in an option"
@@ -1528,7 +1577,7 @@ fn an_argument_that_is_not_a_handle(called: ref SharingCall, described: ref Desc
 // A handle handed on: into the parameter's class where a contract describes
 // the position - duplicated where the position takes it by value (ADR-312
 // D1) - and atomic where nothing does.
-fn a_handle_handed_on(called: ref SharingCall, described: ref Described?, at: i64, handle: ref String, mut walk: SharingWalk) {
+fn a_handle_handed_on(called: ref SharingCall, described: ref Described?, at: i64, handle: ref String, moved: bool, mut walk: SharingWalk) {
     let function = walk.function.clone()
     if described == null {
         walk.slots.force(function, handle, unseen(called.callee), unseen_kind(called))
@@ -1541,7 +1590,8 @@ fn a_handle_handed_on(called: ref SharingCall, described: ref Described?, at: i6
         return
     }
     let param = known.params[at].0.clone()
-    if by_value_shared(known.params[at].1) {
+    // At its last use it is moved, not duplicated (D2, #1502).
+    if by_value_shared(known.params[at].1) && !moved {
         walk.slots.duplicates(function, handle, handed_on_to(known.key, param))
     }
     walk.slots.join(slot(function, handle), slot(known.key, param))

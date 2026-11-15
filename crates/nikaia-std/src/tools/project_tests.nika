@@ -615,8 +615,10 @@ fn project_tests_batch_carrier() -> String {
 
 /// **One setting's batches of `programs`** (`project_batch.nika`), each a
 /// package in a directory of its own under `own`: by program name, the binary
-/// that holds it and its entry. A batch whose build fails is split in two and
-/// each half built again, down to a few programs; what is in no batch is built
+/// that holds it and its entry. A batch whose build fails is built again
+/// without the programs whose modules rustc's messages cite (#1582), or, where
+/// they cite none, split in two and each half built again, down to a few
+/// programs; what is in no batch is built
 /// alone by `project_tests_program_test`. A program with a `.bounds` or
 /// `.asserts` report is batched too: the report is checked once per program
 /// (`project_tests_reports`), not at its build. Nothing is batched where there
@@ -661,8 +663,21 @@ pub fn project_tests_batches[H: ProjectTestsProgramHost](host: ref H, programs: 
         fs::write(list, fs::Root::Anywhere, lines.join(""))
         match host.batched(setting, dir.join("project"), dir, list) {
             null => {
-                // **Split, and build each half again**: one program that does
-                // not compile as a module leaves its half out, not the rest.
+                // **Leave out the programs rustc named, and build the rest
+                // again** (#1582): the lines it cites are in their modules.
+                let said = fs::read_to_string(dir.join("batch.said"), fs::Root::Anywhere) catch { "" }
+                let ranges = fs::read_to_string(dir.join("batch.modules"), fs::Root::Anywhere) catch { "" }
+                let cited = project_batch_cited(said, ranges, "program_test")
+                let rest: Vec[ProgramTest] = chunk.iter().filter(fn(program) { !cited.contains(program.name) }).map(fn(program) { program.clone() }).collect()
+                if !cited.is_empty() && rest.len() < chunk.len() {
+                    if rest.len() >= project_tests_batch_least() {
+                        chunks.push(rest)
+                    }
+                    continue
+                }
+                // **Else split, and build each half again**: one program that
+                // does not compile as a module leaves its half out, not the
+                // rest.
                 if chunk.len() >= 2 * project_tests_batch_least() {
                     let half = chunk.len() / 2
                     chunks.push(chunk.iter().take(half).map(fn(program) { program.clone() }).collect())

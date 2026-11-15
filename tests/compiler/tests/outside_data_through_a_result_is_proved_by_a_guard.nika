@@ -1,0 +1,15 @@
+// A guard on what a function of the package read from outside proves the
+// index it reaches (ADR-396 D1, #1573): it builds and runs.
+use std::io
+use std::text
+
+fn line() -> String {
+	return io::read_to_string() catch { "" }
+}
+
+fn main() throws {
+	let names = ["red", "green", "blue"]
+	let at = text::parse_i64(line().trim()) ?? 0
+	return if !(at >= 0 && at < 3)
+	println(names[at])
+}

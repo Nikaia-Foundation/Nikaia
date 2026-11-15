@@ -16,67 +16,90 @@
 use std::env
 use std::fs
 use std::collections
+use std::text
 
 /// The variable that hands the wrapper the list of programs to build as one
 /// crate: a file of `NAME<TAB>ENTRY` lines. Beside it the wrapper writes
-/// `LIST.included`, the names of the programs the crate holds.
+/// `LIST.included`, the names of the programs the crate holds, and
+/// `LIST.modules`, where each module is ([`project_batch_ranges`]); the build
+/// of a batch that failed keeps what rustc said in `LIST.said` (#1582).
 pub fn project_batch_var() -> String {
     return "NIKAIA_TEST_BATCH"
 }
 
 /// **A lowered program as the module `p{k}` of the batch**, or nothing where
-/// it has no `fn main` of its own. The module is a crate root moved one level
-/// down: `crate::` paths name the module, the program's `main` and the types it
-/// declares at the top become `pub` (the dispatcher calls `main`, and its error
-/// type is in `main`'s signature), and the global allocator is the batch's,
-/// declared once. **`main` is the last line that starts one**: an earlier one
-/// is inside a text the program holds. A text that holds `crate::` or a line
-/// starting `enum` is changed with the rest; the program then prints something
-/// else, its batched run fails and it is run alone.
+/// it has no `main` the batch can call. The emitter lowered it as that module
+/// (`lower_batch`, #1582): paths to the crate root name the module, `main` and
+/// the types its signature names are `pub`, and the allocator is the batch's.
+/// So it is only wrapped. A `main` the emitter wrote `pub` starts a line; a
+/// program whose own `main` it does not wrap (ADR-360 D1) has none, and is
+/// built alone.
 pub fn project_batch_module(k: i64, rust: ref String) -> String? {
-    let lines: Vec[String] = rust.split("\n").map(fn(line) { line.clone() }).collect()
-    let mut main_at: i64 = -1
-    for (at, line) in lines.iter().enumerate() {
-        if line.starts_with("fn main(") || line.starts_with("async fn main(") {
-            main_at = at
-        }
-    }
-    if main_at < 0 {
+    if !rust.starts_with("pub fn main(") && !rust.contains("\npub fn main(") {
         return null
     }
-    let root = f"crate::p{k}::"
-    let mut parts: Vec[String] = [f"pub mod p{k} " + "{\n"]
-    let mut allocator = false
-    for (at, line) in lines.iter().enumerate() {
-        if allocator {
-            allocator = false
-            continue
-        }
-        if line == "#[global_allocator]" {
-            allocator = true
-            continue
-        }
-        let mut text = line.replace("$crate::", "\u{1}").replace("crate::", root).replace("\u{1}", "$crate::")
-        if at == main_at || text.starts_with("enum ") || text.starts_with("struct ") || text.starts_with("type ") {
-            text = "pub " + text
-        }
-        parts.push(text + "\n")
+    return f"pub mod p{k} " + "{\n" + rust + "\n}\n"
+}
+
+/// **The header of the batch's crate**: what comes before its modules.
+fn project_batch_header() -> String {
+    return "#![allow(warnings)]\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n"
+}
+
+/// **Where each module is in the batch's crate** (#1582), the lines of
+/// `LIST.modules`: `NAME\tFIRST\tLAST`, the lines of the generated file the
+/// module `modules[k]` of the program `names[k]` holds, counted from 1. What
+/// rustc says about a line names the program to leave out
+/// ([`project_batch_cited`]).
+pub fn project_batch_ranges(names: ref Vec[String], modules: ref Vec[String]) -> String {
+    let mut first = project_batch_header().lines().count() + 1
+    let mut parts: Vec[String] = []
+    for (name, module) in names.iter().zip(modules.iter()) {
+        let last = first + module.lines().count() - 1
+        parts.push(f"{name}\t{first}\t{last}\n")
+        first = last + 1
     }
-    parts.push("}\n")
     return parts.join("")
 }
 
+/// **The programs what rustc said is about** (#1582): every line of the
+/// batch's generated file (`FILE.rs:LINE`) that `said` cites, as the program
+/// whose module holds it by `ranges` ([`project_batch_ranges`]). A note that
+/// points into another module names that one too; it is then built alone,
+/// which never changes a verdict.
+pub fn project_batch_cited(said: ref String, ranges: ref String, file: ref String) -> Vec[String] {
+    let mut lines: Vec[i64] = []
+    for piece in said.split(f"{file}.rs:").skip(1) {
+        let digits: String = piece.chars().take_while(fn(c) { c.is_ascii_digit() }).collect()
+        let line = text::parse_i64(digits) ?? continue
+        lines.push(line)
+    }
+    let mut cited: Vec[String] = []
+    for range in ranges.lines() {
+        let parts: Vec[String] = range.split("\t").map(fn(part) { part.clone() }).collect()
+        if parts.len() != 3 {
+            continue
+        }
+        let first = text::parse_i64(parts[1]) ?? continue
+        let last = text::parse_i64(parts[2]) ?? continue
+        if lines.iter().any(fn(line) { line >= first && line <= last }) {
+            cited.push(parts[0].clone())
+        }
+    }
+    return cited
+}
+
 /// **The batch's crate**: the allocator once, every module, and the
-/// dispatcher. `names[k]` is the program `modules[k]` holds; `main`'s result
-/// is reported as a `main` of its own would report it, so the exit code and
-/// what is written on an error are the same.
-pub fn project_batch_crate(names: ref Vec[String], modules: ref Vec[String]) -> String {
-    let mut parts: Vec[String] = ["#![allow(warnings)]\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n"]
+/// dispatcher. `names[k]` is the program the module `p{ks[k]}` holds;
+/// `main`'s result is reported as a `main` of its own would report it, so the
+/// exit code and what is written on an error are the same.
+pub fn project_batch_crate(names: ref Vec[String], ks: ref Vec[i64], modules: ref Vec[String]) -> String {
+    let mut parts: Vec[String] = [project_batch_header()]
     for module in modules {
         parts.push(module.clone())
     }
     parts.push("fn main() -> std::process::ExitCode {\n    match std::env::args().nth(1).as_deref().unwrap_or(\"\") {\n")
-    for (k, name) in names.iter().enumerate() {
+    for (name, k) in names.iter().zip(ks.iter()) {
         parts.push(f"        {name:?} => std::process::Termination::report(p{k}::main()),\n")
     }
     parts.push("        _ => std::process::ExitCode::from(2),\n    }\n}\n")
@@ -85,20 +108,32 @@ pub fn project_batch_crate(names: ref Vec[String], modules: ref Vec[String]) -> 
 
 /// **What the wrapper builds for a batch** (`project_drive_wrapper`, where
 /// [`project_batch_var`] is set and the crate is the program): every program
-/// of `list` lowered as a crate of its own would be, the ones that lower made
-/// modules of one crate, their names written to `LIST.included`. The Rust, and
-/// every source the programs read.
+/// of `list` lowered as the module `p{k}` (`lower_batch`, on every core), the
+/// ones that lower made modules of one crate, their names written to
+/// `LIST.included` and where each module is to `LIST.modules`. The Rust,
+/// and every source the programs read.
 pub fn project_batch_lowered[H: ProjectDriveWrapperHost](host: ref H, list: ref fs::Path, no_cache: bool) -> (String, Vec[fs::Path]) throws {
     let text = fs::read_to_string(list, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"reading the batch list {list.display()}: {error}") }
-    let mut names: Vec[String] = []
-    let mut modules: Vec[String] = []
-    let mut sources: Vec[fs::Path] = []
+    let mut listed: Vec[String] = []
+    let mut entries: Vec[fs::Path] = []
+    let mut roots: Vec[String] = []
     for line in text.lines() {
         let (name, entry) = line.split_once("\t") ?? continue
         let path: fs::Path = entry
-        let (rust, read) = host.lower(path, no_cache, null, null, true) catch { continue }
-        let module = project_batch_module(names.len(), rust) ?? continue
-        names.push(name.clone())
+        roots.push(f"crate::p{listed.len()}")
+        listed.push(name.clone())
+        entries.push(path)
+    }
+    let lowered = host.lower_batch(entries, roots, no_cache)
+    let mut names: Vec[String] = []
+    let mut ks: Vec[i64] = []
+    let mut modules: Vec[String] = []
+    let mut sources: Vec[fs::Path] = []
+    for (k, made) in lowered.iter().enumerate() {
+        let (rust, read) = made ?? continue
+        let module = project_batch_module(k, rust) ?? continue
+        names.push(listed[k].clone())
+        ks.push(k)
         modules.push(module)
         for source in read {
             sources.push(source.clone())
@@ -106,5 +141,7 @@ pub fn project_batch_lowered[H: ProjectDriveWrapperHost](host: ref H, list: ref 
     }
     let included = list.with_extension("included")
     fs::write(included, fs::Root::Anywhere, names.iter().map(fn(name) { name.clone() + "\n" }).collect().join("")) catch { throw ProjectDriveRefusal::Failed(f"writing {included.display()}: {error}") }
-    return (project_batch_crate(names, modules), sources)
+    let ranges = list.with_extension("modules")
+    fs::write(ranges, fs::Root::Anywhere, project_batch_ranges(names, modules)) catch { throw ProjectDriveRefusal::Failed(f"writing {ranges.display()}: {error}") }
+    return (project_batch_crate(names, ks, modules), sources)
 }

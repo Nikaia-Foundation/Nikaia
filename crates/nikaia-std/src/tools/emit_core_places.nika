@@ -292,7 +292,8 @@ impl EmitState {
             }
             i += 1
             self.emit_expr(world, walk, out, host, item, depth, flow, scope)
-            // **A handle stored by value is duplicated** (ADR-312 D1, #1411).
+            // **A handle stored by value is duplicated** (ADR-312 D1, #1411),
+            // where it is read again (D2, #1502).
             if self.facts.stored_handles.contains(node_key(item)) {
                 out.push(".clone()")
             }

@@ -40,9 +40,14 @@ over again, asked about a clone instead of about a `Shared` annotation, and the
 prohibition has already been written twice on its own account:
 [ADR-005](specification/adr/adr-005.md) §3 rejects implicit clone outright —
 "Nikaia never inserts a clone the user did not write; diagnostics suggest, the
-user decides" — and [ADR-283](specification/adr/adr-283.md) D3 re-argues it for
+user decides", with one exception for a handle on a shared value, which copies
+no data ([ADR-312](specification/adr/adr-312.md) D1, D2: duplicated where the
+name is read again, moved at its last use) — and [ADR-283](specification/adr/adr-283.md) D3 re-argues it for
 the view case rather than leaning on it. Whoever proposes an automatic clone owes
 an answer to that reasoning: some account of why a moved cleanup point is
 tolerable when inserted by this rule and not by the one D3 refused, and why the
 `spawn` case is different from the two §3 already covers. Not an appeal to how
-much typing it saves. Until such an answer exists, one clones by hand.
+much typing it saves. Until such an answer exists, one clones by hand. The one
+exception is a handle on a shared value, which copies no data and is
+duplicated by the compiler where its name is read again
+([ADR-312](specification/adr/adr-312.md) D1, D2).

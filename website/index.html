@@ -295,7 +295,34 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
   </div>
 </section>
 
-<section class="home-section home-section-alt" id="contribute">
+<section class="home-section home-section-alt" id="large">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center">Large programs</p>
+    <h2 class="home-heading">Tried on large programs.</h2>
+    <p class="safe-lead home-intro">The compiler and its prover are written in Nikaia, and the same checks run over them on every build. A defect they show there is fixed in the compiler.</p>
+    <div class="next">
+      <a class="next-card" href="{{ "/good/large-programs.html" | relative_url }}">
+        <p class="fit-tag">Self-hosting</p>
+        <h3>The compiler, in Nikaia</h3>
+        <p>87&nbsp;% of the toolchain, about 123,000 lines, is Nikaia code, and the compiler's
+        own package of 295 files is checked as one program. How often a check flags correct
+        code there is being measured now.</p></a>
+      <a class="next-card" href="{{ "/good/large-programs.html" | relative_url }}#prover">
+        <p class="fit-tag">Prover and solver</p>
+        <h3>The prover, in Nikaia</h3>
+        <p>The prover that drops a bounds check it can show never fails, and the solvers it
+        asks, are about 27,000 lines of Nikaia. Each answer comes with a certificate a small
+        checker replays.</p></a>
+      <a class="next-card" href="{{ "/good/large-programs.html" | relative_url }}#case-study">
+        <p class="fit-tag">Case study</p>
+        <h3>Build a large program with us</h3>
+        <p>We are looking for a few large projects written in Nikaia, and we will help build
+        them. Tell us why yours would make a good case study.</p></a>
+    </div>
+  </div>
+</section>
+
+<section class="home-section" id="contribute">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Get involved</p>
     <h2 class="home-heading">Build Nikaia with us.</h2>
@@ -325,7 +352,7 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
   </div>
 </section>
 
-<section class="home-section">
+<section class="home-section home-section-alt">
   <div class="home-inner">
     <h2 class="home-heading">Where to go next</h2>
     <div class="next">

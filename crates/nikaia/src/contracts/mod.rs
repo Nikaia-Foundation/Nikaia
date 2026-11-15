@@ -791,6 +791,14 @@ impl nikaia_std::tools::ledger_items::LedgerInferHost for InferHost<'_> {
         *self.checked.borrow_mut() = checked;
     }
 
+    fn outside_results(&self) -> BTreeSet<String> {
+        self.checked
+            .borrow()
+            .iter()
+            .flat_map(|c| c.facts.outside.results.keys().cloned())
+            .collect()
+    }
+
     fn infer_sync(&self, ledger: &mut Ledger) {
         let noted = self.timed("sync", || {
             sync::infer(ledger, self.units, self.library, &self.resolved.borrow())

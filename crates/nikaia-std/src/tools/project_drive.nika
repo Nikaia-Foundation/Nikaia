@@ -461,6 +461,19 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     // program (#724).
     host.settle()
     host.report(messages)
+    // **A batch that failed keeps what rustc said** (#1582), untranslated:
+    // the translation reads the carrier's map, not the batch's modules, and
+    // `nikaia test` finds the programs to leave out from the lines it cites.
+    if code != 0 {
+        match env::var(project_batch_var()) {
+            null => {},
+            list => {
+                let path: fs::Path = list
+                let said = path.with_extension("said")
+                host.write_if_changed(said, messages)
+            },
+        }
+    }
     // **The library and its header, together where a C build looks**
     // (ADR-284 D4, D12): `target/nikaia/c-library/`.
     if code == 0 && subcommand != "check" {
@@ -1028,6 +1041,13 @@ pub trait ProjectDriveWrapperHost {
     /// writes the allocator that counts each task's heap (ADR-327 D9). The
     /// Rust and the files read.
     fn lower(ref self, source: ref fs::Path, no_cache: bool, allowlist: fs::Path?, shown: String?, program: bool) -> (String, Vec[fs::Path]) sync throws
+    /// **Lowers a batch's programs on every core** (#1582): `sources[k]` as
+    /// [`lower`] lowers a program, but as the module of another crate whose
+    /// path `roots[k]` names (`crate::p{k}`): its `main` and what that names
+    /// are `pub`, and the allocator is left to the crate. A dependency's file
+    /// is checked once for the batch. Nothing for a program that does not
+    /// lower.
+    fn lower_batch(ref self, sources: ref Vec[fs::Path], roots: ref Vec[String], no_cache: bool) -> Vec[(String, Vec[fs::Path])?] sync
     /// Writes `text` to `path` where it differs from what is there.
     fn write_if_changed(ref self, path: ref fs::Path, text: ref String) sync throws
     /// Points the invocation at `generated` in place of the `.nika` source.

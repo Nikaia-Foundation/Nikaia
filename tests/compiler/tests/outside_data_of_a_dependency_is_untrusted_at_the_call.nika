@@ -1,0 +1,53 @@
+// #1573: a `pub` function of another package whose result comes from
+// outside carries `provenance = "untrusted"` in that package's ledger, and
+// the call reads it (ADR-396 D1): the query of a request the dependency read
+// is data from outside here too, an index on it NK1302 and an `assert` NK1202.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	process::run("mkdir", ["-p", f"{tmp}/lib/src", f"{tmp}/app/src"])
+	fs::write(
+		f"{tmp}/lib/nikaia.toml",
+		fs::Root::Anywhere,
+		"[package]\nname = \"lib\"\nversion = \"0.1.0\"\n",
+	)
+	fs::write(
+		f"{tmp}/lib/src/main.nika",
+		fs::Root::Anywhere,
+		"use std::io\n\npub struct Request {\n\tbody: String,\n}\n\nimpl Request {\n\tpub fn query(ref self, name: String) -> String? {\n\t\tif self.body.starts_with(name) {\n\t\t\treturn self.body\n\t\t}\n\t\treturn null\n\t}\n}\n\npub fn request() -> Request {\n\tlet body = io::read_to_string() catch { \"\" }\n\treturn Request { body: body }\n}\n",
+	)
+	fs::write(
+		f"{tmp}/app/nikaia.toml",
+		fs::Root::Anywhere,
+		"[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n",
+	)
+	fs::write(
+		f"{tmp}/app/src/main.nika",
+		fs::Root::Anywhere,
+		"use lib\nuse std::text\n\nfn main() throws {\n\tlet names = [\"red\", \"green\", \"blue\"]\n\tlet request = lib::request()\n\tlet at = text::parse_i64(request.query(\"color\") ?? \"0\") ?? 0\n\tprintln(names[at])\n\tassert(at >= 0)\n}\n",
+	)
+	let out = process::run(toolchain(), ["check", "src/main.nika"]; dir: f"{tmp}/app")
+	let mut shown: Vec[String] = []
+	for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+		if !line.trim().starts_with("Compiling") {
+			shown.push(line.clone())
+		}
+	}
+	println(shown.join("\n"))
+	println(f"exit {out.code}")
+	process::run("rm", ["-rf", tmp])
+}

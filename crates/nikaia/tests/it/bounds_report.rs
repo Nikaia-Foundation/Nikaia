@@ -22,6 +22,7 @@ fn report(source: &str, bounds: BoundsChecks, overflow: OverflowChecks) -> Strin
         bounds,
         overflow,
         false,
+        false,
     )
 }
 

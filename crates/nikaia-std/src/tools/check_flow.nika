@@ -218,6 +218,11 @@ pub struct CheckFlow {
     pub pending_coalesces: Vec[CheckPendingCoalesce],
     /// Names of owned text beside a `+` that are lent if read again (#1324).
     pub pending_concatenations: Vec[CheckPendingConcat],
+    /// Handles handed on by value, duplicated if read again (#1502).
+    pub pending_handles: Vec[CheckPendingHandle],
+    /// Whether the function starts an `async` task: one borrows the handles
+    /// it is handed until its group ends, so none is moved there (#1502).
+    pub starts_async: bool,
     /// **Bindings a `let` declared as an owned `T?`** (#1291): what they hold
     /// was copied out at the `let`, so a read of them is not copied again.
     pub declared_options: collections::BTreeSet[i64],
@@ -492,6 +497,8 @@ impl CheckFlow {
             read_index: collections::BTreeMap(),
             pending_coalesces: Vec(),
             pending_concatenations: Vec(),
+            pending_handles: Vec(),
+            starts_async: false,
             declared_options: collections::BTreeSet(),
             writing_index: false,
             read_a_map: false,

@@ -312,10 +312,10 @@ fn ts_agent(path: String, name: String, root: String) -> TsAgent throws {
             let chunk = chunks[c].clone()
             let tool = ts_value(chunk.clone(), "\"name\":\"")
             if tool == "Edit" || tool == "Write" {
-                let f = ts_value(chunk.clone(), "\"file_path\":\"")
+                let f = ts_value(chunk, "\"file_path\":\"")
                 if f != "" { files.push(f.replace(root.clone() + "/", "")) }
             } else if tool == "Bash" {
-                let cmd = ts_value(chunk.clone(), "\"command\":\"")
+                let cmd = ts_value(chunk, "\"command\":\"")
                 if cmd.contains("git add") { adds.push(cmd) }
             }
         }
@@ -444,7 +444,7 @@ fn ts_counts(root: String, commit: String, compiler: String) -> Vec[i64] throws 
         let blob = cut[0].split_whitespace().collect()[2].clone()
         if path.starts_with("crates/nikaia/src/") && path.ends_with(".rs") {
             rust += ts_code_lines(ts_git(root.clone(), ["cat-file", "-p", blob]))
-        } else if path.ends_with(".nika") && path.contains("/tools/") && compiler.contains("|" + path.split("/").collect()[path.split("/").collect().len() - 1].clone() + "|") {
+        } else if path.ends_with(".nika") && path.contains("/tools/") && compiler.contains("|" + (path.split("/").last() ?? "").clone() + "|") {
             nika += ts_code_lines(ts_git(root.clone(), ["cat-file", "-p", blob]))
         }
     }

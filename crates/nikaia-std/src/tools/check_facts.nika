@@ -177,6 +177,11 @@ pub struct CheckFacts {
     pub stored_handles: collections::BTreeSet[i64],
     /// `P { a }` over such a name, by the struct literal and the field.
     pub stored_handle_fields: collections::BTreeSet[(i64, String)],
+    /// **A handle handed on at its last use is moved, not duplicated**
+    /// (ADR-312 D2, #1502): a call's argument naming one that nothing reads
+    /// afterwards, by the argument's id. Taken out of `stored_handles`,
+    /// `stored_handle_fields` and `task_handles` likewise.
+    pub moved_handles: collections::BTreeSet[i64],
     pub copied_tuple_parts: collections::BTreeSet[(i64, String)],
     pub std_lengths: collections::BTreeSet[i64],
     pub sized_lengths: collections::BTreeSet[i64],
@@ -221,6 +226,13 @@ pub struct CheckFacts {
     /// **The method a call resolves to by its receiver's type** (#842), by the
     /// receiver's node, as the ledger keys it (`Holder::put`).
     pub method_callees: collections::BTreeMap[i64, String],
+    /// **The struct a field is read from** (#1573), by the node of the
+    /// field's base: the prover carries outside data through `Type.field`.
+    pub field_owners: collections::BTreeMap[i64, String],
+    /// **What carries outside data in the package** (ADR-396 D1, #1573):
+    /// read off the walk's facts in the ledger's pass too, which runs no
+    /// prover, so a dependency's ledger names its sources.
+    pub outside: ProverOutside,
     /// **A vector's load, read as the cut it reads** (ADR-377 D3), by the
     /// node of the called path: the bytes it reads, or minus the most a
     /// `Lanes` reads on any CPU level where its count is the build's.
@@ -546,6 +558,10 @@ pub struct CheckFacts {
     pub entries: collections::BTreeMap[String, Vec[PreconditionCheck]],
     pub reaches: collections::BTreeMap[(String, String), CallReach],
     pub published: collections::BTreeMap[String, Published],
+    /// **Each index data from outside reaches, and what became of it**
+    /// (ADR-396 D5), by where it stands and how it is written, as the
+    /// prover's last walk left it: `--bounds` lists them.
+    pub outside_indices: collections::BTreeMap[(i64, String), OutsideIndex],
     pub mut_args: collections::BTreeSet[i64],
     /// **The receivers of methods written `ref mut self`** (#787), by the
     /// receiver's node: a call there lends its root as a `mut` argument does.
@@ -712,6 +728,7 @@ impl CheckFacts {
             kept_fn_fields: collections::BTreeSet(),
             stored_handles: collections::BTreeSet(),
             stored_handle_fields: collections::BTreeSet(),
+            moved_handles: collections::BTreeSet(),
             copied_tuple_parts: collections::BTreeSet(),
             std_lengths: collections::BTreeSet(),
             sized_lengths: collections::BTreeSet(),
@@ -727,6 +744,8 @@ impl CheckFacts {
             shifts: collections::BTreeMap(),
             std_receivers: collections::BTreeMap(),
             method_callees: collections::BTreeMap(),
+            field_owners: collections::BTreeMap(),
+            outside: ProverOutside::nothing(),
             declared: collections::BTreeMap(),
             bound_at: collections::BTreeMap(),
             declared_at: collections::BTreeMap(),
@@ -866,6 +885,7 @@ impl CheckFacts {
             entries: collections::BTreeMap(),
             reaches: collections::BTreeMap(),
             published: collections::BTreeMap(),
+            outside_indices: collections::BTreeMap(),
             mut_args: collections::BTreeSet(),
             mut_receivers: collections::BTreeSet(),
             mut_arg_bindings: collections::BTreeMap(),

@@ -34,6 +34,10 @@ pub struct ProverWalk {
     /// #1003), keyed as `held` is, by statement and the call's id: each is a
     /// claim the program makes there, written `callee: condition`.
     pub std_claims: collections::BTreeMap[(i64, i64), String],
+    /// **Each index data from outside reaches, and what became of it**
+    /// (ADR-396 D5), by where it stands and how it is written: the last
+    /// walk's, for `--bounds`.
+    pub outside: collections::BTreeMap[(i64, String), OutsideIndex],
 }
 
 /// **Every body of the program, walked once**: each function and method,
@@ -427,7 +431,7 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             match target {
                 Expr::Variable(name, _) => {
                     let n = words.resolve(name).clone()
-                    let tainted = from_outside(value, scope.tainted, words, library, walk.state.method_callees, holes_of) || (op != null && scope.tainted.contains(n))
+                    let tainted = from_outside(value, scope.tainted, words, library, walk.state, holes_of) || (op != null && scope.tainted.contains(n))
                     if !prover_assigned(walk, n, op, value, span, scope, words) {
                         scope.rebind(walk.arena, n)
                         if op == null && !tainted {
@@ -438,7 +442,7 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
                         }
                     }
                     if tainted {
-                        let source = outside_source(value, scope.tainted, scope.sources, words, library, walk.state.method_callees, holes_of)
+                        let source = outside_source(value, scope.tainted, scope.sources, words, library, walk.state, holes_of)
                         if source != null {
                             scope.sources.insert(n.clone(), source ?? "")
                         }
@@ -449,8 +453,8 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             }
             false
         },
-        Stmt::For { bindings, iter, body, .. } => {
-            prover_for(walk, bindings, iter, body, span, scope, at, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+        Stmt::For { bindings, mutable, iter, body, .. } => {
+            prover_for(walk, bindings, mutable, iter, body, span, scope, at, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             false
         },
         Stmt::While { cond, body } => {
@@ -630,7 +634,7 @@ fn prover_field_list(value: ref Expr?, field_name: ref String, words: ref winnow
 /// A `let`: what its value makes known of the names it binds.
 fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], mutable: bool, ty: ref Type?, value: ref Expr, span: Span, mut scope: ProverScope, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     prover_expr(walk, value, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
-    let tainted = from_outside(value, scope.tainted, words, library, walk.state.method_callees, holes_of)
+    let tainted = from_outside(value, scope.tainted, words, library, walk.state, holes_of)
     // **The calls with known arguments the value reads** (ADR-359 D11), kept
     // with the name it binds, so a claim over it can have them run.
     let mut known_calls: collections::BTreeSet[String] = collections::BTreeSet()
@@ -674,7 +678,7 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
     }
     let mut source: String = ""
     if tainted {
-        source = outside_source(value, scope.tainted, scope.sources, words, library, walk.state.method_callees, holes_of) ?? ""
+        source = outside_source(value, scope.tainted, scope.sources, words, library, walk.state, holes_of) ?? ""
     }
     for name in names {
         let n = words.resolve(name).clone()
@@ -1323,9 +1327,9 @@ fn prover_all_plain(exprs: ref Vec[Expr]) -> bool {
 /// a name nothing pins. A `for` over a range whose turn changes whole numbers
 /// the walk follows is the `while` it means (ADR-361 D1): read past it
 /// through its invariant; over anything else what it changes is unknown.
-fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], iter: ref Expr, body: ref Block, span: Span, mut scope: ProverScope, at: ref ProverWhere, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
+fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], mutable: bool, iter: ref Expr, body: ref Block, span: Span, mut scope: ProverScope, at: ref ProverWhere, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     prover_expr(walk, iter, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
-    let tainted = from_outside(iter, scope.tainted, words, library, walk.state.method_callees, holes_of)
+    let tainted = from_outside(iter, scope.tainted, words, library, walk.state, holes_of)
     // What a turn changes is unknown at its head and past the loop.
     let mut changed = assigned_in(body, words)
     prover_lengths_changed(changed, body, scope, walk.state.readers, words)
@@ -1396,7 +1400,7 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
         inner.rebind(walk.arena, n)
         inner.maps.remove(n)
         if tainted {
-            let source = outside_source(iter, scope.tainted, scope.sources, words, library, walk.state.method_callees, holes_of)
+            let source = outside_source(iter, scope.tainted, scope.sources, words, library, walk.state, holes_of)
             if source != null {
                 inner.sources.insert(n.clone(), source ?? "")
             }
@@ -1405,12 +1409,20 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
     }
     // **An element with a length has one** (ADR-396 D4): `for line in
     // s.split("\n")` knows `line.len()`, of which nothing more is known.
-    if bindings.len() == 1 {
+    // Not a `for mut` element: the walk does not follow what its body
+    // changes in it, as a `mut` parameter's fields (#1624).
+    if bindings.len() == 1 && !mutable {
         match walk.state.whole_lets.get(span.start as i64) {
             null => {},
             element => {
                 if has_a_length(element) {
                     inner.has_length(walk.arena, words.resolve(bindings[0]), null)
+                } else {
+                    // **A struct element has its fields' names** (ADR-396
+                    // D4), as a call's result has.
+                    let kind = element.clone()
+                    let mut not_params: collections::BTreeSet[String] = collections::BTreeSet()
+                    prover_parameter_fields(walk, inner, not_params, words.resolve(bindings[0]), kind, false, program, words)
                 }
             },
         }
@@ -1611,6 +1623,7 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
     let mut then_scope = scope.clone()
     if holds != null {
         then_scope.facts.push(holds ?? 0)
+        then_scope.guards.insert(holds ?? 0, (span.start as i64, written_of(cond)))
     }
     // A branch on a condition the prover cannot read is reached by some
     // states and not others, and no fact says which.
@@ -1631,12 +1644,14 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
     if then_leaves {
         if fails != null {
             scope.facts.push(fails ?? 0)
+            scope.guards.insert(fails ?? 0, (span.start as i64, written_of(cond)))
         }
         scope.on_the_path(walk.arena, fails)
         scope.exact = scope.exact && fails != null && !prover_else_leaves(else_branch, at, program, words, own, library, holes_of, unaliased)
     } else if else_leaves {
         if holds != null {
             scope.facts.push(holds ?? 0)
+            scope.guards.insert(holds ?? 0, (span.start as i64, written_of(cond)))
         }
         scope.on_the_path(walk.arena, holds)
         scope.exact = scope.exact && holds != null && !leaves_block(then_branch, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true)
@@ -2265,7 +2280,7 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
                 },
                 else => {},
             }
-            if from_outside(index, scope.tainted, words, library, walk.state.method_callees, holes_of) {
+            if from_outside(index, scope.tainted, words, library, walk.state, holes_of) {
                 if !walk.state.collecting {
                     prover_outside_index(walk, expr, base, index, span, scope, words, library, holes_of, ask, model, written_of)
                 }
@@ -2357,7 +2372,7 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
                         high = walk.arena.lt(to, len)
                     }
                     goal = walk.arena.and([low, ordered, high])
-                } else if !from_outside(end, scope.tainted, words, library, walk.state.method_callees, holes_of) {
+                } else if !from_outside(end, scope.tainted, words, library, walk.state, holes_of) {
                     // An open end: the cut runs to the length.
                     let inside = walk.arena.le(from, len)
                     goal = walk.arena.and([low, inside])
@@ -2373,11 +2388,13 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
             }
         },
     }
+    let first = prover_outside_name(walk, goal, index, scope, words, written_of)
+    let source = outside_source(index, scope.tainted, scope.sources, words, library, walk.state, holes_of)
     if goal != null && prover_proves_here(walk, goal ?? 0, scope, ask) {
+        prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, scope.guard_of(walk.arena, goal ?? 0), true)
         return
     }
-    let first = prover_outside_name(walk, goal, index, scope, words, written_of)
-    let source = outside_source(index, scope.tainted, scope.sources, words, library, walk.state.method_callees, holes_of)
+    prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, null, false)
     let mut notes: Vec[String] = [outside_note(first, source)]
     if goal != null {
         let found = model(walk.arena, scope.facts, goal ?? 0)
@@ -2398,6 +2415,23 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
         notes.push(f"The prover cannot state `{holds}` here: a part of it is not a whole number it reads.")
     }
     walk.findings.push(Finding { code: "NK1302", span: span, message: f"`{written_of(expr)}` is not proved in bounds, and `{first}` comes from outside the program.", notes: notes, help: outside_help(first, guard), warning: false, labels: [] })
+}
+
+/// **An index data from outside reaches, recorded for `--bounds`**
+/// (ADR-396 D5): where it stands, the name and its source, and whether it
+/// is proved, by the guard `guard` where one proves it.
+pub fn prover_outside_record(mut walk: ProverWalk, span: Span, written: String, name: ref String, source: ref String?, guard: (i64, String)?, proved: bool) {
+    let mut guard_at: i64 = -1
+    let mut condition: String = ""
+    match guard {
+        null => {},
+        found => {
+            guard_at = found.0
+            condition = found.1.clone()
+        },
+    }
+    let at = span.start as i64
+    walk.outside.insert((at, written.clone()), OutsideIndex { at: at, written: written, name: name.clone(), source: source?.clone() ?? "", proved: proved, guard_at: guard_at, guard: condition })
 }
 
 /// Whether `goal` holds of what is known here, or of that with what the
@@ -2731,7 +2765,7 @@ fn prover_a_method_call(mut walk: ProverWalk, receiver: ref Expr, method: winnow
 /// call.
 fn prover_unwritten_call(mut walk: ProverWalk, callee: ref String, params: ref Vec[String], args: ref Vec[Expr], span: Span, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
     let checks = walk.state.unwritten[callee]?.clone() ?? return
-    let found = walk.state.unwritten_call(walk.arena, words, callee, params, checks, args, span, scope, ask, model)
+    let found = walk.state.unwritten_call(walk.arena, words, callee, params, checks, args, span, scope, ask, model, walk.outside)
     walk.findings.extend(found)
 }
 

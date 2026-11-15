@@ -38,13 +38,12 @@ fn frame_rounds() -> i64 {
 /// function's parameters, `true` where one is `mut`; the methods that take a
 /// parameter `mut`, of this program and of what `ledgers` describe; those
 /// that take their receiver `mut` (ADR-306 D17); and every function's frame,
-/// by its name or by `Type::method` (ADR-391 D2). `beside` are the package's
-/// other files, `beside_words` their words: a private function's call sites
-/// may stand there (ADR-391 D1).
+/// by its name or by `Type::method` (ADR-391 D2). `beside` is what each of
+/// the package's other files says ([`bounds_beside`]): a private function's
+/// call sites may stand there (ADR-391 D1).
 pub fn bounds_around(
 	program: ref Program,
-	beside: ref Vec[ref Program],
-	beside_words: ref Vec[ref winnow_grammar::InternerContext],
+	beside: ref Vec[ref BoundsBeside],
 	ledgers: ref Vec[ref Ledger],
 	std_receivers: ref collections::BTreeMap[i64, String],
 	simd_loads: ref collections::BTreeMap[i64, i64],
@@ -119,10 +118,10 @@ pub fn bounds_around(
 	let rules = rules_candidates(program, context, words)
 	context.around.rules = rules
 	// **The private functions their callers may bound** (ADR-391 D1).
-	context.around.derived = derived_of(program, beside, beside_words, words)
+	context.around.derived = derived_of(program, beside, words)
 	// **The list fields whose every write the walks see** (ADR-306 D21):
 	// their bounds are found by `bounds_fields`, before the bodies' walks.
-	let seen = fields_seen(program, beside, beside_words, words)
+	let seen = fields_seen(program, beside, words)
 	context.around.fields = seen.keys
 	context.around.field_writers = seen.writers
 	return context.around
@@ -585,19 +584,79 @@ struct FieldsScan {
 	/// Scanning the file being proved: a write in a file beside, whose
 	/// bodies `bounds_fields` does not walk, takes the field out (#1414).
 	here: bool,
+	/// Scanning a file beside on its own ([`bounds_beside`]): each field
+	/// written or mentioned goes into `lost`, whatever `live` holds.
+	recording: bool,
+	lost: collections::BTreeSet[String],
+}
+
+/// **What a file beside the one proved says to its walks**, read once per
+/// file of the package rather than once for each file proved (#1581): the
+/// names its items call or hand on (`derived_item_names`, ADR-391 D1), the
+/// fields its structs declare, its `pub` fields of `pub` structs (ADR-306
+/// D22), whether it declares `main`, and every field it writes or
+/// mentions where it may be handed on (#1414). Each takes out of the file
+/// proved exactly what reading the file beside whole took out.
+pub struct BoundsBeside {
+	pub names: collections::BTreeSet[String],
+	pub declared: collections::BTreeSet[String],
+	pub reached: collections::BTreeSet[String],
+	pub has_main: bool,
+	pub lost: collections::BTreeSet[String],
+}
+
+/// [`BoundsBeside`] of one file, `words` its words.
+pub fn bounds_beside(program: ref Program, words: ref winnow_grammar::InternerContext) -> BoundsBeside {
+	let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+	for item in program.items {
+		derived_item_names(item.node, words, names)
+	}
+	let mut scan = FieldsScan {
+		live: collections::BTreeMap(),
+		walked: false,
+		wrote: false,
+		here: false,
+		recording: true,
+		lost: collections::BTreeSet(),
+	}
+	let mut reached: collections::BTreeSet[String] = collections::BTreeSet()
+	let has_main = fields_declared(program, words, false, scan, reached)
+	let mut declared: collections::BTreeSet[String] = collections::BTreeSet()
+	for (name, _) in scan.live {
+		declared.insert(name.clone())
+	}
+	let mut ignored: collections::BTreeSet[i64] = collections::BTreeSet()
+	for item in program.items {
+		fields_item(item, words, scan, ignored)
+	}
+	return BoundsBeside { names, declared, reached, has_main, lost: scan.lost }
 }
 
 pub fn fields_seen(
 	program: ref Program,
-	beside: ref Vec[ref Program],
-	beside_words: ref Vec[ref winnow_grammar::InternerContext],
+	beside: ref Vec[ref BoundsBeside],
 	words: ref winnow_grammar::InternerContext,
 ) -> FieldsSeen {
-	let mut scan = FieldsScan { live: collections::BTreeMap(), walked: false, wrote: false, here: true }
+	let mut scan = FieldsScan {
+		live: collections::BTreeMap(),
+		walked: false,
+		wrote: false,
+		here: true,
+		recording: false,
+		lost: collections::BTreeSet(),
+	}
 	let mut reached: collections::BTreeSet[String] = collections::BTreeSet()
 	let mut a_program = fields_declared(program, words, true, scan, reached)
-	for (k, other) in beside.iter().enumerate() {
-		a_program = fields_declared(other, beside_words[k], false, scan, reached) || a_program
+	// A field a file beside declares is no candidate (`fields_declared`
+	// with `here` off).
+	for other in beside {
+		for name in other.declared {
+			scan.live.insert(name.clone(), false)
+		}
+		for name in other.reached {
+			reached.insert(name.clone())
+		}
+		a_program = other.has_main || a_program
 	}
 	// **A `pub` field of a `pub` type** is written only by this package's
 	// files where the package is a program, which no other package
@@ -611,11 +670,11 @@ pub fn fields_seen(
 	for item in program.items {
 		fields_item(item, words, scan, writers)
 	}
-	scan.here = false
-	for (k, other) in beside.iter().enumerate() {
-		let mut ignored: collections::BTreeSet[i64] = collections::BTreeSet()
-		for item in other.items {
-			fields_item(item, beside_words[k], scan, ignored)
+	// A write or a mention beside takes the field out (`fields_write` and
+	// `fields_lose` with `here` off).
+	for other in beside {
+		for name in other.lost {
+			fields_lose(name, scan)
 		}
 	}
 	let mut keys: collections::BTreeSet[String] = collections::BTreeSet()
@@ -724,6 +783,10 @@ fn fields_item(
 
 /// The field `name` is written here: seen where a walk goes, lost elsewhere.
 fn fields_write(name: ref String, mut scan: FieldsScan) {
+	if scan.recording {
+		scan.lost.insert(name.clone())
+		return
+	}
 	if !(scan.live.get(name) ?? false) {
 		return
 	}
@@ -736,6 +799,10 @@ fn fields_write(name: ref String, mut scan: FieldsScan) {
 
 /// The field `name` is mentioned where it may be handed on.
 fn fields_lose(name: ref String, mut scan: FieldsScan) {
+	if scan.recording {
+		scan.lost.insert(name.clone())
+		return
+	}
 	if scan.live.get(name) ?? false {
 		scan.live.insert(name.clone(), false)
 	}

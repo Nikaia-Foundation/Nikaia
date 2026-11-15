@@ -30,6 +30,7 @@ fn report(source: &str) -> String {
         BoundsChecks::Removed,
         OverflowChecks::Removed,
         false,
+        false,
     )
 }
 

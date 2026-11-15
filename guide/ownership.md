@@ -146,7 +146,8 @@ fn main() throws {
 ```
 
 Every copy of a large value is visible in the source in this way, because the compiler does
-not insert one. Numbers, `bool`s, `scalar`s and enums whose variants hold nothing are small
+not insert one. The one exception copies no data: a handle on a `Shared` or `SharedMut` value
+is duplicated where its name is read again, and moved at its last use like `ada` here. Numbers, `bool`s, `scalar`s and enums whose variants hold nothing are small
 and copied wherever they are used, so there is nothing to hand over: `let age = ada.age`
 leaves `ada` whole.
 

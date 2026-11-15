@@ -91,13 +91,12 @@ pub fn no_derived() -> Derived {
 	}
 }
 
-/// **The candidates and their call sites** in `program`; `beside` are the
-/// package's other files with their words: a name met there is a call this
-/// file's walk does not see.
+/// **The candidates and their call sites** in `program`; `beside` is what
+/// the package's other files say (`bounds_beside`): a name met there is a
+/// call this file's walk does not see.
 pub fn derived_of(
 	program: ref Program,
-	beside: ref Vec[ref Program],
-	beside_words: ref Vec[ref winnow_grammar::InternerContext],
+	beside: ref Vec[ref BoundsBeside],
 	words: ref winnow_grammar::InternerContext,
 ) -> Derived {
 	let mut derived = no_derived()
@@ -129,18 +128,8 @@ pub fn derived_of(
 			else => derived_item_names(item.node, words, everywhere.values),
 		}
 	}
-	for k in 0..<beside.len() {
-		if k >= beside_words.len() {
-			return derived
-		}
-		let mut there = derived_scan()
-		for item in beside[k].items {
-			derived_item_names(item.node, beside_words[k], there.values)
-		}
-		for (name, _) in there.calls {
-			everywhere.values.insert(name.clone())
-		}
-		for name in there.values {
+	for other in beside {
+		for name in other.names {
 			everywhere.values.insert(name.clone())
 		}
 	}
@@ -705,10 +694,9 @@ pub fn derived_callees(
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
 ) -> collections::BTreeSet[String] {
-	let none: Vec[ref Program] = []
-	let no_words: Vec[ref winnow_grammar::InternerContext] = []
+	let none: Vec[ref BoundsBeside] = []
 	let mut out: collections::BTreeSet[String] = collections::BTreeSet()
-	for (name, _) in derived_of(program, none, no_words, words).functions {
+	for (name, _) in derived_of(program, none, words).functions {
 		out.insert(name.clone())
 	}
 	return out

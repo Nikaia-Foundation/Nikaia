@@ -281,6 +281,16 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     let mut code = built_code;
     host.settle();
     host.report(&messages)?;
+    if code != 0 {
+        match env::var(&project_batch_var()) {
+            None => { },
+            Some(list) => {
+                let path: fs::Path = std::path::PathBuf::from(list);
+                let said = nikaia_std::fs::path::with_extension(&(path), std::path::Path::new(&("said")));
+                host.write_if_changed(&said, &messages)?;
+            },
+        }
+    }
     if code == 0 && subcommand != "check" {
         match header {
             None => { },
@@ -748,6 +758,7 @@ pub trait ProjectDriveWrapperHost {
     fn run(&self) -> Result<i32, Box<dyn std::error::Error>>;
     fn crate_name(&self) -> Option<String>;
     fn lower(&self, source: &std::path::Path, no_cache: bool, allowlist: Option<&std::path::Path>, shown: Option<&str>, program: bool) -> Result<(String, Vec<fs::Path>), Box<dyn std::error::Error>>;
+    fn lower_batch(&self, sources: &[fs::Path], roots: &[String], no_cache: bool) -> Vec<Option<(String, Vec<fs::Path>)>>;
     fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), Box<dyn std::error::Error>>;
     fn replace_source(&self, generated: &std::path::Path);
     fn args(&self) -> Vec<String>;
@@ -780,8 +791,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple57809| {
-        let (a, b) = __nikaia_tuple57809;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple58869| {
+        let (a, b) = __nikaia_tuple58869;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {

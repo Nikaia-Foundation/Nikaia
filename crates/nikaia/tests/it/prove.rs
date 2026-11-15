@@ -1243,7 +1243,7 @@ fn a_callee_that_reads_the_arguments_or_does_io_is_not_run() {
                   }\n\
                   \n\
                   fn counted(n: i64) -> i64 {\n\
-                  \x20   return cli::args().len() + n\n\
+                  \x20   return cli::args(trusted: true).len() + n\n\
                   }\n\
                   \n\
                   fn main() throws {\n\

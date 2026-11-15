@@ -62,6 +62,7 @@ signature = "(code: String) -> String"
 [fn."reach"]
 throws = ["io::IoError"]
 panics = false
+provenance = "untrusted"
 views = ["dir: borrowed", "source: borrowed"]
 signature = "(dir: String, root: fs::Root, source: String) -> Reached"
 

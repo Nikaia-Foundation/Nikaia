@@ -63,6 +63,7 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
         walk.std_claims = collections::BTreeMap()
         walk.reaches = collections::BTreeMap()
         walk.findings = []
+        walk.outside = collections::BTreeMap()
         walk.state.broken = collections::BTreeSet()
         prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
         settled = walk.state.broken.is_empty()

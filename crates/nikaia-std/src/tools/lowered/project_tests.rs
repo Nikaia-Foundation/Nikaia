@@ -539,6 +539,20 @@ pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, program
         fs::write(&list, &fs::Root::Anywhere, nikaia_std::block::Text::from(lines.join("")), false, true).await?;
         match host.batched(setting, &nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project"))), &dir, &list)? {
             None => {
+                let said = match fs::read_to_string(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("batch.said"))), &fs::Root::Anywhere).await {
+                    Ok(value) => value,
+                    Err(_error) => { String::from("") },
+                };
+                let ranges = match fs::read_to_string(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("batch.modules"))), &fs::Root::Anywhere).await {
+                    Ok(value) => value,
+                    Err(_error) => { String::from("") },
+                };
+                let cited = project_batch_cited(&said, &ranges, "program_test");
+                let rest: Vec<ProgramTest> = chunk.iter().filter(|&program| { !nikaia_std::list::contains(&cited, &program.name) }).map(|program| { program.clone() }).collect::<Vec<_>>();
+                if !cited.is_empty() && (rest.len() as i64) < chunk.len() as i64 {
+                    if (rest.len() as i64) >= project_tests_batch_least() { chunks.push(rest); }
+                    continue;
+                }
                 if (chunk.len() as i64) >= unsafe { nikaia_std::proven::mul::<i64>(2, project_tests_batch_least()) } {
                     let half = chunk.len() as i64 / 2;
                     chunks.push(chunk.iter().take(nikaia_std::count::of(half)).map(|program| { program.clone() }).collect::<Vec<_>>());

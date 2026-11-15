@@ -380,6 +380,7 @@ pub fn ledger_items_stored(codes: &mut Vec<collections::BTreeMap<String, CheckSt
 
 pub trait LedgerInferHost {
     fn check_units(&self, ledger: &Ledger);
+    fn outside_results(&self) -> collections::BTreeSet<String>;
     fn infer_sync(&self, ledger: &mut Ledger);
     fn reads_back(&self, condition: &str, readable: &collections::BTreeSet<String>) -> bool;
     fn infer_throws(&self, ledger: &mut Ledger);
@@ -400,6 +401,7 @@ pub trait LedgerInferHost {
 pub fn ledger_infer_package<H: LedgerInferHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[collections::BTreeSet<String>], library: &Ledger, host: &H) {
     let defaults = declare_items(units, borrowing, ledger);
     host.check_units(&ledger);
+    ledger_untrusted_results(ledger, &host.outside_results());
     host.infer_sync(ledger);
     ledger_expression_ensures(ledger, units, host);
     host.infer_panics(ledger);
@@ -482,5 +484,14 @@ pub(crate) fn ledger_option_default<H: LedgerInferHost>(view: &ParsedView<'_, '_
     };
     let option = match config.get(nikaia_std::count::of(computed.at)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     host.computed_literal(computed.unit, &computed.option, &option.default, &written_ty(view.words, view.aliases, &option.ty))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn ledger_untrusted_results(ledger: &mut Ledger, results: &collections::BTreeSet<String>) {
+    for key in results.iter() {
+        let contract = match nikaia_std::index::get_mut(&mut ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if contract.provenance.is_none() { contract.provenance = Some(Provenance::Untrusted); }
+    }
 }
 

@@ -1,0 +1,21 @@
+// A handle on a shared value handed to a function by value is moved at its
+// last use and duplicated only where the name is read again (ADR-312 D2,
+// #1502): the value goes with the last handle, in the callee.
+struct Noisy { name: String }
+
+impl Drop for Noisy {
+	fn drop(mut self) {
+		println(f"{self.name} goes") catch { }
+	}
+}
+
+fn take(_s: SharedMut[Noisy], said: String) throws {
+	println(f"took it {said}")
+}
+
+fn main() throws {
+	let s = SharedMut(Noisy { name: "the value" })
+	take(s, "first")
+	take(s, "last")
+	println("main goes on")
+}

@@ -1,0 +1,7 @@
+bounds in tests/a_range_over_a_for_elements_field_proves_its_index_on_outside_data.nika: 2 indexes, 2 proved; 2 operations, 0 proved
+    14  n += f.lines[i].len()  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    14  f.lines[i]             proved
+    24  n += f.lines[i].len()  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    24  f.lines[i]             proved
+  outside  14  `f.lines[i]`, `i` from `i`: proved
+  outside  24  `f.lines[i]`, `i` from `i`: proved

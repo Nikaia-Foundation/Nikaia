@@ -321,7 +321,7 @@ impl EmitState {
                 return Ok(());
             }
         }
-        let shares_a_handle = i < takes_a_handle.len() as i64 && *unsafe { nikaia_std::proven::read(&takes_a_handle, (i) as usize) } && emit_arg_names_a_place(arg);
+        let shares_a_handle = i < takes_a_handle.len() as i64 && *unsafe { nikaia_std::proven::read(&takes_a_handle, (i) as usize) } && emit_arg_names_a_place(arg) && !self.facts.moved_handles.contains(&node);
         let hands_on_kept = emit_arg_is_variable(arg) && !self.facts.named_fn_values.contains_key(&node) && self.keeps_code_at(&nikaia_std::index::or(match method_callee {
             Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,

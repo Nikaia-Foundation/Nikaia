@@ -6657,6 +6657,9 @@ sync = true
 touches = []
 throws = ["io::IoError"]
 signature = "(self: ref Buffer, at: i64, end: i64) -> String"
+# Untrusted (ADR-010 D2): the bytes a connection read, the request line,
+# headers, query and body of whoever sent them.
+provenance = "untrusted"
 
 # Forget the first `count` bytes, the request just answered, so what is left
 # starts the next one (ADR-326 D9). More than there are forgets them all.
@@ -6679,6 +6682,9 @@ sync = true
 touches = []
 throws = ["io::IoError"]
 signature = "(self: ref Buffer) -> http1::Head"
+# Untrusted (ADR-010 D2): the bytes a connection read, the request line,
+# headers, query and body of whoever sent them.
+provenance = "untrusted"
 
 # The bytes from `at` on, as text.
 #
@@ -6691,6 +6697,9 @@ sync = true
 touches = []
 throws = ["io::IoError"]
 signature = "(self: ref Buffer, at: i64) -> String"
+# Untrusted (ADR-010 D2): the bytes a connection read, the request line,
+# headers, query and body of whoever sent them.
+provenance = "untrusted"
 
 # `GET` or `POST`, as it was written.
 [fn."http1::Head::method"]

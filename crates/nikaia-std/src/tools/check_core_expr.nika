@@ -317,6 +317,7 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
             state.flow.barrier = "task"
             state.flow.async_depth += 1
             state.flow.async_started += 1
+            state.flow.starts_async = true
             let changed_from = state.changed.len()
             let mut run = false
             match inner {
@@ -442,6 +443,7 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
             }
             if child {
                 state.flow.async_started += 1
+                state.flow.starts_async = true
                 // A child task's group is the door's block, which waits for
                 // it with the lock held (`NK2203`).
                 state.an_async_inside_a_door(span)

@@ -172,9 +172,9 @@ impl CheckState {
     /// **What a task takes** (ADR-312 D1, D2): the names its body reads, given
     /// in order. A handle is duplicated into the task, not moved - recorded
     /// rather than refused, because the emitter writes the step and has no
-    /// types (ADR-288). Unconditional, and not only where the name is used
-    /// again: a line further down may not decide what a line further up does to
-    /// a cleanup point. A value a move takes away goes with it. `who` is the
+    /// types (ADR-288). Only where the name is read after the task's
+    /// statement: at its last use the handle is moved into the task (ADR-312
+    /// D2 as revised by #1502). A value a move takes away goes with it. `who` is the
     /// task as `NK2101` names it: a `spawn`ed or an `async(detached)` one.
     pub fn a_task_takes_these(ref mut self, world: ref CheckWorld, body: ref Expr, task: i64, who: ref String, span: ref Span) sync {
         let mut named: collections::BTreeSet[String] = collections::BTreeSet()
@@ -185,6 +185,7 @@ impl CheckState {
                 let local = found ?? return
                 if is_a_handle(local.ty) {
                     self.facts.task_handles.insert((task, name.clone()))
+                    self.a_handle_a_task_takes(name, local.ty, task, span)
                 }
                 if !self.takes_away(world, local.ty) {
                     continue

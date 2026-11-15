@@ -10,6 +10,8 @@ pub struct BoundsReportFacts {
     pub proven_arithmetic: collections::BTreeSet<i64>,
     pub proven_negations: collections::BTreeSet<i64>,
     pub derived: Vec<String>,
+    pub outside: collections::BTreeMap<(i64, String), OutsideIndex>,
+    pub unproved_warn: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,8 +96,24 @@ pub fn bounds_report_checked(program: &Program, words: &winnow_grammar::Interner
         let line = nikaia_std::block::Text::from(site.line.to_string());
         out.push_str(&format!("  {}{}  {}{}  {}\n", bounds_report_spaces(&line, 4), line, site.text, bounds_report_spaces(&site.text, width), how));
     }
+    for row in bounds_report_outside(facts, source) { out.push_str(&format!("  outside  {}\n", row)); }
     for row in bounds_report_derived(&facts.derived, source) { out.push_str(&format!("  derived  {}\n", row)); }
     out
+}
+
+pub(crate) fn bounds_report_outside(facts: &BoundsReportFacts, source: &str) -> Vec<String> {
+    let mut rows: Vec<String> = vec![];
+    for (_, found) in facts.outside.iter() {
+        let mut from = String::from("from outside");
+        if found.source != "" { from = format!("from `{}`", found.source); }
+        let mut verdict = String::from("refused NK1302");
+        if found.proved {
+            verdict = String::from("proved");
+            if found.guard_at >= 0 { verdict = format!("proved by the guard on line {} (`{}`)", bounds_report_line(source, found.guard_at), found.guard); }
+        } else if facts.unproved_warn { verdict = String::from("checked (unproved-claims = warn)"); }
+        rows.push(format!("{}  {}, `{}` {}: {}", bounds_report_line(source, found.at), found.written, found.name, from, verdict));
+    }
+    rows
 }
 
 pub fn bounds_report_derived(derived: &[String], source: &str) -> Vec<String> {
