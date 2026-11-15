@@ -63,9 +63,10 @@ fn every_site_is_listed_with_what_became_of_it() {
         "{out}"
     );
     assert!(line("total + xs[i]").contains("checked"), "{out}");
-    // A field of a name is a name of the walk (ADR-306 D17): what is left
-    // is the product.
-    assert!(line("xs[0] * g.width").contains("#386"), "{out}");
+    // A field of a name is a name of the walk (ADR-306 D17), and the
+    // literal that built `g` gives it a value (#1634): that product is
+    // proved, and what is left is the product of two unknowns.
+    assert!(line("xs[0] * g.width").ends_with("proved"), "{out}");
     assert!(line("p * q").contains("#386"), "{out}");
     assert!(
         out.lines()
