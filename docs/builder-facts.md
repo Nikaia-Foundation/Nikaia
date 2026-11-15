@@ -233,7 +233,7 @@ together with the specification section and an example test.
 * A toolchain at another path costs nothing to make: `cp -al $(rustc --print sysroot) $T/.rustup/toolchains/NAME`, run with `RUSTUP_HOME=$T/.rustup RUSTUP_TOOLCHAIN=NAME`, works on the same filesystem. (issue-1584)
 * The run-bundle record in `NIKAIA_CACHE_DIR` is shared by every nested `nikaia run`, so a test that changes HOME or the toolchain leaks into the other tests through it. (issue-1584)
 * Building a copy of an example with path dependencies needs a symlink from `crates` to the repo's crates; a copy gives cargo's "package collision in the lockfile". (issue-1591)
-* A package with no `fn main` needs `artifact = "rust-library"` for `build --locked`; `check --rustc` on it crashes with NK1343. (issue-1591)
+* A package with no `fn main` needs `artifact = "rust-library"` in its manifest; `build` and `check --rustc` refuse it otherwise (NK1351), and `scripts/ledgers.nika` builds every directory with `build`. (issue-1591, #1657)
 * The ADR that ADR-270 replaced is archived: cite ADR-270 (D2→D4, D6→D22) and never name the archived number, not even in a warning, or pre-push's adr-refs check is red. (issue-1591, #1662)
 * A test program in `tests/compiler` is run with `nikaia test --filter NAME` and updated with `--bless`, not with `nikaia run FILE`. (issue-1591)
 * Moving `crates/nikaia-std/src/compiler/` means editing `SYSROOT_TOOLS` in `sysroot_cache.nika` and in its lowered `.rs` by hand before the first build, because the old binary cannot lower from the new path. (issue-1600)
