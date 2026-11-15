@@ -1199,7 +1199,9 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let owner = view.text(name);
                     for method in methods.iter() {
                         let called = view.text(method.node.name);
-                        graph.insert(format!("{}::{}", owner, called), no_uses());
+                        let mut marked = no_uses();
+                        for arg in method.node.args.iter() { if arg.keep { marked.kept.insert(view.text(arg.name)); } }
+                        graph.insert(format!("{}::{}", owner, called), marked);
                     }
                 },
                 Item::Grammar(def) => {
