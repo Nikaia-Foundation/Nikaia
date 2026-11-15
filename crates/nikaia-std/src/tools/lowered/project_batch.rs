@@ -8,8 +8,39 @@ pub fn project_batch_module(k: i64, rust: &str) -> Option<String> {
     Some(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(format!("pub mod p{} ", k), "{\n")), rust)), "\n}\n")))
 }
 
+pub(crate) fn project_batch_header() -> String { String::from("#![allow(warnings)]\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n") }
+
+pub fn project_batch_ranges(names: &[String], modules: &[String]) -> String {
+    let mut first = project_batch_header().lines().count() as i64 + 1;
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for (name, module) in names.iter().zip(modules.iter()) {
+        let last = first + module.lines().count() as i64 - 1;
+        parts.push(format!("{}\t{}\t{}\n", name, first, last));
+        first = last + 1;
+    }
+    nikaia_std::block::Text::from(parts.join(""))
+}
+
+pub fn project_batch_cited(said: &str, ranges: &str, file: &str) -> Vec<String> {
+    let mut lines: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for piece in said.split(&*format!("{}.rs:", file)).skip(1) {
+        let digits: String = piece.chars().take_while(|&c| { c.is_ascii_digit() }).collect();
+        let line = match text::parse_i64(&digits) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        lines.push(line);
+    }
+    let mut cited: Vec<String> = vec![];
+    for range in ranges.lines() {
+        let parts: Vec<String> = range.split("\t").map(|part| { nikaia_std::block::Text::from(part.to_string()) }).collect::<Vec<_>>();
+        if parts.len() != 3 { continue; }
+        let first = match text::parse_i64(unsafe { nikaia_std::proven::read(&parts, (1) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let last = match text::parse_i64(unsafe { nikaia_std::proven::read(&parts, (2) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if lines.iter().copied().any(|line| { line >= first && line <= last }) { cited.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string())); }
+    }
+    cited
+}
+
 pub fn project_batch_crate(names: &[String], ks: &[i64], modules: &[String]) -> String {
-    let mut parts: Vec<String> = nikaia_std::block::List::from_array_in([String::from("#![allow(warnings)]\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n")], nikaia_std::block::Place::Block);
+    let mut parts: Vec<String> = nikaia_std::block::List::from_array_in([project_batch_header()], nikaia_std::block::Place::Block);
     for module in modules.iter() { parts.push(nikaia_std::block::Text::from(module.to_string())); }
     parts.push(String::from("fn main() -> std::process::ExitCode {\n    match std::env::args().nth(1).as_deref().unwrap_or(\"\") {\n"));
     for (name, k) in names.iter().zip(ks.iter().copied()) { parts.push(format!("        {:?} => std::process::Termination::report(p{}::main()),\n", name, k)); }
@@ -49,6 +80,11 @@ pub async fn project_batch_lowered<H: ProjectDriveWrapperHost>(host: &H, list: &
     match fs::write(&included, &fs::Root::Anywhere, nikaia_std::block::Text::from(names.iter().map(|name| { nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(name.to_string()), "\n")) }).collect::<Vec<_>>().join("")), false, true).await {
         Ok(_) => {},
         Err(error) => { return Err(nikaia_std::error::throwing(ProjectDriveRefusal::Failed(format!("writing {}: {}", nikaia_std::fs::path::display(&(included)), error)), &"project_batch_lowered")); },
+    };
+    let ranges = nikaia_std::fs::path::with_extension(&(list), std::path::Path::new(&("modules")));
+    match fs::write(&ranges, &fs::Root::Anywhere, project_batch_ranges(&names, &modules), false, true).await {
+        Ok(_) => {},
+        Err(error) => { return Err(nikaia_std::error::throwing(ProjectDriveRefusal::Failed(format!("writing {}: {}", nikaia_std::fs::path::display(&(ranges)), error)), &"project_batch_lowered")); },
     };
     Ok((project_batch_crate(&names, &ks, &modules), sources))
 }

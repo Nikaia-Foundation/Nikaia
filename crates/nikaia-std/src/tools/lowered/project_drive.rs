@@ -273,6 +273,16 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     let mut code = built_code;
     host.settle();
     host.report(&messages)?;
+    if code != 0 {
+        match env::var(&project_batch_var()) {
+            None => { },
+            Some(list) => {
+                let path: fs::Path = std::path::PathBuf::from(list);
+                let said = nikaia_std::fs::path::with_extension(&(path), std::path::Path::new(&("said")));
+                host.write_if_changed(&said, &messages)?;
+            },
+        }
+    }
     if code == 0 && subcommand != "check" {
         match header {
             None => { },
@@ -759,8 +769,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple56726| {
-        let (a, b) = __nikaia_tuple56726;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple57250| {
+        let (a, b) = __nikaia_tuple57250;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {

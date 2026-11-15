@@ -4101,7 +4101,7 @@ pub mod paths {
 }
 pub mod project_batch {
     #[allow(unused_imports)]
-    pub use super::{project_batch_var, project_batch_module, project_batch_crate, project_batch_lowered};
+    pub use super::{project_batch_var, project_batch_module, project_batch_ranges, project_batch_cited, project_batch_crate, project_batch_lowered};
 }
 pub mod project_check {
     #[allow(unused_imports)]
