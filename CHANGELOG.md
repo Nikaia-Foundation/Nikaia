@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1379] — 2026-11-15
+
+**check: a name proved not null is still bound outside the loop around the proof (NK2105) (#1574)**
+- A name an `if` proved not `null` and then handed over inside a loop it was declared outside of is NK2105 now, through `??` or plainly, instead of a rustc error (NK1343).
+
 ## [0.0.1378] — 2026-11-15
 
 **Re-record the stale ledgers of packages/yaml, packages/json, page-examples and crate-ledger, and guard the packages' with build --locked (#1604)**
