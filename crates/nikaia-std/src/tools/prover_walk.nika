@@ -1415,6 +1415,12 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], i
             element => {
                 if has_a_length(element) {
                     inner.has_length(walk.arena, words.resolve(bindings[0]), null)
+                } else {
+                    // **A struct element has its fields' names** (ADR-396
+                    // D4), as a call's result has.
+                    let kind = element.clone()
+                    let mut not_params: collections::BTreeSet[String] = collections::BTreeSet()
+                    prover_parameter_fields(walk, inner, not_params, words.resolve(bindings[0]), kind, false, program, words)
                 }
             },
         }

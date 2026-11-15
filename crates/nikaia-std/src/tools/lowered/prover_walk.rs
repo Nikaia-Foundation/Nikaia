@@ -1055,7 +1055,13 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
     if bindings.len() == 1 {
         match walk.state.whole_lets.get(&(span.start as i64)) {
             None => { },
-            Some(element) => { if has_a_length(element) { inner.has_length(&mut walk.arena, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), None); } },
+            Some(element) => {
+                if has_a_length(element) { inner.has_length(&mut walk.arena, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), None); } else {
+                    let kind = nikaia_std::block::Text::from(element.to_string());
+                    let mut not_params: collections::BTreeSet<String> = collections::BTreeSet::new();
+                    prover_parameter_fields(walk, &mut inner, &mut not_params, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), &kind, false, program, words);
+                }
+            },
         }
     }
     let mut ranged = false;

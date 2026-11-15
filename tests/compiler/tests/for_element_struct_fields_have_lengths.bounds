@@ -1,0 +1,4 @@
+bounds in tests/for_element_struct_fields_have_lengths.nika: 1 indexes, 1 proved; 1 operations, 0 proved
+    22  f.lines[i]       proved
+    23  n += line.len()  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+  outside  22  `f.lines[i]`, `i` from `i`: proved
