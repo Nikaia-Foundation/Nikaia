@@ -19,6 +19,18 @@ pub struct ProjectLowerOut {
     pub notes: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckUnit {
+    pub path: String,
+    pub dependency: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnitSaid {
+    Warned(String),
+    Refused(String),
+}
+
 pub trait ProjectLowerHost {
     fn read_program(&self) -> Result<(), Box<dyn std::error::Error>>;
     fn open_cache(&self);
@@ -32,7 +44,14 @@ pub trait ProjectLowerHost {
     fn proofs_settled(&self) -> bool;
     fn in_the_wrapper(&self) -> bool;
     fn eprint(&self, text: &str);
-    fn check_units(&self) -> Result<String, Box<dyn std::error::Error>>;
+    fn check_open(&self) -> Vec<CheckUnit>;
+    fn unit_source(&self, at: i64) -> String;
+    fn check_unit(&self, at: i64) -> Result<UnitSaid, Box<dyn std::error::Error>>;
+    fn check_close(&self, refused: &[String]) -> Result<(), Box<dyn std::error::Error>>;
+    fn in_a_batch(&self) -> bool;
+    fn digest(&self, text: &str) -> String;
+    fn batch_said(&self, key: &str) -> Option<UnitSaid>;
+    fn batch_remember(&self, key: &str, said: &UnitSaid);
     fn emit(&self) -> Result<String, Box<dyn std::error::Error>>;
     fn contracts(&self) -> Ledger;
     fn published(&self) -> collections::BTreeMap<String, Published>;
@@ -84,7 +103,7 @@ pub fn project_lower_reading<H: ProjectLowerHost>(host: &H, in_project: bool) ->
 }
 
 pub(crate) fn project_lower_made<H: ProjectLowerHost>(host: &H) -> Result<ProjectLowerArtifacts, Box<dyn std::error::Error>> {
-    let mut warnings = host.check_units()?;
+    let mut warnings = project_lower_check(host)?;
     let rust = host.emit()?;
     let ledger = project_lower_published(host.contracts(), &host.published());
     let (text, derived) = host.render(&ledger);
@@ -96,6 +115,42 @@ pub(crate) fn project_lower_made<H: ProjectLowerHost>(host: &H) -> Result<Projec
     let made = ProjectLowerArtifacts { rust, ledger: text, derived, warnings };
     if host.proofs_settled() { host.record(&made); }
     Ok(made)
+}
+
+pub fn project_lower_check<H: ProjectLowerHost>(host: &H) -> Result<String, Box<dyn std::error::Error>> {
+    let units = host.check_open();
+    let mut digest = nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block);
+    let batch = host.in_a_batch();
+    if batch {
+        let mut all = String::from("");
+        for (at, unit) in units.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+            if unit.dependency {
+                let source = host.unit_source(at as i64);
+                all = format!("{}{}\n{}\n// --- unit ---\n", all, unit.path, source);
+            }
+        }
+        digest = host.digest(&all);
+    }
+    let mut warnings = String::from("");
+    let mut refused: Vec<String> = vec![];
+    for (at, unit) in units.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+        let shared = batch && unit.dependency;
+        let key = format!("{}\n{}", unit.path, digest);
+        let mut said: Option<UnitSaid> = None;
+        if shared { said = host.batch_said(&key); }
+        if said.is_none() {
+            let checked = host.check_unit(at as i64)?;
+            if shared { host.batch_remember(&key, &checked); }
+            said = Some(checked);
+        }
+        match said {
+            None => { },
+            Some(UnitSaid::Warned(ref text)) => { warnings = format!("{}{}", warnings, text); },
+            Some(UnitSaid::Refused(text)) => { refused.push(text); },
+        }
+    }
+    host.check_close(&refused)?;
+    Ok(warnings)
 }
 
 pub fn project_lower_published(ledger: Ledger, published: &collections::BTreeMap<String, Published>) -> Ledger {

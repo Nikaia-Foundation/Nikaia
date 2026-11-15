@@ -4120,7 +4120,7 @@ pub mod project_features {
 }
 pub mod project_lower {
     #[allow(unused_imports)]
-    pub use super::{ProjectLowerArtifacts, ProjectLowerOut, ProjectLowerHost, project_lower_reading, project_lower_published};
+    pub use super::{ProjectLowerArtifacts, ProjectLowerOut, CheckUnit, UnitSaid, ProjectLowerHost, project_lower_reading, project_lower_check, project_lower_published};
 }
 pub mod project_members {
     #[allow(unused_imports)]
@@ -4393,4 +4393,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "a2044114e443fd8a5ca69ffe8f280afa08a43214ad469e4a54865fea575fe2f0";
+pub const LOWERED_DIGEST: &str = "9dde670513d2779e48599c085aa711106192ba2645db1400cf3e5662a0f7fa24";

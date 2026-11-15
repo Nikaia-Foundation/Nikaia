@@ -879,7 +879,7 @@ pub fn diagnose(
             |host, _| {
                 use project_lower::ProjectLowerHost;
                 host.read_program()
-                    .and_then(|()| host.check_units().map(|_| ()))
+                    .and_then(|()| project_lower::project_lower_check(host).map(|_| ()))
                     .map_err(|error| host.failed.take().unwrap_or_else(|| anyhow!("{error}")))
             },
         )?
@@ -926,7 +926,7 @@ pub fn definition(
                     use project_lower::ProjectLowerHost;
                     host.read_program().ok()?;
                     // A refusal still leaves the facts of what was checked.
-                    let _ = host.check_units();
+                    let _ = project_lower::project_lower_check(host);
                     let program = host.program.borrow();
                     let program = program.as_ref()?;
                     let at = program.units.iter().position(|unit| unit.path == input)?;
@@ -1048,6 +1048,7 @@ fn with_lower_host<R>(
         exported: RefCell::new(None),
         foreign: RefCell::new(None),
         book: RefCell::new(None),
+        checking: RefCell::new(None),
         checked_facts: RefCell::new(BTreeMap::new()),
         unit_facts: RefCell::new(BTreeMap::new()),
         published: RefCell::new(BTreeMap::new()),
@@ -1084,6 +1085,8 @@ struct LowerHost<'a> {
     foreign: RefCell<Option<Foreign>>,
     /// The prover's book between the check and the emitter.
     book: RefCell<Option<crate::proofs::Book>>,
+    /// What the check of the units reads once for all of them, while it runs.
+    checking: RefCell<Option<Checking>>,
     checked_facts: RefCell<BTreeMap<usize, check::CheckFacts>>,
     /// Each unit's facts, by its place in the program, for `nikaia lsp`'s
     /// [`definition`] (#1396): empty for every other build.
@@ -1092,6 +1095,16 @@ struct LowerHost<'a> {
     /// The book as the lowering left it, in a project.
     proofs: RefCell<Option<crate::proofs::Book>>,
     failed: RefCell<Option<anyhow::Error>>,
+}
+
+/// **What the check of a program's units reads once** (`check_open`), for
+/// each unit's check after: the package names, the contracts that moved, the
+/// dependencies' promises and whether the facts are the emitter's.
+struct Checking {
+    modules: BTreeSet<String>,
+    newly: check::Newly,
+    promised: Ledger,
+    facts_reusable: bool,
 }
 
 type HostResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -1349,8 +1362,8 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         }
     }
 
-    fn check_units(&self) -> HostResult<String> {
-        let (layout, settings) = (self.layout, self.settings);
+    fn check_open(&self) -> Vec<project_lower::CheckUnit> {
+        let layout = self.layout;
         let program = self.program();
         // Every unit is checked against the *program's* contracts, not its
         // own: `utils::double` is a name `main.nika` may write, and the
@@ -1372,14 +1385,58 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         // package.
         let mut newly = newly(&layout.root, &program.contracts);
         newly.keepers = program.keepers.clone();
-        // Collected once for the whole package, because every unit is
-        // checked against the same program (`ADR-286`) and a `comptime` in
-        // any of them may call into any other.
+        // **And the program's own files against what each dependency
+        // promised** (ADR-288 D28), not what its body happens to be: an
+        // `"inferred"` `sync` reads as *may pause* across the boundary.
+        let promised = program.contracts_as_promised();
+        // **The check's facts are the emitter's** where the check asked
+        // exactly what `check::propagation_against` asks: the unit's own
+        // ledger the emitter's, no module and no contract that moved
+        // (#727).
+        let facts_reusable = foreign.packages(&modules).is_empty()
+            && newly.throws.is_empty()
+            && newly.keeps.is_empty()
+            && promised == program.contracts;
+        let units = program
+            .units
+            .iter()
+            .map(|unit| project_lower::CheckUnit {
+                path: unit.path.display().to_text(),
+                dependency: unit.package.is_some(),
+            })
+            .collect();
+        *self.checking.borrow_mut() = Some(Checking {
+            modules,
+            newly,
+            promised,
+            facts_reusable,
+        });
+        *self.checked_facts.borrow_mut() = BTreeMap::new();
+        *self.foreign.borrow_mut() = Some(foreign);
+        units
+    }
+
+    fn unit_source(&self, at: i64) -> String {
+        self.program().units[at as usize].source.clone()
+    }
+
+    fn check_unit(&self, at: i64) -> HostResult<project_lower::UnitSaid> {
+        let settings = self.settings;
+        let program = self.program();
+        let at = at as usize;
+        let unit = &program.units[at];
+        let checking = self.checking.borrow();
+        let checking = checking.as_ref().expect("the check is open");
+        let foreign = self.foreign.borrow();
+        let foreign = foreign.as_ref().expect("the check is open");
+        // Collected for every unit, because every unit is checked against
+        // the same program (`ADR-286`) and a `comptime` in any of them may
+        // call into any other.
         let beside: Vec<&crate::parser::Parsed> =
             program.units.iter().map(|unit| &unit.parsed).collect();
         let around = Around {
-            foreign: &foreign,
-            newly: &newly,
+            foreign,
+            newly: &checking.newly,
             beside: &beside,
             reads: self.reads,
         };
@@ -1390,11 +1447,16 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         // types inside them*, and the package's file writes the bare word.
         // `Program::as_its_own` is the ledger that package was inferred
         // with, kept rather than reconstructed.
-        //
-        // **And the program's own files against what each dependency
-        // promised** (ADR-288 D28), not what its body happens to be: an
-        // `"inferred"` `sync` reads as *may pause* across the boundary.
-        let promised = program.contracts_as_promised();
+        let contracts = match &unit.package {
+            Some(package) => program
+                .as_its_own
+                .get(package)
+                .unwrap_or(&program.contracts),
+            None => &checking.promised,
+        };
+        let lsp = diagnostics::is_collecting();
+        let mut facts = None;
+        let keep = checking.facts_reusable && unit.package.is_none();
         // **The prover's recorded answers** ([ADR-270](../../docs/specification/adr/adr-270.md)
         // D4, D21, #448): open since the program was read, while it is
         // checked and lowered, and written back beside `nikaia.contracts`
@@ -1404,131 +1466,74 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             .borrow_mut()
             .take()
             .expect("the program is read first");
-        let mut warnings = String::new();
-        // **The check's facts are the emitter's** where the check asked
-        // exactly what `check::propagation_against` asks: the unit's own
-        // ledger the emitter's, no module and no contract that moved
-        // (#727).
-        let facts_reusable = foreign.packages(&modules).is_empty()
-            && newly.throws.is_empty()
-            && newly.keeps.is_empty()
-            && promised == program.contracts;
-        let mut checked_facts = BTreeMap::new();
-        let mut refused: Vec<String> = Vec::new();
-        // **In a batch, a dependency's file is checked once** (#1582): the
-        // key names every dependency file and its source.
-        let lsp = diagnostics::is_collecting();
-        let batch_digest = (BATCH.load(std::sync::atomic::Ordering::Relaxed) && !lsp).then(|| {
-            let mut all = String::new();
-            for unit in program.units.iter().filter(|unit| unit.package.is_some()) {
-                all += &format!(
-                    "{}\n{}\n// --- unit ---\n",
-                    unit.path.display(),
-                    unit.source
-                );
-            }
-            assets::digest(all.as_bytes())
-        });
-        let (checked, book) = crate::proofs::with_book(book, || -> Result<()> {
-            for (at, unit) in program.units.iter().enumerate() {
-                let batch_key = match (&batch_digest, &unit.package) {
-                    (Some(digest), Some(_)) => Some((unit.path.clone(), digest.clone())),
-                    _ => None,
-                };
-                let remembered = batch_key.as_ref().and_then(|key| {
-                    BATCH_CHECKED
-                        .lock()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner())
-                        .get(key)
-                        .cloned()
-                });
-                match remembered {
-                    Some(Ok(said)) => {
-                        warnings += &said;
-                        continue;
-                    }
-                    Some(Err(said)) => {
-                        refused.push(said);
-                        continue;
-                    }
-                    None => {}
-                }
-                let contracts = match &unit.package {
-                    Some(package) => program
-                        .as_its_own
-                        .get(package)
-                        .unwrap_or(&program.contracts),
-                    None => &promised,
-                };
-                let mut facts = None;
-                let keep = facts_reusable && unit.package.is_none();
-                // **`nikaia lsp` asks where a name is declared** (#1396): every
-                // unit's facts, a refused unit's too, kept apart from the
-                // emitter's (`lsp`, above).
-                let checked = crate::proofs::for_unit(
+        // **`nikaia lsp` asks where a name is declared** (#1396): every
+        // unit's facts, a refused unit's too, kept apart from the emitter's.
+        let (checked, book) = crate::proofs::with_book(book, || {
+            crate::proofs::for_unit(&unit.path, &unit.source, unit.package.is_some(), || {
+                check(
+                    &unit.parsed,
+                    contracts,
+                    &checking.modules,
+                    around,
                     &unit.path,
                     &unit.source,
-                    unit.package.is_some(),
-                    || {
-                        check(
-                            &unit.parsed,
-                            contracts,
-                            &modules,
-                            around,
-                            &unit.path,
-                            &unit.source,
-                            &settings.words.user_parallelism,
-                            &settings.words.refuted_claims,
-                            &settings.words.unproved_claims,
-                            settings.library(),
-                            (keep || lsp).then_some(&mut facts),
-                        )
-                    },
-                );
-                if lsp && let Some(facts) = &facts {
-                    self.unit_facts.borrow_mut().insert(at, facts.clone());
-                }
-                // **A refused unit does not stop the others** (#1508): the
-                // file next door may hold the refusal this one's follows from
-                // (an `NK1171` in a callee makes it read as pausing, and the
-                // `sync` caller's `NK2202` was all a build said), so every
-                // unit says its findings and the tallies are joined.
-                let remember = |said: Result<String, String>| {
-                    if let Some(key) = &batch_key {
-                        BATCH_CHECKED
-                            .lock()
-                            .unwrap_or_else(|poisoned| poisoned.into_inner())
-                            .insert(key.clone(), said);
-                    }
-                };
-                match checked {
-                    Ok(said) => {
-                        remember(Ok(said.clone()));
-                        warnings += &said
-                    }
-                    Err(e) => match e.downcast_ref::<diagnostics::Refused>() {
-                        Some(tally) if tally.at.is_none() && tally.finding.is_none() => {
-                            remember(Err(tally.message.clone()));
-                            refused.push(tally.message.clone());
-                            continue;
-                        }
-                        _ => return Err(e),
-                    },
-                }
-                if keep && let Some(facts) = facts {
-                    checked_facts.insert(at, facts);
-                }
-            }
-            if !refused.is_empty() {
-                return Err(diagnostics::refuse(refused.join(", ")));
-            }
-            Ok(())
+                    &settings.words.user_parallelism,
+                    &settings.words.refuted_claims,
+                    &settings.words.unproved_claims,
+                    settings.library(),
+                    (keep || lsp).then_some(&mut facts),
+                )
+            })
         });
-        self.held(checked)?;
         *self.book.borrow_mut() = Some(book);
-        *self.checked_facts.borrow_mut() = checked_facts;
-        *self.foreign.borrow_mut() = Some(foreign);
-        Ok(warnings)
+        if lsp && let Some(facts) = &facts {
+            self.unit_facts.borrow_mut().insert(at, facts.clone());
+        }
+        match checked {
+            Ok(said) => {
+                if keep && let Some(facts) = facts {
+                    self.checked_facts.borrow_mut().insert(at, facts);
+                }
+                Ok(project_lower::UnitSaid::Warned(said))
+            }
+            Err(e) => match e.downcast_ref::<diagnostics::Refused>() {
+                Some(tally) if tally.at.is_none() && tally.finding.is_none() => {
+                    Ok(project_lower::UnitSaid::Refused(tally.message.clone()))
+                }
+                _ => self.held(Err(e)),
+            },
+        }
+    }
+
+    fn check_close(&self, refused: &[String]) -> HostResult<()> {
+        *self.checking.borrow_mut() = None;
+        if !refused.is_empty() {
+            return self.held(Err(diagnostics::refuse(refused.join(", "))));
+        }
+        Ok(())
+    }
+
+    fn in_a_batch(&self) -> bool {
+        BATCH.load(std::sync::atomic::Ordering::Relaxed) && !diagnostics::is_collecting()
+    }
+
+    fn digest(&self, text: &str) -> String {
+        assets::digest(text.as_bytes())
+    }
+
+    fn batch_said(&self, key: &str) -> Option<project_lower::UnitSaid> {
+        BATCH_CHECKED
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(key)
+            .cloned()
+    }
+
+    fn batch_remember(&self, key: &str, said: &project_lower::UnitSaid) {
+        BATCH_CHECKED
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(key.to_text(), said.clone());
     }
 
     fn emit(&self) -> HostResult<String> {
@@ -3914,14 +3919,12 @@ fn wrapper_lower(
 
 /// **Set in a wrapper that lowers a batch of test programs** (#1582): its
 /// programs share their dependencies, so a dependency's file is checked once
-/// for all of them ([`BATCH_CHECKED`]), not once per program.
+/// for all of them (`project_lower_check`), not once per program.
 static BATCH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// What the check of a dependency's file said, in a batch ([`BATCH`]): by
-/// the file and the digest of every dependency file's source, which is all a
-/// dependency's ledger is inferred from (ADR-100 D5: the dependencies first,
-/// the program's own package last). `Ok` its warnings, `Err` its refusal.
-static BATCH_CHECKED: std::sync::Mutex<BTreeMap<(PathBuf, String), Result<String, String>>> =
+/// The batch's shared memo of what a dependency's file said
+/// (`project_lower_check`, which builds the key and replays it).
+static BATCH_CHECKED: std::sync::Mutex<BTreeMap<String, project_lower::UnitSaid>> =
     std::sync::Mutex::new(BTreeMap::new());
 
 impl project_drive::ProjectDriveWrapperHost for WrapperHost {
@@ -3969,7 +3972,7 @@ impl project_drive::ProjectDriveWrapperHost for WrapperHost {
 
     /// **A batch's programs lowered on every core** (#1582): each as the
     /// module `roots[k]` names, its dependencies' files checked once for the
-    /// whole batch ([`BATCH_CHECKED`]). A program that does not lower is
+    /// whole batch (`project_lower_check`). A program that does not lower is
     /// nothing; the batch leaves it out, and it is built alone.
     fn lower_batch(
         &self,
