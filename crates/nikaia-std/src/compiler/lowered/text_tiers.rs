@@ -201,6 +201,7 @@ pub(crate) struct FnDecl {
     pub(crate) params: Vec<Type>,
     pub(crate) changes: Vec<bool>,
     pub(crate) keeps: Vec<bool>,
+    pub(crate) options: Vec<(String, Type)>,
     pub(crate) result: Option<Type>,
     published: bool,
     pub(crate) of_a_trait: bool,
@@ -282,7 +283,7 @@ pub(crate) fn declare_rules(def: &GrammarDef, names: &winnow_grammar::InternerCo
     for rule in def.rules.iter() {
         let key = format!("{}::{}", gname, names.resolve(rule.name));
         declared.rules.insert(nikaia_std::block::Text::from(key.to_string()));
-        declared.fns.insert(key, FnDecl { params: vec![], changes: vec![], keeps: vec![], result: match rule.ret_type.as_ref() {
+        declared.fns.insert(key, FnDecl { params: vec![], changes: vec![], keeps: vec![], options: vec![], result: match rule.ret_type.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, published: def.public && rule.is_entry, of_a_trait: false, changes_self: false });
@@ -290,8 +291,8 @@ pub(crate) fn declare_rules(def: &GrammarDef, names: &winnow_grammar::InternerCo
 }
 
 pub(crate) fn declare_function(item: &Item, target: Option<&str>, names: &winnow_grammar::InternerContext, declared: &mut TextDeclared, of_a_trait: bool) {
-    let (name, receiver, args, ret_type, is_public) = match item {
-        Item::Fn { name, receiver, args, ret_type, is_public, .. } => { let is_public = *is_public; let name = *name; (name, receiver, args, ret_type, is_public) },
+    let (name, receiver, args, config, ret_type, is_public) = match item {
+        Item::Fn { name, receiver, args, config, ret_type, is_public, .. } => { let is_public = *is_public; let name = *name; (name, receiver, args, config, ret_type, is_public) },
         _ => return,
     };
     let changes_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
@@ -306,7 +307,9 @@ pub(crate) fn declare_function(item: &Item, target: Option<&str>, names: &winnow
         changes.push(arg.mutable);
         keeps.push(arg.keep);
     }
-    declared.fns.insert(key, FnDecl { params, changes, keeps, result: match ret_type {
+    let mut options: Vec<(String, Type)> = vec![];
+    for option in config.iter() { options.push((nikaia_std::block::Text::from(names.resolve(option.name).to_string()), option.ty.clone())); }
+    declared.fns.insert(key, FnDecl { params, changes, keeps, options, result: match ret_type {
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
     }, published: is_public || of_a_trait, of_a_trait, changes_self });
@@ -3717,8 +3720,18 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &m
             }
             kinds
         },
-        Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; method_kinds(receiver, ask.names.resolve(method), args, ask, walk) },
-        Expr::SafeMethod { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; method_kinds(receiver, ask.names.resolve(method), args, ask, walk) },
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let kinds = method_kinds(receiver, ask.names.resolve(method), args, ask, walk);
+            own_method_options(ask.names.resolve(method), config, ask, walk);
+            kinds
+        },
+        Expr::SafeMethod { receiver, method, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let kinds = method_kinds(receiver, ask.names.resolve(method), args, ask, walk);
+            own_method_options(ask.names.resolve(method), config, ask, walk);
+            kinds
+        },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             let kinds = call_kinds(func, args, ask, walk);
@@ -4141,7 +4154,10 @@ pub(crate) fn std_container_args(callee: &str, args: &[Expr], ask: &TierAsk<'_, 
 pub(crate) fn std_option_lists(func: &Expr, config: &[ConfigArg], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     if config.is_empty() { return; }
     let callee = match tier_callee(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return };
-    if walk.declared.fns.contains_key(&callee) { return; }
+    if walk.declared.fns.contains_key(&callee) {
+        own_option_containers(&callee, config, ask, walk);
+        return;
+    }
     let contract = match *nikaia_std::index::get(&ask.library.functions, &callee) { Some(__nikaia_value) => __nikaia_value, None => return };
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     for option in config.iter() {
@@ -4153,6 +4169,55 @@ pub(crate) fn std_option_lists(func: &Expr, config: &[ConfigArg], ask: &TierAsk<
             if a_followed(ask.names, &whole.ty) && holds_text(ask.names, &whole.ty) { demote_inside(&whole.owner, &whole.ty, &mut vec![], ask, walk); }
         }
     }
+}
+
+pub(crate) fn own_option_containers(callee: &str, config: &[ConfigArg], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    let declared = declared_options(callee, &walk);
+    for option in config.iter() {
+        let name = nikaia_std::block::Text::from(ask.names.resolve(option.name).to_string());
+        for (wanted, ty) in declared.iter() { if *wanted == name { adopt_option_list(&option.value, ty, ask, walk); } }
+        let built = matches!(option.value, Expr::ListLit { .. } | Expr::Tuple(_, _));
+        if built {
+            kept_unseen(&option.value, ask, walk);
+            owned_literal_lets(&option.value, ask, walk);
+            continue;
+        }
+        let whole = match source_of(&option.value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if a_followed(ask.names, &whole.ty) && holds_text(ask.names, &whole.ty) { demote_inside(&whole.owner, &whole.ty, &mut vec![], ask, walk); }
+    }
+}
+
+pub(crate) fn declared_options(callee: &str, walk: &TierWalk) -> Vec<(String, Type)> {
+    let function = match *nikaia_std::index::get(&walk.declared.fns, callee) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    function.options.copy_owned()
+}
+
+pub(crate) fn own_method_options(method: &str, config: &[ConfigArg], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    if config.is_empty() { return; }
+    let keys = match match *nikaia_std::index::get(&walk.declared.methods, method) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let key = if keys.len() == 1 { nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&keys, (0) as usize) }).to_string()) } else { String::from("") };
+    own_option_containers(&key, config, ask, walk);
+}
+
+pub(crate) fn adopt_option_list(value: &Expr, want: &Type, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    let name = match value {
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(ask.names.resolve(name).to_string()) },
+        _ => return,
+    };
+    let local = match tier_local(&name, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let at = local.listed;
+    if at < 0 || walk.flows.adopted.contains_key(&at) { return; }
+    let mut ty = want.clone();
+    ty.is_nullable = false;
+    ty.is_view = false;
+    ty.is_mut = false;
+    if !a_container(ask.names, &ty) || !holds_text(ask.names, &ty) { return; }
+    let kind = nikaia_std::index::or(container_of(ask.names, &ty), || "".into());
+    if is_a_map_name(&kind) || kind == "HashSet" { return; }
+    walk.flows.adopted.insert(at, Declaring { owner: TextOwner::Let(at), ty });
 }
 
 pub(crate) fn std_whole_list(value: &Expr, want: &Ty, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {

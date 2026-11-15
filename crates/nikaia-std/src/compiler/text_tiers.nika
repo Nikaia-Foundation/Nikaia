@@ -327,6 +327,8 @@ struct FnDecl {
     /// callee owns what is handed there, so it is never lent, even where the
     /// body only hands it back.
     keeps: Vec[bool],
+    /// The options after the `;`, by name, with their written types.
+    options: Vec[(String, Type)],
     result: Type?,
     published: bool,
     /// A method of a trait's: its signature is the trait's.
@@ -443,13 +445,13 @@ fn declare_rules(def: ref GrammarDef, names: ref winnow_grammar::InternerContext
     for rule in def.rules {
         let key = f"{gname}::{names.resolve(rule.name)}"
         declared.rules.insert(key.clone())
-        declared.fns.insert(key, FnDecl { params: [], changes: [], keeps: [], result: rule.ret_type?.clone(), published: def.public && rule.is_entry, of_a_trait: false, changes_self: false })
+        declared.fns.insert(key, FnDecl { params: [], changes: [], keeps: [], options: [], result: rule.ret_type?.clone(), published: def.public && rule.is_entry, of_a_trait: false, changes_self: false })
     }
 }
 
 fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::InternerContext, mut declared: TextDeclared, of_a_trait: bool) {
-    let (name, receiver, args, ret_type, is_public) = match item {
-        Item::Fn { name, receiver, args, ret_type, is_public, .. } => (name, receiver, args, ret_type, is_public),
+    let (name, receiver, args, config, ret_type, is_public) = match item {
+        Item::Fn { name, receiver, args, config, ret_type, is_public, .. } => (name, receiver, args, config, ret_type, is_public),
         else => return,
     }
     let changes_self = receiver?.is_mut ?? false
@@ -466,7 +468,11 @@ fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::
         changes.push(arg.mutable)
         keeps.push(arg.keep)
     }
-    declared.fns.insert(key, FnDecl { params: params, changes: changes, keeps: keeps, result: ret_type?.clone(), published: is_public || of_a_trait, of_a_trait: of_a_trait, changes_self: changes_self })
+    let mut options: Vec[(String, Type)] = []
+    for option in config {
+        options.push((names.resolve(option.name).clone(), option.ty.clone()))
+    }
+    declared.fns.insert(key, FnDecl { params: params, changes: changes, keeps: keeps, options: options, result: ret_type?.clone(), published: is_public || of_a_trait, of_a_trait: of_a_trait, changes_self: changes_self })
 }
 
 fn own_name(name: ref winnow_grammar::Symbol?, names: ref winnow_grammar::InternerContext) -> String {
@@ -5236,8 +5242,16 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             }
             kinds
         }
-        Expr::MethodCall { receiver, method, args, .. } => method_kinds(receiver, ask.names.resolve(method), args, ask, walk),
-        Expr::SafeMethod { receiver, method, args, .. } => method_kinds(receiver, ask.names.resolve(method), args, ask, walk),
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            let kinds = method_kinds(receiver, ask.names.resolve(method), args, ask, walk)
+            own_method_options(ask.names.resolve(method), config, ask, walk)
+            kinds
+        },
+        Expr::SafeMethod { receiver, method, args, config, .. } => {
+            let kinds = method_kinds(receiver, ask.names.resolve(method), args, ask, walk)
+            own_method_options(ask.names.resolve(method), config, ask, walk)
+            kinds
+        },
         Expr::Call { func, args, config, .. } => {
             let kinds = call_kinds(func, args, ask, walk)
             std_option_lists(func, config, ask, walk)
@@ -5772,6 +5786,7 @@ fn std_option_lists(func: ref Expr, config: ref Vec[ConfigArg], ask: ref TierAsk
     }
     let callee = tier_callee(func, ask) ?? return
     if walk.declared.fns.contains_key(callee) {
+        own_option_containers(callee, config, ask, walk)
         return
     }
     let contract = ask.library.functions[callee] ?? return
@@ -5789,6 +5804,85 @@ fn std_option_lists(func: ref Expr, config: ref Vec[ConfigArg], ask: ref TierAsk
             }
         }
     }
+}
+
+/// **A container of text handed to an option of this program's function
+/// holds text of its own**: the walk binds no option as a position of the
+/// body (`walk_function`), and only a `String` option is ever lent
+/// (`lends_option`), so a list, a set or a map handed to one is the owned
+/// container its type declares, as one handed whole to `std` is
+/// (`std_container_args`). A `let` filled with literals and handed to
+/// `parameters: collections::HashMap[String, db::Value]` keeps its keys.
+fn own_option_containers(callee: ref String, config: ref Vec[ConfigArg], ask: ref TierAsk, mut walk: TierWalk) {
+    let declared = declared_options(callee, walk)
+    for option in config {
+        let name = ask.names.resolve(option.name).clone()
+        for (wanted, ty) in declared {
+            if wanted == name {
+                adopt_option_list(option.value, ty, ask, walk)
+            }
+        }
+        let built = match option.value {
+            Expr::ListLit { .. } => true,
+            Expr::Tuple(_, _) => true,
+            else => false,
+        }
+        if built {
+            kept_unseen(option.value, ask, walk)
+            owned_literal_lets(option.value, ask, walk)
+            continue
+        }
+        let whole = source_of(option.value, ask, walk) ?? continue
+        if a_followed(ask.names, whole.ty) && holds_text(ask.names, whole.ty) {
+            demote_inside(whole.owner, whole.ty, [], ask, walk)
+        }
+    }
+}
+
+/// The options a function of this program's declares, none where it is unknown.
+fn declared_options(callee: ref String, walk: ref TierWalk) -> Vec[(String, Type)] {
+    let function = walk.declared.fns[callee] ?? return []
+    return function.options.clone()
+}
+
+/// The options handed to a method of this program's (`own_option_containers`);
+/// their declared types are read where one method has the name.
+fn own_method_options(method: ref String, config: ref Vec[ConfigArg], ask: ref TierAsk, mut walk: TierWalk) {
+    if config.len() == 0 {
+        return
+    }
+    let keys = walk.declared.methods[method]?.clone() ?? return
+    let key = if keys.len() == 1 { keys[0].clone() } else { "" }
+    own_option_containers(key, config, ask, walk)
+}
+
+/// **A list literal a `let` binds, handed to an option of this program's
+/// function, is declared as the option's list** (#1501 for a parameter):
+/// `let l = ["a", "b"]` handed to `l: Vec[String]?` builds its text there.
+/// A map or a set is seeded by the position it goes to (ADR-010 D9), as at a
+/// parameter (`adopt_listed`).
+fn adopt_option_list(value: ref Expr, want: ref Type, ask: ref TierAsk, mut walk: TierWalk) {
+    let name = match value {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        else => return,
+    }
+    let local = tier_local(name, walk) ?? return
+    let at = local.listed
+    if at < 0 || walk.flows.adopted.contains_key(at) {
+        return
+    }
+    let mut ty = want.clone()
+    ty.is_nullable = false
+    ty.is_view = false
+    ty.is_mut = false
+    if !a_container(ask.names, ty) || !holds_text(ask.names, ty) {
+        return
+    }
+    let kind = container_of(ask.names, ty) ?? ""
+    if is_a_map_name(kind) || kind == "HashSet" {
+        return
+    }
+    walk.flows.adopted.insert(at, Declaring { owner: TextOwner::Let(at), ty: ty })
 }
 
 /// **A list literal a `let` binds, handed whole to `std` where it is a list
