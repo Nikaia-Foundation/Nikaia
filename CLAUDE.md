@@ -14,8 +14,9 @@ The rules every session and agent needs. What only the main session does
   change touches, `cargo clippy --all-targets -- -D warnings` (a lint in a
   lowered file is allowed on the `tools` module in
   `crates/nikaia-std/src/lib.rs`, not fixed in the file) and
-  `nikaia run scripts/pre-push.nika` (fmt, ADR citations, badges, version, on
-  what is staged, not the working tree). Never the full suite.
+  `nikaia run scripts/pre-push.nika` (fmt, ADR citations, version, on what is
+  staged, not the working tree; the badges are the driver's and only shown).
+  Never the full suite.
   Small commits, often.
 * **Agents commit, the supervisor pushes.** A builder or QA agent
   commits locally; the driver or the main session tests and pushes
@@ -70,7 +71,7 @@ The rules every session and agent needs. What only the main session does
   What blocks on the way is a finding: fix it in the compiler, do not route
   around it.
 * **New tests** are a `.nika` program with its `.stdout` / `.stderr` beside it
-  in `tests/compiler/` (or a package's tests), run by `nikaia test` (#821); no
+  in `tests/compiler/tests/` (or a package's tests), run by `nikaia test` (#821); no
   new `#[test]`, no new Rust test file. An existing Rust test is changed only
   to keep it passing, or moved to Nikaia. What cannot yet be said in Nikaia is
   a finding: fix or file it.

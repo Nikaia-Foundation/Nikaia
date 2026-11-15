@@ -4152,7 +4152,7 @@ pub mod prove_run {
 }
 pub mod prove_terms {
     #[allow(unused_imports)]
-    pub use super::{lin_term, text_literal_length, length_path, element_name, element_index, divisor_name, call_result_name, claim_term, nothing_pinned, folded_whole};
+    pub use super::{lin_term, text_literal_length, length_path, element_name, element_index, divisor_name, call_result_name, claim_term, claim_parts, nothing_pinned, folded_whole};
 }
 pub mod prove_text {
     #[allow(unused_imports)]

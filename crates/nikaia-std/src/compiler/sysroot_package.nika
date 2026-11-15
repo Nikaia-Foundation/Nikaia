@@ -409,6 +409,7 @@ comptime SYSROOT_PACKAGE_HANDED: ref Array[ref String] = ["scalar", "IntoEither"
 /// is `(name, its lowered files)`, the files as `sysroot_package_assemble`
 /// gives them.
 pub fn sysroot_package_with_dependencies(package: Vec[(String, String)], dependencies: ref Vec[(String, Vec[(String, String)])]) -> Vec[(String, String)] {
+    assert(package.len() > 0)
     let mut index = package[0].1.clone()
     let mut files: Vec[(String, String)] = []
     for at in 1..<package.len() {

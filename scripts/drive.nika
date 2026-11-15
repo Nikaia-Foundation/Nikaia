@@ -27,7 +27,7 @@
 // block's comment), `--focus-issue FILE NAME|DIR...`, `--blocks DIR`,
 // `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add),
 // `--wip-after RESULT FIXES N`, `--found-issue NAME N FOUND NEEDS`,
-// `--time-up` (drive_time_up: `up` or `not up`).
+// `--improve-issue NAME N REPORT`, `--time-up` (drive_time_up: `up` or `not up`).
 //
 // Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time;
 // before each cycle the area's ready issues (the area being DIR's last name)
@@ -44,9 +44,14 @@
 //                                 a report's `Found:` appended to
 //                                 DIR/found.txt and printed as `FOUND
 //                                 <brief>: Found: ...`, then filed as an
-//                                 issue (`ready` or `decision`, the area;
-//                                 `FILED #N <brief>`, drive_found_file),
-//                                 the batch goes on
+//                                 issue (`ready` or `decision`, the area,
+//                                 `bugs`; `FILED #N <brief>`,
+//                                 drive_found_file); the report's `Issue:`,
+//                                 `Deviation:`, `Needs:` and `Friction:`
+//                                 filed as one issue for the improvement
+//                                 lane (`ready`, `improve`; `IMPROVE #N
+//                                 <brief>`, drive_improve_file); the batch
+//                                 goes on
 //     BUMP pending, CI green      cycle.nika -- DIR --apply
 //     CUT, RED, BATCH DONE        the batch's suite runs and is waited for,
 //                                 then the driver stops for the supervisor
@@ -212,7 +217,7 @@ fn drive_escalate(why: String) throws {
 	if lane != "" && drive_testing() != "" {
 		println(f"SUITE before escalating: {why}")
 		let exe = drive_exe()
-		drive_settle(exe.clone(), lane)
+		drive_settle(exe, lane)
 	}
 	drive_unlock()
 	println(f"ESCALATE drive: {why}")
@@ -520,7 +525,7 @@ fn drive_merge_check(base: String, merge: String) -> String throws {
 	if names.len() == 0 { return "" }
 	let exe = process::run("realpath", [drive_exe()]).stdout.trim().clone()
 	let mut args: String = ""
-	for n in names.clone() { args = args + f" --filter '{n}'" }
+	for n in names { args = args + f" --filter '{n}'" }
 	println(f"LOCAL tests {names.join(" ")}")
 	let out = process::run(
 		"sh",
@@ -907,6 +912,28 @@ fn drive_ci_branch(dir: String) -> String {
 // self-hosted share there, so the committed badge did not match the committed
 // tree and CI's `badges.py --check` was red on it.
 fn drive_badges() throws {
+	for attempt in 1..<4 {
+		drive_badges_once()
+		if drive_badges_check() { return }
+		println(f"BADGES check red after attempt {attempt}, again")
+	}
+	drive_escalate("the badges stay red under `badges.py --check` after three regenerations")
+}
+
+// `badges.py --check` on an export of HEAD: whether the committed badges
+// match the committed tree (owner, 2026-11-15: the driver regenerates until
+// they do, so no builder sees a badge red).
+fn drive_badges_check() -> bool throws {
+	let copy = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let checked = process::run(
+		"sh",
+		["-c", f"git archive HEAD | tar -x -C '{copy}' && cd '{copy}' && python3 scripts/badges.py --check"],
+	)
+	process::run("rm", ["-rf", copy])
+	return checked.ok
+}
+
+fn drive_badges_once() throws {
 	let copy = process::run("mktemp", ["-d"]).stdout.trim().clone()
 	let made = process::run(
 		"sh",
@@ -1358,7 +1385,7 @@ fn drive_local_tests(paths: Vec[String]) -> String throws {
 	let bin = drive_exe()
 	let exe = process::run("realpath", [bin]).stdout.trim().clone()
 	let mut args: String = ""
-	for f in filters.clone() { args = args + f" --filter '{f}'" }
+	for f in filters { args = args + f" --filter '{f}'" }
 	println(f"LOCAL tests {filters.join(" ")}")
 	let out = process::run(
 		"sh",
@@ -1808,11 +1835,12 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 	drive_say(dry, f"append {brief} to {dir}/unpushed.txt (no suite until the batch ends)")
 	if dry { return }
 	drive_append(f"{dir}/unpushed.txt", brief.clone())
-	let found = drive_found(dir, brief)
+	let found = drive_found(dir.clone(), brief.clone())
 	if found != "" {
 		println(found)
-		drive_found_file(dir, brief)
+		drive_found_file(dir.clone(), brief.clone())
 	}
+	drive_improve_file(dir, brief)
 }
 
 // Adds LABEL to issue N (`gh api -X POST .../labels`); true when it went through.
@@ -1882,12 +1910,15 @@ fn drive_wip_end(dry: bool, brief: String) throws {
 	}
 }
 
-// The labels of an issue filed from a report's `Found:` in AREA: `ready`
-// and AREA, `decision` instead of `ready` when `Needs:` asks for something.
+// The labels of an issue filed from a report's `Found:` in AREA: `ready`,
+// AREA and `bugs` (the bug lane takes it, owner 2026-11-15; the improvement
+// lane relabels what is no compiler defect), `decision` instead of `ready`
+// when `Needs:` asks for something.
 fn drive_found_labels(needs: String, area: String) -> Vec[String] {
 	let mut status: String = "decision"
 	if needs == "" || drive_word(needs) == "none" { status = "ready" }
-	return [status, area]
+	if area == "bugs" { return [status, area] }
+	return [status, area, "bugs"]
 }
 
 // The title of an issue filed from FOUND: its first 80 characters, cut at a
@@ -1919,7 +1950,7 @@ fn drive_found_body(name: String, issue: String, found: String, needs: String) -
 	if needs != ""
 		&& drive_word(needs) != "none" { body = body + f"\n## Needs\n\n{needs.trim()}\n" }
 	body = body
-		+ "\n## To build\n\n- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`).\n- [ ] Fix it where it lives, with a test in `tests/compiler/`.\n"
+		+ "\n## To build\n\n- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`).\n- [ ] Fix it where it lives, with a test in `tests/compiler/tests/`.\n"
 	body = body + "\n## Done when\n\nThe probe gives the specified result and its test is green.\n"
 	return body + drive_footer()
 }
@@ -1939,33 +1970,80 @@ fn drive_found_file(dir: String, brief: String) throws {
 	let name = drive_stem(brief.clone())
 	let area = drive_stem(dir.clone())
 	let body = drive_found_body(name.clone(), drive_issue(brief), found.clone(), needs.clone())
-	let file = process::run("mktemp", []).stdout.trim().clone()
-	fs::write(file.clone(), fs::Root::Anywhere, body)
-	let mut call: Vec[String] = [
-		"api",
-		f"repos/{drive_repo()}/issues",
-		"-f",
-		f"title={drive_found_title(found)}",
-		"-F",
-		f"body=@{file}",
-	]
-	for l in drive_found_labels(needs, area) { call.push(f"labels[]={l}") }
-	let mut args: Vec[String] = []
-	for a in call {
-		if a.starts_with("labels[]=") { args.push("-f") }
-		args.push(a.clone())
-	}
-	args.push("--jq")
-	args.push(".number")
-	let made = process::run("gh", args)
-	process::run("rm", ["-f", file])
-	let number = made.stdout.trim().clone()
-	if !made.ok || number == "" {
+	let number = drive_issue_new(drive_found_title(found), body, drive_found_labels(needs, area))
+	if number == "" {
 		println(f"file failed for {name}")
 		return
 	}
 	drive_append(f"{dir}/found.txt", f"{name}: filed #{number}")
 	println(f"FILED #{number} {name}")
+}
+
+// Files an issue with TITLE, BODY and LABELS (`gh api .../issues`); its
+// number, "" when the call failed.
+fn drive_issue_new(title: String, body: String, labels: Vec[String]) -> String throws {
+	let file = process::run("mktemp", []).stdout.trim().clone()
+	fs::write(file.clone(), fs::Root::Anywhere, body)
+	let mut args: Vec[String] = ["api", f"repos/{drive_repo()}/issues", "-f", f"title={title}", "-F", f"body=@{file}"]
+	for l in labels {
+		args.push("-f")
+		args.push(f"labels[]={l}")
+	}
+	args.push("--jq")
+	args.push(".number")
+	let made = process::run("gh", args)
+	process::run("rm", ["-f", file])
+	if !made.ok { return "" }
+	return made.stdout.trim().clone()
+}
+
+// What a report says went badly besides its `Found:` (owner, 2026-11-15:
+// nobody has to ask a builder again): `Issue:` when not `complete`,
+// `Deviation:`, `Needs:` and `Friction:` when not `none`, as
+// `<field>: <text>` lines; empty when all is well.
+fn drive_improve_items(text: String) -> Vec[String] {
+	let mut items: Vec[String] = []
+	for key in ["Issue", "Deviation", "Needs", "Friction"] {
+		let value = drive_field(text.clone(), key.clone())
+		let word = drive_word(value.clone())
+		if value == "" || word == "none" || word == "complete" || word == "-" { continue }
+		items.push(f"{key}: {value}")
+	}
+	return items
+}
+
+// The body of an issue filed for the improvement lane from ITEMS of the
+// report of NAME (issue ISSUE): where it came from, the items, a *To build*
+// and a *Done when* for the lane, then the footer.
+fn drive_improve_body(name: String, issue: String, items: Vec[String]) -> String {
+	let from = if issue == "" { f"the run of `{name}`" } else { f"the run of `{name}` (#{issue})" }
+	let mut body = f"Filed by the driver from the report of {from} for the improvement lane (owner, 2026-11-15).\n\n## Reported\n\n"
+	for item in items { body = body + f"- {item}\n" }
+	body = body
+		+ "\n## To build\n\n- [ ] Judge each point: a general fix (a rule in `docs/`, a script, the driver, a template, a check that turns builders red for nothing), a compiler defect (relabel `bugs`), or noise.\n- [ ] Build the general fix, or close the point with a one-line reason.\n"
+	body = body + "\n## Done when\n\nEach point is built as a general fix, moved to the bug lane, or closed as noise with its reason.\n"
+	return body + drive_footer()
+}
+
+// Files what a report says went badly (drive_improve_items) as one issue
+// labelled `ready` and `improve` for the improvement lane (owner,
+// 2026-11-15); `<brief>: improve #N` goes into DIR/found.txt (a report with
+// that line is not filed again) and `IMPROVE #N <brief>` is printed.
+fn drive_improve_file(dir: String, brief: String) throws {
+	let report = drive_report_of(brief.clone())
+	if report == "" { return }
+	let items = drive_improve_items(drive_read(report))
+	if items.len() == 0 { return }
+	let name = drive_stem(brief.clone())
+	if drive_read(f"{dir}/found.txt").contains(f"{name}: improve #") { return }
+	let title = drive_found_title(f"{name}: {items[0]}")
+	let number = drive_issue_new(title, drive_improve_body(name.clone(), drive_issue(brief), items), ["ready", "improve"])
+	if number == "" {
+		println(f"improve file failed for {name}")
+		return
+	}
+	drive_append(f"{dir}/found.txt", f"{name}: improve #{number}")
+	println(f"IMPROVE #{number} {name}")
 }
 
 // A report's `Found:` (a defect outside the builder's step) does not stop the
@@ -2661,6 +2739,17 @@ fn main() throws {
 		print(drive_found_body(args[2].clone(), args[3].clone(), args[4].clone(), args[5].clone()))
 		return
 	}
+	if args.len() == 5 && args[1] == "--improve-issue" {
+		let items = drive_improve_items(drive_read(args[4]))
+		if items.len() == 0 {
+			println("none")
+			return
+		}
+		println(drive_found_title(f"{args[2]}: {items[0]}"))
+		println("ready,improve")
+		print(drive_improve_body(args[2].clone(), args[3].clone(), items))
+		return
+	}
 	// The cleanup alone (#1521), in the directory it runs in.
 	if args.len() == 2 && args[1] == "--cleanup" {
 		drive_cleanup(drive_exe(), false)
@@ -2805,5 +2894,5 @@ fn main() throws {
 		drive_stop(exe.clone(), dry, dir, (action.strip_prefix("STOP ") ?? ""))
 		return
 	}
-	drive_settle(exe.clone(), dir)
+	drive_settle(exe, dir)
 }

@@ -152,8 +152,12 @@ fn sv_cancelling(xj: i64, yj: i64) -> Vec[i64]? {
 /// Column `j` eliminated between `x` and `y` with the smallest multipliers,
 /// the result divided by its gcd. Between two bounds `Σ <= 0` the
 /// multipliers must both be positive, so `x[j]` and `y[j]` have opposite
-/// signs; the caller asks so, an equality may take either sign.
+/// signs; the caller asks so, an equality may take either sign. `null`
+/// where a multiplier leaves `i64`, or `j` is no column of both.
 pub fn sv_dense_eliminate(x: ref Vec[i64], y: ref Vec[i64], j: i64) -> Vec[i64]? {
+	if j < 0 || j >= x.len() || j >= y.len() {
+		return null
+	}
 	let ab = sv_cancelling(x[j], y[j]) ?? return null
 	return sv_dense_combine(ab[0], x, ab[1], y)
 }
