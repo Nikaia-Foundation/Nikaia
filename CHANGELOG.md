@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1382] — 2026-11-15
+
+**Builders' changes (#1073, #1187)**
+- Lowering: a text put into a keep is handed to a map's `get`, `contains_key` or `remove` once lent, after a block that binds its name again too; a `for` or match-arm binding of that name is lent as its own value (#1073).
+- pre-push: `version` (bump.py check) runs on the index copy, so another agent's unstaged `.nika` no longer turns it red (#1187)
+
 ## [0.0.1381] — 2026-11-15
 
 **Builders' changes (#1598, #1599, #1601, #1602, #1606, #1607)**
