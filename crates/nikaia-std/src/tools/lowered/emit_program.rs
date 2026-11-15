@@ -157,6 +157,7 @@ impl EmitState {
         let entry = self.entry_point(world, host.user_parallelism(), &channel, &types, &passing);
         if entry.is_empty() { return; }
         out.push(&entry);
+        if self.as_a_module() { return; }
         if host.skip_free_at_exit() { out.push(&emit_program_allocator()); } else if host.counts_heap() { out.push("\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n"); }
     }
 }

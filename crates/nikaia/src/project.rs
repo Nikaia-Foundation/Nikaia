@@ -1415,8 +1415,44 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             && promised == program.contracts;
         let mut checked_facts = BTreeMap::new();
         let mut refused: Vec<String> = Vec::new();
+        // **In a batch, a dependency's file is checked once** (#1582): the
+        // key names every dependency file and its source.
+        let lsp = diagnostics::is_collecting();
+        let batch_digest = (BATCH.load(std::sync::atomic::Ordering::Relaxed) && !lsp).then(|| {
+            let mut all = String::new();
+            for unit in program.units.iter().filter(|unit| unit.package.is_some()) {
+                all += &format!(
+                    "{}\n{}\n// --- unit ---\n",
+                    unit.path.display(),
+                    unit.source
+                );
+            }
+            assets::digest(all.as_bytes())
+        });
         let (checked, book) = crate::proofs::with_book(book, || -> Result<()> {
             for (at, unit) in program.units.iter().enumerate() {
+                let batch_key = match (&batch_digest, &unit.package) {
+                    (Some(digest), Some(_)) => Some((unit.path.clone(), digest.clone())),
+                    _ => None,
+                };
+                let remembered = batch_key.as_ref().and_then(|key| {
+                    BATCH_CHECKED
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .get(key)
+                        .cloned()
+                });
+                match remembered {
+                    Some(Ok(said)) => {
+                        warnings += &said;
+                        continue;
+                    }
+                    Some(Err(said)) => {
+                        refused.push(said);
+                        continue;
+                    }
+                    None => {}
+                }
                 let contracts = match &unit.package {
                     Some(package) => program
                         .as_its_own
@@ -1428,8 +1464,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                 let keep = facts_reusable && unit.package.is_none();
                 // **`nikaia lsp` asks where a name is declared** (#1396): every
                 // unit's facts, a refused unit's too, kept apart from the
-                // emitter's.
-                let lsp = diagnostics::is_collecting();
+                // emitter's (`lsp`, above).
                 let checked = crate::proofs::for_unit(
                     &unit.path,
                     &unit.source,
@@ -1458,10 +1493,22 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                 // (an `NK1171` in a callee makes it read as pausing, and the
                 // `sync` caller's `NK2202` was all a build said), so every
                 // unit says its findings and the tallies are joined.
+                let remember = |said: Result<String, String>| {
+                    if let Some(key) = &batch_key {
+                        BATCH_CHECKED
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner())
+                            .insert(key.clone(), said);
+                    }
+                };
                 match checked {
-                    Ok(said) => warnings += &said,
+                    Ok(said) => {
+                        remember(Ok(said.clone()));
+                        warnings += &said
+                    }
                     Err(e) => match e.downcast_ref::<diagnostics::Refused>() {
                         Some(tally) if tally.at.is_none() && tally.finding.is_none() => {
+                            remember(Err(tally.message.clone()));
                             refused.push(tally.message.clone());
                             continue;
                         }
@@ -3804,6 +3851,52 @@ impl WrapperHost {
     }
 }
 
+/// **Lowers `source` as the project build does**, for the wrapper
+/// (`ProjectDriveWrapperHost::lower`): under the settings the environment
+/// carries and the packages its manifest names; a `program` counts the heap
+/// (ADR-327 D9), and `root` lowers it as that module of another crate
+/// (`Build::crate_root`, #1582), whose allocator the crate declares.
+fn wrapper_lower(
+    source: &Path,
+    no_cache: bool,
+    allowlist: Option<&Path>,
+    shown: Option<&str>,
+    program: bool,
+    root: Option<&str>,
+) -> Result<Lowered> {
+    let mut settings = Settings::from_env()?;
+    if let Some(root) = root {
+        settings = settings.rooted_at(root);
+    }
+    settings.build.counts_heap = program && root.is_none();
+    // **The packages, found the same way the project build finds
+    // them**: the manifest above the `.nika` path Cargo handed over,
+    // read here because a dependency list is not a switch the
+    // environment could carry. `packages_of` is the one resolution
+    // rule, so the two cannot disagree about what the program is.
+    let manifest = Manifest::find(source)?;
+    let packages = match manifest.root() {
+        Some(root) => packages_of(&manifest, root, false)?,
+        None => Vec::new(),
+    };
+    let shown_outer = SHOWN_AS.with(|cell| cell.replace(shown.map(String::from)));
+    let lowered = lower_reading(source, &settings, no_cache, &packages, allowlist);
+    SHOWN_AS.with(|cell| cell.replace(shown_outer));
+    lowered
+}
+
+/// **Set in a wrapper that lowers a batch of test programs** (#1582): its
+/// programs share their dependencies, so a dependency's file is checked once
+/// for all of them ([`BATCH_CHECKED`]), not once per program.
+static BATCH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// What the check of a dependency's file said, in a batch ([`BATCH`]): by
+/// the file and the digest of every dependency file's source, which is all a
+/// dependency's ledger is inferred from (ADR-100 D5: the dependencies first,
+/// the program's own package last). `Ok` its warnings, `Err` its refusal.
+static BATCH_CHECKED: std::sync::Mutex<BTreeMap<(PathBuf, String), Result<String, String>>> =
+    std::sync::Mutex::new(BTreeMap::new());
+
 impl project_drive::ProjectDriveWrapperHost for WrapperHost {
     fn source_path(&self) -> Option<PathBuf> {
         self.invocation.borrow().source_path()
@@ -3841,26 +3934,33 @@ impl project_drive::ProjectDriveWrapperHost for WrapperHost {
         shown: Option<&str>,
         program: bool,
     ) -> HostResult<(String, Vec<PathBuf>)> {
-        let lowered = (|| {
-            let mut settings = Settings::from_env()?;
-            settings.build.counts_heap = program;
-            // **The packages, found the same way the project build finds
-            // them**: the manifest above the `.nika` path Cargo handed over,
-            // read here because a dependency list is not a switch the
-            // environment could carry. `packages_of` is the one resolution
-            // rule, so the two cannot disagree about what the program is.
-            let manifest = Manifest::find(source)?;
-            let packages = match manifest.root() {
-                Some(root) => packages_of(&manifest, root, false)?,
-                None => Vec::new(),
-            };
-            let shown_outer = SHOWN_AS.with(|cell| cell.replace(shown.map(String::from)));
-            let lowered = lower_reading(source, &settings, no_cache, &packages, allowlist);
-            SHOWN_AS.with(|cell| cell.replace(shown_outer));
-            lowered
-        })();
-        let lowered = self.held(lowered)?;
+        let lowered = self.held(wrapper_lower(
+            source, no_cache, allowlist, shown, program, None,
+        ))?;
         Ok((lowered.rust, lowered.sources))
+    }
+
+    /// **A batch's programs lowered on every core** (#1582): each as the
+    /// module `roots[k]` names, its dependencies' files checked once for the
+    /// whole batch ([`BATCH_CHECKED`]). A program that does not lower is
+    /// nothing; the batch leaves it out, and it is built alone.
+    fn lower_batch(
+        &self,
+        sources: &[PathBuf],
+        roots: &[String],
+        no_cache: bool,
+    ) -> Vec<Option<(String, Vec<PathBuf>)>> {
+        BATCH.store(true, std::sync::atomic::Ordering::Relaxed);
+        let order: Vec<usize> = (0..sources.len()).collect();
+        crate::sysroot::in_parallel(&order, None, |k| {
+            let lowered = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                wrapper_lower(&sources[k], no_cache, None, None, true, Some(&roots[k]))
+            }));
+            match lowered {
+                Ok(Ok(lowered)) => Some((lowered.rust, lowered.sources)),
+                _ => None,
+            }
+        })
     }
 
     fn write_if_changed(&self, path: &Path, text: &str) -> HostResult<()> {

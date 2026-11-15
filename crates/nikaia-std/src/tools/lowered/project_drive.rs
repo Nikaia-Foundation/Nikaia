@@ -726,6 +726,7 @@ pub trait ProjectDriveWrapperHost {
     fn run(&self) -> Result<i32, Box<dyn std::error::Error>>;
     fn crate_name(&self) -> Option<String>;
     fn lower(&self, source: &std::path::Path, no_cache: bool, allowlist: Option<&std::path::Path>, shown: Option<&str>, program: bool) -> Result<(String, Vec<fs::Path>), Box<dyn std::error::Error>>;
+    fn lower_batch(&self, sources: &[fs::Path], roots: &[String], no_cache: bool) -> Vec<Option<(String, Vec<fs::Path>)>>;
     fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), Box<dyn std::error::Error>>;
     fn replace_source(&self, generated: &std::path::Path);
     fn args(&self) -> Vec<String>;
@@ -758,8 +759,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple56190| {
-        let (a, b) = __nikaia_tuple56190;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple56726| {
+        let (a, b) = __nikaia_tuple56726;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {

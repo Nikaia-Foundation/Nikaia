@@ -144,8 +144,8 @@ impl EmitState {
                 out.push(test_gate);
                 out.push(&self.derives(world, name));
                 if is_extern { out.push("#[repr(C)]\n"); }
-                let vis = if is_public { "pub " } else { "" };
                 let enum_name = emit_text(world, name);
+                let vis = if is_public || self.named_by_main(world, &enum_name) { "pub " } else { "" };
                 let mut params = "";
                 if self.borrowing.contains(&enum_name) { params = "<'a>"; }
                 out.push(&format!("{}enum {}{} {{\n", vis, escaped_name(&enum_name), params));
@@ -219,7 +219,7 @@ impl EmitState {
                 out.push(test_gate);
                 out.push(&derives);
                 if is_extern { out.push("#[repr(C)]\n"); }
-                let vis = if is_public { "pub " } else { "" };
+                let vis = if is_public || self.named_by_main(world, &text) { "pub " } else { "" };
                 let mut body = EmitOut::empty();
                 let slots = self.emit_item_slots(&text);
                 for field in fields.iter() {

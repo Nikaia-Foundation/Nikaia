@@ -4,35 +4,15 @@
 pub fn project_batch_var() -> String { String::from("NIKAIA_TEST_BATCH") }
 
 pub fn project_batch_module(k: i64, rust: &str) -> Option<String> {
-    let lines: Vec<String> = rust.split("\n").map(|line| { nikaia_std::block::Text::from(line.to_string()) }).collect::<Vec<_>>();
-    let mut main_at: i64 = -1;
-    for (at, line) in lines.iter().enumerate().map(|(at, item)| (at as i64, item)) { if line.starts_with("fn main(") || line.starts_with("async fn main(") { main_at = at; } }
-    if main_at < 0 { return None; }
-    let root = format!("crate::p{}::", k); #[allow(clippy::redundant_locals)] let lines = lines;
-    let mut parts: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(nikaia_std::concat::plus(format!("pub mod p{} ", k), "{\n"))], nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let lines = lines;
-    let mut allocator = false;
-    for (at, line) in lines.iter().enumerate().map(|(at, item)| (at as i64, item)) {
-        if allocator {
-            allocator = false;
-            continue;
-        }
-        if AsRef::<str>::as_ref(&(line)) == AsRef::<str>::as_ref(&("#[global_allocator]")) {
-            allocator = true;
-            continue;
-        }
-        let mut text = nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(line.replace("$crate::", "\u{1}")).replace("crate::", &root)).replace("\u{1}", "$crate::"));
-        if at == main_at || text.starts_with("enum ") || text.starts_with("struct ") || text.starts_with("type ") { text = nikaia_std::block::Text::from(nikaia_std::concat::plus("pub ", text)); }
-        parts.push(nikaia_std::block::Text::from(nikaia_std::concat::plus(text, "\n")));
-    }
-    parts.push(String::from("}\n"));
-    Some(nikaia_std::block::Text::from(parts.join("")))
+    if !rust.starts_with("pub fn main(") && !rust.contains("\npub fn main(") { return None; }
+    Some(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(format!("pub mod p{} ", k), "{\n")), rust)), "\n}\n")))
 }
 
-pub fn project_batch_crate(names: &[String], modules: &[String]) -> String {
+pub fn project_batch_crate(names: &[String], ks: &[i64], modules: &[String]) -> String {
     let mut parts: Vec<String> = nikaia_std::block::List::from_array_in([String::from("#![allow(warnings)]\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n")], nikaia_std::block::Place::Block);
     for module in modules.iter() { parts.push(nikaia_std::block::Text::from(module.to_string())); }
     parts.push(String::from("fn main() -> std::process::ExitCode {\n    match std::env::args().nth(1).as_deref().unwrap_or(\"\") {\n"));
-    for (k, name) in names.iter().enumerate().map(|(at, item)| (at as i64, item)) { parts.push(format!("        {:?} => std::process::Termination::report(p{}::main()),\n", name, k)); }
+    for (name, k) in names.iter().zip(ks.iter().copied()) { parts.push(format!("        {:?} => std::process::Termination::report(p{}::main()),\n", name, k)); }
     parts.push(String::from("        _ => std::process::ExitCode::from(2),\n    }\n}\n"));
     nikaia_std::block::Text::from(parts.join(""))
 }
@@ -42,18 +22,26 @@ pub async fn project_batch_lowered<H: ProjectDriveWrapperHost>(host: &H, list: &
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::throwing(ProjectDriveRefusal::Failed(format!("reading the batch list {}: {}", nikaia_std::fs::path::display(&(list)), error)), &"project_batch_lowered")) },
     };
-    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
-    let mut modules: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
-    let mut sources: Vec<fs::Path> = vec![];
+    #[allow(unused_mut)] let mut listed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut entries: Vec<fs::Path> = vec![];
+    let mut roots: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut listed = listed;
     for line in text.lines() {
         let (name, entry) = match line.split_once("\t") { Some(__nikaia_value) => __nikaia_value, None => continue };
         let path: fs::Path = std::path::PathBuf::from(entry);
-        let (rust, read) = match host.lower(&path, no_cache, None, None, true) {
-            Ok(value) => value,
-            Err(_error) => { continue; },
-        };
-        let module = match project_batch_module(names.len() as i64, &rust) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        names.push(nikaia_std::block::Text::from(name.to_string()));
+        roots.push(format!("crate::p{}", listed.len() as i64));
+        listed.push(nikaia_std::block::Text::from(name.to_string()));
+        entries.push(path);
+    }
+    let lowered = host.lower_batch(&entries, &roots, no_cache); #[allow(unused_mut, clippy::redundant_locals)] let mut listed = listed;
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut listed = listed;
+    let mut ks: Vec<i64> = vec![];
+    let mut modules: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut listed = listed; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+    let mut sources: Vec<fs::Path> = vec![];
+    for (k, made) in lowered.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+        let (rust, read) = match made { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let module = match project_batch_module(k, &rust) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        names.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&listed, nikaia_std::index::at(k))).to_string()));
+        ks.push(k);
         modules.push(module);
         for source in read.iter() { sources.push(nikaia_std::fs::path::clone(&(source))); }
     }
@@ -62,6 +50,6 @@ pub async fn project_batch_lowered<H: ProjectDriveWrapperHost>(host: &H, list: &
         Ok(_) => {},
         Err(error) => { return Err(nikaia_std::error::throwing(ProjectDriveRefusal::Failed(format!("writing {}: {}", nikaia_std::fs::path::display(&(included)), error)), &"project_batch_lowered")); },
     };
-    Ok((project_batch_crate(&names, &modules), sources))
+    Ok((project_batch_crate(&names, &ks, &modules), sources))
 }
 

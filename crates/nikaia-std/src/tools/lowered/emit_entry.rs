@@ -16,6 +16,12 @@ impl EmitState {
         }
         None
     }
+    pub fn as_a_module(&self) -> bool { !self.is_std && self.crate_root != "crate" }
+    pub fn named_by_main(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> bool {
+        if !self.as_a_module() || self.user_main(world).is_none() { return false; }
+        let contract = match self.own_contracts.functions.get("main") { Some(__nikaia_value) => __nikaia_value, None => return false };
+        nikaia_std::list::contains(&contract.fails_with, &name)
+    }
     pub fn entry_point(&self, world: &EmitWorld<'_, '_, '_, '_>, concurrent: bool, channel: &str, types: &[String], passing: &[String]) -> String {
         let fails = match self.user_main(world) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         let (reads, passed) = self.main_words(world, types, passing);
@@ -26,7 +32,8 @@ impl EmitState {
         let mut start: &'static str = "start";
         if !call_pauses(&self.own_contracts, "main") && !concurrent { start = "on_demand"; }
         let mut text: String = String::from("\n// ADR-303 D4: the runtime is running before the program's first\n// statement, so an operation inside it costs no thread wake-up. What\n// starts is what `user_parallelism` allows (ADR-037 D2): the I/O\n// worker always, a pool for user code only at `yes`.\n");
-        text = format!("{}#[allow(dead_code)]\nfn main(){} {{\n", text, ret);
+        let vis = if self.as_a_module() { "pub " } else { "" };
+        text = format!("{}#[allow(dead_code)]\n{}fn main(){} {{\n", text, vis, ret);
         text = format!("{}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n", text);
         text = format!("{}{}", text, reads);
         let mut body: &'static str = "__nikaia_main";

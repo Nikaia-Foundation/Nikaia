@@ -32,6 +32,27 @@ impl EmitState {
         return null
     }
 
+    /// **The program is lowered as a module of another crate** (#1582):
+    /// its root is not the crate's (`Build::crate_root`), as `nikaia test`'s
+    /// batch build lowers each program into the module `p{k}` of one crate.
+    /// Then `main` and what its signature names are `pub`, since the crate's
+    /// own `main` calls it, and the allocator is the crate's, declared once.
+    pub fn as_a_module(ref self) -> bool {
+        return !self.is_std && self.crate_root != "crate"
+    }
+
+    /// **A type the signature of `main` names** (#1582): one of the errors
+    /// it fails with, where the program is lowered as a module
+    /// ([`as_a_module`]). The crate root calling `main` needs it `pub`, as
+    /// Rust refuses a value whose type it may not name.
+    pub fn named_by_main(ref self, world: ref EmitWorld, name: ref String) -> bool {
+        if !self.as_a_module() || self.user_main(world) == null {
+            return false
+        }
+        let contract = self.own_contracts.functions.get("main") ?? return false
+        return contract.fails_with.contains(name)
+    }
+
     /// The `fn main` Rust runs (ADR-303 D4), as the lines of generated code.
     /// `channel` is the failure channel of the program's `main`, `concurrent`
     /// whether user code may run on a pool; `types` are the types of
@@ -53,7 +74,8 @@ impl EmitState {
             start = "on_demand"
         }
         let mut text: String = "\n// ADR-303 D4: the runtime is running before the program's first\n// statement, so an operation inside it costs no thread wake-up. What\n// starts is what `user_parallelism` allows (ADR-037 D2): the I/O\n// worker always, a pool for user code only at `yes`.\n"
-        text = f"{text}#[allow(dead_code)]\nfn main(){ret} {{\n"
+        let vis = if self.as_a_module() { "pub " } else { "" }
+        text = f"{text}#[allow(dead_code)]\n{vis}fn main(){ret} {{\n"
         text = f"{text}    nikaia_std::abort::report_in_nikaia_terms(__NIKAIA_SITES);\n"
         // ADR-360 D4: the words are read and `main`'s preconditions checked
         // before anything starts; a wrong word ends the program here.
