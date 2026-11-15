@@ -381,6 +381,27 @@ fn drive_field(body: String, key: String) -> String {
 	return ""
 }
 
+// Every value of KEY in BODY, one per `KEY:` line, in order (a report may give
+// several `Found:` lines, one defect each, #1677).
+fn drive_fields(body: String, key: String) -> Vec[String] {
+	let prefix = key + ":"
+	let mut out: Vec[String] = []
+	for line in body.split("\n") {
+		let t = line.trim()
+		if t.starts_with(prefix) { out.push((t.strip_prefix(prefix) ?? "").trim().clone()) }
+	}
+	return out
+}
+
+// The `Found:` values of a report that name a defect (not empty, not `none`).
+fn drive_founds(text: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	for f in drive_fields(text, "Found") {
+		if f != "" && drive_word(f.clone()) != "none" { out.push(f) }
+	}
+	return out
+}
+
 fn drive_word(value: String) -> String {
 	return value.split(" ").collect()[0].replace(".", "")
 }
@@ -2025,7 +2046,7 @@ fn drive_found_body(name: String, issue: String, found: String, needs: String) -
 	if needs != ""
 		&& drive_word(needs) != "none" { body = body + f"\n## Needs\n\n{needs.trim()}\n" }
 	body = body
-		+ "\n## To build\n\n- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`).\n- [ ] Fix it where it lives, with a test in `tests/compiler/tests/`.\n"
+		+ "\n## To build\n\n- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`); a behaviour the code does on purpose (name the function or ADR) closes it as by design.\n- [ ] Fix it where it lives, with a test in `tests/compiler/tests/`.\n"
 	body = body + "\n## Done when\n\nThe probe gives the specified result and its test is green.\n"
 	return body + drive_footer()
 }
@@ -2039,19 +2060,24 @@ fn drive_found_file(dir: String, brief: String) throws {
 	let report = drive_report_of(brief.clone())
 	if report == "" { return }
 	let text = drive_read(report)
-	let found = drive_field(text.clone(), "Found")
-	if found == "" || drive_word(found.clone()) == "none" { return }
-	let needs = drive_field(text, "Needs")
+	let needs = drive_field(text.clone(), "Needs")
 	let name = drive_stem(brief.clone())
 	let area = drive_stem(dir.clone())
-	let body = drive_found_body(name.clone(), drive_issue(brief), found.clone(), needs.clone())
-	let number = drive_issue_new(drive_found_title(found), body, drive_found_labels(needs, area))
-	if number == "" {
-		println(f"file failed for {name}")
-		return
+	let issue = drive_issue(brief)
+	for found in drive_founds(text) {
+		let body = drive_found_body(name.clone(), issue.clone(), found.clone(), needs.clone())
+		let number = drive_issue_new(
+			drive_found_title(found),
+			body,
+			drive_found_labels(needs.clone(), area.clone()),
+		)
+		if number == "" {
+			println(f"file failed for {name}")
+		} else {
+			drive_append(f"{dir}/found.txt", f"{name}: filed #{number}")
+			println(f"FILED #{number} {name}")
+		}
 	}
-	drive_append(f"{dir}/found.txt", f"{name}: filed #{number}")
-	println(f"FILED #{number} {name}")
 }
 
 // Files an issue with TITLE, BODY and LABELS (`gh api .../issues`); its
@@ -2133,20 +2159,22 @@ fn drive_improve_file(dir: String, brief: String) throws {
 }
 
 // A report's `Found:` (a defect outside the builder's step) does not stop the
-// batch (supervisor, 2026-11-06): `<brief>: Found: <text>` is appended to
-// DIR/found.txt (created when missing) for the supervisor to file, and the
-// line to print, `FOUND <brief>: Found: <text>` (at most 160 characters), is
-// returned; "" when the report has none (`none` or no line).
+// batch (supervisor, 2026-11-06): for each `Found:` line (one defect each,
+// #1677) `<brief>: Found: <text>` is appended to DIR/found.txt (created when
+// missing) for the supervisor to file, and the lines to print, `FOUND <brief>:
+// Found: <text>` (each at most 160 characters), are returned joined by
+// newlines; "" when the report has none (`none` or no line).
 fn drive_found(dir: String, brief: String) -> String throws {
 	let report = drive_report_of(brief.clone())
 	if report == "" { return "" }
-	let found = drive_field(drive_read(report), "Found")
-	if found == "" || found == "none" { return "" }
-	let line = f"{drive_stem(brief)}: Found: {found}"
-	drive_append(f"{dir}/found.txt", line.clone())
-	let out = f"FOUND {line}"
-	if out.len() <= 160 { return out }
-	return out.bytes[0..157].text() + "..."
+	let mut lines: Vec[String] = []
+	for found in drive_founds(drive_read(report)) {
+		let line = f"{drive_stem(brief.clone())}: Found: {found}"
+		drive_append(f"{dir}/found.txt", line.clone())
+		let out = f"FOUND {line}"
+		if out.len() <= 160 { lines.push(out) } else { lines.push(out.bytes[0..157].text() + "...") }
+	}
+	return lines.join("\n")
 }
 
 // The batch ends at a stop line: its suite runs and is waited for (pushed when

@@ -1,6 +1,7 @@
 // batch.nika and drive.nika (supervisor, 2026-11-06): a report's `Found:` no
 // longer cuts the batch; the driver appends `<brief>: Found: ...` to
-// DIR/found.txt (created when missing) and prints a `FOUND` line. A
+// DIR/found.txt (created when missing) and prints a `FOUND` line, one per
+// `Found:` line (#1677). A
 // `Deviation:` still cuts.
 use std::fs
 use std::process
@@ -36,6 +37,10 @@ fn main() throws {
         print(f"drive {k}: {found.stdout}")
     }
     print("found.txt:\n" + fs::read_to_string(f"{tmp}/found.txt", fs::Root::Anywhere))
+    // One defect per `Found:` line (#1677): two lines are two findings.
+    fs::write(f"{tmp}/b.md.report.md", fs::Root::Anywhere, head + "Found: NK1131 refuses a lent field (probe p.nika)\nFound: describe writes ? for [T; N] (probe q.nika)\nFound: none\nDeviation: none\n")
+    let two = process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--found", tmp.clone(), f"{tmp}/b.md"]; dir: repo.clone())
+    print(f"two: {two.stdout}")
     fs::write(f"{tmp}/a.md.report.md", fs::Root::Anywhere, head + "Found: none\nDeviation: step 2 not built\nChangelog: none\n")
     let cut = process::run(nikaia.clone(), ["run", "scripts/batch.nika", "--", tmp.clone()]; dir: repo.clone())
     print(f"deviation: {cut.stdout}")

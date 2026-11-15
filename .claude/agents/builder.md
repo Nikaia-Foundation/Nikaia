@@ -56,7 +56,11 @@ You build one small slice of an issue in the Nikaia repository and end.
   view or slice defect) that fits the run is fixed in the same run, with a
   `tests/compiler/tests/` test, as its own commit, and named in `Body:`. `Found:`
   holds only what lies outside the area, does not fit the run or needs a
-  decision; the driver files each `Found:` as an issue for the bug lane, and
+  decision. One defect per `Found:` line, with its probe (the snippet and the
+  output it gives today); a second defect is a second `Found:` line, and a
+  behaviour some function or ADR does on purpose is no Found (#1677: one line
+  merged two claims without a probe, and the second was by design). The
+  driver files each `Found:` line as an issue for the bug lane, and
   `Issue:`, `Deviation:`, `Needs:` and `Friction:` (what cost you turns for
   nothing: a tool, a rule, a red check that was not yours) as one issue for the
   improvement lane. Say friction there, not in `Body:`.

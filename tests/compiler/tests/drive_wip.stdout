@@ -14,7 +14,7 @@ a Bytes field filled from a[1..] fails at rustc (Into &[u8] -> Bytes), not cover
 
 ## To build
 
-- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`).
+- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`); a behaviour the code does on purpose (name the function or ADR) closes it as by design.
 - [ ] Fix it where it lives, with a test in `tests/compiler/tests/`.
 
 ## Done when
@@ -38,7 +38,7 @@ supervisor decision
 
 ## To build
 
-- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`).
+- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`); a behaviour the code does on purpose (name the function or ADR) closes it as by design.
 - [ ] Fix it where it lives, with a test in `tests/compiler/tests/`.
 
 ## Done when

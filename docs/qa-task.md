@@ -28,6 +28,6 @@ lane's copy, with the two paths below made the lane's own.
 Fields: Result, Files, Commit, Body (optional), Fixes, Pushed, Tests, Gate, Deviation, Found, Needs, Changelog, Issue, Owner (a question for the owner), Friction, Disk freed, and last `Attribution:` with your commit trailer lines below it.
 * Fields with nothing to say hold the bare word: `done`, `none`.
 * `Result: done` only when every red step is fixed; `partial` otherwise.
-* `Found:` only for a defect this run cannot fix (the driver files it as an issue).
+* `Found:` only for a defect this run cannot fix (the driver files it as an issue): one defect per `Found:` line, with its probe (#1677).
 * `Issue: complete`.
 * Final answer, one line: `done <sha>, report <path>` (or `BLOCKED: ...`).

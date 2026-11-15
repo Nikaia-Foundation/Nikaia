@@ -37,6 +37,11 @@ it, like the checks in `docs/supervisor.md`.
   the function is called from more than one file (ADR-391 D1) (#1465).
   The probe names what it needs in order to fail (which writes keep a field
   rule alive), so a test grown from it still fails before the fix (#1483).
+  One defect per bug issue, each with its own probe: two claims are two
+  issues, and a claim no probe shows is checked against the code first, since
+  a behaviour a function does on purpose is no bug (#1677: a `Found:` merged
+  two claims without a probe, and the second was the describer's rule).
+  A builder's report gives each defect its own `Found:` line for this.
 * **I6. The governing decision**: the ADR and its decision (`ADR-282 D7`) or
   the section of Part I-III that says what is right. Without one, the issue
   says "no decision yet" and is a `decision` issue, not a bug
