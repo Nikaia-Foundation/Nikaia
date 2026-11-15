@@ -4389,3 +4389,8 @@ pub mod json {
     use super::{scalar, IntoEither, IntoEitherMaybe, TextQuoted};
     include!("lowered/json/lowered.rs");
 }
+
+/// **The digest of this lowered set** (#1610): every file `lower-std` wrote
+/// beside this index, and the index above this line. Compiled into the same
+/// crate as the code it names, it is the compiler's identity for its caches.
+pub const LOWERED_DIGEST: &str = "a2044114e443fd8a5ca69ffe8f280afa08a43214ad469e4a54865fea575fe2f0";

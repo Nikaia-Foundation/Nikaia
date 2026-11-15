@@ -7,6 +7,8 @@
 // package's index - moved. `sysroot.rs` keeps the parallel lowering, the cache
 // and `Phases`; the renderer of a finding stays Rust and is the host's.
 
+use std::hash
+
 /// **What `lib.rs` writes by hand beside the package, by the file it serves**:
 /// the names a Rust caller reaches through that file's path, which are Rust
 /// because Nikaia cannot say them - a `Span`'s `usize` doors, and the one call
@@ -423,7 +425,25 @@ pub fn sysroot_package_with_dependencies(package: Vec[(String, String)], depende
     }
     // **Sorted by path** after the index, as `sysroot_committed` reads them.
     files.sort()
+    let digest = sysroot_package_digest(index, files)
+    index.push_str(f"\n/// **The digest of this lowered set** (#1610): every file `lower-std` wrote\n/// beside this index, and the index above this line. Compiled into the same\n/// crate as the code it names, it is the compiler's identity for its caches.\npub const LOWERED_DIGEST: &str = \"{digest}\";\n")
     let mut all: Vec[(String, String)] = [(package[0].0.clone(), index)]
     all.extend(files)
     return all
+}
+
+/// **The digest of a lowered set** (#1610): SHA-256 over the index and each
+/// file's path and its own digest, in the order written, so two sets differ
+/// in it exactly when a file of them does.
+fn sysroot_package_digest(index: ref String, files: ref Vec[(String, String)]) -> String {
+    let mut all: String = ""
+    all.push_str(hash::sha256_hex(index.bytes().collect()))
+    all.push_str("\n")
+    for (path, text) in files {
+        all.push_str(path)
+        all.push_str("\n")
+        all.push_str(hash::sha256_hex(text.bytes().collect()))
+        all.push_str("\n")
+    }
+    return hash::sha256_hex(all.bytes().collect())
 }

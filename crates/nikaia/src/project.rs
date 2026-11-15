@@ -1228,7 +1228,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             &self.layout.lock,
             &self.layout.store,
             env!("NIKAIA_RUSTC_VERSION"),
-            env!("NIKAIA_COMPILER"),
+            crate::compiler_identity(),
         ) {
             Ok(cache) => *self.cache.borrow_mut() = Some(cache),
             Err(error) => eprintln!("warning: the build cache is unavailable: {error:#}"),
@@ -2705,7 +2705,7 @@ impl Project {
         let mut lock = Lockfile::load(
             &lock_path,
             env!("NIKAIA_RUSTC_VERSION"),
-            env!("NIKAIA_COMPILER"),
+            crate::compiler_identity(),
         )?;
         if lock.dependencies == resolved {
             return Ok(());
@@ -3510,7 +3510,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn compiler(&self) -> String {
-        env!("NIKAIA_COMPILER").to_text()
+        crate::compiler_identity().to_text()
     }
 
     fn toolchain_is_new_enough(&self) -> Option<String> {

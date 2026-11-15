@@ -322,8 +322,23 @@ pub fn sysroot_package_with_dependencies(package: &[(String, String)], dependenc
         for (file, text) in theirs.iter() { files.push((format!("{}/{}/{}", SYSROOT_TOOLS_FILES, name, file), nikaia_std::block::Text::from(text.to_string()))); }
     }
     files.sort();
+    let digest = sysroot_package_digest(&index, &files);
+    index.push_str(&format!("\n/// **The digest of this lowered set** (#1610): every file `lower-std` wrote\n/// beside this index, and the index above this line. Compiled into the same\n/// crate as the code it names, it is the compiler's identity for its caches.\npub const LOWERED_DIGEST: &str = \"{}\";\n", digest));
     let mut all: Vec<(String, String)> = vec![(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&package, (0) as usize) }.0.to_string()), index)];
     all.extend(files);
     all
+}
+
+pub(crate) fn sysroot_package_digest(index: &str, files: &[(String, String)]) -> String {
+    let mut all: String = String::from("");
+    all.push_str(&hash::sha256_hex(&index.bytes().collect::<Vec<_>>()));
+    all.push_str("\n");
+    for (path, text) in files.iter() {
+        all.push_str(path);
+        all.push_str("\n");
+        all.push_str(&hash::sha256_hex(&text.bytes().collect::<Vec<_>>()));
+        all.push_str("\n");
+    }
+    hash::sha256_hex(&all.bytes().collect::<Vec<_>>())
 }
 

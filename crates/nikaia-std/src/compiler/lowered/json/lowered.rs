@@ -35,3 +35,8 @@ pub mod main {
     #[allow(unused_imports)]
     pub use super::{Value, Member, Error, ConvertError, parse, as_i64, as_u64, as_f64, to_string};
 }
+
+/// **The digest of this lowered set** (#1610): every file `lower-std` wrote
+/// beside this index, and the index above this line. Compiled into the same
+/// crate as the code it names, it is the compiler's identity for its caches.
+pub const LOWERED_DIGEST: &str = "f9650e8e079c31da69209b0c5c40bbcc119daa51918c9f5c0de13cdb4ab470e3";

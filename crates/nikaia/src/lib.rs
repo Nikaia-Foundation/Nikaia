@@ -52,3 +52,25 @@ pub mod type_rules;
 pub mod types;
 pub mod view_changes;
 pub mod views;
+
+/// **This compiler's identity for its caches** (ADR-021 D3, #801, #1610):
+/// the fingerprint `build.rs` takes of the sources it can read safely (the
+/// compiler's Rust, the `.nika` files, the ledgers, rustc, `Cargo.lock`)
+/// together with the digest `lower-std` wrote into the lowered set this
+/// binary was compiled from (`LOWERED_DIGEST`). The lowered files are not
+/// read by `build.rs`: in a shared checkout they can change between its run
+/// and nikaia-std's compile, and the binary would be named after code it does
+/// not hold.
+pub fn compiler_identity() -> &'static str {
+    static IDENTITY: std::sync::OnceLock<std::string::String> = std::sync::OnceLock::new();
+    IDENTITY.get_or_init(|| {
+        orchestrator::cache::sha256_hex(
+            format!(
+                "{}\n{}",
+                env!("NIKAIA_COMPILER"),
+                nikaia_std::tools::LOWERED_DIGEST
+            )
+            .as_bytes(),
+        )
+    })
+}

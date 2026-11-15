@@ -1319,13 +1319,6 @@ struct LoweredBefore {
     compiler: Option<String>,
 }
 
-/// **Which compiler wrote an entry** (#667, #801): the fingerprint of the
-/// compiler's sources, `.nika` files, `std` ledgers, rustc and `Cargo.lock`
-/// (`build.rs`), not the binary's bytes. A rebuild of the same sources, in any
-/// checkout, keeps every entry; a change to the lowering misses once. `NIKAIA_LOWER_CACHE_SALT` in the environment
-/// separates entries by hand while a lowering is being worked on.
-const COMPILER_IDENTITY: &str = env!("NIKAIA_COMPILER");
-
 impl LoweredBefore {
     /// No cache: nothing is read and nothing is written.
     fn none() -> LoweredBefore {
@@ -1335,9 +1328,16 @@ impl LoweredBefore {
         }
     }
 
+    /// **Which compiler wrote an entry** (#667, #801, #1610): the fingerprint of
+    /// the compiler's sources, `.nika` files, `std` ledgers, rustc and `Cargo.lock`
+    /// (`build.rs`) with the digest of the lowered set compiled in
+    /// ([`crate::compiler_identity`]), not the binary's bytes. A rebuild of the same sources, in any
+    /// checkout, keeps every entry; a change to the lowering misses once. `NIKAIA_LOWER_CACHE_SALT` in the environment
+    /// separates entries by hand while a lowering is being worked on.
     fn open() -> LoweredBefore {
         LoweredBefore::with_compiler(&format!(
-            "{COMPILER_IDENTITY}{}",
+            "{}{}",
+            crate::compiler_identity(),
             std::env::var("NIKAIA_LOWER_CACHE_SALT").unwrap_or_default()
         ))
     }
@@ -1438,7 +1438,7 @@ mod tests {
             LoweredBefore::open().compiler,
             LoweredBefore::open().compiler
         );
-        assert!(!COMPILER_IDENTITY.contains('/'));
+        assert!(!crate::compiler_identity().contains('/'));
     }
 
     /// #801: what a file's cache entry follows in a two-file package.

@@ -779,7 +779,7 @@ impl ComptimeBundleHost for BundleHost {
     }
 
     fn compiler(&self) -> String {
-        env!("NIKAIA_COMPILER").to_text()
+        crate::compiler_identity().to_text()
     }
 
     fn rustc_version(&self) -> String {
