@@ -45,7 +45,7 @@ use crate::check::MethodCalls;
 use super::{Ledger, Sync};
 
 /// One call that a `sync` function may not make, declared in Nikaia
-/// (`nikaia-std/src/tools/sync.nika`): the statement it is in, the caller and
+/// (`nikaia-std/src/compiler/sync.nika`): the statement it is in, the caller and
 /// what it promised, the callee as the ledger names it, whether a library
 /// answered, whether the callee never pauses and does not promise it
 /// ([ADR-288](../../../docs/specification/adr/adr-288.md) D28), and whether it

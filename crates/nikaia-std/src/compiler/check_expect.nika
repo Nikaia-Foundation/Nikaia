@@ -1,0 +1,328 @@
+// crates/nikaia-std/src/compiler/check_expect.nika
+//
+// **Where a found type meets the one a position wants** - moved from the
+// compiler's checker (ADR-294, #125, #558, C-5g): `expect` (`NK1102` to
+// `NK1106`, `NK1166`), `expect_kept` (the same, with the reason a view of text
+// was kept) and `a_handler_error_of_several`.
+
+use std::collections
+
+/// **A handler's `error` where several error types arrive** (ADR-280 D30): its
+/// members, and none where it is not one.
+pub fn several_errors_of(ty: ref Ty) -> Vec[Ty] sync {
+    return match ty {
+        Ty::Named { name, args, view } => if name == "Error" && args.len() > 1 && !view { args.clone() } else { [] },
+        else => [],
+    }
+}
+
+/// **A float written out where its use asks for an `f32`** (Part I 2.2,
+/// #728): a float literal is an `f64` unless its use asks for an `f32`, so a
+/// float written out - negated, in parentheses, or worked out of others - goes
+/// into an `f32` place, an `f32?`, or a list of them, as it is written.
+pub fn check_float_literal_fits(value: ref Expr, want: ref Ty) -> bool {
+    return match want {
+        Ty::Nullable(inner) => check_float_literal_fits(value, inner),
+        Ty::Named { name, args, .. } => {
+            if name == "f32" && args.len() == 0 {
+                return check_floats_written(value)
+            }
+            if (name == "Vec" || name == "Array") && args.len() >= 1 {
+                return match check_peeled(value) {
+                    Expr::ListLit { items, .. } => {
+                        let mut all = items.len() > 0
+                        for item in items {
+                            if !check_float_literal_fits(item, args[0]) {
+                                all = false
+                            }
+                        }
+                        all
+                    },
+                    Expr::ListRepeat { value: repeated, .. } => check_float_literal_fits(repeated, args[0]),
+                    else => false,
+                }
+            }
+            false
+        },
+        else => false,
+    }
+}
+
+/// Whether a value is floats written out and nothing else.
+pub fn check_floats_written(value: ref Expr) -> bool {
+    return match check_peeled(value) {
+        Expr::LitFloat(_, _) => true,
+        Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && check_floats_written(expr),
+        Expr::Binary { op, lhs, rhs, .. } => (op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul || op == BinaryOp::Div || op == BinaryOp::Rem) && check_floats_written(lhs) && check_floats_written(rhs),
+        else => false,
+    }
+}
+
+/// Whether a float written out in an `f32` place, an `f32?` or a list of
+/// them, is beyond the `f32` range (ADR-285 D33).
+fn check_floats_beyond_f32(value: ref Expr, want: ref Ty) -> bool {
+    return match want {
+        Ty::Nullable(inner) => check_floats_beyond_f32(value, inner),
+        Ty::Named { name, args, .. } => {
+            if name == "f32" && args.len() == 0 {
+                return check_core_places_beyond_f32(value)
+            }
+            if (name == "Vec" || name == "Array") && args.len() >= 1 {
+                return match check_peeled(value) {
+                    Expr::ListLit { items, .. } => {
+                        let mut any = false
+                        for item in items {
+                            if check_floats_beyond_f32(item, args[0]) {
+                                any = true
+                            }
+                        }
+                        any
+                    },
+                    Expr::ListRepeat { value: repeated, .. } => check_floats_beyond_f32(repeated, args[0]),
+                    else => false,
+                }
+            }
+            false
+        },
+        else => false,
+    }
+}
+
+/// The code a position's mismatch is told with.
+fn expect_code(what: ref String) -> String sync {
+    return match what {
+        "let" => "NK1103",
+        "catch" => "NK1103",
+        "returns" => "NK1104",
+        "assign" => "NK1105",
+        "field" => "NK1106",
+        "argument" => "NK1102",
+        "const" => "NK1166",
+        else => "NK1103",
+    }
+}
+
+impl CheckState {
+    /// **A float written out beyond the `f32` range, in an `f32` place**
+    /// (Part I 2.2, ADR-285 D33, #737): `NK1116`, as for `as f32`.
+    pub fn floats_beyond_f32(ref mut self, value: ref Expr, want: ref Ty, span: ref Span) sync {
+        if check_floats_beyond_f32(value, want) {
+            self.findings.push(check_refusal("NK1116", span, "This number is beyond the range of an `f32`.", ["An `f32` holds finite values up to about 3.4e38 either side of zero."], "Keep it an `f64`, or write a number within the `f32` range."))
+        }
+    }
+
+    /// Report only when both sides are known and they disagree.
+    pub fn expect_type(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) sync {
+        if found.is_unknown() {
+            self.literal_receivers_take(want)
+        }
+        if self.fits_through_deref(world, found, want) {
+            return
+        }
+        // A file's name made from text: the position recorded how (`wrap_for`,
+        // ADR-319 D2).
+        if text_as_a_path(found, want) >= 0 {
+            return
+        }
+        // A mapping where a `Bytes` is taken (ADR-373 D3).
+        if mapped_as_bytes(found, want) {
+            return
+        }
+        // An integer widened where no value can be lost (ADR-285 D32).
+        if widened_into(found, want) != null {
+            return
+        }
+        let key = span.start as i64
+        let mut waiting: i64 = -1
+        if self.flow.unsigned_slots.contains_key(key) {
+            let slots = self.flow.unsigned_slots.get(key) ?? return
+            let mut index: i64 = 0
+            for slot in slots {
+                if waiting < 0 && slot.refusal == null && slot.found == found && slot.want == want {
+                    waiting = index
+                }
+                index = index + 1
+            }
+        }
+        let code = expect_code(what)
+        // **An error, one of several, is said as that** (ADR-280 D30).
+        let members = several_errors_of(found)
+        let found_text = found.text()
+        let want_text = want.text()
+        let mut said: String = message(found_text, want_text)
+        let mut help: String = way_out_of_a_mismatch(found, want)
+        // **A `catch` has no declaration to change** (#884): its block hands
+        // back the guarded type, or `null`, which widens it.
+        if what == "catch" && help.ends_with(f", or change the declaration to `{found_text}`.") {
+            help = f"Hand back a `{want_text}`, or `null` to make the value a `{want_text}?` (Part I 7.1)."
+        }
+        if members.len() > 0 {
+            said = said.replace(f"`{found_text}`", f"an error, one of {members_named(members)}")
+            help = "Take it apart first: `match error { … }`, and use what each arm binds."
+        }
+        let finding = check_refusal(code, span, said, [], help)
+        // **Unless the walk may still show it is not negative** (D32): the
+        // refusal waits for its answer.
+        if waiting >= 0 {
+            let held = self.flow.unsigned_slots.get(key) ?? return
+            let mut slots: Vec[CheckUnsignedSlot] = held.clone()
+            slots[waiting].refusal = finding
+            self.flow.unsigned_slots.insert(key, slots)
+            return
+        }
+        self.findings.push(finding)
+    }
+
+    /// [`CheckState::expect_type`], for a position that has the value in hand, so a
+    /// view of text kept where text of its own is wanted can say **why** here
+    /// (ADR-282 D25). `keeper` is the position's own words for what keeps it.
+    /// **A field declared `String` is said as `String`** (ADR-282 D29): one
+    /// that holds static text is typed as the view it is below, and the
+    /// refusals pushed since `before` speak the program's words.
+    fn said_as_declared(ref mut self, present: ref Ty, value: ref Expr?, before: i64) sync {
+        let given = value ?? return
+        if !self.facts.static_field_reads.contains(id_of(check_peeled(given)) as i64) {
+            return
+        }
+        let shown = f"`{present.text()}`"
+        let said = f"`{present.owned().text()}`"
+        if shown == said {
+            return
+        }
+        let mut at = before
+        while at < self.findings.len() {
+            let message = self.findings[at].message.replace(shown, said)
+            self.findings[at].message = message
+            if self.findings[at].help != null {
+                let help = (self.findings[at].help ?? "").replace(shown, said)
+                self.findings[at].help = help
+            }
+            at += 1
+        }
+    }
+
+    /// **A view of a value that copies, where the value is wanted** (ADR-387
+    /// D1, widening ADR-233 D4 from a call to every such place): a name of a
+    /// `ref C` where a `C` or a `C?` is wanted is copied out of, `*name`
+    /// below. A `*` on what an operator made is not Rust, so only a name.
+    pub fn a_view_copied_out(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?) -> bool sync {
+        let given = value ?? return false
+        let named = match given {
+            Expr::Variable(_, _) => true,
+            else => false,
+        }
+        if !named || !self.a_view_that_copies(world, found) {
+            return false
+        }
+        let value_of = unviewed_type(found)
+        let wanted = match want {
+            Ty::Nullable(inner) => inner == value_of,
+            else => want == value_of,
+        }
+        if !wanted {
+            return false
+        }
+        // **A name whose binding already holds the value is not copied again**
+        // (#1291): `let known: u32? = m.get(k)` copied the read at the `let`,
+        // so `return known` reads an `Option<u32>`, not an `Option<&u32>`.
+        let symbol = match given {
+            Expr::Variable(symbol, _) => symbol,
+            else => return true,
+        }
+        let local = self.binding(world.words.resolve(symbol).clone())
+        if local != null {
+            let bound: CheckLocal = local ?? return true
+            if self.flow.declared_options.contains(bound.id) {
+                return true
+            }
+        }
+        self.facts.copied_views.insert(id_of(given) as i64)
+        return true
+    }
+
+    pub fn expect_kept(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?, keeper: ref String, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) sync {
+        // **A place that says its type is a use of the numbers put there**
+        // (ADR-285 D24): a field, a `let`'s annotation, what a function hands
+        // back.
+        if value != null {
+            let given = value ?? return
+            if check_float_literal_fits(given, want) {
+                self.floats_beyond_f32(given, want, span)
+                return
+            }
+            self.number_asked(world, given, want, span, true)
+            let asked = integer_named(value_of_a_copy(want.unseen()))
+            if asked != null && shifts_literals(given) {
+                self.a_shift_asked_as(world, given, asked ?? return, span)
+            }
+            if self.an_open_number_where_none_fits(world, found, want, given, span, what, message) {
+                return
+            }
+        }
+        if self.a_name_in_text(world, want, value, span) {
+            return
+        }
+        // **A view into a position both kinds of text flow into** is borrowed
+        // as it is (ADR-282 D14, ADR-282 D15): that is what the position is
+        // for.
+        let mut either = false
+        if what == "returns" {
+            either = self.flow.expected_either
+        }
+        if what == "field" {
+            either = self.flow.field_either
+            self.flow.field_either = false
+        }
+        if either && a_plain_str_view(found) && a_plain_string(want) {
+            return
+        }
+        // **Into a `String?` the same holds of what is there** (ADR-282 D12):
+        // a view, present or absent, goes into a mixed one as it is, and is
+        // refused from an owned one.
+        let mut present: ref Ty = found
+        let mut nullable = false
+        if views_into_nullable_text(found, want) {
+            if either {
+                return
+            }
+            present = match found {
+                Ty::Nullable(held) => held,
+                else => found,
+            }
+            nullable = true
+        }
+        let mut target: Ty = want.clone()
+        if nullable {
+            target = Ty::Named { name: "String", args: [], view: false }
+        }
+        if self.a_view_copied_out(world, found, want, value) {
+            return
+        }
+        let before = self.findings.len()
+        self.expect_type(world, present, target, span, what, message)
+        self.said_as_declared(present, value, before)
+        if self.findings.len() > before {
+            self.a_view_kept_beside(world, present, target, value, keeper)
+        }
+    }
+
+    /// The notes and the help a kept view adds to the finding just made.
+    fn a_view_kept_beside(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?, keeper: ref String) sync {
+        let mut named: String? = null
+        if value != null {
+            let given = value ?? return
+            match given {
+                Expr::Variable(name, _) => {
+                    named = world.words.resolve(name).clone()
+                },
+                else => {},
+            }
+        }
+        let kept = self.a_view_kept(found, want, named, keeper) ?? return
+        let last = self.findings.len() - 1
+        for note in kept.notes {
+            self.findings[last].notes.push(note.clone())
+        }
+        self.findings[last].help = kept.help.clone()
+    }
+}

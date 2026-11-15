@@ -1,0 +1,439 @@
+// crates/nikaia-std/src/compiler/touch.nika
+//
+// **What an operation reaches, and whether it changes it** (ADR-292, ADR-288
+// D2) - the decisions of the compiler's `contracts::touch`, moved from Rust
+// (ADR-294, #125): when two reached resources might be one and force an
+// order, and the fixpoint that gives every function the `touches` its body
+// earns.
+//
+// The walk that finds what each body reaches and whom it calls is here too
+// (ADR-288 D22): the calls are `tools/foreign.nika`'s walk, what each goes to
+// is `callee_named`, and a method call is the type checker's answer, handed
+// in. What stays Rust is reading a `touches` entry back, the list of kinds
+// this compiler knows, handing in each unit, and the order a set is written
+// in.
+
+use std::collections
+
+/// Which resource a **call** reaches, with the parameter filled in. A ledger
+/// says `file(path)`; a call site says `file` of `"measurements.txt"`, and
+/// this is the second, what two calls are compared on.
+pub struct Reached {
+    pub kind: String,
+    /// The argument that named it, where the compiler could see one. `null`
+    /// means the kind's only resource (`stdout`) **or** an argument this
+    /// compiler cannot evaluate - not told apart, because an unknown argument
+    /// is "might be any of them", which is the answer both want.
+    pub named: String?,
+    /// Where the argument was not readable, so `named` is not a name.
+    pub unknown: bool,
+    pub write: bool,
+}
+
+impl Reached {
+    /// Whether two reached resources might be the same one. Different
+    /// **families** never are (`stdout` and `stderr` are one destination as
+    /// soon as somebody writes `2>&1`); the same family under two different
+    /// known names never are. Everything else might be, and "might be" is the
+    /// answer that keeps the order.
+    pub fn might_be_same(ref self, other: ref Reached) -> bool {
+        if family(self.kind) != family(other.kind) {
+            return false
+        }
+        if self.unknown || other.unknown {
+            return true
+        }
+        let mine = self.named?.clone() ?? return true
+        let theirs = other.named?.clone() ?? return true
+        return mine == theirs
+    }
+
+    /// Whether two reached resources force an order between their operations.
+    /// Two reads never do, however much they overlap: reading does not change
+    /// what the other one sees.
+    pub fn conflicts_with(ref self, other: ref Reached) -> bool {
+        return (self.write || other.write) && self.might_be_same(other)
+    }
+}
+
+/// The family a kind belongs to, which is what two resources are compared
+/// on: the two console handles are one, and every other kind is its own.
+/// Deliberately not the claim that any two resources might coincide - D2
+/// names the file the program named, and ordinary statements (ADR-292 D1) are the escape for
+/// resources that look disjoint and are not.
+fn family(kind: ref String) -> String {
+    if kind == "stderr" {
+        return "stdout"
+    }
+    return kind.clone()
+}
+
+/// **What every function whose claim holds touches**, by name - the greatest
+/// fixpoint, for `sync`'s reason: start from "every function touches
+/// nothing", and take the claim away from anything that reaches one without
+/// it, until nothing changes. Mutual recursion between two functions that
+/// touch nothing keeps the claim, which is right. `unknown` is a body that
+/// reaches something unaccounted for, `outside` what it reaches through
+/// callees a library describes, `calls` whom in this package it calls. The
+/// set is a union over the whole reachable graph, because what a caller
+/// reaches is what everything it calls reaches.
+pub fn touches_of(unknown: ref collections::BTreeMap[String, bool], outside: ref collections::BTreeMap[String, Vec[Touch]], calls: ref collections::BTreeMap[String, collections::BTreeSet[String]]) -> collections::BTreeMap[String, Vec[Touch]] {
+    let mut known: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    for (name, lost) in unknown {
+        known.insert(name.clone(), !lost)
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for (name, called) in calls {
+            let holds = known[name] ?? false
+            if !holds {
+                continue
+            }
+            let mut reaches_unknown = false
+            for callee in called {
+                let theirs = known[callee] ?? false
+                if !theirs {
+                    reaches_unknown = true
+                }
+            }
+            if reaches_unknown {
+                known.insert(name.clone(), false)
+                changed = true
+            }
+        }
+    }
+    let mut settled: collections::BTreeMap[String, Vec[Touch]] = collections::BTreeMap()
+    for (name, holds) in known {
+        if !holds {
+            continue
+        }
+        let mut found: Vec[Touch] = []
+        let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+        let mut todo: Vec[String] = [name.clone()]
+        while todo.len() > 0 {
+            let here = todo.pop() ?? break
+            if seen.contains(here) {
+                continue
+            }
+            seen.insert(here.clone())
+            for touch in outside[here]?.clone() ?? [] {
+                found.push(touch)
+            }
+            for callee in calls[here]?.clone() ?? collections::BTreeSet() {
+                todo.push(callee)
+            }
+        }
+        settled.insert(name.clone(), found)
+    }
+    return settled
+}
+
+/// What one body reaches, before the fixpoint joins it up (ADR-288 D22):
+/// whether something it calls is not accounted for - a name no ledger knows,
+/// a construct that runs something, a described callee whose own touch set is
+/// *"nobody said"* - what it reaches through callees a library describes, and
+/// the functions in this package it calls, whose claims its own rests on.
+pub struct Reach {
+    pub unknown: bool,
+    pub outside: Vec[Touch],
+    pub calls: collections::BTreeSet[String],
+}
+
+/// The graph the walk builds, with the type checker's method calls by the
+/// key it files each body's answers under (ADR-288) - one record, because
+/// every function of a unit reads the one and writes the other.
+pub struct TouchGraph {
+    pub methods: collections::BTreeMap[String, MethodsCalled],
+    pub reaches: collections::BTreeMap[String, Reach],
+}
+
+/// Every function, method and `pub` grammar rule of one unit, into `graph`.
+/// What a call by name goes to is `callee_named`, the one resolution every
+/// analysis shares (ADR-288); a method call is the type checker's answer.
+pub fn unit_touches(program: ref Program, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, own: ref Ledger, library: ref Ledger, mut graph: TouchGraph) {
+    for item in program.items {
+        match item.node {
+            Item::Fn { name, body, .. } => {
+                let key = key_of_function(name, "", names)
+                let mut reach = Reach { unknown: false, outside: [], calls: collections::BTreeSet() }
+                reached_by(seen_in(body, names, unaliased, holes_of, no_root, false), program, names, own, library, reach)
+                methods_reach(graph.methods[key], own, library, reach)
+                graph.reaches.insert(key, reach)
+            }
+            Item::Impl { target, methods, .. } => {
+                let owner = names.resolve(target.name).clone()
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, body, .. } => {
+                            let key = key_of_function(name, owner, names)
+                            let mut reach = Reach { unknown: false, outside: [], calls: collections::BTreeSet() }
+                            reached_by(seen_in(body, names, unaliased, holes_of, no_root, false), program, names, own, library, reach)
+                            methods_reach(graph.methods[key], own, library, reach)
+                            graph.reaches.insert(key, reach)
+                        }
+                        else => {}
+                    }
+                }
+            }
+            // **A `entry` rule is an entry, so it gets the walk too** (ADR-296
+            // D24). Its body is every action block in the grammar: which
+            // rules' actions run with it is the parser backend's question, so
+            // the grammar is the unit - the over-approximation ADR-292 D4
+            // asks for in this column.
+            Item::Grammar(def) => {
+                let mut whole = Reach { unknown: false, outside: [], calls: collections::BTreeSet() }
+                for rule in def.rules {
+                    for alt in rule.alts {
+                        let action = alt.action ?? continue
+                        reached_by(seen_in(action, names, unaliased, holes_of, no_root, false), program, names, own, library, whole)
+                    }
+                }
+                rules_into(def, names, whole, own, library, graph)
+            }
+            else => {}
+        }
+    }
+}
+
+/// The fixpoint over a graph the walk built (`touches_of`).
+pub fn touches_of_graph(graph: ref TouchGraph) -> collections::BTreeMap[String, Vec[Touch]] {
+    let mut unknown: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    let mut outside: collections::BTreeMap[String, Vec[Touch]] = collections::BTreeMap()
+    let mut calls: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    for (name, reach) in graph.reaches {
+        unknown.insert(name.clone(), reach.unknown)
+        outside.insert(name.clone(), reach.outside.clone())
+        calls.insert(name.clone(), reach.calls.clone())
+    }
+    return touches_of(unknown, outside, calls)
+}
+
+// Each `entry` rule of a grammar reaches what the whole grammar does, and the
+// method calls the type checker resolved under the rule's own key.
+fn rules_into(def: ref GrammarDef, names: ref winnow_grammar::InternerContext, whole: ref Reach, own: ref Ledger, library: ref Ledger, mut graph: TouchGraph) {
+    let named = names.resolve(def.name).clone()
+    for rule in def.rules {
+        if !rule.is_entry {
+            continue
+        }
+        let key = f"{named}::{names.resolve(rule.name)}"
+        let mut reach = Reach { unknown: whole.unknown, outside: whole.outside.clone(), calls: whole.calls.clone() }
+        methods_reach(graph.methods[key], own, library, reach)
+        graph.reaches.insert(key, reach)
+    }
+}
+
+// What the calls the walk met reach: a function of this package is a call, a
+// library's brings its touch set, and a `spawn`, a `dsl` statement and a call
+// of something that is not a name are calls nobody can name.
+fn reached_by(seen: ref Vec[Seen], program: ref Program, names: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, mut reach: Reach) {
+    for one in seen {
+        match one {
+            Seen::Call { name, literals, .. } => reached_call(callee_named(names, name.clone(), own, library, program.items), literals, library, reach),
+            Seen::Spawn { .. } => {
+                reach.unknown = true
+            }
+            Seen::Opaque { .. } => {
+                reach.unknown = true
+            }
+            else => {}
+        }
+    }
+}
+
+fn reached_call(callee: ref Callee?, literals: ref Vec[String?], library: ref Ledger, mut reach: Reach) {
+    let known = callee ?? return
+    match known {
+        Callee::Own(name) => {
+            reach.calls.insert(name.clone())
+        }
+        Callee::Library { key, .. } => absorb(library.functions[key], literals, reach),
+        Callee::Opaque(_) => {
+            reach.unknown = true
+        }
+        else => {}
+    }
+}
+
+// The method calls the type checker resolved, which this walk cannot
+// (ADR-288): one of this package is a call, any other brings its touch set.
+fn methods_reach(resolved: ref MethodsCalled?, own: ref Ledger, library: ref Ledger, mut reach: Reach) {
+    let known = resolved ?? return
+    if known.unseen {
+        reach.unknown = true
+    }
+    for callee in known.resolved {
+        if own.functions.contains_key(callee) {
+            reach.calls.insert(callee.clone())
+        } else {
+            absorb(library.functions[callee], [], reach)
+        }
+    }
+}
+
+// Take a described callee's touch set into a caller's, or give up. A resource
+// named by a **parameter** is named in the callee's words: the caller reaches
+// the resource its argument names where that argument is a text literal
+// (`literals`, by the call's argument; #1354), and anything else would be
+// claiming something about the wrong resource.
+fn absorb(contract: ref FnContract?, literals: ref Vec[String?], mut reach: Reach) {
+    if !touches_said(contract) {
+        reach.unknown = true
+        return
+    }
+    let known = contract ?? return
+    for touch in known.touches {
+        if touch.parameter != null {
+            let named = literal_for(known, touch.parameter ?? "", literals) ?? ""
+            if named.len() == 0 {
+                reach.unknown = true
+                continue
+            }
+            let mine = Touch { kind: touch.kind.clone(), parameter: null, named: named, write: touch.write }
+            if !holds_touch(reach.outside, mine) {
+                reach.outside.push(mine)
+            }
+        } else if !holds_touch(reach.outside, touch) {
+            reach.outside.push(touch.clone())
+        }
+    }
+}
+
+// The literal a call by name hands the parameter `parameter`, where it is one
+// a ledger can write back (no `"`, `\` or line break in it). A method's
+// `self` may or may not be among the arguments, so a method gives none.
+fn literal_for(contract: ref FnContract, parameter: ref String, literals: ref Vec[String?]) -> String? {
+    let signature = contract.signature ?? return null
+    let mut at = 0
+    for (name, _) in signature.params {
+        if name == "self" {
+            return null
+        }
+        if name == parameter {
+            if at >= literals.len() {
+                return null
+            }
+            let text = literals[at]?.clone() ?? return null
+            if text.contains("\"") || text.contains("\\") || text.contains("\n") {
+                return null
+            }
+            return text
+        }
+        at += 1
+    }
+    return null
+}
+
+fn touches_said(contract: ref FnContract?) -> bool {
+    let known = contract ?? return false
+    return known.touches_known
+}
+
+// A touch named by no parameter is its kind, the resource a literal named, and
+// whether it writes.
+fn holds_touch(touches: ref Vec[Touch], touch: ref Touch) -> bool {
+    for one in touches {
+        if one.kind == touch.kind && one.named == touch.named && one.write == touch.write {
+            return true
+        }
+    }
+    return false
+}
+
+// --- Tests moved from the compiler's `contracts::touch` (ADR-294, #125) ---
+
+fn touch_test_reached(kind: String, named: String?, write: bool) -> Reached {
+    return Reached { kind: kind, named: named, unknown: false, write: write }
+}
+
+test "a touch round trips through its text" {
+    for written in ["file(path) read", "file(path) write", "file('a.txt') write", "stdout write", "stderr write", "args read"] {
+        let touch = touch_of(written) catch {
+            assert(false)
+            return
+        }
+        assert(touch.text() == written)
+    }
+}
+
+test "a touch names its kind and parameter" {
+    let touch = touch_of("file(path) read") catch {
+        assert(false)
+        return
+    }
+    assert(touch.kind == "file")
+    assert((touch.parameter ?? "") == "path")
+    assert(!touch.write)
+
+    let out = touch_of("stdout write") catch {
+        assert(false)
+        return
+    }
+    assert(out.kind == "stdout")
+    assert(out.parameter == null)
+    assert(out.write)
+}
+
+test "a malformed touch says what is wrong" {
+    for written in ["file(path)", "file(path) maybe", "file(path read", "(x) read"] {
+        let mut parsed = true
+        touch_of(written) catch {
+            parsed = false
+        }
+        assert(!parsed)
+    }
+}
+
+/// An unknown kind would be disjoint from everything: written as an assertion
+/// about the wrong answer, so that anyone who makes `conflicts_with` the guard
+/// sees why it cannot be.
+test "an unknown kind would be disjoint from everything" {
+    let typo = touch_test_reached("stdoutt", null, true)
+    assert(!typo.conflicts_with(touch_test_reached("stdout", null, true)))
+    assert(!typo.conflicts_with(touch_test_reached("file", "a.txt", true)))
+}
+
+/// Different kinds never meet. The cheap half of the rule.
+test "different kinds never conflict" {
+    let file = touch_test_reached("file", "a.txt", true)
+    let out = touch_test_reached("stdout", null, true)
+    assert(!file.conflicts_with(out))
+}
+
+/// The two console handles are one destination under `2>&1`.
+test "the two console handles may be one destination" {
+    let out = touch_test_reached("stdout", null, true)
+    let err = touch_test_reached("stderr", null, true)
+    assert(out.conflicts_with(err))
+    assert(err.conflicts_with(out))
+    assert(!out.conflicts_with(touch_test_reached("file", "a.txt", true)))
+    assert(!err.conflicts_with(touch_test_reached("args", null, false)))
+}
+
+/// Two reads never conflict - a processor's rule for two loads.
+test "two reads never conflict" {
+    let one = touch_test_reached("file", "a.txt", false)
+    let same = touch_test_reached("file", "a.txt", false)
+    assert(!one.conflicts_with(same))
+    let written = touch_test_reached("file", "a.txt", true)
+    assert(one.conflicts_with(written))
+    assert(written.conflicts_with(one))
+}
+
+/// Two different files do not conflict even when both are written.
+test "two named resources are compared by name" {
+    let a = touch_test_reached("file", "a.txt", true)
+    let b = touch_test_reached("file", "b.txt", true)
+    assert(!a.conflicts_with(b))
+}
+
+/// A resource the compiler could not name might be any of them: the
+/// fail-closed half.
+test "an unnameable resource conflicts with its whole kind" {
+    let unknown = Reached { kind: "file", named: null, unknown: true, write: true }
+    let read = touch_test_reached("file", "a.txt", false)
+    assert(unknown.conflicts_with(read))
+    assert(read.conflicts_with(unknown))
+    assert(!unknown.conflicts_with(touch_test_reached("stdout", null, true)))
+}

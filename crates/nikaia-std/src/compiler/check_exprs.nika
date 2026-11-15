@@ -1,0 +1,550 @@
+// crates/nikaia-std/src/compiler/check_exprs.nika
+//
+// **Reports about one expression, said with the expression's own words**,
+// moved from the compiler's checker (ADR-294, #125, #558): a bit operation
+// computed in a narrower type (`NK1215`) or beside a comparison (`NK1197`), a
+// collection in an `f"…"` hole (`NK1201`), a loop over a `T?` (`NK1206`), a
+// `??` whose sides are a view and a value (`NK1185`), text of its own given to
+// a name bound to a literal (`NK1105`), a view where text of its own is kept
+// and a condition that is not a `bool` (`NK1108`). The words are
+// `written_expression` over the file's names.
+
+/// The name a tuple's part takes where the help takes it apart: `a`, `b`, …
+fn check_exprs_part_name(index: i64) -> String {
+    let letters = ["a", "b", "c", "d", "e", "f", "g", "h"]
+    if index < 8 {
+        return letters[index].clone()
+    }
+    return f"p{index}"
+}
+
+/// The ledger entry of `name` (`yaml::Node`) where it is a type a package
+/// this file `use`s declares, with the fields or variants it records (#1422):
+/// not a `std` module's, which this file reached with `use std::…`, and not a
+/// Rust crate's, which the ledger records with neither. A dependency's entries
+/// are in the program's ledger or in `library`, under its qualified name.
+fn check_exprs_package_type(world: ref CheckWorld, std_in_scope: ref collections::BTreeSet[String], name: ref String) -> TypeContract? sync {
+    let parts: Vec[ref String] = name.split("::").collect()
+    let head = parts[0].to_string()
+    if std_in_scope.contains(head) || !imports_a_package(world.here, head) {
+        return null
+    }
+    for ledger in [world.own, world.library] {
+        let contract = ledger.types.get(name) ?? continue
+        if contract.fields.len() > 0 || contract.variants.len() > 0 {
+            return contract.clone()
+        }
+    }
+    return null
+}
+
+/// Whether a type is exactly `String`, held.
+pub fn a_plain_string(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => !view && args.len() == 0 && name == "String",
+        else => false,
+    }
+}
+
+/// Whether a type is exactly a view of text, `ref String` below.
+fn a_plain_str_view(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => view && args.len() == 0 && name == "str",
+        else => false,
+    }
+}
+
+/// What an expression's shape is for `narrow_by_width`: the operator in
+/// backticks, and what the reader should write; empty where the shape is not
+/// one that depends on the width.
+fn width_dependent(world: ref CheckWorld, value: ref Expr, into: ref String) -> Vec[String] {
+    return match value {
+        Expr::Binary { op, lhs, rhs, .. } => if op.is_bitwise() {
+            width_of_binary(world, op, lhs, rhs, into)
+        } else {
+            []
+        },
+        Expr::Unary { op, expr, .. } => if op == UnaryOp::Not {
+            ["`!`", f"!({written_expression(world.words, expr)} as {into})"]
+        } else {
+            []
+        },
+        Expr::MethodCall { receiver, method, .. } => width_of_method(world, receiver, method, into),
+        else => [],
+    }
+}
+
+fn width_of_binary(world: ref CheckWorld, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, into: ref String) -> Vec[String] {
+    let sign = binary_op_text(op)
+    let left = written_expression(world.words, lhs)
+    let mut right = written_expression(world.words, rhs)
+    if op != BinaryOp::Shl && op != BinaryOp::Shr {
+        right = f"({right} as {into})"
+    }
+    return [f"`{sign}`", f"({left} as {into}) {sign} {right}"]
+}
+
+fn width_of_method(world: ref CheckWorld, receiver: ref Expr, method: winnow_grammar::Symbol, into: ref String) -> Vec[String] {
+    let name = world.words.resolve(method).clone()
+    if !name.starts_with("wrapping_") && !name.starts_with("saturating_") && !name.starts_with("truncating_") && !name.starts_with("bits_as_") && !name.starts_with("rotate_") {
+        return []
+    }
+    return [f"`{name}`", f"({written_expression(world.words, receiver)} as {into}).{name}(…)"]
+}
+
+impl CheckState {
+    /// **`NK1215`: a bit operation computed in a narrower type than the one it
+    /// is put into** (ADR-285 D9): `a & b` and the `wrapping_` family depend on
+    /// the width, so widening before and after give different numbers. True
+    /// where it said so.
+    pub fn narrow_by_width(ref mut self, world: ref CheckWorld, value: ref Expr, into: ref String, span: ref Span) -> bool sync {
+        let found = width_dependent(world, value, into)
+        if found.len() == 0 {
+            return false
+        }
+        let what = found[0].clone()
+        let before = found[1].clone()
+        let whole = written_expression(world.words, value)
+        let message = f"This {what} is computed in a narrower type than the `{into}` it is put into."
+        let note = f"The result of {what} depends on the width, so widening before it and after it give different numbers."
+        let help = f"Say which: `{before}` computes in `{into}`, `({whole}) as {into}` computes first and widens the result."
+        self.findings.push(check_refusal("NK1215", span, message, [note], help))
+        return true
+    }
+
+    /// `NK1197`: a bit operation next to a comparison without parentheses
+    /// (ADR-285 D9). Nikaia binds the bit operations tighter than a comparison
+    /// and C looser, so the line can be read two ways.
+    pub fn a_bit_operation_beside_a_comparison(ref mut self, world: ref CheckWorld, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, at: ref Span) sync {
+        let left_bare = a_bare_bit_operation(lhs)
+        let right_bare = a_bare_bit_operation(rhs)
+        if !left_bare && !right_bare {
+            return
+        }
+        let mut left = written_expression(world.words, lhs)
+        if left_bare {
+            left = f"({left})"
+        }
+        let mut right = written_expression(world.words, rhs)
+        if right_bare {
+            right = f"({right})"
+        }
+        let compared = binary_op_text(op)
+        let note = "Nikaia binds `&`, `|`, `^` and the shifts tighter than a comparison, and C binds them looser, so without parentheses the line can be read two ways."
+        self.findings.push(check_refusal("NK1197", at, "Put parentheses around a bit operation next to a comparison.", [note.clone()], f"Write `{left} {compared} {right}`."))
+    }
+
+    /// `NK1201`: a list, map or set in an `f"…"` hole, which has no text form.
+    /// `spec` is the hole's format spec, where it has one.
+    pub fn a_collection_in_a_hole(ref mut self, world: ref CheckWorld, hole: ref Expr, held: ref Ty, spec: ref String?, span: ref Span) sync {
+        if spec != null && (spec ?? "").contains("?") {
+            return
+        }
+        self.a_value_with_no_text(world, hole, held, span, false)
+    }
+
+    /// **`NK1201`: a value with no text form handed to a print call**
+    /// (#873): `println(x)` writes `x`'s text as `println(f"{x}")` does, so
+    /// what a hole refuses a print call refuses, with the same way out.
+    pub fn a_value_with_no_text_printed(ref mut self, world: ref CheckWorld, value: ref Expr, held: ref Ty, span: ref Span) sync {
+        self.a_value_with_no_text(world, value, held, span, true)
+    }
+
+    /// What a hole of an `f"…"` (`printed` false) or a print call's argument
+    /// (`printed` true) refuses: a collection, or the rest below.
+    fn a_value_with_no_text(ref mut self, world: ref CheckWorld, hole: ref Expr, held: ref Ty, span: ref Span, printed: bool) sync {
+        if !is_a_collection_type(held) {
+            self.a_value_with_no_text_in_a_hole(world, hole, held, span, printed)
+            return
+        }
+        let written = written_expression(world.words, hole)
+        let mut what: String = f"`{held.text()}`"
+        let mut help: String = "Write the parts you want in holes of their own, or build the text in a loop first."
+        if printed {
+            help = "Print the parts you want in holes of an `f\"…\"`, or build the text in a loop first."
+        }
+        if is_a_list_type(held) {
+            what = "a list"
+            let shown = match hole {
+                Expr::Variable(_, _) => written.clone(),
+                Expr::Field { .. } => written.clone(),
+                else => f"({written})",
+            }
+            help = f"Join its elements into text first: `let text = {shown}.iter().join(\", \")`, then write `{{text}}`."
+            if printed {
+                help = f"Join its elements into text first: `let text = {shown}.iter().join(\", \")`, then print `text`."
+            }
+        }
+        if printed {
+            let note = f"A print call writes its value's text, and lists, maps and sets have no text form. `{written}` is {what}."
+            self.findings.push(check_refusal("NK1201", span, f"You can't print {what}.", [note], help))
+            return
+        }
+        let note = f"A hole is written as its value's text, and lists, maps and sets have no text form. `{written}` is {what}."
+        self.findings.push(check_refusal("NK1201", span, f"You can't put {what} in an `f\"…\"` hole.", [note], help))
+    }
+
+    /// `NK1201` for the rest of what has no text form (#638): a range, a
+    /// tuple, a `SharedMut[T]` or `Locked[T]`, and a struct or `enum` of this
+    /// package with no `impl Error`. An
+    /// error's text is its message, and the lowering writes a `Display` for
+    /// it and for a sum of errors; a type from another package is left alone.
+    /// A print call's argument (`printed`) is told the same in its words.
+    fn a_value_with_no_text_in_a_hole(ref mut self, world: ref CheckWorld, hole: ref Expr, held: ref Ty, span: ref Span, printed: bool) sync {
+        let written = written_expression(world.words, hole)
+        let shown = match hole {
+            Expr::Variable(_, _) => written.clone(),
+            Expr::Field { .. } => written.clone(),
+            else => f"({written})",
+        }
+        let ty = held.unseen()
+        let mut what: String = ""
+        let mut kinds: String = ""
+        let mut help: String = ""
+        match ty {
+            Ty::Seq { .. } => {
+                what = "a range"
+                kinds = "a range or a sequence has"
+                help = f"Write the values you want in holes of their own, or write `{{{shown}:?}}` for its debug form."
+                if printed {
+                    help = f"Print the values you want in holes of an `f\"…\"`, or print `f\"{{{shown}:?}}\"` for its debug form."
+                }
+            }
+            Ty::Tuple(parts) => {
+                what = "a tuple"
+                kinds = "a tuple has"
+                let mut names: Vec[String] = []
+                let mut holes: Vec[String] = []
+                let mut index = 0
+                while index < parts.len() {
+                    let letter = check_exprs_part_name(index)
+                    holes.push(f"`{{{letter}}}`")
+                    names.push(letter)
+                    index += 1
+                }
+                let pattern = names.join(", ")
+                let listed = holes.join(" and ")
+                help = f"Take it apart first: `let ({pattern}) = {shown}`, then write {listed}."
+                if printed {
+                    help = f"Take it apart first: `let ({pattern}) = {shown}`, then print {listed} in an `f\"…\"`."
+                }
+            }
+            Ty::Named { name, .. } => {
+                // **A value behind a lock is reached through a door** (Part I
+                // 6.3, #704): `SharedMut[T]` and `Locked[T]` have no text of
+                // their own; `get` takes the value out.
+                if name == "SharedMut" || name == "Locked" {
+                    let mut message = f"You can't put a `{held.text()}` in an `f\"…\"` hole."
+                    let mut note = f"A hole is written as its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{written}` is `{held.text()}`."
+                    let mut out = f"Take the value out first: `let value = {shown}.get()`, then write `{{value}}`."
+                    if printed {
+                        message = f"You can't print a `{held.text()}`."
+                        note = f"A print call writes its value's text, and a value behind a lock has none of its own: it is reached through one of the four doors (Part I 6.3). `{written}` is `{held.text()}`."
+                        out = f"Take the value out first: `let value = {shown}.get()`, then print `value`."
+                    }
+                    self.findings.push(check_refusal("NK1201", span, message, [note], out))
+                    return
+                }
+                if name == "Self" {
+                    return
+                }
+                // **A struct or `enum` of a package this file `use`s** (#1422):
+                // its ledger says what it is made of, and the lowering writes
+                // a text form only for an error of it, as for one of this
+                // package. A `std` type or a Rust crate's is left alone.
+                let mut package_type: TypeContract? = null
+                if name.contains("::") {
+                    package_type = check_exprs_package_type(world, self.std_in_scope, name)
+                }
+                let from_a_package = package_type != null
+                if name.contains("::") && !from_a_package {
+                    return
+                }
+                let is_enum = !from_a_package && self.enums.contains_key(name)
+                let is_struct = !from_a_package && self.structs.contains_key(name)
+                if !is_enum && !is_struct && !from_a_package && !world.own.types.contains_key(name) {
+                    return
+                }
+                let own = world.own.implementations.get("Error")
+                if own != null && (own?.contains(name) ?? false) {
+                    return
+                }
+                let library = world.library.implementations.get("Error")
+                if library != null && (library?.contains(name) ?? false) {
+                    return
+                }
+                if implements_error(world.here, world.beside, name) {
+                    return
+                }
+                let mut fields: Vec[String] = []
+                let mut an_enum = is_enum
+                if is_struct {
+                    let own_fields = self.structs.get(name) ?? return
+                    for field in own_fields {
+                        fields.push(field.name.clone())
+                    }
+                } else if from_a_package {
+                    // Only what another package lets a program read is offered.
+                    let contract = package_type ?? return
+                    for field in contract.fields {
+                        if field.public {
+                            fields.push(field.name.clone())
+                        }
+                    }
+                    an_enum = contract.variants.len() > 0
+                } else if !is_enum {
+                    let contract = world.own.types.get(name) ?? return
+                    for field in contract.fields {
+                        fields.push(field.name.clone())
+                    }
+                    an_enum = contract.variants.len() > 0
+                }
+                if an_enum {
+                    what = f"the `enum` `{name}`"
+                    kinds = "an `enum` that is not an error has"
+                    help = f"Match on it and give each variant its text first, or write `{{{shown}:?}}` for its debug form."
+                    if printed {
+                        help = f"Match on it and give each variant its text first, or print `f\"{{{shown}:?}}\"` for its debug form."
+                    }
+                } else {
+                    what = f"the struct `{name}`"
+                    kinds = "a struct that is not an error has"
+                    if fields.len() == 0 {
+                        help = f"Write `{{{shown}:?}}` for its debug form."
+                        if printed {
+                            help = f"Print `f\"{{{shown}:?}}\"` for its debug form."
+                        }
+                    } else {
+                        let mut holes: Vec[String] = []
+                        for field in fields {
+                            holes.push(f"`{{{shown}.{field}}}`")
+                        }
+                        let listed = holes.join(", ")
+                        help = f"Write its fields in holes of their own: {listed}."
+                        if printed {
+                            help = f"Print its fields in holes of an `f\"…\"`: {listed}."
+                        }
+                    }
+                }
+            }
+            else => return,
+        }
+        let mut called: String = f"`{held.text()}`"
+        if what == "a range" || what == "a tuple" {
+            called = what.clone()
+        }
+        if printed {
+            let note = f"A print call writes its value's text, and {kinds} no text form. `{written}` is {called}."
+            self.findings.push(check_refusal("NK1201", span, f"You can't print {what}.", [note], help))
+            return
+        }
+        let note = f"A hole is written as its value's text, and {kinds} no text form. `{written}` is {called}."
+        self.findings.push(check_refusal("NK1201", span, f"You can't put {what} in an `f\"…\"` hole.", [note], help))
+    }
+
+    /// `NK1206`: a `for` over a `T?`.
+    pub fn a_loop_over_a_nullable(ref mut self, world: ref CheckWorld, over: ref Ty, iter: ref Expr, span: ref Span) sync {
+        let inner = match over {
+            Ty::Nullable(held) => held.text(),
+            else => return,
+        }
+        let written = written_expression(world.words, iter)
+        let note = f"`{written}` is a `{over.text()}`: a `{inner}` or nothing, and a `for` walks a list, not the maybe of one."
+        let help = f"Say what `null` walks first: `for … in {written} ?? [] {{ … }}`, or check it for `null` before the loop."
+        self.findings.push(check_refusal("NK1206", span, f"`{written}` may be `null`, so a `for` can't walk it directly.", [note], help))
+    }
+
+    /// `NK1206` too: a `for` over a value that holds no elements, a number,
+    /// a `bool` or a `struct` or `enum` the package declares (Part I 3.3: a
+    /// `for` walks a sequence; no `impl` gives a type one, NK1117). Without it
+    /// the lowering asked rustc for `.iter()` and NK1343 came back (#1421).
+    /// Fail-open: a type with arguments or one not known here passes.
+    pub fn a_loop_over_what_holds_no_elements(ref mut self, world: ref CheckWorld, over: ref Ty, iter: ref Expr, span: ref Span) sync {
+        let name: String = match over {
+            Ty::Named { name, args, .. } => if args.len() == 0 { name.clone() } else { return },
+            else => return,
+        }
+        let a_number = integer_named(Ty::Named { name: name.clone(), args: [], view: false }) != null || name == "int" || name == "f64" || name == "f32"
+        let a_scalar = a_number || name == "bool" || name == "char"
+        let declared = self.structs.contains_key(name) || self.enums.contains_key(name) || self.parts_beside.contains_key(name)
+        if !a_scalar && !declared {
+            return
+        }
+        let written = written_expression(world.words, iter)
+        let note = f"`{written}` is a `{name}`, which holds no elements: a `for` walks a sequence, a range, a list, a set, a map or what a call produces (Part I 3.3)."
+        let help = if a_number { f"Walk a range up to it: `for … in 0..<{written} {{ … }}`." } else if a_scalar { f"Test it with `if {written} {{ … }}`, or walk a list of such values." } else if self.enums.contains_key(name) { f"Put the values in a list and walk that: `for … in [{written}] {{ … }}`." } else { f"Walk a list the `{name}` holds, `for … in {written}.<field> {{ … }}`, or put the values in a list first." }
+        self.findings.push(check_refusal("NK1206", span, f"A `for` can't walk `{written}`: a `{name}` holds no elements.", [note], help))
+    }
+
+    /// `NK1185`: a `??` whose left side is a view of what a map keeps and whose
+    /// fallback is a value of its own. Fail-open: only where the held type is a
+    /// declared one that moves.
+    pub fn a_fallback_beside_what_a_map_holds(ref mut self, world: ref CheckWorld, read: ref Expr, held: ref Ty, fallback: ref Ty, span: ref Span) sync {
+        if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) {
+            return
+        }
+        let name = match held {
+            Ty::Named { name, .. } => name.clone(),
+            else => return,
+        }
+        if !moves(held) || self.copies_in_the_package.contains(name) {
+            return
+        }
+        let written = written_expression(world.words, read)
+        let message = f"The two sides of `??` don't match: the left is a view of the `{held.text()}` in the map, the fallback a value of its own."
+        let notes: Vec[String] = ["The map keeps its values, so reading one gives a view of it, and `??` has to give back one type.", "Nikaia never makes a copy behind your back."]
+        let help = f"Copy the map's value when you need a `{held.text()}` of your own: `{written}?.clone() ?? …`."
+        self.findings.push(check_refusal("NK1185", span, message, notes, help))
+    }
+
+    /// **A value assigned to a name that started as a literal and is given
+    /// views and text of its own** (ADR-282 D13, D14, #840) goes in as an
+    /// `EitherText`: wrapped on its own, a field read through a `ref`
+    /// parameter lent. True where the name is such.
+    pub fn mixed_text_assigned(ref mut self, world: ref CheckWorld, target: ref Expr, value: ref Expr, found: ref Ty) -> bool sync {
+        let name = match target {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => return false,
+        }
+        if !self.flow.mixed_text.contains(name) {
+            return false
+        }
+        let local = self.binding(name) ?? return false
+        if local.literal == null || !local.ty.is_a_view() {
+            return false
+        }
+        if is_a_choice(value) {
+            // **Arms that read a field through a `ref` parameter are lent, each leaf wrapped on its own** (#841).
+            let text = a_string_type()
+            for leaf in self.value_leaves(world, value) {
+                if (self.arm_type_of(leaf) ?? Ty::Unknown) == text && self.a_place_of_a_lent_parameter(world, leaf) {
+                    self.facts.lent_reads.insert(node_key(leaf))
+                    self.flow.lent_tail_leaves.insert(node_key(leaf))
+                }
+            }
+            self.note_mixed(world, value, false)
+            return true
+        }
+        if self.a_lent_text_place(world, value, found) {
+            self.facts.lent_reads.insert(node_key(value))
+        }
+        self.facts.mixed_leaves.insert(node_key(check_peeled(value)), false)
+        return true
+    }
+
+    /// `NK1105`: text of its own given to a name that started as a literal, so
+    /// can only hold a view. True where it said so.
+    pub fn owned_text_into_a_literal_binding(ref mut self, world: ref CheckWorld, target: ref Expr, found: ref Ty, into: ref Ty, span: ref Span) -> bool sync {
+        let name = match target {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => return false,
+        }
+        let local = self.binding(name) ?? return false
+        let literal = local.literal ?? return false
+        if !a_plain_string(found) || !into.is_a_view() {
+            return false
+        }
+        let message = f"You're giving `{name}` text of its own, but it started as a literal, so it can only hold a view of text."
+        let note = "A literal is text built into the program. A name bound to one is a view of that text, so everything it's given later has to be a view too."
+        let help = f"Declare it as text of its own: `let mut {name}: String = \"{literal}\"`."
+        self.findings.push(check_refusal("NK1105", span, message, [note.clone()], help))
+        return true
+    }
+
+    /// `NK1108`: a condition that is not a `bool`; `why` is the note.
+    pub fn expect_bool(ref mut self, found: ref Ty, span: ref Span, why: ref String) sync {
+        let wanted = Ty::Named { name: "bool", args: [], view: false }
+        if found.fits(wanted) {
+            return
+        }
+        let help: String = "Compare it to get a `bool`: `x != 0`, `text != \"\"`, `xs.len() > 0`."
+        self.findings.push(check_refusal("NK1108", span, f"A condition has to be `true` or `false`, but this is `{found.text()}`.", [why.clone()], help))
+    }
+}
+
+/// A bit operation written without parentheses.
+fn a_bare_bit_operation(side: ref Expr) -> bool {
+    return match side {
+        Expr::Binary { op, grouped, .. } => !grouped && op.is_bitwise(),
+        else => false,
+    }
+}
+
+/// What a view kept where text of its own is wanted says: the notes and the way
+/// out (ADR-282 D12); empty where `found` and `want` are not that pair.
+pub struct CheckKept {
+    pub notes: Vec[String],
+    pub help: String,
+}
+
+impl CheckState {
+    /// **A view of text where the keeper needs text of its own**: the three
+    /// sentences by what the value is - a name bound to a literal, a `ref
+    /// String` parameter, or any other view. `named` is the name where `value`
+    /// is one.
+    pub fn a_view_kept(ref self, found: ref Ty, want: ref Ty, named: ref String?, keeper: ref String) -> CheckKept? sync {
+        if !a_plain_str_view(found) || !a_plain_string(want) {
+            return null
+        }
+        let cost = "Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens."
+        let said = capitalised(keeper)
+        if named == null {
+            return CheckKept { notes: ["This is a view: it points into text that something else owns.", f"{said}, so it needs text of its own.", cost.clone()], help: "Write `.clone()` to copy it here." }
+        }
+        let name = (named ?? "").clone()
+        let local = self.binding(name)
+        if local != null {
+            let held = local ?? return null
+            if held.literal != null {
+                let literal = (held.literal ?? "").clone()
+                let first = f"`{name}` was bound to the literal \"{literal}\", so it's a view of that text."
+                let second = f"{said}, so it needs text of its own. Written directly here, the literal would become text of its own; through the name it can't, because that would change how `{name}` was declared above."
+                let way = f"Write \"{literal}\" here directly, or declare `let {name}: String = \"{literal}\"`."
+                return CheckKept { notes: [first, second], help: way }
+            }
+            if a_parameter_binding(held) {
+                let first = f"`{name}` is declared `ref String`, so the text belongs to the caller, who still has it."
+                let way = f"Declare `{name}: String` so the caller hands its text over, or write `{name}.clone()` to copy it here."
+                return CheckKept { notes: [first, f"{said}, so it needs text of its own.", cost.clone()], help: way }
+            }
+        }
+        return CheckKept { notes: ["This is a view: it points into text that something else owns.", f"{said}, so it needs text of its own.", cost.clone()], help: "Write `.clone()` to copy it here." }
+    }
+}
+
+/// Whether a binding is a parameter.
+fn a_parameter_binding(local: ref CheckLocal) -> bool {
+    if local.without_mut == null {
+        return false
+    }
+    let at = local.without_mut ?? return false
+    return at.kind == CheckKind::Parameter
+}
+
+/// Whether a path of two names is `Enum::Variant` of a declared enum.
+fn a_variant_path(state: ref CheckState, world: ref CheckWorld, segments: ref Vec[winnow_grammar::Symbol]) -> bool {
+    if segments.len() != 2 {
+        return false
+    }
+    return state.is_variant(world.words.resolve(segments[0]), world.words.resolve(segments[1]))
+}
+
+impl CheckState {
+    /// **A value written out**: a variant, a struct literal or the call of a
+    /// variant - a value of its own, not a place.
+    pub fn a_value_written_out(ref self, world: ref CheckWorld, written: ref Expr) -> bool {
+        return match written {
+            Expr::Path(segments, _) => a_variant_path(self, world, segments),
+            Expr::StructLit { .. } => true,
+            Expr::Call { func, .. } => a_call_of_a_variant(self, world, func),
+            else => false,
+        }
+    }
+}
+
+fn a_call_of_a_variant(state: ref CheckState, world: ref CheckWorld, func: ref Expr) -> bool {
+    return match func {
+        Expr::Path(segments, _) => a_variant_path(state, world, segments),
+        else => false,
+    }
+}

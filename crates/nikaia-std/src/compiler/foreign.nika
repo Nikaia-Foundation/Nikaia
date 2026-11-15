@@ -1,0 +1,467 @@
+// crates/nikaia-std/src/compiler/foreign.nika
+//
+// **Every qualified name a unit writes, and every call it makes by name**
+// (ADR-290 D1, D2; ADR-010 D7, ADR-108 D4), for the compiler's
+// `foreign`: the refusal of a call into a crate nothing describes (`NK2504`,
+// `NK2505`) asks which crates a program reaches into, and `nikaia describe`
+// asks which names of one it reaches; `--trust` asks what each call is, and
+// what it hands a `root`. Moved from Rust (ADR-294, #125).
+//
+// **The first walk of the tree in Nikaia.** It reads every item, every
+// statement and every expression the way `contracts::sync`'s walk does - the
+// expressions of a statement without its nested blocks, then the blocks, each
+// read with its own statement's span - and a hole of a literal is an
+// expression of its statement like any other. What the holes of a literal are
+// is the compiler's to say (`holes_of`): an `f"…"`'s are its parts, a
+// template's are parsed out of its text, which only the compiler's parser can.
+// A package's alias is resolved by the compiler too (`unaliased`, ADR-286 D12),
+// because the manifest key is the only name the declaration has.
+
+/// What the walk has met so far, and whether it was asked for names.
+struct Walked {
+    seen: Vec[Seen],
+    with_names: bool,
+}
+
+/// What the walk meets that a reader outside it asks about.
+pub enum Seen {
+    /// A qualified name, beside the span of the item or statement it is
+    /// written in: a written type with a `::` in it, or a path an expression
+    /// holds - its head with the file's alias resolved, the segments after it
+    /// as written.
+    Path { name: String, span: Span },
+    /// A call by name, as written, beside its statement's span, and what it
+    /// hands the parameter called `root` where `root_at` says the callee has
+    /// one (`--trust`, ADR-108 D4); and the text of each argument written
+    /// as a text literal, which names the resource a touch's parameter
+    /// stands for (#1354); and whether it writes the marker `trusted: true`
+    /// (ADR-365 D2), which makes a source's bytes the operator's.
+    Call { name: String, wrote: Wrote?, span: Span, literals: Vec[String?], trusted: bool },
+    /// A bare name, where the walk was asked for them.
+    Name(String),
+    /// A `spawn`: its body runs later and elsewhere, and the walk does not
+    /// descend into it, so a reader of names knows there are some it did not
+    /// see, and a reader of calls one it cannot name.
+    Spawn { span: Span },
+    /// Something else that runs what nobody can name: a `dsl` statement, or a
+    /// call of something that is not a name (`calls::callee_of`'s `Opaque`).
+    Opaque { span: Span },
+    /// An `overlap` or a `select`, which joins on the executor and so pauses
+    /// whatever it stands in (ADR-292 D16).
+    Joins { construct: String, span: Span },
+}
+
+/// Every qualified name `program` writes and every call it makes by name, in
+/// the order the walk meets them. `root_at` answers where a callee's `root`
+/// parameter stands, or `-1`.
+pub fn written_in(program: ref Program, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync) -> Vec[Seen] {
+    let mut found = Walked { seen: [], with_names: false }
+    for item in program.items {
+        item_names(item.node, item.span, names, unaliased, holes_of, root_at, found)
+    }
+    return found.seen
+}
+
+/// The same walk over one block - a function's body, a grammar's action -
+/// for a reader that asks about one function at a time (`contracts::locks`).
+/// `with_names` asks for every bare name and every `spawn` too, which a
+/// reader of what a body keeps needs (`contracts::keep`, `contracts::keeps`)
+/// and a build's every-file walk does not pay for.
+pub fn seen_in(block: ref Block, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, with_names: bool) -> Vec[Seen] {
+    let mut found = Walked { seen: [], with_names: with_names }
+    block_names(block, names, unaliased, holes_of, root_at, found)
+    return found.seen
+}
+
+/// The same walk from one expression: its own expressions, then the blocks
+/// it holds.
+pub fn seen_in_expression(expr: ref Expr, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, with_names: bool) -> Vec[Seen] {
+    let mut found = Walked { seen: [], with_names: with_names }
+    let nowhere = Span::nowhere()
+    expression_paths(expr, nowhere, names, unaliased, holes_of, root_at, found)
+    expression_blocks(expr, names, unaliased, holes_of, root_at, found)
+    return found.seen
+}
+
+fn item_names(item: ref Item, span: ref Span, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, mut found: Walked) {
+    match item {
+        Item::Fn { args, ret_type, body, .. } => {
+            for arg in args {
+                type_names(arg.ty, span, names, unaliased, found)
+            }
+            maybe_type_names(ret_type, span, names, unaliased, found)
+            block_names(body, names, unaliased, holes_of, root_at, found)
+        }
+        Item::Struct { fields, .. } => {
+            for field in fields {
+                type_names(field.ty, span, names, unaliased, found)
+            }
+        }
+        Item::Impl { methods, .. } => {
+            for method in methods {
+                item_names(method.node, method.span, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        else => {}
+    }
+}
+
+// A written type may name a crate too - `hyper_shim::Handle` in a parameter is
+// as much a reach across the boundary as a call is, and it is the one the
+// crossing rules are about.
+fn type_names(ty: ref Type, span: ref Span, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, mut found: Walked) {
+    let name = unaliased(names.resolve(ty.name))
+    if name.contains("::") {
+        found.seen.push(named_at(name, span))
+    }
+    for argument in ty.generics {
+        type_names(argument, span, names, unaliased, found)
+    }
+    maybe_type_names(ty.code?.result, span, names, unaliased, found)
+}
+
+fn maybe_type_names(ty: ref Type?, span: ref Span, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, mut found: Walked) {
+    type_names(ty ?? return, span, names, unaliased, found)
+}
+
+// A block's statements: a `let`'s written type, the paths each statement's
+// expressions hold, and then the blocks inside it.
+fn block_names(block: ref Block, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, mut found: Walked) {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Let { ty, .. } => maybe_type_names(ty, stmt.span, names, unaliased, found),
+            else => {}
+        }
+        statement_paths(stmt.node, stmt.span, names, unaliased, holes_of, root_at, found)
+        statement_blocks(stmt.node, names, unaliased, holes_of, root_at, found)
+    }
+}
+
+// Every expression a statement holds, without descending into nested blocks -
+// those are walked separately, so that each keeps its own statement's span.
+fn statement_paths(stmt: ref Stmt, span: ref Span, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, mut found: Walked) {
+    match stmt {
+        Stmt::Let { value, .. } => expression_paths(value, span, names, unaliased, holes_of, root_at, found),
+        Stmt::Comptime { value, .. } => expression_paths(value, span, names, unaliased, holes_of, root_at, found),
+        Stmt::Assign { target, value, .. } => {
+            expression_paths(target, span, names, unaliased, holes_of, root_at, found)
+            expression_paths(value, span, names, unaliased, holes_of, root_at, found)
+        }
+        Stmt::For { iter, .. } => expression_paths(iter, span, names, unaliased, holes_of, root_at, found),
+        Stmt::While { cond, .. } => expression_paths(cond, span, names, unaliased, holes_of, root_at, found),
+        Stmt::Return(value) => maybe_expression_paths(value, span, names, unaliased, holes_of, root_at, found),
+        Stmt::Expr(value) => expression_paths(value, span, names, unaliased, holes_of, root_at, found),
+        else => {}
+    }
+}
+
+fn maybe_expression_paths(expr: ref Expr?, span: ref Span, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, mut found: Walked) {
+    expression_paths(expr ?? return, span, names, unaliased, holes_of, root_at, found)
+}
+
+// Every path inside an expression, the holes of a literal included, and not
+// inside the bodies of nested blocks.
+fn expression_paths(expr: ref Expr, span: ref Span, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, mut found: Walked) {
+    // What the expression is itself, before its holes and its parts: the
+    // order `contracts::sync` names the first place a body pauses in.
+    match expr {
+        Expr::Spawn { .. } => found.seen.push(Seen::Spawn { span: span.clone() }),
+        Expr::Dsl { .. } => found.seen.push(Seen::Opaque { span: span.clone() }),
+        Expr::Overlap(_, _) => found.seen.push(Seen::Joins { construct: "overlap", span: span.clone() }),
+        Expr::Select(_, _) => found.seen.push(Seen::Joins { construct: "select", span: span.clone() }),
+        Expr::Call { func, args, config, .. } => a_named_call(func, args, config, span, names, root_at, found),
+        else => {}
+    }
+    for hole in holes_of(expr) {
+        expression_paths(hole, span, names, unaliased, holes_of, root_at, found)
+    }
+    match expr {
+        Expr::Path(segments, _) => {
+            if segments.len() > 0 {
+                found.seen.push(named_at(path_name(segments, names, unaliased), span))
+            }
+        }
+        Expr::Variable(name, _) => {
+            if found.with_names {
+                found.seen.push(Seen::Name(names.resolve(name).clone()))
+            }
+        }
+        Expr::Call { func, args, config, .. } => {
+            expression_paths(func, span, names, unaliased, holes_of, root_at, found)
+            for arg in args {
+                expression_paths(arg, span, names, unaliased, holes_of, root_at, found)
+            }
+            for setting in config {
+                expression_paths(setting.value, span, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::MethodCall { receiver, args, config, .. } => {
+            expression_paths(receiver, span, names, unaliased, holes_of, root_at, found)
+            for arg in args {
+                expression_paths(arg, span, names, unaliased, holes_of, root_at, found)
+            }
+            for setting in config {
+                expression_paths(setting.value, span, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::SafeMethod { receiver, args, config, .. } => {
+            expression_paths(receiver, span, names, unaliased, holes_of, root_at, found)
+            for arg in args {
+                expression_paths(arg, span, names, unaliased, holes_of, root_at, found)
+            }
+            for setting in config {
+                expression_paths(setting.value, span, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::Binary { lhs, rhs, .. } => {
+            expression_paths(lhs, span, names, unaliased, holes_of, root_at, found)
+            expression_paths(rhs, span, names, unaliased, holes_of, root_at, found)
+        }
+        Expr::Unary { expr, .. } => expression_paths(expr, span, names, unaliased, holes_of, root_at, found),
+        Expr::Try(inner, _) => expression_paths(inner, span, names, unaliased, holes_of, root_at, found),
+        Expr::Async(inner, _, _, _) => expression_paths(inner, span, names, unaliased, holes_of, root_at, found),
+        Expr::Throw(inner, _) => expression_paths(inner, span, names, unaliased, holes_of, root_at, found),
+        Expr::Cast { expr, .. } => expression_paths(expr, span, names, unaliased, holes_of, root_at, found),
+        Expr::Field { base, .. } => expression_paths(base, span, names, unaliased, holes_of, root_at, found),
+        Expr::SafeField { base, .. } => expression_paths(base, span, names, unaliased, holes_of, root_at, found),
+        Expr::Index { base, index, .. } => {
+            expression_paths(base, span, names, unaliased, holes_of, root_at, found)
+            expression_paths(index, span, names, unaliased, holes_of, root_at, found)
+        }
+        Expr::Range { start, end, .. } => {
+            expression_paths(start, span, names, unaliased, holes_of, root_at, found)
+            expression_paths(end, span, names, unaliased, holes_of, root_at, found)
+        }
+        Expr::Tuple(parts, _) => {
+            for part in parts {
+                expression_paths(part, span, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::Coalesce { value, fallback, .. } => {
+            expression_paths(value, span, names, unaliased, holes_of, root_at, found)
+            expression_paths(fallback, span, names, unaliased, holes_of, root_at, found)
+        }
+        Expr::TryCatch { expr, .. } => expression_paths(expr, span, names, unaliased, holes_of, root_at, found),
+        Expr::If { cond, .. } => expression_paths(cond, span, names, unaliased, holes_of, root_at, found),
+        Expr::Match { value, arms, .. } => {
+            expression_paths(value, span, names, unaliased, holes_of, root_at, found)
+            for arm in arms {
+                maybe_expression_paths(arm.guard, span, names, unaliased, holes_of, root_at, found)
+                expression_paths(arm.body, span, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                maybe_expression_paths(field.value, span, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::ListRepeat { value, count, .. } => {
+            expression_paths(value, span, names, unaliased, holes_of, root_at, found)
+            expression_paths(count, span, names, unaliased, holes_of, root_at, found)
+        }
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                expression_paths(item, span, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::With { base, fields, .. } => {
+            expression_paths(base, span, names, unaliased, holes_of, root_at, found)
+            for field in fields {
+                maybe_expression_paths(field.value, span, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::Return(value, _) => maybe_expression_paths(value, span, names, unaliased, holes_of, root_at, found),
+        Expr::Select(arms, _) => {
+            for arm in arms {
+                expression_paths(arm.value, span, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        else => {}
+    }
+}
+
+// Every block a statement holds.
+fn statement_blocks(stmt: ref Stmt, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, mut found: Walked) {
+    match stmt {
+        Stmt::For { body, .. } => block_names(body, names, unaliased, holes_of, root_at, found),
+        Stmt::While { body, .. } => block_names(body, names, unaliased, holes_of, root_at, found),
+        Stmt::Let { value, .. } => expression_blocks(value, names, unaliased, holes_of, root_at, found),
+        Stmt::Comptime { value, .. } => expression_blocks(value, names, unaliased, holes_of, root_at, found),
+        Stmt::Expr(value) => expression_blocks(value, names, unaliased, holes_of, root_at, found),
+        Stmt::Assign { target, value, .. } => {
+            expression_blocks(target, names, unaliased, holes_of, root_at, found)
+            expression_blocks(value, names, unaliased, holes_of, root_at, found)
+        }
+        Stmt::Return(value) => {
+            expression_blocks(value ?? return, names, unaliased, holes_of, root_at, found)
+        }
+        else => {}
+    }
+}
+
+// Every block an expression holds, the body of a lambda passed as an argument
+// included: a trailing lambda runs during the call it is given to.
+fn expression_blocks(expr: ref Expr, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, mut found: Walked) {
+    match expr {
+        Expr::Block(block, _) => block_names(block, names, unaliased, holes_of, root_at, found),
+        Expr::AsyncGroup(block, _, _, _, _) => block_names(block, names, unaliased, holes_of, root_at, found),
+        Expr::Unsafe(block, _) => block_names(block, names, unaliased, holes_of, root_at, found),
+        Expr::Overlap(block, _) => block_names(block, names, unaliased, holes_of, root_at, found),
+        Expr::Closure { body, .. } => block_names(body, names, unaliased, holes_of, root_at, found),
+        Expr::Call { func, args, config, .. } => {
+            expression_blocks(func, names, unaliased, holes_of, root_at, found)
+            for arg in args {
+                expression_blocks(arg, names, unaliased, holes_of, root_at, found)
+            }
+            for setting in config {
+                expression_blocks(setting.value, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::MethodCall { receiver, args, config, .. } => {
+            expression_blocks(receiver, names, unaliased, holes_of, root_at, found)
+            for arg in args {
+                expression_blocks(arg, names, unaliased, holes_of, root_at, found)
+            }
+            for setting in config {
+                expression_blocks(setting.value, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::SafeMethod { receiver, args, config, .. } => {
+            expression_blocks(receiver, names, unaliased, holes_of, root_at, found)
+            for arg in args {
+                expression_blocks(arg, names, unaliased, holes_of, root_at, found)
+            }
+            for setting in config {
+                expression_blocks(setting.value, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            expression_blocks(cond, names, unaliased, holes_of, root_at, found)
+            block_names(then_branch, names, unaliased, holes_of, root_at, found)
+            block_names(else_branch ?? return, names, unaliased, holes_of, root_at, found)
+        }
+        Expr::TryCatch { expr, handler, .. } => {
+            expression_blocks(expr, names, unaliased, holes_of, root_at, found)
+            block_names(handler, names, unaliased, holes_of, root_at, found)
+        }
+        Expr::Match { value, arms, .. } => {
+            expression_blocks(value, names, unaliased, holes_of, root_at, found)
+            for arm in arms {
+                maybe_expression_blocks(arm.guard, names, unaliased, holes_of, root_at, found)
+                expression_blocks(arm.body, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::Select(arms, _) => {
+            for arm in arms {
+                expression_blocks(arm.value, names, unaliased, holes_of, root_at, found)
+                block_names(arm.body, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        // **Through every expression that holds others** (#494): a block under
+        // `+`, a cast, `??` or a field is the function's as much as one under
+        // a call, and a call in it was invisible to `sync`, `touches`,
+        // `throws` and the build-time rule.
+        Expr::Binary { lhs, rhs, .. } => {
+            expression_blocks(lhs, names, unaliased, holes_of, root_at, found)
+            expression_blocks(rhs, names, unaliased, holes_of, root_at, found)
+        }
+        Expr::Unary { expr, .. } => expression_blocks(expr, names, unaliased, holes_of, root_at, found),
+        Expr::Try(inner, _) => expression_blocks(inner, names, unaliased, holes_of, root_at, found),
+        Expr::Async(inner, _, _, _) => expression_blocks(inner, names, unaliased, holes_of, root_at, found),
+        Expr::Throw(inner, _) => expression_blocks(inner, names, unaliased, holes_of, root_at, found),
+        Expr::Cast { expr, .. } => expression_blocks(expr, names, unaliased, holes_of, root_at, found),
+        Expr::Field { base, .. } => expression_blocks(base, names, unaliased, holes_of, root_at, found),
+        Expr::SafeField { base, .. } => expression_blocks(base, names, unaliased, holes_of, root_at, found),
+        Expr::Index { base, index, .. } => {
+            expression_blocks(base, names, unaliased, holes_of, root_at, found)
+            expression_blocks(index, names, unaliased, holes_of, root_at, found)
+        }
+        Expr::Range { start, end, .. } => {
+            expression_blocks(start, names, unaliased, holes_of, root_at, found)
+            expression_blocks(end, names, unaliased, holes_of, root_at, found)
+        }
+        Expr::Tuple(parts, _) => {
+            for part in parts {
+                expression_blocks(part, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::Coalesce { value, fallback, .. } => {
+            expression_blocks(value, names, unaliased, holes_of, root_at, found)
+            expression_blocks(fallback, names, unaliased, holes_of, root_at, found)
+        }
+        Expr::ListRepeat { value, count, .. } => {
+            expression_blocks(value, names, unaliased, holes_of, root_at, found)
+            expression_blocks(count, names, unaliased, holes_of, root_at, found)
+        }
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                expression_blocks(item, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                maybe_expression_blocks(field.value, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::With { base, fields, .. } => {
+            expression_blocks(base, names, unaliased, holes_of, root_at, found)
+            for field in fields {
+                maybe_expression_blocks(field.value, names, unaliased, holes_of, root_at, found)
+            }
+        }
+        Expr::Return(value, _) => maybe_expression_blocks(value, names, unaliased, holes_of, root_at, found),
+        else => {}
+    }
+}
+
+fn maybe_expression_blocks(expr: ref Expr?, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, mut found: Walked) {
+    expression_blocks(expr ?? return, names, unaliased, holes_of, root_at, found)
+}
+
+// `h::serve_once` as `hyper_shim::serve_once`: the head with the file's alias
+// resolved, the rest as written.
+fn path_name(segments: ref Vec[winnow_grammar::Symbol], names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync) -> String {
+    let mut name = unaliased(names.resolve(segments[0]))
+    for k in 1..<segments.len() {
+        let segment = names.resolve(segments[k])
+        name = f"{name}::{segment}"
+    }
+    return name
+}
+
+fn named_at(name: String, span: ref Span) -> Seen {
+    return Seen::Path { name: name, span: span.clone() }
+}
+
+// A call by a name or a path, as written, and what it hands a `root`.
+fn a_named_call(func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span, names: ref winnow_grammar::InternerContext, root_at: fn(ref String) -> i64 sync, mut found: Walked) {
+    let name = match func {
+        Expr::Variable(name, _) => names.resolve(name).clone(),
+        Expr::Path(segments, _) => written_path(names, segments),
+        // `id[i64](3)` is a call of `id` (Part I 4.7, ADR-288: the callee is
+        // named before its arguments), so it takes `id`'s promise (#1095).
+        Expr::Index { base, .. } => match base {
+            Expr::Variable(name, _) => names.resolve(name).clone(),
+            Expr::Path(segments, _) => written_path(names, segments),
+            else => "",
+        },
+        else => "",
+    }
+    if name.len() == 0 {
+        found.seen.push(Seen::Opaque { span: span.clone() })
+        return
+    }
+    let at = root_at(name)
+    let mut wrote: Wrote? = null
+    if at >= 0 && at < args.len() {
+        wrote = written_root(names, args[at])
+    }
+    let mut literals: Vec[String?] = []
+    for arg in args {
+        literals.push(match arg {
+            Expr::LitStr { text, .. } => text.clone(),
+            else => null,
+        })
+    }
+    found.seen.push(Seen::Call { name: name, wrote: wrote, span: span.clone(), literals: literals, trusted: says_trusted(names, config) })
+}

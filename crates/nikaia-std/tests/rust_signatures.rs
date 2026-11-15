@@ -2,7 +2,7 @@
 //! Rust, which is the whole of what
 //! [ADR-290](../../../docs/specification/adr/adr-290.md) D16 decided.
 //!
-//! `src/tools/rust.nika` is the source; `src/tools/rust.rs` beside it is what
+//! `src/compiler/rust.nika` is the source; `src/compiler/rust.rs` beside it is what
 //! `nikaia lower-std` made of it and what this links against. There is no
 //! process here and no C ABI: `nikaia_std::tools::rust::file` is a function call, and
 //! what comes back is `Vec<Item>` with `&str` views into the text that was

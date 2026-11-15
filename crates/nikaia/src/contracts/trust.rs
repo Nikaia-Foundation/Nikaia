@@ -4,7 +4,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 //
 // Where a program's bytes came from (ADR-010).
 //
-// **The adapter of `nikaia-std/src/tools/trust.nika`** (ADR-294 D1, D2): the
+// **The adapter of `nikaia-std/src/compiler/trust.nika`** (ADR-294 D1, D2): the
 // module's decisions - which written root is a way around the root check, and
 // what `--trust` says - are Nikaia. What stays here is what it reads, which is
 // the compiler's: the call walk and the ledger, handed over as names, `bool`s
@@ -78,7 +78,7 @@ pub struct Root {
 }
 
 /// Which of the two spellings D4 lists a root is, declared in Nikaia
-/// (`nikaia-std/src/tools/trust.nika`).
+/// (`nikaia-std/src/compiler/trust.nika`).
 pub use nikaia_std::tools::trust::Wrote;
 
 /// What `--trust` names where a method call could not be resolved, so the
@@ -396,5 +396,5 @@ pub fn trusted_maps(parsed: &Parsed, library: &Ledger) -> MapPlan {
 }
 
 /// The `let`s, parameters and results that keep the fast hash
-/// (`nikaia-std/src/tools/trust.nika`).
+/// (`nikaia-std/src/compiler/trust.nika`).
 pub use nikaia_std::tools::trust::MapPlan;

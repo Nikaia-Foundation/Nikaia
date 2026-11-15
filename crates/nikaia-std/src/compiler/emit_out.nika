@@ -1,0 +1,166 @@
+// crates/nikaia-std/src/compiler/emit_out.nika
+//
+// **The text the emitter writes and where each part of it came from**, moved
+// from `emit/mod.rs` (ADR-294, #125, #558): the buffer, and one entry for every
+// run of it that a source span wrote. Entries are kept in the order they were
+// recorded, so "innermost first" survives an `append`. The compiler's
+// `SourceMap` is built from them once, when the module is done.
+//
+// Also here since #1180 (`String::pop`, `String::insert_str`): taking a `&`
+// back off the end of the buffer, and text put in after the first `{` or
+// before the last `}`, the map moved along.
+
+/// One run of the generated text and the source span that wrote it.
+pub struct EmitMapEntry {
+    pub start: i64,
+    pub end: i64,
+    pub source: Span,
+    pub unit: i64,
+}
+
+/// The narrowest entry of a source map whose emitted text covers `offset`:
+/// the map holds the innermost first, as the emitter records a node before
+/// anything that encloses it.
+pub fn emit_out_locate(entries: ref Vec[EmitMapEntry], offset: i64) -> EmitMapEntry? {
+    entries.iter().find(fn(entry) { entry.start <= offset && offset < entry.end })?.clone()
+}
+
+/// A source map as it reads once its module's text has been placed `by` bytes
+/// into a larger file, and tagged with the file it came from: a program of
+/// several modules is emitted one module at a time and joined, and this keeps
+/// ADR-300's promise across the join.
+pub fn emit_out_placed(mut entries: Vec[EmitMapEntry], by: i64, unit: i64) {
+    for mut entry in entries {
+        entry.start += by
+        entry.end += by
+        entry.unit = unit
+    }
+}
+
+/// The generated text so far, and the map of it.
+pub struct EmitOut {
+    pub buf: String,
+    pub entries: Vec[EmitMapEntry],
+    /// How many `unsafe { … }` blocks of a proved operation the text being
+    /// written is inside (ADR-306 D26): a proved read inside a proved index
+    /// writes no second `unsafe`, which `rustc` would call unnecessary.
+    pub unsafe_depth: i64,
+}
+
+impl EmitOut {
+    /// An empty buffer and an empty map.
+    pub fn empty() -> EmitOut {
+        return EmitOut { buf: "", entries: [], unsafe_depth: 0 }
+    }
+
+    pub fn push(ref mut self, text: ref String) {
+        self.buf.push_str(text)
+    }
+
+    /// Opens the `unsafe` block a proved operation stands in: `unsafe { `,
+    /// only where no such block is open already (ADR-306 D26).
+    pub fn open_unsafe(ref mut self) {
+        if self.unsafe_depth == 0 {
+            self.buf.push_str("unsafe { ")
+        }
+        self.unsafe_depth += 1
+    }
+
+    /// Closes what `open_unsafe` opened: ` }` once the outermost is done.
+    pub fn close_unsafe(ref mut self) {
+        self.unsafe_depth -= 1
+        if self.unsafe_depth == 0 {
+            self.buf.push_str(" }")
+        }
+    }
+
+    /// **Whether the text from `start` begins with an `unsafe { … }` block and
+    /// goes on after it** (ADR-306 D26): `unsafe { add(i, 3) } == n` as a
+    /// statement or a tail, which Rust reads as the block statement and then
+    /// a stray `== n`, so the caller writes it in brackets.
+    pub fn block_headed_from(ref self, start: i64) -> bool {
+        let text = self.buf.bytes[start..].text() catch { return false }
+        if !text.starts_with("unsafe { ") { return false }
+        let mut depth = 0
+        let mut at = 0
+        for b in text.bytes() {
+            at += 1
+            if b as i64 == 123 { depth += 1 }
+            if b as i64 == 125 {
+                depth -= 1
+                if depth == 0 { return at < text.len() }
+            }
+        }
+        return false
+    }
+
+    /// Where what is about to be written starts.
+    pub fn mark(ref self) -> i64 {
+        return self.buf.len()
+    }
+
+    /// Record that everything written since `start` came from `span`. Called
+    /// only after the writing succeeded. The emitter writes one module at a
+    /// time and does not know which: the driver stamps the unit when it joins
+    /// them.
+    pub fn record(ref mut self, span: ref Span, start: i64) {
+        let end = self.buf.len()
+        self.entries.push(EmitMapEntry { start: start, end: end, source: Span { start: span.start, end: span.end }, unit: 0 })
+    }
+
+    /// Text of its own was put in at `at`, `by` bytes long: every entry that
+    /// starts or ends at or after it moves along.
+    pub fn shift_entries(ref mut self, at: i64, by: i64) {
+        for mut entry in self.entries {
+            if entry.start >= at {
+                entry.start += by
+            }
+            if entry.end >= at {
+                entry.end += by
+            }
+        }
+    }
+
+    /// **Takes back a `&` just written**, where what follows is already the
+    /// reference it asked for (0.0.250): `&*get(&v, i)` is `get(&v, i)`, and
+    /// the long form is what `clippy` refuses in `std`. Not `&&`, which is the
+    /// operator, and not `&mut `, which ends in a space. A `&` at the end of the
+    /// buffer is inside no recorded span, so the map is untouched.
+    pub fn take_lend(ref mut self) -> bool {
+        if self.buf.ends_with("&") && !self.buf.ends_with("&&") {
+            self.buf.pop()
+            return true
+        }
+        return false
+    }
+
+    /// Insert text just inside the first `{`, moving the map entries after it.
+    pub fn insert_after_first_brace(ref mut self, text: ref String) {
+        let at = (self.buf.find("{") ?? return) + 1
+        self.buf.insert_str(at, text)
+        self.shift_entries(at, text.len())
+    }
+
+    /// The same, just before the last `}`.
+    /// Insert `text` at byte `at`, moving the map entries behind it.
+    pub fn insert_at(ref mut self, at: i64, text: ref String) {
+        self.buf.insert_str(at, text)
+        self.shift_entries(at, text.len())
+    }
+
+    pub fn insert_before_last_brace(ref mut self, text: ref String) {
+        let at = self.buf.rfind("}") ?? return
+        self.buf.insert_str(at, text)
+        self.shift_entries(at, text.len())
+    }
+
+    /// Append a scratch buffer, moving its map entries into place. Order is
+    /// preserved, so "innermost first" survives.
+    pub fn append(ref mut self, other: EmitOut) {
+        let offset = self.buf.len()
+        self.buf.push_str(other.buf)
+        for entry in other.entries {
+            self.entries.push(EmitMapEntry { start: entry.start + offset, end: entry.end + offset, source: entry.source, unit: entry.unit })
+        }
+    }
+}

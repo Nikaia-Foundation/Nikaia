@@ -1,0 +1,569 @@
+// crates/nikaia-std/src/compiler/emit_pattern.nika
+//
+// **A grammar pattern, as the backend's grammar syntax**, moved from
+// `emit/mod.rs` (ADR-294, #125, #583, E11-2): sequences, choices, captures,
+// `list(item, sep)`, the built-ins over bytes (ADR-366 D2), repeats and
+// groups. A `fold` is `emit_fold`; a type argument is written by the host.
+
+impl EmitState {
+    /// One pattern, its span recorded in the source map.
+    pub fn emit_pattern[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref Spanned[Pattern]) sync throws {
+        let st = out.mark()
+        // **An unbound `text(p)` where `p` binds names** is written as the
+        // bound one with a label of the lowering's own (#1039), so that what
+        // `p` binds is the alternative's as well.
+        if emit_is_a_binding_text(world, walk, pattern.node) {
+            match pattern.node {
+                Pattern::Ref { args, .. } => {
+                    self.emit_text_parts(world, walk, out, host, emit_hidden_text(pattern), args)
+                    out.record(pattern.span, st)
+                    return
+                },
+                else => {},
+            }
+        }
+        // What a sequence, a group or a binding binds is the alternative's;
+        // below anything else it stays there (#1013).
+        let nested = walk.grammar_nested
+        walk.grammar_nested = match pattern.node {
+            Pattern::Seq(_) => nested,
+            Pattern::Group(_) => nested,
+            Pattern::Bind { .. } => nested,
+            else => true,
+        }
+        self.emit_pattern_body(world, walk, out, host, pattern)
+        walk.grammar_nested = nested
+        out.record(pattern.span, st)
+    }
+
+    fn emit_patterns[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, patterns: ref Vec[Spanned[Pattern]], separator: String) sync throws {
+        for i in 0..<patterns.len() {
+            if i > 0 {
+                out.push(separator)
+            }
+            self.emit_pattern(world, walk, out, host, patterns[i])
+            if separator == " " {
+                emit_texts_a_guard_reads(world, walk, out, patterns, i)
+            }
+        }
+    }
+
+    fn emit_pattern_body[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref Spanned[Pattern]) sync throws {
+        match pattern.node {
+            Pattern::Seq(parts) => self.emit_patterns(world, walk, out, host, parts, " "),
+            Pattern::Choice(parts) => self.emit_patterns(world, walk, out, host, parts, " | "),
+            Pattern::Bind { name, pat: grouped } => {
+                let pat = emit_ungrouped(grouped)
+                // **`s:span(p)` is `p` with the range it covered** (ADR-339
+                // D1, #557): the backend's `(p) @ s`, which keeps a name `p`
+                // binds when `p` is one element, and is read as a `text::Span`
+                // before the action. Over a sequence that binds names the
+                // backend's group would scope them (#1197), so the sequence is
+                // written as `text(..)`'s is (#1013), its first and last
+                // element each with the range it covered.
+                if emit_is_a_span(world, walk, pat.node) {
+                    match pat.node {
+                        Pattern::Ref { args, .. } => {
+                            if emit_is_a_binding_span(world, walk, pat.node, walk.grammar_nested) {
+                                self.emit_text_parts(world, walk, out, host, emit_text(world, name), args)
+                                return
+                            }
+                            out.push("(")
+                            self.emit_pattern(world, walk, out, host, args[0])
+                            out.push(f") @ {emit_text(world, name)}")
+                        },
+                        else => {},
+                    }
+                    return
+                }
+                // **`s:text(p)` where `p` binds names** (#1013): the backend's
+                // `text(p)` drops what `p` binds, and its `(a b) @ at` scopes
+                // them too, so `p` is written as without the `text(..)`, its
+                // first and last element each with the range it covered
+                // (`(a) @ from b (c) @ to`); the action reads the text from
+                // the one's start to the other's end before it runs
+                // (`emit_text_bindings`). One pass over the input.
+                match pat.node {
+                    Pattern::Ref { args, .. } => {
+                        if emit_is_a_binding_text(world, walk, pat.node) {
+                            self.emit_text_parts(world, walk, out, host, emit_text(world, name), args)
+                            return
+                        }
+                    },
+                    else => {},
+                }
+                out.push(f"{emit_text(world, name)}:")
+                // A literal's capture is text in Nikaia; over bytes the backend
+                // hands back bytes, so it is checked (ADR-366 D2).
+                let literal = match pat.node {
+                    Pattern::Literal(_) => true,
+                    else => false,
+                }
+                if walk.grammar_bytes && literal {
+                    out.push("text(")
+                    self.emit_pattern(world, walk, out, host, pat)
+                    out.push(")")
+                } else {
+                    self.emit_pattern(world, walk, out, host, pat)
+                }
+            },
+            Pattern::Literal(text) => out.push(f"\"{text}\""),
+            Pattern::Ref { name, generics, args } => self.emit_pattern_ref(world, walk, out, host, name, generics, args),
+            Pattern::Repeat { pat, rep } => {
+                // A sequence or a choice has to be grouped before a suffix can
+                // apply to all of it rather than to its last element.
+                let group = match pat.node {
+                    Pattern::Seq(_) => true,
+                    Pattern::Choice(_) => true,
+                    else => false,
+                }
+                if group {
+                    out.push("(")
+                }
+                self.emit_pattern(world, walk, out, host, pat)
+                if group {
+                    out.push(")")
+                }
+                out.push(repeat_suffix(rep))
+            },
+            // A group around one element is that element (Part II 10.8,
+            // `( p )` yields as `p`): the backend reads `n:(P)` as a scope
+            // of its own, so only a sequence or a choice keeps its
+            // parentheses (#1027).
+            Pattern::Group(inner) => {
+                if emit_groups_parts(inner.node) {
+                    out.push("(")
+                    self.emit_pattern(world, walk, out, host, inner)
+                    out.push(")")
+                } else {
+                    self.emit_pattern(world, walk, out, host, inner)
+                }
+            },
+            Pattern::Cut => out.push("=>"),
+            Pattern::Fold(spec) => self.emit_fold(world, walk, out, host, spec),
+            Pattern::Call { name, args, config } => self.emit_pattern_call(world, walk, out, host, name, args, config),
+            Pattern::Counted { pat, low, high, comma } => {
+                let group = match pat.node {
+                    Pattern::Seq(_) => true,
+                    Pattern::Choice(_) => true,
+                    else => false,
+                }
+                if group {
+                    out.push("(")
+                }
+                self.emit_pattern(world, walk, out, host, pat)
+                if group {
+                    out.push(")")
+                }
+                // **A computed bound starts with an integer** (ADR-grammar-1
+                // D3), which is how the engine tells a bound from a brace in
+                // the input whatever the expression begins with.
+                out.push("{0i64 + (")
+                self.emit_grammar_value(world, walk, out, host, low)
+                out.push(")")
+                if comma {
+                    out.push(", ")
+                    match high {
+                        bound => {
+                            out.push("0i64 + (")
+                            self.emit_grammar_value(world, walk, out, host, bound)
+                            out.push(")")
+                        },
+                        null => {},
+                    }
+                }
+                out.push("}")
+            },
+            // Resolved by the copying before any emit (grammar_types.nika).
+            Pattern::Choose { .. } => {},
+            // **`members[S](..)` is the call of rules of its own** (ADR-grammar-2
+            // D3), written after the grammar's (`emit_members_rules`).
+            Pattern::Members { .. } => {
+                out.push(f"__nikaia_members_{walk.grammar_members.len()}")
+                walk.grammar_members.push(pattern.clone())
+            },
+            Pattern::Guard { cond, expected } => {
+                out.push("if(")
+                self.emit_grammar_value(world, walk, out, host, cond)
+                match expected {
+                    text => out.push(f", {rust_string(text)}"),
+                    null => {},
+                }
+                out.push(")")
+            },
+        }
+    }
+
+    /// The elements of a bound `text(..)` whose pattern binds names
+    /// (#1013): a nested one as itself, the first and the last element of
+    /// the rest with the range each covered.
+    fn emit_text_parts[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: String, args: ref Vec[Spanned[Pattern]]) sync throws {
+        // several arguments are a sequence, and so is one sequence
+        if args.len() == 1 {
+            match args[0].node {
+                Pattern::Seq(parts) => {
+                    self.emit_text_run(world, walk, out, host, name, parts)
+                    return
+                },
+                else => {},
+            }
+        }
+        self.emit_text_run(world, walk, out, host, name, args)
+    }
+
+    fn emit_text_run[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: String, parts: ref Vec[Spanned[Pattern]]) sync throws {
+        for k in 0..<parts.len() {
+            if k > 0 {
+                out.push(" ")
+            }
+            let at = if k == 0 { "from" } else if k == parts.len() - 1 { "to" } else { "" }
+            if at == "" || emit_text_nested(world, walk, parts[k].node) {
+                self.emit_pattern(world, walk, out, host, parts[k])
+            } else {
+                out.push("(")
+                self.emit_pattern(world, walk, out, host, parts[k])
+                out.push(f") @ __nikaia_{name}_{at}")
+            }
+        }
+    }
+
+    /// **A value in a grammar** (ADR-grammar-1 D2-D4): an argument, a bound,
+    /// a guard, written as the expression it is. It may not pause or fail,
+    /// as an action may not (the checker says so), so it is plain.
+    fn emit_grammar_value[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr) sync throws {
+        self.emit_expr(world, walk, out, host, value, 0, EmitFlow::plain(), EmitScope::plain())
+    }
+
+    /// **A rule of the grammar handed values** (ADR-grammar-1 D2): every
+    /// parameter by name, in the rule's order, an option left out by its
+    /// default. The engine matches by position and reads `name = expr` as a
+    /// value whatever the expression is.
+    fn emit_pattern_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg]) sync throws {
+        let called = emit_text(world, name)
+        out.push(called.clone())
+        let found: GrammarRule? = walk.grammar_values.get(called.clone())?.clone()
+        let rule = found ?? throw EmitRefused { message: f"There's no rule called `{called}` in this grammar.", at: null }
+        out.push("(")
+        let mut first = true
+        for i in 0..<rule.args.len() {
+            if !first {
+                out.push(", ")
+            }
+            first = false
+            out.push(f"{emit_text(world, rule.args[i].name)} = ")
+            if i < args.len() {
+                self.emit_grammar_value(world, walk, out, host, args[i])
+            }
+        }
+        for option in rule.config {
+            if !first {
+                out.push(", ")
+            }
+            first = false
+            let named = emit_text(world, option.name)
+            out.push(f"{named} = ")
+            let mut given = false
+            for c in config {
+                if !given && emit_text(world, c.name) == named {
+                    self.emit_grammar_value(world, walk, out, host, c.value)
+                    given = true
+                }
+            }
+            if !given {
+                self.emit_grammar_value(world, walk, out, host, option.default)
+            }
+        }
+        out.push(")")
+    }
+
+    /// A rule reference, a built-in, or a call to either.
+    fn emit_pattern_ref[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: winnow_grammar::Symbol, generics: ref Vec[Type], args: ref Vec[Spanned[Pattern]]) sync throws {
+        let called = emit_text(world, name)
+        if called == "list" && generics.len() == 0 && args.len() == 2 {
+            // The template rule `list(item, sep)` lowers to (Part II 10.8).
+            out.push("__nikaia_list")
+            // The element type is the item rule's where this grammar
+            // declares it; a built-in is left to the backend to infer.
+            match args[0].node {
+                Pattern::Ref { name: item, args: none, .. } => {
+                    if none.len() == 0 {
+                        let declared = walk.grammar_rule_types.get(emit_text(world, item))?.clone()
+                        match declared {
+                            ty => out.push(f"<{ty}>"),
+                            null => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+            out.push("(item = ")
+            self.emit_pattern(world, walk, out, host, args[0])
+            out.push(", sep = ")
+            self.emit_pattern(world, walk, out, host, args[1])
+            out.push(")")
+            return
+        }
+        // **`count(p)` is an `i64`** (ADR-grammar-1 D5): a template rule the
+        // grammar is given beside its own reads the engine's `usize`.
+        if called == "count" && generics.len() == 0 && args.len() == 1 && !walk.grammar_rules.contains(called) {
+            out.push(f"{emit_count_rule()}(p = (")
+            self.emit_pattern(world, walk, out, host, args[0])
+            out.push("))")
+            return
+        }
+        // `here`, and a `span(p)` no name binds directly, are the template
+        // rules the grammar is given beside its own (`emit_grammar_body`).
+        if called == "here" && generics.len() == 0 && args.len() == 0 && !walk.grammar_rules.contains(called) {
+            out.push(emit_here_rule())
+            return
+        }
+        // `same_line` asks the record the grammar's `WS` keeps (ADR-339 D2),
+        // through the `extern rule` the grammar is given.
+        if called == "same_line" && generics.len() == 0 && args.len() == 0 && !walk.grammar_rules.contains(called) {
+            out.push(emit_same_line_rule())
+            return
+        }
+        if called == "span" && generics.len() == 0 && args.len() == 1 && !walk.grammar_rules.contains(called) {
+            out.push(f"{emit_span_rule()}(p = (")
+            self.emit_pattern(world, walk, out, host, args[0])
+            out.push("))")
+            return
+        }
+        let over_bytes = walk.grammar_bytes && (called == "until" || called == "text")
+        if generics.len() == 0 && args.len() > 0 && (called == "bytes" || over_bytes) {
+            // Over bytes `until(t)` is bytes to the backend and text to
+            // Nikaia: it is checked where it becomes text (ADR-366 D2).
+            // Inside `bytes(...)` or `text(...)` what is captured is the
+            // outer one's, so nothing below is wrapped again.
+            let wrap = called == "until"
+            let written = if called == "bytes" && !walk.grammar_bytes { "text" } else { called.clone() }
+            if wrap {
+                out.push("text(until(")
+            } else {
+                out.push(written)
+                out.push("(")
+            }
+            let bytes = walk.grammar_bytes
+            let raw = walk.grammar_raw
+            walk.grammar_bytes = false
+            walk.grammar_raw = raw || bytes && written == "bytes"
+            self.emit_built_in_args(world, walk, out, host, called, args)
+            walk.grammar_raw = raw
+            walk.grammar_bytes = bytes
+            out.push(if wrap { "))" } else { ")" })
+            return
+        }
+        // Over bytes the backend's `any` is a checked `char`, as in
+        // Nikaia; under `bytes(...)` it is the raw `byte`.
+        let raw_any = walk.grammar_raw && called == "any" && args.len() == 0
+        out.push(if raw_any { "byte" } else { called.clone() })
+        // The backend's builtin takes its type between angles, not after a
+        // turbofish, and a grammar body is the backend's syntax once it is
+        // emitted.
+        if generics.len() > 0 {
+            let mut params: Vec[String] = []
+            for g in generics {
+                params.push(host.ty_named(walk, g))
+            }
+            out.push(f"<{params.join(", ")}>")
+        }
+        // **A built-in's one pattern may be a sequence or a choice** (Part
+        // II 10, #1049): the backend reads one element as `peek(..)`'s,
+        // `not(..)`'s or `intern(..)`'s argument, so a sequence or a choice
+        // is written as the group it means.
+        if args.len() == 1 && called == "intern" && emit_groups_parts(args[0].node) {
+            // what `intern(p)` keeps is `p`'s text, and a group yields its parts
+            out.push("(text(")
+            self.emit_built_in_args(world, walk, out, host, called, args)
+            out.push("))")
+        } else if args.len() > 0 {
+            out.push("(")
+            self.emit_built_in_args(world, walk, out, host, called, args)
+            out.push(")")
+        }
+    }
+
+    // `until(..)` reads a sequence or a choice of its own: its alternatives are
+    // the terminators the engine scans for, so they are written as they are.
+    fn emit_built_in_args[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, called: ref String, args: ref Vec[Spanned[Pattern]]) sync throws {
+        if args.len() == 1 && called != "until" && emit_groups_parts(args[0].node) {
+            out.push("(")
+            self.emit_pattern(world, walk, out, host, args[0])
+            out.push(")")
+        } else {
+            self.emit_patterns(world, walk, out, host, args, ", ")
+        }
+    }
+}
+
+/// Whether a pattern is the built-in `span(p)`: the grammar declares no rule
+/// of that name.
+fn emit_is_a_span(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Ref { name, generics, args } => emit_text(world, name) == "span" && generics.len() == 0 && args.len() == 1 && !walk.grammar_rules.contains("span"),
+        else => false,
+    }
+}
+
+/// **Whether a `span(p)` is a sequence that binds names** (#1197): the
+/// backend's `(a n:b c) @ s` scopes `n`, so such a span is written as a bound
+/// `text(..)` is (`emit_text_parts`). Below a repeat or a choice the
+/// backend's own form stays (`grammar_nested`, as for `text(..)`).
+fn emit_is_a_binding_span(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern, nested: bool) -> bool {
+    return match pattern {
+        Pattern::Ref { args, .. } => emit_is_a_span(world, walk, pattern) && !nested && args.len() == 1 && emit_is_a_bound_run(args[0].node),
+        else => false,
+    }
+}
+
+/// Whether a pattern is a sequence of two or more elements, one of which
+/// binds a name.
+fn emit_is_a_bound_run(pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Seq(parts) => parts.len() >= 2 && parts.iter().any(fn(part) { emit_binds_a_name(part.node) }),
+        else => false,
+    }
+}
+
+/// Whether a group around this pattern keeps its parentheses: it holds a
+/// sequence or a choice (#1027).
+fn emit_groups_parts(pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Seq(_) => true,
+        Pattern::Choice(_) => true,
+        else => false,
+    }
+}
+
+/// **A pattern through every group around one element** (#1027): what a
+/// label on it binds, as Part II 10.8 reads `( p )`.
+fn emit_ungrouped(pattern: ref Spanned[Pattern]) -> ref Spanned[Pattern] {
+    return match pattern.node {
+        Pattern::Group(inner) => if emit_groups_parts(inner.node) { pattern } else { emit_ungrouped(inner) },
+        else => pattern,
+    }
+}
+
+/// Whether a pattern is the built-in `text(p)` and `p` binds a name
+/// (#1013): the grammar declares no rule of that name.
+fn emit_is_a_binding_text(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Ref { name, generics, args } => emit_text(world, name) == "text" && generics.len() == 0 && args.len() >= 1 && !walk.grammar_nested && !walk.grammar_rules.contains("text") && args.iter().any(fn(arg) { emit_binds_a_name(arg.node) }),
+        else => false,
+    }
+}
+
+/// **A bound `text(..)` a later guard reads is bound before it** (#1033):
+/// the backend writes a guard as a closure of its own, before the action and
+/// its prelude (`emit_text_bindings`), where `input` is out of reach, so each
+/// such name is bound right after the element of `patterns` at `at` by the
+/// grammar's `__nikaia_covered` rule (`emit_grammar_body`), whose action
+/// reads the text its range covered from its own input.
+fn emit_texts_a_guard_reads(world: ref EmitWorld, walk: ref EmitWalk, mut out: EmitOut, patterns: ref Vec[Spanned[Pattern]], at: i64) {
+    let mut names: Vec[String] = []
+    let mut ranges: Vec[String] = []
+    emit_text_bindings(world, walk, patterns[at], names, ranges)
+    for (name, range) in names.iter().zip(ranges.iter()) {
+        if patterns.iter().skip(at + 1).any(fn(later) { emit_guard_reads(world, later.node, name) }) {
+            out.push(f" {name}:{emit_covered_rule()}(at = {range})")
+        }
+    }
+}
+
+/// Whether a guard anywhere in a pattern names `name`.
+fn emit_guard_reads(world: ref EmitWorld, pattern: ref Pattern, name: String) -> bool {
+    return match pattern {
+        Pattern::Choose { .. } => false,
+        Pattern::Members { .. } => false,
+        Pattern::Guard { cond, .. } => emit_mentions(world, cond, name),
+        Pattern::Seq(parts) => parts.iter().any(fn(part) { emit_guard_reads(world, part.node, name) }),
+        Pattern::Choice(parts) => parts.iter().any(fn(part) { emit_guard_reads(world, part.node, name) }),
+        Pattern::Bind { pat, .. } => emit_guard_reads(world, pat.node, name),
+        Pattern::Ref { args, .. } => args.iter().any(fn(arg) { emit_guard_reads(world, arg.node, name) }),
+        Pattern::Repeat { pat, .. } => emit_guard_reads(world, pat.node, name),
+        Pattern::Counted { pat, .. } => emit_guard_reads(world, pat.node, name),
+        Pattern::Group(pat) => emit_guard_reads(world, pat.node, name),
+        else => false,
+    }
+}
+
+/// Whether a guard of an alternative reads a bound `text(..)` of it, so
+/// that the grammar needs the `__nikaia_covered` rule (#1033).
+fn emit_reads_a_text_in_a_guard(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Spanned[Pattern]) -> bool {
+    let mut names: Vec[String] = []
+    let mut ranges: Vec[String] = []
+    emit_text_bindings(world, walk, pattern, names, ranges)
+    return names.iter().any(fn(name) { emit_guard_reads(world, pattern.node, name) })
+}
+
+/// The rule a guard's bound `text(..)` is read by (#1033).
+fn emit_covered_rule() -> String {
+    return "__nikaia_covered"
+}
+
+/// Whether a pattern binds a name anywhere in it.
+fn emit_binds_a_name(pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Bind { .. } => true,
+        Pattern::Seq(parts) => parts.iter().any(fn(part) { emit_binds_a_name(part.node) }),
+        Pattern::Choice(parts) => parts.iter().any(fn(part) { emit_binds_a_name(part.node) }),
+        Pattern::Ref { args, .. } => args.iter().any(fn(arg) { emit_binds_a_name(arg.node) }),
+        Pattern::Repeat { pat, .. } => emit_binds_a_name(pat.node),
+        Pattern::Counted { pat, .. } => emit_binds_a_name(pat.node),
+        Pattern::Group(pat) => emit_binds_a_name(pat.node),
+        else => false,
+    }
+}
+
+/// Whether an element of a bound `text(..)` is itself a `text(..)`, bound
+/// or not, whose pattern binds names: it writes its own ranges.
+fn emit_text_nested(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Bind { pat, .. } => emit_is_a_binding_text(world, walk, emit_ungrouped(pat).node),
+        else => emit_is_a_binding_text(world, walk, pattern),
+    }
+}
+
+/// **The label of an unbound `text(p)` whose `p` binds names** (#1039): the
+/// lowering's own (`__nikaia_`), one per place in the source.
+fn emit_hidden_text(pattern: ref Spanned[Pattern]) -> String {
+    return f"__nikaia_text_{pattern.span.start}"
+}
+
+/// **Where the text bound to `name` starts or ends** (`at` is `from` or
+/// `to`, #1013): the range of its first or last element, or of the nested
+/// bound `text(..)` that element is.
+fn emit_text_edge(world: ref EmitWorld, walk: ref EmitWalk, name: String, args: ref Vec[Spanned[Pattern]], at: String) -> String {
+    if args.len() == 1 {
+        match args[0].node {
+            Pattern::Seq(parts) => return emit_text_edge_of(world, walk, name, parts, at),
+            else => {},
+        }
+    }
+    return emit_text_edge_of(world, walk, name, args, at)
+}
+
+fn emit_text_edge_of(world: ref EmitWorld, walk: ref EmitWalk, name: String, parts: ref Vec[Spanned[Pattern]], at: String) -> String {
+    let k = if at == "from" { 0 } else { parts.len() - 1 }
+    match parts[k].node {
+        Pattern::Bind { name: inner, pat: grouped } => {
+            let pat = emit_ungrouped(grouped)
+            if emit_is_a_binding_text(world, walk, pat.node) {
+                match pat.node {
+                    Pattern::Ref { args: within, .. } => return emit_text_edge(world, walk, emit_text(world, inner), within, at),
+                    else => {},
+                }
+            }
+        },
+        Pattern::Ref { args: within, .. } => {
+            if emit_is_a_binding_text(world, walk, parts[k].node) {
+                return emit_text_edge(world, walk, emit_hidden_text(parts[k]), within, at)
+            }
+        },
+        else => {},
+    }
+    if parts.len() == 1 {
+        return f"__nikaia_{name}_from"
+    }
+    return f"__nikaia_{name}_{at}"
+}

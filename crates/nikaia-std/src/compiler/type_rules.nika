@@ -1,0 +1,1540 @@
+// crates/nikaia-std/src/compiler/type_rules.nika
+//
+// **A type's rule, an `assert` after a struct's fields**
+// ([ADR-369](../../../docs/specification/adr/adr-369.md)), written out right
+// after parsing as the `assert`s it means, moved from the compiler's
+// `type_rules` (ADR-294, #125, R-3). This half reads the tree and builds the
+// `assert`s; the Rust module stays as the adapter that rewrites the bodies in
+// place (`rewrite_fn`, `check_literals`, the walks that insert statements),
+// because a walk that changes an expression where it stands is not yet
+// something Nikaia lowers (a `mut` element of a list handed on, and a match
+// on an indexed element that moves out of it).
+//
+//   * the rules of a file's structs, read once (`tr_collect`), with the type's
+//     fields and the name a checked literal is bound to;
+//   * `tr_asserts_as`: the `assert(rule over base; message: ...)` statements
+//     for a type, given (`rule of the type`) or claimed;
+//   * which types a file may change outside their own methods
+//     (`tr_changed_outside`, `tr_fails_changed`, `tr_built_elsewhere`), and which
+//     rules a method cannot break (`tr_kept_by`).
+//
+// A rule is one `assert(claim)` or `assert(claim; message: ...)` whose claim
+// reads the fields by name, paths and pure methods from them, `comptime`
+// values and literals; anything else is `NK1288`, handed back as a
+// `TrRefusal` for the adapter to raise.
+
+use std::collections
+use std::node_id
+
+/// The option that marks a rule's `assert` as given rather than claimed: a
+/// fact at a function's entry (ADR-369 D3). A name with spaces, which no
+/// program can write.
+pub fn tr_given() -> String {
+    return "rule of the type"
+}
+
+/// One rule: its claim and its `message:`, as written.
+pub struct TrRule {
+    pub claim: Expr,
+    pub message: Expr?,
+    pub span: Span,
+}
+
+/// A struct of the file that states rules.
+pub struct TrRuled {
+    pub fields: collections::BTreeSet[String],
+    pub rules: Vec[TrRule],
+    /// The name a checked literal is bound to: the type's name, its first
+    /// letter small (`piece`), which is what a failure shows.
+    pub binding: winnow_grammar::Symbol,
+}
+
+/// A rule that is not one: where, what, and how to write it.
+pub struct TrRefusal {
+    pub span: Span,
+    pub head: String,
+    pub help: String,
+}
+
+/// The rules of a file's structs, or the first that is not a rule.
+pub struct TrFound {
+    pub ruled: collections::BTreeMap[String, TrRuled],
+    pub refusal: TrRefusal?,
+}
+
+/// A type's methods in the file: every one that takes `self`, and those that
+/// change it.
+pub struct TrMethods {
+    pub all: collections::BTreeSet[String],
+    pub changing: collections::BTreeSet[String],
+}
+
+/// A struct of a file that states rules, as another file reads it.
+pub struct TrDeclared {
+    pub fields: collections::BTreeSet[String],
+    /// Each rule as written, `assert(...)`, to be read again in the file that
+    /// builds a literal of the type.
+    pub rules: Vec[String],
+    /// A rule reads a `pub` field, or the type is `pub` and every field is
+    /// `pub` or has a default: another package can break the rule unchecked.
+    pub open: bool,
+}
+
+fn tr_span(s: ref Span) -> Span {
+    return Span { start: s.start, end: s.end }
+}
+
+fn tr_is_self(e: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+    return match e {
+        Expr::Variable(n, _) => words.resolve(n) == "self",
+        else => false,
+    }
+}
+
+/// The name a checked literal of `type_name` is bound to: its first letter
+/// small (`piece`), which is what a failure shows.
+pub fn tr_binding_of(type_name: ref String, fields: ref collections::BTreeSet[String]) -> String {
+    let mut small: String = ""
+    for c in type_name.chars() {
+        if small == "" {
+            small = f"{c}".to_lowercase()
+        } else {
+            small = f"{small}{c}"
+        }
+    }
+    if fields.contains(small) || small == type_name {
+        small = f"{small}_value"
+    }
+    return small
+}
+
+/// The claim and the `message:` of `assert(claim; message: ...)`.
+pub fn tr_a_rule(words: ref winnow_grammar::InternerContext, rule: ref Expr, span: Span) -> TrRule? {
+    match rule {
+        Expr::Call { func, args, config, .. } => {
+            match func {
+                Expr::Variable(called, _) => {
+                    if words.resolve(called) != "assert" || args.len() != 1 {
+                        return null
+                    }
+                },
+                else => return null,
+            }
+            let mut message: Expr? = null
+            for option in config {
+                if words.resolve(option.name) != "message" {
+                    return null
+                }
+                message = option.value.clone()
+            }
+            return TrRule { claim: args[0].clone(), message: message, span: span }
+        },
+        else => return null,
+    }
+}
+
+/// A base read once more: the same name or path, a node of its own. `renew`
+/// copies any other expression with a new id (`ast::set_id`).
+pub fn tr_renumbered(base: ref Expr, renew: fn(ref Expr) -> Expr sync) -> Expr {
+    return match base {
+        Expr::Variable(name, _) => Expr::Variable(name, node_id::NodeId::fresh()),
+        Expr::Field { base: inner, name, .. } => Expr::Field { base: tr_renumbered(inner, renew), name: name, id: node_id::NodeId::fresh() },
+        else => renew(base),
+    }
+}
+
+fn tr_all_on(claims: ref Vec[Expr], words: ref winnow_grammar::InternerContext, base: ref Expr, fields: ref collections::BTreeSet[String], renew: fn(ref Expr) -> Expr sync) -> Vec[Expr]? {
+    let mut out: Vec[Expr] = []
+    for claim in claims {
+        let one = tr_on(words, claim, base, fields, renew) ?? return null
+        out.push(one)
+    }
+    return out
+}
+
+/// The claim with each field read through `base`, every node new; `None`
+/// where it reads something a rule may not.
+pub fn tr_on(words: ref winnow_grammar::InternerContext, claim: ref Expr, base: ref Expr, fields: ref collections::BTreeSet[String], renew: fn(ref Expr) -> Expr sync) -> Expr? {
+    return match claim {
+        Expr::Variable(name, _) => {
+            if fields.contains(words.resolve(name)) {
+                return Expr::Field { base: tr_renumbered(base, renew), name: name, id: node_id::NodeId::fresh() }
+            }
+            return Expr::Variable(name, node_id::NodeId::fresh())
+        },
+        Expr::Path(segments, _) => Expr::Path(segments.clone(), node_id::NodeId::fresh()),
+        Expr::LitInt { value, negative, .. } => Expr::LitInt { value: value, negative: negative, id: node_id::NodeId::fresh() },
+        Expr::LitBool(b, _) => Expr::LitBool(b, node_id::NodeId::fresh()),
+        Expr::LitChar(c, _) => Expr::LitChar(c.clone(), node_id::NodeId::fresh()),
+        Expr::LitFloat(f, _) => Expr::LitFloat(f.clone(), node_id::NodeId::fresh()),
+        Expr::LitNull(_) => Expr::LitNull(node_id::NodeId::fresh()),
+        Expr::Binary { op, lhs, rhs, span, grouped, .. } => {
+            let l = tr_on(words, lhs, base, fields, renew) ?? return null
+            let r = tr_on(words, rhs, base, fields, renew) ?? return null
+            return Expr::Binary { op: op.clone(), lhs: l, rhs: r, span: tr_span(span), grouped: grouped, id: node_id::NodeId::fresh() }
+        },
+        Expr::Unary { op, expr, .. } => {
+            let inner = tr_on(words, expr, base, fields, renew) ?? return null
+            return Expr::Unary { op: op.clone(), expr: inner, id: node_id::NodeId::fresh() }
+        },
+        Expr::Field { base: inner, name, .. } => {
+            let over = tr_on(words, inner, base, fields, renew) ?? return null
+            return Expr::Field { base: over, name: name, id: node_id::NodeId::fresh() }
+        },
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            if config.len() > 0 {
+                return null
+            }
+            let over = tr_on(words, receiver, base, fields, renew) ?? return null
+            let all = tr_all_on(args, words, base, fields, renew) ?? return null
+            return Expr::MethodCall { receiver: over, method: method, args: all, config: [], id: node_id::NodeId::fresh() }
+        },
+        Expr::Cast { expr, ty, .. } => {
+            let inner = tr_on(words, expr, base, fields, renew) ?? return null
+            return Expr::Cast { expr: inner, ty: ty.clone(), id: node_id::NodeId::fresh() }
+        },
+        else => null,
+    }
+}
+
+/// `assert(rule over base; message: ...)` for each rule of `ruled`, standing
+/// at `span`; given rather than claimed where `given` says so, with its
+/// `message:` where `said` does: a rule a method keeps (`tr_kept_by`) is both,
+/// so that it is a check again where another file breaks the rule.
+pub fn tr_asserts_as(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref TrRuled, type_name: ref String, base: ref Expr, span: ref Span, given: bool, said: bool) -> Vec[Spanned[Stmt]] {
+    let mut out: Vec[Spanned[Stmt]] = []
+    for rule in ruled.rules {
+        let condition = tr_on(words, rule.claim, base, ruled.fields, renew) ?? continue
+        let mut config: Vec[ConfigArg] = []
+        if given {
+            config.push(ConfigArg { name: intern(tr_given()), value: Expr::LitStr { text: type_name.clone(), id: node_id::NodeId::fresh() } })
+        }
+        if said {
+            // **A failure names the type** (D2): its message is the rule's,
+            // after the type's name.
+            let mut shown = Expr::LitStr { text: f"the rule of `{type_name}`", id: node_id::NodeId::fresh() }
+            match rule.message {
+                own => {
+                    shown = match own {
+                        Expr::LitStr { text, .. } => Expr::LitStr { text: f"the rule of `{type_name}`: {text}", id: node_id::NodeId::fresh() },
+                        else => renew(own),
+                    }
+                },
+                null => {},
+            }
+            config.push(ConfigArg { name: intern("message"), value: shown })
+        }
+        let call = Expr::Call { func: Expr::Variable(intern("assert"), node_id::NodeId::fresh()), args: [condition], config: config, id: node_id::NodeId::fresh() }
+        out.push(Spanned(Stmt::Expr(call), tr_span(span)))
+    }
+    return out
+}
+
+/// The same, given where `given` says so and with its `message:` where it
+/// does not.
+pub fn tr_asserts(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref TrRuled, type_name: ref String, base: ref Expr, span: ref Span, given: bool) -> Vec[Spanned[Stmt]] {
+    return tr_asserts_as(words, intern, renew, ruled, type_name, base, span, given, !given)
+}
+
+/// The rules of `ruled` the flags name, as a `TrRuled` of their own.
+pub fn tr_part(ruled: ref TrRuled, taken: ref Vec[bool]) -> TrRuled {
+    let mut rules: Vec[TrRule] = []
+    for at in 0..<ruled.rules.len() {
+        if taken[at] {
+            let rule = ruled.rules[at]
+            rules.push(TrRule { claim: rule.claim.clone(), message: rule.message?.clone(), span: tr_span(rule.span) })
+        }
+    }
+    return TrRuled { fields: ruled.fields.clone(), rules: rules, binding: ruled.binding }
+}
+
+/// The rules of a file's structs, read once; the first that is not a rule
+/// comes back as a refusal (`NK1288`).
+pub fn tr_collect(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, items: ref Vec[Spanned[Item]]) -> TrFound {
+    let mut ruled: collections::BTreeMap[String, TrRuled] = collections::BTreeMap()
+    for item in items {
+        match item.node {
+            Item::Struct { name, fields, rules, generics, .. } => {
+                if rules.len() == 0 {
+                    continue
+                }
+                let type_name = words.resolve(name).clone()
+                let mut field_names: collections::BTreeSet[String] = collections::BTreeSet()
+                for f in fields {
+                    field_names.insert(words.resolve(f.name).clone())
+                }
+                let mut read: Vec[TrRule] = []
+                for rule in rules {
+                    let found = tr_a_rule(words, rule.node, tr_span(rule.span))
+                    if found == null {
+                        return TrFound { ruled: ruled, refusal: TrRefusal { span: tr_span(rule.span), head: f"A rule of `{type_name}` has to be an `assert`.", help: "Write it as `assert(claim)` or `assert(claim; message: \"…\")` after the fields." } }
+                    }
+                    if generics.len() > 0 {
+                        return TrFound { ruled: ruled, refusal: TrRefusal { span: tr_span(rule.span), head: f"`{type_name}` is generic, and a generic struct states no rule yet.", help: "Check what the methods need with an `assert` in each of them." } }
+                    }
+                    let one = found ?? continue
+                    let probe = Expr::Variable(name, node_id::NodeId::fresh())
+                    let mapped = tr_on(words, one.claim, probe, field_names, renew)
+                    if mapped == null {
+                        return TrFound { ruled: ruled, refusal: TrRefusal { span: tr_span(rule.span), head: f"A rule of `{type_name}` may read only its fields, paths and pure methods from them, `comptime` values and literals.", help: "Compute anything else in a method, and state the rule over the fields it keeps." } }
+                    }
+                    read.push(one)
+                }
+                let binding = intern(tr_binding_of(type_name, field_names))
+                ruled.insert(type_name.clone(), TrRuled { fields: field_names, rules: read, binding: binding })
+            },
+            else => {},
+        }
+    }
+    return TrFound { ruled: ruled, refusal: null }
+}
+
+/// Each type's methods in the file: those that take `self`, and of them those
+/// that change it.
+pub fn tr_methods_of(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeMap[String, TrMethods] {
+    let mut own: collections::BTreeMap[String, TrMethods] = collections::BTreeMap()
+    for item in items {
+        match item.node {
+            Item::Impl { target, methods, .. } => {
+                let owner = words.resolve(target.name).clone()
+                let mut all: collections::BTreeSet[String] = collections::BTreeSet()
+                let mut changing: collections::BTreeSet[String] = collections::BTreeSet()
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, receiver, .. } => {
+                            let how = receiver ?? continue
+                            let called = name ?? continue
+                            let text = words.resolve(called).clone()
+                            if how.is_mut {
+                                changing.insert(text.clone())
+                            }
+                            all.insert(text)
+                        },
+                        else => {},
+                    }
+                }
+                let seen = own.get(owner)
+                if seen != null {
+                    let prev = seen ?? continue
+                    all.extend(prev.all.clone())
+                    changing.extend(prev.changing.clone())
+                }
+                own.insert(owner, TrMethods { all: all, changing: changing })
+            },
+            else => {},
+        }
+    }
+    return own
+}
+
+/// **The types a method can leave broken through a failure it passes on**:
+/// a method that changes its receiver and `throws` leaves at every call that
+/// fails, and a caller that catches the failure still holds the value, its
+/// rule maybe broken for a while. The rule is checked before each `return`
+/// and `throw` written, not before each call that may fail, so the rule of
+/// such a type is not a fact at an entry (D3): what is lost is a proof, never
+/// a check.
+pub fn tr_fails_changed(words: ref winnow_grammar::InternerContext, ruled: ref collections::BTreeMap[String, TrRuled], items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in items {
+        match item.node {
+            Item::Impl { target, methods, .. } => {
+                let owner = words.resolve(target.name).clone()
+                if !ruled.contains_key(owner) {
+                    continue
+                }
+                let mut fails = false
+                for m in methods {
+                    match m.node {
+                        Item::Fn { receiver, can_throw, .. } => {
+                            let how = receiver ?? continue
+                            if how.is_mut && can_throw {
+                                fails = true
+                            }
+                        },
+                        else => {},
+                    }
+                }
+                if fails {
+                    out.insert(owner)
+                }
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+// --- Reading the tree ------------------------------------------------------
+
+/// Every block a function item holds: its body, and a method's.
+fn tr_item_blocks(item: ref Item) -> Vec[ref Block] {
+    let mut out: Vec[ref Block] = []
+    match item {
+        Item::Fn { body, .. } => out.push(body),
+        Item::Test { body, .. } => out.push(body),
+        Item::Bench { body, .. } => out.push(body),
+        Item::Impl { methods, .. } => {
+            for method in methods {
+                out.extend(tr_item_blocks(method.node))
+            }
+        },
+        else => {},
+    }
+    return out
+}
+
+/// Every expression below a block, as `text_tiers::visit_block_mut` meets
+/// them, the walk's own order aside; with `targets`, instead the target of
+/// every assignment below it.
+fn tr_in_block(block: ref Block, targets: bool) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    for stmt in block.stmts {
+        out.extend(tr_in_stmt(stmt.node, targets))
+    }
+    return out
+}
+
+fn tr_in_stmt(stmt: ref Stmt, targets: bool) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    match stmt {
+        Stmt::Let { value, .. } => out.extend(tr_in_expr(value, targets)),
+        Stmt::Assign { target, value, .. } => {
+            if targets {
+                out.push(target)
+            }
+            out.extend(tr_in_expr(target, targets))
+            out.extend(tr_in_expr(value, targets))
+        },
+        Stmt::For { iter, body, .. } => {
+            out.extend(tr_in_expr(iter, targets))
+            out.extend(tr_in_block(body, targets))
+        },
+        Stmt::While { cond, body } => {
+            out.extend(tr_in_expr(cond, targets))
+            out.extend(tr_in_block(body, targets))
+        },
+        Stmt::Return(value) => out.extend(tr_in_maybe(value, targets)),
+        Stmt::Expr(value) => out.extend(tr_in_expr(value, targets)),
+        else => {},
+    }
+    return out
+}
+
+fn tr_in_maybe(expr: ref Expr?, targets: bool) -> Vec[ref Expr] {
+    return tr_in_expr(expr ?? return [], targets)
+}
+
+fn tr_in_all(all: ref Vec[Expr], targets: bool) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    for each in all {
+        out.extend(tr_in_expr(each, targets))
+    }
+    return out
+}
+
+fn tr_in_config(config: ref Vec[ConfigArg], targets: bool) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    for option in config {
+        out.extend(tr_in_expr(option.value, targets))
+    }
+    return out
+}
+
+fn tr_in_expr(expr: ref Expr, targets: bool) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    if !targets {
+        out.push(expr)
+    }
+    match expr {
+        Expr::Call { func, args, config, .. } => {
+            out.extend(tr_in_expr(func, targets))
+            out.extend(tr_in_all(args, targets))
+            out.extend(tr_in_config(config, targets))
+        },
+        Expr::MethodCall { receiver, args, config, .. } => {
+            out.extend(tr_in_expr(receiver, targets))
+            out.extend(tr_in_all(args, targets))
+            out.extend(tr_in_config(config, targets))
+        },
+        Expr::SafeMethod { receiver, args, config, .. } => {
+            out.extend(tr_in_expr(receiver, targets))
+            out.extend(tr_in_all(args, targets))
+            out.extend(tr_in_config(config, targets))
+        },
+        Expr::Binary { lhs, rhs, .. } => {
+            out.extend(tr_in_expr(lhs, targets))
+            out.extend(tr_in_expr(rhs, targets))
+        },
+        Expr::Unary { expr: inner, .. } => out.extend(tr_in_expr(inner, targets)),
+        Expr::Try(inner, _) => out.extend(tr_in_expr(inner, targets)),
+        Expr::Async(inner, _, _, _) => out.extend(tr_in_expr(inner, targets)),
+        Expr::Throw(inner, _) => out.extend(tr_in_expr(inner, targets)),
+        Expr::Cast { expr: inner, .. } => out.extend(tr_in_expr(inner, targets)),
+        Expr::Return(value, _) => out.extend(tr_in_maybe(value, targets)),
+        Expr::Field { base, .. } => out.extend(tr_in_expr(base, targets)),
+        Expr::SafeField { base, .. } => out.extend(tr_in_expr(base, targets)),
+        Expr::Index { base, index, .. } => {
+            out.extend(tr_in_expr(base, targets))
+            out.extend(tr_in_expr(index, targets))
+        },
+        Expr::Range { start, end, .. } => {
+            out.extend(tr_in_expr(start, targets))
+            out.extend(tr_in_expr(end, targets))
+        },
+        Expr::Tuple(items, _) => out.extend(tr_in_all(items, targets)),
+        Expr::ListLit { items, .. } => out.extend(tr_in_all(items, targets)),
+        Expr::ListRepeat { value, count, .. } => {
+            out.extend(tr_in_expr(value, targets))
+            out.extend(tr_in_expr(count, targets))
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            out.extend(tr_in_expr(value, targets))
+            out.extend(tr_in_expr(fallback, targets))
+        },
+        Expr::TryCatch { expr: inner, handler, .. } => {
+            out.extend(tr_in_expr(inner, targets))
+            out.extend(tr_in_block(handler, targets))
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            out.extend(tr_in_expr(cond, targets))
+            out.extend(tr_in_block(then_branch, targets))
+            match else_branch {
+                other => out.extend(tr_in_block(other, targets)),
+                null => {},
+            }
+        },
+        Expr::Match { value, arms, .. } => {
+            out.extend(tr_in_expr(value, targets))
+            for arm in arms {
+                out.extend(tr_in_maybe(arm.guard, targets))
+                out.extend(tr_in_expr(arm.body, targets))
+            }
+        },
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                out.extend(tr_in_maybe(field.value, targets))
+            }
+        },
+        Expr::With { base, fields, .. } => {
+            out.extend(tr_in_expr(base, targets))
+            for field in fields {
+                out.extend(tr_in_maybe(field.value, targets))
+            }
+        },
+        Expr::Block(block, _) => out.extend(tr_in_block(block, targets)),
+        Expr::AsyncGroup(block, _, _, _, _) => out.extend(tr_in_block(block, targets)),
+        Expr::Unsafe(block, _) => out.extend(tr_in_block(block, targets)),
+        Expr::Overlap(block, _) => out.extend(tr_in_block(block, targets)),
+        Expr::Closure { body, .. } => out.extend(tr_in_block(body, targets)),
+        Expr::Spawn { body, .. } => out.extend(tr_in_expr(body, targets)),
+        else => {},
+    }
+    return out
+}
+
+// --- Which types a file changes outside their methods ----------------------
+
+/// The methods that only read the field they are called on: a call of one
+/// on a field from outside the type's methods leaves its rule as it was.
+fn tr_reader(name: ref String) -> bool {
+    return match name {
+        "len" | "is_empty" | "get" | "contains" | "contains_key" | "iter" | "clone" | "first" | "last" | "keys" | "values" | "text" => true,
+        else => false,
+    }
+}
+
+/// The types that have a field of this name.
+fn tr_mark(words: ref winnow_grammar::InternerContext, ruled: ref collections::BTreeMap[String, collections::BTreeSet[String]], field: winnow_grammar::Symbol, mut changed: collections::BTreeSet[String]) {
+    let text = words.resolve(field)
+    for (name, fields) in ruled {
+        if fields.contains(text) {
+            changed.insert(name.clone())
+        }
+    }
+}
+
+/// A field read off something other than `self` in a type's own method.
+fn tr_mark_arg(words: ref winnow_grammar::InternerContext, ruled: ref collections::BTreeMap[String, collections::BTreeSet[String]], in_impl: bool, arg: ref Expr, mut changed: collections::BTreeSet[String]) {
+    match arg {
+        Expr::Field { base, name, .. } => {
+            if !(tr_is_self(base, words) && in_impl) {
+                tr_mark(words, ruled, name, changed)
+            }
+        },
+        else => {},
+    }
+}
+
+/// The fields on the way down a place that is written: `a.b[i].c = ...`.
+fn tr_mark_place(words: ref winnow_grammar::InternerContext, ruled: ref collections::BTreeMap[String, collections::BTreeSet[String]], in_impl: bool, place: ref Expr, mut changed: collections::BTreeSet[String]) {
+    match place {
+        Expr::Field { base, name, .. } => {
+            if !(tr_is_self(base, words) && in_impl) {
+                tr_mark(words, ruled, name, changed)
+            }
+            tr_mark_place(words, ruled, in_impl, base, changed)
+        },
+        Expr::Index { base, .. } => tr_mark_place(words, ruled, in_impl, base, changed),
+        else => {},
+    }
+}
+
+/// **The types whose fields this file may change outside their own
+/// methods**, where a rule is not checked after the change: a field of
+/// one written, set by a `with`, handed to a call or called a method on that
+/// may change it, anywhere but through `self` in the type's methods. Read
+/// by the field's name, whatever its owner, so a type it names is left out
+/// even where the change is another type's: the rule is then not a fact at
+/// an entry (D3), and what is lost is a proof, never a check.
+pub fn tr_changed_outside(words: ref winnow_grammar::InternerContext, ruled: ref collections::BTreeMap[String, collections::BTreeSet[String]], items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
+    let mut changed: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in items {
+        let in_impl = match item.node {
+            Item::Impl { .. } => true,
+            else => false,
+        }
+        for block in tr_item_blocks(item.node) {
+            for expr in tr_in_block(block, false) {
+                match expr {
+                    Expr::With { fields, .. } => {
+                        for field in fields {
+                            tr_mark(words, ruled, field.name, changed)
+                        }
+                    },
+                    Expr::MethodCall { receiver, method, args, .. } => {
+                        match receiver {
+                            Expr::Field { base, name, .. } => {
+                                if !(tr_is_self(base, words) && in_impl) && !tr_reader(words.resolve(method)) {
+                                    tr_mark(words, ruled, name, changed)
+                                }
+                            },
+                            else => {},
+                        }
+                        for arg in args {
+                            tr_mark_arg(words, ruled, in_impl, arg, changed)
+                        }
+                    },
+                    Expr::Call { args, .. } => {
+                        for arg in args {
+                            tr_mark_arg(words, ruled, in_impl, arg, changed)
+                        }
+                    },
+                    else => {},
+                }
+            }
+            for target in tr_in_block(block, true) {
+                tr_mark_place(words, ruled, in_impl, target, changed)
+            }
+        }
+    }
+    return changed
+}
+
+/// The types of `ruled` this file writes a method for that changes `self`,
+/// or builds a literal of without reading its rules again (`checked`):
+/// neither is checked here.
+pub fn tr_built_elsewhere(words: ref winnow_grammar::InternerContext, ruled: ref collections::BTreeMap[String, collections::BTreeSet[String]], checked: ref collections::BTreeMap[String, TrRuled], items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
+    let mut found: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in items {
+        match item.node {
+            Item::Impl { target, methods, .. } => {
+                let owner = words.resolve(target.name).clone()
+                let mut changes_self = false
+                for m in methods {
+                    match m.node {
+                        Item::Fn { receiver, .. } => {
+                            let how = receiver ?? continue
+                            if how.is_mut {
+                                changes_self = true
+                            }
+                        },
+                        else => {},
+                    }
+                }
+                if changes_self && ruled.contains_key(owner) {
+                    found.insert(owner)
+                }
+            },
+            else => {},
+        }
+        for block in tr_item_blocks(item.node) {
+            for expr in tr_in_block(block, false) {
+                match expr {
+                    Expr::StructLit { name, .. } => {
+                        let type_name = words.resolve(name).clone()
+                        if ruled.contains_key(type_name) && !checked.contains_key(type_name) {
+                            found.insert(type_name)
+                        }
+                    },
+                    else => {},
+                }
+            }
+        }
+    }
+    return found
+}
+
+// --- Which rules a method cannot break --------------------------------------
+
+/// Whether `claim` reads one of `names` as a field.
+pub fn tr_reads(words: ref winnow_grammar::InternerContext, claim: ref Expr, names: ref collections::BTreeSet[String]) -> bool {
+    return match claim {
+        Expr::Variable(name, _) => names.contains(words.resolve(name)),
+        Expr::Binary { lhs, rhs, .. } => tr_reads(words, lhs, names) || tr_reads(words, rhs, names),
+        Expr::Unary { expr, .. } => tr_reads(words, expr, names),
+        Expr::Cast { expr, .. } => tr_reads(words, expr, names),
+        Expr::Field { base, .. } => tr_reads(words, base, names),
+        Expr::MethodCall { receiver, args, .. } => {
+            if tr_reads(words, receiver, names) {
+                return true
+            }
+            for arg in args {
+                if tr_reads(words, arg, names) {
+                    return true
+                }
+            }
+            return false
+        },
+        Expr::Path(..) => false,
+        Expr::LitInt { .. } => false,
+        Expr::LitBool(..) => false,
+        Expr::LitChar(..) => false,
+        Expr::LitFloat(..) => false,
+        Expr::LitNull(_) => false,
+        else => true,
+    }
+}
+
+/// **What a rule reads of each field**: `names` holds every field it reads,
+/// `full` those it reads as more than its length (`xs.len()`).
+fn tr_rule_reads(words: ref winnow_grammar::InternerContext, claim: ref Expr, fields: ref collections::BTreeSet[String], mut names: collections::BTreeSet[String], mut full: collections::BTreeSet[String]) {
+    match claim {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            match receiver {
+                Expr::Variable(name, _) => {
+                    if fields.contains(words.resolve(name)) && words.resolve(method) == "len" && args.len() == 0 {
+                        names.insert(words.resolve(name).clone())
+                        return
+                    }
+                },
+                else => {},
+            }
+            tr_rule_reads(words, receiver, fields, names, full)
+            for arg in args {
+                tr_rule_reads(words, arg, fields, names, full)
+            }
+        },
+        Expr::Variable(name, _) => {
+            if fields.contains(words.resolve(name)) {
+                names.insert(words.resolve(name).clone())
+                full.insert(words.resolve(name).clone())
+            }
+        },
+        Expr::Binary { lhs, rhs, .. } => {
+            tr_rule_reads(words, lhs, fields, names, full)
+            tr_rule_reads(words, rhs, fields, names, full)
+        },
+        Expr::Unary { expr, .. } => tr_rule_reads(words, expr, fields, names, full),
+        Expr::Cast { expr, .. } => tr_rule_reads(words, expr, fields, names, full),
+        Expr::Field { base, .. } => tr_rule_reads(words, base, fields, names, full),
+        else => {},
+    }
+}
+
+/// The name of a field read off `self`.
+fn tr_field_of_self(e: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    return match e {
+        Expr::Field { base, name, .. } => {
+            if tr_is_self(base, words) {
+                return words.resolve(name).clone()
+            }
+            return null
+        },
+        else => null,
+    }
+}
+
+/// **A rule a method cannot break** (D2, proved by what the method does):
+/// every use of `self` in its body reads a field the rule does not read,
+/// counts one it reads only the length of (`self.xs.len()`) or indexes it
+/// (`self.xs[i]`, which keeps its length), or calls a method of the type,
+/// whose exits hold the rule. The rule then holds wherever the body stands as
+/// it held at the entry, and no point of it needs a check.
+pub fn tr_kept_by(words: ref winnow_grammar::InternerContext, claim: ref Expr, fields: ref collections::BTreeSet[String], methods: ref collections::BTreeSet[String], body: ref Block) -> bool {
+    let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut full: collections::BTreeSet[String] = collections::BTreeSet()
+    tr_rule_reads(words, claim, fields, names, full)
+    let mut seen = 0
+    let mut allowed = 0
+    for expr in tr_in_block(body, false) {
+        match expr {
+            Expr::Variable(..) => {
+                if tr_is_self(expr, words) {
+                    seen += 1
+                }
+            },
+            Expr::Field { .. } => {
+                let name = tr_field_of_self(expr, words)
+                if name != null && !names.contains(name ?? "") {
+                    allowed += 1
+                }
+            },
+            Expr::MethodCall { receiver, method, args, .. } => {
+                let called = words.resolve(method)
+                let name = tr_field_of_self(receiver, words)
+                let own_method = tr_is_self(receiver, words) && methods.contains(called)
+                let own_len = name != null && names.contains(name ?? "") && called == "len" && args.len() == 0
+                if own_method || own_len {
+                    allowed += 1
+                }
+            },
+            Expr::Index { base, .. } => {
+                let name = tr_field_of_self(base, words)
+                if name != null {
+                    let field = name ?? ""
+                    if names.contains(field) && !full.contains(field) {
+                        allowed += 1
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return seen == allowed
+}
+
+// --- What a package declares -------------------------------------------------
+
+/// The structs of a file that state rules. `written_at` gives the text of a
+/// span of the file.
+pub fn tr_declared_rules(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], written_at: fn(ref Span) -> String sync) -> collections::BTreeMap[String, TrDeclared] {
+    let mut out: collections::BTreeMap[String, TrDeclared] = collections::BTreeMap()
+    for item in items {
+        match item.node {
+            Item::Struct { name, fields, rules, is_public, .. } => {
+                if rules.len() == 0 {
+                    continue
+                }
+                let mut public: collections::BTreeSet[String] = collections::BTreeSet()
+                let mut all: collections::BTreeSet[String] = collections::BTreeSet()
+                let mut buildable = is_public
+                for f in fields {
+                    all.insert(words.resolve(f.name).clone())
+                    if f.is_public {
+                        public.insert(words.resolve(f.name).clone())
+                    } else if f.default == null {
+                        buildable = false
+                    }
+                }
+                let mut reads_public = false
+                let mut written: Vec[String] = []
+                for rule in rules {
+                    let found = tr_a_rule(words, rule.node, tr_span(rule.span))
+                    if found == null {
+                        reads_public = true
+                    } else {
+                        let one = found ?? continue
+                        if tr_reads(words, one.claim, public) {
+                            reads_public = true
+                        }
+                    }
+                    written.push(written_at(rule.span))
+                }
+                out.insert(words.resolve(name).clone(), TrDeclared { fields: all, rules: written, open: buildable || reads_public })
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+// --- Writing the rules into the bodies ---------------------------------------
+
+/// What an in-place walk (`tr_walk_block`) does at each expression, after the
+/// expressions inside it.
+enum TrJob {
+    /// Before each `return` and `throw` outside a lambda, and each call that
+    /// hands `self` on, the rules over `self` (D2): checked, and the kept ones
+    /// given.
+    Leaving { checked: TrRuled, kept: TrRuled, type_name: String, base: Expr, in_lambdas: collections::BTreeSet[u32] },
+    /// Each literal of a type with a rule, checked where it is built (D2).
+    Literals,
+    /// Each field of `binding` read: the literal's value of it, read again.
+    Fields { binding: winnow_grammar::Symbol, values: collections::BTreeMap[String, Expr] },
+    /// The given rules of the types another file changes, in every block.
+    Dropping { changed: collections::BTreeSet[String] },
+}
+
+/// Where the expression `id` stands, or `span` where the parser did not say.
+fn tr_at(spans: ref collections::BTreeMap[u32, Span], id: u32, span: ref Span) -> Span {
+    let found = spans.get(id) ?? return tr_span(span)
+    return tr_span(found)
+}
+
+/// **Writes every rule of the file's structs out as its `assert`s**
+/// (`type_rules::expand`); the first rule that is not one comes back as the
+/// refusal (`NK1288`) and nothing is written.
+pub fn tr_expand(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, mut items: Vec[Spanned[Item]], spans: ref collections::BTreeMap[u32, Span]) -> TrRefusal? {
+    let found = tr_collect(words, intern, renew, items)
+    if found.refusal != null {
+        return found.refusal
+    }
+    let ruled = found.ruled
+    if ruled.len() == 0 {
+        return null
+    }
+    let fields: collections::BTreeMap[String, collections::BTreeSet[String]] = ruled.iter().map(fn(pair) { (pair.0.clone(), pair.1.fields.clone()) }).collect()
+    let mut changed = tr_changed_outside(words, fields, items)
+    changed.extend(tr_fails_changed(words, ruled, items))
+    // Each type's methods in this file, and of them those that change `self`.
+    let own = tr_methods_of(words, items)
+    for mut item in items {
+        tr_rewrite_item(words, intern, renew, ruled, changed, own, spans, item)
+    }
+    return null
+}
+
+fn tr_rewrite_item(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], changed: ref collections::BTreeSet[String], own: ref collections::BTreeMap[String, TrMethods], spans: ref collections::BTreeMap[u32, Span], mut item: Spanned[Item]) sync {
+    let span = tr_span(item.span)
+    match item.node {
+        Item::Impl { target, methods, .. } => {
+            let owner: String? = words.resolve(target.name).clone()
+            for mut method in methods {
+                let at = tr_span(method.span)
+                tr_rewrite_fn(words, intern, renew, ruled, changed, own, spans, method.node, owner, at)
+            }
+        },
+        else => tr_rewrite_fn(words, intern, renew, ruled, changed, own, spans, item.node, null, span),
+    }
+}
+
+/// One function's body with the rules written in: the literals it builds,
+/// a method's leaving points, and the facts at its entry.
+fn tr_rewrite_fn(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], changed: ref collections::BTreeSet[String], own: ref collections::BTreeMap[String, TrMethods], spans: ref collections::BTreeMap[u32, Span], mut item: Item, owner: ref String?, span: ref Span) sync {
+    match item {
+        Item::Fn { receiver, args, ret_type, body, .. } => tr_rewrite_body(words, intern, renew, ruled, changed, own, spans, receiver, args, ret_type != null, body, owner, span),
+        Item::Test { body, .. } => tr_rewrite_body(words, intern, renew, ruled, changed, own, spans, null, [], false, body, owner, span),
+        Item::Bench { body, .. } => tr_rewrite_body(words, intern, renew, ruled, changed, own, spans, null, [], false, body, owner, span),
+        else => {},
+    }
+}
+
+fn tr_rewrite_body(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], changed: ref collections::BTreeSet[String], own: ref collections::BTreeMap[String, TrMethods], spans: ref collections::BTreeMap[u32, Span], receiver: ref Receiver?, args: ref Vec[FnArg], returns: bool, mut body: Block, owner: ref String?, span: ref Span) sync {
+    tr_check_literals(words, intern, renew, ruled, spans, body, span)
+    let type_name: String = owner?.clone() ?? ""
+    let has_self = receiver != null && ruled.contains_key(type_name)
+    let changes_self = has_self && (receiver?.is_mut ?? false)
+    let kept_as_fact = has_self && !changed.contains(type_name)
+    let methods: TrMethods = own.get(type_name)?.clone() ?? TrMethods { all: collections::BTreeSet(), changing: collections::BTreeSet() }
+    let no_rules = TrRuled { fields: collections::BTreeSet(), rules: [], binding: intern("self") }
+    let rules: ref TrRuled = ruled.get(type_name) ?? no_rules
+    // **A rule the method cannot break is not checked in it** (`tr_kept_by`):
+    // given at each point instead, with its message for where another file
+    // breaks it.
+    let taken: Vec[bool] = rules.rules.iter().map(fn(rule) { !changed.contains(type_name) && tr_kept_by(words, rule.claim, rules.fields, methods.all, body) }).collect()
+    let others: Vec[bool] = taken.iter().map(fn(t) { !t }).collect()
+    let kept = tr_part(rules, taken)
+    let checked = tr_part(rules, others)
+    if kept_as_fact {
+        tr_given_after_calls(words, intern, renew, rules, type_name, methods.changing, body)
+    }
+    // **A method that changes its receiver keeps the rule when it leaves**.
+    if changes_self {
+        let base = Expr::Variable(intern("self"), node_id::NodeId::fresh())
+        let mut in_lambdas: collections::BTreeSet[u32] = collections::BTreeSet()
+        for expr in tr_in_block(body, false) {
+            match expr {
+                Expr::Closure { body: inner, .. } => in_lambdas.extend(tr_in_block(inner, false).iter().filter_map(fn(e) { tr_leaving_id(e) })),
+                else => {},
+            }
+        }
+        let leaving = TrJob::Leaving { checked: checked.clone(), kept: kept.clone(), type_name: type_name.clone(), base: base.clone(), in_lambdas: in_lambdas }
+        tr_walk_block(body, words, intern, renew, ruled, spans, span, leaving)
+        tr_before_returns(words, intern, renew, checked, type_name, base, false, body)
+        tr_before_returns(words, intern, renew, kept, type_name, base, true, body)
+        let falls_through = match body.stmts.last() {
+            null => true,
+            last => match last.node {
+                Stmt::Return(_) => false,
+                else => true,
+            },
+        }
+        if !returns && falls_through {
+            let at = match body.stmts.last() {
+                null => tr_span(span),
+                last => tr_span(last.span),
+            }
+            let end = Span { start: at.end, end: at.end }
+            body.stmts.extend(tr_leaving_asserts(words, intern, renew, checked, kept, type_name, base, end))
+        }
+    }
+    // **Where a value of the type is read, its rule holds** (D3): each
+    // parameter of the type, and `self` in the type's methods.
+    let mut given: Vec[Spanned[Stmt]] = []
+    let entry = Span { start: span.start, end: span.start }
+    if kept_as_fact {
+        let base = Expr::Variable(intern("self"), node_id::NodeId::fresh())
+        given.extend(tr_asserts(words, intern, renew, rules, type_name, base, entry, true))
+    }
+    for arg in args {
+        let named = words.resolve(arg.ty.name).clone()
+        let of_arg = ruled.get(named) ?? continue
+        if changed.contains(named) || arg.ty.generics.len() > 0 || arg.ty.is_tuple {
+            continue
+        }
+        let base = Expr::Variable(arg.name, node_id::NodeId::fresh())
+        given.extend(tr_asserts(words, intern, renew, of_arg, named, base, entry, true))
+    }
+    if given.len() > 0 {
+        given.extend(body.stmts.drain())
+        body.stmts = given
+    }
+}
+
+/// The id of a `return` or a `throw`.
+fn tr_leaving_id(e: ref Expr) -> u32? {
+    return match e {
+        Expr::Return(_, id) => id.get(),
+        Expr::Throw(_, id) => id.get(),
+        else => null,
+    }
+}
+
+/// The rules over `self` where a method that changes it leaves: the checked
+/// ones claimed, the kept ones given, both with their `message:`.
+fn tr_leaving_asserts(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, checked: ref TrRuled, kept: ref TrRuled, type_name: ref String, base: ref Expr, at: Span) -> Vec[Spanned[Stmt]] {
+    let mut out = tr_asserts_as(words, intern, renew, checked, type_name, base, at, false, true)
+    out.extend(tr_asserts_as(words, intern, renew, kept, type_name, base, at, true, true))
+    return out
+}
+
+/// **Every literal of a type with a rule is checked where it is built** (D2).
+pub fn tr_check_literals(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], spans: ref collections::BTreeMap[u32, Span], mut body: Block, span: ref Span) sync {
+    tr_walk_block(body, words, intern, renew, ruled, spans, span, TrJob::Literals)
+}
+
+/// The same over every function of a file (`type_rules::across_files`): a
+/// literal of a type another file declares is checked as one in its own file.
+pub fn tr_check_literals_in(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], spans: ref collections::BTreeMap[u32, Span], mut items: Vec[Spanned[Item]]) sync {
+    for mut item in items {
+        let span = tr_span(item.span)
+        tr_literals_in_item(words, intern, renew, ruled, spans, item.node, span)
+    }
+}
+
+fn tr_literals_in_item(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], spans: ref collections::BTreeMap[u32, Span], mut item: Item, span: ref Span) sync {
+    match item {
+        Item::Impl { methods, .. } => {
+            for mut method in methods {
+                let at = tr_span(method.span)
+                tr_literals_in_item(words, intern, renew, ruled, spans, method.node, at)
+            }
+        },
+        Item::Fn { body, .. } => tr_check_literals(words, intern, renew, ruled, spans, body, span),
+        Item::Test { body, .. } => tr_check_literals(words, intern, renew, ruled, spans, body, span),
+        Item::Bench { body, .. } => tr_check_literals(words, intern, renew, ruled, spans, body, span),
+        else => {},
+    }
+}
+
+/// The literal's field values by name, where each is a name or a literal:
+/// a value read twice means the same.
+fn tr_plain_fields(fields: ref Vec[FieldInit], words: ref winnow_grammar::InternerContext) -> collections::BTreeMap[String, Expr]? {
+    let mut out: collections::BTreeMap[String, Expr] = collections::BTreeMap()
+    for field in fields {
+        let value: Expr = match field.value {
+            null => Expr::Variable(field.name, node_id::NodeId::fresh()),
+            given => match given {
+                Expr::Variable(..) | Expr::LitInt { .. } | Expr::LitBool(..) | Expr::LitChar(..) | Expr::LitFloat(..) => given.clone(),
+                else => return null,
+            },
+        }
+        out.insert(words.resolve(field.name).clone(), value)
+    }
+    return out
+}
+
+/// A literal of a type with a rule, checked: `{ let piece = Piece { … };
+/// assert(…); piece }`, or, where its fields are plain values, the rule
+/// asserted over them before the literal, so that the prover sees
+/// `slots.len()` rather than a field of a new binding.
+fn tr_checked_literal(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], spans: ref collections::BTreeMap[u32, Span], span: ref Span, rules: ref TrRuled, type_name: ref String, literal: Expr, values: collections::BTreeMap[String, Expr]?, at: Span) -> Vec[Spanned[Stmt]] {
+    let binding = Expr::Variable(rules.binding, node_id::NodeId::fresh())
+    let checks = tr_asserts(words, intern, renew, rules, type_name, binding, at, false)
+    match values {
+        null => {
+            let mut stmts: Vec[Spanned[Stmt]] = [Spanned(Stmt::Let { names: [rules.binding], shape: [], mutable: false, deep: false, ty: null, value: literal }, tr_span(at))]
+            stmts.extend(checks)
+            stmts.push(Spanned(Stmt::Expr(Expr::Variable(rules.binding, node_id::NodeId::fresh())), tr_span(at)))
+            return stmts
+        },
+        plain => {
+            let mut block = Block { stmts: checks }
+            let job = TrJob::Fields { binding: rules.binding, values: plain }
+            tr_walk_block(block, words, intern, renew, ruled, spans, span, job)
+            block.stmts.push(Spanned(Stmt::Expr(literal), tr_span(at)))
+            return block.stmts
+        },
+    }
+}
+
+/// **A `return` written as a statement, anywhere in the body but a lambda**:
+/// the rule is checked before it.
+fn tr_before_returns(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, rules: ref TrRuled, type_name: ref String, base: ref Expr, given: bool, mut block: Block) sync {
+    let mut out: Vec[Spanned[Stmt]] = []
+    for mut stmt in block.stmts.drain() {
+        if tr_returns_in(words, intern, renew, rules, type_name, base, given, stmt.node) {
+            out.extend(tr_asserts_as(words, intern, renew, rules, type_name, base, stmt.span, given, true))
+        }
+        out.push(stmt)
+    }
+    block.stmts = out
+}
+
+/// Whether the statement is a `return`; the blocks it holds get theirs.
+fn tr_returns_in(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, rules: ref TrRuled, type_name: ref String, base: ref Expr, given: bool, mut stmt: Stmt) -> bool {
+    match stmt {
+        Stmt::Return(_) => return true,
+        Stmt::For { body, .. } => tr_before_returns(words, intern, renew, rules, type_name, base, given, body),
+        Stmt::While { body, .. } => tr_before_returns(words, intern, renew, rules, type_name, base, given, body),
+        Stmt::Let { value, .. } => tr_nested_returns(words, intern, renew, rules, type_name, base, given, value),
+        Stmt::Expr(value) => tr_nested_returns(words, intern, renew, rules, type_name, base, given, value),
+        else => {},
+    }
+    return false
+}
+
+/// The blocks an expression holds as statements of its own: an `if`'s
+/// branches, a `match`'s arms, a block.
+fn tr_nested_returns(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, rules: ref TrRuled, type_name: ref String, base: ref Expr, given: bool, mut expr: Expr) sync {
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => {
+            tr_before_returns(words, intern, renew, rules, type_name, base, given, then_branch)
+            tr_returns_in_else(words, intern, renew, rules, type_name, base, given, else_branch)
+        },
+        Expr::Block(block, _) => tr_before_returns(words, intern, renew, rules, type_name, base, given, block),
+        Expr::AsyncGroup(block, _, _, _, _) => tr_before_returns(words, intern, renew, rules, type_name, base, given, block),
+        Expr::Unsafe(block, _) => tr_before_returns(words, intern, renew, rules, type_name, base, given, block),
+        Expr::Match { arms, .. } => {
+            for mut arm in arms {
+                tr_nested_returns(words, intern, renew, rules, type_name, base, given, arm.body)
+            }
+        },
+        else => {},
+    }
+}
+
+fn tr_returns_in_else(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, rules: ref TrRuled, type_name: ref String, base: ref Expr, given: bool, mut block: Block?) sync {
+    if block != null {
+        tr_before_returns(words, intern, renew, rules, type_name, base, given, block)
+    }
+}
+
+/// **After a call of a method of the type that changes `self`, the rule
+/// holds again** (D2, D3): the call's exits hold it, so each statement whose
+/// value is such a call - `self.m(…)`, `let x = self.m(…)`, `x = self.m(…)` -
+/// is followed by the rule, given.
+fn tr_given_after_calls(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, rules: ref TrRuled, type_name: ref String, changing: ref collections::BTreeSet[String], mut block: Block) sync {
+    let mut out: Vec[Spanned[Stmt]] = []
+    for mut stmt in block.stmts.drain() {
+        let called = tr_calls_in(words, intern, renew, rules, type_name, changing, stmt.node)
+        let at = tr_span(stmt.span)
+        out.push(stmt)
+        if called {
+            let base = Expr::Variable(intern("self"), node_id::NodeId::fresh())
+            out.extend(tr_asserts(words, intern, renew, rules, type_name, base, at, true))
+        }
+    }
+    block.stmts = out
+}
+
+/// Whether the statement's value is a call that changes `self`; the blocks
+/// it holds get their rules.
+fn tr_calls_in(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, rules: ref TrRuled, type_name: ref String, changing: ref collections::BTreeSet[String], mut stmt: Stmt) -> bool {
+    match stmt {
+        Stmt::For { body, .. } => tr_given_after_calls(words, intern, renew, rules, type_name, changing, body),
+        Stmt::While { body, .. } => tr_given_after_calls(words, intern, renew, rules, type_name, changing, body),
+        Stmt::Let { value, .. } => {
+            tr_nested_given(words, intern, renew, rules, type_name, changing, value)
+            return tr_changes_self(value, words, changing)
+        },
+        Stmt::Expr(value) => {
+            tr_nested_given(words, intern, renew, rules, type_name, changing, value)
+            return tr_changes_self(value, words, changing)
+        },
+        Stmt::Assign { target, value, .. } => {
+            let a_name = match target {
+                Expr::Variable(..) => true,
+                else => false,
+            }
+            return a_name && !tr_is_self(target, words) && tr_changes_self(value, words, changing)
+        },
+        else => {},
+    }
+    return false
+}
+
+fn tr_changes_self(e: ref Expr, words: ref winnow_grammar::InternerContext, changing: ref collections::BTreeSet[String]) -> bool {
+    return match e {
+        Expr::MethodCall { receiver, method, .. } => tr_is_self(receiver, words) && changing.contains(words.resolve(method)),
+        else => false,
+    }
+}
+
+/// The blocks an expression holds as statements of its own, for
+/// `tr_given_after_calls`.
+fn tr_nested_given(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, rules: ref TrRuled, type_name: ref String, changing: ref collections::BTreeSet[String], mut expr: Expr) sync {
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => {
+            tr_given_after_calls(words, intern, renew, rules, type_name, changing, then_branch)
+            tr_given_in_else(words, intern, renew, rules, type_name, changing, else_branch)
+        },
+        Expr::Block(block, _) => tr_given_after_calls(words, intern, renew, rules, type_name, changing, block),
+        Expr::AsyncGroup(block, _, _, _, _) => tr_given_after_calls(words, intern, renew, rules, type_name, changing, block),
+        Expr::Unsafe(block, _) => tr_given_after_calls(words, intern, renew, rules, type_name, changing, block),
+        Expr::Match { arms, .. } => {
+            for mut arm in arms {
+                tr_nested_given(words, intern, renew, rules, type_name, changing, arm.body)
+            }
+        },
+        else => {},
+    }
+}
+
+fn tr_given_in_else(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, rules: ref TrRuled, type_name: ref String, changing: ref collections::BTreeSet[String], mut block: Block?) sync {
+    if block != null {
+        tr_given_after_calls(words, intern, renew, rules, type_name, changing, block)
+    }
+}
+
+/// **A function's entry without the facts of the rules of `changed`**, in
+/// every function of a file (`type_rules::across_files`): one at an entry
+/// or after a call is dropped; one a method keeps (`tr_kept_by`), which also
+/// carries its `message:`, is a check again.
+pub fn tr_drop_given(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, changed: ref collections::BTreeSet[String], mut items: Vec[Spanned[Item]]) sync {
+    for mut item in items {
+        tr_drop_given_in_item(words, intern, renew, changed, item.node)
+    }
+}
+
+fn tr_drop_given_in_item(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, changed: ref collections::BTreeSet[String], mut item: Item) sync {
+    match item {
+        Item::Impl { methods, .. } => {
+            for mut method in methods {
+                tr_drop_given_in_item(words, intern, renew, changed, method.node)
+            }
+        },
+        Item::Fn { body, .. } => tr_drop_given_in(words, intern, renew, changed, body),
+        Item::Test { body, .. } => tr_drop_given_in(words, intern, renew, changed, body),
+        Item::Bench { body, .. } => tr_drop_given_in(words, intern, renew, changed, body),
+        else => {},
+    }
+}
+
+fn tr_drop_given_in(words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, changed: ref collections::BTreeSet[String], mut body: Block) sync {
+    tr_drop_in(body, words, changed)
+    let ruled: collections::BTreeMap[String, TrRuled] = collections::BTreeMap()
+    let spans: collections::BTreeMap[u32, Span] = collections::BTreeMap()
+    let job = TrJob::Dropping { changed: changed.clone() }
+    tr_walk_block(body, words, intern, renew, ruled, spans, Span { start: 0, end: 0 }, job)
+}
+
+/// Whether a config option is the given mark of a type of `changed`.
+fn tr_given_of(arg: ref ConfigArg, words: ref winnow_grammar::InternerContext, changed: ref collections::BTreeSet[String]) -> bool {
+    if words.resolve(arg.name) != tr_given() {
+        return false
+    }
+    return match arg.value {
+        Expr::LitStr { text, .. } => changed.contains(text),
+        else => false,
+    }
+}
+
+/// The given rules of `changed` out of one block's statements.
+fn tr_drop_in(mut block: Block, words: ref winnow_grammar::InternerContext, changed: ref collections::BTreeSet[String]) sync {
+    let mut kept: Vec[Spanned[Stmt]] = []
+    for mut stmt in block.stmts.drain() {
+        if !tr_drops(stmt.node, words, changed) {
+            kept.push(stmt)
+        }
+    }
+    block.stmts = kept
+}
+
+/// Whether the statement is a given rule of `changed`, dropped; one that
+/// carries its `message:` loses only the mark, and is a check again.
+fn tr_drops(mut stmt: Stmt, words: ref winnow_grammar::InternerContext, changed: ref collections::BTreeSet[String]) -> bool {
+    match stmt {
+        Stmt::Expr(Expr::Call { config, .. }) => {
+            if !config.iter().any(fn(arg) { tr_given_of(arg, words, changed) }) {
+                return false
+            }
+            if config.iter().any(fn(arg) { words.resolve(arg.name) == "message" }) {
+                config.retain(fn(arg) { !tr_given_of(arg, words, changed) })
+                return false
+            }
+            return true
+        },
+        else => return false,
+    }
+}
+
+fn tr_drop_in_else(mut block: Block?, words: ref winnow_grammar::InternerContext, changed: ref collections::BTreeSet[String]) sync {
+    if block != null {
+        tr_drop_in(block, words, changed)
+    }
+}
+
+// --- The in-place walk -------------------------------------------------------
+
+/// **Every expression below a block, changed where it stands** (as
+/// `text_tiers::visit_block_mut` did): the expressions inside one first,
+/// then the job at it (`tr_visit`).
+fn tr_walk_block(mut block: Block, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], spans: ref collections::BTreeMap[u32, Span], span: ref Span, job: ref TrJob) sync {
+    for mut stmt in block.stmts {
+        tr_walk_stmt(stmt.node, words, intern, renew, ruled, spans, span, job)
+    }
+}
+
+fn tr_walk_stmt(mut stmt: Stmt, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], spans: ref collections::BTreeMap[u32, Span], span: ref Span, job: ref TrJob) sync {
+    match stmt {
+        Stmt::Let { value, .. } => tr_walk_expr(value, words, intern, renew, ruled, spans, span, job),
+        Stmt::Assign { target, value, .. } => {
+            tr_walk_expr(target, words, intern, renew, ruled, spans, span, job)
+            tr_walk_expr(value, words, intern, renew, ruled, spans, span, job)
+        },
+        Stmt::For { iter, body, .. } => {
+            tr_walk_expr(iter, words, intern, renew, ruled, spans, span, job)
+            tr_walk_block(body, words, intern, renew, ruled, spans, span, job)
+            tr_drop_from(body, words, job)
+        },
+        Stmt::While { cond, body } => {
+            tr_walk_expr(cond, words, intern, renew, ruled, spans, span, job)
+            tr_walk_block(body, words, intern, renew, ruled, spans, span, job)
+            tr_drop_from(body, words, job)
+        },
+        Stmt::Return(value) => tr_walk_maybe(value, words, intern, renew, ruled, spans, span, job),
+        Stmt::Expr(value) => tr_walk_expr(value, words, intern, renew, ruled, spans, span, job),
+        else => {},
+    }
+}
+
+fn tr_walk_maybe(mut expr: Expr?, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], spans: ref collections::BTreeMap[u32, Span], span: ref Span, job: ref TrJob) sync {
+    if expr != null {
+        tr_walk_expr(expr, words, intern, renew, ruled, spans, span, job)
+    }
+}
+
+fn tr_walk_else(mut block: Block?, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], spans: ref collections::BTreeMap[u32, Span], span: ref Span, job: ref TrJob) sync {
+    if block != null {
+        tr_walk_block(block, words, intern, renew, ruled, spans, span, job)
+    }
+}
+
+fn tr_walk_all(mut all: Vec[Expr], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], spans: ref collections::BTreeMap[u32, Span], span: ref Span, job: ref TrJob) sync {
+    for mut each in all {
+        tr_walk_expr(each, words, intern, renew, ruled, spans, span, job)
+    }
+}
+
+fn tr_walk_config(mut config: Vec[ConfigArg], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], spans: ref collections::BTreeMap[u32, Span], span: ref Span, job: ref TrJob) sync {
+    for mut option in config {
+        tr_walk_expr(option.value, words, intern, renew, ruled, spans, span, job)
+    }
+}
+
+fn tr_walk_fields(mut fields: Vec[FieldInit], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], spans: ref collections::BTreeMap[u32, Span], span: ref Span, job: ref TrJob) sync {
+    for mut field in fields {
+        tr_walk_maybe(field.value, words, intern, renew, ruled, spans, span, job)
+    }
+}
+
+fn tr_walk_expr(mut expr: Expr, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], spans: ref collections::BTreeMap[u32, Span], span: ref Span, job: ref TrJob) sync {
+    match expr {
+        Expr::Call { func, args, config, .. } => {
+            tr_walk_expr(func, words, intern, renew, ruled, spans, span, job)
+            tr_walk_all(args, words, intern, renew, ruled, spans, span, job)
+            tr_walk_config(config, words, intern, renew, ruled, spans, span, job)
+        },
+        Expr::MethodCall { receiver, args, config, .. } => {
+            tr_walk_expr(receiver, words, intern, renew, ruled, spans, span, job)
+            tr_walk_all(args, words, intern, renew, ruled, spans, span, job)
+            tr_walk_config(config, words, intern, renew, ruled, spans, span, job)
+        },
+        Expr::SafeMethod { receiver, args, config, .. } => {
+            tr_walk_expr(receiver, words, intern, renew, ruled, spans, span, job)
+            tr_walk_all(args, words, intern, renew, ruled, spans, span, job)
+            tr_walk_config(config, words, intern, renew, ruled, spans, span, job)
+        },
+        Expr::Binary { lhs, rhs, .. } => {
+            tr_walk_expr(lhs, words, intern, renew, ruled, spans, span, job)
+            tr_walk_expr(rhs, words, intern, renew, ruled, spans, span, job)
+        },
+        Expr::Unary { expr: inner, .. } => tr_walk_expr(inner, words, intern, renew, ruled, spans, span, job),
+        Expr::Try(inner, _) => tr_walk_expr(inner, words, intern, renew, ruled, spans, span, job),
+        Expr::Async(inner, _, _, _) => tr_walk_expr(inner, words, intern, renew, ruled, spans, span, job),
+        Expr::Throw(inner, _) => tr_walk_expr(inner, words, intern, renew, ruled, spans, span, job),
+        Expr::Cast { expr: inner, .. } => tr_walk_expr(inner, words, intern, renew, ruled, spans, span, job),
+        Expr::Return(value, _) => tr_walk_maybe(value, words, intern, renew, ruled, spans, span, job),
+        Expr::Field { base, .. } => tr_walk_expr(base, words, intern, renew, ruled, spans, span, job),
+        Expr::SafeField { base, .. } => tr_walk_expr(base, words, intern, renew, ruled, spans, span, job),
+        Expr::Index { base, index, .. } => {
+            tr_walk_expr(base, words, intern, renew, ruled, spans, span, job)
+            tr_walk_expr(index, words, intern, renew, ruled, spans, span, job)
+        },
+        Expr::Range { start, end, .. } => {
+            tr_walk_expr(start, words, intern, renew, ruled, spans, span, job)
+            tr_walk_expr(end, words, intern, renew, ruled, spans, span, job)
+        },
+        Expr::Tuple(items, _) => tr_walk_all(items, words, intern, renew, ruled, spans, span, job),
+        Expr::ListLit { items, .. } => tr_walk_all(items, words, intern, renew, ruled, spans, span, job),
+        Expr::ListRepeat { value, count, .. } => {
+            tr_walk_expr(value, words, intern, renew, ruled, spans, span, job)
+            tr_walk_expr(count, words, intern, renew, ruled, spans, span, job)
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            tr_walk_expr(value, words, intern, renew, ruled, spans, span, job)
+            tr_walk_expr(fallback, words, intern, renew, ruled, spans, span, job)
+        },
+        Expr::TryCatch { expr: inner, handler, .. } => {
+            tr_walk_expr(inner, words, intern, renew, ruled, spans, span, job)
+            tr_walk_block(handler, words, intern, renew, ruled, spans, span, job)
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            tr_walk_expr(cond, words, intern, renew, ruled, spans, span, job)
+            tr_walk_block(then_branch, words, intern, renew, ruled, spans, span, job)
+            tr_walk_else(else_branch, words, intern, renew, ruled, spans, span, job)
+        },
+        Expr::Match { value, arms, .. } => {
+            tr_walk_expr(value, words, intern, renew, ruled, spans, span, job)
+            for mut arm in arms {
+                tr_walk_maybe(arm.guard, words, intern, renew, ruled, spans, span, job)
+                tr_walk_expr(arm.body, words, intern, renew, ruled, spans, span, job)
+            }
+        },
+        Expr::StructLit { fields, .. } => tr_walk_fields(fields, words, intern, renew, ruled, spans, span, job),
+        Expr::With { base, fields, .. } => {
+            tr_walk_expr(base, words, intern, renew, ruled, spans, span, job)
+            tr_walk_fields(fields, words, intern, renew, ruled, spans, span, job)
+        },
+        Expr::Block(block, _) => tr_walk_block(block, words, intern, renew, ruled, spans, span, job),
+        Expr::AsyncGroup(block, _, _, _, _) => tr_walk_block(block, words, intern, renew, ruled, spans, span, job),
+        Expr::Unsafe(block, _) => tr_walk_block(block, words, intern, renew, ruled, spans, span, job),
+        Expr::Overlap(block, _) => tr_walk_block(block, words, intern, renew, ruled, spans, span, job),
+        Expr::Closure { body, .. } => tr_walk_block(body, words, intern, renew, ruled, spans, span, job),
+        Expr::Spawn { body, .. } => tr_walk_expr(body, words, intern, renew, ruled, spans, span, job),
+        else => {},
+    }
+    tr_visit(expr, words, intern, renew, ruled, spans, span, job)
+}
+
+/// The job at one expression, its parts walked already.
+fn tr_visit(mut expr: Expr, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], spans: ref collections::BTreeMap[u32, Span], span: ref Span, job: ref TrJob) sync {
+    match job {
+        TrJob::Leaving { checked, kept, type_name, base, in_lambdas } => tr_leaving(expr, words, intern, renew, spans, span, checked, kept, type_name, base, in_lambdas),
+        TrJob::Literals => tr_literal(expr, words, intern, renew, ruled, spans, span),
+        TrJob::Fields { binding, values } => tr_field_read(expr, words, renew, binding, values),
+        TrJob::Dropping { changed } => tr_drop_nested(expr, words, changed),
+    }
+}
+
+/// **`self` handed on holds the rule**: the method or function it reaches
+/// reads the rule as a fact at its entry (D3), so a rule broken for a while
+/// is checked before the call; so it is before a `return` or a `throw` that
+/// leaves the method, not a lambda in it.
+fn tr_leaves(e: ref Expr, words: ref winnow_grammar::InternerContext, in_lambdas: ref collections::BTreeSet[u32]) -> bool {
+    return match e {
+        Expr::MethodCall { receiver, .. } => tr_is_self(receiver, words),
+        Expr::Call { args, .. } => args.iter().any(fn(a) { tr_is_self(a, words) }),
+        Expr::Return(_, id) => !in_lambdas.contains(id.get()),
+        Expr::Throw(_, id) => !in_lambdas.contains(id.get()),
+        else => false,
+    }
+}
+
+/// The rules checked before the expression: `{ assert(…); expr }`.
+fn tr_leaving(mut expr: Expr, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, spans: ref collections::BTreeMap[u32, Span], span: ref Span, checked: ref TrRuled, kept: ref TrRuled, type_name: ref String, base: ref Expr, in_lambdas: ref collections::BTreeSet[u32]) sync {
+    if !tr_leaves(expr, words, in_lambdas) {
+        return
+    }
+    let at = tr_at(spans, id_of(expr), span)
+    let mut stmts = tr_leaving_asserts(words, intern, renew, checked, kept, type_name, base, tr_span(at))
+    match expr {
+        Expr::MethodCall { receiver, method, args, config, id } => {
+            stmts.push(Spanned(Stmt::Expr(Expr::MethodCall { receiver: receiver, method: method, args: args, config: config, id: id }), at))
+            expr = Expr::Block(Block { stmts: stmts }, node_id::NodeId::fresh())
+        },
+        Expr::Call { func, args, config, id } => {
+            stmts.push(Spanned(Stmt::Expr(Expr::Call { func: func, args: args, config: config, id: id }), at))
+            expr = Expr::Block(Block { stmts: stmts }, node_id::NodeId::fresh())
+        },
+        Expr::Return(value, id) => {
+            stmts.push(Spanned(Stmt::Expr(Expr::Return(value, id)), at))
+            expr = Expr::Block(Block { stmts: stmts }, node_id::NodeId::fresh())
+        },
+        Expr::Throw(value, id) => {
+            stmts.push(Spanned(Stmt::Expr(Expr::Throw(value, id)), at))
+            expr = Expr::Block(Block { stmts: stmts }, node_id::NodeId::fresh())
+        },
+        else => {},
+    }
+}
+
+/// A literal of a type with a rule, checked where it is built (D2).
+fn tr_literal(mut expr: Expr, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, renew: fn(ref Expr) -> Expr sync, ruled: ref collections::BTreeMap[String, TrRuled], spans: ref collections::BTreeMap[u32, Span], span: ref Span) sync {
+    let type_name: String = match expr {
+        Expr::StructLit { name, .. } => words.resolve(name).clone(),
+        else => return,
+    }
+    let rules = ruled.get(type_name) ?? return
+    let at = tr_at(spans, id_of(expr), span)
+    let values = match expr {
+        Expr::StructLit { fields, .. } => tr_plain_fields(fields, words),
+        else => null,
+    }
+    match expr {
+        Expr::StructLit { name, fields, id } => {
+            let literal = Expr::StructLit { name: name, fields: fields, id: id }
+            expr = Expr::Block(Block { stmts: tr_checked_literal(words, intern, renew, ruled, spans, span, rules, type_name, literal, values, at) }, node_id::NodeId::fresh())
+        },
+        else => {},
+    }
+}
+
+/// A field of the checked literal's binding: the literal's value of it.
+fn tr_field_read(mut expr: Expr, words: ref winnow_grammar::InternerContext, renew: fn(ref Expr) -> Expr sync, binding: ref winnow_grammar::Symbol, values: ref collections::BTreeMap[String, Expr]) sync {
+    let field: String = match expr {
+        Expr::Field { base, name, .. } => match base {
+            Expr::Variable(b, _) => if b == binding { words.resolve(name).clone() } else { return },
+            else => return,
+        },
+        else => return,
+    }
+    let value = values.get(field) ?? return
+    expr = tr_renumbered(value, renew)
+}
+
+/// The given rules of `changed` out of the blocks an expression holds.
+fn tr_drop_nested(mut expr: Expr, words: ref winnow_grammar::InternerContext, changed: ref collections::BTreeSet[String]) sync {
+    match expr {
+        Expr::Block(block, _) => tr_drop_in(block, words, changed),
+        Expr::AsyncGroup(block, _, _, _, _) => tr_drop_in(block, words, changed),
+        Expr::Unsafe(block, _) => tr_drop_in(block, words, changed),
+        Expr::Closure { body, .. } => tr_drop_in(body, words, changed),
+        Expr::If { then_branch, else_branch, .. } => {
+            tr_drop_in(then_branch, words, changed)
+            tr_drop_in_else(else_branch, words, changed)
+        },
+        else => {},
+    }
+}
+
+/// A loop's body without the given rules of `changed`, where the job drops
+/// them.
+fn tr_drop_from(mut block: Block, words: ref winnow_grammar::InternerContext, job: ref TrJob) sync {
+    match job {
+        TrJob::Dropping { changed } => tr_drop_in(block, words, changed),
+        else => {},
+    }
+}

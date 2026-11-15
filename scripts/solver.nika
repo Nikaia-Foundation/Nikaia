@@ -17,7 +17,7 @@
 // PAR-2 with no wrong answer. Then it reports the defaults and the tuned set
 // on the held-out half, which the tuning never saw.
 //
-// `run` puts the logic layer's files of `crates/nikaia-std/src/tools/` (read,
+// `run` puts the logic layer's files of `crates/nikaia-std/src/compiler/` (read,
 // never copied), the new engine's files there too (moved in #1285),
 // and the driver `crates/nikaia-std/src/solver/sv_rod.nika` into
 // one program in a temporary directory, builds it with the `nikaia` that runs
@@ -43,7 +43,7 @@ fn solver_logic_files() -> Vec[String] {
 	return ["prover_arena", "solver_terms", "prove_text", "logic_lia", "logic_horn", "logic_normal", "logic_search", "logic_smtlib", "logic_alethe"]
 }
 
-// The new engine's files of `crates/nikaia-std/src/tools/` (#1282, #1283, #1285), in the
+// The new engine's files of `crates/nikaia-std/src/compiler/` (#1282, #1283, #1285), in the
 // order the program takes them, before the driver.
 fn solver_engine_files() -> Vec[String] {
 	return ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_pre", "sv_walk", "sv_strategy", "sv_smt", "sv_smtlib", "sv_lemma", "sv_nl", "sv_rod_line"]
@@ -88,10 +88,10 @@ fn solver_root() -> String throws {
 fn solver_program(repo: String) -> String throws {
 	let mut paths: Vec[String] = []
 	for name in solver_logic_files() {
-		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
+		paths.push(f"{repo}/crates/nikaia-std/src/compiler/{name}.nika")
 	}
 	for name in solver_engine_files() {
-		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
+		paths.push(f"{repo}/crates/nikaia-std/src/compiler/{name}.nika")
 	}
 	paths.push(f"{repo}/crates/nikaia-std/src/solver/sv_rod.nika")
 	let mut uses: Vec[String] = []

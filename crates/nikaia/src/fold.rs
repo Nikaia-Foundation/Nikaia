@@ -14,7 +14,7 @@
 //! it exactly the subset of expressions that can be answered without looking
 //! anything up.
 //!
-//! **The fold is Nikaia** (`nikaia-std/src/tools/fold.nika`,
+//! **The fold is Nikaia** (`nikaia-std/src/compiler/fold.nika`,
 //! [ADR-294](../../../docs/specification/adr/adr-294.md) D11): a magnitude and
 //! a sign, 65 bits, held at every step to the type a declared operand pinned.
 //! This module is its adapter: the checker keeps a constant as the same

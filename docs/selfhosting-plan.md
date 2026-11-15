@@ -710,7 +710,7 @@ at that commit: re-grep the names before cutting.
 Of `project.rs` about 2,120 lines are in P1-P4; of `comptime_run.rs` about 610 in K1-K2.
 
 **First two slices to brief: P2, then K1** (different files, one after the other; both
-add a row to `scripts/self_hosting.py` and a module to `tools/lowered.rs`, so not side
+add a row to `scripts/self_hosting.py` and a module to `compiler/lowered.rs`, so not side
 by side). Known risk of each:
 
 * P2: the summary text is byte for byte in many `.stderr` of `tests/compiler` and the

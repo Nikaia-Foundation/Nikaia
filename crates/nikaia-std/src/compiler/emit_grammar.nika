@@ -1,0 +1,1068 @@
+// crates/nikaia-std/src/compiler/emit_grammar.nika
+//
+// **The grammars the emitter writes**, moved from `emit/mod.rs` (ADR-294,
+// #125, #558, E10-1): `grammar! { .. }` for a grammar and, after it, its copy
+// over bytes (ADR-366 D1), the options of a `par_fold` entry (ADR-372 D6), and
+// each rule with its alternatives and actions. A pattern and a type are
+// written by the host; an action is a block of Nikaia.
+
+use std::collections
+
+/// The template rule `list(item, sep)` lowers to (Part II 10.8).
+fn emit_list_rule() -> String {
+    return "__nikaia_list"
+}
+
+/// The Rust tuple of `parts`, a one-part one with its comma.
+fn emit_members_tuple(parts: ref Vec[String]) -> String {
+    if parts.is_empty() {
+        return "()"
+    }
+    return f"({parts.join(", ")},)"
+}
+
+/// Whether a pattern writes `list(item, sep)` anywhere in it.
+fn emit_writes_a_list(world: ref EmitWorld, pattern: ref Spanned[Pattern]) -> bool {
+    return match pattern.node {
+        Pattern::Seq(parts) => emit_any_writes_a_list(world, parts),
+        Pattern::Choice(parts) => emit_any_writes_a_list(world, parts),
+        Pattern::Bind { pat, .. } => emit_writes_a_list(world, pat),
+        Pattern::Repeat { pat, .. } => emit_writes_a_list(world, pat),
+        Pattern::Group(pat) => emit_writes_a_list(world, pat),
+        Pattern::Ref { name, args, .. } => (emit_text(world, name) == "list" && args.len() == 2) || emit_any_writes_a_list(world, args),
+        else => false,
+    }
+}
+
+fn emit_any_writes_a_list(world: ref EmitWorld, parts: ref Vec[Spanned[Pattern]]) -> bool {
+    for part in parts {
+        if emit_writes_a_list(world, part) {
+            return true
+        }
+    }
+    return false
+}
+
+/// The template rules `span(p)` and `here` lower to (Part II 10.8, ADR-339
+/// D1, #557).
+fn emit_span_rule() -> String {
+    return "__nikaia_span"
+}
+
+/// The template rule `count(p)` lowers to (ADR-grammar-1 D5).
+fn emit_count_rule() -> String {
+    return "__nikaia_count"
+}
+
+fn emit_here_rule() -> String {
+    return "__nikaia_here"
+}
+
+/// The template rule `same_line` lowers to (ADR-339 D2): an `extern rule`
+/// over the function written after the grammar (`emit_same_line_function`).
+fn emit_same_line_rule() -> String {
+    return "__nikaia_same_line"
+}
+
+/// The name a grammar's own `WS` takes under the `WS` that records what it
+/// skipped, in a grammar that writes `same_line`: upper case, so the backend
+/// reads it as a lexical rule, which skips no whitespace inside itself.
+fn emit_own_ws_rule() -> String {
+    return "NIKAIA_OWN_WS"
+}
+
+/// What the backend skips where a grammar declares no `WS`: any run of
+/// whitespace, none too.
+fn emit_default_ws() -> String {
+    return "multispace0"
+}
+
+/// **The function behind a grammar's `same_line`** (ADR-339 D2, the Rust
+/// parser's `same_line` in `parser/mod.rs`): it fails where the token at the
+/// current position came right after a skipped run that held a line break,
+/// and covers nothing. One per grammar copy, so the text copy and the one over
+/// bytes, written in the same module, do not collide.
+fn emit_same_line_function(name: ref String) -> String {
+    let mut out: Vec[String] = []
+    out.push("#[allow(non_snake_case, dead_code)]\n")
+    out.push(f"fn {emit_same_line_rule()}_{name}<B, S>(i: &mut ::winnow_grammar::rt::Input<B, S>) -> Result<(), ::winnow_grammar::ParseError>\n")
+    out.push("where\n")
+    out.push("    B: ::winnow_grammar::rt::Slice,\n")
+    out.push("    S: Clone + ::std::fmt::Debug + ::winnow_grammar::StateOf<::nikaia_std::grammar::LineBreaks>,\n")
+    out.push("{\n")
+    out.push("    let at = ::winnow::stream::Location::current_token_start(&*i) as i64;\n")
+    out.push("    if ::winnow_grammar::StateOf::<::nikaia_std::grammar::LineBreaks>::state(&mut i.state.user_state).began_a_line(at) {\n")
+    out.push("        return Err(::winnow_grammar::ParseError::from_input(i));\n")
+    out.push("    }\n")
+    out.push("    Ok(())\n")
+    out.push("}\n")
+    return out.join("")
+}
+
+/// Whether a pattern writes the built-in `called` with `arity` arguments
+/// anywhere in it, where the grammar declares no rule of that name.
+fn emit_writes_a_built_in(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern, called: String, arity: i64) -> bool {
+    return match pattern {
+        Pattern::Seq(parts) => parts.iter().any(fn(part) { emit_writes_a_built_in(world, walk, part.node, called, arity) }),
+        Pattern::Choice(parts) => parts.iter().any(fn(part) { emit_writes_a_built_in(world, walk, part.node, called, arity) }),
+        Pattern::Bind { pat, .. } => emit_writes_a_built_in(world, walk, pat.node, called, arity),
+        Pattern::Repeat { pat, .. } => emit_writes_a_built_in(world, walk, pat.node, called, arity),
+        Pattern::Counted { pat, .. } => emit_writes_a_built_in(world, walk, pat.node, called, arity),
+        Pattern::Group(pat) => emit_writes_a_built_in(world, walk, pat.node, called, arity),
+        Pattern::Ref { name, generics, args } => (emit_text(world, name) == called && generics.len() == 0 && args.len() == arity && !walk.grammar_rules.contains(called)) || args.iter().any(fn(arg) { emit_writes_a_built_in(world, walk, arg.node, called, arity) }),
+        else => false,
+    }
+}
+
+/// **The names bound to a `span(p)`** in a pattern, each with the range the
+/// action reads as a `text::Span` (#557): the backend's own for `(p) @ s`, or
+/// from the first element's start to the last one's end where `p` is a
+/// sequence that binds names (`emit_is_a_binding_span`, #1197).
+fn emit_span_bindings(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern, mut found: Vec[String], mut ranges: Vec[String], nested: bool) {
+    match pattern {
+        Pattern::Bind { name, pat: grouped } => {
+            let pat = emit_ungrouped(grouped)
+            if emit_is_a_span(world, walk, pat.node) {
+                let said = emit_text(world, name)
+                match pat.node {
+                    Pattern::Ref { args, .. } => {
+                        if emit_is_a_binding_span(world, walk, pat.node, nested) {
+                            let from = emit_text_edge(world, walk, said, args, "from")
+                            let to = emit_text_edge(world, walk, said, args, "to")
+                            ranges.push(f"{from}.start..{to}.end")
+                        } else {
+                            ranges.push(said.clone())
+                        }
+                    },
+                    else => ranges.push(said.clone()),
+                }
+                found.push(said)
+            }
+            emit_span_bindings(world, walk, pat.node, found, ranges, nested)
+        },
+        Pattern::Seq(parts) => {
+            for part in parts {
+                emit_span_bindings(world, walk, part.node, found, ranges, nested)
+            }
+        },
+        Pattern::Choice(parts) => {
+            for part in parts {
+                emit_span_bindings(world, walk, part.node, found, ranges, true)
+            }
+        },
+        // what a span or a text written out element by element holds is
+        // the alternative's still; below any other rule the backend's
+        Pattern::Ref { args, .. } => {
+            let open = !nested && (emit_is_a_binding_span(world, walk, pattern, false) || emit_is_a_binding_text(world, walk, pattern))
+            for arg in args {
+                emit_span_bindings(world, walk, arg.node, found, ranges, !open)
+            }
+        },
+        Pattern::Repeat { pat, .. } => emit_span_bindings(world, walk, pat.node, found, ranges, true),
+        Pattern::Group(pat) => emit_span_bindings(world, walk, pat.node, found, ranges, nested),
+        else => {},
+    }
+}
+
+/// **The names bound to a `text(p)` whose `p` binds names** (#1013), each
+/// with the ranges it starts and ends in (`emit_text_edge`): the action reads
+/// the text between them.
+fn emit_text_bindings(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Spanned[Pattern], mut found: Vec[String], mut ranges: Vec[String]) {
+    match pattern.node {
+        Pattern::Bind { name, pat: grouped } => {
+            let pat = emit_ungrouped(grouped)
+            match pat.node {
+                Pattern::Ref { args, .. } => {
+                    if emit_is_a_binding_text(world, walk, pat.node) {
+                        emit_text_binding(world, walk, emit_text(world, name), args, found, ranges)
+                    } else if emit_is_a_binding_span(world, walk, pat.node, false) {
+                        // a span written out element by element (#1197)
+                        for arg in args {
+                            emit_text_bindings(world, walk, arg, found, ranges)
+                        }
+                    }
+                },
+                else => {},
+            }
+        },
+        // an unbound one, under the lowering's own label (#1039)
+        Pattern::Ref { args, .. } => {
+            if emit_is_a_binding_text(world, walk, pattern.node) {
+                emit_text_binding(world, walk, emit_hidden_text(pattern), args, found, ranges)
+            }
+        },
+        Pattern::Seq(parts) => {
+            for part in parts {
+                emit_text_bindings(world, walk, part, found, ranges)
+            }
+        },
+        Pattern::Group(pat) => emit_text_bindings(world, walk, pat, found, ranges),
+        // below a repeat, a choice or a built-in a bound `text(..)` is the
+        // backend's own (`grammar_nested`)
+        else => {},
+    }
+}
+
+/// One `text(..)` of `emit_text_bindings` bound to `said`, and those nested
+/// in it.
+fn emit_text_binding(world: ref EmitWorld, walk: ref EmitWalk, said: String, args: ref Vec[Spanned[Pattern]], mut found: Vec[String], mut ranges: Vec[String]) {
+    let from = emit_text_edge(world, walk, said, args, "from")
+    let to = emit_text_edge(world, walk, said, args, "to")
+    found.push(said)
+    ranges.push(f"{from}.start..{to}.end")
+    for arg in args {
+        emit_text_bindings(world, walk, arg, found, ranges)
+    }
+}
+
+/// **The names bound to a `bytes(p)`** in a pattern, for a text grammar's
+/// action to see as bytes (ADR-366 D4).
+fn emit_bytes_bindings(world: ref EmitWorld, pattern: ref Pattern, mut found: Vec[String]) {
+    match pattern {
+        Pattern::Bind { name, pat } => {
+            match pat.node {
+                Pattern::Ref { name: called, .. } => {
+                    if emit_text(world, called) == "bytes" {
+                        found.push(emit_text(world, name))
+                    }
+                },
+                else => {},
+            }
+            emit_bytes_bindings(world, pat.node, found)
+        },
+        Pattern::Seq(parts) => {
+            for part in parts {
+                emit_bytes_bindings(world, part.node, found)
+            }
+        },
+        Pattern::Choice(parts) => {
+            for part in parts {
+                emit_bytes_bindings(world, part.node, found)
+            }
+        },
+        Pattern::Repeat { pat, .. } => emit_bytes_bindings(world, pat.node, found),
+        Pattern::Group(pat) => emit_bytes_bindings(world, pat.node, found),
+        else => {},
+    }
+}
+
+/// The `par_fold` a rule's body is, written bare or bound to a name.
+fn emit_a_par_fold(rule: ref GrammarRule) -> FoldSpec? {
+    for alt in rule.alts {
+        let found: FoldSpec? = match alt.pattern.node {
+            Pattern::Fold(spec) => emit_parallel_fold(spec),
+            Pattern::Bind { pat, .. } => match pat.node {
+                Pattern::Fold(spec) => emit_parallel_fold(spec),
+                else => null,
+            },
+            else => null,
+        }
+        if found != null {
+            return found
+        }
+    }
+    return null
+}
+
+fn emit_parallel_fold(spec: ref FoldSpec) -> FoldSpec? {
+    if spec.parallel {
+        return spec.clone()
+    }
+    return null
+}
+
+impl EmitState {
+    /// A grammar, and where a call enters it with a `Bytes`, its copy over
+    /// bytes after it (ADR-366 D1): the backend reads one input per grammar
+    /// (winnow-grammar ADR 25).
+    pub fn emit_grammar[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef) sync throws {
+        let name = emit_text(world, def.name)
+        self.emit_grammar_over(world, walk, out, host, def, name, false)
+        if self.facts.bytes_grammars.contains(name) {
+            let lowered = emit_bytes_grammar(name)
+            self.emit_grammar_over(world, walk, out, host, def, lowered, true)
+        }
+        for rule in def.rules {
+            if rule.is_entry {
+                let spec = emit_a_par_fold(rule)
+                if spec != null {
+                    self.emit_fold_options(world, walk, out, host, name, emit_text(world, rule.name), spec ?? panic("a par_fold"))
+                }
+            }
+        }
+        let readers = emit_stream_readers(def, self.offered_to_rust)
+        for rule in readers {
+            self.emit_stream_reader(world, walk, out, host, name, rule)
+        }
+        for rule in emit_stream_walks(def, self.offered_to_rust) {
+            self.emit_stream_walk(world, walk, out, host, name, rule)
+        }
+        // **The readers under the grammar's name**: the backend takes only a
+        // private `use` into a grammar, so a grammar with readers is written
+        // inside a module of its own (`emit_grammar_over`) and the module
+        // under its name takes in all of it and the readers, each `use` line
+        // one a feature's `#[cfg]` keeps or leaves out. The glob passes the
+        // `pub(crate)` functions of a `@stream` entry on to the crate alone
+        // (`emit_stream_rule`), and holds nothing public where that entry is
+        // the grammar's only one.
+        if readers.len() > 0 {
+            out.push(f"\n#[allow(non_snake_case)]\npub mod {name} {{\n    #[allow(unused_imports)]\n    pub use super::{emit_stream_grammar_module(name)}::{name}::*;\n")
+            for rule in readers {
+                let rule_name = emit_text(world, rule.name)
+                out.push(f"    pub use super::{emit_stream_reader_name(name, rule_name)} as {rule_name}_reader;\n")
+            }
+            out.push("}\n")
+        }
+    }
+
+    /// **The Rust user's reader of a `@stream` entry** (ADR-grammar-2 D7 and
+    /// ADR-393 D4, both amended 2026-11-08): `G::<rule>_reader(r)` takes
+    /// `impl std::io::Read + Send + 'static` and hands back the items, owned,
+    /// as an iterator of `Result<Item, ParseError>`, the shape of the Nikaia
+    /// walk: the engine's `parse_<rule>_reader_each` on a thread of its own,
+    /// each item through a channel that holds none. The function is a
+    /// sibling of the grammar's module, which the backend writes and nothing
+    /// can be added to; the module under the grammar's name takes it in
+    /// (`emit_grammar`). The build of a feature that roots the entry
+    /// keeps it under that feature's `#[cfg]`, and every other build blanks
+    /// it (`features_applied`, `features_readers_dropped`).
+    fn emit_stream_reader[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, rule: ref GrammarRule) sync throws {
+        let rule_name = emit_text(world, rule.name)
+        let ty = rule.ret_type ?? return
+        let item = host.ty_named(walk, ty)
+        out.push(f"\n#[allow(non_snake_case)]\npub fn {emit_stream_reader_name(name, rule_name)}(reader: impl ::std::io::Read + Send + 'static) -> impl Iterator<Item = Result<{item}, nikaia_std::grammar::ParseError>> {{ ")
+        out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
+        out.push(f"let __wg_parsed = {name}::parse_{rule_name}_reader_each(reader, &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &{item}| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ")
+        out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render_excerpt()))); } }); __wg_rx.into_iter() }\n")
+    }
+
+    /// **Another package's walk of a `@stream` entry** (ADR-grammar-2 D7,
+    /// #1505): the engine's `parse_<rule>_reader_each` is the crate's alone
+    /// (#1464), so a `pub grammar` writes beside itself, public and hidden,
+    /// the function a caller in another package walks: the form of the walk
+    /// in the grammar's own file (`emit_core_grammar_entry`), over a copy of
+    /// the input, the failure rendered against it. It takes the entry's
+    /// values, owned, then each option as `Option`, `None` where the caller
+    /// left it out: the default is evaluated here, where it is declared and
+    /// visible (ADR-grammar-1 D2, #1512), and last the caller's `words:`
+    /// table, shared, where it hands one (ADR-388 D1).
+    fn emit_stream_walk[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, rule: ref GrammarRule) sync throws {
+        let rule_name = emit_text(world, rule.name)
+        let ty = rule.ret_type ?? return
+        let item = host.ty_named(walk, ty)
+        let mut params = String()
+        let mut handed = String()
+        for i in 0..<rule.args.len() {
+            let value_ty = host.ty_named(walk, rule.args[i].ty)
+            params.push_str(f", __wg_value{i}: {value_ty}")
+            handed.push_str(f"__wg_value{i}, ")
+        }
+        for j in 0..<rule.config.len() {
+            let option_ty = host.ty_named(walk, rule.config[j].ty)
+            params.push_str(f", __wg_given{j}: ::std::option::Option<{option_ty}>")
+            handed.push_str(f"__wg_option{j}, ")
+        }
+        out.push(f"\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code, clippy::too_many_arguments)]\npub fn {emit_stream_walk_name(name, rule_name)}(__wg_source: ::std::vec::Vec<u8>{params}, __wg_words: ::std::option::Option<winnow_grammar::InternerContext>) -> impl Iterator<Item = Result<{item}, nikaia_std::grammar::ParseError>> {{ ")
+        for j in 0..<rule.config.len() {
+            out.push(f"let __wg_option{j} = match __wg_given{j} {{ ::std::option::Option::Some(__wg_value) => __wg_value, ::std::option::Option::None => ")
+            self.emit_expr(world, walk, out, host, rule.config[j].default, 0, EmitFlow::plain(), EmitScope::plain())
+            out.push(" }; ")
+        }
+        out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
+        out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ")
+        out.push(f"let __wg_parsed = {name}::parse_{rule_name}_reader_each(&__wg_source[..], &mut __wg_context, winnow_grammar::rt::Reading::default(), {handed}|__wg_item: &{item}| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ")
+        out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() }\n")
+    }
+
+    /// **The options a `par_fold` entry names after its `;`** (ADR-372 D6),
+    /// made by a function beside the grammar that every call of the entry
+    /// calls: the grammar's own module is the backend's, and they are
+    /// evaluated, and checked, where the parse starts.
+    fn emit_fold_options[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, book: ref String, rule: ref String, spec: FoldSpec) sync throws {
+        let function = emit_fold_options(book, rule)
+        out.push(f"\n#[allow(non_snake_case, dead_code)]\npub fn {function}() -> nikaia_std::par::FoldOptions {{\n    nikaia_std::par::FoldOptions::new(")
+        let order = emit_named_option(world, spec, "order")
+        if order >= 0 {
+            self.emit_expr(world, walk, out, host, spec.config[order].value, 0, EmitFlow::plain(), EmitScope::plain())
+        } else {
+            out.push("nikaia_std::par::Order::Kept")
+        }
+        for option in ["limit", "piece"] {
+            let at = emit_named_option(world, spec, option)
+            if at >= 0 {
+                out.push(", Some(")
+                self.emit_expr(world, walk, out, host, spec.config[at].value, 0, EmitFlow::plain(), EmitScope::plain())
+                out.push(")")
+            } else {
+                out.push(", None")
+            }
+        }
+        out.push(")\n}\n")
+    }
+
+    fn emit_grammar_over[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef, name: ref String, bytes: bool) sync throws {
+        // A grammar with readers is written in a module of its own (`emit_grammar`).
+        if !bytes && emit_stream_readers(def, self.offered_to_rust).len() > 0 {
+            out.push(f"#[doc(hidden)]\n#[allow(non_snake_case)]\nmod {emit_stream_grammar_module(name)} {{ use super::*; grammar! {{\n")
+        } else {
+            out.push("grammar! {\n")
+        }
+        out.push(f"    grammar {name} {{\n")
+        if bytes {
+            out.push("        input bytes;\n")
+        }
+        // On the block types a repetition collects into a block's list
+        // (winnow-grammar 0.2's `collect L;`, #490), and the grammar's module
+        // names the block's `format!` and `vec!` itself: through its
+        // `use super::*` alone they would be ambiguous with the prelude's.
+        if self.on_block_types() {
+            out.push("        collect nikaia_std::block::List;\n")
+            out.push("        use nikaia_std::block::names::{format, vec};\n")
+        }
+        walk.grammar_bytes = bytes
+        self.emit_grammar_body(world, walk, out, host, def, name, bytes)
+        walk.grammar_bytes = false
+    }
+
+    fn emit_grammar_body[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef, name: ref String, bytes: bool) sync throws {
+        let mut types: collections::BTreeMap[String, String] = collections::BTreeMap()
+        for rule in def.rules {
+            match rule.ret_type {
+                ty => types.insert(emit_text(world, rule.name), host.ty_named(walk, ty)),
+                null => {},
+            }
+        }
+        walk.grammar_rule_types = types
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        for rule in def.rules {
+            names.insert(emit_text(world, rule.name))
+        }
+        walk.grammar_rules = names
+        let mut valued: collections::BTreeMap[String, GrammarRule] = collections::BTreeMap()
+        for rule in def.rules {
+            if rule.args.len() > 0 || rule.config.len() > 0 {
+                valued.insert(emit_text(world, rule.name), rule.clone())
+            }
+        }
+        walk.grammar_values = valued
+        walk.grammar_members = []
+        // **`same_line` asks what the last `WS` skipped held** (ADR-339 D2,
+        // D3): the lowering, not the grammar, gives the parser a state of
+        // `LineBreaks`, a `WS` that records each run in it, and an `extern
+        // rule` over the function written after the grammar that asks it.
+        let mut lines = false
+        for rule in def.rules {
+            for alt in rule.alts {
+                lines = lines || emit_writes_a_built_in(world, walk, alt.pattern.node, "same_line", 0)
+            }
+        }
+        let own_ws = walk.grammar_rules.contains("WS")
+        if lines {
+            out.push(f"        use super::{emit_same_line_rule()}_{name} as {emit_same_line_rule()};\n")
+            out.push("        state ::nikaia_std::grammar::LineBreaks;\n")
+            out.push(f"        extern rule {emit_same_line_rule()} -> ();\n")
+            // The grammar's own `WS` is skipped under its new name, or the
+            // default whitespace is written out; `text` / `bytes` hands back
+            // the run either covered, and `@` where it was.
+            let over = if bytes { "bytes" } else { "text" }
+            let skipped = if own_ws { f"{over}({emit_own_ws_rule()})" } else { emit_default_ws() }
+            let newline = if own_ws && bytes { "w.contains(&b'\\n')" } else { "w.contains('\\n')" }
+            out.push(f"\n        rule WS -> () =\n          w:{skipped} @ at\n")
+            out.push(f"            -> {{ _state.user().ran(at.start as i64, at.end as i64, {newline}) }}\n")
+        }
+        for rule in def.rules {
+            out.push("\n")
+            let st = out.mark()
+            let renamed = if lines && own_ws && emit_text(world, rule.name) == "WS" { emit_own_ws_rule() } else { "" }
+            self.emit_grammar_rule(world, walk, out, host, rule, renamed, bytes)
+            if !bytes {
+                out.record(rule.span, st)
+            }
+        }
+        // **`list(item, sep)` is a rule the backend is given** (Part II 10.8,
+        // issue #165 closed at 0.0.249): the backend has no such element and
+        // read `list` as a rule of the grammar's own, so each grammar that
+        // writes one gets the two template rules it lowers to - the first
+        // item, then every `sep item` after it, or nothing at all.
+        let mut lists = false
+        for rule in def.rules {
+            for alt in rule.alts {
+                if emit_writes_a_list(world, alt.pattern) {
+                    lists = true
+                }
+            }
+        }
+        // **`span(p)` and `here` are rules the backend is given** (ADR-339
+        // D1, #557), as `list` is: the range a pattern covered, and the
+        // position, read from the backend's `p @ at`. A `span(p)` a name binds
+        // directly is written in place (`emit_pattern`) and keeps what `p`
+        // binds; these are for the rest.
+        let mut spans = false
+        let mut heres = false
+        let mut counts = false
+        let mut covers = false
+        for rule in def.rules {
+            for alt in rule.alts {
+                spans = spans || emit_writes_a_built_in(world, walk, alt.pattern.node, "span", 1)
+                heres = heres || emit_writes_a_built_in(world, walk, alt.pattern.node, "here", 0)
+                counts = counts || emit_writes_a_built_in(world, walk, alt.pattern.node, "count", 1)
+                covers = covers || emit_reads_a_text_in_a_guard(world, walk, alt.pattern)
+            }
+        }
+        // **A guard reads a bound `text(..)` through a rule** (#1033): the
+        // text its range covered, bound before the guard
+        // (`emit_texts_a_guard_reads`), as the action's prelude binds it.
+        if covers {
+            out.push(f"\n        rule {emit_covered_rule()}(at: ::core::ops::Range<usize>) -> &'a str =\n")
+            out.push("          empty\n")
+            if bytes {
+                out.push("            -> { ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, at.clone())? }\n")
+            } else {
+                out.push("            -> { ::nikaia_std::grammar::covered(input, at.clone()) }\n")
+            }
+        }
+        if counts {
+            out.push(f"\n        rule {emit_count_rule()}<T>(p: Rule<T>) -> i64 =\n")
+            out.push("          n:count(p)\n")
+            out.push("            -> { n as i64 }\n")
+        }
+        if spans {
+            out.push(f"\n        rule {emit_span_rule()}<T>(p: Rule<T>) -> ::nikaia_std::text::Span =\n")
+            out.push("          p @ at\n")
+            out.push("            -> { ::nikaia_std::text::Span::of(at) }\n")
+        }
+        if heres {
+            out.push(f"\n        rule {emit_here_rule()} -> u32 =\n")
+            out.push("          empty @ at\n")
+            out.push("            -> { ::nikaia_std::text::Span::of(at).start }\n")
+        }
+        let mut at: i64 = 0
+        while at < walk.grammar_members.len() as i64 {
+            let members = walk.grammar_members[at].clone()
+            self.emit_members_rules(world, walk, out, host, at, members)
+            at += 1
+        }
+        walk.grammar_members = []
+        if lists {
+            let list = emit_list_rule()
+            out.push(f"\n        rule {list}<T>(item: Rule<T>, sep) -> Vec<T> =\n")
+            out.push(f"          first:item rest:{list}_more<T>(item = item, sep = sep)*\n")
+            out.push("            -> { let mut all = vec![first]; all.extend(rest); all }\n")
+            out.push("        | \"\"\n")
+            out.push("            -> { Vec::new() }\n")
+            out.push(f"\n        rule {list}_more<T>(item: Rule<T>, sep) -> T =\n")
+            out.push("          sep x:item\n")
+            out.push("            -> { x }\n")
+        }
+        out.push("    }\n")
+        if !bytes && emit_stream_readers(def, self.offered_to_rust).len() > 0 {
+            out.push("} }\n")
+        } else {
+            out.push("}\n")
+        }
+        if lines {
+            out.push(emit_same_line_function(name))
+        }
+    }
+
+    fn emit_grammar_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, renamed: ref String, bytes: bool) sync throws {
+        match rule.frame {
+            frame => out.push(f"        {frame_attribute(frame)}\n"),
+            null => {},
+        }
+        // An entry is a `pub` rule to the backend: one function per entry
+        // (ADR-296 D25).
+        let vis = if rule.is_entry { "pub " } else { "" }
+        let mut ret = ""
+        match rule.ret_type {
+            ty => { ret = f" -> {host.ty_named(walk, ty)}" },
+            null => {},
+        }
+        // The label sits between the return type and the `=`, in both
+        // languages: `rule expr -> Expr # "expression" = ...`.
+        let mut label = ""
+        match rule.label {
+            text => { label = f" # {rust_string(text)}" },
+            null => {},
+        }
+        // **The values a rule takes** (ADR-grammar-1 D2), its options after
+        // its parameters: the engine takes them by position.
+        let mut values: Vec[String] = []
+        for arg in rule.args {
+            values.push(f"{emit_text(world, arg.name)}: {host.ty_named(walk, arg.ty)}")
+        }
+        for option in rule.config {
+            values.push(f"{emit_text(world, option.name)}: {host.ty_named(walk, option.ty)}")
+        }
+        let taken = if values.is_empty() { "" } else { f"({values.join(", ")})" }
+        // A grammar's own `WS` under the recording one keeps its body and
+        // takes `renamed` (`emit_grammar_body`).
+        let rule_name = if renamed.is_empty() { emit_text(world, rule.name) } else { renamed.clone() }
+        if rule.stream && rule.is_entry {
+            self.emit_stream_rule(world, walk, out, host, rule, rule_name, taken, label)
+            return
+        }
+        out.push(f"        {vis}rule {rule_name}{taken}{ret}{label} =\n")
+
+        for i in 0..<rule.alts.len() {
+            let alt = rule.alts[i]
+            let separator = if i == 0 { "  " } else { "| " }
+            match alt.action {
+                action => {
+                    out.push(f"          {separator}")
+                    self.emit_pattern(world, walk, out, host, alt.pattern)
+                    out.push("\n            -> ")
+                    // In a text grammar the backend has no `bytes(p)`: it is
+                    // `text(p)` there, and the action sees its bytes (ADR-366
+                    // D4).
+                    let mut as_bytes: Vec[String] = []
+                    if !bytes {
+                        emit_bytes_bindings(world, alt.pattern.node, as_bytes)
+                    }
+                    let mut as_spans: Vec[String] = []
+                    let mut spanned: Vec[String] = []
+                    emit_span_bindings(world, walk, alt.pattern.node, as_spans, spanned, false)
+                    let mut prelude = ""
+                    for name in as_bytes {
+                        prelude = f"{prelude}let {name} = {name}.as_bytes(); "
+                    }
+                    for (name, range) in as_spans.iter().zip(spanned.iter()) {
+                        prelude = f"{prelude}let {name} = ::nikaia_std::text::Span::of({range}); "
+                    }
+                    let mut as_texts: Vec[String] = []
+                    let mut covered: Vec[String] = []
+                    emit_text_bindings(world, walk, alt.pattern, as_texts, covered)
+                    for (name, range) in as_texts.iter().zip(covered.iter()) {
+                        if bytes {
+                            prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {range})?; "
+                        } else {
+                            prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered(input, {range}); "
+                        }
+                    }
+                    // A grammar action is the rule's own body: what it ends
+                    // in is what the rule hands back, so a `return` there is
+                    // that value (ADR-296). The prelude opens the action's
+                    // own block, so no block is nested in another for it.
+                    if self.emit_action_can_fail(world, action) {
+                        if prelude != "" {
+                            out.push(f"{{ {prelude}")
+                        }
+                        self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(alt.pattern.node))
+                        if prelude != "" {
+                            out.push(" }")
+                        }
+                    } else if prelude != "" {
+                        self.emit_stmt_block_opening_with(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return, prelude)
+                    } else {
+                        self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return)
+                    }
+                    out.push("\n")
+                },
+                null => {
+                    // The one body that needs no action: a `par_fold` is the
+                    // whole rule (ADR-296 D10), so the value of the rule is
+                    // the value of the fold. The binding the backend wants is
+                    // supplied here rather than demanded from the user.
+                    if rule.ret_type != null {
+                        out.push(f"          {separator}folded:")
+                        self.emit_pattern(world, walk, out, host, alt.pattern)
+                        out.push("\n            -> { folded }\n")
+                    } else {
+                        out.push(f"          {separator}")
+                        self.emit_pattern(world, walk, out, host, alt.pattern)
+                        out.push("\n")
+                    }
+                },
+            }
+        }
+    }
+
+    /// **A `@stream` entry is the engine's `#[stream(each)]`** (ADR-grammar-2
+    /// D7, amended 2026-11-08): its `item*` becomes a `fold` that counts, on
+    /// the path the reader hands each item over on, and the caller sees the
+    /// items through `each` (`nikaia_std::grammar::stream`). The rule is
+    /// `pub(crate)`, and so is every function the engine writes for it
+    /// (`parse_<rule>`, `parse_<rule>_reader`, `parse_<rule>_reader_each`,
+    /// #1464): the walk calls them inside the crate, and a Rust user reads
+    /// the entry only through `G::<rule>_reader` (`emit_stream_reader`).
+    fn emit_stream_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, rule_name: ref String, taken: ref String, label: ref String) sync throws {
+        let item = match rule.ret_type {
+            ty => host.ty_named(walk, ty),
+            null => throw EmitRefused { message: "A `@stream` entry names the type of its items: `@stream entry rule items -> Item = item*`.", at: rule.span.start as i64 },
+        }
+        if rule.alts.len() != 1 || rule.alts[0].action != null {
+            throw EmitRefused { message: "The compiler can't translate a `@stream` entry with an action or with alternatives yet: its body is `item*`, alone or between other patterns.", at: rule.span.start as i64 }
+        }
+        let pattern = rule.alts[0].pattern
+        let parts: Vec[Spanned[Pattern]] = match pattern.node {
+            Pattern::Seq(seq) => seq.clone(),
+            else => [pattern.clone()],
+        }
+        let mut folds = 0
+        for part in parts {
+            if stream_fold(world, part.node) != null {
+                folds += 1
+            }
+        }
+        if folds != 1 {
+            throw EmitRefused { message: "The compiler can't translate this `@stream` entry: its body has to hold one repetition of a rule, `item*`, `item+`, `item{2,5}` or `list(item, sep)`.", at: rule.span.start as i64 }
+        }
+        out.push("        #[stream(each)]\n")
+        out.push(f"        pub(crate) rule {rule_name}{taken} -> usize{label} =\n          ")
+        for i in 0..<parts.len() {
+            if i > 0 {
+                out.push(" ")
+            }
+            match stream_fold(world, parts[i].node) {
+                fold => {
+                    match fold.max {
+                        most => {
+                            if most < 1 || most < fold.min {
+                                throw EmitRefused { message: "This `@stream` entry's repetition matches no item: its upper bound is 0 or below its lower one.", at: rule.span.start as i64 }
+                            }
+                        },
+                        null => {},
+                    }
+                    out.push("__wg_n:fold(")
+                    self.emit_pattern(world, walk, out, host, fold.item)
+                    out.push(f", || 0usize, |n: usize, _item: {item}| n + 1")
+                    // The separator and the counts are the engine's named
+                    // arguments of a fold (winnow-grammar#28): a separator
+                    // is taken only with the item after it, and a short
+                    // stream fails where the next item should start.
+                    match fold.sep {
+                        sep => {
+                            out.push(", sep = ")
+                            self.emit_pattern(world, walk, out, host, sep)
+                        },
+                        null => {},
+                    }
+                    if fold.min > 0 {
+                        out.push(f", min = {fold.min}")
+                    }
+                    match fold.max {
+                        most => out.push(f", max = {most}"),
+                        null => {},
+                    }
+                    // **A bound that is a value** (`item{n}`, ADR-grammar-1
+                    // D3) is a computed `min` / `max` of the fold, read where
+                    // the parser reaches it (winnow-grammar#31); it starts
+                    // with an integer as the bounds of a repetition do.
+                    match fold.low {
+                        low => {
+                            out.push(", min = 0i64 + (")
+                            self.emit_grammar_value(world, walk, out, host, low)
+                            out.push(")")
+                        },
+                        null => {},
+                    }
+                    match fold.high {
+                        high => {
+                            out.push(", max = 0i64 + (")
+                            self.emit_grammar_value(world, walk, out, host, high)
+                            out.push(")")
+                        },
+                        null => {},
+                    }
+                    out.push(")")
+                },
+                null => self.emit_pattern(world, walk, out, host, parts[i]),
+            }
+        }
+        out.push("\n            -> { __wg_n }\n")
+    }
+}
+
+/// **The `@stream` entries a Rust user reads with a reader** (ADR-grammar-2
+/// D7, amended 2026-11-08): those of a `pub grammar` in a package offered to
+/// Rust, which take no values; the walk refuses an entry that does
+/// (`emit_core_grammar_entry`).
+fn emit_stream_readers(def: ref GrammarDef, offered_to_rust: bool) -> Vec[GrammarRule] {
+    let mut found: Vec[GrammarRule] = []
+    if !offered_to_rust || !def.public {
+        return found
+    }
+    for rule in def.rules {
+        if rule.stream && rule.is_entry && rule.ret_type != null && rule.args.len() == 0 && rule.config.len() == 0 {
+            found.push(rule.clone())
+        }
+    }
+    return found
+}
+
+/// **The `@stream` entries another Nikaia package walks** (#1505): those of
+/// a `pub grammar`, with their values and options (#1512); a package offered
+/// to Rust has the readers instead, whose features `project_features.nika`
+/// derives, and writes none.
+fn emit_stream_walks(def: ref GrammarDef, offered_to_rust: bool) -> Vec[GrammarRule] {
+    let mut found: Vec[GrammarRule] = []
+    if offered_to_rust || !def.public {
+        return found
+    }
+    for rule in def.rules {
+        if rule.stream && rule.is_entry && rule.ret_type != null {
+            found.push(rule.clone())
+        }
+    }
+    return found
+}
+
+/// The function beside grammar `book` another package walks its `@stream`
+/// entry `rule` with; `emit_call_grammar` in `emit_core_calls.nika` calls it.
+pub fn emit_stream_walk_name(book: ref String, rule: ref String) -> String {
+    return f"__nikaia_walk_{book}__{rule}"
+}
+
+/// The function beside grammar `book` that reads its `@stream` entry `rule`
+/// from a `std::io::Read`; `features_reader_root` in `project_features.nika`
+/// reads the same prefix and the `__` between the two names.
+fn emit_stream_reader_name(book: ref String, rule: ref String) -> String {
+    return f"__nikaia_reader_{book}__{rule}"
+}
+
+/// The module a grammar `book` with readers is written in (`emit_grammar`).
+fn emit_stream_grammar_module(book: ref String) -> String {
+    return f"__nikaia_grammar_{book}"
+}
+
+/// **The repetition a `@stream` entry walks** (ADR-grammar-2 D7, #1459):
+/// the rule repeated, the separator between two items, and the counts.
+struct StreamFold {
+    item: Spanned[Pattern],
+    sep: Spanned[Pattern]?,
+    min: i64,
+    max: i64?,
+    /// `item{n}`, `item{n,}`, `item{n, m}`: the bounds that are values
+    /// (ADR-grammar-1 D3); `{n}` is both.
+    low: Expr?,
+    high: Expr?,
+}
+
+/// The repetition of a `@stream` entry's body element: `item*`, `item+`,
+/// `item{n}`, `item{n,}`, `item{n,m}`, a repetition counted by a value, or
+/// `list(item, sep)`, where `item` is a call of a rule (as the checker's
+/// `grammar_stream_paths` reads it).
+fn stream_fold(world: ref EmitWorld, pattern: ref Pattern) -> StreamFold? {
+    match pattern {
+        Pattern::Repeat { pat, rep } => {
+            if stream_item(pat.node) {
+                match rep {
+                    Repeat::Star => return StreamFold { item: pat.clone(), sep: null, min: 0, max: null, low: null, high: null },
+                    Repeat::Plus => return StreamFold { item: pat.clone(), sep: null, min: 1, max: null, low: null, high: null },
+                    Repeat::Exactly(n) => return StreamFold { item: pat.clone(), sep: null, min: n as i64, max: n as i64, low: null, high: null },
+                    Repeat::AtLeast(n) => return StreamFold { item: pat.clone(), sep: null, min: n as i64, max: null, low: null, high: null },
+                    Repeat::Between(low, high) => return StreamFold { item: pat.clone(), sep: null, min: low as i64, max: high as i64, low: null, high: null },
+                    Repeat::Optional => {},
+                }
+            }
+        },
+        Pattern::Counted { pat, low, high, comma } => {
+            if stream_item(pat.node) {
+                let mut most: Expr? = low.clone()
+                if comma {
+                    most = match high {
+                        bound => bound.clone(),
+                        null => null,
+                    }
+                }
+                return StreamFold { item: pat.clone(), sep: null, min: 0, max: null, low: low.clone(), high: most }
+            }
+        },
+        Pattern::Ref { name, generics, args } => {
+            if emit_text(world, name) == "list" && generics.len() == 0 && args.len() == 2 && stream_item(args[0].node) {
+                return StreamFold { item: args[0].clone(), sep: args[1].clone(), min: 0, max: null, low: null, high: null }
+            }
+        },
+        else => {},
+    }
+    return null
+}
+
+/// Whether a pattern is one item of a `@stream` entry: a call of a rule.
+fn stream_item(pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Ref { .. } => true,
+        Pattern::Call { .. } => true,
+        Pattern::Group(inner) => stream_item(inner.node),
+        else => false,
+    }
+}
+
+/// Whether an alternative's own pattern has passed a commit point (`=>`)
+/// where its action runs.
+fn emit_passes_a_cut(pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Cut => true,
+        Pattern::Seq(parts) => parts.iter().any(fn(part) { emit_passes_a_cut(part.node) }),
+        Pattern::Group(inner) => emit_passes_a_cut(inner.node),
+        else => false,
+    }
+}
+
+impl EmitState {
+    /// Whether one of an action's statements can fail.
+    fn emit_action_can_fail(ref self, world: ref EmitWorld, action: ref Block) -> bool {
+        for stmt in action.stmts {
+            let at = stmt.span.start as i64
+            let fails = match stmt.node {
+                Stmt::Expr(value) => self.branch_can_fail(world, at, value),
+                Stmt::Let { value, .. } => self.branch_can_fail(world, at, value),
+                else => false,
+            }
+            if fails {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// **An action that can fail** (Part II 10.8, #557): its body runs as a
+    /// `throws` function's does, and its failure is the alternative's, with
+    /// the error's message in the `ParseError` (the backend's `external`).
+    /// Past a commit point it is the parse's error: no enclosing alternative
+    /// is tried; before one, the next alternative is.
+    /// **The rules `members[S](key, value, sep; null:, unknown:)` lowers
+    /// to** (ADR-grammar-2 D3, D5; Part II 10.8). The members, `key value`
+    /// apart by `sep`, each read into a piece that holds one field, the
+    /// value rule chosen by the key's index among the fields; then `S` built
+    /// from the pieces by the mapping rule: a field left out takes its
+    /// default, else `null` in a `T?`, else the parse fails; a `null:` member
+    /// goes into a `T?`, into another field it takes the default, else the
+    /// parse fails; a field given twice fails; an unknown key fails unless
+    /// `unknown:` names the rule that skips its value.
+    fn emit_members_rules[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, at: i64, pattern: ref Spanned[Pattern]) sync throws {
+        match pattern.node {
+            Pattern::Members { ty, key, value, sep, on_null, on_unknown, fields } => {
+                let rule = f"__nikaia_members_{at}"
+                let built = host.ty_named(walk, ty)
+                let owner = emit_text(world, ty.name)
+                let mut slots: Vec[String] = []
+                let mut names: Vec[String] = []
+                let mut nothing: Vec[String] = []
+                for field in fields {
+                    slots.push(f"Option<Option<{host.ty_named(walk, field.ty)}>>")
+                    names.push(rust_string(emit_text(world, field.name)))
+                    nothing.push("None")
+                }
+                let piece = emit_members_tuple(slots)
+                let fail = "return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, "
+                // The fields, from the pieces, by the mapping rule.
+                out.push(f"\n        rule {rule} -> {built} =\n")
+                out.push(f"          pieces:{rule}_all\n")
+                out.push("            -> { ")
+                for i in 0..<fields.len() {
+                    out.push(f"let mut f{i}: {slots[i]} = None; ")
+                }
+                out.push("for piece in pieces { ")
+                for i in 0..<fields.len() {
+                    out.push(f"if let Some(v) = piece.{i} {{ if f{i}.is_some() {{ {fail}::nikaia_std::grammar::member_error({names[i]}, \"is given twice\")))); }} f{i} = Some(v); }} ")
+                }
+                out.push("} ")
+                let defaults = self.field_defaults(world, owner)
+                let mut built_fields: Vec[String] = []
+                for i in 0..<fields.len() {
+                    let field = emit_text(world, fields[i].name)
+                    let mut default: String? = null
+                    for (named, written, held) in defaults {
+                        if named == field {
+                            default = held_literal(written, held)
+                        }
+                    }
+                    let missing = f"{fail}::nikaia_std::grammar::member_error({names[i]}, \"is missing\"))))"
+                    let refused = f"{fail}::nikaia_std::grammar::member_error({names[i]}, \"takes no null\"))))"
+                    let mut given = match default {
+                        d => if fields[i].ty.is_nullable { f"match f{i} {{ Some(Some(v)) => v, Some(None) => None, None => {d} }}" } else { f"match f{i} {{ Some(Some(v)) => v, _ => {d} }}" },
+                        null => if fields[i].ty.is_nullable { f"match f{i} {{ Some(Some(v)) => v, _ => None }}" } else { f"match f{i} {{ Some(Some(v)) => v, Some(None) => {refused}, None => {missing} }}" },
+                    }
+                    if self.is_boxed_field(owner, field) {
+                        given = f"Box::new({given})"
+                    }
+                    built_fields.push(f"{escaped_name(field)}: {given}")
+                }
+                out.push(f"{escaped_name(owner)} {{ {built_fields.join(", ")} }} }}\n")
+                // The members, or none.
+                out.push(f"\n        rule {rule}_all -> Vec<{piece}> =\n")
+                out.push(f"          first:{rule}_one rest:{rule}_more*\n")
+                out.push("            -> { let mut all = vec![first]; all.extend(rest); all }\n")
+                out.push("        | \"\"\n")
+                out.push("            -> { Vec::new() }\n")
+                out.push(f"\n        rule {rule}_more -> {piece} =\n")
+                out.push("          ")
+                self.emit_members_part(world, walk, out, host, sep)
+                out.push(f" p:{rule}_one\n")
+                out.push("            -> { p }\n")
+                // One member: the key, then the value its field takes.
+                out.push(f"\n        rule {rule}_one -> {piece} =\n")
+                out.push("          k:")
+                self.emit_members_part(world, walk, out, host, key)
+                out.push(f" => p:{rule}_value(i = ::nikaia_std::grammar::member_index(&k, &[{names.join(", ")}]))\n")
+                out.push(f"            -> {{ match p {{ Some(p) => p, None => {fail}::nikaia_std::grammar::member_unknown(&k)))) }} }}\n")
+                out.push(f"\n        rule {rule}_value(i: usize) -> Option<{piece}> =\n")
+                let mut separator = "  "
+                for i in 0..<fields.len() {
+                    match on_null {
+                        named => {
+                            let mut one = nothing.clone()
+                            one[i] = "Some(None)"
+                            out.push(f"        {separator}if(i == {i}) {emit_text(world, named)}\n")
+                            out.push(f"            -> {{ Some({emit_members_tuple(one)}) }}\n")
+                            separator = "| "
+                        },
+                        null => {},
+                    }
+                    let mut one = nothing.clone()
+                    one[i] = "Some(Some(::nikaia_std::grammar::IntoMember::into_member(v)))"
+                    out.push(f"        {separator}if(i == {i}) v:{emit_text(world, fields[i].value)}\n")
+                    out.push(f"            -> {{ Some({emit_members_tuple(one)}) }}\n")
+                    separator = "| "
+                }
+                match on_unknown {
+                    named => {
+                        out.push(f"        {separator}if(i == {fields.len()}) {emit_text(world, named)}\n")
+                        out.push(f"            -> {{ Some({emit_members_tuple(nothing)}) }}\n")
+                    },
+                    null => {
+                        out.push(f"        {separator}if(i == {fields.len()}) \"\"\n")
+                        out.push("            -> { None }\n")
+                    },
+                }
+            },
+            else => {},
+        }
+    }
+
+    /// A pattern a `members[S]` is given, in brackets unless it is a rule.
+    fn emit_members_part[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, part: ref Spanned[Pattern]) sync throws {
+        match part.node {
+            Pattern::Ref { args, .. } => {
+                if args.len() == 0 {
+                    self.emit_pattern(world, walk, out, host, part)
+                    return
+                }
+            },
+            else => {},
+        }
+        out.push("(")
+        self.emit_pattern(world, walk, out, host, part)
+        out.push(")")
+    }
+
+    fn emit_failing_action[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, action: ref Block, cut: bool) sync throws {
+        let mode = if cut { "Cut" } else { "Backtrack" }
+        let inside = EmitFlow::plain() with { can_throw: true }
+        out.push("{ let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = ")
+        self.emit_core_block(world, walk, out, host, action, 3, inside, EmitScope::plain(), EmitTail::Value)
+        out.push("; Ok(__nikaia_done) })(); ")
+        out.push(f"match __nikaia_acted {{ Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::{mode}(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) }} }}")
+    }
+}
+
+/// Where the option `wanted` stands in a `par_fold`'s config, or -1.
+fn emit_named_option(world: ref EmitWorld, spec: ref FoldSpec, wanted: ref String) -> i64 {
+    for i in 0..<spec.config.len() {
+        if emit_text(world, spec.config[i].name) == wanted {
+            return i
+        }
+    }
+    return -1
+}

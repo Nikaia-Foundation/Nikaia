@@ -1,0 +1,1159 @@
+// crates/nikaia-std/src/compiler/project_drive.nika
+//
+// **A project's build, step by step**, for the compiler's `Project::drive_to`:
+// the entry refusal, the members lowered dependencies first, the libraries of
+// each member's own sources, the ledgers, the generated files and the
+// switches, the toolchain checks, the choice between `run_fast`, the built
+// program and `cargo run`, the environment handed to Cargo and a C library's
+// outputs. Moved from Rust (ADR-294, #125, P5c). The program, the lowering,
+// the members' manifests, the generated workspace, Cargo and what reads its
+// JSON stay Rust, behind `ProjectDriveHost`; members are named by index.
+
+use std::env
+use std::fs
+use std::hash
+
+/// **What one member's lowering hands back** (`project.rs`'s `Lowered`): the
+/// Rust, the files it read, the notes to say after the build, and a library's
+/// header and bindings. The host keeps the ledgers and the proofs for
+/// `write_ledgers`.
+pub struct ProjectDriveLowered {
+    pub rust: String,
+    pub sources: Vec[fs::Path],
+    pub notes: String,
+    pub header: String?,
+    pub python: String?,
+    pub node: String?,
+}
+
+/// **What the build without Cargo made** (`run_fast::compile`): `rustc`'s
+/// messages, and the program where it compiled.
+pub struct ProjectDriveFast {
+    pub messages: String,
+    pub binary: fs::Path?,
+}
+
+/// What `project_drive_drive_to` asks of the compiler (`project.rs`'s
+/// `DriveHost`): it holds the project, the build's arguments and the Rust
+/// values made on the way (the members, the lowerings, the workspace, Cargo);
+/// a refusal of a `throws` method is kept there and handed back unchanged.
+pub trait ProjectDriveHost {
+    /// The project's entry point (`src/main.nika` under its root).
+    fn entry(ref self) -> fs::Path sync
+    /// **Explains the program** where the run asked for it, before the build:
+    /// an explanation is about the program, and a build that reuses a cached
+    /// lowering still answers the question.
+    fn explain_if_asked(ref self) sync throws
+    /// Every package of this build, the entry first; the host keeps the
+    /// members with their manifests.
+    fn drive_members(ref self) -> Vec[ProjectMembersMember] sync throws
+    /// **Lowers member `at`**, the entry under the name it was given, its
+    /// items below `crate_root` (`project_drive_crate_root`); the host keeps
+    /// its ledgers and proofs.
+    /// `writes` says the build writes its ledgers and proofs after (#1569).
+    fn lower_member(ref self, at: i64, no_cache: bool, writes: bool, crate_root: ref String) -> ProjectDriveLowered sync throws
+    /// **The libraries member `at` names in `own`, its own sources**, checked
+    /// both ways (ADR-324 D2-D4): the linker flags `pkg-config` gives for
+    /// them; a library named one way and not the other is thrown.
+    fn check_libraries(ref self, at: i64, own: ref Vec[fs::Path]) -> Vec[String] sync throws
+    /// Writes member `at`'s ledger and derived file, and its proofs, or under
+    /// `locked` compares them.
+    fn write_ledgers(ref self, at: i64, locked: bool) sync throws
+    /// Whether this is `nikaia test`'s test build of a package.
+    fn tests_build(ref self) -> bool sync
+    /// Writes `text` to stderr as it is.
+    fn eprint(ref self, text: ref String) sync
+    /// Writes `text` to `path` where it differs from what is there.
+    fn write_if_changed(ref self, path: ref fs::Path, text: ref String) sync throws
+    /// Where the generated Rust goes.
+    fn gen_dir(ref self) -> fs::Path sync
+    /// The entry package as `cargo publish` takes it:
+    /// `project_drive_publishable` over its root and its manifest.
+    fn write_publishable(ref self) sync throws
+    /// The entry package's crate with its hand-written root (ADR-393 D7):
+    /// `project_drive_spliced` over its root and its manifest, into the
+    /// crate's `src` with the `lowered` package.
+    fn write_spliced(ref self, src: ref fs::Path, lowered: ref String) sync throws
+    /// The switches file the cache keys on.
+    fn switches_path(ref self) -> fs::Path sync
+    /// `target/nikaia` of the project.
+    fn own_dir(ref self) -> fs::Path sync
+    /// The build's two choices, the build and the backend.
+    fn choices(ref self) -> (String, String) sync
+    /// This compiler's identity (`NIKAIA_COMPILER`).
+    fn compiler(ref self) -> String sync
+    /// The refusal of a toolchain older than the emitted Rust needs, or null.
+    fn toolchain_is_new_enough(ref self) -> String? sync
+    /// The triple this build is for.
+    fn target_triple(ref self) -> String sync
+    /// The machine this compiler runs on, null where it is none it knows.
+    fn host_triple(ref self) -> String? sync
+    /// Whether the toolchain has a `std` for `triple`, or cannot tell.
+    fn toolchain_can_build_for(ref self, triple: ref String) -> bool sync
+    /// Writes the generated workspace of the members as lowered: its manifest.
+    fn write_workspace(ref self, rust: ref Vec[String]) -> fs::Path sync throws
+    /// **Member `at`'s manifest as a library** of the generated workspace,
+    /// over its lowered `rust`: the dependency tables a build writes for it.
+    fn member_manifest(ref self, at: i64, rust: ref String) -> String sync throws
+    /// `[features]` of the manifest (ADR-393 D2), as read.
+    fn features(ref self) -> Vec[ManifestFeature] sync
+    /// `[rust-library]` of the manifest (ADR-393 D7), where it has the table.
+    fn rust_library(ref self) -> ManifestRustLibrary? sync
+    /// The path of `nikaia.toml` and its text, for a refusal shown in it.
+    fn manifest_text(ref self) -> (String, String) sync
+    /// Whether the program can be built without Cargo (`run_fast`).
+    fn runs_without_cargo(ref self, link_flags: ref Vec[String]) -> bool sync
+    /// Compiles the entry's Rust against `std` as a dynamic library; null
+    /// where that library cannot be built.
+    fn compile_fast(ref self, rust: ref String) -> ProjectDriveFast? sync throws
+    /// The build's switches as environment variables.
+    fn settings_env(ref self) -> Vec[(String, String)] sync
+    /// What sets this project's program apart in the shared directory.
+    fn root_tag(ref self) -> String sync
+    /// The entry and the name it is shown as, where a loose file was given.
+    fn shown_as(ref self) -> (String, String)? sync
+    /// The entry's text where it declares no `fn main` (Part III 13.3);
+    /// null where it does, or where it cannot be read or parsed, which the
+    /// lowering then reports.
+    fn entry_without_main(ref self) -> String? sync
+    /// The allowlist this build reads under, absolute; null where none.
+    fn allowlist(ref self) -> fs::Path? sync throws
+    /// The `--cpu` flags for `rustc`, null where none.
+    fn cpu_rustflags(ref self) -> String? sync throws
+    /// Makes the Cargo of this build: `manifest`, `env`, the variables to
+    /// `unset`, and whether it builds in the shared directory of the user's
+    /// cache (ADR-002 D4).
+    fn make_cargo(ref self, manifest: ref fs::Path, env: ref Vec[(String, String)], unset: ref Vec[String], shared: bool) sync throws
+    /// Whether the package is built as a C library.
+    fn is_library(ref self) -> bool sync
+    /// Cargo's `verb` (`build`, or `check` for `nikaia check --rustc`) with
+    /// `args`: its exit code and its JSON messages.
+    fn cargo_messages(ref self, verb: ref String, args: ref Vec[String]) -> (i32, String) sync throws
+    /// Holds the user cache to its limit.
+    fn settle(ref self) sync
+    /// Says what the backend said, against the `.nika` line it was about.
+    fn report(ref self, messages: ref String) sync throws
+    /// The package's `[package] name`, where it has one.
+    fn package_name(ref self) -> String? sync
+    /// The binding asked for (`--bind`), where one was.
+    fn bind(ref self) -> String? sync
+    /// The features `nikaia bind --features` named, where it did (ADR-393 D5).
+    fn bind_features(ref self) -> Vec[String]? sync
+    /// The program built in the shared directory, under the project's name.
+    fn own_copy(ref self, built: ref fs::Path) -> fs::Path sync throws
+    /// Records the versions Cargo resolved in `nikaia.lock`: why it could
+    /// not, or null.
+    fn record_resolved_dependencies(ref self) -> String? sync
+    /// `cargo run` with `args` and the program's arguments: its exit code.
+    fn cargo_run(ref self, args: ref Vec[String]) -> i32 sync throws
+    /// Runs `binary` with the program's arguments: its exit code.
+    fn run_directly(ref self, binary: ref fs::Path) -> i32 sync throws
+}
+
+/// Why the build stops.
+pub enum ProjectDriveRefusal {
+    /// A host step failed: the host holds the error.
+    Host,
+    /// A statement about the program, in the words the compiler reports.
+    Refused(String),
+    /// A failure that is no statement about the program (the toolchain, a
+    /// file that could not be written).
+    Failed(String),
+}
+
+impl Error for ProjectDriveRefusal {
+    fn message(ref self) -> String {
+        return match self {
+            ProjectDriveRefusal::Host => "a step of the build failed",
+            ProjectDriveRefusal::Refused(why) => why.clone(),
+            ProjectDriveRefusal::Failed(why) => why.clone(),
+        }
+    }
+}
+
+/// **Build the project, or build and run it**: the exit code, and the binary
+/// the build made (which `nikaia test` runs, once per test).
+///
+/// The lowering happens twice and that is deliberate: **here**, so the
+/// checks and the ledger are the compiler's own output rather than
+/// something buried in a `cargo` subprocess, and again inside the wrapper,
+/// where it is what `rustc` is actually handed. Both go through `lower` and
+/// the second is a cache hit, so the work is done once even though the
+/// decision is made in two places.
+pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: String, no_cache: bool, locked: bool) -> (i32, fs::Path?) sync throws {
+    // **A package offered to Rust** (ADR-393 D1, Part III 15.2) is built as
+    // a lib crate and has no entry point: what it offers is its `pub` items.
+    let rust_library = project_drive_artifact(host) == "rust-library"
+    if rust_library && subcommand == "run" {
+        throw ProjectDriveRefusal::Refused("This package is built as a library (`artifact = \"rust-library\"`), and a library has nothing to run: `nikaia build` writes it as a Rust crate, and a Rust program depends on it.")
+    }
+    let crate_build = rust_library && subcommand == "build" && !host.tests_build()
+    // **`[features]` is a library's** (ADR-393 D5): a program has no user
+    // who chooses parts (`NK1346`), a C library is built whole and only its
+    // binding is narrowed; a feature list, and `nikaia bind --features`, are
+    // checked before anything is lowered (`NK1347`).
+    let features = host.features()
+    let chosen = host.bind_features()
+    if chosen != null && !host.tests_build() {
+        if !host.is_library() {
+            let refusal = FeaturesRefusal { code: "NK1346", feature: "", entry: "", message: "`--features` chooses the parts of a library a binding carries, and a program has no user who chooses its parts.", help: "Write `artifact = \"c-library\"` under `[build]` to bind the package, or leave out `--features`." }
+            return (project_drive_features_refused(host, refusal), null)
+        }
+        let checked = features_chosen_checked(features, chosen ?? [])
+        if checked != null {
+            return (project_drive_features_refused(host, checked ?? throw ProjectDriveRefusal::Failed("no refusal")), null)
+        }
+    }
+    if features.len() > 0 && !host.tests_build() && (subcommand == "build" || subcommand == "run") {
+        if !rust_library && !host.is_library() {
+            let refusal = FeaturesRefusal { code: "NK1346", feature: "", entry: "", message: "`[features]` is for a package built as a Rust library: a program has no user who chooses its parts.", help: "Write `artifact = \"rust-library\"` under `[build]`, or remove `[features]`." }
+            return (project_drive_features_refused(host, refusal), null)
+        }
+        let checked = features_lists_checked(features, host.package_name() ?? "")
+        if checked != null {
+            return (project_drive_features_refused(host, checked ?? throw ProjectDriveRefusal::Failed("no refusal")), null)
+        }
+    }
+    // **`[rust-library]` is a rust-library's** (ADR-393 D7, `NK1348`), and
+    // its `root` a file of the package.
+    if !host.tests_build() && (subcommand == "build" || subcommand == "run") {
+        let splice_refused = project_drive_splice_checked(host, rust_library)
+        if splice_refused != 0 {
+            return (splice_refused, null)
+        }
+    }
+    let entry = host.entry()
+    let not_there = f"{entry.display()} is not there. A project's entry point is `src/main.nika`."
+    if !crate_build {
+        let meta = fs::metadata(entry, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Refused(not_there) }
+        if !meta.is_file() {
+            throw ProjectDriveRefusal::Refused(not_there)
+        }
+    }
+    // **A program has a `fn main`** (Part III 13.3, `NK1351`): refused here,
+    // before anything is lowered, rather than by `rustc` as an internal
+    // error. A library artifact and a test build have no `main` of their own.
+    let program = !rust_library && !host.is_library() && !host.tests_build()
+    if program && (subcommand == "build" || subcommand == "run") {
+        match host.entry_without_main() {
+            null => {},
+            source => return (project_drive_no_main(host, entry, source), null),
+        }
+    }
+
+    // Before the build, because an explanation is about the program and a
+    // build that reuses a cached lowering still answers the question.
+    host.explain_if_asked()
+
+    // Every package of this build, resolved before anything is read: a
+    // dependency that is not there, or two names for one path, is a
+    // statement about the project and should not wait for a lowering.
+    let members = host.drive_members()
+
+    // **Every member is lowered here**, for the reason the doc comment
+    // above gives for the entry: the checks and the diagnostics are the
+    // compiler's own output rather than something buried in a `cargo`
+    // subprocess. Each is lowered again inside the wrapper and each of
+    // those is a cache hit, so a package is compiled once however many
+    // crates now ask about it.
+    //
+    // **Dependencies first** ([ADR-100](../../docs/specification/adr/adr-100.md)
+    // D5). A package's ledger is a build input of everything that depends
+    // on it: `http`'s own build has `deeper` in view and a consumer's does
+    // not (ADR-286 D21), so the consumer has to read the answer `http`
+    // computed rather than derive a worse one. `members_of` is
+    // breadth-first from the entry, which is the wrong end and is not a
+    // topological order once a package is reached two ways — so the order
+    // is computed here, and this loop is where the two builds of one
+    // package stop being able to disagree.
+    let order = project_members_dependencies_first(members)
+    // Each member's Rust, in `members_of`'s own order, which is what the
+    // generated workspace is written in.
+    let empty: String = ""
+    let mut rust: Vec[String] = members.iter().map(fn(m) { empty.clone() }).collect()
+    // **`<package>.h`**, the entry's, where this build makes a library
+    // (ADR-284 D12).
+    let mut header: String? = null
+    let mut python: String? = null
+    let mut node: String? = null
+    let mut link_flags: Vec[String] = []
+    for at in order {
+        let member = members[at].clone()
+        // **Whose ledgers this build writes** (#534, ADR-286 D25; below):
+        // the lowering is told, so it records in the cache only a lowering
+        // whose proofs the written file already holds (#1569).
+        let writes = !(at == 0 && host.tests_build()) && member.fetched == null
+        let lowered = host.lower_member(at, no_cache, writes, project_drive_crate_root(host, crate_build && at == 0))
+        // **The libraries this package names, and how it finds them**
+        // (ADR-324 D2-D4): both ways before anything is linked, and the
+        // flags from `pkg-config` before `cargo` runs. Its own sources are
+        // the ones under its root and not under a member nested in it.
+        let own: Vec[fs::Path] = lowered.sources.iter().filter(fn(s) {
+            return s.starts_with(member.root)
+                && !members.iter().any(fn(other) { other.root != member.root && other.root.starts_with(member.root) && s.starts_with(other.root) })
+        }).map(fn(s) { s.clone() }).collect()
+        for flag in host.check_libraries(at, own) {
+            if !link_flags.contains(flag) {
+                link_flags.push(flag.clone())
+            }
+        }
+        // **Each package's ledger in that package's own root**
+        // (Part III 13.5, ADR-100 D1): written here so the consumers
+        // lowered after it read it, and committed with the package the way
+        // a lockfile is. Under `--locked` this is D4 — each is compared
+        // byte for byte rather than rewritten, which is the check CI wants
+        // and the one a development build must not pay for.
+        //
+        // **Not the entry's, in `nikaia test`'s test build** (#534): it
+        // lowers the `test` blocks too, and they are no contract of the
+        // package's. A consumer reads the ledger the program's build
+        // writes, and `nikaia test` in a package must leave its committed
+        // files as they were.
+        //
+        // **Nor a package Cargo fetched** (ADR-286 D25): its ledger is the
+        // one it was published with, read where it landed, and the
+        // directory is Cargo's.
+        if writes {
+            host.write_ledgers(at, locked)
+        }
+        // **The package as `cargo publish` takes it** (ADR-286 D25): the
+        // entry's, beside its build, once its ledger is written.
+        if at == 0 && !host.tests_build() {
+            host.write_publishable()
+        }
+        // **The note is the entry's** (ADR-288 D29): what a dependency's
+        // author could promise is theirs to hear, in their own build.
+        if at == 0 {
+            host.eprint(lowered.notes)
+            header = lowered.header?.clone()
+            python = lowered.python?.clone()
+            node = lowered.node?.clone()
+        }
+        rust[at] = lowered.rust.clone()
+    }
+
+    // **The crates, and no Cargo** (ADR-393 D1): a Rust crate that depends
+    // on the library builds it.
+    if crate_build {
+        return (project_drive_rust_library(host, members, rust), null)
+    }
+
+    // **The generated Rust, before Cargo starts** (#280). The wrapper
+    // writes the same file while `rustc` runs, and Cargo dates the
+    // dependency file to when the invocation *started*: a source written
+    // after that looks edited during the build, so a new project was
+    // compiled again on its second build with nothing changed. Written
+    // here, the wrapper's write finds the bytes already there and touches
+    // nothing. The path is the wrapper's: the generated directory, then
+    // the crate's name as Cargo passes it, `-` made `_`.
+    for (member, text) in members.iter().zip(rust.iter()) {
+        host.write_if_changed(project_drive_generated(host, member.name), text)
+    }
+
+    // **Before `cargo`**, and written only when it differs, so an
+    // unchanged switch does not dirty the package every build. What is in
+    // it is what the cache keys on, so the two cannot disagree about which
+    // switches decide an artifact.
+    let switches = host.switches_path()
+    match switches.parent() {
+        null => {},
+        dir => project_drive_make_dir(dir),
+    }
+    let (build, backend) = host.choices()
+    // **And the libraries' flags**, which change what the program is
+    // linked against and nothing Cargo watches.
+    //
+    // **And this compiler's identity** (ADR-002 D4): the wrapper that
+    // lowers the program is this compiler, and Cargo fingerprints the
+    // wrapper by its path, not by what it writes. The directory the program
+    // is built in is shared and outlives an edit to the compiler, so this
+    // line is what makes the program's crates stale after one - and only
+    // them, not `std` and what is under it, which the compiler never wrote.
+    host.write_if_changed(switches, f"{build}\n{backend}\n{link_flags.join(" ")}\n{host.compiler()}\n")
+
+    // **Before Cargo is handed anything** (ADR-288 D27): its own answer
+    // about the floor names a package the author never wrote, which is
+    // Part III C.1's class.
+    match host.toolchain_is_new_enough() {
+        null => {},
+        why => throw ProjectDriveRefusal::Failed(why),
+    }
+    // **The machine named is the machine built for** (ADR-037 D1): the
+    // triple goes to Cargo as `--target`, at the host too, so there is one
+    // path and not a second one that only a cross build takes. Where it is
+    // not the host, the toolchain may not have its `std`, and Cargo's own
+    // answer is `can't find crate for core` - so that is asked first.
+    let triple = host.target_triple()
+    if (host.host_triple() ?? "") != triple && !host.toolchain_can_build_for(triple) {
+        throw ProjectDriveRefusal::Failed(project_drive_no_std_for(triple))
+    }
+    let mut build_args: Vec[String] = ["--target", triple]
+
+    let manifest = host.write_workspace(rust)
+
+    // **A `run` of a program that needs nothing but `std` skips Cargo**
+    // (`crate::run_fast`): `rustc` compiles it against `std` as a dynamic
+    // library. The workspace above is still written, for whoever reads it;
+    // where that library cannot be built, Cargo's path follows.
+    if subcommand == "run" && host.runs_without_cargo(link_flags) {
+        match host.compile_fast(rust[0]) {
+            null => {},
+            built => {
+                host.report(built.messages)
+                return match built.binary {
+                    // Cargo's own code for a crate that did not compile.
+                    null => (101, null),
+                    binary => (host.run_directly(binary), binary.clone()),
+                }
+            },
+        }
+    }
+
+    // **The compiled-`std` cache** (ADR-002 D4): Cargo builds into a
+    // directory in the user's cache, so the second project on this machine
+    // links the `std` the first one built. `CARGO_TARGET_DIR` still wins where
+    // it is set: it is Cargo's own documented override, and a build that
+    // asked for a directory has to get it. Set to nothing, it asked for none.
+    let shared = (env::var("CARGO_TARGET_DIR") ?? "") == ""
+    let env = project_drive_cargo_env(host, link_flags, no_cache, shared, project_members_fetched_text(members))
+    let mut unset: Vec[String] = []
+    let mut env = env
+    match host.cpu_rustflags() {
+        null => {},
+        flags => {
+            env.push(("CARGO_ENCODED_RUSTFLAGS", flags))
+            unset.push("RUSTFLAGS")
+        },
+    }
+    host.make_cargo(manifest, env, unset, shared)
+
+    // **`build` first, always, and its diagnostics read rather than
+    // relayed** (ADR-005 D7, Part III C.1). Cargo's stderr is Rust about a
+    // file the author never opened; `--message-format=json` is the channel
+    // the translator can read, and it is only usable for `build` - a `run`
+    // writes the *program's* output to the same stdout.
+    //
+    // So a `nikaia run` is a build and then a run, and the run is a no-op
+    // rebuild. That is the same shape the lowering already has (above): the
+    // work happens once, and the decision is made where it can be reported.
+    let library = host.is_library()
+    if library && subcommand == "run" {
+        throw ProjectDriveRefusal::Refused("This package is built as a library (`artifact = \"c-library\"`), and a library has nothing to run: `nikaia build` makes it, and a C program calls it.")
+    }
+    if library && header == null {
+        throw ProjectDriveRefusal::Failed(cx_nothing_exported())
+    }
+    // **A `run` shows the program's output and nothing of Cargo's.** Its
+    // progress lines ("Compiling", "Finished") are not about the program,
+    // and on a terminal they mix into what the program prints. `--quiet`
+    // keeps what Cargo cannot do (a manifest it cannot read) on stderr;
+    // the diagnostics arrive on the JSON channel either way.
+    if subcommand == "run" || subcommand == "check" {
+        build_args.push("--quiet")
+    }
+    // **`nikaia check --rustc` is Cargo's `check`** (#1373): the same
+    // lowering and the same reading of what rustc said, with no program made.
+    let verb = if subcommand == "check" { "check" } else { "build" }
+    let (built_code, messages) = host.cargo_messages(verb, build_args)
+    let mut code = built_code
+    // Cargo is done with what this build added to the user cache, so its
+    // size is known: hold the cache to its limit before a `run` starts the
+    // program (#724).
+    host.settle()
+    host.report(messages)
+    // **A batch that failed keeps what rustc said** (#1582), untranslated:
+    // the translation reads the carrier's map, not the batch's modules, and
+    // `nikaia test` finds the programs to leave out from the lines it cites.
+    if code != 0 {
+        match env::var(project_batch_var()) {
+            null => {},
+            list => {
+                let path: fs::Path = list
+                let said = path.with_extension("said")
+                host.write_if_changed(said, messages)
+            },
+        }
+    }
+    // **The library and its header, together where a C build looks**
+    // (ADR-284 D4, D12): `target/nikaia/c-library/`.
+    if code == 0 && subcommand != "check" {
+        match header {
+            null => {},
+            text => project_drive_c_library(host, text, python, node, messages),
+        }
+    }
+    let built = diagnostics_executable_in(messages)
+    let binary: fs::Path? = match built {
+        null => null,
+        path => if shared { host.own_copy(path) } else { path.clone() },
+    }
+
+    // Cargo has resolved by now, and only now: the versions do not exist
+    // before it ran. A build that failed resolved nothing worth recording.
+    //
+    // **Before the program starts**, because `run` hands this process over
+    // to it (#281) and nothing after that point runs. What is recorded is
+    // what the *build* resolved, so the program's own exit status was never
+    // the right condition for it.
+    if code == 0 {
+        match host.record_resolved_dependencies() {
+            null => {},
+            // D12: the record costs the *next* reader some information. It
+            // never costs this build, which has already succeeded.
+            error => host.eprint(f"warning: the resolved dependency versions could not be recorded in nikaia.lock: {error}\n"),
+        }
+    }
+
+    if code == 0 && subcommand == "run" {
+        // **The built program is run directly, and that is Part III C.1
+        // rather than a shortcut.** `cargo run` is a second invocation that
+        // cannot use the JSON channel - the program's own output is on that
+        // stdout - so Cargo renders its **cached** diagnostics to stderr
+        // while it checks freshness, and a program with a warning saw it
+        // twice: once in this language's words from `report` above, and
+        // once as `rustc` about `target/nikaia/gen/….rs`.
+        //
+        // **The path is read and not computed.** Cargo decides where a
+        // binary lands from the target directory, the profile and
+        // `CARGO_TARGET_DIR`; the build above already captured the answer.
+        // Where there is none the old path is taken, so this can only remove
+        // a duplicate and never lose a run.
+        code = match binary {
+            null => host.cargo_run(build_args),
+            path => host.run_directly(path),
+        }
+    }
+    return (code, binary)
+}
+
+/// Where the wrapper writes the generated Rust of package `name`: the
+/// generated directory, then the crate's name as Cargo passes it, `-` made `_`.
+fn project_drive_generated[H: ProjectDriveHost](host: ref H, name: String) -> fs::Path sync {
+    let crate_name = name.replace("-", "_")
+    return host.gen_dir().join(crate_name).join(f"{crate_name}.rs")
+}
+
+/// `dir` and the directories above it, made where they are not there.
+fn project_drive_make_dir(dir: ref fs::Path) sync throws {
+    fs::create_dir(dir, fs::Root::Anywhere; recursive: true) catch { throw ProjectDriveRefusal::Failed(f"making {dir.display()}: {error}") }
+}
+
+/// **The refusal of a target the toolchain has no `std` for**
+/// ([ADR-037](../../docs/specification/adr/adr-037.md) D1). Cargo's own answer
+/// is *can't find crate for `core`*, about a crate the author never named;
+/// the answer that helps is the command that installs it.
+pub fn project_drive_no_std_for(triple: String) -> String {
+    return f"cannot build for `{triple}`: this toolchain has no `std` for it.\nInstall it with `rustup target add {triple}`. A machine other than the one this runs on also needs a linker for it, named to Cargo in `$CARGO_HOME/config.toml` (a project's own is not read) as `[target.{triple}] linker = \"…\"`."
+}
+
+/// **The environment the wrapper is run in**: the build's switches, the
+/// marker that makes this compiler the wrapper, where the generated Rust is,
+/// the program's tag in the `shared` directory, the libraries' flags, the
+/// cache switch, the name a loose file is shown as and the allowlist.
+fn project_drive_cargo_env[H: ProjectDriveHost](host: ref H, link_flags: ref Vec[String], no_cache: bool, shared: bool, fetched: String) -> Vec[(String, String)] sync throws {
+    let mut env = host.settings_env()
+    env.push(("NIKAIA_RUSTC_WRAPPER", "1"))
+    env.push(("NIKAIA_GEN_DIR", host.gen_dir().to_text()))
+    // The program's crate is named for its project in the shared directory
+    // (#495), and its generated file keeps its package's name.
+    if shared {
+        env.push(("NIKAIA_PROGRAM_TAG", f"_{host.root_tag()}"))
+    }
+    env.push(("NIKAIA_LINK_FLAGS", link_flags.join("\u{1f}")))
+    // Where Cargo put each package by version (ADR-286 D25): the wrapper
+    // reads this build's resolution rather than asking Cargo from inside it.
+    if fetched.len() > 0 {
+        env.push((project_members_fetched_variable(), fetched))
+    }
+    if no_cache {
+        env.push(("NIKAIA_NO_CACHE", "1"))
+    }
+    // The entry it names and the name, `\u{1f}` between: only that file is
+    // said under another name, not a package the program depends on.
+    match host.shown_as() {
+        null => {},
+        (entry, written) => env.push(("NIKAIA_SHOWN_AS", f"{entry}\u{1f}{written}")),
+    }
+    // **Absolute**, because the wrapper runs in a directory Cargo chose.
+    match host.allowlist() {
+        null => {},
+        list => env.push(("NIKAIA_ALLOW_READ_FROM_LIST", list.to_text())),
+    }
+    return env
+}
+
+/// Whether `[package]` key `key` of `nikaia.toml` is one a published crate
+/// carries as written: what crates.io shows of a package, none of it a path.
+fn project_drive_published_key(key: ref String) -> bool {
+    return key == "description" || key == "license" || key == "authors" || key == "repository" || key == "homepage" || key == "documentation" || key == "keywords" || key == "categories"
+}
+
+/// **The `Cargo.toml` that makes the package publishable** (ADR-286 D25, #99):
+/// the crate `nikaia_<name>` at the package's version, carrying `nikaia.toml`,
+/// its `src/*.nika` and `nikaia.contracts`, and its own packages by version as
+/// the renaming the consumer's resolution follows (D27). Its one Rust file is
+/// there because Cargo wants a target; it is never built, nothing lowered is
+/// published, and the consuming compiler lowers the sources itself.
+pub fn project_drive_publish_stub(file: ref ManifestFile) -> String {
+    let name = file.name ?? "package"
+    let crate_name = f"nikaia_{name.replace("-", "_")}"
+    let mut out = f"# Written by `nikaia build`: `cargo publish` on this file publishes the Nikaia\n# package `{name}` (ADR-286 D25). Cargo only finds it; nothing here is built.\n[package]\nname = \"{crate_name}\"\nversion = \"{file.version}\"\nedition = \"2024\"\n"
+    if !file.package.contains_key("description") {
+        out = f"{out}description = \"The Nikaia package `{name}`.\"\n"
+    }
+    for (key, text) in file.package.iter() {
+        if project_drive_published_key(key) {
+            out = f"{out}{key} = {text}\n"
+        }
+    }
+    out = f"{out}include = [\"Cargo.toml\", \"lib.rs\", \"nikaia.toml\", \"nikaia.contracts\", \"src/**/*.nika\"]\n\n[lib]\npath = \"lib.rs\"\n\n[workspace]\n\n[dependencies]\n"
+    for (key, declared) in file.dependencies.iter() {
+        match declared.cargo {
+            null => {},
+            entry => { out = f"{out}{key} = {entry}\n" },
+        }
+    }
+    return out
+}
+
+/// **The package as `cargo publish` takes it**, in `target/nikaia/publish/`
+/// under `root`: the stub, its empty `lib.rs`, and copies of `nikaia.toml`,
+/// `nikaia.contracts` and every `.nika` file under `src/`. A copy, so the
+/// package's own directory gains no `Cargo.toml`; each file is written only
+/// where it changed, and a source no longer there is dropped.
+pub fn project_drive_publishable(root: ref fs::Path, file: ref ManifestFile) throws {
+    let dir = root.join("target").join("nikaia").join("publish")
+    let src = root.join("src")
+    let mut wanted: Vec[(String, String)] = [("Cargo.toml", project_drive_publish_stub(file)), ("lib.rs", "")]
+    for name in ["nikaia.toml", "nikaia.contracts"] {
+        let text = fs::read_to_string(root.join(name), fs::Root::Anywhere) catch { continue }
+        wanted.push((name.clone(), text))
+    }
+    let sources = fs::walk(src, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"reading {src.display()}: {error}") }
+    for name in sources.iter() {
+        if (name.extension()?.text_of() ?? "") != "nika" {
+            continue
+        }
+        let text = fs::read_to_string(src.join(name), fs::Root::Anywhere) catch { continue }
+        wanted.push((f"src/{name.to_text()}", text))
+    }
+    let old_src = dir.join("src")
+    let old = fs::walk(old_src, fs::Root::Anywhere) catch { [] }
+    for name in old.iter() {
+        let at = f"src/{name.to_text()}"
+        if !wanted.iter().any(fn(pair) { pair.0 == at }) {
+            fs::remove(old_src.join(name), fs::Root::Anywhere) catch {}
+        }
+    }
+    for (name, text) in wanted.iter() {
+        let path = dir.join(name)
+        let parent = path.parent() ?? continue
+        fs::create_dir(parent, fs::Root::Anywhere; recursive: true) catch { throw ProjectDriveRefusal::Failed(f"making {parent.display()}: {error}") }
+        let was = fs::read_to_string(path, fs::Root::Anywhere) catch { "\u{0}" }
+        if was != text {
+            fs::write(path, fs::Root::Anywhere, text) catch { throw ProjectDriveRefusal::Failed(f"writing {path.display()}: {error}") }
+        }
+    }
+}
+
+/// **The library and its header, together where a C build looks**
+/// (ADR-284 D4, D12): `target/nikaia/c-library/`, the binding asked for over
+/// it (D26, D28), and the libraries Cargo made, copied beside them.
+fn project_drive_c_library[H: ProjectDriveHost](host: ref H, header: ref String, python: String?, node: String?, messages: ref String) sync throws {
+    let made = host.own_dir().join("c-library")
+    project_drive_make_dir(made)
+    let package = host.package_name() ?? "program"
+    host.write_if_changed(made.join(f"{package}.h"), header)
+    let bind = host.bind() ?? ""
+    // **`<package>/__init__.py`** beside the library it loads (D26).
+    if bind == "python" {
+        match python {
+            null => {},
+            text => {
+                let module = made.join(package.replace("-", "_"))
+                project_drive_make_dir(module)
+                host.write_if_changed(module.join("__init__.py"), text)
+                println(f"binding: {module.join("__init__.py").display()}")
+            },
+        }
+    }
+    // `node/<package>.c` and its `binding.gyp` (D28), which the host's
+    // toolchain compiles against the library.
+    if bind == "node" {
+        match node {
+            null => {},
+            text => {
+                let module = made.join("node")
+                project_drive_make_dir(module)
+                host.write_if_changed(module.join(f"{package}.c"), text)
+                host.write_if_changed(module.join("binding.gyp"), cx_node_gyp(package))
+                println(f"binding: {module.join(f"{package}.c").display()}")
+            },
+        }
+    }
+    for built in diagnostics_libraries_in(messages) {
+        let name = built.file_name() ?? continue
+        fs::copy(built, made.join(name), fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"copying {built.display()}: {error}") }
+    }
+    println(f"library: {made.display()}")
+}
+
+/// The build's `[build] artifact`, as the settings hand it to the wrapper.
+fn project_drive_artifact[H: ProjectDriveHost](host: ref H) -> String sync {
+    for (key, value) in host.settings_env() {
+        if key == PROJECT_SETTINGS_ARTIFACT_VAR {
+            return value
+        }
+    }
+    return "program"
+}
+
+/// The crate a package is offered to Rust as (ADR-286 D23): `nikaia_<name>`,
+/// `-` written `_`.
+pub fn project_drive_rust_crate(name: ref String) -> String {
+    return f"nikaia_{name.replace("-", "_")}"
+}
+
+/// **The package as a Rust lib crate** (ADR-393 D1, Part III 15.2): each
+/// member written as `target/rust-library/nikaia_<name>/`, its `Cargo.toml`
+/// and its lowered Rust as `src/lib.rs`, and the entry's directory printed.
+/// The manifest is the member's in the generated workspace, which holds the
+/// dependency tables (`nikaia-std` by path, a Rust crate as written, a Nikaia
+/// package as the crate beside it), made the lib crate by
+/// `project_drive_rust_manifest`. The next build overwrites each file.
+fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec[ProjectMembersMember], rust: ref Vec[String]) -> i32 sync throws {
+    let target = host.own_dir().parent() ?? throw ProjectDriveRefusal::Failed(f"{host.own_dir().display()} has no directory")
+    let made = target.join("rust-library")
+    let features = host.features()
+    let mut checked: FeaturesMade? = null
+    for at in 0..<members.len() {
+        let crate_name = project_drive_rust_crate(members[at].name)
+        let mut manifest = project_drive_rust_manifest(host.member_manifest(at, rust[at]), crate_name, members)
+        // **The features** (ADR-393 D2-D3) are the package's own: the
+        // members it depends on are built whole, and without a feature that
+        // roots a grammar's `@stream` entry the crate holds no reader (D4).
+        let mut lowered = features_readers_dropped(rust[at])
+        if at == 0 && features.len() > 0 {
+            let applied = features_applied(rust[at], manifest, features, members[0].name) catch {
+                return project_drive_features_refused(host, error)
+            }
+            manifest = features_manifest(manifest, applied)
+            lowered = applied.rust.clone()
+            checked = applied
+        }
+        let dir = made.join(crate_name)
+        project_drive_make_dir(dir.join("src"))
+        host.write_if_changed(dir.join("Cargo.toml"), manifest)
+        // **A hand-written root** (D7) is the entry package's alone: its
+        // directory copied into `src/`, the lowered items under `native`.
+        if at > 0 || host.rust_library() == null {
+            host.write_if_changed(dir.join("src").join("lib.rs"), lowered)
+            continue
+        }
+        host.write_spliced(dir.join("src"), lowered)
+    }
+    let crate_dir = made.join(project_drive_rust_crate(members[0].name))
+    let applied = checked ?? {
+        println(f"rust-library: {crate_dir.display()}")
+        return 0
+    }
+    // **Every feature alone, the core, and all together** (D6): what rustc
+    // refuses is the feature's, reported on its root.
+    // Cargo's own wrapper is left out: the crate is plain Rust now.
+    let check_dir = env::var("CARGO_TARGET_DIR") ?? target.join("rust-library-check").display()
+    let mut check_env: Vec[(String, String)] = []
+    check_env.push(("CARGO_TARGET_DIR", check_dir))
+    check_env.push(("RUSTC_WORKSPACE_WRAPPER", ""))
+    let unset: Vec[String] = []
+    host.make_cargo(crate_dir.join("Cargo.toml"), check_env, unset, false)
+    let mut runs: Vec[(String, Vec[String])] = [("", ["--no-default-features"])]
+    for name in applied.names {
+        runs.push((name.clone(), ["--no-default-features", "--features", name.clone()]))
+    }
+    if applied.names.len() > 1 {
+        runs.push(("*", ["--all-features"]))
+    }
+    for run in runs {
+        let mut args: Vec[String] = ["--quiet"]
+        for arg in run.1 { args.push(arg.clone()) }
+        let (code, said) = host.cargo_messages("check", args)
+        if code == 0 { continue }
+        // A feature alone is that feature's; the core or all together is the
+        // feature whose item rustc names, else the table's.
+        let blamed = if run.0.len() > 0 && run.0 != "*" { run.0.clone() } else { features_blamed(said, applied, "") }
+        let alone = if run.0.len() == 0 { "the core alone" } else if run.0 == "*" { "all the features together" } else { f"the feature `{run.0}` alone" }
+        let mut entry: String = ""
+        for feature in features {
+            if feature.name == blamed && feature.entries.len() > 0 { entry = feature.entries[0].clone() }
+        }
+        let help = if blamed.len() > 0 { f"What `{blamed}` reaches is derived from its roots, and rustc found something the derivation missed: name the item it lacks as a root of `{blamed}`." } else { "The items no root reaches are the core, and rustc refuses them before any feature is added: fix the core first." }
+        let refusal = FeaturesRefusal { code: "NK1345", feature: blamed.clone(), entry: entry, message: f"The crate does not build with {alone}. rustc says: {features_first_error(said)}", help: help }
+        return project_drive_features_refused(host, refusal)
+    }
+    println(f"rust-library: {crate_dir.display()}")
+    return 0
+}
+
+/// **`[rust-library]` checked** (ADR-393 D7): `NK1348` where the artifact
+/// is not a rust-library, or `root` names no file of the package, shown at
+/// the table or at `root`; the exit code, 0 where nothing is refused.
+fn project_drive_splice_checked[H: ProjectDriveHost](host: ref H, rust_library: bool) -> i32 sync {
+    let table = host.rust_library() ?? { return 0 }
+    let (path, toml) = host.manifest_text()
+    let mut message: String = ""
+    let mut help: String = ""
+    let mut key: String = ""
+    if !rust_library {
+        message = "`[rust-library]` splices hand-written Rust into the crate a rust-library build writes, and this package is not built as one."
+        help = "Write `artifact = \"rust-library\"` under `[build]`, or remove `[rust-library]`."
+    } else {
+        let written = table.root ?? ""
+        let manifest: fs::Path = path.clone()
+        let package = manifest.parent() ?? { return 0 }
+        let meta = fs::metadata(package.join(written), fs::Root::Anywhere) catch { null }
+        if written.len() == 0 {
+            message = "`[rust-library]` needs `root`, the hand-written Rust file that becomes the crate root."
+            help = "Write `root = \"rust/lib.rs\"` under `[rust-library]`, naming a file of the package."
+        } else if !(meta?.is_file() ?? false) {
+            message = f"`[rust-library] root` names `{written}`, which is not a file of the package."
+            help = "Name the hand-written Rust file that becomes the crate root, relative to `nikaia.toml`."
+            key = "root"
+        }
+    }
+    if message.len() == 0 {
+        return 0
+    }
+    let span = project_drive_splice_span(toml, key)
+    let shown = Shown { warning: false, code: "NK1348", message: message, notes: [], help: help, span: span, labels: [] }
+    host.eprint(rendered(shown, path, toml))
+    return 1
+}
+
+/// Where a refusal of `[rust-library]` stands in `nikaia.toml`: at `key` in
+/// the table where it is written there, else at the table's header.
+pub fn project_drive_splice_span(toml: ref String, key: ref String) -> Span {
+    let mut offset = 0
+    let mut inside = false
+    let mut header = 0
+    for line in toml.split("\n") {
+        let trimmed = line.trim()
+        if trimmed.starts_with("[") {
+            inside = trimmed == "[rust-library]"
+            if inside { header = offset }
+        } else if inside && key.len() > 0 {
+            let name = trimmed.split("=").next() ?? ""
+            if name.trim() == key {
+                let start = offset + line.len() - line.trim_start().len()
+                return Span { start: start as u32, end: (start + key.len()) as u32 }
+            }
+        }
+        offset += line.len() + 1
+    }
+    return Span { start: header as u32, end: (header + 14) as u32 }
+}
+
+/// **The path of a member's root in its crate** (#1447): `crate::<native>`
+/// for the entry of a rust-library build whose `[rust-library] root` splices
+/// it under a hand-written root (ADR-393 D7, `project_drive_spliced`),
+/// `crate` for every other.
+fn project_drive_crate_root[H: ProjectDriveHost](host: ref H, spliced: bool) -> String sync {
+    if !spliced {
+        return "crate"
+    }
+    let table = host.rust_library() ?? { return "crate" }
+    return f"crate::{table.native}"
+}
+
+/// **The crate with a hand-written root** (ADR-393 D7), under the package
+/// `root` whose manifest is `file`: the directory holding `[rust-library]
+/// root` copied into `src` as it is, the `lowered` package written as
+/// `src/<native>/mod.rs`, and `root` made `src/lib.rs` with `pub mod
+/// <native>;` below it. Each file is written only where it changed.
+pub fn project_drive_spliced(root: ref fs::Path, file: ref ManifestFile, src: ref fs::Path, lowered: ref String) throws {
+    let table = file.rust_library ?? throw ProjectDriveRefusal::Failed("the manifest has no `[rust-library]`")
+    let hand_path = root.join(table.root ?? "")
+    let from = hand_path.parent() ?? root.clone()
+    let files = fs::walk(from, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"reading {from.display()}: {error}") }
+    for name in files.iter() {
+        let to = src.join(name)
+        let text = fs::read_to_string(from.join(name), fs::Root::Anywhere) catch {
+            project_drive_make_dir(to.parent() ?? src.clone())
+            fs::copy(from.join(name), to, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"copying {from.join(name).display()}: {error}") }
+            continue
+        }
+        project_drive_written(to, text)
+    }
+    let hand = fs::read_to_string(hand_path, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"reading {hand_path.display()}: {error}") }
+    project_drive_written(src.join(table.native).join("mod.rs"), lowered)
+    // At the end: above the file's `//!` and `#![...]` it would end them.
+    let parted = if hand.len() == 0 || hand.ends_with("\n") { "" } else { "\n" }
+    project_drive_written(src.join("lib.rs"), f"{hand}{parted}\npub mod {table.native};\n")
+}
+
+/// `text` written to `path`, its directory made, where the file holds
+/// something else.
+fn project_drive_written(path: ref fs::Path, text: ref String) throws {
+    project_drive_make_dir(path.parent() ?? throw ProjectDriveRefusal::Failed(f"{path.display()} has no directory"))
+    let was = fs::read_to_string(path, fs::Root::Anywhere) catch { "\u{0}" }
+    if was != text {
+        fs::write(path, fs::Root::Anywhere, text) catch { throw ProjectDriveRefusal::Failed(f"writing {path.display()}: {error}") }
+    }
+}
+
+/// **A program without `fn main`** (`NK1351`, Part III 13.3), shown at the
+/// start of the entry under the name it was given as; the exit code.
+fn project_drive_no_main[H: ProjectDriveHost](host: ref H, entry: ref fs::Path, source: ref String) -> i32 sync {
+    let path = match host.shown_as() {
+        null => entry.display(),
+        (_, written) => written,
+    }
+    let message = f"A program starts at its `fn main`, and `{path}` declares none."
+    let help: String = "Add `fn main()` to it, or, for a package that is built as a library, name the library under `[build]`: `artifact = \"rust-library\"` or `artifact = \"c-library\"`."
+    let shown = Shown { warning: false, code: "NK1351", message: message, notes: [], help: help, span: Span { start: 0, end: 0 }, labels: [] }
+    host.eprint(rendered(shown, path, source))
+    return 1
+}
+
+/// **A refusal of `[features]`** (`NK1344`-`NK1347`) shown on its entry in
+/// `nikaia.toml`; the exit code.
+fn project_drive_features_refused[H: ProjectDriveHost](host: ref H, refusal: ref FeaturesRefusal) -> i32 sync {
+    let (path, toml) = host.manifest_text()
+    let span = features_span(toml, refusal.feature, refusal.entry)
+    let shown = Shown { warning: false, code: refusal.code.clone(), message: refusal.message.clone(), notes: [], help: refusal.help?.clone(), span: span, labels: [] }
+    host.eprint(rendered(shown, path, toml))
+    return 1
+}
+
+/// **A generated member manifest made the lib crate `crate_name`**: the
+/// `[package] name` renamed, the lib's target `src/lib.rs`, each Nikaia
+/// package it depends on the crate `nikaia_<name>` beside it, and a
+/// `[workspace]` of its own, so that a Rust crate in any workspace takes it by
+/// path. `generated` is as `CargoProject::render` writes it.
+pub fn project_drive_rust_manifest(generated: ref String, crate_name: ref String, members: ref Vec[ProjectMembersMember]) -> String {
+    let mut out = "# Written by `nikaia build` (`artifact = \"rust-library\"`, ADR-393 D1) from\n# `nikaia.toml`. Do not edit: every build rewrites it.\n"
+    let mut section: String = ""
+    for line in generated.lines() {
+        if line.starts_with("#") {
+            continue
+        }
+        if line.starts_with("[") {
+            section = line.trim().clone()
+            if section == "[[bin]]" || section == "[lib]" {
+                out = f"{out}[lib]\nname = \"{crate_name}\"\npath = \"src/lib.rs\"\n"
+            } else {
+                out = f"{out}{line}\n"
+            }
+            continue
+        }
+        // The target's name and path, written above.
+        if (section == "[[bin]]" || section == "[lib]") && line.trim().len() > 0 {
+            continue
+        }
+        if section == "[package]" && line.starts_with("name = ") {
+            out = f"{out}name = \"{crate_name}\"\n"
+            continue
+        }
+        let mut kept = line.clone()
+        if section == "[dependencies]" {
+            for member in members.iter() {
+                let beside = project_drive_rust_crate(member.name)
+                kept = kept.replace(f"package = \"{member.name}\", path = \"../{member.name}\"", f"package = \"{beside}\", path = \"../{beside}\"")
+            }
+        }
+        out = f"{out}{kept}\n"
+    }
+    return f"{out}\n[workspace]\n"
+}
+
+/// **Whether Cargo's messages hold one of the compiler's** (a
+/// `"compiler-message"` line): only then is the program lowered again to
+/// place them.
+pub fn project_drive_backend_said(messages: String) -> bool {
+    return messages.lines().any(fn(line) { line.contains("\"compiler-message\"") })
+}
+
+/// What `project_drive_kept_for_file` asks of the compiler (`project.rs`'s
+/// `KeptHost`): the user's cache and the write that leaves a file alone when
+/// its bytes are the same; a refusal of a `throws` method is kept there.
+pub trait ProjectDriveKeptHost {
+    /// The user's cache directory (`Layout::user_cache_dir`).
+    fn user_cache_dir(ref self) -> fs::Path sync
+    /// Marks `entry` of the user cache as used now, so it is pruned last (#724).
+    fn use_entry(ref self, entry: ref fs::Path) sync
+    /// Writes `text` to `path` where it differs from what is there.
+    fn write_if_changed(ref self, path: ref fs::Path, text: ref String) sync throws
+}
+
+/// **The refusal of a file of a project that is not its entry**
+/// ([ADR-260](../../docs/specification/adr/adr-260.md) D4): a project has one
+/// program, and running another file of it would run something the project
+/// does not build.
+pub fn project_drive_not_the_entry(file: ref fs::Path, root: ref fs::Path, entry: String) -> String {
+    return f"{file.display()} is not the entry point of the project at {root.display()}.\n`nikaia run` with a file runs the program whose entry it is, and this project's program starts at `{entry}`. Run `nikaia run --project {root.display()}`, or `nikaia lower {file.display()}` to lower the file to Rust."
+}
+
+/// **The project `nikaia run <file>` keeps for a file outside any project**
+/// ([ADR-260](../../docs/specification/adr/adr-260.md) D4), in the user's
+/// cache and keyed on the file's path, built through the same Cargo workspace
+/// `nikaia build` makes: its root, with the manifest and the copy of the file
+/// as `entry` written there. Each is rewritten only when its bytes changed,
+/// so Cargo's freshness keeps working. Moved from `project.rs`'s
+/// `project_for_file` (ADR-294, #125).
+pub fn project_drive_kept_for_file[H: ProjectDriveKeptHost](file: ref fs::Path, entry: String, host: ref H) -> fs::Path throws {
+    let canonical_file = project_members_canonical(file)
+    let bytes: Vec[u8] = canonical_file.display().bytes().collect()
+    let hex = hash::sha256_hex(bytes)
+    let key: String = hex.scalars.take(16).collect()
+    let stem = (file.with_extension("").file_name()?.display() ?? "").to_lowercase()
+    // Cargo's package names are letters, digits, `-` and `_`, starting with a
+    // letter; the binary is called what the package is. The stem is lowercase
+    // already, so a letter here is `a` to `z`.
+    let first = stem.scalars.next() ?? ' '
+    let fits = first >= 'a' && first <= 'z' && stem.scalars.all(fn(c) { (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' })
+    let name = if fits { stem } else { "program" }
+    let root = host.user_cache_dir().join("run").join(f"{name}-{key}")
+    // An entry of the user cache like any other: pruned when it was used
+    // longest ago (#724).
+    host.use_entry(root)
+    host.write_if_changed(root.join("nikaia.toml"), f"# Kept by `nikaia run` for {canonical_file.display()} (ADR-260 D4): a file outside any project\n# is built as one of its own. Rewritten from that file on every run.\n[package]\nname = \"{name}\"\nversion = \"0.0.0\"\n")
+    let source = fs::read_to_string(file, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"cannot read {file.display()}: {error}") }
+    host.write_if_changed(root.join(entry), source)
+    return root
+}
+
+
+/// What `project_drive_wrapper` asks of the compiler (`project.rs`'s
+/// `WrapperHost`): the `rustc` invocation Cargo made, the lowering and the
+/// dependency file `rustc` writes; a refusal of a `throws` method is kept
+/// there and handed back unchanged.
+pub trait ProjectDriveWrapperHost {
+    /// The `.nika` source the invocation compiles; null for any other.
+    fn source_path(ref self) -> fs::Path? sync
+    /// Records the invocation, if anybody asked (`project_settings_trace`).
+    fn trace(ref self, verdict: ref String) sync
+    /// Runs the invocation as it stands: `rustc`'s exit code.
+    fn run(ref self) -> i32 sync throws
+    /// The `--crate-name` Cargo passed, where it passed one.
+    fn crate_name(ref self) -> String? sync
+    /// **Lowers `source` as the project build does**: under the settings the
+    /// environment carries and the packages its manifest names, reading under
+    /// `allowlist`, the entry shown as `shown`; a `program` (a binary crate)
+    /// writes the allocator that counts each task's heap (ADR-327 D9). The
+    /// Rust and the files read.
+    fn lower(ref self, source: ref fs::Path, no_cache: bool, allowlist: fs::Path?, shown: String?, program: bool) -> (String, Vec[fs::Path]) sync throws
+    /// **Lowers a batch's programs on every core** (#1582): `sources[k]` as
+    /// [`lower`] lowers a program, but as the module of another crate whose
+    /// path `roots[k]` names (`crate::p{k}`): its `main` and what that names
+    /// are `pub`, and the allocator is left to the crate. A dependency's file
+    /// is checked once for the batch. Nothing for a program that does not
+    /// lower.
+    fn lower_batch(ref self, sources: ref Vec[fs::Path], roots: ref Vec[String], no_cache: bool) -> Vec[(String, Vec[fs::Path])?] sync
+    /// Writes `text` to `path` where it differs from what is there.
+    fn write_if_changed(ref self, path: ref fs::Path, text: ref String) sync throws
+    /// Points the invocation at `generated` in place of the `.nika` source.
+    fn replace_source(ref self, generated: ref fs::Path) sync
+    /// The invocation's arguments.
+    fn args(ref self) -> Vec[String] sync
+    /// Adds `arg` to the invocation.
+    fn push_arg(ref self, arg: ref String) sync
+    /// Adds `inputs` to the dependency file `rustc` wrote, where it wrote one.
+    fn record_dependencies(ref self, inputs: ref Vec[fs::Path]) sync throws
+}
+
+/// **The wrapper: what Cargo runs in `rustc`'s place**, for workspace
+/// members. Cargo calls it for its own probes as well as for real compiles,
+/// so it first decides whether this invocation has anything to do with
+/// Nikaia at all: every other crate goes to the real `rustc` untouched. A
+/// `.nika` source is lowered as the project build lowers it, written where the
+/// build said, and compiled in its place. Moved from `project.rs`'s
+/// `wrapper_main` (ADR-294, #125).
+pub fn project_drive_wrapper[H: ProjectDriveWrapperHost](host: ref H) -> i32 throws {
+    let source = match host.source_path() {
+        null => {
+            host.trace("passed through")
+            return host.run()
+        },
+        source => source,
+    }
+    host.trace("lowered")
+    // The only channel from the build into the wrapper is the environment.
+    let allowlist: fs::Path? = match env::var("NIKAIA_ALLOW_READ_FROM_LIST") {
+        null => null,
+        list => {
+            let path: fs::Path = list
+            path
+        },
+    }
+    // The name a loose file is shown as, for the entry it was copied to.
+    let shown: String? = match env::var("NIKAIA_SHOWN_AS") {
+        null => null,
+        value => {
+            let (entry, written) = value.split_once("\x1f") ?? ("", "")
+            if project_members_canonical(source).display() == entry { written.clone() } else { null }
+        },
+    }
+    let no_cache = env::var("NIKAIA_NO_CACHE") != null
+    // **Only the program counts the heap** (ADR-327 D9): a library crate is
+    // linked into one, and a binary takes one allocator.
+    let args = host.args()
+    let a_program = args.iter().zip(args.iter().skip(1)).any(fn((a, b)) { a == "--crate-type" && b == "bin" })
+    // **A batch of test programs** (`project_batch.nika`): the program crate
+    // of `nikaia test`'s batch build holds every program the list names.
+    let batch: String? = match a_program {
+        true => env::var(project_batch_var()),
+        false => null,
+    }
+    let (rust, sources) = match batch {
+        null => host.lower(source, no_cache, allowlist, shown, a_program),
+        list => {
+            let path: fs::Path = list
+            project_batch_lowered(host, path, no_cache)
+        },
+    }
+    let name = host.crate_name() ?? (source.with_extension("").file_name()?.display() ?? "main")
+    let tag = env::var("NIKAIA_PROGRAM_TAG") ?? ""
+    let name = name.strip_suffix(tag)?.clone() ?? name
+    let gen_dir: fs::Path = match env::var("NIKAIA_GEN_DIR") {
+        null => env::temp_dir().join("nikaia-gen"),
+        dir => {
+            let path: fs::Path = dir
+            path
+        },
+    }
+    // **One directory per crate**, and that is not tidiness: `rustc`
+    // refusing a name from a package this crate does not depend on offered to
+    // fix it with `mod deeper`, a file it had found next door. A crate root
+    // with no siblings cannot be offered any.
+    let generated = gen_dir.join(name).join(f"{name}.rs")
+    host.write_if_changed(generated, rust)
+    host.replace_source(generated)
+    // **The program links the libraries its packages name** (ADR-324 D2,
+    // D3), and only the program: a library crate is linked into it, and the
+    // build-time library is built elsewhere and never sees these (ADR-321 D14).
+    if a_program {
+        match env::var("NIKAIA_LINK_FLAGS") {
+            null => {},
+            said => {
+                let flags: Vec[String] = said.split("\x1f").filter(fn(f) { f != "" }).map(fn(f) { f.clone() }).collect()
+                for arg in as_rustc_args(flags) {
+                    host.push_arg(arg)
+                }
+            },
+        }
+    }
+    let code = host.run()
+    // Cargo believes the dependency file `rustc` wrote, and `rustc` saw only
+    // the generated Rust: without the sources an edit to a `.nika` file leaves
+    // the binary stale. **And the switches**, one step further out: a build
+    // switch is no source, and flipping one left the program at the setting
+    // it was built at.
+    if code == 0 {
+        let mut inputs = sources
+        match project_settings_switches_beside(gen_dir) {
+            null => {},
+            switches => inputs.push(switches),
+        }
+        host.record_dependencies(inputs)
+    }
+    return code
+}

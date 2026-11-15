@@ -58,7 +58,7 @@ The prover is three layers, and only the top one knows Nikaia
 </figure>
 
 The frontend is part of the compiler (`prover_walk`, `prover_claims`,
-`prover_loops` and their neighbours in `crates/nikaia-std/src/tools/`). It
+`prover_loops` and their neighbours in `crates/nikaia-std/src/compiler/`). It
 reads comparisons, guards, lengths, what a callee promises and a type's rule,
 and asks each question as a self-contained query made of facts, a goal, and
 opaque ids for what they stand for (D3, D7). An answer is one of three. It is

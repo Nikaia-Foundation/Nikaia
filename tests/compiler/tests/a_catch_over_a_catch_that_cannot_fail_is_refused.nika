@@ -1,0 +1,22 @@
+// A `catch` over a `catch` that cannot fail has nothing to handle
+// (`NK1134`, Part I 7.1, #1641): the inner handler hands back a number and
+// fails nowhere, so nothing reaches the outer one.
+enum Bad { Oops }
+
+impl Error for Bad {
+    fn message(ref self) -> String {
+        return "oops"
+    }
+}
+
+fn fails() -> i64 throws {
+    throw Bad::Oops
+}
+
+fn f() -> i64 {
+    return (fails() catch { 20 }) catch { 30 }
+}
+
+fn main() throws {
+    println(f())
+}

@@ -1,0 +1,229 @@
+// crates/nikaia-std/src/compiler/grammar_run.nika
+//
+// **A grammar run's parser, built and run** (issue #178, ADR-294, #125, GR):
+// the sub-project a `comptime` grammar run compiles is written, built with
+// Cargo and run over the input, moved from `crates/nikaia/src/grammar_run.rs`.
+// What it needs from the compiler - the driver text, the manifest, the shared
+// target directory and where tools start - comes from `GrammarRunHost`; the
+// Rust `Workshop` keeps the lock that refuses a run inside a run.
+
+use std::collections
+use std::env
+use std::fs
+use std::hash
+use std::process
+
+/// What the compiler hands a grammar run.
+pub trait GrammarRunHost {
+    /// The parser's `main.rs`: the grammar's lowering, the types it uses and
+    /// the dump. A refusal is kept by the host and handed back after the run.
+    fn driver(ref self) -> String sync throws
+    /// The sub-project's `Cargo.toml`, for the crate `p<key>`.
+    fn manifest(ref self, key: ref String, program: ref String) -> String sync
+    /// Where every grammar run's parser is compiled.
+    fn shared_target(ref self) -> fs::Path sync
+    /// The directory Cargo starts in.
+    fn where_tools_start(ref self) -> fs::Path sync
+    /// A path beside `path` that no other run writes at the same time.
+    fn unique_beside(ref self, path: ref fs::Path) -> fs::Path sync
+}
+
+impl Error for CheckWall {
+    fn message(ref self) -> String {
+        return match self {
+            CheckWall::Refused { detail } => f"the parser refused the input: {detail}",
+            CheckWall::NoCrossedForm { ty, .. } => f"`{ty}` has no form to build into the program",
+            CheckWall::InsideAnother { outer } => f"a grammar run inside the run of `{outer}`",
+            CheckWall::NowhereToBuild => "no directory to compile the parser in",
+            CheckWall::DidNotBuild { detail } => f"the parser did not build: {detail}",
+            CheckWall::Unreadable { detail } => f"the parser's result could not be read: {detail}",
+        }
+    }
+}
+
+/// Compile the parser the host's driver describes under `at`, run it over
+/// `input`, and hand back what it printed, trimmed.
+pub fn grammar_run_compile_and_run[H: GrammarRunHost](host: ref H, at: ref fs::Path, input: String) -> String throws {
+    let program = host.driver() catch { throw CheckWall::NowhereToBuild }
+    // **Keyed on what went into it** — the driver text carries the
+    // grammar's lowering, the types it uses and the dump, so a digest of it
+    // is a digest of everything this sub-project is.
+    let bytes: Vec[u8] = program.bytes().collect()
+    let key = hash::sha256_hex(bytes)
+    let dir = at.join(key)
+    let source = dir.join("src").join("main.rs")
+    grammar_run_write_if_changed(source, program, host.unique_beside(source))
+    let manifest_path = dir.join("Cargo.toml")
+    grammar_run_write_if_changed(manifest_path, host.manifest(key, program), host.unique_beside(manifest_path))
+
+    // **One target directory for every parser on the machine**: what a
+    // parser depends on - `std`, `winnow`, the grammar runtime - is the
+    // same for all of them, and under each project's workshop it was
+    // compiled again for every new project (half a minute before the
+    // first grammar could run). Each parser is a crate of its own name
+    // (`p<key>`), so they share the directory without meeting.
+    let target = host.shared_target()
+    let cargo = env::var("CARGO") ?? "cargo"
+    let built = process::run(cargo, ["build", "--quiet", "--manifest-path", manifest_path.display(), "--target-dir", target.display()]; dir: host.where_tools_start().display()) catch {
+        throw CheckWall::DidNotBuild { detail: f"running cargo: {error}" }
+    }
+    if !built.ok {
+        throw CheckWall::DidNotBuild { detail: built.stderr }
+    }
+
+    // **The bytes go in a file**, because that is what a parser is pointed
+    // at and what the diagnostic's line and column are counted against.
+    // **A file of this run's own** (#1248): every run of one grammar shares
+    // the directory, and two runs at once over different text each parsed
+    // whichever text was written last.
+    let input_path = host.unique_beside(dir.join("input"))
+    fs::write(input_path, fs::Root::Anywhere, input) catch {
+        throw CheckWall::DidNotBuild { detail: f"writing {input_path.display()}: {error}" }
+    }
+
+    let binary = target.join("debug").join(f"p{key}")
+    let ran = process::run(binary.display(), [input_path.display()]) catch {
+        fs::remove(input_path, fs::Root::Anywhere) catch {}
+        throw CheckWall::DidNotBuild { detail: f"running {binary.display()}: {error}" }
+    }
+    fs::remove(input_path, fs::Root::Anywhere) catch {}
+    if !ran.ok {
+        throw CheckWall::Refused { detail: ran.stderr }
+    }
+    return ran.stdout.trim().clone()
+}
+
+/// **Written only when it changed**, which is what keeps Cargo's own freshness
+/// working: a file rewritten with identical bytes is newer than the fingerprint
+/// and rebuilds for ever. The build cache learned this the same way
+/// ([ADR-021](../../../docs/specification/adr/adr-021.md)).
+///
+/// **Written beside, then moved into place** (#1248): another run of the same
+/// grammar reads the file at the same time, and a file truncated for
+/// rewriting read as different text.
+fn grammar_run_write_if_changed(path: ref fs::Path, text: String, partial: ref fs::Path) throws {
+    match path.parent() {
+        null => {},
+        parent => {
+            fs::create_dir(parent, fs::Root::Anywhere; recursive: true) catch {
+                throw CheckWall::DidNotBuild { detail: f"creating {parent.display()}: {error}" }
+            }
+        },
+    }
+    if sysroot_holds(path, text) {
+        return
+    }
+    fs::write(partial, fs::Root::Anywhere, text) catch {
+        throw CheckWall::DidNotBuild { detail: f"writing {partial.display()}: {error}" }
+    }
+    fs::rename(partial, path, fs::Root::Anywhere) catch {
+        fs::remove(partial, fs::Root::Anywhere) catch {}
+        throw CheckWall::DidNotBuild { detail: f"writing {path.display()}: {error}" }
+    }
+}
+
+/// What the driver of a grammar run asks of the compiler: the files it lowers,
+/// which hold the program's syntax and so stay in Rust.
+pub trait GrammarDriverHost {
+    /// The grammar's own file lowered whole, its `fn main` still in it.
+    fn lowered_own(ref self) -> String sync throws
+    /// How many files of the grammar's package stand beside its own.
+    fn beside(ref self) -> i64 sync
+    /// The file beside the grammar's at `index`, lowered as a module body.
+    fn lowered_beside(ref self, index: i64) -> String sync throws
+    /// A dependency's functions, for the actions that call them (ADR-321
+    /// D13), or nothing where one could not be lowered.
+    fn dependency_modules(ref self) -> String? sync
+}
+
+/// **The whole sub-program**: the grammar's file without its `fn main` and
+/// its item-level `comptime`s, the package's files beside it, the
+/// dependencies' modules, then the dump and a `main` that parses `rule`.
+pub fn grammar_run_driver[H: GrammarDriverHost](host: ref H, names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], program: ref Program, ledger: ref Ledger, result: ref Ty, named: String, rule: String) -> String sync throws {
+    let lowered = host.lowered_own() catch {
+        throw CheckWall::DidNotBuild { detail: f"lowering the grammar: {error}" }
+    }
+    // The generated `fn main` and its site table go with it: this program has
+    // its own entry point.
+    let mut out: String = lowered.split("\nfn main() {").next()?.clone() ?? lowered.clone()
+    for index in 0..<host.beside() {
+        let body = host.lowered_beside(index) catch {
+            throw CheckWall::DidNotBuild { detail: f"lowering a file beside the grammar: {error}" }
+        }
+        out.push_str(body)
+        out.push_str("\n")
+    }
+    let modules = host.dependency_modules() ?? throw CheckWall::DidNotBuild { detail: "lowering a dependency the grammar's actions call" }
+    out.push_str(modules)
+    out.push_str(gr_dump_helpers())
+    let mut dump: String = ""
+    match grammar_run_dump(names, aliases, program, ledger, result, dump) {
+        null => {},
+        wall => throw wall.clone(),
+    }
+    out.push_str(gr_main(named, rule, dump))
+    return out
+}
+
+/// **The dump, written inline**, from the declaration and not from the value,
+/// so a shape a `const` cannot hold is refused *before* a parser is compiled:
+/// pushed onto `out`, or the wall that names the type with no crossed form.
+/// What the Rust `dumper` keeps is handing over the program's file.
+pub fn grammar_run_dump(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], program: ref Program, ledger: ref Ledger, result: ref Ty, mut out: String) -> CheckWall? {
+    let shapes = grammar_run_shapes(names, aliases, program, ledger)
+    let refused = dump(shapes, result, "value", 1, out) ?? return null
+    return CheckWall::NoCrossedForm { ty: refused.ty, because: refused.because }
+}
+
+/// The `enum`s and `struct`s this program declares, each by its name, with
+/// each field's name as Rust reads it; the first declaration of a name is the
+/// one read.
+fn grammar_run_shapes(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], program: ref Program, ledger: ref Ledger) -> Shapes {
+    let mut shapes = Shapes {
+        enums: collections::BTreeMap(),
+        structs: collections::BTreeMap(),
+        // **`std`'s types that cross through a constructor** (ADR-318 D5):
+        // the column is `std`'s, so its ledger is the one read.
+        constants: ledger.types.iter().filter_map(fn((name, entry)) { grammar_run_constant(name, entry.constant) }).collect(),
+    }
+    for item in program.items {
+        match item.node {
+            Item::Enum { name, variants, .. } => {
+                let shaped: Vec[VariantShape] = variants.iter().map(fn(held) { grammar_run_variant(names, aliases, held) }).collect()
+                shapes.enums.entry(names.resolve(name).clone()).or_insert(shaped)
+            },
+            Item::Struct { name, fields, .. } => {
+                let shaped: Vec[FieldShape] = fields.iter().map(fn(field) { grammar_run_field(names, aliases, field) }).collect()
+                shapes.structs.entry(names.resolve(name).clone()).or_insert(shaped)
+            },
+            else => {},
+        }
+    }
+    return shapes
+}
+
+/// A `std` type and the constructor its ledger names, where it names one.
+fn grammar_run_constant(name: String, constant: String) -> (String, String)? {
+    let constructor = (constant.split("(").next() ?? return null).trim()
+    if constructor.is_empty() {
+        return null
+    }
+    return (name.clone(), constructor.clone())
+}
+
+/// One variant as the dump reads it: what it carries, and whether by name.
+fn grammar_run_variant(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], held: ref EnumVariant) -> VariantShape {
+    let name = names.resolve(held.name).clone()
+    return match held.fields {
+        VariantFields::Unit => VariantShape { name: name, carried: [], named: false },
+        VariantFields::Tuple(types) => VariantShape { name: name, carried: types.iter().map(fn(t) { written_ty(names, aliases, t) }).collect(), named: false },
+        VariantFields::Named(fields) => VariantShape { name: name, carried: fields.iter().map(fn(f) { written_ty(names, aliases, f.ty) }).collect(), named: true },
+    }
+}
+
+/// One field as the dump reads it, with its name as Rust spells it.
+fn grammar_run_field(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], field: ref FieldDef) -> FieldShape {
+    let name = names.resolve(field.name)
+    let spelled = if is_reserved(name) { f"r#{name}" } else { name.clone() }
+    return FieldShape { name: name.clone(), spelled: spelled, ty: written_ty(names, aliases, field.ty) }
+}

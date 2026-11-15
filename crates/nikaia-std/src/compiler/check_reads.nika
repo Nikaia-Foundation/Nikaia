@@ -1,0 +1,588 @@
+// crates/nikaia-std/src/compiler/check_reads.nika
+//
+// **Views, reads and casts the emitter has to be told about** - moved from the
+// compiler's checker (ADR-294, #125, #558, C-5a): a view compared with a value
+// (ADR-081 D1), a lookup's key lent (0.0.235), a map's read kept (ADR-293 D15),
+// the parts of a `mut` parameter an arm took out (ADR-094 D7), a read of a
+// name, a cast over a lent binding, and a cast's width (ADR-233 D4).
+
+use std::collections
+
+/// Whether a ledger entry takes a count in `usize` as its first argument
+/// (ADR-293 D20): the entry and not the method's name.
+fn check_counts_first(key: ref String) -> bool {
+    return key == "Seq::take" || key == "Seq::skip" || key == "Seq::step_by" || key == "Seq::nth" || key == "Vec::get" || key == "Vec::chunks" || key == "Vec::windows" || key == "Vec::insert" || key == "Vec::remove" || key == "Vec::swap_remove" || key == "Vec::truncate" || key == "Vec::resize" || key == "Vec::swap" || key == "Array::swap" || key == "str::splitn" || key == "String::insert_str"
+}
+
+/// Whether a ledger entry takes a second count in `usize` as well: `swap`'s
+/// two positions.
+fn check_counts_second(key: ref String) -> bool {
+    return key == "Vec::swap" || key == "Array::swap"
+}
+
+/// The integer and floating-point types a cast goes between.
+pub fn check_numeric(name: ref String) -> bool {
+    return name == "i32" || name == "i64" || name == "f32" || name == "f64" || name == "u8" || name == "u32" || name == "u64"
+}
+
+/// Whether text is what the type is, viewed or owned.
+fn check_owned_text(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, .. } => {
+            let parts: Vec[ref String] = name.split("::").collect()
+            let last = parts[parts.len() - 1]
+            last == "String" || last == "str"
+        }
+        else => false,
+    }
+}
+
+/// A view of a named type that is not text.
+fn check_view_of_a_type(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { view, .. } => view && !check_owned_text(ty),
+        else => false,
+    }
+}
+
+/// A number, a `char`, a `scalar` or a `bool`, as a value.
+fn check_copied(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, view, .. } => !view && (a_number_name(name) || name == "char" || name == "scalar" || name == "bool"),
+        else => false,
+    }
+}
+
+/// A number written out: a literal, or a negated one.
+fn check_number_by_form(side: ref Expr) -> bool {
+    return match side {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::LitChar(_, _) => true,
+        Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && check_number_literal(expr),
+        else => false,
+    }
+}
+
+fn check_number_literal(side: ref Expr) -> bool {
+    return match side {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        else => false,
+    }
+}
+
+impl CheckState {
+    /// **A count the language below takes in `usize`** (ADR-293 D20), recorded
+    /// for the emitter by the entry the call resolved to - so a method of the
+    /// program's own that happens to be called `take` is not converted.
+    pub fn counts_in_usize(ref mut self, key: ref String, args: ref Vec[Expr]) sync {
+        if check_counts_first(key) && args.len() > 0 {
+            let added = self.facts.count_args.insert(id_of(args[0]) as i64)
+        }
+        if check_counts_second(key) && args.len() > 1 {
+            let second = self.facts.count_args.insert(id_of(args[1]) as i64)
+        }
+    }
+
+    /// **A map's read kept where a `T?` of its own is wanted** (ADR-293 D15): the
+    /// read is a view of what the map keeps, so a value that copies is copied out
+    /// and one that does not is refused with the copy to write.
+    pub fn a_map_read_kept(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) sync {
+        // **Each branch of an `if` or a `match` hands the value over** (#1117's
+        // round): a read an arm ends in is kept as the whole would be.
+        match value {
+            Expr::Match { arms, .. } => {
+                for arm in arms {
+                    self.a_map_read_kept(world, found, want, arm.body, span)
+                }
+                return
+            }
+            Expr::If { then_branch, else_branch, .. } => {
+                for tail in block_tail(then_branch) {
+                    self.a_map_read_kept(world, found, want, tail, span)
+                }
+                let other = else_branch ?? return
+                for tail in block_tail(other) {
+                    self.a_map_read_kept(world, found, want, tail, span)
+                }
+                return
+            }
+            Expr::Block(block, _) => {
+                for tail in block_tail(block) {
+                    self.a_map_read_kept(world, found, want, tail, span)
+                }
+                return
+            }
+            Expr::AsyncGroup(block, _, _, _, _) => {
+                for tail in block_tail(block) {
+                    self.a_map_read_kept(world, found, want, tail, span)
+                }
+                return
+            }
+            else => {}
+        }
+        let node = id_of(value) as i64
+        // **A word by its kind is copied by its read already** (#1460).
+        if !self.flow.map_read_sites.contains(node) || self.facts.copied_walks.contains(node) {
+            return
+        }
+        let inner = match want {
+            Ty::Nullable(inner) => inner.clone(),
+            else => return,
+        }
+        let read = match found {
+            Ty::Nullable(read) => read.clone(),
+            else => return,
+        }
+        // **A view the map holds is copied out as a view** (#996): a map of
+        // literal text holds `&'static str`, and its `get` is a view of it.
+        if inner.is_a_view() && read.is_a_view() && self.flow.view_reads.contains(node) {
+            let viewed = self.facts.copied_reads.insert(node)
+            return
+        }
+        if inner.is_a_view() || inner.is_unknown() || read.is_a_view() || read.is_unknown() {
+            return
+        }
+        if self.copied(world, inner) || !self.takes_away(world, inner) {
+            let added = self.facts.copied_reads.insert(node)
+            return
+        }
+        if self.flow.list_gets.contains(node) {
+            self.findings.push(check_refusal("NK1102", span, f"This keeps a `{want.text()}` of its own, and a list's `get` is a view of what the list keeps.", ["Nikaia never makes a copy behind your back, so the copy is written where it happens."], "Write `?.clone()` after the read: `xs.get(i)?.clone()`."))
+            return
+        }
+        self.findings.push(check_refusal("NK1102", span, f"This keeps a `{want.text()}` of its own, and a map's read is a view of what the map keeps.", ["Nikaia never makes a copy behind your back, so the copy is written where it happens."], "Write `?.clone()` after the read: `m[k]?.clone()`."))
+    }
+
+    /// **A map's read a lambda hands back** (ADR-293 D15): the lambda's result
+    /// is a `T?` of its own, so a value that copies is copied out, as a kept
+    /// read is. One that does not copy stays the view it was.
+    pub fn a_map_read_handed_back(ref mut self, world: ref CheckWorld, found: ref Ty, body: ref Block) sync {
+        for value in block_tail(body) {
+            let node = id_of(value) as i64
+            if !self.flow.map_read_sites.contains(node) || self.facts.copied_walks.contains(node) {
+                return
+            }
+            let read = match found {
+                Ty::Nullable(read) => read.clone(),
+                else => return,
+            }
+            if read.is_a_view() || read.is_unknown() {
+                return
+            }
+            if self.copied(world, read) {
+                let added = self.facts.copied_reads.insert(node)
+            }
+        }
+    }
+
+    /// **A map's read, past a jump, assigned to a place that owns its value**
+    /// (ADR-293 D15, #492): `x = m[k] ?? return …` reads a view of what the map
+    /// keeps, as `let found = m[k] ?? return …` binds one.
+    pub fn a_map_read_assigned(ref mut self, world: ref CheckWorld, into: ref Ty, value: ref Expr, span: ref Span) sync {
+        match value {
+            Expr::Coalesce { value: read, fallback, .. } => {
+                let node = id_of(read) as i64
+                if !self.jumps(world, fallback) || !self.flow.map_read_sites.contains(node) || self.facts.copied_walks.contains(node) || into.is_a_view() || into.is_unknown() {
+                    return
+                }
+                if self.copied(world, into) || !self.takes_away(world, into) {
+                    let added = self.facts.copied_reads.insert(node)
+                    return
+                }
+                self.findings.push(check_refusal("NK1102", span, f"This keeps a `{into.text()}` of its own, and a map's read is a view of what the map keeps.", ["Nikaia never makes a copy behind your back, so the copy is written where it happens."], "Write `?.clone()` after the read: `m[k]?.clone()`."))
+            }
+            else => {}
+        }
+    }
+
+    /// **A view of a value that copies**, for an argument handed where the value
+    /// is wanted (ADR-233 D4): a number, a `bool` or a `char`, and a type that is
+    /// one by declaration - the unit's own that derive `Copy`, and a described
+    /// Rust type whose ledger says `copies` (ADR-294 D9.3).
+    pub fn a_view_that_copies(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
+        if copies_as_a_view(ty) {
+            return true
+        }
+        return match ty {
+            Ty::Named { name, args, view } => {
+                if view && args.len() == 0 {
+                    if self.copies_in_the_package.contains(name) {
+                        return true
+                    }
+                    let contract = world.library.types[name] ?? return false
+                    return contract.copies
+                }
+                false
+            }
+            else => false,
+        }
+    }
+
+    /// **A cast over a binding a `for` lends** (ADR-182 D5): the operand is a
+    /// view below whatever its type says.
+    pub fn a_cast_over_a_lent_binding(ref mut self, world: ref CheckWorld, operand: ref Expr, span: ref Span) sync {
+        match operand {
+            Expr::Variable(name, _) => {
+                let written = world.words.resolve(name).clone()
+                let local = self.binding(written) ?? return
+                if local.lent {
+                    let added = self.facts.viewed_numbers.insert((span.start as i64, written.clone()))
+                }
+            }
+            else => {}
+        }
+    }
+
+    /// Whether `side` is a name a `for` lends.
+    fn a_lent_name(ref self, world: ref CheckWorld, side: ref Expr) -> bool sync {
+        return match side {
+            Expr::Variable(name, _) => {
+                let local = self.binding(world.words.resolve(name)) ?? return false
+                local.lent
+            }
+            else => false,
+        }
+    }
+
+    /// Whether `side`, of type `ty`, is a view below.
+    fn a_side_is_a_view(ref self, world: ref CheckWorld, side: ref Expr, ty: ref Ty) -> bool sync {
+        return copies_as_a_view(ty)
+            || check_view_of_a_type(ty)
+            || (self.a_lent_name(world, side) && (check_copied(ty) || check_owned_text(ty)))
+            || self.a_side_is_lent(world, side, ty)
+            || check_core_stmt_got_compared(self, world, side, ty)
+            || self.a_narrowed_read_lent(side)
+            || self.a_lent_arm_part(world, side)
+    }
+
+    /// **A name an arm binds out of a `std` `get` is the view below**
+    /// (#1562): `Some(other)` over the `Option<&T>` binds the `&T`, though
+    /// its type here is the `T`, so beside a value it is read through `*`.
+    fn a_lent_arm_part(ref self, world: ref CheckWorld, side: ref Expr) -> bool sync {
+        let local = match side {
+            Expr::Variable(name, _) => self.binding(world.words.resolve(name)) ?? return false,
+            else => return false,
+        }
+        return self.narrowing.got_refs.contains(local.id)
+    }
+
+    /// **A `T?` a test proved set, read lent** (ADR-382): below it is
+    /// `x.as_ref().unwrap()`, a `&T`, though its type here is the `T`, so
+    /// beside a value it is read through `*` (#1599: `made != ty` with
+    /// `made: String?` compared a `&Text` with a `Text`).
+    /// A field's read is `as_deref` text below, compared as it is.
+    fn a_narrowed_read_lent(ref self, side: ref Expr) -> bool sync {
+        match side {
+            Expr::Variable(_, _) => {}
+            else => return false,
+        }
+        let bits = self.facts.narrowed_reads.get(node_key(side)) ?? return false
+        return bits % 2 == 0 && (bits / 8) % 2 == 0 && (bits / 32) % 2 == 0
+    }
+
+    /// A parameter the function is lent, or a `let` over a place: a view below
+    /// though its type here is the value's.
+    fn a_side_is_lent(ref self, world: ref CheckWorld, side: ref Expr, ty: ref Ty) -> bool sync {
+        if ty.is_unknown() {
+            return false
+        }
+        return (!ty.is_a_view() && !check_owned_text(ty) && self.a_lent_parameter(world, side)) || self.a_lent_let(world, side)
+    }
+
+    /// Whether `side`, of type `ty`, is a value below.
+    fn a_side_is_a_value(ref self, world: ref CheckWorld, side: ref Expr, ty: ref Ty) -> bool sync {
+        return !ty.is_unknown() && !ty.is_a_view() && !self.a_lent_name(world, side) && !self.a_side_is_lent(world, side, ty)
+    }
+
+    /// **A view compared with a value** (ADR-081 D1): `*op == UnaryOp::Neg` is
+    /// `PartialEq::eq(&*op, …)` below and moves nothing, where `op ==
+    /// UnaryOp::Neg` compared a `&UnaryOp` with a `UnaryOp`.
+    pub fn a_view_compared_with_a_value(ref mut self, world: ref CheckWorld, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) sync {
+        let read_left = self.a_side_is_a_view(world, lhs, left) && self.a_side_is_a_value(world, rhs, right)
+        let read_right = self.a_side_is_a_view(world, rhs, right) && self.a_side_is_a_value(world, lhs, left)
+        // **A lent name whose type is not known here, beside a number** (#531):
+        // whether it arrived as one or as a view of one is not this checker's
+        // to know - so it is read as the number either is. A literal has no
+        // type of its own here, so it is asked by its form.
+        let number_left = left.is_unknown() && self.a_lent_name(world, lhs) && self.a_number_beside(world, rhs, right)
+        let number_right = right.is_unknown() && self.a_lent_name(world, rhs) && self.a_number_beside(world, lhs, left)
+        let here = at.start as i64
+        if number_left {
+            let added = self.facts.compared_numbers.insert((here, "lhs"))
+        }
+        if number_right {
+            let added = self.facts.compared_numbers.insert((here, "rhs"))
+        }
+        // **By the operator's own span and the side**: a statement may hold two
+        // comparisons of one name, and only the second reads `a`.
+        if read_left {
+            let added = self.facts.compared_views.insert((here, "lhs"))
+        }
+        if read_right {
+            let added = self.facts.compared_views.insert((here, "rhs"))
+        }
+        self.a_comparison_beside_an_arm_name(world, lhs, left, "lhs", rhs, right, here)
+        self.a_comparison_beside_an_arm_name(world, rhs, right, "rhs", lhs, left, here)
+    }
+
+    /// **A name an arm bound, read here as a value** (#954): the arm may yet
+    /// write it `ref name`, so the comparison waits for the arm's end
+    /// (`check_core_flow_arm_names_compared`).
+    fn a_comparison_beside_an_arm_name(ref mut self, world: ref CheckWorld, side: ref Expr, ty: ref Ty, which: String, other: ref Expr, other_ty: ref Ty, here: i64) sync {
+        if !self.a_side_is_a_value(world, side, ty) {
+            return
+        }
+        let name = match side {
+            Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
+            else => return,
+        }
+        let local = self.binding(name) ?? return
+        if !self.arm_bound.contains_key(local.id) {
+            return
+        }
+        let arm = self.arm_bound.get(local.id) ?? -1
+        let view = self.a_side_is_a_view(world, other, other_ty)
+        let value = self.a_side_is_a_value(world, other, other_ty)
+        self.arm_compared.push((arm, name, here, which, view, value))
+    }
+
+    fn a_number_beside(ref self, world: ref CheckWorld, side: ref Expr, ty: ref Ty) -> bool sync {
+        return (check_copied(ty) && self.a_side_is_a_value(world, side, ty)) || check_number_by_form(side)
+    }
+
+    /// **A lookup's key is lent** (0.0.235, issue #169): `m.get(k)`,
+    /// `m.contains_key(k)` and a set's `contains(k)` and `remove(k)` take the key
+    /// by reference in the language below, and the `&` is recorded here for
+    /// exactly these entries, where the key is a known value that is not already
+    /// a view.
+    pub fn a_lookup_key_lent(ref mut self, world: ref CheckWorld, key: ref String, on: ref Ty, args: ref Vec[Expr], found: ref Vec[Ty]) sync {
+        if !is_a_lookup(key) || !world.library.functions.contains_key(key) {
+            return
+        }
+        if args.len() != 1 || found.len() != 1 {
+            return
+        }
+        let given = args[0]
+        let ty = found[0]
+        let a_string = match given {
+            Expr::LitStr { .. } => true,
+            else => false,
+        }
+        // **Text looked up in a map or a set of views of text** - its own, a
+        // view, a name lent either - as the `str` it holds, which such a key
+        // borrows as (#659); a literal is one already.
+        if !a_string && names_text(ty) && check_reads_keyed_by_views(on) {
+            self.facts.map_keys.insert((id_of(given) as i64, false), FactKeyForm::Viewed)
+            return
+        }
+        // **A name that copied a value the ledger copies** out of a place
+        // (`Symbol`) holds the value, not a view, below: it is lent with `&`.
+        let copied = (self.a_lent_let(world, given) || self.a_lent_name(world, given)) && a_ledger_copies(unviewed_type(ty), [world.library])
+        // A cut of a `Bytes` is a `&[u8]` below already (#1345).
+        if (ty.is_a_view() && !copied) || a_string || self.facts.bytes_cuts.contains(id_of(given) as i64) {
+            return
+        }
+        // **A name that is a view below whatever its type says** - a `let`
+        // bound to a map read beside a jump - is a reference already (#125);
+        // not one that copied its value. So is one `get` handed back past a
+        // jump (D30): `let k = a.get(1) ?? return` keys `b.get(k)` as it is.
+        if moves(ty) && !copied && (self.a_lent_name(world, given) || self.a_lent_let(world, given) || check_reads_got_past_a_jump(self, world, given)) {
+            return
+        }
+        // **A number is lent as it is**, typed or not (0.0.246): a literal, or a
+        // name a literal folded into, can never be a view.
+        let mut a_number = match given {
+            Expr::LitInt { .. } => true,
+            Expr::LitFloat(_, _) => true,
+            else => false,
+        }
+        match given {
+            Expr::Variable(name, _) => {
+                let local = self.binding(world.words.resolve(name))
+                if local != null {
+                    a_number = a_number || (local ?? return).constant != null
+                }
+            }
+            else => {}
+        }
+        // **A key of no known type** - `let k = 1` has none until something pins
+        // it - is written through `AsKey`, which lends a number and passes a
+        // view through, since the `&` alone would be wrong for the second.
+        let node = id_of(given) as i64
+        // **Unless the map's own key is a number** (#735): the plain `&`
+        // pins the name to it, where `AsKey` would leave it to the language
+        // below's default.
+        if ty.is_unknown() && !a_number && !check_reads_keyed_by_numbers(on) {
+            let added = self.facts.lookup_keys.insert(node)
+            return
+        }
+        // **A lambda's text item a walk lends is a reference already** (#1190):
+        // `filter` after a `map` hands `&String` below, whatever its type
+        // says, so a map or a set keyed by text looks it up as the `str` it
+        // holds, where a `&` would make it `&&String`.
+        if names_text(ty) && check_reads_keyed_by_text(on) && check_core_ops_lent_text_item(self, world, given) {
+            self.facts.map_keys.insert((node, false), FactKeyForm::Viewed)
+            return
+        }
+        let added = self.facts.lent_args.insert(node)
+    }
+
+    /// A read of a name, recorded once per expression and statement.
+    pub fn a_read(ref mut self, expr: ref Expr, path: ref String, span: ref Span) sync {
+        let key = (id_of(expr) as i64, span.start as i64)
+        if self.flow.read_index.contains_key(key) {
+            return
+        }
+        self.read_seq = self.read_seq + 1
+        self.flow.read_index.insert(key, self.reads_on_paths.len())
+        let binding = self.binding(path)?.id
+        self.reads_on_paths.push(CheckRead { path: path.clone(), at: span.start as i64, choices: self.branch.clone(), seq: self.read_seq, binding: binding })
+    }
+
+    /// **The parts of a `mut` parameter an arm took out** (`NK2108`, ADR-094 D7):
+    /// the arm of a `match` over the parameter, or a place in it, bound a part and
+    /// handed it to something that keeps it. **And the arm that does is told to
+    /// the emitter** (#576): it works on the value taken out of the place, and
+    /// writes the whole back.
+    pub fn parts_taken_out_of_a_mut_parameter(ref mut self, world: ref CheckWorld, path: ref String, body: ref Expr, subject: ref Ty, parts: ref collections::BTreeMap[String, Ty], handed_from: i64, from: i64) sync {
+        for repeat in self.repeats {
+            if repeat.what == "lambda" {
+                return
+            }
+        }
+        if self.scope.len() == 0 {
+            return
+        }
+        let frame = self.scope[self.scope.len() - 1].clone()
+        let mut found: Vec[(String, i64)] = []
+        for (name, _) in parts {
+            for local in frame {
+                if local.name == name {
+                    found.push((name.clone(), local.id))
+                    break
+                }
+            }
+        }
+        let mut any = false
+        for (part, binding) in found {
+            let mut at = handed_from
+            while at < self.handed.len() {
+                if (self.handed[at].binding ?? -1) == binding {
+                    break
+                }
+                at = at + 1
+            }
+            if at >= self.handed.len() {
+                continue
+            }
+            any = true
+            self.parts_out.push(CheckPartOut { subject: path.clone(), part: part.clone(), binding: binding, handed: at, view: "", frame: -1, ends: -1, from: from, choices: self.branch.clone() })
+        }
+        if !any {
+            return
+        }
+        let node = id_of(body) as i64
+        // The guard and a pattern that looks inside a box keep the arm as it
+        // was: both are read before the arm opens anything.
+        let placeholder = self.a_placeholder(world, subject) ?? return
+        self.facts.taking_arms.insert(node, placeholder)
+        // The parts are values here, not references: nothing to copy out.
+        // So are the parts of a `match` over one of them, nested in the arm.
+        let mut nested: collections::BTreeSet[i64] = collections::BTreeSet()
+        for (part_binding, arm) in self.narrowing.in_place_arms {
+            for (_, binding) in found {
+                if binding == part_binding {
+                    let added = nested.insert(arm)
+                }
+            }
+        }
+        let mut kept: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
+        for one in self.facts.copied_bindings {
+            if one.0 != node && !nested.contains(one.0) {
+                let added = kept.insert(one.clone())
+            }
+        }
+        self.facts.copied_bindings = kept
+    }
+
+    /// **A cast's width** (ADR-233): a cast that always fits is a widening,
+    /// every other between two numbers is recorded as narrowing, out of a
+    /// floating-point number silent three ways and so of its own kind.
+    pub fn record_cast(ref mut self, from: ref Ty, into: ref Ty, operand: i64) sync {
+        let from_name = match from {
+            Ty::Named { name, .. } => name.clone(),
+            else => return,
+        }
+        let into_name = match into {
+            Ty::Named { name, .. } => name.clone(),
+            else => return,
+        }
+        let fits_i64 = from_name == "i32" && into_name == "i64"
+        let fits_from_u8 = from_name == "u8" && (into_name == "i32" || into_name == "i64" || into_name == "u32" || into_name == "u64")
+        let fits_from_u32 = from_name == "u32" && (into_name == "i64" || into_name == "u64")
+        // **An integer into an `f32` fits as one into an `f64` does**, and an
+        // `f32` into an `f64` always (Part I 2.2, ADR-285 D33); an `f64` into an
+        // `f32` is checked against the `f32` range.
+        let from_a_float = from_name == "f32" || from_name == "f64"
+        let fits_f32 = into_name == "f32" && from_name != "f64"
+        let always_fits = from_name == into_name || into_name == "f64" || fits_f32 || fits_i64 || fits_from_u8 || fits_from_u32
+        let checked = check_numeric(from_name) && check_numeric(into_name) && !always_fits
+        let at = operand
+        // An integer other than a `u8` into a `scalar` is refused where the
+        // cast stands (`NK1241`, #1003).
+        if !checked {
+            let added = self.flow.widening_casts.insert(at)
+        } else if from_a_float {
+            self.facts.narrowing_casts.insert(at, FactNarrowing::FromFloat)
+        } else {
+            self.facts.narrowing_casts.insert(at, FactNarrowing::Integer)
+        }
+    }
+}
+
+/// Whether `on` is a map or a set whose keys are text, of its own or views.
+fn check_reads_keyed_by_text(on: ref Ty) -> bool sync {
+    return match on {
+        Ty::Named { name, args, .. } => {
+            let base = type_last_segment(name)
+            let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set"
+            keyed && args.len() > 0 && names_text(args[0])
+        },
+        else => false,
+    }
+}
+
+/// Whether `on` is a map or a set whose keys are views of text (#659).
+fn check_reads_keyed_by_views(on: ref Ty) -> bool sync {
+    return match on {
+        Ty::Named { name, args, .. } => {
+            let base = type_last_segment(name)
+            let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set"
+            keyed && args.len() > 0 && args[0].is_a_view() && names_text(args[0])
+        },
+        else => false,
+    }
+}
+
+/// Whether a map's or a set's key is a number or another copied scalar.
+fn check_reads_keyed_by_numbers(on: ref Ty) -> bool sync {
+    return match on {
+        Ty::Named { name, args, .. } => {
+            let base = type_last_segment(name)
+            let keyed = base == "HashMap" || base == "BTreeMap" || base == "HashSet" || base == "BTreeSet" || base == "Map" || base == "Set"
+            keyed && args.len() > 0 && check_copied(args[0])
+        },
+        else => false,
+    }
+}
+
+/// A name bound to what `get` handed back past a jump (D30), which is a
+/// reference below.
+fn check_reads_got_past_a_jump(state: ref CheckState, world: ref CheckWorld, given: ref Expr) -> bool sync {
+    return match given {
+        Expr::Variable(name, _) => state.got_past_a_jump.contains(world.words.resolve(name)),
+        else => false,
+    }
+}

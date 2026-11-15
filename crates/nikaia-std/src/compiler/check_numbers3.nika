@@ -1,0 +1,267 @@
+// crates/nikaia-std/src/compiler/check_numbers3.nika
+//
+// **The numbers no annotation typed, decided once the body is walked** (ADR-285
+// D2, D3, D4, D23-D25, D27, D34), moved from the compiler's checker (ADR-294,
+// #125, #558, C-5b): the entry an open number was joined into, and the pass that
+// reads what its uses asked, refuses two different asks (`NK1200`), a number
+// that does not fit (`NK1116`) and writes the type down for the emitter.
+
+use std::collections
+
+/// What the check said, as the checker keeps it.
+fn check_finding_of(found: ref Finding) -> CheckFinding {
+    let mut severity = CheckSeverity::Error
+    if found.warning {
+        severity = CheckSeverity::Warning
+    }
+    return CheckFinding { severity: severity, span: found.span.clone(), code: found.code.clone(), message: found.message.clone(), notes: found.notes.clone(), help: found.help?.clone(), labels: [] }
+}
+
+impl CheckState {
+    /// The entry an open number was joined into (ADR-285 D23).
+    pub fn open_root(ref self, start: i64) -> i64 sync {
+        let mut at = start
+        while self.flow.open_numbers.contains_key(at) {
+            let joined = self.flow.open_numbers[at]?.joined ?? at
+            if joined == at {
+                break
+            }
+            at = joined
+        }
+        return at
+    }
+
+    /// `NK1116` for a number and the type it has to fit, where it does not.
+    fn a_number_not_fitting(ref mut self, value: ref CheckConstant, bare: bool, ty: ref String, span: ref Span, why: String?) sync {
+        let found = a_number_that_does_not_fit(value.value, value.beyond, bare, ty, span.clone(), why)
+        if found != null {
+            let said = found ?? return
+            self.facts.unfit_numbers.insert(span.start as i64)
+            self.findings.push(check_finding_of(said))
+        }
+    }
+
+    /// **Every open number of a body, decided** once the body has been walked
+    /// (ADR-285 D24, D25, D27).
+    pub fn numbers_typed_by_their_uses(ref mut self) sync {
+        self.chars_typed_by_their_uses()
+        if self.flow.open_numbers.len() == 0 {
+            return
+        }
+        let mut groups: collections::BTreeMap[i64, Vec[(i64, CheckOpenNumber)]] = collections::BTreeMap()
+        for (at, number) in self.flow.open_numbers {
+            let head = self.open_root(at)
+            let mut members: Vec[(i64, CheckOpenNumber)] = []
+            if groups.contains_key(head) {
+                members = groups[head]?.clone() ?? []
+            }
+            members.push((at, number.clone()))
+            groups.insert(head, members)
+        }
+        // **A `sum` over its items names the type it gets** (#1007, #1485):
+        // the language below infers no result type for it where nothing
+        // annotates it, as in `println(v.iter().sum())`.
+        let mut sums: collections::BTreeMap[i64, Vec[i64]] = collections::BTreeMap()
+        for (receiver, number) in self.flow.open_sums {
+            let head = self.open_root(number)
+            let mut receivers: Vec[i64] = sums[head]?.clone() ?? []
+            receivers.push(receiver)
+            sums.insert(head, receivers)
+        }
+        self.flow.open_sums = collections::BTreeMap()
+        self.flow.open_numbers = collections::BTreeMap()
+        for (head_at, members) in groups {
+            let mut head = members[0].1.clone()
+            for member in members {
+                if member.0 == head_at {
+                    head = member.1.clone()
+                }
+            }
+            let mut beside: Vec[(String, Span)] = []
+            let mut indexed = false
+            for member in members {
+                for ask in member.1.asks {
+                    if ask.2 {
+                        // Kept in the order the uses stand in the source.
+                        let mut place = beside.len()
+                        while place > 0 && beside[place - 1].1.start > ask.1.start {
+                            place = place - 1
+                        }
+                        beside.insert(place, (ask.0.clone(), ask.1.clone()))
+                    } else {
+                        indexed = true
+                    }
+                }
+            }
+            let mut types: Vec[(String, Span)] = []
+            for ask in beside {
+                let mut seen = false
+                for one in types {
+                    if one.0 == ask.0 {
+                        seen = true
+                    }
+                }
+                if !seen {
+                    types.push((ask.0.clone(), ask.1.clone()))
+                }
+            }
+            // **Two uses that ask two types** (D2): the language below would
+            // say *mismatched types* about the generated file.
+            if types.len() >= 2 {
+                if self.flow.open_map_parts.contains_key(head_at) {
+                    let keys: bool = self.flow.open_map_parts[head_at]?.0 ?? false
+                    let other: String = self.flow.open_map_parts[head_at]?.1?.clone() ?? ""
+                    self.findings.push(a_map_number_asked_for_two_types(head.name, keys, other, types[0].0, types[1].0, types[1].1))
+                } else {
+                    self.findings.push(a_number_asked_for_two_types(head.name, head.element, types[0].0, types[1].0, types[1].1))
+                }
+                continue
+            }
+            let mut decided: String? = null
+            if types.len() > 0 {
+                decided = types[0].0.clone()
+            } else if indexed {
+                decided = "i64"
+            }
+            // **Where no use asks, the first type that holds what it is given**
+            // (D3, ADR-285 D21) - `i32`, else `i64`.
+            let mut held: String = "i32"
+            if decided != null {
+                held = (decided ?? "").clone()
+            } else {
+                for member in members {
+                    for given in member.1.given {
+                        if given.0.beyond || !integer_fits(given.0.value, "i32") {
+                            held = "i64"
+                        }
+                    }
+                    for shifted in member.1.shifted {
+                        if shifted.beyond || !integer_fits(shifted.value, "i32") {
+                            held = "i64"
+                        }
+                    }
+                }
+            }
+            let mut why: String? = null
+            if decided != null {
+                let ty = (decided ?? "").clone()
+                if head.element {
+                    why = f"the elements of `{head.name}` are `{ty}`s because of how they are used"
+                } else {
+                    why = f"`{head.name}` is {an_or_a(ty)} `{ty}` because of how it is used"
+                }
+            }
+            // What it is given first; what an operation over it comes to only
+            // where that held, so one cause is one refusal.
+            let before = self.findings.len()
+            for member in members {
+                for given in member.1.given {
+                    self.a_number_not_fitting(given.0, given.2, held, given.1, why?.clone())
+                }
+            }
+            // **What an operation over a shift of literals comes to** is
+            // exact only where no use asks (ADR-285 D40).
+            let mut shifted = false
+            for member in members {
+                shifted = shifted || member.1.shifted.len() > 0
+            }
+            if self.findings.len() == before && !(decided != null && shifted) {
+                for member in members {
+                    for derived in member.1.derived {
+                        let mut reported = false
+                        for at in before..<self.findings.len() {
+                            if self.findings[at].span.start == derived.1.start && self.findings[at].span.end == derived.1.end {
+                                reported = true
+                            }
+                        }
+                        if !reported {
+                            self.a_number_not_fitting(derived.0, false, held, derived.1, why?.clone())
+                        }
+                    }
+                }
+            }
+            // **A shift of it by a constant count** is measured against the
+            // type it got (Part I 2.2).
+            for member in members {
+                for shift in member.1.shifts {
+                    self.a_shift_too_far(held, shift.0, shift.1)
+                }
+            }
+            // **A cast out of it is kept or checked as out of the type it got**
+            // (#629 D-1), and a cast or a method call needs that type written
+            // even where no use asked for one (D-2).
+            let mut typed = false
+            for member in members {
+                typed = typed || member.1.typed
+                for cast in member.1.casts {
+                    let from = Ty::Named { name: held.clone(), args: [], view: false }
+                    let into = Ty::Named { name: cast.1.clone(), args: [], view: false }
+                    self.record_cast(from, into, cast.0)
+                }
+            }
+            // **A map's literals are written with the type** (ADR-285 D43):
+            // a key read by a literal is no write the language below infers
+            // the map's type from.
+            let mut of_a_map = false
+            for member in members {
+                of_a_map = of_a_map || self.flow.open_map_parts.contains_key(member.0)
+            }
+            if held != "i32" && of_a_map {
+                for member in members {
+                    for put in member.1.written {
+                        for literal in put.1 {
+                            self.facts.unsigned_literals.insert(literal.0, held.clone())
+                        }
+                    }
+                }
+            }
+            // **The type is written** (D4), and a literal the emitter would
+            // otherwise give an `i64`'s suffix is given this one.
+            if decided != null || typed {
+                let ty = held.clone()
+                if sums.contains_key(head_at) {
+                    for receiver in sums[head_at]?.clone() ?? [] {
+                        self.facts.summed.insert(receiver, ty.clone())
+                    }
+                }
+                for member in members {
+                    // A list's elements: the list is written with the type
+                    // (D34), so the language below infers nothing either.
+                    // A list of lists (#938) inside as many as stand around it.
+                    let mut written: String = ty.clone()
+                    let mut level = 0
+                    while level < member.1.levels {
+                        written = f"Vec<{written}>"
+                        level += 1
+                    }
+                    // A map's part is written where the map's write is, and
+                    // no `let` stands there.
+                    // So is a list literal walked in place (#1485): its
+                    // literals carry the type.
+                    let in_place = self.flow.open_literal_lists.contains(member.0)
+                    if !self.flow.open_map_parts.contains_key(member.0) && !in_place {
+                        self.facts.number_lets.insert(member.1.at.start as i64, written)
+                    }
+                    // **An operation over it is a site of the overflow proof**
+                    // as one over a typed name is (ADR-306 D6).
+                    for site in member.1.sites {
+                        self.facts.arithmetic.insert(site, ty.clone())
+                    }
+                    for put in member.1.written {
+                        let mut suffixed = put.2
+                        for literal in put.1 {
+                            if !integer_fits(literal.1, "i32") {
+                                suffixed = true
+                            }
+                        }
+                        if (ty != "i64" && suffixed) || in_place {
+                            for literal in put.1 {
+                                self.facts.unsigned_literals.insert(literal.0, ty.clone())
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

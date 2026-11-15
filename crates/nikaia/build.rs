@@ -119,7 +119,7 @@ fn compiler_fingerprint() -> String {
     let mut inputs = Vec::new();
     collect(&manifest.join("src"), &mut inputs);
     collect(&manifest.join("../nikaia-logic/src"), &mut inputs);
-    collect(&manifest.join("../nikaia-std/src/tools"), &mut inputs);
+    collect(&manifest.join("../nikaia-std/src/compiler"), &mut inputs);
     inputs.push(manifest.join("../nikaia-std/std.contracts"));
     inputs.push(manifest.join("../../Cargo.lock"));
     inputs.sort();

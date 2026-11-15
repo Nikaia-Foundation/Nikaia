@@ -1,0 +1,462 @@
+// crates/nikaia-std/src/compiler/emit_holes.nika
+//
+// **The holes of a literal, and what the walks over them find** (ADR-294,
+// #125, E12-2), moved from `emit/mod.rs` and `emit/host.rs`. A hole is an
+// expression of its own, owned and not a node of the tree: an `f"…"`'s the
+// grammar parsed (ADR-309 D2), a template's parsed once per text at one site
+// by the parser (ADR-340 D1, D2). So a walk that must see them - a hole is a
+// call like any other (ADR-288 D2, ADR-010 D1) - walks the tree with
+// `check_visit` and each literal's holes right after the literal, the order of
+// `contracts::sync::visit_expr`.
+//
+// Two readers ask for holes. The checker and the analyses hold the parsed file
+// (`EmitHolesHost`, implemented by `Parsed`); the emitter holds the tables the
+// file's holes were read into (`EmitState.template_holes`, `hole_wraps`).
+
+use std::collections
+
+/// What the parser answers for one hole of a template: the expression, or what
+/// it said of a hole that does not parse.
+pub enum EmitHole {
+    Parsed(Expr),
+    Refused(String),
+}
+
+/// What the walks over holes ask of the parsed file (`Parsed`, Rust).
+pub trait EmitHolesHost {
+    /// One hole of a template, parsed once per text at one site
+    /// (`Parsed::hole`): `site` is the template's id (`id_of`).
+    fn hole(ref self, site: u32, text: String) -> EmitHole sync
+
+    /// The hole of an `f"…"` whose `{` stands at byte `at`, with what the tier
+    /// pass hands over inside it (ADR-229 D1, `text_tiers::wrap_hole`); `null`
+    /// where nothing is wrapped.
+    fn wrapped_hole(ref self, at: u32, hole: ref Expr) -> Expr? sync
+
+    /// Every hole of a template parsed so far, by the template's site and the
+    /// hole's text (`Parsed::cached_holes`).
+    fn cached_holes(ref self) -> collections::BTreeMap[(i64, String), Expr] sync
+
+    /// Every call built for a function kept as a value, by name and arity
+    /// (`Parsed::cached_kept_calls`).
+    fn cached_kept_calls(ref self) -> collections::BTreeMap[(String, i64), EmitKeptCall] sync
+}
+
+/// The texts of a template's holes, each with what a `<for>` binds around it
+/// (`template_holes_bound`), including the ones inside a `<for>` body: a hole
+/// does not become invisible by being repeated (ADR-017 D3). None for anything
+/// that is not a template, for one that does not split, and for a
+/// deferred-parameter statement, whose braces are the foreign syntax's
+/// (ADR-296 D5).
+fn emit_holes_template_texts(words: ref winnow_grammar::InternerContext, literal: ref Expr) -> Vec[(String, Vec[(String, String)])] sync {
+    match literal {
+        Expr::Dsl { target, package, content, .. } => {
+            if is_deferred(dsl_name(words, package, target), content) {
+                return []
+            }
+            let framed: String = content.trim().clone()
+            let segments = split(framed) catch {
+                return []
+            }
+            return template_holes_bound(segments)
+        },
+        else => return [],
+    }
+}
+
+/// **An `f"…"`'s holes as their readers read them** (ADR-309 D6): each with
+/// what the tier pass hands over inside it, keyed by the byte its `{` stands
+/// at (ADR-229 D1); the hole as the grammar parsed it where nothing is wrapped.
+fn emit_holes_interpolated[H: EmitHolesHost](host: ref H, parts: ref Vec[FPart]) -> Vec[Expr] sync {
+    let mut out: Vec[Expr] = []
+    for part in parts {
+        match part {
+            FPart::Hole { expr, at, .. } => out.push(host.wrapped_hole(at, expr) ?? expr.clone()),
+            FPart::Text(_) => {},
+        }
+    }
+    return out
+}
+
+/// **The holes of a literal, with the names a template's `<for>` binds around
+/// each** (#524): an `f"…"`'s binds none. A hole that does not parse yields
+/// nothing here: the emitter reports it, in its own words, where it happens;
+/// an analysis has nothing to add. Empty for anything that is not a literal.
+pub fn emit_holes_literal_bound[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, literal: ref Expr) -> Vec[(Expr, Vec[(String, String)])] sync {
+    let mut out: Vec[(Expr, Vec[(String, String)])] = []
+    match literal {
+        Expr::LitInterpolated { parts, .. } => {
+            let none: Vec[(String, String)] = []
+            for hole in emit_holes_interpolated(host, parts) {
+                out.push((hole.clone(), none.clone()))
+            }
+        },
+        else => {
+            let site = id_of(literal)
+            for (text, bound) in emit_holes_template_texts(words, literal) {
+                match host.hole(site, text) {
+                    EmitHole::Parsed(hole) => out.push((hole.clone(), bound.clone())),
+                    EmitHole::Refused(_) => {},
+                }
+            }
+        },
+    }
+    return out
+}
+
+/// **The holes of a literal** (`emit_holes_literal_bound` without the names):
+/// what every walk that must see a call visits right after the literal.
+pub fn emit_holes_literal[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, literal: ref Expr) -> Vec[Expr] sync {
+    let mut out: Vec[Expr] = []
+    for (hole, _) in emit_holes_literal_bound(host, words, literal) {
+        out.push(hole.clone())
+    }
+    return out
+}
+
+/// The expressions a statement holds at its top, without the blocks inside
+/// it: where `contracts::sync::visit_stmt` starts its walk.
+fn emit_holes_stmt_roots(stmt: ref Stmt) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    match stmt {
+        Stmt::Let { value, .. } => out.push(value),
+        Stmt::Comptime { value, .. } => out.push(value),
+        Stmt::Assign { target, value, .. } => {
+            out.push(target)
+            out.push(value)
+        },
+        Stmt::For { iter, .. } => out.push(iter),
+        Stmt::While { cond, .. } => out.push(cond),
+        Stmt::Return(value) => {
+            if value != null {
+                out.push(value ?? return out)
+            }
+        },
+        Stmt::Break => {},
+        Stmt::Continue => {},
+        Stmt::Expr(inner) => out.push(inner),
+    }
+    return out
+}
+
+/// The name an expression gives a walk, by what is asked: `1` a function
+/// called by its name, `2` that or a method called by its name.
+fn emit_holes_pick(words: ref winnow_grammar::InternerContext, expr: ref Expr, kind: i64) -> String? {
+    match expr {
+        Expr::Call { func, .. } => {
+            match func {
+                Expr::Variable(name, _) => return words.resolve(name).clone(),
+                else => {},
+            }
+        },
+        Expr::MethodCall { method, .. } => {
+            if kind == 2 {
+                return words.resolve(method).clone()
+            }
+        },
+        else => {},
+    }
+    return null
+}
+
+/// The names `kind` asks for (`emit_holes_pick`) in an expression and inside
+/// it, outside its blocks, a literal's holes right after the literal: the walk
+/// of `contracts::sync::visit_expr`.
+fn emit_holes_names_in[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, expr: ref Expr, kind: i64, mut out: Vec[String]) sync {
+    let picked = emit_holes_pick(words, expr, kind)
+    if picked != null {
+        out.push(picked ?? return)
+    }
+    if check_visit_has_holes(expr) {
+        for hole in emit_holes_literal(host, words, expr) {
+            emit_holes_names_in(host, words, hole, kind, out)
+        }
+    }
+    for child in check_visit_children(expr) {
+        emit_holes_names_in(host, words, child, kind, out)
+    }
+}
+
+/// The same, and in the statements of every block the expression holds.
+fn emit_holes_names_deep[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, expr: ref Expr, kind: i64, mut out: Vec[String]) sync {
+    emit_holes_names_in(host, words, expr, kind, out)
+    for block in check_visit_expr_blocks(expr) {
+        emit_holes_names_block(host, words, block, kind, out)
+    }
+}
+
+/// The same, in every statement of a block and of the blocks inside it.
+fn emit_holes_names_block[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, block: ref Block, kind: i64, mut out: Vec[String]) sync {
+    for stmt in block.stmts {
+        for root in emit_holes_stmt_roots(stmt.node) {
+            emit_holes_names_in(host, words, root, kind, out)
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            emit_holes_names_block(host, words, inner, kind, out)
+        }
+    }
+}
+
+/// The tables of a file's holes, as the emitter reads them.
+pub struct EmitHoleTables {
+    /// Every hole of every template, by the template's site and the hole's
+    /// text: the trees every reader of them shares.
+    pub holes: collections::BTreeMap[(i64, String), Expr],
+    /// What was said of the holes that did not parse.
+    pub errors: collections::BTreeMap[(i64, String), String],
+    /// Every call built for a function kept as a value, by name and arity.
+    pub kept_calls: collections::BTreeMap[(String, i64), EmitKeptCall],
+}
+
+/// **Every hole of every template in the file's functions and methods**, asked
+/// of the parser once, so every reader shares the trees; what was said of the
+/// ones that did not parse beside them.
+pub fn emit_holes_tables[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> EmitHoleTables sync {
+    let mut errors: collections::BTreeMap[(i64, String), String] = collections::BTreeMap()
+    for item in items {
+        match item.node {
+            Item::Fn { body, .. } => emit_holes_ask_block(host, words, body, errors),
+            Item::Impl { methods, .. } => {
+                for method in methods {
+                    match method.node {
+                        Item::Fn { body, .. } => emit_holes_ask_block(host, words, body, errors),
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return EmitHoleTables { holes: host.cached_holes(), errors: errors, kept_calls: host.cached_kept_calls() }
+}
+
+fn emit_holes_ask_block[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, body: ref Block, mut errors: collections::BTreeMap[(i64, String), String]) sync {
+    for expr in visited_in_block(body) {
+        let site = id_of(expr)
+        for (text, _) in emit_holes_template_texts(words, expr) {
+            match host.hole(site, text.clone()) {
+                EmitHole::Refused(said) => {
+                    errors.insert((site as i64, text.clone()), said.clone())
+                },
+                EmitHole::Parsed(_) => {},
+            }
+        }
+    }
+}
+
+/// The steps of the `fold`s and `par_fold`s a pattern holds.
+fn emit_holes_fold_steps(pattern: ref Pattern) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    match pattern {
+        Pattern::Fold(spec) => out.extend(check_visit_one(spec.step)),
+        Pattern::Seq(all) => {
+            for each in all {
+                out.extend(emit_holes_fold_steps(each.node))
+            }
+        },
+        Pattern::Choice(all) => {
+            for each in all {
+                out.extend(emit_holes_fold_steps(each.node))
+            }
+        },
+        Pattern::Bind { pat, .. } => out.extend(emit_holes_fold_steps(pat.node)),
+        Pattern::Repeat { pat, .. } => out.extend(emit_holes_fold_steps(pat.node)),
+        Pattern::Group(inner) => out.extend(emit_holes_fold_steps(inner.node)),
+        Pattern::Ref { args, .. } => {
+            for each in args {
+                out.extend(emit_holes_fold_steps(each.node))
+            }
+        },
+        Pattern::Counted { pat, .. } => out.extend(emit_holes_fold_steps(pat.node)),
+        Pattern::Literal(_) => {},
+        Pattern::Cut => {},
+        Pattern::Call { .. } => {},
+        Pattern::Choose { .. } => {},
+        Pattern::Members { .. } => {},
+        Pattern::Guard { .. } => {},
+    }
+    return out
+}
+
+/// **The names a `fold`'s or a `par_fold`'s step calls directly** (#433): a
+/// function it calls and a method it calls, by name, in any rule of any
+/// grammar this unit declares. By name, because the step's receiver is the
+/// accumulator, whose type this emitter does not know (ADR-296 D17) - and a
+/// method of another type with the same name gains a hint, nothing more.
+pub fn emit_holes_fold_callees[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, grammars: ref collections::BTreeMap[String, GrammarDef]) -> collections::BTreeSet[String] sync {
+    let mut found: Vec[String] = []
+    for (_, def) in grammars {
+        for rule in def.rules {
+            for alt in rule.alts {
+                for step in emit_holes_fold_steps(alt.pattern.node) {
+                    match step {
+                        Expr::Closure { body, .. } => {
+                            for stmt in body.stmts {
+                                for root in emit_holes_stmt_roots(stmt.node) {
+                                    emit_holes_names_in(host, words, root, 2, found)
+                                }
+                            }
+                        },
+                        else => {},
+                    }
+                }
+            }
+        }
+    }
+    let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+    names.extend(found.clone())
+    return names
+}
+
+/// The calls a function's options' defaults and its `comptime` statements make.
+fn emit_holes_fn_builds[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, item: ref Item, mut waiting: Vec[String]) sync {
+    match item {
+        Item::Fn { config, body, .. } => {
+            for option in config {
+                emit_holes_names_deep(host, words, option.default, 1, waiting)
+            }
+            emit_holes_comptimes(host, words, body, waiting)
+        },
+        else => {},
+    }
+}
+
+/// The calls of every `comptime` statement in a block and the blocks inside it.
+fn emit_holes_comptimes[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, block: ref Block, mut waiting: Vec[String]) sync {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Comptime { value, .. } => emit_holes_names_deep(host, words, value, 1, waiting),
+            else => {},
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            emit_holes_comptimes(host, words, inner, waiting)
+        }
+    }
+}
+
+/// **The functions of this file the build calls** (#446): what a `comptime`
+/// and an option's default call, and what those call in turn. Their values
+/// reach the Rust as literals, so the Rust may never call them, and `rustc`
+/// would say *never used* about a function the program used. Each gets
+/// `#[allow(dead_code)]`; a function nothing calls is still warned.
+pub fn emit_holes_built_at_build_time[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] sync {
+    let mut waiting: Vec[String] = []
+    // A free function's place among the items, by name; the last one written
+    // wins, as a second definition would.
+    let mut free: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut at = 0
+    for item in items {
+        match item.node {
+            Item::Comptime { value, .. } => emit_holes_names_deep(host, words, value, 1, waiting),
+            Item::Impl { methods, .. } => {
+                for method in methods {
+                    emit_holes_fn_builds(host, words, method.node, waiting)
+                }
+            },
+            Item::Fn { name, .. } => {
+                emit_holes_fn_builds(host, words, item.node, waiting)
+                if name != null {
+                    let named = name ?? return collections::BTreeSet()
+                    free.insert(words.resolve(named).clone(), at)
+                }
+            },
+            else => {},
+        }
+        at += 1
+    }
+    let mut built: collections::BTreeSet[String] = collections::BTreeSet()
+    while waiting.len() > 0 {
+        let name = waiting.pop() ?? return built
+        if free.contains_key(name.clone()) && !built.contains(name.clone()) {
+            built.insert(name.clone())
+            let place = free.get(name.clone()) ?? return built
+            match items[place].node {
+                Item::Fn { body, .. } => emit_holes_names_block(host, words, body, 1, waiting),
+                else => {},
+            }
+        }
+    }
+    return built
+}
+
+impl EmitState {
+    /// **A literal's holes as the emitter reads them**: an `f"…"`'s with what
+    /// the tier pass hands over inside it (`hole_wraps`), a template's from the
+    /// trees every reader of them shares (`template_holes`), the ones that did
+    /// not parse left out.
+    fn emit_holes_of[H: EmitHost](ref self, world: ref EmitWorld, host: ref H, literal: ref Expr) -> Vec[Expr] sync {
+        let mut out: Vec[Expr] = []
+        match literal {
+            Expr::LitInterpolated { parts, .. } => {
+                for part in parts {
+                    match part {
+                        FPart::Hole { expr, at, .. } => {
+                            let key = at as i64
+                            if self.hole_wraps.contains_key(key) {
+                                let wraps = self.hole_wraps.get(key) ?? return out
+                                out.push(host.wrap_hole(expr, wraps))
+                            } else {
+                                out.push(expr.clone())
+                            }
+                        },
+                        FPart::Text(_) => {},
+                    }
+                }
+            },
+            else => {
+                let site = id_of(literal) as i64
+                for (text, _) in emit_holes_template_texts(world.words, literal) {
+                    if self.template_holes.contains_key((site, text.clone())) {
+                        let hole = self.template_holes.get((site, text.clone())) ?? return out
+                        out.push(hole.clone())
+                    }
+                }
+            },
+        }
+        return out
+    }
+
+    /// **Every name read anywhere inside `expr`**, string holes and the
+    /// statements of its blocks included (a copy an arm body reads in a
+    /// statement is still read), in the order the walk meets them.
+    pub fn emit_holes_names_read[H: EmitHost](ref self, world: ref EmitWorld, host: ref H, expr: ref Expr) -> Vec[String] sync {
+        let mut out: Vec[String] = []
+        self.emit_holes_read_deep(world, host, expr, out)
+        return out
+    }
+
+    fn emit_holes_read_deep[H: EmitHost](ref self, world: ref EmitWorld, host: ref H, expr: ref Expr, mut out: Vec[String]) sync {
+        self.emit_holes_read_in(world, host, expr, out)
+        for block in check_visit_expr_blocks(expr) {
+            self.emit_holes_read_block(world, host, block, out)
+        }
+    }
+
+    fn emit_holes_read_block[H: EmitHost](ref self, world: ref EmitWorld, host: ref H, block: ref Block, mut out: Vec[String]) sync {
+        for stmt in block.stmts {
+            for root in emit_holes_stmt_roots(stmt.node) {
+                self.emit_holes_read_in(world, host, root, out)
+            }
+            for inner in check_visit_stmt_blocks(stmt.node) {
+                self.emit_holes_read_block(world, host, inner, out)
+            }
+        }
+    }
+
+    /// The names read in an expression outside its blocks, a literal's holes
+    /// right after the literal.
+    fn emit_holes_read_in[H: EmitHost](ref self, world: ref EmitWorld, host: ref H, expr: ref Expr, mut out: Vec[String]) sync {
+        match expr {
+            Expr::Variable(name, _) => out.push(world.words.resolve(name).clone()),
+            else => {},
+        }
+        if check_visit_has_holes(expr) {
+            for hole in self.emit_holes_of(world, host, expr) {
+                self.emit_holes_read_in(world, host, hole, out)
+            }
+        }
+        for child in check_visit_children(expr) {
+            self.emit_holes_read_in(world, host, child, out)
+        }
+    }
+}

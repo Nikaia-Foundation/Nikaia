@@ -32,7 +32,7 @@ use crate::ast;
 use crate::parser::Parsed;
 
 /// `Ty` and `Shape` are declared in Nikaia ([ADR-294](../../../docs/specification/adr/adr-294.md)
-/// D1): `nikaia-std/src/tools/ty.nika`, with the words below, the text a type
+/// D1): `nikaia-std/src/compiler/ty.nika`, with the words below, the text a type
 /// is written as, and what the checker asks of one.
 pub use nikaia_std::tools::ty::{
     ARRAY, ENDS, PAR, PAUSES, REPLAYS, SEEN, SEQ, SIZED, Shape, TEXT, TEXT_VIEW, Ty, bind, qualify,

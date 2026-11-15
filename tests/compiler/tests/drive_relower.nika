@@ -6,7 +6,10 @@
 // lowering that fails, aborts and escalates with no merge left open. A clean
 // merge that brought a change under `crates/` is re-lowered and its badges
 // regenerated (a stub that lists the sources) in the merge commit, before it
-// could be pushed; one of documentation only is merged as it is.
+// could be pushed; one of documentation only is merged as it is. A clean
+// merge that brought a change under `examples/` has its ledgers refreshed
+// (#1591; here a stub `scripts/ledgers.nika` that writes one) and committed
+// in the merge too.
 use std::fs
 use std::process
 
@@ -37,7 +40,7 @@ fn sh(dir: String, script: String) -> String throws {
 // ours another file; "docs": theirs only a note in `docs/`.
 fn setup(tmp: String, name: String, kind: String) -> String throws {
     let base = f"{tmp}/{name}"
-    let low = "crates/nikaia-std/src/tools/lowered"
+    let low = "crates/nikaia-std/src/compiler/lowered"
     let id = "git config user.email t@t; git config user.name t; git config commit.gpgsign false"
     sh(tmp.clone(), f"mkdir -p {name}; cd {name}; git init -q --bare origin.git; git init -q -b develop work")
     let work = f"{base}/work"
@@ -47,6 +50,7 @@ fn setup(tmp: String, name: String, kind: String) -> String throws {
     let lowered = kind == "lowered" || kind == "both"
     let mut theirs = if kind == "both" { "echo theirs > crates/src/a.nika; " } else { "echo theirs-side > crates/src/b.nika; " }
     if kind == "docs" { theirs = "mkdir -p docs; echo theirs > docs/x.md; " }
+    if kind == "example" { theirs = "mkdir -p examples/a/src; echo theirs > examples/a/src/main.nika; " }
     if lowered { theirs = f"echo theirs > {low}/a.rs; {theirs}" }
     sh(other, f"{id}; {theirs}git add -A; git commit -q -m theirs; git push -q origin develop")
     let mut ours = if kind == "both" { "echo ours > crates/src/a.nika; " } else { "echo ours > ours.txt; " }
@@ -56,7 +60,14 @@ fn setup(tmp: String, name: String, kind: String) -> String throws {
 }
 
 fn case(nikaia: String, repo: String, tmp: String, name: String, kind: String, lower: String) throws {
-    let work = setup(tmp.clone(), name.replace(" ", "-"), kind)
+    let work = setup(tmp.clone(), name.replace(" ", "-"), kind.clone())
+    if kind == "example" {
+        // The stub ledgers script: it rewrites one ledger and says so, run by
+        // this compiler as the checkout's `target/fast/nikaia`.
+        let stub = "use std::fs\n\nfn main() throws {\n    fs::write(\"examples/a/nikaia.contracts\", fs::Root::Anywhere, \"refreshed\\n\")\n    println(\"refreshed examples/a/nikaia.contracts\")\n}\n"
+        sh(work.clone(), f"mkdir -p scripts target/fast; ln -s {nikaia} target/fast/nikaia; printf 'target/\\nscripts/\\n' > .git/info/exclude")
+        fs::write(f"{work}/scripts/ledgers.nika", fs::Root::Anywhere, stub)
+    }
     // The stub badges: the sources of the tree they are measured on.
     let badges = "ls crates/src | tr '\\n' ' ' > assets/badges/self-hosted.svg"
     let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--merge-fetched", lower, "true", badges]; dir: work.clone())
@@ -64,7 +75,7 @@ fn case(nikaia: String, repo: String, tmp: String, name: String, kind: String, l
     println(f"== {name}")
     println(out.stdout.trim().replace(head, "SHA"))
     println(f"exit ok: {out.ok}")
-    let state = sh(work, "git log --format=%s -1; git log --format=%p -1 | wc -w; test -f .git/MERGE_HEAD && echo merge open || echo no merge open; git status --porcelain --untracked-files=all; git show --format= --name-only HEAD | sort; cat crates/nikaia-std/src/tools/lowered/a.rs; cat assets/badges/self-hosted.svg; echo; cat notes.txt")
+    let state = sh(work, "git log --format=%s -1; git log --format=%p -1 | wc -w; test -f .git/MERGE_HEAD && echo merge open || echo no merge open; git status --porcelain --untracked-files=all; git show --format= --name-only HEAD | sort; cat crates/nikaia-std/src/compiler/lowered/a.rs; cat assets/badges/self-hosted.svg; echo; cat notes.txt; cat examples/a/nikaia.contracts 2>/dev/null || true")
     println(state)
 }
 
@@ -72,14 +83,15 @@ fn main() throws {
     let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
     let repo = root()
     let nikaia = toolchain()
-    let low = "crates/nikaia-std/src/tools/lowered"
+    let low = "crates/nikaia-std/src/compiler/lowered"
     // The stub lowering: the lowered file from the sources, and a new file.
     let lower = f"cat crates/src/*.nika > {low}/a.rs; echo new > {low}/new.rs"
     case(nikaia.clone(), repo.clone(), tmp.clone(), "lowered only", "lowered", lower.clone())
     case(nikaia.clone(), repo.clone(), tmp.clone(), "also a nika", "both", lower.clone())
     case(nikaia.clone(), repo.clone(), tmp.clone(), "lowering fails", "lowered", f"echo new > {low}/new.rs; false")
     case(nikaia.clone(), repo.clone(), tmp.clone(), "clean, a source", "clean", lower.clone())
-    case(nikaia.clone(), repo.clone(), tmp.clone(), "clean, docs only", "docs", lower)
-    case(nikaia, repo, tmp.clone(), "clean, lowering fails", "clean", f"echo new > {low}/new.rs; false")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "clean, docs only", "docs", lower.clone())
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "clean, lowering fails", "clean", f"echo new > {low}/new.rs; false")
+    case(nikaia, repo, tmp.clone(), "clean, an example", "example", lower)
     process::run("rm", ["-rf", tmp])
 }

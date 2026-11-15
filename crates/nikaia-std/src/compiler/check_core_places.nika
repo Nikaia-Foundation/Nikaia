@@ -1,0 +1,1409 @@
+// crates/nikaia-std/src/compiler/check_core_places.nika
+//
+// **Places and the values built from fields** (ADR-294, #125, #558, C-6,
+// U-c9): the arms `Field | SafeField`, `StructLit`, `With`, `Index`, `Cast`
+// and `Range` of the checker's walk. The form is the pilot's
+// (`check_core_pilot.nika`): a free function over the state, the world and a
+// host; the walk comes back through the hub `check_core_expr`, a written type
+// through `host.declared`, and a lambda's free calls through
+// `host.free_calls`. One function per arm, and the per-field work of a
+// literal in a function of its own, so a deep expression's frames stay small.
+
+use std::collections
+use std::text
+
+/// A type by its bare name.
+fn check_core_places_named(name: ref String) -> Ty {
+    return Ty::Named { name: name.clone(), args: [], view: false }
+}
+
+/// A view of `str`.
+fn check_core_places_str_view() -> Ty {
+    return Ty::Named { name: "str", args: [], view: true }
+}
+
+/// The last segment of a path, `ty::base`.
+fn check_core_places_base(name: ref String) -> String {
+    let parts: Vec[ref String] = name.split("::").collect()
+    if parts.len() == 0 {
+        return name.clone()
+    }
+    let last = parts.len() as i64 - 1
+    return f"{parts[last]}"
+}
+
+/// A list's name: `Vec`, `List` or `Array`.
+fn check_core_places_a_list(base: ref String) -> bool {
+    return base == "Vec" || base == "List" || base == "Array"
+}
+
+/// Whether an expression is a range written in place.
+/// A call of a function or a method.
+fn check_core_places_a_call(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Call { .. } => true,
+        Expr::MethodCall { .. } => true,
+        else => false,
+    }
+}
+
+fn check_core_places_a_range(index: ref Expr) -> bool sync {
+    return match index {
+        Expr::Range { .. } => true,
+        else => false,
+    }
+}
+
+/// Whether a field's value is a lambda written in place.
+fn check_core_places_a_closure(value: ref Expr?) -> bool sync {
+    let v: ref Expr = value ?? return false
+    return match v {
+        Expr::Closure { .. } => true,
+        else => false,
+    }
+}
+
+/// A tuple position, as Rust's `parse::<usize>` reads it: digits only.
+fn check_core_places_position(field: ref String) -> i64 {
+    if field.len() == 0 {
+        return -1
+    }
+    for c in field.chars() {
+        if c < '0' || c > '9' {
+            return -1
+        }
+    }
+    return text::parse_i64(field) ?? -1
+}
+
+/// What a parameter is bound to, or `?`.
+fn check_core_places_bound(bound: ref collections::BTreeMap[String, Ty], p: ref String) -> Ty {
+    return bound.get(p)?.clone() ?? Ty::Unknown
+}
+
+/// **`field.default`, its default as a `T?`** (ADR-331 D5): `?` outside an
+/// unrolling.
+fn check_core_places_unrolled_default(unrolling: ref CheckUnrolling?) -> Ty {
+    let u: ref CheckUnrolling = unrolling ?? return Ty::Unknown
+    return Ty::Nullable(u.field.ty.clone())
+}
+
+/// The types a cast may name (`OFFERED`).
+fn check_core_places_offered(name: ref String) -> bool {
+    return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str"
+}
+
+/// Whether a float literal, negated or not, or one an operation on floats
+/// written out holds, is a finite value beyond the `f32` range.
+pub fn check_core_places_beyond_f32(value: ref Expr) -> bool {
+    return match check_peeled(value) {
+        Expr::LitFloat(written, _) => {
+            let number = text::parse_f64(written) ?? 0.0
+            number > 340282346638528859811704183484516925440.0
+        },
+        Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && check_core_places_beyond_f32(expr),
+        Expr::Binary { lhs, rhs, .. } => check_core_places_beyond_f32(lhs) || check_core_places_beyond_f32(rhs),
+        else => false,
+    }
+}
+
+/// What an integer cast `as scalar` is, for the refusal: a literal, or a
+/// value of its type.
+fn check_core_places_what_casts(from: ref Ty, written_out: bool) -> String sync {
+    if written_out {
+        return "an integer literal"
+    }
+    return match from {
+        Ty::Named { name, .. } => f"an `{name}`",
+        else => "a whole number",
+    }
+}
+
+/// The integer types a `char` is cast into as its code (`INTEGERS`).
+fn check_core_places_an_integer(name: ref String) -> bool {
+    return name == "u8" || name == "u32" || name == "u64" || name == "i32" || name == "i64"
+}
+
+/// A field's value, or the name of its shorthand: `Reading { name }`.
+fn check_core_places_given[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, field: ref String, span: ref Span) -> Ty sync {
+    if value == null {
+        return state.lookup(field) ?? Ty::Unknown
+    }
+    let v: ref Expr = value ?? return Ty::Unknown
+    return check_core_expr(state, world, host, v, span)
+}
+
+/// **A tuple's part is the type written at its position**, and a position
+/// the tuple does not have is `NK1107` (#515).
+fn check_core_places_tuple_part(mut state: CheckState, parts: ref Vec[Ty], field: ref String, span: ref Span) -> Ty sync {
+    let at = check_core_places_position(field)
+    if at >= 0 && at >= parts.len() as i64 {
+        let count = parts.len() as i64
+        let mut last = count - 1
+        if last < 0 {
+            last = 0
+        }
+        let mut help: String = "There's nothing in it to read."
+        if count > 0 {
+            help = f"Use one of `.0` to `.{last}`."
+        }
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1107", message: f"This tuple has no part `.{at}`.", notes: [f"A tuple's parts are counted from 0, and this one has {count}."], help: help, labels: [] })
+        return Ty::Unknown
+    }
+    if at < 0 {
+        return Ty::Unknown
+    }
+    return parts[at].clone()
+}
+
+/// **A field of a type, by its declaration**: a boxed field, a handle, a
+/// reflected variant or field, a parameter, and the field itself.
+fn check_core_places_a_named_field(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, on: ref Ty, ty: ref String, field: ref String, span: ref Span) -> Ty sync {
+    // **`s.bytes` is a `Bytes` over the text's own buffer, borrowed**
+    // (ADR-320 D11): every read of a `Bytes` works on it (D7).
+    if (ty == "String" || ty == "str") && field == "bytes" {
+        state.facts.text_bytes.insert(id_of(expr) as i64)
+        return check_core_places_named("Bytes")
+    }
+    // **`s.scalars` walks the text's scalars, `s.graphemes` what a reader
+    // sees as one character each** (ADR-320 D3, D4, D9): sequences read with
+    // `take`, `skip`, `count` and `for`, borrowed from the text.
+    if (ty == "String" || ty == "str") && field == "scalars" {
+        state.facts.text_scalars.insert(id_of(expr) as i64)
+        return Ty::Seq { item: check_core_places_named("scalar"), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false } }
+    }
+    if (ty == "String" || ty == "str") && field == "graphemes" {
+        state.facts.text_graphemes.insert(id_of(expr) as i64)
+        let grapheme = check_core_places_str_view()
+        return Ty::Seq { item: grapheme, is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: false, sized: false, replays: false, timed: false } }
+    }
+    // **A boxed field is read through its box** (ADR-246 D2).
+    let boxed = state.facts.boxed_members.get(ty)
+    if boxed != null {
+        let members = boxed ?? return Ty::Unknown
+        if members.contains(field) {
+            state.facts.boxed_reads.insert(id_of(expr) as i64)
+        }
+    }
+    // **A handle has no fields** (ADR-302 D7).
+    if state.opaque_handles.contains(ty) {
+        state.a_handle_has_nothing_inside(ty, f"the field `{field}`", span)
+        return Ty::Unknown
+    }
+    // **A reflected field answers two members and no others** (ADR-304 D2).
+    if ty == "$Variant" {
+        if field == "name" {
+            return check_core_places_str_view()
+        }
+        state.a_reflected_variant_has_two_members(field, span)
+        return Ty::Unknown
+    }
+    if ty == "meta::Field" {
+        if field == "name" {
+            return check_core_places_str_view()
+        }
+        // **`field.default`, its default as a `T?`** (ADR-331 D5).
+        if field == "default" {
+            return check_core_places_unrolled_default(state.flow.unrolling)
+        }
+        // **`field.ty` is the field's type** (ADR-330 D5): asked with `::`,
+        // never a value.
+        if field == "ty" {
+            state.a_field_type_as_a_value(span)
+            return Ty::Unknown
+        }
+        if field.starts_with("ty::") {
+            return check_reflect_field_type(state, expr, field.strip_prefix("ty::") ?? "", span)
+        }
+        if field.contains("::") {
+            state.a_path_after_a_value(field, span)
+            return Ty::Unknown
+        }
+        state.a_reflected_field_has_two_members(field, span)
+        return Ty::Unknown
+    }
+    let declared: Vec[FieldContract]? = state.fields_of(world, ty)
+    if declared == null {
+        // `NK1126` where the type is a parameter.
+        state.nothing_says_what_a_parameter_can_do(ty, "field", field, span)
+        return Ty::Unknown
+    }
+    let fields: Vec[FieldContract] = declared ?? return Ty::Unknown
+    for found in fields {
+        if found.name == field {
+            state.field_is_reachable(ty, found, span)
+            if a_field_of_static_text(world.here, ty, field) {
+                state.facts.static_field_reads.insert(id_of(expr) as i64)
+            }
+            // `Pair[i64].first` is an `i64` (ADR-288, ADR-295 D2).
+            return substitute(found.ty, state.arguments_of(on))
+        }
+    }
+    state.no_such_field(ty, field, fields, span)
+    return Ty::Unknown
+}
+
+/// **`x.field` and `x?.field`** (Part I 3.5).
+pub fn check_core_field[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, safe: bool, base: ref Expr, name: winnow_grammar::Symbol, span: ref Span) -> Ty sync {
+    let got = check_core_field_walked(state, world, host, expr, safe, base, name, span)
+    // **A path of fields a `null` test proved is read as the `T`** (ADR-382).
+    if safe {
+        return got
+    }
+    return check_narrow_path_read(state, world, expr, got, span)
+}
+
+fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, safe: bool, base: ref Expr, name: winnow_grammar::Symbol, span: ref Span) -> Ty sync {
+    let on = check_core_expr(state, world, host, base, span)
+    // **A field of a call's owned result is moved out, not lent** (#1191).
+    let owned_result = match on {
+        Ty::Named { view, .. } => !view,
+        else => false,
+    }
+    if owned_result && check_core_places_a_call(base) {
+        state.flow.owned_call_bases.insert(id_of(base) as i64)
+    }
+    let field: String = f"{world.words.resolve(name)}"
+    match unviewed_type(on) {
+        Ty::Named { name: held, .. } => {
+            state.facts.field_owners.insert(id_of(base) as i64, held.clone())
+            state.declared_use(expr, CheckDeclared::Field(held.clone(), field.clone()))
+        },
+        else => {},
+    }
+    // **`x.name::member` asks a type** (ADR-330 D5): only a reflected
+    // field's `.ty` is one.
+    if field.contains("::") && !safe {
+        let reflected = match on {
+            Ty::Named { name: held, .. } => held == "meta::Field",
+            else => false,
+        }
+        if !reflected {
+            state.a_path_after_a_value(field, span)
+            return Ty::Unknown
+        }
+    }
+    // **`x?.field`**: over a `T?` the field of what is inside, as a `T?`; over
+    // a plain value the plain read, with `NK1217` (ADR-279 D13).
+    if safe {
+        match on {
+            Ty::Nullable(inner) => {
+                // **`p?.0` is a part of a `(A, B)?`, as a nullable** (ADR-364).
+                match inner {
+                    Ty::Tuple(parts) => {
+                        let part = check_core_places_tuple_part(state, parts, field, span)
+                        if part.is_unknown() {
+                            return Ty::Unknown
+                        }
+                        return state.a_safe_reach(world, base, part, inner.is_a_view())
+                    },
+                    else => {}
+                }
+                return state.a_safe_field(world, inner, base, field, expr, span)
+            },
+            Ty::Unknown => {
+                return Ty::Unknown
+            },
+            else => {
+                state.reaches_through_a_plain_value(world, on, base, field, false, expr, span)
+            },
+        }
+    }
+    state.a_read_of_a_part(base, expr, field, span)
+    match on {
+        Ty::Nullable(_) => {
+            let before = state.findings.len() as i64
+            state.reaches_into_a_nullable(on, "field", field, span)
+            check_narrow_a_proof_taken_back(state, base, base, before)
+            return Ty::Unknown
+        },
+        else => {}
+    }
+    // **A field of one member is reached through the `match`** (ADR-280 D30).
+    let members = several_errors_of(on)
+    if members.len() > 0 {
+        let named = members_named(members)
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1107", message: f"This is an error, one of {named}, and an error has no field `{field}`.", notes: ["A field belongs to one of them, and which one it is is said by a `match`."], help: f"Take it apart first: `match error {{ … }}`, and read `{field}` in the arm of the type that has it.", labels: [] })
+        return Ty::Unknown
+    }
+    match on {
+        Ty::Tuple(parts) => {
+            return check_core_places_tuple_part(state, parts, field, span)
+        },
+        else => {}
+    }
+    // **A type that is seen through answers with what it holds** (#497).
+    let mut seen: Ty = on.clone()
+    match on {
+        Ty::Named { name, .. } => {
+            if state.fields_of(world, name) == null {
+                seen = state.seen_through(world, on) ?? on.clone()
+            }
+        },
+        else => {}
+    }
+    let ty: String = match seen {
+        Ty::Named { name, .. } => name.clone(),
+        else => return Ty::Unknown,
+    }
+    let got = check_core_places_a_named_field(state, world, expr, seen, ty, field, span)
+    // **A field of a whole-number type is a number of the bounds walk**
+    // (ADR-306 D17), read through its path.
+    match got {
+        Ty::Named { name, args, .. } => {
+            if args.is_empty() && is_whole_number(name) {
+                state.facts.whole_fields.insert(id_of(expr) as i64)
+            }
+        },
+        else => {}
+    }
+    check_core_places_array_length(state, id_of(expr) as i64, got)
+    return got
+}
+
+/// **The length an `Array[T, N]` says** (#711): the `N` of the array read at
+/// `node`, for the bounds walk.
+pub fn check_core_places_array_length(mut state: CheckState, node: i64, on: ref Ty) sync {
+    match on {
+        Ty::Named { name, args, .. } => {
+            if (name == "Array" || name.ends_with("::Array")) && args.len() == 2 {
+                match args[1] {
+                    Ty::Count(n) => {
+                        if n >= 0 {
+                            state.facts.array_lengths.insert(node, n)
+                        }
+                    },
+                    else => {}
+                }
+            }
+        },
+        else => {}
+    }
+}
+
+/// **The code a function field is given, remembered with the field**
+/// (ADR-230 D1): what it calls is what a call through the field reaches.
+pub fn check_core_places_stored[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, key: ref String) sync {
+    let mut stored: CheckStoredCode = state.stored_frames.pop() ?? CheckStoredCode::empty()
+    if value == null {
+        stored.unresolved = true
+    } else {
+        let v: ref Expr = value ?? return
+        check_core_places_code_into(state, world, host, v, stored)
+    }
+    let mut entry: CheckStoredCode = state.stored_code.remove(key) ?? CheckStoredCode::empty()
+    entry.meet(stored)
+    state.stored_code.insert(key.clone(), entry)
+}
+
+/// **Code given to places already holding code meets what they hold**
+/// (ADR-351 D3): an assignment, a `push` or an `insert` adds the value's set
+/// to each place it reaches, under the frame pushed before it was walked.
+pub fn check_core_places_stored_keys[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, keys: ref Vec[String]) sync {
+    let mut stored: CheckStoredCode = state.stored_frames.pop() ?? CheckStoredCode::empty()
+    if value == null {
+        stored.unresolved = true
+    } else {
+        let v: ref Expr = value ?? return
+        check_core_places_code_into(state, world, host, v, stored)
+    }
+    for key in keys {
+        let mut entry: CheckStoredCode = state.stored_code.remove(key) ?? CheckStoredCode::empty()
+        entry.meet(stored)
+        state.stored_code.insert(key.clone(), entry)
+    }
+}
+
+/// **The places of code a write reaches** (ADR-351 D3): a name of this
+/// function that holds code, every function field a field path names, and
+/// for an element written through the brackets, its container.
+pub fn check_core_places_code_keys(state: ref CheckState, world: ref CheckWorld, target: ref Expr) -> Vec[String] sync {
+    let mut keys: Vec[String] = []
+    match target {
+        Expr::Variable(bound, _) => {
+            let named: String = f"{world.words.resolve(bound)}"
+            let found = state.lookup(named)
+            if found != null && state.current != null {
+                let ty: Ty = found ?? Ty::Unknown
+                if check_core_stmt_holds_code(ty) {
+                    let current: String = state.current?.clone() ?? ""
+                    keys.push(f"{current}::{named}")
+                }
+            }
+        },
+        Expr::Index { base, .. } => {
+            return check_core_places_code_keys(state, world, base)
+        },
+        Expr::Field { base, name, .. } => {
+            let field: String = f"{world.words.resolve(name)}"
+            let mut owners: Vec[String] = []
+            let mut typed = false
+            match base {
+                Expr::Variable(bound, _) => {
+                    let named: String = f"{world.words.resolve(bound)}"
+                    let found = state.lookup(named)
+                    if found != null {
+                        let ty: Ty = found ?? Ty::Unknown
+                        match ty {
+                            Ty::Named { name: owner, .. } => {
+                                owners.push(owner.clone())
+                                typed = true
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+            if !typed {
+                for item in world.here.items {
+                    match item.node {
+                        Item::Struct { name: declared, .. } => owners.push(world.here.text(declared)),
+                        else => {},
+                    }
+                }
+            }
+            for owner in owners {
+                if state.a_field_holds_code(world, owner, field) {
+                    keys.push(f"{owner}.{field}")
+                }
+            }
+        },
+        else => {},
+    }
+    return keys
+}
+
+/// **Where code values meet, their sets meet** (ADR-351 D1, D4): what an
+/// expression that gives a function value can give, added to `stored` - a
+/// lambda's calls, a named function, the place a name was given, each element
+/// of a list and each arm of an `if` or a `match`.
+pub fn check_core_places_code_into[H: CheckHost](state: ref CheckState, world: ref CheckWorld, host: ref H, v: ref Expr, mut stored: CheckStoredCode) sync {
+    match v {
+        Expr::Closure { body, .. } => {
+            stored.free.extend(host.free_calls(body))
+            // **And what its body throws itself** (Part I 7.1, #1627): a
+            // `throw` fails the code as a failing call does.
+            let thrown = thrown_by(body, world.words, fn(literal) { host.literal_holes(literal) }, fn(_) { Contribution { call: null, given: [], errors: [], fatal: [], result: null } })
+            stored.thrown.extend(thrown.direct.clone())
+        },
+        // A function of this program, named: it is what runs. A name of this
+        // function that was given code passes on what it was given.
+        Expr::Variable(named, _) => {
+            let written: String = f"{world.words.resolve(named)}"
+            if state.lookup(written) == null {
+                stored.free.insert(written)
+            } else {
+                let current: String = state.current?.clone() ?? ""
+                let key = f"{current}::{written}"
+                if state.stored_code.contains_key(key) {
+                    let entry: CheckStoredCode = state.stored_code[key]?.clone() ?? CheckStoredCode::empty()
+                    stored.meet(entry)
+                } else if check_core_call_a_param_of(world, current, written) {
+                    // **A parameter of code handed on is that parameter's
+                    // place** (ADR-351 D4): `@F::p`, so `g(f)` chains `g`'s
+                    // `from(q)` to `F`'s `from(f)`.
+                    stored.free.insert(f"@{key}")
+                } else {
+                    stored.unresolved = true
+                }
+            }
+        },
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                check_core_places_code_into(state, world, host, item, stored)
+            }
+        },
+        Expr::ListRepeat { value, .. } => check_core_places_code_into(state, world, host, value, stored),
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                check_core_places_code_into(state, world, host, arm.body, stored)
+            }
+        },
+        Expr::If { then_branch, else_branch, .. } => {
+            check_core_places_tail_into(state, world, host, then_branch, stored)
+            if else_branch == null {
+                stored.unresolved = true
+            } else {
+                let other: ref Block = else_branch ?? return
+                check_core_places_tail_into(state, world, host, other, stored)
+            }
+        },
+        // Anything else is code this walk did not see.
+        else => {
+            stored.unresolved = true
+        },
+    }
+}
+
+// What a block gives: its last statement, where that is an expression.
+fn check_core_places_tail_into[H: CheckHost](state: ref CheckState, world: ref CheckWorld, host: ref H, block: ref Block, mut stored: CheckStoredCode) sync {
+    let n = block.stmts.len() as i64
+    if n == 0 {
+        stored.unresolved = true
+        return
+    }
+    let last = block.stmts[n - 1]
+    match last.node {
+        Stmt::Expr(e) => check_core_places_code_into(state, world, host, e, stored),
+        else => {
+            stored.unresolved = true
+        },
+    }
+}
+
+/// **One field of a struct literal against its declaration**: what it binds,
+/// what it hands over, and the type it must have. `false` where the
+/// declaration has no such field.
+fn check_core_places_a_declared_field[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, name: ref String, declared: ref Vec[FieldContract], value: ref Expr?, field: ref String, given: Ty, mut bound: collections::BTreeMap[String, Ty], span: ref Span) -> bool sync {
+    let mut at = -1
+    let mut i = 0
+    while i < declared.len() as i64 {
+        if declared[i].name == field {
+            at = i
+            break
+        }
+        i += 1
+    }
+    if at < 0 {
+        state.no_such_field(name, field, declared, span)
+        return false
+    }
+    let found_field = declared[at]
+    let want: Ty = found_field.ty.clone()
+    bind(want, given, bound)
+    // **A field holds what it is given** (ADR-293 D29), unless it is declared
+    // a view.
+    if !want.is_a_view() {
+        let to = f"stored in `{name}.{field}`"
+        if value == null && state.a_text_bytes_name(field) {
+            // **`P { b }` over a name bound to `s.bytes` keeps it**, copied
+            // (ADR-320 D11).
+            state.facts.kept_byte_fields.insert((id_of(expr) as i64, field.clone()))
+        } else if value == null && check_core_places_a_kept_fn(state, field, given) {
+            // **`P { f }` over a kept function value copies it** (#1031).
+            state.facts.kept_fn_fields.insert((id_of(expr) as i64, field.clone()))
+        } else if value == null {
+            state.hands_over_name(world, field, to, span)
+        } else {
+            let v: ref Expr = value ?? return true
+            state.hands_over(world, v, given, to, span)
+        }
+    }
+    // **A handle on a shared value stored by value is duplicated**
+    // (ADR-312 D1, #1411), so the name can be read again; at its last use it
+    // is moved (D2, #1502).
+    if check_core_places_a_handle(given) {
+        if value == null {
+            state.facts.stored_handle_fields.insert((id_of(expr) as i64, field.clone()))
+            state.a_handle_stored_by_name(field, given, id_of(expr) as i64, span)
+        } else {
+            let v: ref Expr = value ?? return true
+            check_core_places_store_handle(state, v, given)
+            state.a_handle_handed_on(world, v, given, span)
+        }
+    }
+    state.field_is_reachable(name, found_field, span)
+    // **A declared field is a use** (ADR-152 D4).
+    let mut found: Ty = given.clone()
+    if value != null {
+        let v: ref Expr = value ?? return true
+        found = check_core_literal_by_use(state, world, host, found, want, v, span) ?? found
+    }
+    // **A run this body owns, in a field that views one** (ADR-179 D2):
+    // inside a grammar action anything not already a view, and never inside
+    // a `comptime` (ADR-311 D1).
+    let mut owns_it = match found {
+        Ty::Named { name, view, .. } => !view && (name == "Vec" || name == "List"),
+        else => false,
+    }
+    if state.inside_an_action != null && !found.is_a_view() {
+        owns_it = true
+    }
+    if slice_element(want) != null && owns_it && !state.flow.inside_a_comptime {
+        state.a_run_this_body_owns(name, field, found.text(), span)
+        return true
+    }
+    // **Text lent to a `ref String` field is a view of it** (D37, #929): the
+    // field says what `String` says (NK1261), so `P { s: text }` is
+    // `P { s: ref text }`.
+    let owned_text = match found {
+        Ty::Named { name, args, view } => !view && args.len() == 0 && type_last_segment(name) == "String",
+        else => false,
+    }
+    let text_view = match want {
+        Ty::Named { name, args, view } => view && args.len() == 0 && (name == TEXT_VIEW || type_last_segment(name) == "String"),
+        else => false,
+    }
+    if value != null && text_view && owned_text {
+        let v: ref Expr = value ?? return true
+        if state.facts.lent_fields.contains(id_of(v) as i64) {
+            found = want.clone()
+        }
+    }
+    // **A local lent to a `ref T` field is a view of it** (#1152), as it is
+    // lent to a `ref T` parameter: `W { own: l }` is `W { own: ref l }`. Where
+    // the struct goes past the local is the keeps rules' question.
+    if value != null && !owned_text {
+        let v: ref Expr = value ?? return true
+        if state.facts.lent_fields.contains(id_of(v) as i64) && check_core_places_a_local_lent(state, world, v) && check_core_places_viewed_as(found, want) {
+            found = want.clone()
+        }
+        // **An element or a field read off a place is a view of it**
+        // (ADR-views-3 D5, #1274), as under a `let` that declares a view:
+        // `W { own: xs[0] }` is `W { own: ref xs[0] }`. A `ref T?` field
+        // wraps it on the widened slot's path below.
+        let plain = match want {
+            Ty::Nullable(_) => false,
+            else => true,
+        }
+        if plain && state.facts.lent_fields.contains(id_of(v) as i64) && check_core_stmt_element_view(state, world, v, found, want) == 1 {
+            found = want.clone()
+        }
+    }
+    // **A declared function that lends a parameter fits a field whose function
+    // type lends it** (ADR-views-3 D2, D14, #1254), as a `let` and an argument do.
+    if state.lends_where_a_function_type_reads(world, value, found, want) {
+        found = want.clone()
+    }
+    let keeper = f"`{name}` keeps its `{field}` after this line"
+    let how: FactWrap? = check_widened_slot(state, world, host, found, want, value, span)
+    if how != null {
+        let wrap: FactWrap = how ?? return true
+        state.facts.nullable_fields.insert((id_of(expr) as i64, field.clone()), wrap)
+        // A view into a `String?` is still a view kept (ADR-282 D12).
+        if views_into_nullable_text(found, want) {
+            state.flow.field_either = either_field(world.here, name, field)
+            state.expect_kept_asked(world, found, want, value, keeper, span, "field", fn(was, wanted) { f"`{name}.{field}` holds `{wanted}`, but you're giving it `{was}`." })
+        }
+        return true
+    }
+    state.flow.field_either = either_field(world.here, name, field)
+    state.expect_kept_asked(world, found, want, value, keeper, span, "field", fn(was, wanted) { f"`{name}.{field}` holds `{wanted}`, but you're giving it `{was}`." })
+    return true
+}
+
+/// **One field of a struct literal**: written twice, code put into it, its
+/// value, and what its declaration asks. `false` where it is misspelled.
+fn check_core_places_a_literal_field[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, name: ref String, declared: ref Vec[FieldContract]?, init: ref FieldInit, mut bound: collections::BTreeMap[String, Ty], mut seen: collections::BTreeSet[String], span: ref Span) -> bool sync {
+    let field: String = f"{world.words.resolve(init.name)}"
+    if seen.contains(field) {
+        state.a_field_written_twice(name, field, span)
+    } else {
+        seen.insert(field.clone())
+    }
+    // **Code put into a function field is remembered with the field**
+    // (ADR-230 D1).
+    let mut code_field = false
+    let mut expected: Ty? = null
+    if declared != null {
+        let d: ref Vec[FieldContract] = declared ?? return true
+        for f in d {
+            // A list or a map of code is a place too (ADR-351 D3).
+            if f.name == field && check_core_stmt_holds_code(f.ty) {
+                code_field = true
+            }
+        }
+        for f in d {
+            if f.name == field {
+                expected = f.ty.clone()
+                break
+            }
+        }
+    }
+    if code_field {
+        state.stored_frames.push(CheckStoredCode::empty())
+    }
+    if init.value != null {
+        let v: ref Expr = init.value ?? return true
+        check_core_a_mut_parameter_given_away(state, world, host, v, span, "put into a field")
+    }
+    let field_ty: Ty = expected?.clone() ?? Ty::Unknown
+    if check_core_places_a_closure(init.value) {
+        state.flow.lambda_expected = expected
+    }
+    let given = check_core_places_given(state, world, host, init.value, field, span)
+    state.flow.lambda_expected = null
+    // **What a `ref` field takes is lent to it** (D37), as a call's argument is.
+    if init.value != null && check_core_places_lent_field(field_ty, given) {
+        let v: ref Expr = init.value ?? return true
+        state.facts.lent_fields.insert(id_of(v) as i64)
+    }
+    if code_field {
+        check_core_places_stored(state, world, host, init.value, f"{name}.{field}")
+    }
+    if declared == null {
+        return true
+    }
+    let d: ref Vec[FieldContract] = declared ?? return true
+    return check_core_places_a_declared_field(state, world, host, expr, name, d, init.value, field, given, bound, span)
+}
+
+/// **A struct literal**, `Point { x: 1, y: 2 }` (ADR-096, ADR-295 D2,
+/// ADR-331 D5).
+/// A name of a local that holds a `Kept` function value (#1031).
+fn check_core_places_a_kept_fn(state: ref CheckState, name: ref String, given: ref Ty) -> bool sync {
+    return match given {
+        Ty::Fn { .. } => state.lookup(name) != null && !state.run_code.contains(name),
+        else => false,
+    }
+}
+
+/// Whether a type is a handle on a shared value: `Shared` or `SharedMut`,
+/// not a view of one (ADR-312 D1; `Locked` is a field, not a handle).
+fn check_core_places_a_handle(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, view, .. } => !view && (name == "Shared" || name == "SharedMut"),
+        // A handle that may be absent is one too (#1212): `Option<Rc<_>>`
+        // duplicates the handle it holds.
+        Ty::Nullable(inner) => check_core_places_a_handle(inner),
+        else => false,
+    }
+}
+
+/// **A handle read from a place and stored by value** (ADR-312 D1, #1411):
+/// a name or a field path of a handle's type put into a field or a list,
+/// which the lowering clones.
+pub fn check_core_places_store_handle(mut state: CheckState, value: ref Expr, ty: ref Ty) sync {
+    if !check_core_places_a_handle(ty) {
+        return
+    }
+    let place = match value {
+        Expr::Variable(_, _) => true,
+        Expr::Field { .. } => true,
+        else => false,
+    }
+    if place {
+        state.facts.stored_handles.insert(id_of(value) as i64)
+    }
+}
+
+/// **A handle handed on by a `let`, an assignment, a tuple or a variant**
+/// (Part I 6.2, ADR-312 D1, D2, #1212): duplicated where its name is read
+/// again, moved at its last use, as one stored into a field or a list is.
+pub fn check_core_places_give_handle(mut state: CheckState, world: ref CheckWorld, value: ref Expr, ty: ref Ty, span: ref Span) sync {
+    if !check_core_places_a_handle(ty) {
+        return
+    }
+    check_core_places_store_handle(state, value, ty)
+    state.a_handle_handed_on(world, value, ty, span)
+}
+
+pub fn check_core_struct_literal[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, written: winnow_grammar::Symbol, fields: ref Vec[FieldInit], span: ref Span) -> Ty sync {
+    // `unaliased`, the same as a type (ADR-286 D12).
+    let name: String = world.here.unaliased(f"{world.words.resolve(written)}")
+    if !state.declared_a_variant(expr, name) {
+        state.declared_use(expr, CheckDeclared::Type(name.clone()))
+    }
+    let declared: Vec[FieldContract]? = state.fields_of(world, name)
+    // **A struct literal naming nothing this compiler declares** (`NK1135`),
+    // unqualified only.
+    if declared == null && !name.contains("::") && !state.declares_a_type(world, name) {
+        state.a_struct_nothing_declares(world, name, span)
+    }
+    let mut bound: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut misspelled = false
+    for init in fields {
+        if !check_core_places_a_literal_field(state, world, host, expr, name, declared, init, bound, seen, span) {
+            misspelled = true
+        }
+    }
+    // **A field left out takes its default, and one without a default may
+    // not be left out** (ADR-331 D5, `NK1234`).
+    if declared != null && !misspelled {
+        let d = declared ?? return Ty::Unknown
+        let mut missing: Vec[String] = []
+        for f in d {
+            if f.default.len() == 0 && !seen.contains(f.name) {
+                missing.push(f.name.clone())
+            }
+        }
+        if missing.len() > 0 {
+            state.fields_left_out(name, missing, span)
+        }
+    }
+    // **A variant's literal is its `enum`** and not the variant.
+    let owner = state.variant_owner.get(name)
+    if owner != null {
+        let o = owner ?? return Ty::Unknown
+        return check_core_places_named(o)
+    }
+    let order = state.struct_parameters.get(name)
+    if order == null {
+        return check_core_places_named(name)
+    }
+    let parameters = order ?? return Ty::Unknown
+    let mut args: Vec[Ty] = []
+    for p in parameters {
+        args.push(check_core_places_bound(bound, p))
+    }
+    return Ty::Named { name: name, args: args, view: false }
+}
+
+/// **`value with { field: … }`** (ADR-118 D1): a copy of a struct with named
+/// fields changed, of the same type.
+pub fn check_core_with[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, base: ref Expr, fields: ref Vec[FieldInit], span: ref Span) -> Ty sync {
+    let found = check_core_expr(state, world, host, base, span)
+    let mut written: String = ""
+    let mut view = false
+    match found {
+        Ty::Named { name, view: v, .. } => {
+            written = name.clone()
+            view = v
+        },
+        else => {
+            state.a_with_over_something_else(found.text(), CheckCopyable::Unnamed, span)
+            return Ty::Unknown
+        },
+    }
+    let name: String = world.here.unaliased(written)
+    // **An enum is refused with a message naming `match`** (ADR-118 §4).
+    if state.enums.contains_key(name) {
+        state.a_with_over_something_else(name, CheckCopyable::AnEnum, span)
+        return found
+    }
+    // **A view is not something to move from** (D3).
+    if view {
+        state.a_with_over_something_else(name, CheckCopyable::AView, span)
+        return check_core_places_named(name)
+    }
+    let fields_of: Vec[FieldContract]? = state.fields_of(world, name)
+    if fields_of == null {
+        state.a_with_over_something_else(name, CheckCopyable::NotAStruct, span)
+        return found
+    }
+    let declared: Vec[FieldContract] = fields_of ?? return found
+    // **A copy that changes nothing is the value** (D1).
+    if fields.len() == 0 {
+        state.a_with_that_changes_nothing(name, span)
+    }
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    for init in fields {
+        check_core_places_a_with_field(state, world, host, expr, name, declared, init, seen, span)
+    }
+    // **The type, for the emitter** (ADR-296 D17).
+    state.facts.with_types.insert(id_of(expr) as i64, name.clone())
+    return found
+}
+
+/// **One field of a `with`**: the literal's rules for naming it, and its type.
+fn check_core_places_a_with_field[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, name: ref String, declared: ref Vec[FieldContract], init: ref FieldInit, mut seen: collections::BTreeSet[String], span: ref Span) sync {
+    let field: String = f"{world.words.resolve(init.name)}"
+    if seen.contains(field) {
+        state.a_field_written_twice(name, field, span)
+    } else {
+        seen.insert(field.clone())
+    }
+    // `user with { name }` - the shorthand is the literal's.
+    // **Code put into a function field by a `with` meets what the field
+    // holds** (ADR-351 D3).
+    let code_field = state.a_field_holds_code(world, name, field)
+    if code_field {
+        state.stored_frames.push(CheckStoredCode::empty())
+    }
+    let mut given: Ty = check_core_places_given(state, world, host, init.value, field, span)
+    if code_field {
+        check_core_places_stored(state, world, host, init.value, f"{name}.{field}")
+    }
+    let mut at = -1
+    let mut i = 0
+    while i < declared.len() as i64 {
+        if declared[i].name == field {
+            at = i
+            break
+        }
+        i += 1
+    }
+    if at < 0 {
+        state.no_such_field(name, field, declared, span)
+        return
+    }
+    let held = declared[at]
+    // **D4: a field may be named only where a literal could name it.**
+    state.field_is_reachable(name, held, span)
+    let want: Ty = held.ty.clone()
+    let mut said: Span = span.clone()
+    // **A field a `with` names is a use, as a literal's is** (ADR-152 D4,
+    // #732): a function of this program put into a field of code is the
+    // closure that calls it, kept.
+    if init.value != null {
+        let v: ref Expr = init.value ?? return
+        said = check_span_at(world, v, span)
+        given = check_core_literal_by_use(state, world, host, given, want, v, span) ?? given
+    }
+    let pushed = state.findings.len() as i64
+    let waiting = state.slots_waiting(span)
+    state.expect_type(world, given, want, span, "field", fn(was, wanted) { f"`{name}.{field}` holds `{wanted}`, but you're giving it `{was}`." })
+    state.findings_moved(span, said, pushed, waiting)
+    // Part I 2.3: a plain value in a field the struct declares nullable, as
+    // in a literal, by the `with`'s id (#1515).
+    let how: FactWrap? = check_widened_slot(state, world, host, given, want, init.value, span)
+    if how != null {
+        let wrap: FactWrap = how ?? return
+        state.facts.nullable_fields.insert((id_of(expr) as i64, field.clone()), wrap)
+    }
+    // **What a `ref` field takes is lent to it** (D37), as a call's argument is.
+    if init.value != null && check_core_places_lent_field(want, given) {
+        let v: ref Expr = init.value ?? return
+        state.facts.lent_fields.insert(id_of(v) as i64)
+    }
+}
+
+/// Whether a field that holds a view (or a view's `T?`) is given a value of
+/// its own, known and not itself absent.
+fn check_core_places_lent_field(want: ref Ty, given: ref Ty) -> bool sync {
+    let viewed = match want {
+        Ty::Nullable(inner) => inner.is_a_view(),
+        else => want.is_a_view(),
+    }
+    let owned = match given {
+        Ty::Named { view, .. } => !view,
+        else => false,
+    }
+    return viewed && owned
+}
+
+/// Whether a field's value is a local of this body, or a field read off one
+/// (#1152): a place that lives on past the literal, so it can be lent. A cut
+/// of one (`a[1..]`) is a piece of that place, a `Bytes`'s too (ADR-320 D7,
+/// ADR-views-3 D15, #1271).
+fn check_core_places_a_local_lent(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Variable(name, _) => state.binding(world.words.resolve(name)) != null,
+        Expr::Field { base, .. } => check_core_places_a_local_lent(state, world, base),
+        Expr::Index { base, index, .. } => check_core_places_a_range(index) && check_core_places_a_local_lent(state, world, base),
+        else => false,
+    }
+}
+
+/// Whether `want` is a view of exactly what `found` owns (#1152).
+fn check_core_places_viewed_as(found: ref Ty, want: ref Ty) -> bool sync {
+    return match want {
+        Ty::Named { name, args, view } => view && found == Ty::Named { name: name.clone(), args: args.clone(), view: false },
+        else => false,
+    }
+}
+
+/// **`xs[i]`, `m[k]` and `xs[a..<b]`** (ADR-293 D1, D3, D23; ADR-320 D7).
+/// **Which text an expression is**, for a position's origin (ADR-320 D5): as
+/// written, behind the binding its first name stands for, so a name bound
+/// again is another text.
+pub fn check_core_places_text_key(state: ref CheckState, world: ref CheckWorld, text: ref Expr) -> String sync {
+    let mut root: ref Expr = text
+    let mut walking = true
+    while walking {
+        match root {
+            Expr::Field { base, .. } => { root = base },
+            else => { walking = false },
+        }
+    }
+    let mut id: i64 = -1
+    match root {
+        Expr::Variable(name, _) => {
+            let local = state.binding(world.words.resolve(name))
+            if local != null {
+                id = (local ?? return "").id
+            }
+        },
+        else => {},
+    }
+    return f"{id}:{written_expression(world.words, text)}"
+}
+
+/// The byte length of a text literal, or `-1`: `";"` and `';'` are one byte.
+fn check_core_places_literal_bytes(expr: ref Expr) -> i64 sync {
+    return match expr {
+        Expr::LitStr { text, .. } => text.len() as i64,
+        Expr::LitChar(written, _) => if literal_is_a_byte(written) { 1 } else { -1 },
+        else => -1,
+    }
+}
+
+/// Whether evaluating `expr` leaves: the fallback of `find(…) ?? return`.
+fn check_core_places_leaves(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::Return(_, _) => true,
+        Expr::Break(_) => true,
+        Expr::Continue(_) => true,
+        Expr::Throw(_, _) => true,
+        else => false,
+    }
+}
+
+/// Two positions that may each be the value, of one text: `""` (the start)
+/// goes with any.
+fn check_core_places_either_position(one: ref CheckTextPosition, other: ref CheckTextPosition) -> CheckTextPosition? sync {
+    let step = if one.step == other.step { one.step } else { -1 }
+    if other.text == "" || other.text == one.text {
+        return CheckTextPosition { text: one.text.clone(), step: step }
+    }
+    if one.text == "" {
+        return CheckTextPosition { text: other.text.clone(), step: step }
+    }
+    return null
+}
+
+/// The position a block of one expression gives, `{ a }`.
+fn check_core_places_block_position(state: ref CheckState, world: ref CheckWorld, block: ref Block) -> CheckTextPosition? sync {
+    if block.stmts.len() != 1 {
+        return null
+    }
+    return match block.stmts[0].node {
+        Stmt::Expr(value) => check_core_places_text_position(state, world, value),
+        else => null,
+    }
+}
+
+/// **A position a text hands out, and where it came from** (ADR-320 D5,
+/// Part I 2.6): `t.find(…)`, `t.rfind(…)`, either end of `t` (`0`, `t.len()`), a name an
+/// immutable `let` bound to one, and one moved by the byte length of a text
+/// literal - `+ ";".len()`, or `+ 1` after a `find(";")`, or `"ab".len()` from
+/// the start - and an `if` whose
+/// branches are each one of them. Anything else is a
+/// number the program made up, and `null`.
+pub fn check_core_places_text_position(state: ref CheckState, world: ref CheckWorld, expr: ref Expr) -> CheckTextPosition? sync {
+    match expr {
+        Expr::LitInt { value, .. } => {
+            if value == 0 {
+                return CheckTextPosition { text: "", step: -1 }
+            }
+            return null
+        },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let called = world.words.resolve(method)
+            // `s.bytes.find(…)` counts bytes of a `Bytes`, not a text's
+            // positions (Part I 2.6 names `s.find`).
+            if state.a_text_bytes_view(world, receiver) {
+                return null
+            }
+            if (called == "find" || called == "rfind") && args.len() >= 1 {
+                return CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: check_core_places_literal_bytes(args[0]) }
+            }
+            // `"ab".len()`: the start of any text, moved by a literal's length.
+            if called == "len" && args.len() == 0 && check_core_places_literal_bytes(receiver) >= 0 {
+                return CheckTextPosition { text: "", step: -1 }
+            }
+            if called == "len" && args.len() == 0 {
+                return CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: -1 }
+            }
+            return null
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            let found = check_core_places_text_position(state, world, value) ?? return null
+            // A fallback that never comes back (`return`, `throw`, `panic(..)`,
+            // a jump): the value is always the left side's.
+            if check_core_places_leaves(fallback) || state.exits(world, fallback) {
+                return found
+            }
+            let other = check_core_places_text_position(state, world, fallback) ?? return null
+            return check_core_places_either_position(found, other)
+        },
+        // `if a < b { a } else { b }`: a position of the text either way.
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise: ref Block = else_branch ?? return null
+            let one = check_core_places_block_position(state, world, then_branch) ?? return null
+            let other = check_core_places_block_position(state, world, otherwise) ?? return null
+            return check_core_places_either_position(one, other)
+        },
+        Expr::Variable(name, _) => {
+            let local = state.binding(world.words.resolve(name)) ?? return null
+            let kept = state.text_positions[local.id] ?? return null
+            return CheckTextPosition { text: kept.text.clone(), step: kept.step }
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let adds = match op {
+                BinaryOp::Add => true,
+                else => false,
+            }
+            let subtracts = match op {
+                BinaryOp::Sub => true,
+                else => false,
+            }
+            if !adds && !subtracts {
+                return null
+            }
+            let from = check_core_places_text_position(state, world, lhs) ?? return null
+            // `+ 1` after a `find(";")`: the literal's length, written out.
+            match rhs {
+                Expr::LitInt { value, negative, .. } => {
+                    if adds && !negative && from.step > 0 && value as i64 == from.step {
+                        return CheckTextPosition { text: from.text.clone(), step: -1 }
+                    }
+                    return null
+                },
+                Expr::MethodCall { receiver, method, args, .. } => {
+                    if world.words.resolve(method) == "len" && args.len() == 0 && check_core_places_literal_bytes(receiver) >= 0 {
+                        return CheckTextPosition { text: from.text.clone(), step: -1 }
+                    }
+                    return null
+                },
+                else => return null,
+            }
+        },
+        else => return null,
+    }
+}
+
+/// **A text is cut by a position it handed out** (ADR-320 D5): each bound of
+/// `text[a..<b]` is one of `text`'s, or the cut is `NK1214`, which names the
+/// view.
+fn check_core_places_text_cut(mut state: CheckState, world: ref CheckWorld, text: ref Expr, index: ref Expr, span: ref Span) sync {
+    let shown = written_expression(world.words, text)
+    let mut bounds: Vec[ref Expr] = []
+    let mut start_zero = false
+    let mut cut: String = written_expression(world.words, index)
+    match index {
+        Expr::Range { start, end, .. } => {
+            bounds.push(start)
+            bounds.push(end)
+            match start {
+                Expr::LitInt { value, .. } => { start_zero = value == 0 },
+                else => {},
+            }
+            match end {
+                Expr::MethodCall { receiver, method, args, .. } => {
+                    if world.words.resolve(method) == "len" && args.len() == 0 && written_expression(world.words, receiver) == shown {
+                        cut = f"{written_expression(world.words, start)}.."
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+    let key = check_core_places_text_key(state, world, text)
+    let mut message: String = ""
+    if bounds.len() == 0 {
+        message = f"`{shown}` is cut by a range kept in a name, and a text is cut only by a position it handed out."
+    }
+    for bound in bounds {
+        if message == "" {
+            let position: CheckTextPosition? = check_core_places_text_position(state, world, bound)
+            if position == null {
+                message = f"`{shown}` is cut at `{written_expression(world.words, bound)}`, a number the program made up: a text is cut only by a position it handed out (`find`, or one moved by the length of a text literal)."
+            } else {
+                let p = position ?? CheckTextPosition { text: "", step: -1 }
+                if p.text != "" && p.text != key {
+                    message = f"`{shown}` is cut at `{written_expression(world.words, bound)}`, a position of another text."
+                }
+            }
+        }
+    }
+    if message == "" {
+        return
+    }
+    let mut readers = f"`{shown}.graphemes` for what a reader sees"
+    if start_zero {
+        match index {
+            Expr::Range { end, inclusive, .. } => {
+                if !inclusive {
+                    readers = f"`{shown}.graphemes.take({written_expression(world.words, end)})` for what a reader sees"
+                }
+            },
+            else => {},
+        }
+    }
+    state.findings.push(check_refusal("NK1214", span, message, ["A number counts bytes, scalars or graphemes only through a view; the text's own positions are bytes it knows to be on a scalar's start."], f"Say the view: `{shown}.bytes[{cut}].text()` for bytes, {readers}."))
+}
+
+pub fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, base: ref Expr, index: ref Expr, span: ref Span) -> Ty sync {
+    let writing = state.flow.writing_index
+    state.flow.writing_index = false
+    let first = check_core_expr(state, world, host, base, span)
+    let key = check_core_expr(state, world, host, index, span)
+    // **An index of a mapping is a page fault** (ADR-281 D35).
+    state.io_inside_a_door(world, first, "this index", span)
+    // A type seen through is indexed as what it holds (#497).
+    let mut on: Ty = first.clone()
+    let through: Ty? = state.seen_through(world, first)
+    if through != null {
+        let held: Ty = through ?? Ty::Unknown
+        if held.unseen() != first.unseen() {
+            on = held
+        }
+    }
+    let written_range = check_core_places_a_range(index)
+    check_core_places_array_length(state, id_of(base) as i64, on)
+    // **A view of a run is indexed as the run is** (ADR-179 D1, ADR-293 D23).
+    match on {
+        Ty::Pointed { item, slice, mutable } => {
+            if slice {
+                if written_range {
+                    return Ty::Pointed { item: item.clone(), slice: true, mutable: mutable }
+                }
+                state.number_asked(world, index, check_core_places_named("i64"), span, false)
+                state.facts.list_indices.insert(id_of(base) as i64)
+                return item.clone()
+            }
+            return Ty::Unknown
+        },
+        else => {}
+    }
+    let mut name: String = ""
+    let mut args: Vec[Ty] = []
+    match on {
+        Ty::Named { name: n, args: a, .. } => {
+            name = n.clone()
+            args = a.clone()
+        },
+        else => return Ty::Unknown,
+    }
+    // **And no indexing** (ADR-302 D7).
+    if state.opaque_handles.contains(name) {
+        state.a_handle_has_nothing_inside(name, "an index", span)
+        return Ty::Unknown
+    }
+    // **A range in the brackets is a slice** (ADR-293 D23): written there, or
+    // kept in a name.
+    let replays = match key {
+        Ty::Seq { shape, .. } => shape.replays,
+        else => false,
+    }
+    let a_range = written_range || replays
+    if a_range && !written_range {
+        state.facts.slice_indices.insert(id_of(index) as i64)
+    }
+    let b = check_core_places_base(name)
+    // **An index is a use that prefers an `i64`** (ADR-285 D24).
+    if !a_range && check_core_places_a_list(b) {
+        state.number_asked(world, index, check_core_places_named("i64"), span, false)
+    }
+    if a_range {
+        if check_core_places_a_list(b) && args.len() > 0 {
+            return Ty::Named { name: "Array", args: [args[0].clone()], view: true }
+        }
+        if (b == "String" || b == "str") && args.len() == 0 {
+            check_core_places_text_cut(state, world, base, index, span)
+            return check_core_places_str_view()
+        }
+        // **A cut of a `Bytes` is a `Bytes`** (ADR-320 D7), and a candidate
+        // for a proof that it lies inside, as a list's read is (ADR-306 D4).
+        if b == "Bytes" && args.len() == 0 {
+            if written_range {
+                state.facts.list_indices.insert(id_of(base) as i64)
+            }
+            // A view into `b` below (#1345).
+            state.facts.bytes_cuts.insert(id_of(expr) as i64)
+            return check_core_places_named("Bytes")
+        }
+        return Ty::Unknown
+    }
+    // **A `Bytes` is read as a run of bytes** (ADR-320 D7), and its read is a
+    // candidate for a proof, as a list's is (ADR-306 D4).
+    if b == "Bytes" && args.len() == 0 {
+        state.facts.list_indices.insert(id_of(base) as i64)
+        return check_core_places_named("u8")
+    }
+    // **A sequence keeps its `T` and its abort** (ADR-293 D3).
+    if check_core_places_a_list(b) && args.len() > 0 {
+        state.facts.list_indices.insert(id_of(base) as i64)
+        // **An element of a whole-number type is a number of the bounds
+        // walk** (ADR-306 D33), read through its path as a field is (D17).
+        match args[0] {
+            Ty::Named { name: item, args: inner, .. } => {
+                if inner.is_empty() && is_whole_number(item) {
+                    state.facts.whole_fields.insert(id_of(expr) as i64)
+                }
+            },
+            else => {}
+        }
+        return args[0].clone()
+    }
+    // **A map answers a `T?`** (D1), and a map of `T?` reads one `T?`.
+    if (b == "HashMap" || b == "Map" || b == "BTreeMap") && args.len() == 2 {
+        state.flow.read_a_map = !writing
+        state.a_map_key(world, args[0], key, index, writing, span)
+        // **A key read is a use of a map's open keys** (ADR-285 D43).
+        if !writing {
+            check_core_call_on_key_read(state, world, base, index, span)
+        }
+        let value: Ty = args[1].clone()
+        if !writing {
+            match value {
+                Ty::Nullable(held) => {
+                    state.facts.flat_reads.insert(id_of(expr) as i64)
+                    return Ty::Nullable(held.clone())
+                },
+                else => {}
+            }
+        }
+        return Ty::Nullable(value)
+    }
+    return Ty::Unknown
+}
+
+/// **`value as T`**: what may be named, and what a cast records.
+pub fn check_core_cast[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, inner: ref Expr, ty: ref Type, span: ref Span) -> Ty sync {
+    let from = check_core_expr(state, world, host, inner, span)
+    let into = check_walked_declared(state, world, ty, span)
+    state.a_cast_over_a_lent_binding(world, inner, span)
+    // **An integer becomes a `scalar` by `as` only from a `u8`** (Part I
+    // 2.2, #1003): every byte value is a scalar value, and no wider integer
+    // type's every value is one - a variable, an open number or a literal
+    // alike. The program says by name what it means: `scalar::from(n)`, whose
+    // precondition is proved or refused, or the character itself.
+    let into_a_scalar = match into {
+        Ty::Named { name, args, .. } => (name == "scalar" || name == "char") && args.len() == 0,
+        else => false,
+    }
+    if into_a_scalar {
+        let written_out = match inner {
+            Expr::LitInt { .. } => true,
+            else => false,
+        }
+        let wider = match from {
+            Ty::Named { name, .. } => check_core_places_an_integer(name) && name != "u8",
+            else => written_out || (from.is_unknown() && state.open_numbers_in(world, inner).len() > 0),
+        }
+        if wider {
+            state.findings.push(check_refusal("NK1241", span, f"An integer is a `scalar` by `as` only from a `u8`, and this is {check_core_places_what_casts(from, written_out)}.", ["Every byte value is a scalar value; a wider integer may be a surrogate (`0xD800` to `0xDFFF`), negative or above `0x10FFFF`, which no character is."], "Write `scalar::from(n)`, whose precondition the compiler proves where the call stands or refuses, or the character itself, as `'\\u{2028}'`."))
+        }
+    }
+    match into {
+        Ty::Named { name, .. } => {
+            if !check_core_places_offered(name) {
+                state.cast_names_a_foreign_type(name, span)
+            }
+        },
+        else => {}
+    }
+    // **A float written out converts into an `f32` where it is written**
+    // (ADR-285 D33): within the range it is the nearest `f32`, beyond it
+    // `NK1116`.
+    let into_f32 = match into {
+        Ty::Named { name, args, .. } => name == "f32" && args.len() == 0,
+        else => false,
+    }
+    if into_f32 && check_floats_written(inner) {
+        state.floats_beyond_f32(inner, into, span)
+        let added = state.flow.widening_casts.insert(id_of(inner) as i64)
+    } else if !(from.is_unknown() && state.open_number_cast(world, inner, into)) {
+        // A cast out of an open number is recorded once the number has its type.
+        state.record_cast(from, into, id_of(inner) as i64)
+    }
+    let from_a_char = match from {
+        Ty::Named { name, .. } => name == "char" || name == "scalar",
+        else => false,
+    }
+    let into_an_integer = match into {
+        Ty::Named { name, .. } => check_core_places_an_integer(name),
+        else => false,
+    }
+    if from_a_char && into_an_integer {
+        state.facts.char_codes.insert(id_of(inner) as i64)
+    }
+    return into
+}
+
+/// **A range is a sequence that replays** (ADR-293 D18): the item is
+/// whichever end says one.
+pub fn check_core_range[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, start: ref Expr, end: ref Expr, span: ref Span) -> Ty sync {
+    let from = check_core_expr(state, world, host, start, span)
+    let to = check_core_expr(state, world, host, end, span)
+    let mut item: Ty = from
+    if item.is_unknown() {
+        item = to
+    }
+    return Ty::Seq { item: item, is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: true, replays: true, timed: false } }
+}

@@ -1,0 +1,505 @@
+// crates/nikaia-std/src/compiler/declared.nika
+//
+// **What a declaration says, before any body is read** - the type a `.nika`
+// declaration names, and the ledger entry a function's declaration makes -
+// moved from the compiler's `contracts` module (ADR-294, #125).
+//
+// An entry starts as what the declaration says and nothing more: whether it
+// is `pub`, its `sync` word, whether it may fail, its signature, the
+// parameters its result may point into, and whether it changes its subject.
+// Every column about the body - which errors, what it touches, what it keeps,
+// whether it locks, the views, the sharing, the `assert`s - is the inferences'
+// to answer afterwards, and empty until they have.
+
+use std::collections
+
+/// A function's entry, by the key a caller reaches it under.
+pub struct DeclaredFn {
+    pub key: String,
+    pub contract: FnContract,
+}
+
+/// The type a `.nika` declaration names.
+pub fn written_ty(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], ty: ref Type) -> Ty {
+    // **An integer argument** (ADR-152 D1), read first: it has no name, no
+    // arguments and no `?`.
+    let count = ty.count ?? -1
+    if ty.count != null {
+        return Ty::Count(count)
+    }
+    // **`Array[T]` with no count is the run itself** (ADR-184 D3), and under
+    // a `ref` it is a view of one.
+    if ty.is_view && !ty.is_slice && names.resolve(ty.name) == ARRAY && ty.generics.len() == 1 {
+        let item = written_ty(names, aliases, ty.generics[0])
+        if ty.is_nullable {
+            return Ty::Pointed { item: Ty::Nullable(item), slice: true, mutable: ty.is_mut }
+        }
+        return Ty::Pointed { item: item, slice: true, mutable: ty.is_mut }
+    }
+    // **A function type's `mut` parameter** (#1134): lent `mut` at each call,
+    // and so not the plain type it changes.
+    if ty.is_mut && !ty.is_view && !ty.is_slice {
+        let mut changed = ty.clone()
+        changed.is_mut = false
+        return Ty::Pointed { item: written_ty(names, aliases, changed), slice: false, mutable: true }
+    }
+    // **What the C boundary lends** (ADR-302 D5). A `?` on one of these is the
+    // pointee's (D14): `&mut sqlite3?` is the out-parameter.
+    if ty.is_slice || ty.is_mut {
+        let item = lent_item(names, aliases, ty)
+        if ty.is_nullable {
+            return Ty::Pointed { item: Ty::Nullable(item), slice: ty.is_slice, mutable: ty.is_mut }
+        }
+        return Ty::Pointed { item: item, slice: ty.is_slice, mutable: ty.is_mut }
+    }
+    // `(A, B)?` is the tuple, nullable (ADR-364).
+    if ty.is_tuple {
+        if ty.is_nullable {
+            return Ty::Nullable(Ty::Tuple(written_all(names, aliases, ty.generics)))
+        }
+        return Ty::Tuple(written_all(names, aliases, ty.generics))
+    }
+    // **A parameter that is code** (ADR-277 D6). Its `?` is written around
+    // it, `(fn(i64) -> i64)?` (#1117): the code, nullable.
+    if ty.code != null && ty.is_nullable {
+        let mut inner = ty.clone()
+        inner.is_nullable = false
+        return Ty::Nullable(written_ty(names, aliases, inner))
+    }
+    // **One that writes `from` is read as the views it names**
+    // (ADR-views-3 D14, `code_as_read`).
+    if ty.code != null {
+        let read = code_as_read(names, ty)
+        let code = read.code ?? return Ty::Unknown
+        let params = written_all(names, aliases, read.generics)
+        let result = code.result ?? return Ty::Fn { params: params, result: null, is_sync: code.is_sync, can_throw: code.can_throw }
+        return Ty::Fn { params: params, result: written_ty(names, aliases, result), is_sync: code.is_sync, can_throw: code.can_throw }
+    }
+    // The `?` wraps whatever the rest of the declaration says.
+    if ty.is_nullable {
+        let mut inner = ty.clone()
+        inner.is_nullable = false
+        return Ty::Nullable(written_ty(names, aliases, inner))
+    }
+    // A type may be written with this file's own name for the package that
+    // declares it (ADR-286 D12).
+    let written_name = unaliased_in(aliases, names.resolve(ty.name))
+    // **`char` is the old word for `scalar`** (ADR-320, #453 step 1): one
+    // type, whichever is written.
+    let named = if written_name == "char" { "scalar" } else { written_name }
+    // **`int` holds the values of an `i64` and aborts where one would**
+    // (ADR-285 D36): every rule of `i64` is its, and the two take each other.
+    let name = if named == "int" { "i64" } else { named }
+    // **Text that is a view or its own per value is read as text of its own**
+    // (ADR-282 D15).
+    if ty.either {
+        return Ty::Named { name: TEXT.clone(), args: [], view: false }
+    }
+    // **A view of `String` is a view of text** (ADR-184 D2): `str` is the
+    // compiler's own noun for it.
+    if ty.is_view && name == TEXT {
+        return Ty::Named { name: TEXT_VIEW.clone(), args: written_all(names, aliases, ty.generics), view: true }
+    }
+    return Ty::Named { name: name, args: written_all(names, aliases, ty.generics), view: ty.is_view }
+}
+
+// What a C-boundary type lends: its element, or - `&mut T` - the name itself.
+fn lent_item(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], ty: ref Type) -> Ty {
+    if ty.generics.len() > 0 {
+        return written_ty(names, aliases, ty.generics[0])
+    }
+    return Ty::Named { name: unaliased_in(aliases, names.resolve(ty.name)), args: [], view: false }
+}
+
+/// **A function type that writes `from`, read as the views it names**
+/// (ADR-views-3 D14): its result is a view, and so is each parameter the
+/// `from` names, which the code lends. `fn(s: String) -> String from s` is
+/// the type `fn(ref String) -> ref String` was; a parameter the `from` does not
+/// name is as written, and the read type writes no `from` of its own. **A
+/// plain text parameter is lent all the same** (ADR-views-3 D2, #1254):
+/// `fn(s: String) -> i64` is the type `fn(ref String) -> i64` was, so a
+/// closure that fits it reads a view and the caller's text stays its own.
+/// Any other type is as written.
+pub fn code_as_read(names: ref winnow_grammar::InternerContext, ty: ref Type) -> Type {
+    let code = ty.code ?? return ty.clone()
+    if !code_lends_unmarked(names, ty) {
+        return ty.clone()
+    }
+    let mut generics: Vec[Type] = []
+    for at in 0..<ty.generics.len() {
+        let mut part = ty.generics[at].clone()
+        if code_lends_at(names, ty, at) {
+            part.is_view = true
+        }
+        generics.push(part)
+    }
+    let mut read = ty.clone()
+    read.generics = generics
+    let mut written = code.clone()
+    if !code.result_from.is_empty() {
+        let mut result = (code.result ?? return ty.clone()).clone()
+        result.is_view = true
+        written.result = result
+    }
+    written.result_from = []
+    read.code = written
+    return read
+}
+
+/// **Whether a function type lends its parameter at `at` as a view**
+/// (ADR-views-3 D2, D14): one its `from` names, or a plain one, unless it
+/// writes `keep` (Part I §C, #1466): text, a struct, a type variable, a type
+/// with arguments (#1504). A number, a `bool`, a `char` and a `scalar` stay
+/// as written: a read copies them. A payloadless enum or a ledger copy, which
+/// this function cannot tell from a struct by its name, is lent as well, and
+/// the emitter copies it out where the code reads it.
+pub fn code_lends_at(names: ref winnow_grammar::InternerContext, ty: ref Type, at: i64) -> bool {
+    let code = ty.code ?? return false
+    if at >= ty.generics.len() {
+        return false
+    }
+    if code_reads(code, at) {
+        return true
+    }
+    if at < code.param_keeps.len() && code.param_keeps[at] {
+        return false
+    }
+    let part = ty.generics[at]
+    if part.is_view || part.is_mut || part.is_nullable || part.is_tuple || part.is_slice || part.code != null {
+        return false
+    }
+    let name = names.resolve(part.name)
+    return !part.generics.is_empty() || !(a_number_name(name) || name == "int" || name == "bool" || name == "char" || name == "scalar")
+}
+
+/// Whether `code_as_read` changes a function type: it writes `from`, or
+/// one of its parameters is a plain one it lends (#1504).
+pub fn code_lends_unmarked(names: ref winnow_grammar::InternerContext, ty: ref Type) -> bool {
+    let code = ty.code ?? return false
+    if !code.result_from.is_empty() {
+        return true
+    }
+    for at in 0..<ty.generics.len() {
+        if !ty.generics[at].is_view && code_lends_at(names, ty, at) {
+            return true
+        }
+    }
+    return false
+}
+
+/// Whether a type is a function type whose result writes `from`
+/// (ADR-views-3 D14).
+pub fn code_writes_from(ty: ref Type) -> bool {
+    let code = ty.code ?? return false
+    return !code.result_from.is_empty()
+}
+
+/// Whether a function type's `from` names its parameter at `at` (ADR-views-3
+/// D14): the code lends it, and its result may point into it.
+pub fn code_reads(code: ref Code, at: i64) -> bool {
+    if at >= code.param_names.len() {
+        return false
+    }
+    let name = code.param_names[at] ?? return false
+    return code.result_from.contains(name)
+}
+
+/// `ty` with every `Self` in it read as `owner`, the type of the `impl`.
+fn self_named(ty: ref Ty, owner: ref Ty) -> Ty {
+    return match ty {
+        Ty::Named { name, args, view } => {
+            if name == "Self" && args.len() == 0 {
+                if view {
+                    return owner.as_a_view()
+                }
+                return owner.clone()
+            }
+            Ty::Named { name: name.clone(), args: args.iter().map(fn(a) { self_named(a, owner) }).collect(), view: view }
+        },
+        Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(fn(a) { self_named(a, owner) }).collect()),
+        Ty::Nullable(inner) => Ty::Nullable(self_named(inner, owner)),
+        else => ty.clone(),
+    }
+}
+
+fn written_all(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], types: ref Vec[Type]) -> Vec[Ty] {
+    let mut out: Vec[Ty] = []
+    for ty in types {
+        out.push(written_ty(names, aliases, ty))
+    }
+    return out
+}
+
+/// **One function's entry**, named as a caller would reach it: `Type::method`
+/// in an `impl`, and the anonymous constructor (Kap 4.2) as `Type::new`.
+/// `outer` is the `impl`'s own generic parameters, and `itself` the type the
+/// `impl` is for, as written there: what `Self` stands for.
+pub fn declared_function(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], item: ref Item, target: String?, outer: ref collections::BTreeSet[String], itself: ref Ty?) -> DeclaredFn? {
+    let (name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw) = match item {
+        Item::Fn { name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw, .. } => (name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw),
+        else => return null,
+    }
+    // A generic parameter is a **variable** (`$T`), so a call site binds it
+    // from what it passes (ADR-295 D2).
+    let mut parameters = outer.clone()
+    for generic in generics {
+        parameters.insert(names.resolve(generic.name).clone())
+    }
+    let mut own: String = "new"
+    if name != null {
+        let symbol = name ?? return null
+        own = names.resolve(symbol).clone()
+    }
+    let mut key = own.clone()
+    if target != null {
+        let owner = target?.clone() ?? ""
+        key = f"{owner}::{own}"
+    }
+    // **The receiver is a position too**: a `ref self` is a view the caller
+    // gave, so a result that is a view may point into the subject.
+    let mut borrows: Vec[String] = []
+    // Asked inside the arm, where `ret_type` is still the field.
+    let returns_view = match item {
+        Item::Fn { ret_type, .. } => returns_a_view(ret_type),
+        else => false,
+    }
+    if returns_view {
+        if receiver != null {
+            let subject = receiver ?? return null
+            if subject.is_ref {
+                borrows.push("self")
+            }
+        }
+        for arg in args {
+            if holds_view(arg.ty) {
+                borrows.push(names.resolve(arg.name).clone())
+            }
+        }
+    }
+    // A method's receiver is a parameter named `self`.
+    let mut params: Vec[(String, Ty)] = []
+    let mut mutates = false
+    if receiver != null {
+        let subject = receiver ?? return null
+        let owner = target?.clone() ?? "Self"
+        let self_name: String = "self"
+        params.push((self_name, Ty::Named { name: owner, args: [], view: subject.is_ref }))
+        // **The declaration and not the body** (ADR-094 D3): `&mut self` is
+        // the claim.
+        mutates = subject.is_mut && subject.is_ref
+    }
+    let mut mutable: Vec[String] = []
+    for arg in args {
+        let arg_name = names.resolve(arg.name).clone()
+        let mut ty = written_ty(names, aliases, arg.ty).parameterise(parameters)
+        // `other: Self` in an `impl` is the type it is for, as the receiver
+        // is (Part I 4.7, #1448).
+        match itself {
+            null => {},
+            owner => {
+                ty = self_named(ty, owner)
+            },
+        }
+        params.push((arg_name.clone(), ty))
+        // `mut out: Vec[i64]` is the claim that the caller's value changes.
+        if arg.mutable {
+            mutable.push(arg_name)
+        }
+    }
+    // **The bounds, where the declaration writes them** (ADR-295 D18): only a
+    // parameter with one, since every reader of this list asks for a bound.
+    let mut bounds: Vec[(String, Vec[String])] = []
+    for generic in generics {
+        if generic.bounds.len() == 0 {
+            continue
+        }
+        let mut written: Vec[String] = []
+        for bound in generic.bounds {
+            written.push(names.resolve(bound).clone())
+        }
+        bounds.push((names.resolve(generic.name).clone(), written))
+    }
+    let mut options: Vec[ConfigContract] = []
+    for option in config {
+        let ty = written_ty(names, aliases, option.ty).parameterise(parameters)
+        options.push(ConfigContract { name: names.resolve(option.name).clone(), ty: ty, default: default_text(option.default) })
+    }
+    let mut result: Ty? = null
+    if ret_type != null {
+        let written = ret_type ?? return null
+        result = written_ty(names, aliases, written).parameterise(parameters)
+    }
+    // `sync(f)` is the source's promise that only `f`'s lambda may make it
+    // pause (ADR-288 D4).
+    let mut sync_claim = Sync::No
+    if is_sync {
+        sync_claim = Sync::Asserted
+    } else if sync_by.len() > 0 {
+        let mut lambdas: Vec[String] = []
+        for lambda in sync_by {
+            lambdas.push(names.resolve(lambda).clone())
+        }
+        sync_claim = Sync::From(lambdas.join(", "))
+    }
+    // The declaration says only that it can fail; which errors is the body's.
+    let mut fails_with: Vec[String] = []
+    if can_throw {
+        fails_with.push("?")
+    }
+    let signature = Signature { bounds: bounds, params: params, mutable: mutable, config: options, result: result }
+    let mut contract = FnContract::empty()
+    contract.public = is_public
+    contract.sync_claim = sync_claim
+    contract.fails_with = fails_with
+    contract.signature = signature
+    contract.borrows = borrows
+    contract.mutates = mutates
+    return DeclaredFn { key: key, contract: contract }
+}
+
+fn returns_a_view(ret_type: ref Type?) -> bool {
+    let written = ret_type ?? return false
+    return holds_view(written)
+}
+
+/// A default, written back the way the source wrote it: only a literal
+/// reaches here, and Nikaia spells every one of them the way the language
+/// below does (ADR-296 D17). A default of `null` is `None`.
+pub fn default_text(expr: ref Expr) -> String {
+    return match expr {
+        Expr::LitBool(value, _) => if value { "true" } else { "false" },
+        Expr::LitNull(_) => "None",
+        Expr::LitInt { value, negative, .. } => if negative { f"-{value}" } else { f"{value}" },
+        Expr::LitFloat(written, _) => written.clone(),
+        Expr::LitChar(written, _) => f"'{written}'",
+        Expr::LitStr { text, .. } => f"\"{text}\"",
+        Expr::Unary { expr, .. } => f"-{default_text(expr)}",
+        // The grammar admits nothing else as a default (Kap 5.1).
+        else => "",
+    }
+}
+
+/// **A trait's method, as its declaration makes it** (ADR-295 D9, ADR-288
+/// D24): the word `sync` asserts it, and its absence is the claim that it may
+/// pause. A described foreign function's bounds are Rust's, and a Nikaia
+/// caller picks no type for one, so nothing in the signature is generic.
+pub fn declared_trait_method(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], trait_name: ref String, method: ref TraitMethod, public: bool) -> DeclaredFn {
+    let mut params: Vec[(String, Ty)] = []
+    if method.receiver != null {
+        let subject = method.receiver?.clone() ?? Receiver { is_ref: false, is_mut: false, is_keep: false }
+        // An extern block's declarations are keyed under an empty name, and
+        // their receiver is named by it as well.
+        let owner = trait_name.clone()
+        let self_name: String = "self"
+        params.push((self_name, Ty::Named { name: owner, args: [], view: subject.is_ref }))
+    }
+    let mut mutable: Vec[String] = []
+    for arg in method.args {
+        let arg_name = names.resolve(arg.name).clone()
+        params.push((arg_name.clone(), written_ty(names, aliases, arg.ty)))
+        if arg.mutable {
+            mutable.push(arg_name)
+        }
+    }
+    let mut options: Vec[ConfigContract] = []
+    for option in method.config {
+        options.push(ConfigContract { name: names.resolve(option.name).clone(), ty: written_ty(names, aliases, option.ty), default: default_text(option.default) })
+    }
+    let result = optional_ty(names, aliases, method.ret_type)
+    let mut contract = FnContract::empty()
+    contract.public = public
+    if method.is_sync {
+        contract.sync_claim = Sync::Asserted
+    }
+    if method.can_throw {
+        contract.fails_with = ["?"]
+    }
+    contract.signature = Signature { bounds: [], params: params, mutable: mutable, config: options, result: result }
+    // **A written `from` as written** (ADR-views-3 D10): the source a caller
+    // through the trait reads.
+    contract.borrows = method.ret_from.iter().map(fn(source) { names.resolve(source).clone() }).collect()
+    return DeclaredFn { key: f"{trait_name}::{names.resolve(method.name)}", contract: contract }
+}
+
+fn optional_ty(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], ty: ref Type?) -> Ty? {
+    let written = ty ?? return null
+    return written_ty(names, aliases, written)
+}
+
+/// **An `enum` is a type a consumer has to know the cases of** (Part I 3.4: a
+/// `match` handles every possible case). It takes no type parameters (4.4), so
+/// the payload types travel as they were written; a tuple case is positional,
+/// its fields named by their places, and a variant carries no visibility word,
+/// so its fields are as reachable as the `enum` is (9.2). `tethered` names the
+/// cases whose payload holds a view (#544): a struct in another file that holds
+/// this `enum` is lowered with the lifetime the `enum` has, and reads it here
+/// by name. `borrowing` is the types known to hold one.
+pub fn declared_enum(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], variants: ref Vec[EnumVariant], is_public: bool, borrowing: ref collections::BTreeSet[String]) -> TypeContract {
+    let mut cases: Vec[VariantContract] = []
+    let mut tethered: Vec[String] = []
+    for variant in variants {
+        let mut holds: Vec[FieldContract] = []
+        let mut positional = false
+        let mut views = false
+        match variant.fields {
+            VariantFields::Unit => {},
+            VariantFields::Tuple(types) => {
+                positional = true
+                let mut at = 0
+                for ty in types {
+                    holds.push(FieldContract { name: f"{at}", ty: written_ty(names, aliases, ty), public: true, default: "", attributes: [] })
+                    if holds_view(ty) || names_borrowing(names, ty, borrowing) {
+                        views = true
+                    }
+                    at = at + 1
+                }
+            },
+            VariantFields::Named(fields) => {
+                for field in fields {
+                    holds.push(FieldContract { name: names.resolve(field.name).clone(), ty: written_ty(names, aliases, field.ty), public: true, default: "", attributes: [] })
+                    if holds_view(field.ty) || names_borrowing(names, field.ty, borrowing) {
+                        views = true
+                    }
+                }
+            },
+        }
+        let name = names.resolve(variant.name).clone()
+        if views {
+            tethered.push(name.clone())
+        }
+        // `attribute_values` fills the attributes.
+        cases.push(VariantContract { name: name, holds: holds, positional: positional, attributes: [] })
+    }
+    let mut contract = TypeContract::empty()
+    contract.public = is_public
+    contract.variants = cases
+    contract.tethered = tethered
+    return contract
+}
+
+/// A `struct`'s fields as the ledger records them: the generics erased to
+/// variables, and every field of an `extern` struct `pub` (ADR-284 D15). The
+/// default of a field is the compiler's to fill (ADR-331 D5, ADR-318 D1-D3), and
+/// so are the attributes.
+pub fn declared_fields(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], generics: ref Vec[GenericParam], fields: ref Vec[FieldDef], is_extern: bool) -> Vec[FieldContract] {
+    let mut parameters: collections::BTreeSet[String] = collections::BTreeSet()
+    for generic in generics {
+        parameters.insert(names.resolve(generic.name).clone())
+    }
+    let mut out: Vec[FieldContract] = []
+    for field in fields {
+        out.push(FieldContract { name: names.resolve(field.name).clone(), ty: written_ty(names, aliases, field.ty).parameterise(parameters), public: field.is_public || is_extern, default: "", attributes: [] })
+    }
+    return out
+}
+
+/// The fields of a `struct` that hold a view, or a type that does (#544).
+pub fn tethered_fields(names: ref winnow_grammar::InternerContext, fields: ref Vec[FieldDef], borrowing: ref collections::BTreeSet[String]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for field in fields {
+        if holds_view(field.ty) || names_borrowing(names, field.ty, borrowing) {
+            out.push(names.resolve(field.name).clone())
+        }
+    }
+    return out
+}

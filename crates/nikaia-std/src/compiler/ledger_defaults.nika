@@ -1,0 +1,197 @@
+// crates/nikaia-std/src/compiler/ledger_defaults.nika
+//
+// **What the ledger writes beyond an item's signature**, moved from the
+// compiler's `contracts` module (ADR-294, #125, R-5): the value of one
+// attribute (ADR-331 D6, D8) and the options whose default is an expression to
+// evaluate (ADR-318 D1), and the writes into the ledger of both and of each
+// function's result sources (R-5). What stays Rust is what asks the workshop,
+// which arrives as a callback.
+
+use std::collections
+
+/// The type contract a name reaches: this package's, or a dependency's by the
+/// name the program writes.
+fn ld_type_named(ledger: ref Ledger, library: ref Ledger, name: ref String) -> TypeContract? {
+    let direct = ledger.types[name]
+    if direct != null {
+        return direct?.clone()
+    }
+    let suffix = f"::{name}"
+    for (key, contract) in library.types {
+        if key == name || key.ends_with(suffix) {
+            return contract.clone()
+        }
+    }
+    return null
+}
+
+/// The variant of the named `enum` that the word names, whole case aside.
+fn ld_variant_named(ledger: ref Ledger, library: ref Ledger, name: ref String, word: ref String) -> String? {
+    let held = ld_type_named(ledger, library, name) ?? return null
+    for variant in held.variants {
+        if check_attributes_same_word(variant.name, word) {
+            return variant.name.clone()
+        }
+    }
+    return null
+}
+
+/// An attribute's argument as a literal: a literal's own text, a variant of the
+/// field's `enum` by its name alone (D3) or whole, or the value anything else
+/// computes to at build time, as an option's default does (D1).
+fn ld_argument_text(ledger: ref Ledger, library: ref Ledger, words: ref winnow_grammar::InternerContext, ty: ref Ty, argument: ref Expr, computed: fn(ref Ty, ref Expr) -> String? sync) -> String? {
+    if a_literal(argument) {
+        return default_text(argument)
+    }
+    match argument {
+        Expr::Variable(word, _) => {
+            match ty {
+                Ty::Named { name, .. } => {
+                    let spelled = words.resolve(word).clone()
+                    let variant = ld_variant_named(ledger, library, name, spelled)
+                    if variant != null {
+                        let shown = variant ?? ""
+                        return f"{name}::{shown}"
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+    return computed(ty, argument)
+}
+
+/// One attribute as `Name { value: "createdAt", case: Case::Camel }`. `name` is
+/// the attribute's type with any alias resolved.
+pub fn attribute_value(ledger: ref Ledger, library: ref Ledger, words: ref winnow_grammar::InternerContext, name: ref String, attribute: ref Attribute, computed: fn(ref Ty, ref Expr) -> String? sync) -> String? {
+    let found = ld_type_named(ledger, library, name) ?? return null
+    let mut position = 0
+    let mut written: Vec[String] = []
+    for field in found.fields {
+        let mut value: String = ""
+        if field.default.is_empty() {
+            if position >= attribute.args.len() {
+                return null
+            }
+            value = ld_argument_text(ledger, library, words, field.ty, attribute.args[position], computed) ?? return null
+            position += 1
+        } else {
+            let mut given = -1
+            let mut at = 0
+            for option in attribute.config {
+                if given < 0 && words.resolve(option.name) == field.name {
+                    given = at
+                }
+                at += 1
+            }
+            if given >= 0 {
+                value = ld_argument_text(ledger, library, words, field.ty, attribute.config[given].value, computed) ?? return null
+            } else {
+                value = field.default.clone()
+            }
+        }
+        written.push(f"{field.name}: {value}")
+    }
+    let joined = written.join(", ")
+    return f"{name} {{ {joined} }}"
+}
+
+/// The places of `item`'s options whose default is an expression to evaluate.
+pub fn computed_options(item: ref Item) -> Vec[i64] {
+    let mut places: Vec[i64] = []
+    match item {
+        Item::Fn { config, .. } => {
+            let mut at = 0
+            for option in config {
+                if !a_literal(option.default) {
+                    places.push(at)
+                }
+                at += 1
+            }
+        },
+        else => {},
+    }
+    return places
+}
+
+/// Where each attribute value goes: the type itself (0), a field (1) or a
+/// variant (2), by its place.
+pub fn apply_attribute(mut ledger: Ledger, owner: ref String, kind: i64, at: i64, text: String) {
+    let mut entry = ledger.types[owner] ?? return
+    if kind == 0 {
+        entry.attributes.push(text)
+    } else if kind == 1 {
+        if at < entry.fields.len() {
+            entry.fields[at].attributes.push(text)
+        }
+    } else if at < entry.variants.len() {
+        entry.variants[at].attributes.push(text)
+    }
+}
+
+/// Writes a computed default's text where it goes: a struct's field (`field`,
+/// `key` is the type) or a function's option.
+pub fn set_default(mut ledger: Ledger, key: ref String, at: i64, field: bool, text: String) {
+    if field {
+        let mut entry = ledger.types[key] ?? return
+        if at < entry.fields.len() {
+            entry.fields[at].default = text
+        }
+    } else {
+        let mut contract = ledger.functions[key] ?? return
+        let mut signature = contract.signature ?? return
+        if at < signature.config.len() {
+            signature.config[at].default = text
+        }
+    }
+}
+
+/// What a round reads of the columns it writes, one text per function.
+fn ld_columns(ledger: ref Ledger) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for (_, contract) in ledger.functions {
+        let borrows = contract.borrows.join("\n")
+        let stores = contract.stores.join("\n")
+        out.push(f"{borrows} | {contract.returns} | {stores}")
+    }
+    return out
+}
+
+/// What each function's result points into, and what it keeps in a `mut`
+/// parameter's place (ADR-283 D25, D27, #580): rounds until a round would
+/// write what the one before read (#727, #740), at most eight. `sources` and
+/// `stored` ask the workshop for one unit by its place; `package` makes what
+/// every unit reads alike once, as the rounds write nothing it reads (#1277).
+pub fn write_result_sources(mut ledger: Ledger, units: i64, package: fn(ref Ledger) -> ResultPackage sync, sources: fn(i64, ref Ledger, ref ResultPackage) -> Vec[ResultSource] sync, stored: fn(i64, ref Ledger, ref ResultPackage) -> Vec[PlacesStored] sync) {
+    let shared = package(ledger)
+    let mut before = ld_columns(ledger)
+    for round in 0..<8 {
+        if round > 0 {
+            let after = ld_columns(ledger)
+            if after == before {
+                break
+            }
+            before = after
+        }
+        let mut fresh: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+        for unit in 0..<units {
+            for source in sources(unit, ledger, shared) {
+                let mut contract = ledger.functions[source.key] ?? continue
+                contract.borrows = source.borrows
+                contract.returns = source.returns
+            }
+            for kept in stored(unit, ledger, shared) {
+                fresh.insert(kept.key, kept.stores)
+            }
+        }
+        let mut keys: Vec[String] = []
+        for (key, _) in ledger.functions {
+            keys.push(key.clone())
+        }
+        for key in keys {
+            let mut contract = ledger.functions[key] ?? continue
+            contract.stores = fresh.remove(key) ?? []
+        }
+    }
+}

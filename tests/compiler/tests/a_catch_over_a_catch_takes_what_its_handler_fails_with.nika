@@ -1,0 +1,26 @@
+// A `catch` over a `catch` takes what the inner handler fails with
+// (Part I 7.1, #1641): a `throw error` there, and a failing call there.
+enum Bad { Oops }
+
+impl Error for Bad {
+    fn message(ref self) -> String {
+        return "oops"
+    }
+}
+
+fn fails() -> i64 throws {
+    throw Bad::Oops
+}
+
+fn rethrown() -> i64 {
+    return (fails() catch { throw error }) catch { 30 }
+}
+
+fn again() -> i64 {
+    return (fails() catch { fails() }) catch { 40 }
+}
+
+fn main() throws {
+    println(rethrown())
+    println(again())
+}

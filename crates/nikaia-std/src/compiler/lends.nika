@@ -1,0 +1,328 @@
+// crates/nikaia-std/src/compiler/lends.nika
+//
+// Whether a callee **lends** a parameter, so that the compiler writes the
+// reference and the caller does not (ADR-094 D1, D2) - the rule the
+// compiler's `contracts::keeps` answers from the `keeps` column, moved from
+// Rust (ADR-294, #125), with the least fixpoint that fills the column from
+// the uses each body's walk found (0.0.399). The walk stays Rust.
+//
+// One answer with three readers - the emitter writing the declaration, the
+// emitter writing the call, and the checker refusing a `&` somebody wrote -
+// because two of the three disagreeing is a `&&T` or a moved value.
+
+use std::collections
+
+// The names whose values are copied when handed on: the numbers, the two
+// machine-width names (ADR-302 D6), a span of time (ADR-150 D1), a reading of
+// the clock (ADR-368 D1), and the hulls, whose handing on duplicates a count
+// (ADR-312 D1, D5).
+comptime COPIED: Array[ref String, 20] = ["i8", "i16", "i32", "i64", "isize", "usize", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char", "scalar", "Duration", "Instant", "Shared", "SharedMut", "Locked"]
+
+/// Whether a callee lends the parameter at `at`. The position has to exist,
+/// not be the receiver and not be `mut` (ADR-094 D3); then either its type is
+/// written as a view - the `&` the author wrote, at a function and at a
+/// method alike - or, at a function, its value **moves**, no ledger in
+/// `copying` says the type copies (ADR-294 D9.1), and the body does not keep
+/// it. A library method's inferred lending waits on the emitter knowing which
+/// entry a call goes to (ADR-288); an own method's is answered (`lends_in_own`).
+pub fn lends_in(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger]) -> bool {
+    return lends_with(contract, at, copying, false)
+}
+
+/// The same, for a contract of **this program's own** method: a parameter it
+/// does not keep is lent as a free function's is, because the declaration is
+/// ours and `kept_by` reads its column (ADR-views-3 D1), but for the ones
+/// `by_value` names; so a method can also hand its own function value to
+/// itself in a loop (`&F` is an `impl Fn` as `F` is).
+pub fn lends_in_own(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger]) -> bool {
+    return lends_with(contract, at, copying, true)
+}
+
+fn lends_with(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger], own: bool) -> bool {
+    let signature = contract.signature ?? return false
+    let mut position = 0
+    for (name, ty) in signature.params {
+        if position == at {
+            if signature.mutable.contains(name) || name == "self" {
+                return false
+            }
+            if ty.is_a_view() {
+                return true
+            }
+            // **An `Array[T]` with no length is a view of a run unless it is
+            // kept** (ADR-views-3 D11, #1209): the caller lends a list, an
+            // array or a part of either; ADR-184 D3's function generic over
+            // the length stays for a `keep` parameter.
+            if a_run_parameter(ty) {
+                return !contract.keeps.contains(name)
+            }
+            // **A method's parameter its result is written to view is lent**
+            // (ADR-views-3 D2, D14, #1230): `fn pick(self, a: String) -> String
+            // from a` hands back a view of the caller's `a`, at the trait's
+            // entry and every impl's alike, so the entry a call goes to does
+            // not change the answer.
+            let viewed_by_the_result = contract.borrows.contains(name)
+            // **An own method's parameter it does not keep is lent**, as a
+            // free function's is (ADR-views-3 D1): the fixpoint of `kept_by`
+            // reads the method's column as "not kept", so a caller hands a
+            // lent value on to it without moving it. `by_value` names the
+            // ones lowered by value all the same: a type that holds a view,
+            // and the parameters of a method named as a function value
+            // (`keeps_by_value`). An impl keeps what its trait method keeps
+            // (D17), so every entry of a trait agrees.
+            let own_lends = own && (a_function_value(ty) || !contract.by_value.contains(name))
+            // **A plain parameter of a type variable is lent too** (ADR-views-3
+            // D2, #1342): `fn twice[C: Named](c: C)` only reads `c`, so the
+            // caller's value is usable after the call. `moves` answers no for
+            // a type variable, which a library's entry still means (its Rust
+            // takes the `T` whole); this program's own declaration is written
+            // `c: &C` by the emitter, so here it is lent unless kept.
+            let a_lent_variable = own && !contract.by_value.contains(name) && a_plain_variable(ty)
+            return (!signature.takes_a_receiver() || own_lends || viewed_by_the_result) && (moves(ty) || a_lent_variable) && !a_ledger_copies(ty, copying) && !contract.keeps.contains(name)
+        }
+        position += 1
+    }
+    return false
+}
+
+/// Whether a parameter's type is an `Array[T]` with no length.
+fn a_run_parameter(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => !view && base_name(name) == ARRAY && args.len() == 1,
+        else => false,
+    }
+}
+
+/// Whether a parameter's type is a type variable written plain, `C` and not
+/// `ref C`.
+fn a_plain_variable(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Var { view, .. } => !view,
+        else => false,
+    }
+}
+
+/// Whether a type is a function value.
+fn a_function_value(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Fn { .. } => true,
+        else => false,
+    }
+}
+
+/// Whether a ledger says values of `ty` are copies.
+pub fn a_ledger_copies(ty: ref Ty, copying: ref Vec[ref Ledger]) -> bool {
+    return match ty {
+        Ty::Named { name, view, .. } => !view && described_as_copying(name, copying),
+        Ty::Nullable(inner) => a_ledger_copies(inner, copying),
+        else => false,
+    }
+}
+
+fn described_as_copying(name: ref String, copying: ref Vec[ref Ledger]) -> bool {
+    for ledger in copying {
+        let described = ledger.types[name] ?? continue
+        if described.copies {
+            return true
+        }
+    }
+    return false
+}
+
+/// Whether a value of this type is **moved** when it is handed on, rather
+/// than copied - and whether this compiler can say so at all: a type it cannot
+/// name, a type variable and anything else unknown answer no, because what
+/// hangs on it is a reference the compiler would write. An array copies as its
+/// elements do (ADR-152 D2); a function value moves (ADR-277 D6); a nullable
+/// and a tuple move where a part does.
+pub fn moves(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => a_name_that_moves(name, args, view),
+        Ty::Fn { .. } => true,
+        Ty::Nullable(inner) => moves(inner),
+        Ty::Tuple(parts) => any_moves(parts),
+        else => false,
+    }
+}
+
+fn a_name_that_moves(name: ref String, args: ref Vec[Ty], view: bool) -> bool {
+    let base = base_name(name)
+    if base == ARRAY {
+        return any_moves(args)
+    }
+    if view {
+        return false
+    }
+    for one in COPIED {
+        if one == base {
+            return false
+        }
+    }
+    return true
+}
+
+fn any_moves(types: ref Vec[Ty]) -> bool {
+    for one in types {
+        if moves(one) {
+            return true
+        }
+    }
+    return false
+}
+
+// ---------------------------------------------------------------------------
+// Which parameters a function keeps (ADR-094 D2): the fixpoint over the uses
+// each body's walk found
+// ---------------------------------------------------------------------------
+
+/// A parameter handed to a callee: the parameter, the callee as the ledger
+/// names it, and the position it landed in. Whether it is kept is that
+/// callee's answer, which the fixpoint waits for.
+pub struct Passed {
+    pub parameter: String,
+    pub callee: String,
+    pub at: i64,
+}
+
+/// What one function's body does with each of its parameters: the ones kept on
+/// its own evidence - stored, assigned, returned by value, given to a task,
+/// handed to a callee nothing describes - and the ones handed on.
+pub struct Uses {
+    pub kept: collections::BTreeSet[String],
+    pub passed: Vec[Passed],
+}
+
+/// The parameters each function keeps. A **least** fixpoint, where `sync`'s is
+/// a greatest one, and the difference is which direction is safe: `sync` is a
+/// promise and is taken away on doubt, `keeps` is a restriction and is added on
+/// doubt. So two functions that pass each other a parameter neither stores
+/// keep neither. Over maps, so the answer does not depend on the order the
+/// source declared things in (Part III 13.5).
+pub fn kept_by(graph: ref collections::BTreeMap[String, Uses], own: ref Ledger, library: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+    let mut kept: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    for (name, uses) in graph {
+        kept.insert(name.clone(), uses.kept.clone())
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for (name, uses) in graph {
+            for passed in uses.passed {
+                if keeps_already(kept, name, passed.parameter) {
+                    continue
+                }
+                if keeps_its(passed.callee, passed.at, kept, own, library) {
+                    add_kept(kept, name, passed.parameter)
+                    changed = true
+                }
+            }
+        }
+    }
+    return kept
+}
+
+fn keeps_already(kept: ref collections::BTreeMap[String, collections::BTreeSet[String]], name: ref String, parameter: ref String) -> bool {
+    let parameters = kept[name] ?? return false
+    return parameters.contains(parameter)
+}
+
+fn add_kept(mut kept: collections::BTreeMap[String, collections::BTreeSet[String]], name: ref String, parameter: ref String) {
+    let mut parameters: collections::BTreeSet[String] = collections::BTreeSet()
+    if kept.contains_key(name) {
+        let held = kept[name] ?? return
+        parameters.extend(held.clone())
+    }
+    parameters.insert(parameter.clone())
+    kept.insert(name.clone(), parameters)
+}
+
+// Whether `callee` keeps whatever is passed in position `at`. This package's
+// own answer comes from the fixpoint in progress; anybody else's from their
+// ledger, where **an absent `keeps` on a present entry means it keeps
+// nothing**. An entry that is absent is unknown, and unknown keeps - as does a
+// position the signature does not have, which is a call read wrongly, and
+// reading it wrongly is not a licence to assume.
+pub fn keeps_its(callee: ref String, at: i64, settling: ref collections::BTreeMap[String, collections::BTreeSet[String]], own: ref Ledger, library: ref Ledger) -> bool {
+    if settling.contains_key(callee) {
+        let contract = own.functions[callee] ?? return true
+        let parameter = parameter_at(contract, at) ?? return true
+        return keeps_already(settling, callee, parameter)
+    }
+    if own.functions.contains_key(callee) {
+        let contract = own.functions[callee] ?? return true
+        return keeps_at(contract, at)
+    }
+    let contract = library.functions[callee] ?? return true
+    return keeps_at(contract, at)
+}
+
+// What a ledger says about the parameter at `at`.
+fn keeps_at(contract: ref FnContract, at: i64) -> bool {
+    let parameter = parameter_at(contract, at) ?? return true
+    return contract.keeps.contains(parameter)
+}
+
+// The parameters first, then the options in the order the signature declares
+// them (`option_at`).
+fn parameter_at(contract: ref FnContract, at: i64) -> String? {
+    let signature = contract.signature ?? return null
+    let mut position = 0
+    for (name, _) in signature.params {
+        if position == at {
+            return name.clone()
+        }
+        position += 1
+    }
+    for option in signature.config {
+        if position == at {
+            return option.name.clone()
+        }
+        position += 1
+    }
+    return null
+}
+
+/// The position `parameter_at` gives the option `name`: after every
+/// parameter, in the order the options are declared.
+pub fn option_at(contract: ref FnContract, name: ref String) -> i64? {
+    let signature = contract.signature ?? return null
+    let mut position = signature.params.len()
+    for option in signature.config {
+        if option.name == name {
+            return position
+        }
+        position += 1
+    }
+    return null
+}
+
+/// **An option is lent as a parameter is** (ADR-282 D2, D5): a `String`
+/// option of a function - not a method, whose call this cannot tie to one
+/// entry (ADR-288) - that the body does not keep is a view below, as one
+/// written `ref String` is. One answer for the declaration, the call and
+/// the checker.
+pub fn lends_option(contract: ref FnContract, option: ref ConfigContract) -> bool {
+    let signature = contract.signature ?? return false
+    if signature.takes_a_receiver() || contract.keeps.contains(option.name) {
+        return false
+    }
+    return match option.ty {
+        Ty::Named { name, args, view } => !view && args.is_empty() && name == "String",
+        else => false,
+    }
+}
+
+/// The options as they are lowered: a lent one (`lends_option`) as the view
+/// it is below, the others as declared.
+pub fn lowered_options(contract: ref FnContract) -> Vec[ConfigContract] {
+    let signature = contract.signature ?? return []
+    let mut out: Vec[ConfigContract] = []
+    for option in signature.config {
+        if lends_option(contract, option) {
+            out.push(ConfigContract { name: option.name.clone(), ty: Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }, default: option.default.clone() })
+        } else {
+            out.push(option.clone())
+        }
+    }
+    return out
+}

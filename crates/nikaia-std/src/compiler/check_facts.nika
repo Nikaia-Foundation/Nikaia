@@ -1,0 +1,1145 @@
+// crates/nikaia-std/src/compiler/check_facts.nika
+//
+// **What the checker found out about the program and the emitter reads**
+// (ADR-294, #125, #558; the coordinator's design): one struct, `CheckFacts`,
+// that the checker fills and the emitter holds as its single `facts` field.
+// Each table is keyed by the id of the node it is about (ADR-340 D4), or by a
+// statement's start byte where the fact is about the statement (D5), so a key
+// is an `i64`. A name is a `String`.
+
+use std::collections
+
+/// How a plain value is put into a nullable slot, a name or a number's slot
+/// (Part I 2.3, ADR-278, ADR-285 D32, ADR-319 D2).
+pub enum FactWrap {
+    /// `Some(value)`: the type is known and is not a `T?`.
+    Constructor,
+    /// Text where a file's name is asked: an `fs::Path` made from it.
+    Path,
+    /// ...and a view of one.
+    PathView,
+    /// An integer widened where no value can be lost: the type the slot states.
+    Widen(String),
+    /// ...and wrapped as a `T?` of it: `u32` into `i64?`.
+    WidenSome(String),
+    /// A signed value proved not negative, in the unsigned type the slot states.
+    Unsigned(String),
+    /// A mapping where a `Bytes` is kept (ADR-373 D3): the mapping at a count.
+    MappedBytes,
+}
+
+/// How a map's key is handed over.
+pub enum FactKeyForm {
+    Handed,
+    Lent,
+    AsIs,
+    /// Text of its own looked up in a map keyed by views of text: read as the
+    /// `str` it holds, which every key of text borrows as (#659).
+    Viewed,
+}
+
+/// What a reach is a view of.
+pub enum FactViewed {
+    Text,
+    Plain,
+}
+
+/// A cast that narrows.
+pub enum FactNarrowing {
+    Integer,
+    FromFloat,
+}
+
+/// What a lambda that pauses is rewritten to: the word, as a function, a lent
+/// one or a method.
+pub enum FactPausing {
+    Function(String),
+    Lent(String),
+    Method(String),
+}
+
+/// One `assert` (ADR-269 D2): what its failure says, which only the compiler
+/// knows.
+pub struct FactClaim {
+    pub held: ClaimHeld?,
+    pub written: String,
+    pub left: String?,
+    pub right: String?,
+    /// **An `assume`** (ADR-376): a fact from where it stands, never a goal.
+    pub assumed: bool,
+}
+
+/// **Where a task of `async e` is waited for** (ADR-async-5 D6), for the
+/// lowering onto tasks (#986): before a call or an operation (its node), before
+/// a statement of the binding's block (its span's start), or at its group's end.
+/// `Handle` is an `async(handle)`'s task (D11): waited for where its handle is
+/// joined, and at its group's end where it is left live.
+pub enum CheckAsyncWaitAt {
+    Before(i64),
+    BeforeStatement(i64),
+    GroupEnd,
+    Handle,
+}
+
+/// One task's wait point and its group (D9): an `async { }`'s node, or for the
+/// innermost block holding the form `-1 -` its first statement's start.
+pub struct CheckAsyncWait {
+    pub at: CheckAsyncWaitAt,
+    pub group: i64,
+}
+
+pub struct CheckFacts {
+    /// **A call of a `std` helper** (`pub = false` in `std`'s ledger, #1606),
+    /// by the start of the call's span: refused (`NK1110`) in a program, and
+    /// let through by `check_access_inside_std` where the file is `std`'s own.
+    pub std_helpers_reached: collections::BTreeSet[i64],
+    /// What a task binds and still holds at a pause (ADR-055 D6): seen by the tests.
+    pub held_across_a_pause: collections::BTreeSet[(i64, String)],
+    pub comptime_values: collections::BTreeMap[i64, (String, String)],
+    /// A `comptime` that reads the turn's field (#1087), once per turn: by
+    /// `"<start>:<type>:<field>"`, as `comptime_values` has it.
+    pub turn_comptime_values: collections::BTreeMap[String, (String, String)],
+    pub dsl_values: collections::BTreeMap[i64, (String, String)],
+    pub with_types: collections::BTreeMap[i64, String],
+    pub unrolled: collections::BTreeMap[(String, String), Vec[FieldContract]],
+    pub walks_fields: collections::BTreeMap[String, String],
+    pub unrolled_calls: collections::BTreeMap[i64, String],
+    /// **The copies of a function that takes a reflected field** (Part II
+    /// 10.3, ADR-grammar-2 D4): keyed by the function and the struct whose
+    /// fields it is called with, one copy per field.
+    pub field_copies: collections::BTreeMap[(String, String), Vec[FieldContract]],
+    /// **The kind of each type a copy is made for, or a path names**
+    /// (ADR-330 D3): `Vec[i64]` is `List`, keyed by the type as written.
+    pub type_kinds: collections::BTreeMap[String, String],
+    /// **The types each type is made of**, as written (ADR-330 D3, D4):
+    /// `Vec[i64]` is `[i64]`, a struct its own name; what an arm of a `match`
+    /// on a kind binds.
+    pub type_parts: collections::BTreeMap[String, Vec[String]],
+    /// The fields of each struct among them, for `field.ty::fields` and
+    /// `s::fields` in a `Struct(s)` arm (ADR-330 D4, D5).
+    pub type_fields: collections::BTreeMap[String, Vec[FieldContract]],
+    /// **The subjects of a `match` on a kind** (ADR-330 D4): each copy
+    /// emits the one arm its type takes.
+    pub kind_matches: collections::BTreeSet[i64],
+    /// The comparisons of two kinds, decided per copy (ADR-330 D6).
+    pub kind_compares: collections::BTreeSet[i64],
+    /// The paths that are `T::name` (ADR-330 D2).
+    pub reflected_names: collections::BTreeSet[i64],
+    pub fallible_loops: collections::BTreeSet[i64],
+    pub pausing_walks: collections::BTreeSet[i64],
+    pub pausing_loops: collections::BTreeSet[i64],
+    pub owned_loops: collections::BTreeSet[i64],
+    pub copied_loop_bindings: collections::BTreeSet[(i64, String)],
+    pub copied_view_bindings: collections::BTreeSet[(i64, String)],
+    pub unsigned_literals: collections::BTreeMap[i64, String],
+    pub number_lets: collections::BTreeMap[i64, String],
+    pub changed_elements: collections::BTreeSet[i64],
+    pub text_finds: collections::BTreeSet[i64],
+    /// **A method of text whose result is a view of the text it is called
+    /// on** (`s.trim()`, `s.split(",")`, ADR-views-3 D9, #1478), by the
+    /// call's node: the view-change walk watches the receiver while the
+    /// result is used.
+    pub receiver_views: collections::BTreeSet[i64],
+    /// **A `Bytes` cut by a set** (ADR-375 D3), by the receiver: written
+    /// `nikaia_std::bytes::split(&b, set)`, since a slice's own `split` takes
+    /// a closure and is the one the language below would pick.
+    pub bytes_splits: collections::BTreeSet[i64],
+    /// **A text pattern of one scalar is that character** (#617), by the
+    /// argument: `split(";")` on text is written `split(';')`, the character
+    /// literal kept here as Rust spells it. A `&str` pattern is Rust's two-way
+    /// searcher, built for every call; a `char` is a `memchr`.
+    pub char_patterns: collections::BTreeMap[i64, String],
+    /// **`a.compare(b)` and `a.eq(b)` on a type the language orders or equates**
+    /// (ADR-341 D2), by the receiver: which side is a view (bit 0 the receiver,
+    /// bit 1 the argument), so the emitter writes `std::cmp::Ord::cmp(&*a, &b)`.
+    pub standard_compares: collections::BTreeMap[i64, i64],
+    pub count_args: collections::BTreeSet[i64],
+    pub path_methods: collections::BTreeMap[i64, bool],
+    pub map_keys: collections::BTreeMap[(i64, bool), FactKeyForm],
+    pub slice_indices: collections::BTreeSet[i64],
+    pub list_indices: collections::BTreeSet[i64],
+    /// **A function value read by index is a copy** (Part I, *A function type stands wherever a type does*, #1018):
+    /// the bases of the reads whose element is a `fn`, so the lowering clones
+    /// the `Kept` handle the list holds instead of moving it out.
+    pub kept_fn_reads: collections::BTreeSet[i64],
+    /// **A function value copied from a place is a copy too** (Part I, #1031):
+    /// a name or a field read whose type is a `fn` that holds a `Kept` (not
+    /// a parameter that only runs it, not a named function), keyed by the
+    /// read; where it stands as a value the lowering clones the handle.
+    /// A callee and an assignment target are taken out again.
+    pub kept_fn_copies: collections::BTreeSet[i64],
+    /// `P { f }` over such a name, by the struct literal and the field.
+    pub kept_fn_fields: collections::BTreeSet[(i64, String)],
+    /// **A handle on a shared value stored by value is duplicated** (ADR-312
+    /// D1, #1411): a name or a field path of `Shared`/`SharedMut` type put
+    /// into a struct literal's field or a list literal, by the value's id;
+    /// the lowering clones the handle, as a call's argument does.
+    pub stored_handles: collections::BTreeSet[i64],
+    /// `P { a }` over such a name, by the struct literal and the field.
+    pub stored_handle_fields: collections::BTreeSet[(i64, String)],
+    /// **A handle handed on at its last use is moved, not duplicated**
+    /// (ADR-312 D2, #1502): a call's argument naming one that nothing reads
+    /// afterwards, by the argument's id. Taken out of `stored_handles`,
+    /// `stored_handle_fields` and `task_handles` likewise.
+    pub moved_handles: collections::BTreeSet[i64],
+    pub copied_tuple_parts: collections::BTreeSet[(i64, String)],
+    pub std_lengths: collections::BTreeSet[i64],
+    pub sized_lengths: collections::BTreeSet[i64],
+    /// **The field reads of a whole-number type**, by node (ADR-306 D17):
+    /// the bounds walk reads a path of fields to one as a number. And the
+    /// calls of that type a `let` binds (#781).
+    pub whole_fields: collections::BTreeSet[i64],
+    /// **The `for` heads that bind one whole number**, by the node of what
+    /// they walk (ADR-306 D7): the bounds walk reads the binding as a number.
+    pub whole_loops: collections::BTreeSet[i64],
+    /// **The `for` heads that bind several names**, by the node of what they
+    /// walk, with the positions of the names bound to a whole number
+    /// (ADR-306 D7): `for (at, unit) in rows` reads each as a number.
+    pub whole_parts: collections::BTreeMap[i64, collections::BTreeSet[i64]],
+    /// **Each `let` of one name without a written type whose value is a whole
+    /// number**, by the statement's start, with the type (#1358): the prover
+    /// reads the name as a whole number, as it reads `let n: i64`. A list, a
+    /// text or a map is kept too, by its type's name (ADR-396 D4), and so is
+    /// the type of a call's result, whose fields the prover then reads, and
+    /// an element with a length a `for` binds, by the `for`'s start.
+    pub whole_lets: collections::BTreeMap[i64, String],
+    /// **Each divisor `NK1118` refused**, by its node (#1566): a zero the
+    /// checker folds is its refusal, and the prover asks no `d != 0` of it.
+    pub zero_divisors: collections::BTreeSet[i64],
+    /// **Each statement `NK1116` refused a folded number at**, by its start:
+    /// the prover refuses no overflow there again (ADR-306 D15).
+    pub unfit_numbers: collections::BTreeSet[i64],
+    /// **The `N` of each `Array[T, N]` read or counted**, by node (#711).
+    pub array_lengths: collections::BTreeMap[i64, i64],
+    pub char_codes: collections::BTreeSet[i64],
+    pub arithmetic: collections::BTreeMap[i64, String],
+    pub negations: collections::BTreeMap[i64, String],
+    /// **Every `x << k` and `x >> k` whose count is not a literal**, by the
+    /// byte its operator starts at, with `x`'s whole-number type: its count is
+    /// a goal of the bounds walk (ADR-306 D18).
+    pub shifts: collections::BTreeMap[i64, String],
+    /// **Every `/` and `%` on one whole-number type**, by the byte its
+    /// operator starts at (the statement's first byte for `x /= d`), with
+    /// that type: `d != 0`, and on a signed type not the least value by
+    /// `-1`, is a goal of the bounds walk, which `--bounds` lists (ADR-396
+    /// D7, #1578). The check stays in the machine code (ADR-395 D3).
+    pub divisions: collections::BTreeMap[i64, String],
+    /// **A method call on a type `std`'s ledger describes**, by the call's
+    /// node, with that type's name as the ledger keys it (`Bytes`, `u64`):
+    /// the bounds walk reads the entry's `ensures` and `ensures_each`
+    /// (ADR-314 D3, ADR-375 D5).
+    pub std_receivers: collections::BTreeMap[i64, String],
+    /// **The method a call resolves to by its receiver's type** (#842), by the
+    /// receiver's node, as the ledger keys it (`Holder::put`).
+    pub method_callees: collections::BTreeMap[i64, String],
+    /// **The struct a field is read from** (#1573), by the node of the
+    /// field's base: the prover carries outside data through `Type.field`.
+    pub field_owners: collections::BTreeMap[i64, String],
+    /// **What carries outside data in the package** (ADR-396 D1, #1573):
+    /// read off the walk's facts in the ledger's pass too, which runs no
+    /// prover, so a dependency's ledger names its sources.
+    pub outside: ProverOutside,
+    /// **A vector's load, read as the cut it reads** (ADR-377 D3), by the
+    /// node of the called path: the bytes it reads, or minus the most a
+    /// `Lanes` reads on any CPU level where its count is the build's.
+    pub simd_loads: collections::BTreeMap[i64, i64],
+    pub copied_slots: collections::BTreeSet[i64],
+    pub owned_copies: collections::BTreeSet[i64],
+    /// **A door over values that copy** (ADR-327 D11): an `update` by its
+    /// receiver's id, an `update_all` by its first lock's, where every value
+    /// is a number, a `bool` or a `char`. The emitter writes `update_copied` /
+    /// `update_all_copied`, whose block works on copies, so a panic in it
+    /// poisons nothing.
+    pub copied_doors: collections::BTreeSet[i64],
+    /// The copies among them that copy text, by the receiver's id: reached
+    /// through `?.`, the receiver is a reference to the text, which may itself
+    /// be a view (ADR-282 D29), and only `to_string` copies both.
+    pub text_copies: collections::BTreeSet[i64],
+    /// **A copy of a tuple with view parts is owned** (ADR-293 D24, #1184),
+    /// by the receiver's id: each part's copy, `to_string` for text,
+    /// `to_owned` for another view and `clone` for an owned part.
+    pub tuple_copies: collections::BTreeMap[i64, Vec[String]],
+    /// Reads of a field declared `String` that holds static text (ADR-282
+    /// D29), by the read's id: typed as the view it is below, said as the
+    /// `String` the program wrote.
+    pub static_field_reads: collections::BTreeSet[i64],
+    pub text_as_is: collections::BTreeSet[i64],
+    pub lent_coalesces: collections::BTreeMap[i64, String],
+    pub plain_reaches: collections::BTreeSet[i64],
+    pub copied_jump_reads: collections::BTreeSet[i64],
+    /// `let mut x = m[k] ?? <jump>` over a `mut` place, by the `??`'s id: `x`
+    /// is a mutable view of the entry (#816), lowered to `index::get_mut`;
+    /// the text is what lends the place: `&mut ` for a local or a field, and
+    /// nothing for a `mut` parameter, which already is the `&mut`.
+    pub mut_view_reads: collections::BTreeMap[i64, String],
+    /// The same view written `let mut x = m.get(k) ?? <jump>` (#952, ADR-293
+    /// D1: the bracket says what `get` says), by the receiver's id: the call
+    /// is lowered to `get_mut`.
+    pub mut_view_gets: collections::BTreeSet[i64],
+    pub view_coalesces: collections::BTreeSet[i64],
+    /// The `??`s whose left side holds a view of text and whose fallback is
+    /// a name that is a view of text (#719): the fallback is read as `str`.
+    pub text_view_fallbacks: collections::BTreeSet[i64],
+    /// The `??`s whose left side holds text, `String` or `&String` below,
+    /// and whose fallback is a name that is a view of text (#752): both sides
+    /// are made the `String` the answer is.
+    pub text_owned_fallbacks: collections::BTreeSet[i64],
+    pub lent_map_fallbacks: collections::BTreeSet[i64],
+    /// **The `??`s whose left side holds a view and whose fallback is a value
+    /// made here** (#1256): the answer is a view, and the fallback goes into a
+    /// slot declared before the statement, filled only on `null`; `true`
+    /// where the answer is a view of text.
+    pub slot_fallbacks: collections::BTreeMap[i64, bool],
+    pub optional_fallbacks: collections::BTreeSet[i64],
+    pub flat_reads: collections::BTreeSet[i64],
+    /// **Where each `async e` task is waited for**, by the `async` node
+    /// (ADR-async-5 D6, D9): what the lowering joins it at.
+    pub async_waits: collections::BTreeMap[i64, CheckAsyncWait],
+    /// **`m.get(k)` on a map**, by the call: an `Option<&T>` below already,
+    /// so a nullable view it is lent to opens nothing.
+    pub map_gets: collections::BTreeSet[i64],
+    pub copied_reads: collections::BTreeSet[i64],
+    pub text_in_lists: collections::BTreeSet[i64],
+    pub owned_patterns: collections::BTreeSet[i64],
+    /// **A view of text handed to a pattern of `str`** (#490), by the
+    /// argument: on the block types it may be a `&Text`, which Rust's
+    /// `Pattern` does not take, so it is lent as the `str` it holds.
+    pub view_patterns: collections::BTreeSet[i64],
+    /// **The lists of views a statement is the last use of** (#490), by the
+    /// statement's start: the emitter drops each right after it, since a
+    /// block's `List` holds what it views to its scope's end
+    /// (`check_core_view_lists_end`).
+    pub view_list_drops: collections::BTreeMap[i64, Vec[String]],
+    /// **The assignments whose value collects views of the place they
+    /// assign over** (#490), by the statement's start: the emitter binds the
+    /// value first, so the temporary list ends before the assignment
+    /// (`check_core_view_list_assigned`).
+    pub view_list_assigns: collections::BTreeSet[i64],
+    /// **The list literals placed in the running task's block** (ADR-327
+    /// D9, step 5 of #490), by the literal's node, and the texts by the
+    /// `String` of their `String()`: the emitter writes `Place::Block`
+    /// there, `Place::Outside` everywhere else
+    /// (`check_core_place_in_block`).
+    pub placed_in_block: collections::BTreeSet[i64],
+    /// **The lists of views a `let` binds what they may view after** (#490),
+    /// by the `let`'s start, with whether the list's `let` said `mut`: the
+    /// emitter binds each list again right after it, so the list is dropped
+    /// before what it views (`check_core_view_list_rebound`).
+    pub view_list_rebinds: collections::BTreeMap[i64, Vec[(String, bool)]],
+    /// The `let`s of the lists `view_list_rebinds` binds again, by the
+    /// `let`'s start: a `let mut` there may change nothing before.
+    pub view_list_rebound: collections::BTreeSet[i64],
+    pub counted: collections::BTreeSet[i64],
+    pub lent_bindings: collections::BTreeMap[i64, collections::BTreeSet[String]],
+    /// **The parts an arm keeps in place out of a field of a `mut`
+    /// parameter**, by the arm's body (#1139): `match h.node` binds them
+    /// `ref mut`, so the arm changes the part where it is.
+    pub in_place_bindings: collections::BTreeMap[i64, collections::BTreeSet[String]],
+    pub taking_arms: collections::BTreeMap[i64, String],
+    /// **A part taken out of a `mut` parameter or a `let mut` view** to be
+    /// given back (ADR-views-1 D3), by the field's node: what stands in its
+    /// place meanwhile, empty where the type's empty value does
+    /// (`std::mem::take`).
+    pub taken_parts: collections::BTreeMap[i64, String],
+    pub views_handed_on: collections::BTreeSet[i64],
+    pub comptime_uses: collections::BTreeMap[i64, String],
+    /// **The names of the package's `comptime`s** (#703): a binding by one
+    /// of them shadows the constant, which the language below refuses, so
+    /// the emitter writes the binding under a name of its own.
+    pub comptime_names: collections::BTreeSet[String],
+    /// **The `comptime`s an open number's use was written out for** (ADR-287
+    /// D21, #700): a use takes the literal with the type it asked for, so
+    /// the constant itself may be read nowhere below.
+    pub folded_comptimes: collections::BTreeSet[String],
+    /// The reads of a name that a binding shadowing a `comptime` holds, by
+    /// node: each is written under the binding's own name.
+    pub shadowing_reads: collections::BTreeSet[i64],
+    pub lent_scrutinees: collections::BTreeSet[i64],
+    /// **Of those, a field of a `for mut` element whose arms change a part**,
+    /// by the subject (#1267): it is written `&mut subject`, so the parts the
+    /// arms bind are `&mut` of the element's own and change it in place.
+    pub changed_scrutinees: collections::BTreeSet[i64],
+    /// **A `match` over an owned `String` with a text literal among its
+    /// patterns**, by the subject (#704): the language below matches a
+    /// literal against a `&str`, so the subject is written as one.
+    pub text_scrutinees: collections::BTreeSet[i64],
+    /// **A part of a tuple a `match` is over, matched against a text
+    /// literal at its position** (#890), by the part: `true` where it is a
+    /// `String?` (written `.as_deref()`), `false` for a `String` (`&*`).
+    pub text_parts: collections::BTreeMap[i64, bool],
+    /// **A `match` on a name an enclosing arm bound**, by the subject: that
+    /// arm's body. Where the arm lent the name, it is a reference below, and
+    /// the `match` is over what it points to.
+    pub arm_subjects: collections::BTreeMap[i64, i64],
+    pub guards_inside_boxes: collections::BTreeMap[i64, collections::BTreeSet[String]],
+    pub collected_into: collections::BTreeSet[i64],
+    /// **A `collect` of text views read from `String` slots**, by the
+    /// receiver (#1388): the items are `&String` below, so they are made the
+    /// `&str` a list of text views holds (ADR-282 D1).
+    pub text_slot_collects: collections::BTreeSet[i64],
+    /// **A sequence's `sum`, by the receiver: the number type it hands
+    /// back** (#1007). The language below infers no result type for `sum`
+    /// where nothing annotates it, so the call names it (`.sum::<i64>()`).
+    pub summed: collections::BTreeMap[i64, String],
+    pub copied_walks: collections::BTreeSet[i64],
+    /// **A `cloned()` over elements already owned below**, by the call
+    /// (ADR-384 D2): nothing else holds them, so the lowering writes nothing.
+    pub owned_clones: collections::BTreeSet[i64],
+    /// **An `or_default()` whose value is a struct of defaults**, by the call:
+    /// the struct's name (ADR-384 D1). The language below has no `Default`
+    /// for it, so the lowering writes `or_insert_with` and the literal.
+    pub defaulted_entries: collections::BTreeMap[i64, String],
+    pub filter_patterns: collections::BTreeSet[i64],
+    /// **An `and_modify` lambda handed a number, `bool` or `char` in the
+    /// map** (#684), by the lambda: its parameter is the value, read out of
+    /// the slot and written back when the lambda ends.
+    pub copied_entry_lambdas: collections::BTreeSet[i64],
+    /// **A lambda bound by `let` without a type, typed by its first use**
+    /// (#997), by the lambda: the types of its parameters, written on them
+    /// below, where nothing else says them.
+    pub lambda_params_by_use: collections::BTreeMap[i64, Vec[Ty]],
+    /// **A lambda bound by `let` without a type**, by the binding (#1043): the
+    /// lambda, made a kept one where the name is handed to something that
+    /// keeps a function value, as a typed `let`'s is.
+    pub let_lambdas: collections::BTreeMap[i64, Expr],
+    /// **Such a lambda, made kept by a use**, by the lambda (#1043): the
+    /// `let` names no type, so its closure is cast to the `dyn Fn` below.
+    pub let_kept_lambdas: collections::BTreeSet[i64],
+    /// **The key of `entry` on a map keyed by owned text, given a literal or
+    /// a view** (#676), by the key: built into text of its own, as `insert`'s
+    /// is.
+    pub owned_entry_keys: collections::BTreeSet[i64],
+    /// **`xs.clone()` of a list or a set**, by the call's id (ADR-collections-1
+    /// D4): as the argument of `extend` it is written `xs.iter().cloned()`,
+    /// no list in between.
+    pub collection_clones: collections::BTreeSet[i64],
+    /// **`m.clone()` of a map**, by the call's id (ADR-collections-1 D6, D4):
+    /// as the argument of `extend` it is written
+    /// `m.iter().map(|(k, v)| (k.clone(), v.clone()))`, no map in between.
+    pub map_clones: collections::BTreeSet[i64],
+    /// **A `comptime` array of text handed to `extend` of a container of owned
+    /// `String`** (#966), by the argument: the constant is `[&str; N]` below, so
+    /// each item is made a `String` as it goes in.
+    pub text_extends: collections::BTreeSet[i64],
+    pub kept_lambdas: collections::BTreeMap[i64, (bool, bool)],
+    /// **A pausing kept lambda's integer result**, as Rust spells it (`i64`,
+    /// `Option<u8>`), by the lambda (#1029): the boxed future's cast names it,
+    /// since the unsizing to `dyn Fn` does not carry it into the closure and a
+    /// bare literal would be `i32`.
+    pub kept_results: collections::BTreeMap[i64, String],
+    pub kept_hulls: collections::BTreeMap[i64, Vec[String]],
+    pub kept_owned: collections::BTreeMap[i64, Vec[String]],
+    pub field_calls: collections::BTreeMap[i64, bool],
+    pub kept_calls: collections::BTreeMap[i64, (bool, bool)],
+    pub kept_args: collections::BTreeSet[i64],
+    /// A kept value that pauses, handed to a parameter that may pause (#832):
+    /// the argument and the arity of its type.
+    pub kept_args_run_async: collections::BTreeMap[i64, i64],
+    pub kept_functions: collections::BTreeMap[i64, (bool, bool, i64)],
+    pub fallible_methods: collections::BTreeSet[i64],
+    pub future_lambdas: collections::BTreeSet[i64],
+    pub run_lambdas: collections::BTreeSet[i64],
+    /// A lambda run in place by a parameter whose type says `throws` (#1360):
+    /// its body hands back a `Result`, as a kept one's does.
+    pub failing_lambdas: collections::BTreeSet[i64],
+    /// A lambda where the function type hands back nothing (#1321): its
+    /// body's last value is dropped, as a named function's is that declares
+    /// no result.
+    pub valueless_lambdas: collections::BTreeSet[i64],
+    pub run_code_fails: collections::BTreeSet[i64],
+    pub sync_functions_run_async: collections::BTreeMap[i64, i64],
+    /// A declared function that throws, named where a parameter of a
+    /// `fn(..) throws` type runs it (ADR-280 D9, #703): the argument and the
+    /// count of its parameters. That type's channel is the box, so the
+    /// lowering hands over a closure that puts the function's own error in it.
+    pub boxed_fn_values: collections::BTreeMap[i64, i64],
+    /// A declared function that cannot fail, named where a parameter of a
+    /// `fn(..) throws` type runs it (ADR-351 D4, #732): the argument and the
+    /// count of its parameters. The lowering hands over a closure that wraps
+    /// its result in `Ok`.
+    pub infallible_fn_values: collections::BTreeMap[i64, i64],
+    /// A declared function named where a parameter of function type takes it
+    /// as a value (#757), with which parameters of that type are views: the
+    /// lowering lends the others the function lends in a closure around it.
+    pub named_fn_values: collections::BTreeMap[i64, Vec[bool]],
+    pub pausing_lambdas: collections::BTreeMap[i64, FactPausing],
+    pub paused_scopes: collections::BTreeSet[i64],
+    /// The lambdas handed to `task::Scope::spawn` (ADR-346 D7): each fails in
+    /// its scope's channel.
+    pub scope_tasks: collections::BTreeSet[i64],
+    pub witnessed_sets: collections::BTreeSet[i64],
+    pub pausing_methods: collections::BTreeSet[i64],
+    pub nullable_sites: collections::BTreeMap[i64, FactWrap],
+    pub concatenations: collections::BTreeSet[i64],
+    /// **A name of owned text beside a `+` that is read again** (ADR-081,
+    /// #1324), by the side: lent as a view of text, where its buffer would
+    /// be given to the answer otherwise.
+    pub lent_concatenated: collections::BTreeSet[i64],
+    /// `text += x` on a text place (#760): the right side goes as a `str`.
+    pub appended_texts: collections::BTreeSet[i64],
+    pub path_comparisons: collections::BTreeSet[i64],
+    pub mixed_comparisons: collections::BTreeMap[i64, bool],
+    pub path_holes: collections::BTreeMap[i64, Vec[bool]],
+    pub flattened_reaches: collections::BTreeSet[i64],
+    pub copied_reaches: collections::BTreeSet[i64],
+    pub viewed_reaches: collections::BTreeMap[i64, FactViewed],
+    pub lent_reaches: collections::BTreeSet[i64],
+    pub held_reaches: collections::BTreeSet[i64],
+    pub nullable_fields: collections::BTreeMap[(i64, String), FactWrap],
+    pub nullable_args: collections::BTreeMap[i64, FactWrap],
+    pub narrowing_casts: collections::BTreeMap[i64, FactNarrowing],
+    /// **A read of a `T?` a test proved not `null`** (ADR-382), by the read:
+    /// bit 0 whether the value is copied out (`x.unwrap()`) or lent
+    /// (`x.as_ref().unwrap()`), bit 1 whether it is an operand, which no wrap
+    /// into an option stands directly around, bit 2 lent, bit 3 given up,
+    /// bit 4 written through, bit 5 a name that is a reference to the option
+    /// (a pattern binding through `ref`, #898).
+    pub narrowed_reads: collections::BTreeMap[i64, i64],
+    /// **The positions of a tuple pattern that meet only set values**
+    /// (ADR-352 D1 per position, #879), by the arm's body: each is written
+    /// `Some(…)`.
+    pub set_positions: collections::BTreeMap[i64, Vec[i64]],
+    /// **The same, for each alternative of an or-pattern** (#1127), by the
+    /// arm's body: one list per alternative, in order.
+    pub set_alternatives: collections::BTreeMap[i64, Vec[Vec[i64]]],
+    pub task_handles: collections::BTreeSet[(i64, String)],
+    /// **An argument of a grammar's entry that is a `Bytes`** (ADR-366 D1), by
+    /// the argument: the call enters the grammar's copy over bytes.
+    pub bytes_entries: collections::BTreeSet[i64],
+    /// **A grammar of this file entered with a `Bytes`**, by its name: it is
+    /// lowered a second time, with `input bytes;`.
+    pub bytes_grammars: collections::BTreeSet[String],
+    pub method_options: collections::BTreeMap[(i64, String), Vec[(String, String)]],
+    pub lent_args: collections::BTreeSet[i64],
+    /// **A value lent into a `ref` field of a struct literal** (D37), by the
+    /// value: the counterpart of `lent_args` for a call.
+    pub lent_fields: collections::BTreeSet[i64],
+    pub lookup_keys: collections::BTreeSet[i64],
+    pub boxed_members: collections::BTreeMap[String, collections::BTreeSet[String]],
+    pub boxed_reads: collections::BTreeSet[i64],
+    pub copied_bindings: collections::BTreeSet[(i64, String)],
+    /// **A number copied out that the arm changes** (#730): changed in
+    /// place, or handed to a `mut` parameter. The copy is the arm's own (Part
+    /// I 3.4), so it is opened as `let mut`.
+    pub changed_copies: collections::BTreeSet[(i64, String)],
+    /// **A part bound by value that the arm changes** (#734, Part I 3.4): the
+    /// arm took it, so it is opened as `let mut` again.
+    pub changed_bindings: collections::BTreeSet[(i64, String)],
+    /// **An element a list pattern keeps out of an owned list** (ADR-355
+    /// D5, #622): the slice lends it, so the arm opens with its clone, and the
+    /// list is gone afterwards as Part I 3.4 says.
+    pub cloned_bindings: collections::BTreeSet[(i64, String)],
+    pub some_tails: collections::BTreeSet[i64],
+    pub mixed_leaves: collections::BTreeMap[i64, bool],
+    pub mixed_choices: collections::BTreeSet[i64],
+    /// **A choice handed to a lent parameter whose arms are views and values
+    /// made there** (#894, ADR-282 D13): the argument, lent as the view of
+    /// the one value its arms are put in, and each arm's leaf, `true` where
+    /// the arm made its value.
+    pub lent_arms: collections::BTreeSet[i64],
+    pub lent_arm_leaves: collections::BTreeMap[i64, bool],
+    pub lent_options: collections::BTreeSet[i64],
+    pub wrapped: collections::BTreeMap[i64, FactWrap],
+    pub compared_views: collections::BTreeSet[(i64, String)],
+    /// The calls whose result, a view of a parameter of a type bound to a
+    /// copied word, is read at the call (ADR-views-3 D12, #1239).
+    pub copied_results: collections::BTreeSet[i64],
+    /// **Text of its own lent as the view a type variable holds** (ADR-views-3
+    /// D12, #1498): in `second(o, "p")` of `fn second[T](x: T, y: T) -> T`,
+    /// `T` is the `&str` the literal is, so `o` goes as `&o.as_str()`.
+    pub lent_text_views: collections::BTreeSet[i64],
+    /// The calls (by their span's start) whose type variable holds a view of
+    /// text (#1498): the result, a view of that view, is read at the call.
+    pub viewed_text_calls: collections::BTreeSet[i64],
+    /// **Brackets the arguments already say are the plain call** (NK1233,
+    /// #1498): `id[i64](3)` is lowered as `id(3)`, by the callee's node, so a
+    /// lent type variable is the view its argument is.
+    pub plain_bracket_calls: collections::BTreeSet[i64],
+    pub compared_numbers: collections::BTreeSet[(i64, String)],
+    /// **Text ordered against text** (#733), and a lambda's lent item
+    /// compared with text (#688), by the operator's span: both sides are
+    /// read as `str`, owned or viewed.
+    pub ordered_texts: collections::BTreeSet[i64],
+    pub claims: collections::BTreeMap[(i64, i64), FactClaim],
+    pub entries: collections::BTreeMap[String, Vec[PreconditionCheck]],
+    pub reaches: collections::BTreeMap[(String, String), CallReach],
+    pub published: collections::BTreeMap[String, Published],
+    /// **Each index data from outside reaches, and what became of it**
+    /// (ADR-396 D5), by where it stands and how it is written, as the
+    /// prover's last walk left it: `--bounds` lists them.
+    pub outside_indices: collections::BTreeMap[(i64, String), OutsideIndex],
+    pub mut_args: collections::BTreeSet[i64],
+    /// **The receivers of methods written `ref mut self`** (#787), by the
+    /// receiver's node: a call there lends its root as a `mut` argument does.
+    pub mut_receivers: collections::BTreeSet[i64],
+    /// The binding each argument of `mut_args` names, by the argument's node.
+    pub mut_arg_bindings: collections::BTreeMap[i64, i64],
+    /// **A `mut` argument that is a reference already** (#703): a part an
+    /// arm over a `mut` parameter bound in place, handed on to a `mut`
+    /// parameter, is lent on as `&mut *part` (ADR-094 D3, D7).
+    pub reborrowed_args: collections::BTreeSet[i64],
+    /// **A mention of a `let mut` view read or written through it** (#976):
+    /// an assignment to the view, and any mention of one of a number, a
+    /// `bool` or a `char`, is `(*c)` below.
+    pub view_derefs: collections::BTreeSet[i64],
+    pub copied_args: collections::BTreeSet[i64],
+    /// **A name that is a view of a value that copies, where the value is
+    /// wanted** (ADR-387 D1): a `let`, a `return`, a field, a described
+    /// method's argument. Written `*name` below.
+    pub copied_views: collections::BTreeSet[i64],
+    pub settle_fns: collections::BTreeMap[String, bool],
+    /// **The type parameters a std operation weighs, by function** (ADR-327
+    /// D9, #1559): a `T` handed to a channel's `send` or a shared value's
+    /// `set`, whose Rust is bounded by `DeepSize`. The emitter writes the
+    /// bound; no Nikaia bound says it.
+    pub weighed: collections::BTreeMap[String, collections::BTreeSet[String]],
+    /// **A generic call that hands its own type parameter on**, by caller:
+    /// the callee, the callee's parameter, and the caller's parameter in the
+    /// type it is bound to. Where the callee weighs it, the caller does.
+    pub weighed_through: collections::BTreeMap[String, collections::BTreeSet[(String, String, String)]],
+    pub settle_lets: collections::BTreeMap[i64, bool],
+    pub lent_lets: collections::BTreeSet[i64],
+    pub lent_returns: collections::BTreeSet[i64],
+    pub compares: collections::BTreeSet[String],
+    pub compares_totally: collections::BTreeSet[String],
+    pub copies: collections::BTreeSet[String],
+    pub viewed_numbers: collections::BTreeSet[(i64, String)],
+    pub array_literals: collections::BTreeSet[i64],
+    pub byte_literals: collections::BTreeSet[i64],
+    pub owned_texts: collections::BTreeSet[i64],
+    /// A text literal handed to a type variable the callee lends
+    /// (ADR-views-3 D2, #1342): the view it is, with the one `&` the
+    /// parameter takes, `&"b"`.
+    pub lent_literals: collections::BTreeSet[i64],
+    /// A `catch` whose guarded value is a view of text and whose handler's is
+    /// text of its own: the guarded value is made owned.
+    pub owned_catches: collections::BTreeSet[i64],
+    /// A `catch` whose handler hands back `null` over a guarded `T` that is
+    /// not `T?`: the guarded value is `Some` (#884).
+    pub nullable_catches: collections::BTreeSet[i64],
+    /// A `catch` whose value is not used (#885): the guarded value and the
+    /// handler's are both dropped.
+    pub dropped_catches: collections::BTreeSet[i64],
+    /// `s.bytes` on text: the text's own bytes, borrowed (ADR-320 D11).
+    pub text_bytes: collections::BTreeSet[i64],
+    /// `s.scalars` on text: its scalars, walked (ADR-320 D3).
+    pub text_scalars: collections::BTreeSet[i64],
+    /// `s.graphemes` on text: its graphemes by UAX #29, walked (ADR-320 D9).
+    pub text_graphemes: collections::BTreeSet[i64],
+    /// `b[a..<c]` on a `Bytes`: a cut, a `&[u8]` into `b` below (ADR-320
+    /// D7): kept, it is copied into a `Bytes` of its own; read as a map's
+    /// key, it goes in as it is (#1345).
+    pub bytes_cuts: collections::BTreeSet[i64],
+    /// `s.bytes`, or a name a `let` bound to it, where the program keeps it
+    /// beyond the text: copied into a `Bytes` of its own (ADR-320 D11).
+    pub kept_text_bytes: collections::BTreeSet[i64],
+    /// The `let`s, by start, that declare `Bytes` and are bound to a text's
+    /// own bytes: the view, written without the annotation (ADR-320 D11,
+    /// ADR-views-3 D15, #1271).
+    pub text_bytes_typed_lets: collections::BTreeSet[i64],
+    /// The receivers of a `Bytes`'s `clone()`: a `Bytes` or a `&[u8]` below,
+    /// copied into a `Bytes` of its own (ADR-320 D11).
+    pub byte_copies: collections::BTreeSet[i64],
+    /// The receivers of a map's `drain()`: where the map stays the caller's,
+    /// it is emptied by Rust's `drain()`, which takes no range (#707).
+    pub map_drains: collections::BTreeSet[i64],
+    pub take_drains: collections::BTreeSet[i64],
+    /// The receivers of a `Par`'s `fold(init, step, merge)` (ADR-372 D2):
+    /// `fold_merged` below, which a list's `iter()` at `no` has as well as a
+    /// walk on every core, beside the language below's own two-argument `fold`.
+    pub par_folds: collections::BTreeSet[i64],
+    /// **The steps that end a walk with `within:`** (ADR-async-5 D27), by
+    /// their receiver's node: the lowering writes `par::ended(…)` around
+    /// each, which throws `task::TimedOut`.
+    pub timed_ends: collections::BTreeSet[i64],
+    /// **The `for` loops over a walk with `within:`**, by the loop's start:
+    /// the lowering lists the walk first, through `par::listed`.
+    pub timed_loops: collections::BTreeSet[i64],
+    /// **A fold's step or merge that changes its accumulator in place**
+    /// (ADR-372 D9), by the argument: `1` takes the second argument by value,
+    /// `2` lent. The lowering wraps it in `|mut a, x| { f(&mut a, x); a }`.
+    pub in_place_folds: collections::BTreeMap[i64, i64],
+    /// The receivers of a `drain()` that stay the caller's - rooted in a `mut`
+    /// parameter or in `self` under `ref mut self` - which it empties (#707).
+    pub kept_drains: collections::BTreeSet[i64],
+    /// `P { b }` over a name bound to `s.bytes`, by the struct literal and the
+    /// field: the name copied into a `Bytes` of its own (ADR-320 D11).
+    pub kept_byte_fields: collections::BTreeSet[(i64, String)],
+    pub lent_list_reads: collections::BTreeSet[i64],
+    /// **An arm that reads an element or a field off a place, lent** (#613).
+    pub lent_reads: collections::BTreeSet[i64],
+    /// **A `T?` place handed back into a `ref T?` result** (#1486): written
+    /// `.as_ref()`, the option of a view, not `&` before it.
+    pub lent_option_results: collections::BTreeSet[i64],
+    pub view_fallbacks: collections::BTreeSet[i64],
+    /// **A map read that jumps where it finds nothing** (`m[k] ?? return`),
+    /// by the `??`: of a value that moves, the answer is a view of the map
+    /// (ADR-293 D28), which `view_changes` watches (#739).
+    pub map_read_views: collections::BTreeSet[i64],
+    /// **The keep plans the check made against `std` alone** (#727): the
+    /// emitter's own, where it reads this check's facts.
+    pub keep_plans: Vec[BufferPlan]?,
+    /// **What each name a use names** (#1396), by the use's node: what
+    /// `nikaia lsp` answers "go to definition" from (`check_declared.nika`).
+    /// Nothing in a build reads it.
+    pub declared: collections::BTreeMap[i64, CheckDeclared],
+    /// **Where each local was bound** (#1396), by its binding's id
+    /// (`CheckLocal::id`): its `let`, `for`, `match` or parameter.
+    pub bound_at: collections::BTreeMap[i64, (Span, String)],
+    /// **Where a use stands whose node the grammar gave no span** (#1396):
+    /// a callee, from its call's start, as wide as the name written.
+    pub declared_at: collections::BTreeMap[i64, Span],
+}
+
+impl CheckFacts {
+    pub fn empty() -> CheckFacts {
+        return CheckFacts {
+            std_helpers_reached: collections::BTreeSet(),
+            held_across_a_pause: collections::BTreeSet(),
+            comptime_values: collections::BTreeMap(),
+            turn_comptime_values: collections::BTreeMap(),
+            dsl_values: collections::BTreeMap(),
+            with_types: collections::BTreeMap(),
+            unrolled: collections::BTreeMap(),
+            walks_fields: collections::BTreeMap(),
+            unrolled_calls: collections::BTreeMap(),
+            field_copies: collections::BTreeMap(),
+            type_kinds: collections::BTreeMap(),
+            type_parts: collections::BTreeMap(),
+            type_fields: collections::BTreeMap(),
+            kind_matches: collections::BTreeSet(),
+            kind_compares: collections::BTreeSet(),
+            reflected_names: collections::BTreeSet(),
+            fallible_loops: collections::BTreeSet(),
+            pausing_walks: collections::BTreeSet(),
+            pausing_loops: collections::BTreeSet(),
+            owned_loops: collections::BTreeSet(),
+            copied_loop_bindings: collections::BTreeSet(),
+            copied_view_bindings: collections::BTreeSet(),
+            unsigned_literals: collections::BTreeMap(),
+            number_lets: collections::BTreeMap(),
+            changed_elements: collections::BTreeSet(),
+            text_finds: collections::BTreeSet(),
+            receiver_views: collections::BTreeSet(),
+            bytes_splits: collections::BTreeSet(),
+            char_patterns: collections::BTreeMap(),
+            standard_compares: collections::BTreeMap(),
+            count_args: collections::BTreeSet(),
+            path_methods: collections::BTreeMap(),
+            map_keys: collections::BTreeMap(),
+            slice_indices: collections::BTreeSet(),
+            list_indices: collections::BTreeSet(),
+            kept_fn_reads: collections::BTreeSet(),
+            kept_fn_copies: collections::BTreeSet(),
+            kept_fn_fields: collections::BTreeSet(),
+            stored_handles: collections::BTreeSet(),
+            stored_handle_fields: collections::BTreeSet(),
+            moved_handles: collections::BTreeSet(),
+            copied_tuple_parts: collections::BTreeSet(),
+            std_lengths: collections::BTreeSet(),
+            sized_lengths: collections::BTreeSet(),
+            whole_fields: collections::BTreeSet(),
+            whole_loops: collections::BTreeSet(),
+            whole_parts: collections::BTreeMap(),
+            whole_lets: collections::BTreeMap(),
+            zero_divisors: collections::BTreeSet(),
+            unfit_numbers: collections::BTreeSet(),
+            array_lengths: collections::BTreeMap(),
+            char_codes: collections::BTreeSet(),
+            arithmetic: collections::BTreeMap(),
+            shifts: collections::BTreeMap(),
+            divisions: collections::BTreeMap(),
+            std_receivers: collections::BTreeMap(),
+            method_callees: collections::BTreeMap(),
+            field_owners: collections::BTreeMap(),
+            outside: ProverOutside::nothing(),
+            declared: collections::BTreeMap(),
+            bound_at: collections::BTreeMap(),
+            declared_at: collections::BTreeMap(),
+            simd_loads: collections::BTreeMap(),
+            negations: collections::BTreeMap(),
+            copied_slots: collections::BTreeSet(),
+            owned_copies: collections::BTreeSet(),
+            copied_doors: collections::BTreeSet(),
+            text_copies: collections::BTreeSet(),
+            tuple_copies: collections::BTreeMap(),
+            static_field_reads: collections::BTreeSet(),
+            text_as_is: collections::BTreeSet(),
+            lent_coalesces: collections::BTreeMap(),
+            plain_reaches: collections::BTreeSet(),
+            copied_jump_reads: collections::BTreeSet(),
+            mut_view_reads: collections::BTreeMap(),
+            mut_view_gets: collections::BTreeSet(),
+            view_coalesces: collections::BTreeSet(),
+            text_view_fallbacks: collections::BTreeSet(),
+            text_owned_fallbacks: collections::BTreeSet(),
+            lent_map_fallbacks: collections::BTreeSet(),
+            slot_fallbacks: collections::BTreeMap(),
+            map_gets: collections::BTreeSet(),
+            optional_fallbacks: collections::BTreeSet(),
+            flat_reads: collections::BTreeSet(),
+            async_waits: collections::BTreeMap(),
+            copied_reads: collections::BTreeSet(),
+            text_in_lists: collections::BTreeSet(),
+            owned_patterns: collections::BTreeSet(),
+            view_patterns: collections::BTreeSet(),
+            view_list_drops: collections::BTreeMap(),
+            view_list_assigns: collections::BTreeSet(),
+            placed_in_block: collections::BTreeSet(),
+            view_list_rebinds: collections::BTreeMap(),
+            view_list_rebound: collections::BTreeSet(),
+            counted: collections::BTreeSet(),
+            lent_bindings: collections::BTreeMap(),
+            in_place_bindings: collections::BTreeMap(),
+            taking_arms: collections::BTreeMap(),
+            taken_parts: collections::BTreeMap(),
+            views_handed_on: collections::BTreeSet(),
+            comptime_uses: collections::BTreeMap(),
+            comptime_names: collections::BTreeSet(),
+            folded_comptimes: collections::BTreeSet(),
+            shadowing_reads: collections::BTreeSet(),
+            lent_scrutinees: collections::BTreeSet(),
+            changed_scrutinees: collections::BTreeSet(),
+            text_scrutinees: collections::BTreeSet(),
+            text_parts: collections::BTreeMap(),
+            arm_subjects: collections::BTreeMap(),
+            guards_inside_boxes: collections::BTreeMap(),
+            collected_into: collections::BTreeSet(),
+            text_slot_collects: collections::BTreeSet(),
+            summed: collections::BTreeMap(),
+            copied_walks: collections::BTreeSet(),
+            owned_clones: collections::BTreeSet(),
+            defaulted_entries: collections::BTreeMap(),
+            filter_patterns: collections::BTreeSet(),
+            copied_entry_lambdas: collections::BTreeSet(),
+            lambda_params_by_use: collections::BTreeMap(),
+            let_lambdas: collections::BTreeMap(),
+            let_kept_lambdas: collections::BTreeSet(),
+            owned_entry_keys: collections::BTreeSet(),
+            collection_clones: collections::BTreeSet(),
+            map_clones: collections::BTreeSet(),
+            text_extends: collections::BTreeSet(),
+            kept_lambdas: collections::BTreeMap(),
+            kept_results: collections::BTreeMap(),
+            kept_hulls: collections::BTreeMap(),
+            kept_owned: collections::BTreeMap(),
+            field_calls: collections::BTreeMap(),
+            kept_calls: collections::BTreeMap(),
+            kept_args: collections::BTreeSet(),
+            kept_args_run_async: collections::BTreeMap(),
+            kept_functions: collections::BTreeMap(),
+            fallible_methods: collections::BTreeSet(),
+            future_lambdas: collections::BTreeSet(),
+            run_lambdas: collections::BTreeSet(),
+            failing_lambdas: collections::BTreeSet(),
+            valueless_lambdas: collections::BTreeSet(),
+            run_code_fails: collections::BTreeSet(),
+            sync_functions_run_async: collections::BTreeMap(),
+            boxed_fn_values: collections::BTreeMap(),
+            infallible_fn_values: collections::BTreeMap(),
+            named_fn_values: collections::BTreeMap(),
+            pausing_lambdas: collections::BTreeMap(),
+            paused_scopes: collections::BTreeSet(),
+            scope_tasks: collections::BTreeSet(),
+            witnessed_sets: collections::BTreeSet(),
+            pausing_methods: collections::BTreeSet(),
+            nullable_sites: collections::BTreeMap(),
+            concatenations: collections::BTreeSet(),
+            lent_concatenated: collections::BTreeSet(),
+            appended_texts: collections::BTreeSet(),
+            path_comparisons: collections::BTreeSet(),
+            mixed_comparisons: collections::BTreeMap(),
+            path_holes: collections::BTreeMap(),
+            flattened_reaches: collections::BTreeSet(),
+            copied_reaches: collections::BTreeSet(),
+            viewed_reaches: collections::BTreeMap(),
+            lent_reaches: collections::BTreeSet(),
+            held_reaches: collections::BTreeSet(),
+            nullable_fields: collections::BTreeMap(),
+            nullable_args: collections::BTreeMap(),
+            narrowing_casts: collections::BTreeMap(),
+            narrowed_reads: collections::BTreeMap(),
+            set_positions: collections::BTreeMap(),
+            set_alternatives: collections::BTreeMap(),
+            task_handles: collections::BTreeSet(),
+            bytes_entries: collections::BTreeSet(),
+            bytes_grammars: collections::BTreeSet(),
+            method_options: collections::BTreeMap(),
+            lent_args: collections::BTreeSet(),
+            lent_fields: collections::BTreeSet(),
+            lookup_keys: collections::BTreeSet(),
+            boxed_members: collections::BTreeMap(),
+            boxed_reads: collections::BTreeSet(),
+            copied_bindings: collections::BTreeSet(),
+            changed_copies: collections::BTreeSet(),
+            changed_bindings: collections::BTreeSet(),
+            cloned_bindings: collections::BTreeSet(),
+            some_tails: collections::BTreeSet(),
+            mixed_leaves: collections::BTreeMap(),
+            mixed_choices: collections::BTreeSet(),
+            lent_arms: collections::BTreeSet(),
+            lent_arm_leaves: collections::BTreeMap(),
+            lent_options: collections::BTreeSet(),
+            wrapped: collections::BTreeMap(),
+            compared_views: collections::BTreeSet(),
+            copied_results: collections::BTreeSet(),
+            lent_text_views: collections::BTreeSet(),
+            viewed_text_calls: collections::BTreeSet(),
+            plain_bracket_calls: collections::BTreeSet(),
+            compared_numbers: collections::BTreeSet(),
+            ordered_texts: collections::BTreeSet(),
+            claims: collections::BTreeMap(),
+            entries: collections::BTreeMap(),
+            reaches: collections::BTreeMap(),
+            published: collections::BTreeMap(),
+            outside_indices: collections::BTreeMap(),
+            mut_args: collections::BTreeSet(),
+            mut_receivers: collections::BTreeSet(),
+            mut_arg_bindings: collections::BTreeMap(),
+            reborrowed_args: collections::BTreeSet(),
+            view_derefs: collections::BTreeSet(),
+            copied_args: collections::BTreeSet(),
+            copied_views: collections::BTreeSet(),
+            settle_fns: collections::BTreeMap(),
+            weighed: collections::BTreeMap(),
+            weighed_through: collections::BTreeMap(),
+            settle_lets: collections::BTreeMap(),
+            lent_lets: collections::BTreeSet(),
+            lent_returns: collections::BTreeSet(),
+            compares: collections::BTreeSet(),
+            compares_totally: collections::BTreeSet(),
+            copies: collections::BTreeSet(),
+            viewed_numbers: collections::BTreeSet(),
+            array_literals: collections::BTreeSet(),
+            byte_literals: collections::BTreeSet(),
+            owned_texts: collections::BTreeSet(),
+            lent_literals: collections::BTreeSet(),
+            owned_catches: collections::BTreeSet(),
+            nullable_catches: collections::BTreeSet(),
+            dropped_catches: collections::BTreeSet(),
+            text_bytes: collections::BTreeSet(),
+            text_scalars: collections::BTreeSet(),
+            text_graphemes: collections::BTreeSet(),
+            bytes_cuts: collections::BTreeSet(),
+            kept_text_bytes: collections::BTreeSet(),
+            text_bytes_typed_lets: collections::BTreeSet(),
+            byte_copies: collections::BTreeSet(),
+            map_drains: collections::BTreeSet(),
+            take_drains: collections::BTreeSet(),
+            par_folds: collections::BTreeSet(),
+            timed_ends: collections::BTreeSet(),
+            timed_loops: collections::BTreeSet(),
+            in_place_folds: collections::BTreeMap(),
+            kept_drains: collections::BTreeSet(),
+            kept_byte_fields: collections::BTreeSet(),
+            lent_list_reads: collections::BTreeSet(),
+            lent_reads: collections::BTreeSet(),
+            lent_option_results: collections::BTreeSet(),
+            view_fallbacks: collections::BTreeSet(),
+            map_read_views: collections::BTreeSet(),
+            keep_plans: null,
+        }
+    }
+
+    /// **The type parameters of `key` that are weighed** (ADR-327 D9,
+    /// #1559): those a std operation in its body weighs, and those it hands
+    /// to a generic callee that weighs them, to a fixed point.
+    pub fn weighed_of(ref self, key: ref String) -> collections::BTreeSet[String] {
+        let mut all: collections::BTreeMap[String, collections::BTreeSet[String]] = self.weighed.clone()
+        let mut changed = true
+        while changed {
+            changed = false
+            for (caller, edges) in self.weighed_through {
+                for edge in edges {
+                    let (callee, param, own) = edge.clone()
+                    let reached = all.get(callee)?.contains(param) ?? false
+                    if !reached {
+                        continue
+                    }
+                    let mut held: collections::BTreeSet[String] = all.get(caller)?.clone() ?? collections::BTreeSet()
+                    if !held.contains(own) {
+                        held.insert(own)
+                        all.insert(caller.clone(), held)
+                        changed = true
+                    }
+                }
+            }
+        }
+        return all.get(key)?.clone() ?? collections::BTreeSet()
+    }
+}
+
+/// How the compiler holds one `assert`, as `--asserts` says it (ADR-269 D7).
+fn check_claim_held(held: ref ClaimHeld?) -> String {
+    let given = held ?? return "refused: a claim about data from outside the program"
+    return match given {
+        ClaimHeld::Proved => "proved",
+        ClaimHeld::ProvedThrough(how) => how.clone(),
+        ClaimHeld::Precondition(f, n) => {
+            // **`main`'s caller is the command line** (ADR-360 D4).
+            if f == "main" {
+                "precondition of `main`, checked where the words arrive"
+            } else if n == 0 {
+                f"precondition of `{f}`: proved at every call the compiler sees; any other reaches the entry that checks it"
+            } else if n == 1 {
+                f"precondition of `{f}`: one call checks it when it runs; any other call proves it or reaches the entry that checks it"
+            } else {
+                f"precondition of `{f}`: {n} calls check it when they run; any other call proves it or reaches the entry that checks it"
+            }
+        }
+        ClaimHeld::AtRunTime(why) => f"checked at run time: {why}",
+        ClaimHeld::ByTheTest => "checked when the test runs",
+        ClaimHeld::Refused => "refused: a claim about data from outside the program",
+    }
+}
+
+/// How a claim the build refuses as not proved (`NK1300`, ADR-380 D1) is
+/// listed; nothing where it is not refused so.
+fn check_claim_refused(held: ref ClaimHeld?) -> String? {
+    let given = held ?? return null
+    match given {
+        ClaimHeld::AtRunTime(why) => return f"refused, not proved: {why}",
+        ClaimHeld::Precondition(f, n) => {
+            if f == "main" || n == 0 {
+                return null
+            }
+            if n == 1 {
+                return f"refused, precondition of `{f}`: one call does not prove it"
+            }
+            return f"refused, precondition of `{f}`: {n} calls do not prove it"
+        },
+        else => return null,
+    }
+}
+
+/// **`--asserts`** (ADR-269 D7): every `assert` of one file, by line, how
+/// the compiler holds it, and how many of each. What is not proved comes
+/// first, in red - refused, checked at run time, checked by a test -, then
+/// what is checked where outside data arrives (`main`'s preconditions), in
+/// light blue, and what the build proved last, in green: proved claims, and
+/// preconditions proved at every call. Within a group the claims are in the
+/// order of their lines; `colour` asks for the colours. `published` gives
+/// `main`'s preconditions carried back from a callee (ADR-269 D15, ADR-360
+/// D3), which no `assert` of `main` states: each is a row of its own.
+/// `derived` gives the preconditions the build derived from a private
+/// function's callers (ADR-391 D4), as `bounds_report_derived` writes them:
+/// each a row marked `derived`, in green after the rest, counted apart from
+/// the asserts.
+pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactClaim], source: ref String, path: ref String, published: ref collections::BTreeMap[String, Published], derived: ref Vec[String], colour: bool, refuses: bool) -> String {
+    let mut refused: Vec[String] = []
+    let mut at_run_time: Vec[String] = []
+    let mut arrives: Vec[String] = []
+    let mut by_the_test: Vec[String] = []
+    let mut proved: Vec[String] = []
+    let mut through_loops = 0
+    let mut preconditions: Vec[String] = []
+    let mut assumed: Vec[String] = []
+    let mut mains: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut line = 1
+    let mut at = 0
+    for (key, claim) in claims {
+        let mut start = key.0
+        if start > source.bytes.len() {
+            start = source.bytes.len()
+        }
+        if start > at {
+            for c in source.bytes[at..<start] {
+                if c == '\n' {
+                    line = line + 1
+                }
+            }
+            at = start
+        }
+        // **Every `assume` is listed** (ADR-376 D3): vouched for, not proved.
+        if claim.assumed {
+            assumed.push(f"  {path}:{line}  {claim.written}  assumed: a fact the program vouches for in `unsafe`, checked only where the build removes no checks")
+            continue
+        }
+        // **Where the build refuses what it did not prove** (ADR-380 D1),
+        // such a claim is refused, not checked at run time.
+        let how = match refuses {
+            true => check_claim_refused(claim.held) ?? check_claim_held(claim.held),
+            false => check_claim_held(claim.held),
+        }
+        let row = f"  {path}:{line}  {claim.written}  {how}"
+        if how == "proved" {
+            proved.push(row)
+        } else if how.starts_with("proved through") || how.starts_with("proved inside") {
+            through_loops += 1
+            proved.push(row)
+        } else if how.starts_with("precondition of `main`") {
+            mains.insert(claim.written.clone())
+            arrives.push(row)
+        } else if how.starts_with("precondition") && how.contains("proved at every call") {
+            preconditions.push(row)
+        } else if how.starts_with("precondition") || how.starts_with("checked at run time") {
+            at_run_time.push(row)
+        } else if how.starts_with("checked when") {
+            by_the_test.push(row)
+        } else if claim.held != null {
+            refused.push(row)
+        }
+    }
+    let main = published["main"]
+    if main != null {
+        let entry = main?.clone() ?? Published::nothing()
+        for k in 0..<entry.requires.len() {
+            if k >= entry.from.len() {
+                continue
+            }
+            let from = entry.from[k]
+            if mains.contains(from) {
+                continue
+            }
+            arrives.push(f"  {path}  {entry.requires[k]}  precondition of `main` carried back from `{from}`, checked where the words arrive")
+        }
+    }
+    let unproved = refused.len() + at_run_time.len() + by_the_test.len()
+    let done = proved.len() + preconditions.len()
+    // **What a loop carried** (ADR-361 D7), counted where there is any.
+    let mut looped: String = ""
+    if through_loops > 0 {
+        looped = f", through a loop {through_loops}"
+    }
+    let mut vouched: String = ""
+    if assumed.len() > 0 {
+        vouched = f"; assumed {assumed.len()}"
+    }
+    // **What callers proved** (ADR-391 D4): no `assert` states it, so it is
+    // counted on its own.
+    if derived.len() > 0 {
+        vouched = f"{vouched}; derived from the callers {derived.len()}"
+    }
+    let mut out: String = f"asserts in {path}: {unproved + arrives.len() + done} - not proved {unproved} (refused {refused.len()}, checked at run time {at_run_time.len()}, checked by a test {by_the_test.len()}); checked where the words arrive {arrives.len()}; proved {done} (proved {proved.len()}{looped}, preconditions proved at every call {preconditions.len()}){vouched}\n"
+    let mut red: Vec[String] = []
+    red.extend(refused)
+    red.extend(at_run_time)
+    red.extend(by_the_test)
+    let mut green: Vec[String] = []
+    green.extend(proved)
+    green.extend(preconditions)
+    for row in derived {
+        green.push(f"  {path}  derived  {row}")
+    }
+    out.push_str(check_report_rows(red, "\x1b[31m", colour))
+    out.push_str(check_report_rows(arrives, "\x1b[94m", colour))
+    out.push_str(check_report_rows(assumed, "\x1b[33m", colour))
+    out.push_str(check_report_rows(green, "\x1b[32m", colour))
+    return out
+}
+
+/// Each row on a line of its own, in `paint` where `colour` asks for it.
+fn check_report_rows(rows: ref Vec[String], paint: ref String, colour: bool) -> String {
+    let mut out: String = ""
+    for row in rows {
+        if colour {
+            out.push_str(paint)
+            out.push_str(row)
+            out.push_str("\x1b[0m\n")
+        } else {
+            out.push_str(row)
+            out.push_str("\n")
+        }
+    }
+    return out
+}

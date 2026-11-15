@@ -1,0 +1,324 @@
+// crates/nikaia-std/src/compiler/prover_passes.nika
+//
+// **The prover's passes over a program** (ADR-269 D5, D15-D20), moved from
+// the compiler's `prove` (ADR-294, #436 step 4): the walk
+// (`prover_walk.nika`) repeated until the preconditions, then the
+// postconditions, stop changing, and what the answer is made into - the
+// checks of each checked entry, what the ledger publishes, how many calls
+// carry each precondition's check, and how a claim no walk reached is held.
+
+use std::collections
+
+/// What the passes make beside the walk's own answers.
+pub struct ProverAnswers {
+    /// By the ledger's key: what the checked entry checks (ADR-269 D20).
+    pub entries: collections::BTreeMap[String, Vec[PreconditionCheck]],
+    /// By the ledger's key: what the ledger publishes (ADR-269 D18).
+    pub published: collections::BTreeMap[String, Published],
+}
+
+/// **Every claim of the program, proved** - the walk's `held`, `reaches` and
+/// `findings` are the last walk's - and what the passes make of it.
+pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> ProverAnswers sync {
+    // Pass 1: which parameter claims are preconditions (D5) - a function's
+    // own `assert`s, and what its calls ask that it cannot show (D15). The
+    // second depends on the callees' preconditions, so the pass repeats with
+    // the last one's until nothing changes. A call inside a cycle is never
+    // carried back, so every chain of carrying is at most as long as the
+    // functions are many.
+    let readers = prover_readers(program, words)
+    walk.state.value_readers = prover_value_readers(readers, own, library)
+    walk.state.readers = prover_length_keepers(program, readers, words)
+    let bound = program.items.len() + 2
+    let mut preconditions: collections::BTreeMap[String, Precondition] = collections::BTreeMap()
+    let mut unwritten: collections::BTreeMap[String, Vec[UnwrittenCheck]] = collections::BTreeMap()
+    for _ in 0..<bound {
+        walk.state.known = preconditions
+        walk.state.known_unwritten = unwritten
+        walk.state.preconditions = collections::BTreeMap()
+        walk.state.candidates = collections::BTreeMap()
+        walk.state.unwritten = collections::BTreeMap()
+        walk.state.unstated = collections::BTreeMap()
+        prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+        preconditions = walk.state.preconditions.clone()
+        unwritten = walk.state.unwritten.clone()
+        if same_preconditions(walk.arena, preconditions, walk.state.known) && same_unwritten(unwritten, walk.state.known_unwritten) {
+            break
+        }
+    }
+    walk.state.known_unwritten = collections::BTreeMap()
+    walk.state.known = collections::BTreeMap()
+    walk.state.collecting = false
+    walk.state.preconditions = preconditions
+    // **Pass 2, until nothing changes: every claim and every call**, with the
+    // postconditions still standing (D17). Each one starts as a candidate and
+    // is struck where an exit does not show it; a proof at one exit may lean
+    // on another function's postcondition, so the walk repeats until no
+    // candidate falls. The last walk is the answer: it ran with exactly the
+    // postconditions that hold.
+    walk.state.postconditions = walk.state.candidates.clone()
+    walk.state.candidates = collections::BTreeMap()
+    let mut settled = false
+    while !settled {
+        walk.held = collections::BTreeMap()
+        walk.std_claims = collections::BTreeMap()
+        walk.reaches = collections::BTreeMap()
+        walk.findings = []
+        walk.outside = collections::BTreeMap()
+        walk.state.broken = collections::BTreeSet()
+        prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+        settled = walk.state.broken.is_empty()
+        if !settled {
+            strike_broken(walk.state)
+        }
+    }
+    let answers = ProverAnswers { entries: checked_entries(walk, escape), published: published_contracts(walk) }
+    count_checked_calls(walk)
+    hold_unreached(walk, program)
+    return answers
+}
+
+/// Whether two walks left the same checks open, by function: what each
+/// says, where it stands (ADR-396 D1).
+fn same_unwritten(now: ref collections::BTreeMap[String, Vec[UnwrittenCheck]], before: ref collections::BTreeMap[String, Vec[UnwrittenCheck]]) -> bool {
+    if now.len() != before.len() {
+        return false
+    }
+    for (function, checks) in now {
+        let earlier = before.get(function) ?? return false
+        if earlier.len() != checks.len() {
+            return false
+        }
+        for (one, other) in checks.iter().zip(earlier.iter()) {
+            if one.written != other.written || one.within != other.within || one.holds != other.holds {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+/// The postconditions an exit did not show, struck - from the last place
+/// back, so that each place is still the one it named.
+fn strike_broken(mut state: ProverState) {
+    let mut broken: Vec[(String, i64)] = []
+    for one in state.broken {
+        broken.push(one.clone())
+    }
+    let mut k = broken.len()
+    while k > 0 {
+        k -= 1
+        let (function, index) = broken[k]
+        let mut posts = state.postconditions.remove(function) ?? continue
+        posts.remove(index)
+        state.postconditions.insert(function.clone(), posts)
+    }
+    state.broken = collections::BTreeSet()
+}
+
+/// Whether two walks found the same preconditions, claim by claim.
+fn same_preconditions(arena: ref TermArena, a: ref collections::BTreeMap[String, Precondition], b: ref collections::BTreeMap[String, Precondition]) -> bool {
+    return precondition_texts(arena, a) == precondition_texts(arena, b)
+}
+
+fn precondition_texts(arena: ref TermArena, m: ref collections::BTreeMap[String, Precondition]) -> Vec[(String, Vec[String])] {
+    let mut out: Vec[(String, Vec[String])] = []
+    for (function, pre) in m {
+        let mut claims: Vec[String] = []
+        for claim in pre.claims {
+            claims.push(arena.text(claim.term))
+        }
+        out.push((function.clone(), claims))
+    }
+    return out
+}
+
+/// **Every function with a precondition has a checked entry** (D20),
+/// whatever its calls do: a caller the compiler doesn't see - a function
+/// value, another package, the language below - reaches it.
+fn checked_entries(walk: ref ProverWalk, escape: fn(ref String) -> String sync) -> collections::BTreeMap[String, Vec[PreconditionCheck]] {
+    let mut entries: collections::BTreeMap[String, Vec[PreconditionCheck]] = collections::BTreeMap()
+    for (function, pre) in walk.state.preconditions {
+        let mut checks: Vec[PreconditionCheck] = []
+        for claim in pre.claims {
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            walk.arena.variables(claim.term, read)
+            let mut operands: Vec[(String, String)] = []
+            for name in read {
+                operands.push((name.clone(), rust_of_name(name, escape)))
+            }
+            checks.push(PreconditionCheck { rust: rust_text(walk.arena, claim.term, escape), written: claim.failure(function), message: claim_text_of(claim.message), operands: operands })
+        }
+        entries.insert(function.clone(), checks)
+    }
+    return entries
+}
+
+/// **What the ledger publishes** (D18): every precondition and every
+/// postcondition still standing, and the `assert` each came from.
+fn published_contracts(walk: ref ProverWalk) -> collections::BTreeMap[String, Published] {
+    let mut published: collections::BTreeMap[String, Published] = collections::BTreeMap()
+    for (function, pre) in walk.state.preconditions {
+        let mut entry = published.remove(function) ?? Published::nothing()
+        for claim in pre.claims {
+            entry.requires.push(ledger_term_text(walk.arena, claim.term))
+            entry.from.push(f"assert({claim.written})")
+        }
+        published.insert(function.clone(), entry)
+    }
+    for (function, posts) in walk.state.postconditions {
+        if posts.is_empty() {
+            continue
+        }
+        let mut entry = published.remove(function) ?? Published::nothing()
+        for post in posts {
+            entry.ensures.push(ledger_term_text(walk.arena, post.term))
+        }
+        published.insert(function.clone(), entry)
+    }
+    // **A result summary is an observation** (ADR-359 D3): written as
+    // `inferred`: each exit's path and the value handed back there.
+    for (function, _) in walk.state.summaries {
+        if !published.contains_key(function) {
+            published.insert(function.clone(), Published::nothing())
+        }
+    }
+    let mut out: collections::BTreeMap[String, Published] = collections::BTreeMap()
+    for (function, entry) in published {
+        let mut full = entry.clone()
+        let posts = standing_posts(walk.state.postconditions, function) ?? []
+        for post in posts {
+            full.from.push(f"assert({post.written})")
+        }
+        let exits = walk.state.summaries[function]?.clone() ?? []
+        for exit in exits {
+            full.inferred.push(ledger_term_text(walk.arena, exit.term))
+        }
+        out.insert(function.clone(), full)
+    }
+    return out
+}
+
+/// A term in the language's own syntax, as the ledger writes it and reads
+/// it back (ADR-251 D4).
+fn ledger_term_text(arena: ref TermArena, id: i64) -> String {
+    return term_ledger_text(id, fn(at) { arena.at(at) })
+}
+
+/// How many distinct calls carry each precondition's check, into the claims
+/// held as preconditions. A call that reaches the checked entry
+/// (`CallReach::Through`: an argument the prover doesn't read) proves
+/// nothing either; it checks when it runs, as a `Checked` call does
+/// (ADR-269 D20, ADR-380 D1, #1076). A call carried back to its caller's
+/// entry (D15) proves nothing by itself: the precondition is then the
+/// caller's, and its callers' calls count too, transitively (#1090).
+fn count_checked_calls(mut walk: ProverWalk) {
+    let mut checked: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    for (key, reach) in walk.reaches {
+        let unproved = match reach {
+            CallReach::Checked(_) => true,
+            CallReach::Through => true,
+            CallReach::Proved => false,
+        }
+        if unproved {
+            let (callee, _) = key
+            let so_far = checked[callee] ?? 0
+            checked.insert(callee.clone(), so_far + 1)
+        }
+    }
+    let carried = carried_to(walk.state)
+    let mut counted: collections::BTreeMap[(i64, i64), ClaimHeld] = collections::BTreeMap()
+    for (key, held) in walk.held {
+        let now = match held {
+            ClaimHeld::Precondition(function, _) => ClaimHeld::Precondition(function.clone(), checked_through(checked, carried, walk.findings, function)),
+            else => held.clone(),
+        }
+        counted.insert(key.clone(), now)
+    }
+    walk.held = counted
+}
+
+/// **The functions each function's preconditions were carried to**: the
+/// callers whose entries hold a claim carried back from a call to it
+/// (ADR-269 D15).
+fn carried_to(state: ref ProverState) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+    let mut out: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    for (owner, pre) in state.preconditions {
+        for claim in pre.claims {
+            let site = claim.site ?? continue
+            let mut callers = out.remove(site.callee) ?? collections::BTreeSet()
+            callers.insert(owner.clone())
+            out.insert(site.callee.clone(), callers)
+        }
+    }
+    return out
+}
+
+/// The unproved calls of `function` and of every function its
+/// preconditions were carried to, transitively; each function once, so the
+/// carrying stops at a cycle (#1090). A call to a function it was carried
+/// to that `NK1207` told breaks it is told already, and not counted again;
+/// `function`'s own are left out where its claims are asked
+/// (`check_claims_unproved`).
+fn checked_through(checked: ref collections::BTreeMap[String, i64], carried: ref collections::BTreeMap[String, collections::BTreeSet[String]], findings: ref Vec[Finding], function: ref String) -> i64 {
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut todo: Vec[String] = [function.clone()]
+    let mut total = 0
+    while !todo.is_empty() {
+        let next = todo.pop() ?? break
+        if seen.contains(next) {
+            continue
+        }
+        let mut calls = checked[next] ?? 0
+        if next != function {
+            for found in findings {
+                if found.code == "NK1207" && found.message.contains(f"`{next}`'s precondition") {
+                    calls -= 1
+                }
+            }
+        }
+        if calls > 0 {
+            total += calls
+        }
+        let callers = carried[next] ?? {
+            seen.insert(next)
+            continue
+        }
+        for caller in callers {
+            todo.push(caller.clone())
+        }
+        seen.insert(next)
+    }
+    return total
+}
+
+/// **An `assert` this walk did not reach is checked where it stands** - in
+/// a test or a bench, by the test.
+fn hold_unreached(mut walk: ProverWalk, program: ref Program) {
+    let mut tests: Vec[(i64, i64)] = []
+    for item in program.items {
+        match item.node {
+            Item::Test { .. } => tests.push((item.span.start as i64, item.span.end as i64)),
+            Item::Bench { .. } => tests.push((item.span.start as i64, item.span.end as i64)),
+            else => {},
+        }
+    }
+    for (at, node) in walk.claims {
+        let key = (at, node)
+        if walk.held.contains_key(key) {
+            continue
+        }
+        let mut in_a_test = false
+        for (start, end) in tests {
+            if at >= start && at < end {
+                in_a_test = true
+            }
+        }
+        if in_a_test {
+            walk.held.insert(key, ClaimHeld::ByTheTest)
+        } else {
+            walk.held.insert(key, ClaimHeld::AtRunTime("it stands somewhere the prover doesn't look yet"))
+        }
+    }
+}
+

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1389] — 2026-11-15
+
+**A catch over a catch that cannot fail is NK1134; one whose handler fails catches it (#1641)**
+- A `catch` over a `catch` that cannot fail is refused (NK1134) instead of an internal compiler error, and an outer `catch` takes a failing call in the inner handler.
+
 ## [0.0.1388] — 2026-11-15
 
 **A program without fn main is refused with NK1351 before lowering (#1622)**

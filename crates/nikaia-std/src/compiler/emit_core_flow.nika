@@ -1,0 +1,1732 @@
+// crates/nikaia-std/src/compiler/emit_core_flow.nika
+//
+// **The values that compute and the jumps of the emitter's core** (ADR-294,
+// #125, #558, E9 unit U8): the arms of `expr_as_written` for `Closure`,
+// `Binary`, `Coalesce` (its four arms, in their original order), `TryCatch`,
+// `Try`, `Return`, `Break` / `Continue`, `Throw` and `Spawn`. Methods of
+// `EmitState`, `emit_core_*[H: EmitHost]`; the arm in the Rust match is a
+// one-line stub, and the match stays the dispatcher until U10.
+
+/// The side of `x == null` that is not the `null`: 1 for the right one, 2 for
+/// the left one, 0 where neither side or both are `null`.
+fn emit_flow_null_side(lhs: ref Expr, rhs: ref Expr) -> i64 {
+    let left = emit_flow_null(lhs)
+    let right = emit_flow_null(rhs)
+    if left && !right {
+        return 1
+    }
+    if right && !left {
+        return 2
+    }
+    return 0
+}
+
+fn emit_flow_null(node: ref Expr) -> bool {
+    return match node {
+        Expr::LitNull(_) => true,
+        else => false,
+    }
+}
+
+/// `a ?? return …` and the other `??`s lowered as a `match` (ADR-276 D20).
+fn emit_flow_a_jumping_coalesce(world: ref EmitWorld, node: ref Expr) -> bool {
+    return match node {
+        Expr::Coalesce { fallback, .. } => jumps_at_the_end(fallback) || emit_flow_never_returns(world, fallback),
+        else => false,
+    }
+}
+
+fn emit_flow_is_binary_below(node: ref Expr, here: i64) -> bool {
+    return match node {
+        Expr::Binary { op, .. } => precedence(op) < here,
+        else => false,
+    }
+}
+
+/// The text of a comparison made between a `u64` and a signed integer.
+fn emit_flow_compared(op: BinaryOp) -> String {
+    return match op {
+        BinaryOp::Lt => ").is_lt()",
+        BinaryOp::Le => ").is_le()",
+        BinaryOp::Gt => ").is_gt()",
+        BinaryOp::Ge => ").is_ge()",
+        BinaryOp::Eq => ").is_eq()",
+        else => ").is_ne()",
+    }
+}
+
+/// The receiver of a method call, by its node, which `compared_receiver`
+/// names; `-1` for any other expression.
+fn emit_flow_called_on(node: ref Expr) -> i64 {
+    return match node {
+        Expr::MethodCall { receiver, .. } => node_key(receiver),
+        else => -1,
+    }
+}
+
+/// Whether an expression is a cut, `x[i..<j]`.
+fn emit_flow_is_cut(node: ref Expr) -> bool {
+    return match node {
+        Expr::Index { index, .. } => match index {
+            Expr::Range { .. } => true,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// Whether a type the checker named for an operator is a whole number.
+fn emit_flow_is_whole(ty: ref String) -> bool {
+    let signed = ty == "i8" || ty == "i16" || ty == "i32" || ty == "i64" || ty == "i128" || ty == "isize"
+    return signed || ty == "u8" || ty == "u16" || ty == "u32" || ty == "u64" || ty == "u128" || ty == "usize"
+}
+
+/// **A `+`, `-` or `*` proved to stay inside its type** (ADR-306 D19): the
+/// operation without its check, `debug_assert`ed, from `proven-index`.
+fn emit_flow_proven(op: BinaryOp) -> String {
+    return match op {
+        BinaryOp::Add => "nikaia_std::proven::add",
+        BinaryOp::Sub => "nikaia_std::proven::sub",
+        else => "nikaia_std::proven::mul",
+    }
+}
+
+/// Whether an expression is the call `panic(..)`, which never comes back
+/// (Part III A.2).
+fn emit_flow_never_returns(world: ref EmitWorld, node: ref Expr) -> bool {
+    return match node {
+        Expr::Call { func, .. } => match func {
+            Expr::Variable(name, _) => emit_text(world, name) == "panic",
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// Whether the fallback of a `??` is a struct written out or a `bool`: the type
+/// already, whatever the option holds.
+fn emit_flow_a_struct_written(node: ref Expr) -> bool {
+    return match node {
+        Expr::StructLit { .. } => true,
+        Expr::LitBool(_, _) => true,
+        else => false,
+    }
+}
+
+/// Whether a struct literal stands at the head of `node` (D39): Rust refuses one
+/// unbracketed in a `match` scrutinee, so the guarded half of a `catch` is then
+/// written in brackets.
+fn emit_flow_struct_headed(node: ref Expr) -> bool {
+    return match node {
+        Expr::StructLit { .. } => true,
+        Expr::With { .. } => true,
+        Expr::MethodCall { receiver, .. } => emit_flow_struct_headed(receiver),
+        Expr::Field { base, .. } => emit_flow_struct_headed(base),
+        else => false,
+    }
+}
+
+fn emit_flow_a_lit_str(node: ref Expr) -> bool {
+    return match node {
+        Expr::LitStr { .. } => true,
+        else => false,
+    }
+}
+
+/// How a `??` lowers a tuple fallback beside a text split (#908):
+/// `split_once` and `rsplit_once` hand back `(&str, &str)` below. 0: not
+/// such a split; 1: every part is a literal or a place, lent as a view; 2:
+/// a part is owned text of its own, so both halves are made owned.
+fn emit_flow_split_fallback(world: ref EmitWorld, value: ref Expr, fallback: ref Expr) -> i64 {
+    let a_split = match value {
+        Expr::MethodCall { method, .. } => {
+            let name = emit_text(world, method)
+            name == "split_once" || name == "rsplit_once"
+        },
+        else => false,
+    }
+    if !a_split {
+        return 0
+    }
+    return match fallback {
+        Expr::Tuple(parts, _) => if parts.iter().all(fn(part) { emit_flow_a_lit_str(part) || emit_flow_a_place(emit_flow_cloned_place(world, part)) }) { 1 } else { 2 },
+        else => 0,
+    }
+}
+
+/// The place a `x.clone()` copies, or the expression itself.
+fn emit_flow_cloned_place(world: ref EmitWorld, node: ref Expr) -> ref Expr {
+    return match node {
+        Expr::MethodCall { receiver, method, args, .. } => if emit_text(world, method) == "clone" && args.len() == 0 && emit_flow_a_place(receiver) { receiver } else { node },
+        else => node,
+    }
+}
+
+/// A name or a field of a place.
+fn emit_flow_a_place(node: ref Expr) -> bool {
+    return match node {
+        Expr::Variable(_, _) => true,
+        Expr::Field { base, .. } => emit_flow_a_place(base),
+        else => false,
+    }
+}
+
+fn emit_flow_an_empty_list(node: ref Expr) -> bool {
+    return match node {
+        Expr::ListLit { items, .. } => items.len() == 0,
+        else => false,
+    }
+}
+
+fn emit_flow_an_index(node: ref Expr) -> bool {
+    return match node {
+        Expr::Index { .. } => true,
+        else => false,
+    }
+}
+
+/// A field read out of a list element, `xs[i].f` or `xs[i].a.b` (D31): a place
+/// behind a shared borrow, which a `match` cannot move out of.
+fn emit_flow_a_field_of_an_index(node: ref Expr) -> bool {
+    return match node {
+        Expr::Field { base, .. } => emit_flow_an_index(base) || emit_flow_a_field_of_an_index(base),
+        else => false,
+    }
+}
+
+/// An answer an iterator hands back, `xs.iter().find_map(..)` or
+/// `..filter_map(..).next()`, or a list's or a set's `first`: below it may be
+/// an `Option<&String>` or an `Option<String>`, which a literal fallback cannot
+/// tell apart.
+fn emit_flow_an_iterator_answer(world: ref EmitWorld, node: ref Expr) -> bool {
+    return match node {
+        Expr::MethodCall { method, .. } => {
+            let name = emit_text(world, method)
+            name == "find_map" || name == "find" || name == "next" || name == "first" || name == "last" || name == "nth" || name == "max" || name == "min" || name == "min_by_key" || name == "max_by_key"
+        },
+        else => false,
+    }
+}
+
+impl EmitState {
+    /// What the checker recorded of a kept lambda: `(pauses, fails)`.
+    fn emit_flow_pair(ref self, key: i64) -> (bool, bool) {
+        let pair = self.facts.kept_lambdas.get(key) ?? return (false, false)
+        return (pair.0, pair.1)
+    }
+
+    /// A pausing kept lambda's result as its future's cast names it: the
+    /// integer type the checker recorded, else `_` (#1029).
+    fn emit_flow_result(ref self, key: i64) -> String {
+        let found = self.facts.kept_results.get(key) ?? return "_"
+        return found.clone()
+    }
+
+    /// The hulls a kept lambda captures, each a handle of its own (ADR-230 D4).
+    fn emit_flow_hulls(ref self, key: i64) -> Vec[String] {
+        let found = self.facts.kept_hulls.get(key) ?? return []
+        return found.clone()
+    }
+
+    /// What a pausing kept lambda takes, owned once and lent to every call
+    /// (#95 step 6).
+    fn emit_flow_owned(ref self, key: i64) -> Vec[String] {
+        let found = self.facts.kept_owned.get(key) ?? return []
+        return found.clone()
+    }
+
+    /// The scope inside a lambda: nothing around it but the `mut` names.
+    fn emit_flow_inside_scope(ref self, changed: Vec[winnow_grammar::Symbol]) -> EmitScope {
+        return EmitScope::plain() with { changed: changed }
+    }
+
+    /// A lambda's arguments are the ones it names (ADR-277): nothing is read
+    /// off the body, so `fn { .. }` is `||`.
+    pub fn emit_core_closure[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let mut names: Vec[String] = []
+        for p in params {
+            names.push(emit_local_name(self.facts.comptime_names, emit_text(world, p)))
+        }
+        // **A lambda where a function value is kept** is one shared closure, and
+        // it takes what it captures with it.
+        if self.facts.kept_lambdas.contains_key(node_key(node)) {
+            let (pauses, fails) = self.emit_flow_pair(node_key(node))
+            self.emit_flow_kept(world, walk, out, host, node, params, mutable, names, body, pauses, fails, depth, flow, scope)
+            return
+        }
+        // **A lambda that pauses, where a `std` entry takes it** (ADR-233 D1):
+        // the language below's own `async` closure. Its body is an ordinary body
+        // that pauses.
+        // **A lambda bound by `let` and run by a parameter that may pause**
+        // (#1046): the same `async` closure the lambda written into the call is.
+        let pauses = self.facts.pausing_lambdas.contains_key(node_key(node)) || self.facts.run_lambdas.contains(node_key(node))
+        // **A task of `task::scope`** (ADR-346 D7) fails in the scope's channel,
+        // or says that it hands back nothing.
+        let a_task = scope.tasks_channel != "" && self.facts.scope_tasks.contains(node_key(node))
+        let fails = a_task && scope.tasks_channel != "nikaia_std::task::Crashed"
+        if a_task && !fails {
+            if pauses {
+                out.push("nikaia_std::task::plain_paused(")
+            } else {
+                out.push("nikaia_std::task::plain(")
+            }
+        }
+        if pauses {
+            out.push("async ")
+        }
+        // **`filter` is handed a reference to its item** (ADR-231 D2): where the
+        // item copies, the pattern takes it out.
+        let pattern = self.facts.filter_patterns.contains(node_key(node))
+        if pattern && names.len() == 1 {
+            out.push(f"|&{names[0]}| ")
+        } else if self.facts.copied_entry_lambdas.contains(node_key(node)) && names.len() == 1 {
+            out.push("|__nikaia_slot| ")
+        } else {
+            // **A lambda bound by `let`, typed by its first use** (#997):
+            // its parameters' types are written, as nothing else says them.
+            let by_use: Vec[Ty] = self.facts.lambda_params_by_use.get(node_key(node))?.clone() ?? []
+            out.push(f"|{emit_core_flow_typed_names(names, by_use).join(", ")}| ")
+        }
+        // **The `mut` ones reach inward** (ADR-281 D12), and the list is the
+        // enclosing one plus this lambda's rather than this lambda's alone.
+        // A number `and_modify` hands is copied in (#684), so its `mut` is the
+        // copy's and not a place to write through.
+        let copied = self.facts.copied_entry_lambdas.contains(node_key(node)) && names.len() == 1
+        let mut changed: Vec[winnow_grammar::Symbol] = scope.changed.clone()
+        for each in mutable {
+            if !copied {
+                changed.push(each.clone())
+            }
+        }
+        // A lambda's `return` leaves the lambda, not the function around it, so
+        // it never carries the enclosing `Ok`. The statement is kept, because the
+        // checker's answers about the calls in here are keyed by it, and
+        // `in_lambda` is what makes a pausing one refusable (ADR-055 6).
+        let inside = EmitFlow::plain() with { in_lambda: !pauses, statement: flow.statement }
+        // **A task of `task::scope` fails in the scope's channel** (ADR-346 D7):
+        // its body's error is handed back, and the scope throws it at its end.
+        if fails {
+            let channel = scope.tasks_channel.clone()
+            out.push(f"-> Result<(), {channel}> {{ ")
+            let failing = inside with { can_throw: true }
+            let failing_scope = EmitScope::plain() with { origin: scope.origin.clone(), function: scope.tasks_function.clone(), channel: channel.clone(), changed: changed, tasks_channel: channel.clone(), tasks_function: scope.tasks_function.clone() }
+            self.emit_core_block(world, walk, out, host, body, depth, failing, failing_scope, EmitTail::Value)
+            out.push("; Ok(()) }")
+            return
+        }
+        let inside_scope = EmitScope::plain() with { changed: changed, tasks_channel: scope.tasks_channel.clone(), tasks_function: scope.tasks_function.clone() }
+        // **`and_modify` handing a number** (#684): the value is copied out of
+        // the slot, the body runs as a closure of its own (a `return` leaves
+        // only it), and the value is written back. One that pauses runs its
+        // body as an `async` block awaited in place: a `return` leaves only the
+        // block, and the body may wait.
+        if copied && pauses {
+            out.push(f"{{ let mut {names[0]} = *__nikaia_slot; async ")
+        } else if copied {
+            out.push(f"{{ let mut {names[0]} = *__nikaia_slot; (|| ")
+        }
+        // **Code whose type says `throws` hands back a `Result`** (#1360), as
+        // a kept lambda does.
+        // **Code that hands back nothing drops the body's value** (#1321),
+        // as a named function without a result type does.
+        let valueless = self.facts.valueless_lambdas.contains(node_key(node))
+        let value_tail = if valueless { EmitTail::Statement } else { EmitTail::Value }
+        let return_tail = if valueless { EmitTail::Statement } else { EmitTail::Return }
+        // **A body that leaves at its end has no `Ok` after it** (#1369).
+        let leaves = emit_a_body_that_leaves(world, body)
+        if !copied && self.facts.failing_lambdas.contains(node_key(node)) {
+            out.push(if leaves { "{ " } else { "{ let __nikaia_done = " })
+            self.emit_core_block(world, walk, out, host, body, depth, inside with { can_throw: true }, inside_scope, value_tail)
+            out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" })
+            if a_task {
+                out.push(")")
+            }
+            return
+        }
+        self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, return_tail)
+        if copied && pauses {
+            out.push(f".await; *__nikaia_slot = {names[0]}; }}")
+        } else if copied {
+            out.push(f")(); *__nikaia_slot = {names[0]}; }}")
+        }
+        if a_task {
+            out.push(")")
+        }
+    }
+
+    /// A lambda where a function value is kept: `Kept(Arc::new(move |..| ..))`.
+    fn emit_flow_kept[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], names: ref Vec[String], body: ref Block, pauses: bool, fails: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // Each hull it captures is a handle of its own (ADR-230 D4): cloned in a
+        // block around the closure, so the name outside is not moved into it.
+        let hulls = self.emit_flow_hulls(node_key(node))
+        // **What a pausing one takes is owned once and lent to every call**
+        // (#95 step 6): moved behind an `Arc` here, and each call's future holds a
+        // count of it rather than a copy.
+        let owned = self.emit_flow_owned(node_key(node))
+        let block = hulls.len() > 0 || owned.len() > 0
+        // **An integer result is said where the future is made** (#1029): a
+        // typed `let`, since a cast does not carry the type into the `async`
+        // block and a bare literal there would be `i32`.
+        let result = self.emit_flow_result(node_key(node))
+        if block {
+            out.push("{ ")
+            for hull in hulls {
+                let name = escaped_name(hull)
+                out.push(f"let {name} = {name}.clone(); ")
+            }
+            for taken in owned {
+                let name = escaped_name(taken)
+                out.push(f"let {name} = std::sync::Arc::new({name}); ")
+            }
+        }
+        // **A `mut` parameter is the lambda's own value**: a kept function is
+        // handed its arguments, so `fn(mut conn)` is a binding it may change,
+        // written `mut conn`, and not the address a lock's door hands an `update`
+        // block.
+        // **One an untyped `let` bound** (#1043) is cast below, so its
+        // parameters' types are written, as nothing else says them.
+        let from_a_let = self.facts.let_kept_lambdas.contains(node_key(node))
+        let mut spelled: Vec[String] = names.clone()
+        if from_a_let {
+            let by_use: Vec[Ty] = self.facts.lambda_params_by_use.get(node_key(node))?.clone() ?? []
+            spelled = emit_core_flow_typed_names(names, by_use)
+        }
+        let mut bound: Vec[String] = []
+        let mut k = 0
+        for p in params {
+            let name = spelled[k].clone()
+            k += 1
+            if mutable.contains(p) {
+                bound.push(f"mut {name}")
+            } else {
+                bound.push(name)
+            }
+        }
+        out.push(f"nikaia_std::func::Kept(std::sync::Arc::new(move |{bound.join(", ")}| ")
+        let mut changed: Vec[winnow_grammar::Symbol] = []
+        for each in scope.changed {
+            if !params.contains(each) {
+                changed.push(each.clone())
+            }
+        }
+        let inside = EmitFlow::plain() with { in_lambda: !pauses, can_throw: fails, statement: flow.statement }
+        let inside_scope = self.emit_flow_inside_scope(changed)
+        // **Each call takes a handle of its own of each hull**: the closure is
+        // called again (a supervisor's child, every connection of `net::serve`),
+        // and the future each call makes owns what it uses, so the closure's own
+        // handle is cloned per call rather than moved out of it.
+        if pauses {
+            if block {
+                out.push("{ ")
+                for hull in self.emit_flow_hulls(node_key(node)) {
+                    let name = escaped_name(hull)
+                    out.push(f"let {name} = {name}.clone(); ")
+                }
+                for taken in self.emit_flow_owned(node_key(node)) {
+                    let name = escaped_name(taken)
+                    out.push(f"let {name} = {name}.clone(); ")
+                }
+            }
+            if result != "_" {
+                out.push(f"{{ let __nikaia_future: {emit_boxed_future_in(host.overlaps_user_code())}<'_, {result}> = ")
+            }
+            out.push("Box::pin(async move ")
+        }
+        // A type that may fail hands back a `Result`, as a `throws` function does:
+        // the value goes inside the `Ok`. Through a `let`: `Ok({ .. })` around a
+        // body of one expression is `rustc`'s *unnecessary braces*.
+        // **Code that hands back nothing drops the body's value** (#1321).
+        // **A body that leaves at its end has no `Ok` after it** (#1369): it
+        // would be unreachable, and `Ok` of no value is no `Result` of the
+        // type's.
+        let valueless = self.facts.valueless_lambdas.contains(node_key(node))
+        let leaves = emit_a_body_that_leaves(world, body)
+        if fails {
+            out.push(if leaves { "{ " } else { "{ let __nikaia_done = " })
+            self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, if valueless { EmitTail::Statement } else { EmitTail::Value })
+            out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" })
+        } else {
+            self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, if valueless { EmitTail::Statement } else { EmitTail::Return })
+        }
+        if pauses {
+            if result != "_" {
+                out.push("); __nikaia_future }")
+            } else {
+                out.push(f") as {emit_boxed_future_in(host.overlaps_user_code())}<'_, _>")
+            }
+            if block {
+                out.push(" }")
+            }
+        }
+        // **One an untyped `let` bound** (#1043) names no type for the
+        // closure to be unsized to: cast to the `dyn Fn` of its arity.
+        if from_a_let {
+            let mut each: Vec[String] = []
+            for p in params {
+                each.push("_")
+            }
+            let mut crossing: String = ""
+            if host.overlaps_user_code() {
+                crossing = " + std::marker::Send + std::marker::Sync"
+            }
+            out.push(f") as std::sync::Arc<dyn Fn({each.join(", ")}) -> _{crossing}>)")
+        } else {
+            out.push("))")
+        }
+        if block {
+            out.push(" }")
+        }
+    }
+
+    /// `a + b`, `a < b`, and the many shapes a comparison or a sum takes below.
+    pub fn emit_core_binary[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, at: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let site = at.start as i64
+        // **Two kinds compared, decided while building** (ADR-330 D3, D6).
+        if self.facts.kind_compares.contains(node_key(node)) {
+            let same = self.kind_named(world, walk, lhs) == self.kind_named(world, walk, rhs)
+            out.push(if same == (op == BinaryOp::Eq) { "true" } else { "false" })
+            return
+        }
+        // **A constant sum takes the first type that holds it**, the way a
+        // constant does (ADR-285 D22). Asked only on the outermost expression that
+        // folds - `widen` reaching inward is what makes the operands agree - and
+        // never where the position decides the type.
+        let mut wide = flow
+        if !flow.widen && !flow.inferred && host.wants_widening(node) {
+            wide = flow.widened()
+        }
+        // **A file's name compares its bytes** (ADR-319 D3), against a name or
+        // against text.
+        if (op == BinaryOp::Eq || op == BinaryOp::Ne) && self.facts.path_comparisons.contains(site) {
+            if op == BinaryOp::Ne {
+                out.push("!")
+            }
+            out.push("nikaia_std::fs::path::same(&(")
+            self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)
+            out.push("), &(")
+            self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)
+            out.push("))")
+            return
+        }
+        // **A `u64` and a signed integer compare as numbers** (ADR-285 D32): a
+        // sign test and a compare, the sides in the order they were written.
+        if self.facts.mixed_comparisons.contains_key(site) {
+            let unsigned_left = self.facts.mixed_comparisons.get(site) ?? false
+            if unsigned_left {
+                out.push("nikaia_std::num::unsigned_with_signed(")
+            } else {
+                out.push("nikaia_std::num::signed_with_unsigned(")
+            }
+            self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)
+            out.push(", ")
+            self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)
+            out.push(emit_flow_compared(op))
+            return
+        }
+        // **A `+` that joins text is a call** (ADR-081 D2), only where the checker
+        // said so, by the operator's own span.
+        if self.facts.concatenations.contains(site) {
+            out.push(f"{block_text_open(self.on_block_types())}nikaia_std::concat::plus(")
+            self.emit_core_concatenated(world, walk, out, host, lhs, depth, wide, scope)
+            out.push(", ")
+            self.emit_core_concatenated(world, walk, out, host, rhs, depth, wide, scope)
+            out.push(f"){block_text_close(self.on_block_types())}")
+            return
+        }
+        // **`x == null` asks whether there is one** (0.0.250): `x.is_none()`, which
+        // needs nothing of what `x` holds.
+        let side = emit_flow_null_side(lhs, rhs)
+        if (op == BinaryOp::Eq || op == BinaryOp::Ne) && side != 0 {
+            if side == 1 {
+                self.emit_core_postfix_base(world, walk, out, host, rhs, depth, wide, scope)
+            } else {
+                self.emit_core_postfix_base(world, walk, out, host, lhs, depth, wide, scope)
+            }
+            if op == BinaryOp::Eq {
+                out.push(".is_none()")
+            } else {
+                out.push(".is_some()")
+            }
+            return
+        }
+        // **A counter that is never negative is compared with a length as a
+        // `usize`** (ADR-270 D8 step 1).
+        if op.is_comparison() {
+            let compared = self.emit_core_against_a_length(world, walk, out, host, op, lhs, rhs, depth, wide, scope)
+            if compared {
+                return
+            }
+        }
+        // **Text ordered against text** (#733): `&str < String` does not exist
+        // below, so both sides are read as `str`, whichever tier each lowered to.
+        if self.facts.ordered_texts.contains(site) {
+            let symbol = binary_op(op)
+            out.push("AsRef::<str>::as_ref(&(")
+            self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)
+            out.push(f")) {symbol} AsRef::<str>::as_ref(&(")
+            self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)
+            out.push("))")
+            return
+        }
+        // **The arithmetic of a believed `assume` is exact** (ADR-376 D2): a
+        // claim whose arithmetic overflows is false, and a false believed
+        // claim is undefined behaviour, so `+`, `-` and `*` in it are written
+        // as operations that do not overflow, without their check.
+        if walk.believing && !wide.widen && !wide.inferred && (op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul) && self.believed_arithmetic.contains_key(site) {
+            let ty = (self.believed_arithmetic.get(site) ?? "").clone()
+            if emit_flow_is_whole(ty) {
+                let name = match op {
+                    BinaryOp::Add => "unchecked_add",
+                    BinaryOp::Sub => "unchecked_sub",
+                    else => "unchecked_mul",
+                }
+                out.push(f"<{ty}>::{name}(")
+                self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)
+                out.push(", ")
+                self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)
+                out.push(")")
+                return
+            }
+        }
+        // **An operation proved to stay inside its type** is written without its
+        // check, naming the type the proof was about (ADR-306 D10).
+        if self.proven_arithmetic.contains_key(site) && !wide.widen && !wide.inferred {
+            let ty = (self.proven_arithmetic.get(site) ?? "").clone()
+            // **A shift proved to count inside its type's width** (ADR-306
+            // D18) is written as the shift that may assume it, as a proved
+            // index is read without its test: a masked count would hide the
+            // count's range from the optimiser below, which then cannot tell
+            // `x & (ONES >> (64 - 8 * n))` is `x`'s low `8 * n` bits. It is
+            // `proven-index`'s, as every dropped check is (ADR-378 D2).
+            if op == BinaryOp::Shl || op == BinaryOp::Shr {
+                let shift = if op == BinaryOp::Shl { "nikaia_std::proven::shl" } else { "nikaia_std::proven::shr" }
+                out.open_unsafe()
+                out.push(f"{shift}::<{ty}>(")
+                self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)
+                out.push(", (")
+                self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)
+                out.push(") as u32)")
+                out.close_unsafe()
+                return
+            }
+            let name = emit_flow_proven(op)
+            out.open_unsafe()
+            out.push(f"{name}::<{ty}>(")
+            self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)
+            out.push(", ")
+            self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)
+            out.push(")")
+            out.close_unsafe()
+            return
+        }
+        // Parenthesised only where precedence needs it: the operators mean the same
+        // in both languages, so `value * 10 + n` should come out the way it went in.
+        let here = precedence(op)
+        // **A view compared with a value is read** (0.0.238), and **a lent name of
+        // a type only the language below knows, beside a number, is read as the
+        // number** (#531): `num::value` is the identity on a number and reads one
+        // out of a view.
+        let number_left = self.facts.compared_numbers.contains((site, "lhs"))
+        let number_right = self.facts.compared_numbers.contains((site, "rhs"))
+        let symbol = binary_op(op)
+        if number_left {
+            out.push("nikaia_std::num::value(")
+            self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)
+            out.push(f") {symbol} ")
+            self.emit_core_nested(world, walk, out, host, rhs, here + 1, depth, wide, scope)
+            return
+        }
+        if number_right {
+            let jumping = emit_flow_a_jumping_coalesce(world, lhs)
+            if jumping {
+                out.push("(")
+            }
+            self.emit_core_nested(world, walk, out, host, lhs, here, depth, wide, scope)
+            if jumping {
+                out.push(")")
+            }
+            out.push(f" {symbol} nikaia_std::num::value(")
+            self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)
+            out.push(")")
+            return
+        }
+        // **Two cuts compared are compared in place** (`nikaia_std::same!`):
+        // what `==` means, and two short runs of bytes or texts a word at a
+        // time, without the call into `memcmp` that a hot loop pays for in
+        // the registers the call clobbers.
+        let viewed = self.facts.compared_views.contains((site, "lhs")) || self.facts.compared_views.contains((site, "rhs"))
+        if (op == BinaryOp::Eq || op == BinaryOp::Ne) && !viewed && emit_flow_is_cut(lhs) && emit_flow_is_cut(rhs) {
+            if op == BinaryOp::Ne {
+                out.push("!")
+            }
+            out.push("nikaia_std::same!(")
+            self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)
+            out.push(", ")
+            self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)
+            out.push(")")
+            return
+        }
+        let deref_left = self.facts.compared_views.contains((site, "lhs"))
+        if deref_left {
+            out.push("*")
+        }
+        // **A conversion left of `<<` keeps its parentheses** (#474), as one left of
+        // `<` does: `x as i64 << 3` is `i64<..>` to Rust. Only where `nested` would
+        // not write them itself.
+        // **A `??` whose fallback jumps is a `match`**, and a `match` at the
+        // start of a statement is a statement to Rust: `match … { … } == "a"`
+        // does not parse, so the left side keeps its parentheses (a `*` in
+        // front already makes it an operand).
+        let cast_before_a_shift = (op == BinaryOp::Shl && self.ends_in_a_cast(world, lhs) && !emit_flow_is_binary_below(lhs, here)) || (!deref_left && emit_flow_a_jumping_coalesce(world, lhs))
+        if cast_before_a_shift {
+            out.push("(")
+        }
+        // **Text a side makes only to be compared is compared as Rust's**
+        // (#490): `x.replace(..) != y` needs no block's text around it.
+        let equality = op == BinaryOp::Eq || op == BinaryOp::Ne
+        let around = walk.compared_receiver
+        if equality && !deref_left {
+            walk.compared_receiver = emit_flow_called_on(lhs)
+        }
+        self.emit_core_nested(world, walk, out, host, lhs, here, depth, wide, scope)
+        walk.compared_receiver = around
+        if cast_before_a_shift {
+            out.push(")")
+        }
+        out.push(f" {symbol} ")
+        let deref_right = self.facts.compared_views.contains((site, "rhs"))
+        if deref_right {
+            out.push("*")
+        }
+        if equality && !deref_right {
+            walk.compared_receiver = emit_flow_called_on(rhs)
+        }
+        self.emit_core_nested(world, walk, out, host, rhs, here + 1, depth, wide, scope)
+        walk.compared_receiver = around
+    }
+
+    /// Whether a declared type or a constructor of one stands as the fallback of
+    /// a `??`: `.into()` on it is the same useless conversion.
+    fn emit_flow_a_declared_variant(ref self, world: ref EmitWorld, fallback: ref Expr) -> bool {
+        return match fallback {
+            Expr::Path(segments, _) => segments.len() == 2 && self.is_variant(world, emit_text(world, segments[0]), emit_text(world, segments[1])),
+            // ...and one built with its parts, `Ty::Tuple([])`.
+            Expr::Call { func, .. } => match func {
+                Expr::Path(segments, _) => segments.len() == 2 && self.is_variant(world, emit_text(world, segments[0]), emit_text(world, segments[1])),
+                else => false,
+            },
+            else => false,
+        }
+    }
+
+    /// **And except for a constructor of a type this file declares**,
+    /// `FnContract::empty()`: its entry says it hands back the type itself.
+    fn emit_flow_a_declared_constructor(ref self, world: ref EmitWorld, fallback: ref Expr) -> bool {
+        return match fallback {
+            Expr::Call { func, .. } => match func {
+                Expr::Path(segments, _) => segments.len() == 2 && self.emit_flow_constructs(emit_text(world, segments[0]), emit_text(world, segments[1])),
+                else => false,
+            },
+            else => false,
+        }
+    }
+
+    fn emit_flow_constructs(ref self, owner: ref String, member: ref String) -> bool {
+        let key = f"{owner}::{member}"
+        let contract = self.own_contracts.functions.get(key) ?? return false
+        let signature = contract.signature?.clone() ?? return false
+        let result = signature.result?.clone() ?? return false
+        return match result {
+            Ty::Named { name, args, view } => !view && name == owner && args.len() == 0,
+            else => false,
+        }
+    }
+
+    /// The opened option of a `??` that lends its left side, or nothing.
+    fn emit_flow_opened(ref self, node: ref Expr) -> String {
+        let found = self.facts.lent_coalesces.get(node_key(node)) ?? return ""
+        return found.clone()
+    }
+
+    /// `value ?? fallback`, in its four shapes (Part I 3.5).
+    pub fn emit_core_coalesce[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, value: ref Expr, fallback: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **A `??` after a value that cannot be absent is its left side** (ADR-279
+        // D13): the fallback never runs and is not written.
+        if self.facts.plain_reaches.contains(node_key(node)) {
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+            return
+        }
+        // **A fallback that jumps is a `match` and not a closure** (ADR-276 D20):
+        // `unwrap_or_else` takes a **closure**, so a `return` written in the
+        // fallback would return from the closure and the program would carry on.
+        // **And so is one whose fallback is another `??` that jumps.**
+        if jumps_at_the_end(fallback) || emit_flow_never_returns(world, fallback) {
+            // **A `let mut` of a `mut` place is a mutable view of the entry**
+            // (#816): `get_mut`, and the answer is the `&mut` itself.
+            if self.facts.mut_view_reads.contains_key(node_key(node)) {
+                match value {
+                    Expr::Field { .. } => {
+                        out.push("match ")
+                        self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+                        out.push(".as_mut() { Some(__nikaia_value) => __nikaia_value, None => ")
+                        self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+                        out.push(" }")
+                        return
+                    },
+                    Expr::Index { base, index, .. } => {
+                        let lend = self.facts.mut_view_reads.get(node_key(node)) ?? return
+                        out.push(f"match nikaia_std::index::get_mut({lend}")
+                        self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)
+                        out.push(", ")
+                        let key = self.map_key(index, false)
+                        if key != null {
+                            let form = key ?? return
+                            self.emit_core_key(world, walk, out, host, form, index, depth, flow, scope)
+                        } else {
+                            out.push("nikaia_std::index::at(")
+                            self.emit_expr(world, walk, out, host, index, depth, flow, scope)
+                            out.push(")")
+                        }
+                        out.push(") { Some(__nikaia_value) => __nikaia_value, None => ")
+                        self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+                        out.push(" }")
+                        return
+                    },
+                    else => {},
+                }
+            }
+            // **A loan on the left is opened, and the answer is a view** (ADR-279
+            // D10); a list element is read without the `*` (#819).
+            let opened_jump = self.emit_flow_opened(node)
+            out.push("match ")
+            let mut wrote = false
+            if opened_jump != "" {
+                match value {
+                    Expr::Index { base, index, .. } => {
+                        if self.map_key(index, false) == null {
+                            self.emit_core_index_read(world, walk, out, host, base, index, false, depth, flow, scope)
+                            wrote = true
+                        }
+                    },
+                    else => {},
+                }
+            }
+            if !wrote {
+                self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+            }
+            // **An option in a list element is cloned out of it** (D31): the element
+            // is behind a borrow, and the `match` would move out of it.
+            if opened_jump == "" && emit_flow_a_field_of_an_index(value) {
+                out.push(".clone()")
+            }
+            out.push(opened_jump)
+            // **A number read past a jump is read out of the view** (#456).
+            if self.facts.copied_jump_reads.contains(node_key(node)) {
+                out.push(" { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => ")
+            } else {
+                out.push(" { Some(__nikaia_value) => __nikaia_value, None => ")
+            }
+            self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+            out.push(" }")
+            return
+        }
+        // **A `??` whose answer is only read lends its left side** (ADR-279 D5): the
+        // option is opened (`.as_deref()` for text, `.as_ref()` for the rest) and
+        // the fallback is a view of what it names.
+        if self.facts.lent_coalesces.contains_key(node_key(node)) {
+            let opened = self.emit_flow_opened(node)
+            out.push("nikaia_std::index::or(")
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+            out.push(opened)
+            out.push(", || ")
+            let mut a_name = false
+            match fallback {
+                Expr::Variable(_, _) => {
+                    a_name = true
+                },
+                else => {}
+            }
+            if emit_flow_a_lit_str(fallback) {
+                self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+            } else if a_name && opened == ".as_deref()" {
+                out.push("std::convert::AsRef::<str>::as_ref(&")
+                self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+                out.push(")")
+            } else {
+                out.push("&")
+                self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+            }
+            out.push(")")
+            return
+        }
+        // **A value made here beside a view goes into a slot** (#1256): the
+        // slot is declared before the statement and filled only on `None`, so
+        // the fallback runs only then, is not copied, and outlives the `??`.
+        // Text answers `&str` whether the left holds `&str` or `&String`.
+        if self.facts.slot_fallbacks.contains_key(node_key(node)) && walk.statements_open > 0 && !flow.in_lambda {
+            let slot = f"__nikaia_slot_{walk.slot_count}"
+            walk.slot_count += 1
+            walk.slots.push(slot.clone())
+            let text = self.facts.slot_fallbacks.get(node_key(node)) ?? false
+            out.push("match ")
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+            if text {
+                out.push(f" {{ Some(__nikaia_value) => std::convert::AsRef::<str>::as_ref(__nikaia_value), None => {slot}.insert(")
+                self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+                out.push(").as_str() }")
+            } else {
+                out.push(f" {{ Some(__nikaia_value) => __nikaia_value, None => &*{slot}.insert(")
+                self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+                out.push(") }")
+            }
+            return
+        }
+        // Kap 3.5. `into()` because the fallback is written as the value it stands
+        // for, not as the type the option holds - `text ?? "none"` on a `String?`
+        // is the case it exists for. **Except for a number**, and that exception is
+        // Part I 2.4 rather than a special case: a number literal takes the type
+        // its use asks for. **`index::or` and not `unwrap_or_else`** (ADR-293 D4):
+        // the left of a `??` may be a view into a container. **And except for text
+        // where the left side is a view of text** (ADR-283), **a variant of an enum
+        // this file declares**, **a constructor of a type this file declares**, and
+        // **a struct written out**, or a `bool`.
+        let bare = a_number(fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || (emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(node_key(fallback))) || self.facts.view_coalesces.contains(node_key(node))
+        // **A fallback that may be `null` too** (Part I 3.5): the first option that
+        // has a value, which is the language below's `or_else`, and the answer is
+        // an option still.
+        if self.facts.optional_fallbacks.contains(node_key(node)) {
+            out.push("nikaia_std::index::or_maybe(")
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+            out.push(", || ")
+            self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+            out.push(")")
+            return
+        }
+        out.push("nikaia_std::index::or(")
+        // **A list's optional text is lent** (#342): the read is a place, and `&` in
+        // front of it borrows the element.
+        if self.facts.lent_list_reads.contains(node_key(node)) {
+            out.push("&")
+        }
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+        // **A name that is a view of text beside text** (#752): both sides
+        // are made `String`, whatever each is below, and never `.into()` with
+        // the type left open.
+        if self.facts.text_owned_fallbacks.contains(node_key(node)) {
+            out.push(".map(String::from), || String::from(")
+            self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+            out.push("))")
+            return
+        }
+        // **Text an iterator found is made text of its own** before a literal
+        // fallback: `Or` for both `Option<&String>` and `Option<String>` left
+        // `"none".into()` ambiguous in rustc.
+        if !bare && emit_flow_a_lit_str(fallback) && emit_flow_an_iterator_answer(world, value) {
+            let (open, close) = (block_text_open(self.on_block_types()), block_text_close(self.on_block_types()))
+            out.push(f".map(|__nikaia_found| {open}__nikaia_found.to_string(){close})")
+        }
+        // **A split's two views beside a fallback of text** (#908): a part
+        // that is a name, a field or its clone is lent as a view; any other
+        // owned part makes both halves owned.
+        let split = if bare { 0 } else { emit_flow_split_fallback(world, value, fallback) }
+        if split == 2 {
+            let (open, close) = (block_text_open(self.on_block_types()), block_text_close(self.on_block_types()))
+            out.push(f".map(|(__nikaia_head, __nikaia_tail)| ({open}__nikaia_head.to_string(){close}, {open}__nikaia_tail.to_string(){close}))")
+        }
+        out.push(", || ")
+        // **An empty list beside a view of a list** (#812): `&[][..]`, a slice
+        // that lives forever, so `index::or` answers `&[T]`.
+        if self.facts.view_fallbacks.contains(node_key(fallback)) && emit_flow_an_empty_list(fallback) {
+            out.push("&[][..])")
+            return
+        }
+        // **A name that is a view of text beside a view of text** (#719): read
+        // as `str`, whether it is `&String` or `&str` below.
+        if self.facts.text_view_fallbacks.contains(node_key(node)) {
+            out.push("std::convert::AsRef::<str>::as_ref(")
+            self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+            out.push("))")
+            return
+        }
+        // **A name lent beside what a map holds**: the answer is a view, and so is
+        // the fallback.
+        if self.facts.lent_map_fallbacks.contains(node_key(node)) {
+            out.push("&")
+            self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+            out.push(")")
+            return
+        }
+        // **A fallback read at an index is cloned out of the place** (#561):
+        // `get(..).clone().into()` is a value for a number and for text alike.
+        if !bare && emit_flow_an_index(fallback) {
+            out.push("&")
+            self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+            out.push(".clone().into())")
+            return
+        }
+        // **A tuple fallback is converted part by part** (ADR-364): `("", "")`
+        // for a `(String, String)?` is `("".into(), "".into())`, as each part
+        // would be on its own; a number part takes its type as written.
+        match fallback {
+            Expr::Tuple(parts, _) => {
+                if !bare {
+                    out.push("(")
+                    let mut at = 0
+                    for part in parts {
+                        if at > 0 {
+                            out.push(", ")
+                        }
+                        at += 1
+                        if split == 1 && !emit_flow_a_lit_str(part) {
+                            out.push("std::convert::AsRef::<str>::as_ref(&")
+                            self.emit_expr(world, walk, out, host, emit_flow_cloned_place(world, part), depth, flow, scope)
+                            out.push(")")
+                            continue
+                        }
+                        let plain = a_number(part)
+                        let wrapped = !plain && (emit_flow_operated(part) || self.ends_in_a_cast(world, part))
+                        // **A part held as a `T?` is converted inside its
+                        // `Some`** (#1570): `Some("b".into())`, never
+                        // `Some("b").into()`, which no `From` makes.
+                        let somed = match self.facts.wrapped.get(node_key(part)) {
+                            null => false,
+                            FactWrap::Constructor => !plain,
+                            else => false,
+                        }
+                        if somed {
+                            out.push("Some(")
+                            if wrapped {
+                                out.push("(")
+                            }
+                            self.emit_expr_as_written(world, walk, out, host, part, depth, flow, scope)
+                            if wrapped {
+                                out.push(")")
+                            }
+                            out.push(".into())")
+                            continue
+                        }
+                        if wrapped {
+                            out.push("(")
+                        }
+                        self.emit_expr(world, walk, out, host, part, depth, flow, scope)
+                        if wrapped {
+                            out.push(")")
+                        }
+                        if !plain {
+                            out.push(".into()")
+                        }
+                    }
+                    out.push("))")
+                    return
+                }
+            },
+            else => {}
+        }
+        // **A fallback that comes out as a conversion is bracketed** before
+        // `.into()`: `r.len() as i64.into()` is not Rust. So is one written
+        // with an operator: `(0 - 1).into()` and not `0 - 1.into()`.
+        let operated = emit_flow_operated(fallback)
+        let cast = !bare && (operated || self.ends_in_a_cast(world, fallback))
+        if cast {
+            out.push("(")
+        }
+        self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+        if cast {
+            out.push(")")
+        }
+        if bare {
+            out.push(")")
+        } else {
+            out.push(".into())")
+        }
+    }
+
+    /// Kap 7.1: `expr catch { handler }`, the handler sees the error as `error`.
+    pub fn emit_core_try_catch[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, guarded_expr: ref Expr, handler: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **A `catch` whose value is not used drops it** (#885): the statement
+        // emitter says so through the walk, the checker through a fact.
+        let dropped = walk.dropped_catch == node_key(guarded_expr) || self.facts.dropped_catches.contains(node_key(guarded_expr))
+        out.push("match ")
+        // **A joining block is told the handler is right here** (ADR-292 D18), and
+        // only when it *is* the guarded half: one nested in an argument hands back
+        // a tuple like any other value.
+        let mut guarded = flow.guarded()
+        // **So is a scope** (ADR-346 D7): its tasks then fail in the box, which the
+        // handler opens by the type each arm names.
+        let a_scope_call = emit_catch_is_a_scope(world, guarded_expr)
+        if a_scope_call {
+            guarded = flow.joined_here()
+        }
+        let mut joined = a_scope_call
+        match guarded_expr {
+            Expr::Overlap(_, _) => {
+                guarded = flow.joined_here()
+                joined = true
+            },
+            Expr::Select(_, _) => {
+                guarded = flow.joined_here()
+                joined = true
+            },
+            else => {}
+        }
+        // **A call that can fail inside the guarded expression is caught here
+        // too** (Part I 7.1, #721): the guarded expression is a labelled block
+        // every failing call in it leaves with its error, in the box, which
+        // the handler opens by the type each arm names. A `catch` around this
+        // one is no longer where they go.
+        // **The fallback of a value form** (Part I 8.1.2, D22): its join hands
+        // the task's value or its failure, in the box.
+        let mut fallback = false
+        match guarded_expr {
+            Expr::Async(_, _, _, _) => {
+                fallback = true
+            },
+            else => {},
+        }
+        let nested = !joined && !fallback && self.emit_catch_nests_a_failure(world, guarded_expr)
+        let at = node_key(guarded_expr)
+        // A block is bound first: inside `Ok(…)` its braces would be
+        // reported as unneeded, which the author may not even have written
+        // (a detached task's fallback guards the task's body).
+        let mut a_block = false
+        match guarded_expr {
+            Expr::Block(_, _) => {
+                a_block = true
+            },
+            else => {},
+        }
+        // **A fallback's guarded block bound by its task's deadline** (D16,
+        // #986): the block runs as a future the deadline cancels, failing in
+        // the box, so the handler stands in for `task::TimedOut` too.
+        let deadline = walk.async_bound.clone()
+        walk.async_bound = ""
+        let bound_here = deadline != "" && a_block
+        if bound_here {
+            let boxed: String = "Box<dyn std::error::Error>"
+            let bound_flow = guarded with { breaks_to: -1, can_throw: true, in_lambda: false }
+            let bound_scope = EmitScope::plain() with { origin: scope.origin.clone(), channel: boxed.clone() }
+            out.push(f"{deadline}.bound(async {{ let __nikaia_value = ")
+            self.emit_expr(world, walk, out, host, guarded_expr, depth, bound_flow, bound_scope)
+            out.push(f"; Ok::<_, {boxed}>(__nikaia_value) }}).await")
+        } else if nested {
+            guarded = guarded with { breaks_to: at }
+            if a_block {
+                out.push(f"'__nikaia_caught_{at}: {{ let __nikaia_value = ")
+            } else {
+                out.push(f"'__nikaia_caught_{at}: {{ Ok::<_, Box<dyn std::error::Error>>(")
+            }
+        } else {
+            guarded = guarded with { breaks_to: -1 }
+        }
+        walk.boxed_scope = false
+        let bracketed = emit_flow_struct_headed(guarded_expr)
+        if bracketed && !bound_here {
+            out.push("(")
+        }
+        if !bound_here {
+            self.emit_expr(world, walk, out, host, guarded_expr, depth, guarded, scope)
+        }
+        if bracketed && !bound_here {
+            out.push(")")
+        }
+        if nested && a_block && !bound_here {
+            out.push("; Ok::<_, Box<dyn std::error::Error>>(__nikaia_value) }")
+        } else if nested && !bound_here {
+            out.push(") }")
+        }
+        // Whether the scope's tasks failed in the box, or `Crashed` came alone.
+        let a_scope = a_scope_call && walk.boxed_scope
+        walk.boxed_scope = false
+        let pad = "    ".repeat(depth + 1)
+        let close = "    ".repeat(depth)
+        // **A handler that does not read the error binds `_error`** (ADR-308).
+        let mut bound: String = "_error"
+        if host.block_mentions(handler, "error") {
+            bound = "error"
+        }
+        // **What the handler was handed** (ADR-280 D10). A named channel hands it an
+        // **envelope** - the author's error plus the site it was raised at - so the
+        // envelope is opened **once, at the binding**, and the site is kept in a
+        // local beside it for the one statement that needs it back (`throw error`).
+        let caught = bound == "error"
+        let mut named = caught && self.caught_channel_is_named(world, guarded_expr)
+        let mut sum: String? = null
+        if caught {
+            sum = self.caught_sum(world, guarded_expr)
+        }
+        // **`join` hands on the body's errors in the starter's channel** (ADR-346
+        // D5): a sum is taken apart as any other, an envelope opened, and the box
+        // is opened by the type each arm names (`""` says the box).
+        let mut boxed = false
+        if caught && a_scope {
+            sum = ""
+            boxed = true
+            named = false
+        }
+        if caught && sum == null && emit_catch_is_a_join(world, guarded_expr) && !walk.plain_tasks.contains(emit_join_receiver(world, guarded_expr)) {
+            let own_sum = self.sum_of(scope.function)
+            if own_sum != null {
+                sum = own_sum
+            } else if scope.channel == "Box<dyn std::error::Error>" {
+                sum = ""
+                boxed = true
+            } else if scope.channel.starts_with("nikaia_std::error::Thrown<") {
+                named = true
+            }
+        }
+        // **A call through a function field fails in the box** (ADR-351 D2):
+        // the stored code's channel is the box, opened by the type each arm
+        // names.
+        // **And so does a call of a function whose set has `from(p)`**
+        // (ADR-351 D4): its channel varies with the caller, so it is the box,
+        // opened by the type each arm names.
+        // **A connection's `read(within:)` fails in two of `std`'s ways**
+        // (ADR-326 D8): `net::ReadFailed` crosses in the box, opened by the
+        // type each arm names, as `join(within:)`'s `Late` does.
+        if caught && sum == null && self.emit_catch_is_a_timed_read(guarded_expr) {
+            sum = ""
+            boxed = true
+            named = false
+        }
+        if caught && sum == null && !named && (self.emit_catch_is_a_field_call(guarded_expr) || self.emit_catch_calls_given_code(world, guarded_expr)) {
+            sum = ""
+            boxed = true
+        }
+        if caught && (nested || fallback) {
+            sum = ""
+            boxed = true
+            named = false
+        }
+        let inside = flow.handling(named)
+        let inside_scope = scope.clone() with { caught_sum: sum }
+        // **The envelope is opened as the handler's first statement** (ADR-292
+        // D20), and not as a block wrapped around it.
+        let mut opening: String? = null
+        if named {
+            opening = "let (error, __nikaia_site) = error.split();"
+        } else if boxed && fallback {
+            // **A task over its block is handed as `task::OverBudget`**
+            // (ADR-327 D13), and not as the crash that carried it.
+            opening = "let error: Box<dyn std::error::Error> = nikaia_std::task::handed(error.into());"
+        } else if boxed {
+            // A handle whose body cannot fail hands `Crashed` or `Late` bare.
+            opening = "let error: Box<dyn std::error::Error> = error.into();"
+        }
+        if dropped {
+            out.push(f" {{\n{pad}Ok(_) => {{}},\n")
+        } else if self.facts.nullable_catches.contains(node_key(guarded_expr)) {
+            // **A `null` from the handler widens the value to `T?`** (#884).
+            out.push(f" {{\n{pad}Ok(value) => Some(value),\n")
+        } else if self.facts.owned_catches.contains(node_key(guarded_expr)) {
+            // On the block types (#490) a view's copy is a block's text or
+            // list (`CopyOwned`), as the handler's arm is.
+            let copy = if self.on_block_types() { "copy_owned" } else { "to_owned" }
+            out.push(f" {{\n{pad}Ok(value) => value.{copy}(),\n")
+        } else {
+            out.push(f" {{\n{pad}Ok(value) => value,\n")
+        }
+        // **A fatal error the handler does not name passes** (ADR-345 D2): an
+        // arm before the handler's hands it on as the function's own failure.
+        let passing = self.fatal_passing(world, guarded_expr, handler)
+        // **`supervisor::run` hands `Stopped` back** (ADR-346 D7): its
+        // `Handed` passes, and the handler gets the `Escalated` in it.
+        let mut handler_takes: String = f"Err({bound}) => "
+        if passing.len() > 0 && (call_callee_name(world.words, world.aliases, guarded_expr) ?? "") == "supervisor::run" {
+            out.push(f"{pad}Err(nikaia_std::supervisor::Stopped::Handed(error)) => return Err(error.into()),\n")
+            handler_takes = f"Err(nikaia_std::supervisor::Stopped::Escalated({bound})) => "
+        } else if a_scope && scope.channel == "Box<dyn std::error::Error>" {
+            // **A scope's tasks fail in the box** (ADR-346 D7), so whether the
+            // error is fatal is asked of the value: one the handler does not
+            // name passes.
+            let mut unless: String = ""
+            for ty in fatal_named(handler, world.words) {
+                if !ty.contains("::") && emit_is_fatal(self.own_contracts, ty) {
+                    unless = f"{unless} && !nikaia_std::error::holds::<{ty}>(&*error)"
+                }
+            }
+            out.push(f"{pad}Err(nikaia_std::task::Boxed(error)) if nikaia_std::process::Ending::fatal_code(&error).is_some(){unless} => return Err(error),\n")
+        } else if a_scope {
+            // In a typed channel, each of the function's own fatal types the
+            // handler does not name passes as itself.
+            let named = fatal_named(handler, world.words)
+            let own = self.own_contracts.functions.get(scope.function)
+            if own != null {
+                let contract = own ?? return
+                for ty in contract.fails_with {
+                    if !ty.contains("::") && !named.contains(ty) && emit_is_fatal(self.own_contracts, ty) {
+                        out.push(f"{pad}Err(nikaia_std::task::Boxed(error)) if nikaia_std::error::holds::<{ty}>(&*error) => return Err(nikaia_std::error::reopened::<{ty}>(error).into()),\n")
+                    }
+                }
+            }
+        } else if nested && passing.len() > 0 {
+            // **In the box, a fatal error is told by its type** (ADR-345 D2):
+            // one the handler does not name passes as itself.
+            for ty in passing {
+                if !ty.contains("::") {
+                    out.push(f"{pad}Err(error) if nikaia_std::error::holds::<{ty}>(&*error) => return Err(nikaia_std::error::reopened::<{ty}>(error).into()),\n")
+                }
+            }
+        } else if passing.len() > 0 {
+            let caught_in = self.caught_sum(world, guarded_expr)
+            if caught_in == null {
+                out.push(f"{pad}Err(error) => return Err(error.into()),\n")
+                out.push(f"{pad}#[allow(unreachable_patterns)]\n")
+            } else {
+                let held_sum = (caught_in ?? "").clone()
+                for member in passing {
+                    // **A hand-over whose child's own type the handler names is
+                    // the handler's** (ADR-346 D7).
+                    let mut unless: String = ""
+                    if member == "supervisor::Handed" {
+                        for ty in fatal_named(handler, world.words) {
+                            if !ty.contains("::") && emit_is_fatal(self.own_contracts, ty) {
+                                if unless.len() > 0 {
+                                    unless = f"{unless} && "
+                                }
+                                unless = f"{unless}nikaia_std::error::handed::<{ty}>(error.held()).is_none()"
+                            }
+                        }
+                    }
+                    if unless.len() > 0 {
+                        out.push(f"{pad}Err({self.sum_root()}{held_sum}::{sum_variant(member)}(error)) if {unless} => return Err(error.into()),\n")
+                    } else {
+                        out.push(f"{pad}Err({self.sum_root()}{held_sum}::{sum_variant(member)}(error)) => return Err(error.into()),\n")
+                    }
+                }
+            }
+        }
+        out.push(f"{pad}{handler_takes}")
+        // Kap 7.1 and ADR-292: the handler's last statement is the value of the
+        // `catch`, so a `return` in it is the *function's* return and has to stay
+        // one.
+        let mut handler_tail = EmitTail::Value
+        if dropped {
+            handler_tail = EmitTail::Statement
+        }
+        self.emit_stmt_block_opening_with(world, walk, out, host, handler, depth + 1, inside, inside_scope, handler_tail, opening)
+        out.push(f",\n{close}}}")
+    }
+
+    /// The fatal errors that arrive at a `catch` over `guarded` and that its
+    /// handler names in no `match` arm (ADR-345 D2).
+    pub fn fatal_passing(ref self, world: ref EmitWorld, guarded: ref Expr, handler: ref Block) -> Vec[String] {
+        let mut out: Vec[String] = []
+        let name = call_callee_name(world.words, world.aliases, guarded) ?? return out
+        let mut arriving: Vec[String] = []
+        let own = self.own_contracts.functions.get(name)
+        if own != null {
+            let contract = own ?? return out
+            arriving = contract.fails_with.clone()
+        } else {
+            let theirs = world.library.functions.get(name) ?? return out
+            arriving = theirs.fails_with.clone()
+        }
+        let named = fatal_named(handler, world.words)
+        for error in arriving {
+            if named.contains(error) {
+                continue
+            }
+            if emit_is_fatal(self.own_contracts, error) || emit_is_fatal(world.library, error) {
+                out.push(error.clone())
+            }
+        }
+        return out
+    }
+
+    /// `expr?`.
+    pub fn emit_core_try[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, inner: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        self.emit_core_postfix_base(world, walk, out, host, inner, depth, flow, scope)
+        out.push("?")
+    }
+
+    /// `return` and `return value`: what it hands back is wrapped by its own
+    /// address (`check::Checked::wrapped`, read in `expr`).
+    pub fn emit_core_return[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        if value != null {
+            let held = value ?? return
+            // **A `return` inside an expression hands back what a `return`
+            // statement does** (#1185's probe): `?? return binary` in a function
+            // whose text result is either kind wraps the value as the statement
+            // form does (`emit_core_handed_back`).
+            let is_null = match held {
+                Expr::LitNull(_) => true,
+                else => false,
+            }
+            let either = call_returns_either(world.words, world.items, scope.function) && !is_null && !self.facts.mixed_choices.contains(node_key(held)) && !self.facts.mixed_leaves.contains_key(node_key(held)) && !never_a_value(held)
+            if flow.can_throw {
+                out.push("return Ok(")
+            } else {
+                out.push("return ")
+            }
+            if either {
+                out.push("nikaia_std::either_text::either(")
+            }
+            self.emit_expr(world, walk, out, host, held, depth, flow, scope)
+            if either {
+                out.push(")")
+            }
+            if flow.can_throw {
+                out.push(")")
+            }
+        } else if flow.can_throw {
+            out.push("return Ok(())")
+        } else {
+            out.push("return")
+        }
+    }
+
+    /// `break` and `continue`, the same refusal the statement form has (ADR-276
+    /// D18).
+    pub fn emit_core_jump(ref self, mut out: EmitOut, is_break: bool, flow: EmitFlow) sync throws {
+        let mut word: String = "continue"
+        if is_break {
+            word = "break"
+        }
+        if !flow.in_loop {
+            throw EmitRefused { message: f"`{word}` only works inside a loop, and there's none here.", at: flow.statement }
+        }
+        out.push(word)
+    }
+
+    /// `throw error` inside a handler passes the error on (ADR-280 D11), with the
+    /// site it was **raised** at and not the one it was caught at; any other
+    /// `throw` leaves the function with the value in the failure channel.
+    pub fn emit_core_throw[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, inner: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let mut is_the_binding = false
+        match inner {
+            Expr::Variable(name, _) => {
+                is_the_binding = emit_text(world, name) == "error"
+            },
+            else => {}
+        }
+        // **Into the `catch` it is guarded by** (Part I 7.1, #1635): the
+        // guarded half is a labelled block its failures leave in the box, and
+        // a `throw` there leaves it as a failing call does, with its site.
+        if flow.breaks_to >= 0 {
+            out.push(f"break '__nikaia_caught_{flow.breaks_to} Err(nikaia_std::error::raise(")
+            self.emit_expr(world, walk, out, host, inner, depth, flow, scope)
+            out.push(f", &{rust_string(scope.origin)}))")
+            return
+        }
+        let passing_on = flow.caught_named && is_the_binding && scope.caught_sum == null
+        if passing_on || (scope.caught_member != null && is_the_binding) {
+            // **Back into the variant it came out of**, where the handler is inside
+            // a sum's member arm (ADR-280 D17).
+            let mut held: String = "error"
+            if flow.caught_named {
+                held = "__nikaia_site.refill(error)"
+            }
+            if scope.caught_sum != null && scope.caught_member != null {
+                let sum = (scope.caught_sum ?? "").clone()
+                let member = (scope.caught_member ?? "").clone()
+                // **Into the function's own channel where it is another
+                // one** (#1360): a function that prints fails with
+                // `io::IoError` beside what it caught, so its sum is not the
+                // callee's, and the envelope converts into either.
+                let own: String = (self.sum_of(scope.function) ?? "").clone()
+                if sum == "" || own != sum {
+                    held = f"{held}.into()"
+                } else {
+                    held = f"{self.sum_root()}{sum}::{sum_variant(member)}({held})"
+                }
+            }
+            out.push(f"return Err({held})")
+            return
+        }
+        // **A sum takes the member it is** (ADR-280 D16), and `into()` is what picks
+        // the variant: the thrown value says which one it is by its own type.
+        if self.sum_of(scope.function) != null {
+            let thrown = host.error_type(inner)
+            let mut own = false
+            if thrown != null {
+                own = self.name_of_error(world, thrown ?? "") != 0
+            }
+            if own {
+                out.push("return Err(nikaia_std::error::throwing(")
+                self.emit_expr(world, walk, out, host, inner, depth, flow, scope)
+                out.push(f", &{rust_string(scope.origin)}).into())")
+            } else {
+                out.push("return Err(")
+                self.emit_expr(world, walk, out, host, inner, depth, flow, scope)
+                out.push(".into())")
+            }
+            return
+        }
+        // **A `throw` has a site whoever declared the error** (ADR-280 D14): a
+        // library's error thrown by this program was raised here.
+        // **Into the box where the signature is the box**
+        // (`defects_found_running::a_typed_throw_in_a_trait_impl_is_boxed`): a trait's `throws` method is declared with the opaque channel
+        // whatever its impl throws, so a typed error is raised into it.
+        if self.named_error(world, scope.function) != 0 && scope.channel != "Box<dyn std::error::Error>" {
+            out.push("return Err(nikaia_std::error::throwing(")
+        } else {
+            out.push("return Err(nikaia_std::error::raise(")
+        }
+        self.emit_expr(world, walk, out, host, inner, depth, flow, scope)
+        out.push(f", &{rust_string(scope.origin)}))")
+    }
+
+    /// **Part I 8.2 and ADR-055 D5: a task.** `spawn fn { .. }` is
+    /// `TaskHandle::start(async move { .. })`: an `async` **block** and not a
+    /// closure, with `move` (Part I 8.3's implicit move), and a **handle**, always.
+    pub fn emit_core_spawn[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, lambda: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match lambda {
+            Expr::Closure { body, .. } => self.emit_flow_task(world, walk, out, host, node_key(lambda), body, depth, flow, scope),
+            else => {
+                throw EmitRefused { message: "`spawn` takes a lambda. Write `spawn fn { … }`.", at: flow.statement }
+            }
+        }
+    }
+
+    /// **The fallback of a detached task** (Part I 8.1.2, ADR-async-5 D22):
+    /// `async(detached) fn { body } catch { f }` starts the task as
+    /// `async(detached) fn { { body } catch { f } }`, so `f` stands in for the
+    /// task's value where its failure arrives, the `join`, after the task's
+    /// own `catch` and before the receiver's. The guarded block keeps the
+    /// task's node, which the checker's facts of this `catch` are keyed by.
+    pub fn emit_core_spawn_fallback[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: ref Expr, lambda: ref Expr, handler: ref Block, id: u32, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match lambda {
+            Expr::Closure { body, .. } => {
+                let mut at: u32 = 0
+                if flow.statement > 0 {
+                    at = flow.statement as u32
+                }
+                let guarded = Expr::Block(body.clone(), numbered_id(id_of(task)))
+                let caught = Expr::TryCatch { expr: guarded, handler: handler.clone(), id: numbered_id(id) }
+                let wrapped = Block { stmts: [Spanned(Stmt::Expr(caught), Span { start: at, end: at })] }
+                self.emit_flow_task(world, walk, out, host, node_key(lambda), wrapped, depth, flow, scope)
+            },
+            else => {
+                throw EmitRefused { message: "`async(detached)` takes a lambda. Write `async(detached) fn { … }`.", at: flow.statement }
+            }
+        }
+    }
+
+    /// The handles the task whose lambda is the node `task` names
+    /// (`Checked::task_handles`), in the set's order.
+    fn emit_task_handles(ref self, task: i64) -> Vec[String] sync {
+        self.facts.task_handles.iter().filter(fn(handle) { handle.0 == task }).map(fn(handle) { handle.1.clone() }).collect()
+    }
+
+    fn emit_flow_task[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: i64, body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **A handle the body names is duplicated, not moved** (ADR-312 D1),
+        // where the name is read after the task; else it moves in (D2). The
+        // step is written *outside* the future, in a block of its own, so the name
+        // the body moves is the new handle and the caller's own survives the
+        // `spawn`.
+        let handles = self.emit_task_handles(task)
+        // **A deadline** (ADR-async-5 D16, #986) counts from here, outside
+        // the future; a fallback inside the task binds its guarded block by
+        // it, so `task::TimedOut` reaches the fallback.
+        let deadline = walk.async_within.clone()
+        walk.async_within = ""
+        // **Its own strategy** (`admission: s`, ADR-async-5 D15, D18): read
+        // here, outside the future; the task waits in it, unstarted, until
+        // the strategy admits it.
+        let admission = walk.async_admission.clone()
+        walk.async_admission = ""
+        let mut first: String = ""
+        if admission != "" {
+            first = "nikaia_std::task::admission_first(__nikaia_admission).await; "
+        }
+        let mut fallback_inside = false
+        if deadline != "" && body.stmts.len() == 1 {
+            match body.stmts[0].node {
+                Stmt::Expr(only) => match only {
+                    Expr::TryCatch { expr: guarded, .. } => match guarded {
+                        Expr::Block(_, _) => {
+                            fallback_inside = true
+                        },
+                        else => {},
+                    },
+                    else => {},
+                },
+                else => {},
+            }
+        }
+        let opened = handles.len() > 0 || deadline != "" || admission != ""
+        if opened {
+            out.push("{ ")
+            for name in handles {
+                out.push(f"let {name} = {name}.clone(); ")
+            }
+            if deadline != "" {
+                out.push(f"let __nikaia_deadline = {deadline}; ")
+            }
+            if admission != "" {
+                out.push(f"let __nikaia_admission = nikaia_std::task::admitted_sent({admission}); ")
+            }
+        }
+        let bound_outside = deadline != "" && !fallback_inside
+        if bound_outside && !flow.can_throw {
+            throw EmitRefused { message: "`async(detached, within: d)` ends with `task::TimedOut` on running out, which the starter must be able to throw.", at: flow.statement }
+        }
+        // **And which of the two starters**, which is the one place
+        // `user_parallelism` reaches a `spawn` (ADR-037 D2).
+        // **A task whose body can fail hands its error to `join`** (ADR-346
+        // D5): the body runs in the starter's channel. Whether it can fail is
+        // read off the body written that way: a `?` or a `return` in it.
+        let mut failing = false
+        let mut inner = EmitOut::empty()
+        if flow.can_throw {
+            let inside = EmitFlow::plain() with { statement: flow.statement, can_throw: true }
+            let inside_scope = EmitScope::plain() with { origin: scope.origin.clone(), function: scope.function.clone(), channel: scope.channel.clone() }
+            if fallback_inside {
+                walk.async_bound = "__nikaia_deadline"
+            }
+            self.emit_core_block(world, walk, inner, host, body, depth, inside, inside_scope, EmitTail::Value)
+            walk.async_bound = ""
+            failing = inner.buf.contains("?") || inner.buf.contains("return") || bound_outside
+        }
+        let mut kind: String = "TaskHandle"
+        if failing {
+            kind = "FailingTask"
+            // A box is not `Send`: on the pool it crosses as `BoxedTask`'s.
+            if host.overlaps_user_code() && scope.channel == "Box<dyn std::error::Error>" {
+                kind = "BoxedTask"
+            }
+        }
+        if host.overlaps_user_code() {
+            out.push(f"nikaia_std::task::{kind}::start_on_pool(async move ")
+        } else {
+            out.push(f"nikaia_std::task::{kind}::start(async move ")
+        }
+        // Plain, like any other lambda body: a `return` inside the task leaves the
+        // task, and a failure in it is the task's. `in_lambda` is deliberately
+        // **not** set - the body is a future, so a call that pauses is exactly what
+        // it may hold.
+        if failing {
+            out.push(f"{{ {first}let __nikaia_task = ")
+            if bound_outside {
+                out.push("__nikaia_deadline.bound(async { let __nikaia_value = ")
+                out.append(inner)
+                out.push(f"; Ok::<_, {scope.channel}>(__nikaia_value) }}).await?")
+            } else {
+                out.append(inner)
+            }
+            out.push(f"; Ok::<_, {scope.channel}>(__nikaia_task) }}")
+            // What its error says in the log if nobody waits (ADR-346 D6).
+            out.push(f", |e: &{scope.channel}| {{ use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})")
+        } else {
+            let inside = EmitFlow::plain() with { statement: flow.statement }
+            let inside_scope = EmitScope::plain()
+            if fallback_inside {
+                walk.async_bound = "__nikaia_deadline"
+            }
+            if first != "" {
+                out.push(f"{{ {first}")
+            }
+            self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return)
+            walk.async_bound = ""
+            if first != "" {
+                out.push(" }")
+            }
+            out.push(")")
+        }
+        if opened {
+            out.push(" }")
+        }
+    }
+}
+
+/// Whether a ledger says `impl Fatal for` this type (ADR-345 D1).
+fn emit_is_fatal(ledger: ref Ledger, error: ref String) -> bool {
+    let types = ledger.implementations.get("Fatal") ?? return false
+    return types.contains(error)
+}
+
+/// The name a plain `join()` is called on, or "" for anything else
+/// (`join(within:)` throws `Late`, which goes through the box).
+fn emit_join_receiver(world: ref EmitWorld, guarded: ref Expr) -> String {
+    return match guarded {
+        Expr::MethodCall { receiver, config, .. } => match receiver {
+            Expr::Variable(name, _) if config.len() == 0 => emit_text(world, name).clone(),
+            else => "",
+        },
+        else => "",
+    }
+}
+
+/// Whether a `catch` guards a call of `task::scope` (ADR-346 D7).
+fn emit_catch_is_a_scope(world: ref EmitWorld, guarded: ref Expr) -> bool {
+    return match guarded {
+        Expr::Call { func, .. } => unaliased_in(world.aliases, emit_callee_text(world, func) ?? "") == "task::scope",
+        else => false,
+    }
+}
+
+impl EmitState {
+    /// Whether a `catch` guards a call through a function field (ADR-351).
+    fn emit_catch_calls_given_code(ref self, world: ref EmitWorld, guarded: ref Expr) -> bool {
+        let name = call_callee_name(world.words, world.aliases, guarded) ?? return false
+        let mut set: Vec[String] = []
+        let own = self.own_contracts.functions.get(name)
+        if own != null {
+            set = (own ?? return false).fails_with.clone()
+        } else {
+            let theirs = world.library.functions.get(name) ?? return false
+            set = theirs.fails_with.clone()
+        }
+        for member in set {
+            if throws_given(member) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether a `catch` guards a connection's `read(within:)` (ADR-326 D8).
+    fn emit_catch_is_a_timed_read(ref self, guarded: ref Expr) -> bool {
+        return match guarded {
+            Expr::MethodCall { receiver, .. } => (self.facts.method_callees[node_key(receiver)]?.clone() ?? "") == "net::Connection::read(within)",
+            else => false,
+        }
+    }
+
+    fn emit_catch_is_a_field_call(ref self, guarded: ref Expr) -> bool {
+        return match guarded {
+            Expr::MethodCall { receiver, .. } => self.facts.field_calls.contains_key(node_key(receiver)),
+            // And through a name that holds code (ADR-351 D3), or a parameter
+            // of code run in place (D4, #732).
+            Expr::Call { func, .. } => self.facts.kept_calls.contains_key(node_key(func)) || self.facts.run_code_fails.contains(node_key(func)),
+            else => false,
+        }
+    }
+}
+
+/// Whether a `catch` guards a `join` of a task handle (ADR-346 D5).
+fn emit_catch_is_a_join(world: ref EmitWorld, guarded: ref Expr) -> bool {
+    return match guarded {
+        Expr::MethodCall { method, .. } => emit_text(world, method) == "join",
+        else => false,
+    }
+}
+
+/// A value written with an operator, which `.into()` needs bracketed.
+fn emit_flow_operated(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Binary { .. } => true,
+        Expr::Unary { .. } => true,
+        else => false,
+    }
+}
+
+/// A lambda's parameter names, each with the type `given` says where plain
+/// Rust can spell it (#997).
+fn emit_core_flow_typed_names(names: ref Vec[String], given: ref Vec[Ty]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let mut at = 0
+    for name in names {
+        let mut spelled: String = "_"
+        if at < given.len() as i64 {
+            spelled = plain_rust_spelling(given[at])
+        }
+        if spelled == "_" {
+            out.push(name.clone())
+        } else {
+            out.push(f"{name}: {spelled}")
+        }
+        at += 1
+    }
+    return out
+}

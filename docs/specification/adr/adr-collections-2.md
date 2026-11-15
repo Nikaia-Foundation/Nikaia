@@ -1,5 +1,7 @@
 # ADR-collections-2: An Array Is Read as a List Is: `Array[T, N]` and Its Run Have `iter()`, and the Sequence That Starts There; So Has Every Set
 
+> **Note (#1600, 2026-11-15):** `crates/nikaia-std/src/tools/` has moved to `crates/nikaia-std/src/compiler/` (its generated Rust to `compiler/lowered/`). The text below keeps the old path; the Rust module is still `nikaia_std::tools`.
+
 **Status:** Accepted
 **Date:** October 29, 2026 (owner's decision, option A; #955); D3 October 30,
 2026 (owner's decision, option B of #1006)

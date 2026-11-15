@@ -1,53 +1,53 @@
 == lowered only
-MERGE SHA re-lowered crates/nikaia-std/src/tools/lowered/a.rs
+MERGE SHA re-lowered crates/nikaia-std/src/compiler/lowered/a.rs
 exit ok: true
 Merge branch 'develop' of ../origin into develop
 2
 no merge open
  M notes.txt
 assets/badges/self-hosted.svg
-crates/nikaia-std/src/tools/lowered/a.rs
-crates/nikaia-std/src/tools/lowered/new.rs
+crates/nikaia-std/src/compiler/lowered/a.rs
+crates/nikaia-std/src/compiler/lowered/new.rs
 base
 theirs-side
 a.nika b.nika 
 local
 == also a nika
-ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/tools/lowered/a.rs crates/src/a.nika, merge aborted
+ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs crates/src/a.nika, merge aborted
 exit ok: false
 ours
 1
 no merge open
  M notes.txt
-crates/nikaia-std/src/tools/lowered/a.rs
+crates/nikaia-std/src/compiler/lowered/a.rs
 crates/src/a.nika
 ours
 old
 
 local
 == lowering fails
-ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/tools/lowered/a.rs, re-lowering failed (lower-std), merge aborted
+ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs, re-lowering failed (lower-std), merge aborted
 exit ok: false
 ours
 1
 no merge open
  M notes.txt
-crates/nikaia-std/src/tools/lowered/a.rs
+crates/nikaia-std/src/compiler/lowered/a.rs
 ours.txt
 ours
 old
 
 local
 == clean, a source
-MERGE SHA regenerated crates/nikaia-std/src/tools/lowered/a.rs crates/nikaia-std/src/tools/lowered/new.rs assets/badges/self-hosted.svg
+MERGE SHA regenerated crates/nikaia-std/src/compiler/lowered/a.rs crates/nikaia-std/src/compiler/lowered/new.rs assets/badges/self-hosted.svg
 exit ok: true
 Merge branch 'develop' of ../origin into develop
 2
 no merge open
  M notes.txt
 assets/badges/self-hosted.svg
-crates/nikaia-std/src/tools/lowered/a.rs
-crates/nikaia-std/src/tools/lowered/new.rs
+crates/nikaia-std/src/compiler/lowered/a.rs
+crates/nikaia-std/src/compiler/lowered/new.rs
 base
 theirs-side
 a.nika b.nika 
@@ -75,3 +75,17 @@ base
 old
 
 local
+== clean, an example
+MERGE SHA regenerated crates/nikaia-std/src/compiler/lowered/new.rs assets/badges/self-hosted.svg examples/a/nikaia.contracts
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+2
+no merge open
+ M notes.txt
+assets/badges/self-hosted.svg
+crates/nikaia-std/src/compiler/lowered/new.rs
+examples/a/nikaia.contracts
+base
+a.nika 
+local
+refreshed

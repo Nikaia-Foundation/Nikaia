@@ -38,7 +38,7 @@ bootstrap resumes after.
    things for little gain. If `std` is ever taken up, then whole modules in one
    piece.
 4. **The compiler's Nikaia leaves the `std` crate.** Its `.nika` stood in
-   `crates/nikaia-std/src/tools` and read from outside as part of the standard
+   `crates/nikaia-std/src/compiler` and read from outside as part of the standard
    library; they move to `crates/nikaia-compiler/src` (R0, #921, ADR-294's new D21),
    with the thin Rust adapter `crates/nikaia` beside it.
 
@@ -251,7 +251,7 @@ copies a binary into its scratchpad first.
 
 Every Rust file has one owning lane; a lane edits only its own.
 
-| Lane | Rust files owned (`crates/nikaia/src/`) | Nikaia files owned (`crates/nikaia-compiler/src/` after R0, `crates/nikaia-std/src/tools/` before) |
+| Lane | Rust files owned (`crates/nikaia/src/`) | Nikaia files owned (`crates/nikaia-compiler/src/` after R0, `crates/nikaia-std/src/compiler/` before) |
 | :--- | :--- | :--- |
 | 1 (moves) | `project.rs`, `comptime_run.rs`, `build_time.rs`, `grammar_run.rs`, `run_fast.rs`, `sysroot.rs`, `modules.rs`, `manifest.rs`, `describe.rs`, `foreign.rs`, `libraries.rs`, `cexport.rs`, `assets.rs`, `specbook.rs`, `fmt.rs`, `main.rs`, `diagnostics/mod.rs` | the ones its running brief names (`project_*`, `comptime_*`, `sysroot_*`, `modules.nika`, `manifest.nika`, `describe.nika`, `foreign.nika`, `libraries.nika`, `cexport*.nika`, `assets.nika`, `specbook.nika`, `fmt.nika`, new files) |
 | 2 (moves) | `contracts/*`, `proofs.rs`, `prove.rs`, `bounds.rs`, `bounds_report.rs`, `fold.rs`, `fold_bound.rs`, `dsl.rs`, `check/*`, `emit/*`, `types.rs`, `traits.rs`, `ast/mod.rs`, every other file not named in this table; `parser/mod.rs` from #557 step 3 on; the five lowering files once the lowering lane hands them over | the ones its running brief names (`order`, `locks`, `sharing`, `maps`, `throws`, `touch`, `trust`, `sync`, `tether`, `keep*`, `ty`, `ledger_*`, `prove*`, `prover_*`, `bounds_*`, `fold*`, `dsl`, `parser_grammar`, new files) |
@@ -273,7 +273,7 @@ architect writes them.
 
 ### The rule for `lower-std` and the generated files
 
-`tools/lowered/*.rs` and `tools/lowered.rs` belong to no lane: they are the
+`compiler/lowered/*.rs` and `compiler/lowered.rs` belong to no lane: they are the
 output of the compiler over the committed `.nika`, and CI's
 `the_committed_rust_is_what_this_compiler_lowers` makes every pushed commit
 hold the fixpoint. So:

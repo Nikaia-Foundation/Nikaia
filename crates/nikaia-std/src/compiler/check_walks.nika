@@ -1,0 +1,611 @@
+// crates/nikaia-std/src/compiler/check_walks.nika
+//
+// **What the checker asks of a block or an expression it walks again**, moved
+// from the compiler's checker (ADR-294, #125, #558, C-5f): the branches of an
+// `overlap` that meet on something (`NK2104`), the names a guard reads inside
+// a boxed part (ADR-246 D5), what a claim reaches (ADR-269 D3). Each walks with
+// `check_visit.nika` and asks the host for the holes of a literal.
+
+use std::collections
+
+/// What a contract is not pure for, in a word the message says: it can pause,
+/// it can fail, it changes what it is called on, it touches something outside
+/// the program's values, it takes a lock. `null` for a contract that does
+/// none of them.
+pub fn check_not_pure_because(contract: ref FnContract) -> String? {
+    if !contract.sync_claim.is_sync() {
+        return "can pause"
+    }
+    if contract.fails_with.len() > 0 {
+        return "can fail"
+    }
+    if contract.mutates {
+        return "changes what it is called on"
+    }
+    if !contract.touches_known || contract.touches.len() > 0 {
+        return "touches something outside the program's values"
+    }
+    if contract.touches_a_lock.holds() {
+        return "takes a lock"
+    }
+    return null
+}
+
+/// Whether two statements of an `overlap` meet on something, and the verdict
+/// that says so; `null` where either cannot be accounted for or they meet on
+/// nothing.
+fn check_walks_clash(earlier: ref Accounted, later: ref Accounted) -> Verdict? {
+    return match earlier {
+        Accounted::Operation(first) => match later {
+            Accounted::Operation(second) => {
+                let verdict = verdict(first, second)
+                if verdict.is_overlap() {
+                    return null
+                }
+                verdict
+            },
+            else => null,
+        },
+        else => null,
+    }
+}
+
+/// The first binding two branches meet on, where one of them changes it and
+/// the other names it: `(name, both change it)`. `null` for none.
+fn check_walks_shared(changed_by: ref Vec[collections::BTreeSet[String]], mentioned: ref Vec[collections::BTreeSet[String]], i: i64, j: i64) -> (String, bool)? {
+    for name in changed_by[i] {
+        if changed_by[j].contains(name) {
+            return (name.clone(), true)
+        }
+        if mentioned[j].contains(name) {
+            return (name.clone(), false)
+        }
+    }
+    for name in changed_by[j] {
+        if mentioned[i].contains(name) {
+            return (name.clone(), false)
+        }
+    }
+    return null
+}
+
+/// **One task of an `async` group** (ADR-async-5 D7), for the conflicts
+/// between the tasks of the group: where it stands, the position it runs
+/// until (where it is waited for), and the operations it performs, `null`
+/// where it cannot be accounted for (it is then not refused, Part III C.4).
+/// A name it changes is refused on its own (`a_task_changes_an_outer_name`).
+struct CheckWalksTask {
+    span: Span,
+    until: i64,
+    operations: Vec[Operation]?,
+}
+
+/// The `async` nodes of `group` started in `block`, lent from it: in its own
+/// statements, and for an `async { }` (a group's node is never negative) in
+/// the blocks nested in it too, by the group `check_async_block` recorded for
+/// each.
+fn check_walks_tasks_in(state: ref CheckState, block: ref Block, group: i64, mut out: Vec[ref Expr]) {
+    for stmt in block.stmts {
+        for each in check_visit_stmt(stmt.node) {
+            match each {
+                Expr::Async(_, _, _, _) => {
+                    let wait = state.facts.async_waits.get(id_of(each) as i64) ?? continue
+                    if wait.group == group {
+                        out.push(each)
+                    }
+                },
+                else => {},
+            }
+        }
+        if group >= 0 {
+            for nested in check_visit_stmt_blocks(stmt.node) {
+                check_walks_tasks_in(state, nested, group, out)
+            }
+        }
+    }
+}
+
+/// One task, the `async` node `id` with the expression `inner` it runs.
+fn check_walks_task(state: ref CheckState, world: ref CheckWorld, walking: ref Walking, id: u32, inner: ref Expr) -> CheckWalksTask? {
+    let at = world.here.spans.get(id) ?? return null
+    let wait = state.facts.async_waits.get(id as i64) ?? return null
+    let until: i64 = match wait.at {
+        CheckAsyncWaitAt::GroupEnd => 4611686018427387904,
+        CheckAsyncWaitAt::Handle => 4611686018427387904,
+        CheckAsyncWaitAt::BeforeStatement(start) => start,
+        CheckAsyncWaitAt::Before(operation) => (world.here.spans.get(operation as u32)?.end ?? at.end) as i64,
+    }
+    return CheckWalksTask { span: Span { start: at.start, end: at.end }, until: until, operations: check_walks_task_operations(state, inner, world.words, walking) }
+}
+
+/// What a task performs, one operation per statement of a run lambda or the
+/// one of its expression; `null` where a part cannot be accounted for. Each is
+/// read as an expression statement: what a task binds is its own. A door on a
+/// lock (`check_walks_lock_door`) is read here, before the ledger walk.
+fn check_walks_task_operations(state: ref CheckState, inner: ref Expr, words: ref winnow_grammar::InternerContext, walking: ref Walking) -> Vec[Operation]? {
+    let mut values: Vec[Expr] = []
+    match inner {
+        Expr::Closure { body, .. } => {
+            for stmt in body.stmts {
+                match stmt.node {
+                    Stmt::Let { value, .. } => values.push(value.clone()),
+                    Stmt::Expr(value) => values.push(value.clone()),
+                    Stmt::Assign { value, .. } => values.push(value.clone()),
+                    else => return null,
+                }
+            }
+        },
+        else => values.push(inner.clone()),
+    }
+    return check_walks_values_operations(state, values, words, walking)
+}
+
+/// What the values of some statements perform, each read as an expression
+/// statement after `check_walks_lock_door`; `null` where one cannot be
+/// accounted for.
+fn check_walks_values_operations(state: ref CheckState, mut values: Vec[Expr], words: ref winnow_grammar::InternerContext, walking: ref Walking) -> Vec[Operation]? {
+    let mut out: Vec[Operation] = []
+    for value in values.drain() {
+        match check_walks_lock_door(state, value, words, walking) {
+            CheckWalksDoor::Door(operation) => {
+                out.push(operation.clone())
+                continue
+            },
+            CheckWalksDoor::Unaccounted => return null,
+            CheckWalksDoor::NotADoor => {},
+        }
+        let found = accounted_beside(Stmt::Expr(value), words, walking)
+        match found {
+            Accounted::Operation(operation) => out.push(operation.clone()),
+            Accounted::NotAnOperation => {},
+            else => return null,
+        }
+    }
+    return out
+}
+
+/// What a task's statement is when read as a **door on a lock** (Part II
+/// 12.2, #985): not one, one accounted for, or one whose lambda or argument
+/// is not.
+enum CheckWalksDoor {
+    NotADoor,
+    Door(Operation),
+    Unaccounted,
+}
+
+/// **A door on a lock bound to a local or a parameter** (Part II 12.2,
+/// #985): `get` and `access` read the lock, `set` and `update` write it, and
+/// the lock is named by its binding, so two doors on one binding meet and two
+/// on two bindings do not. What the door's lambda and its other arguments
+/// reach is the door's too; a part not accounted for makes the whole door
+/// so (Part III C.4). A lock reached through a field or a call's result is no
+/// door here, and the ledger walk does not account it either.
+fn check_walks_lock_door(state: ref CheckState, value: ref Expr, words: ref winnow_grammar::InternerContext, walking: ref Walking) -> CheckWalksDoor {
+    return match value {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            if config.len() > 0 {
+                return CheckWalksDoor::NotADoor
+            }
+            check_walks_door_on(state, value, receiver, words.resolve(method).clone(), args, words, walking)
+        },
+        else => CheckWalksDoor::NotADoor,
+    }
+}
+
+// The door `door` on `receiver`, where it is a lock's.
+fn check_walks_door_on(state: ref CheckState, value: ref Expr, receiver: ref Expr, door: String, args: ref Vec[Expr], words: ref winnow_grammar::InternerContext, walking: ref Walking) -> CheckWalksDoor {
+    let write = door == "set" || door == "update"
+    if !write && door != "get" && door != "access" {
+        return CheckWalksDoor::NotADoor
+    }
+    let name = match receiver {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        else => return CheckWalksDoor::NotADoor,
+    }
+    let held = state.lookup(name) ?? return CheckWalksDoor::NotADoor
+    let lock = match held {
+        Ty::Named { name, .. } => name.clone(),
+        else => return CheckWalksDoor::NotADoor,
+    }
+    if lock != "SharedMut" && lock != "Locked" {
+        return CheckWalksDoor::NotADoor
+    }
+    let mut mentions: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in(value, words, mentions)
+    let mut reaches: Vec[Reached] = [Reached { kind: "lock", named: name.clone(), unknown: false, write: write }]
+    for arg in args {
+        let inside = check_walks_task_operations(state, arg, words, walking) ?? return CheckWalksDoor::Unaccounted
+        for operation in inside {
+            reaches.extend(operation.reaches.clone())
+        }
+    }
+    return CheckWalksDoor::Door(Operation { binds: null, mentions: mentions, reaches: reaches, callee: f"{lock}::{door}" })
+}
+
+/// Whether two tasks meet on a resource one of them writes, and the verdict
+/// that says so; `null` where either cannot be accounted for or they meet on
+/// nothing.
+fn check_walks_task_clash(earlier: ref CheckWalksTask, later: ref CheckWalksTask) -> Verdict? {
+    let first = earlier.operations ?? return null
+    let second = later.operations ?? return null
+    return check_walks_operations_clash(first, second)
+}
+
+/// The first pair of `first` and `second` that meets on a resource one of
+/// them writes, as its verdict; `null` where none does.
+fn check_walks_operations_clash(first: ref Vec[Operation], second: ref Vec[Operation]) -> Verdict? {
+    for a in first {
+        for b in second {
+            let found = verdict(a, b)
+            if !found.is_overlap() {
+                return found
+            }
+        }
+    }
+    return null
+}
+
+/// Whether a statement starts a task or a child task where it stands, outside
+/// its blocks: it is no main-line statement of a window (Part I 8.1.2).
+fn check_walks_starts_a_task(stmt: ref Stmt) -> bool {
+    for each in check_visit_stmt(stmt) {
+        match each {
+            Expr::Async(_, _, _, _) => return true,
+            Expr::Spawn { .. } => return true,
+            else => {},
+        }
+    }
+    return false
+}
+
+/// What a main-line statement performs, read as the tasks' statements are
+/// (`check_walks_values_operations`); `null` where it cannot be accounted
+/// for, or holds a block or a loop.
+fn check_walks_statement_operations(state: ref CheckState, stmt: ref Stmt, words: ref winnow_grammar::InternerContext, walking: ref Walking) -> Vec[Operation]? {
+    let value = match stmt {
+        Stmt::Let { value, .. } => value.clone(),
+        Stmt::Expr(value) => value.clone(),
+        Stmt::Assign { value, .. } => value.clone(),
+        else => return null,
+    }
+    return check_walks_values_operations(state, [value], words, walking)
+}
+
+/// **The main-line statements in a task's window** (Part I 8.1.2, #1259):
+/// each statement of `block` that starts after a task and before the point
+/// where the task meets the main line again (`until`: the group's end, the
+/// statement that names its binding, the call it is an argument of) is
+/// compared with that task by the rule two tasks are (`NK2104` where both
+/// reach one resource and one writes it). A statement holding a task of the
+/// group is walked into for an `async { }`, whose nested blocks hold its
+/// tasks too; one finding per statement, at the statement.
+fn check_walks_window(state: ref CheckState, world: ref CheckWorld, walking: ref Walking, block: ref Block, group: i64, tasks: ref Vec[CheckWalksTask], mut out: Vec[CheckFinding]) {
+    for stmt in block.stmts {
+        let mut holds = false
+        let mut inside = false
+        for task in tasks {
+            if task.span.start >= stmt.span.start && task.span.end <= stmt.span.end {
+                holds = true
+            } else if stmt.span.start >= task.span.start && stmt.span.end <= task.span.end {
+                inside = true
+            }
+        }
+        // **A statement of a task's own body runs in that task**, not on the
+        // main line: it is no statement of the window (D7).
+        if inside {
+            continue
+        }
+        if holds {
+            if group >= 0 {
+                for nested in check_visit_stmt_blocks(stmt.node) {
+                    check_walks_window(state, world, walking, nested, group, tasks, out)
+                }
+            }
+            continue
+        }
+        if check_walks_starts_a_task(stmt.node) {
+            continue
+        }
+        let mut read = false
+        let mut main: Vec[Operation] = []
+        for task in tasks {
+            if stmt.span.start < task.span.end || stmt.span.start as i64 >= task.until {
+                continue
+            }
+            let operations = task.operations ?? continue
+            if !read {
+                main = check_walks_statement_operations(state, stmt.node, world.words, walking) ?? break
+                read = true
+            }
+            let clash = check_walks_operations_clash(operations, main)
+            if clash != null {
+                let verdict = clash ?? Verdict::NotAccountedFor
+                let why = capitalised(verdict.why())
+                out.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: "NK2104", message: "This statement can't run at the same time as a task before it.", notes: [f"{why}.", "A task runs beside the statements after it until it is waited for: the end of its group, or where its value is read."], help: "If it should run after the task, move it after the group's end or after the read of the task's value, or write the task without `async`.", labels: [] })
+                break
+            }
+        }
+    }
+}
+
+impl CheckState {
+    /// **The branches of an `overlap` meet on nothing** (`NK2104`, ADR-292 D2):
+    /// a branch that binds is refused on its own, and two that depend on each
+    /// other are refused at the later one - one finding per branch.
+    pub fn branches_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block, changed_by: ref Vec[collections::BTreeSet[String]]) sync {
+        for stmt in block.stmts {
+            match stmt.node {
+                Stmt::Let { names, .. } => {
+                    let mut bound: Vec[String] = []
+                    for name in names {
+                        bound.push(world.words.resolve(name).clone())
+                    }
+                    let name = bound.join("`, `")
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: "NK2104", message: f"A branch of an `overlap` can't declare `{name}`.", notes: ["Each statement in the block runs as its own branch, and the block's value is their results in the order they're written."], help: f"Take the value from the block instead: `let ({name}, …) = overlap {{ … }}`.", labels: [] })
+                },
+                else => {},
+            }
+        }
+        // **A branch runs beside the others** (ADR-292 D11): a failure in it
+        // is the block's to combine, and what the others did has run by then,
+        // so it is no reason to leave the branch unaccounted for - a `println`
+        // that can fail (ADR-392) still writes stdout.
+        let mut operations: Vec[Accounted] = []
+        for stmt in block.stmts {
+            operations.push(accounted_beside(stmt.node, world.words, Walking { own: world.own, library: world.library, into: Going::Ours }))
+        }
+        let mut mentioned: Vec[collections::BTreeSet[String]] = []
+        for stmt in block.stmts {
+            let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+            match stmt.node {
+                Stmt::Expr(value) => names_in(value, world.words, names),
+                Stmt::Let { value, .. } => names_in(value, world.words, names),
+                else => {},
+            }
+            mentioned.push(names)
+        }
+        for i in 0..<operations.len() {
+            for j in (i + 1)..<operations.len() {
+                let shared = check_walks_shared(changed_by, mentioned, i, j)
+                if shared != null {
+                    let (name, both) = shared ?? ("", false)
+                    let note = if both { f"Both change `{name}`." } else { f"One changes `{name}`, and the other reads it." }
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: block.stmts[j].span.clone(), code: "NK2104", message: "These two branches can't run at the same time.", notes: [note, "`overlap` runs its branches at once, so a binding one changes can't be touched by the other."], help: "If they should run in order, write them as ordinary statements.", labels: [] })
+                    break
+                }
+                let clash = check_walks_clash(operations[i], operations[j])
+                if clash != null {
+                    let verdict = clash ?? Verdict::NotAccountedFor
+                    let why = capitalised(verdict.why())
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: block.stmts[j].span.clone(), code: "NK2104", message: "These two branches can't run at the same time.", notes: [f"{why}.", "`overlap` runs its branches at once, so they can't depend on each other."], help: "If they should run in order, write them as ordinary statements.", labels: [] })
+                    // One finding per branch: a branch that meets two others has
+                    // one thing wrong with it, and three messages about it is
+                    // the same mistake told three times.
+                    break
+                }
+            }
+        }
+    }
+
+    /// **The tasks of one `async` group meet on nothing** (ADR-async-5 D7):
+    /// two that run at the same time - the later one starts before the
+    /// earlier one is waited for - may not share a resource one of them
+    /// writes (`NK2104`); a name a task changes is `NK2107` on its own. One
+    /// finding per task, at the later one; a task inside another is that task's.
+    /// Nor does a task meet the main-line statements in its window
+    /// (`check_walks_window`, Part I 8.1.2, #1259).
+    pub fn tasks_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block, group: i64) sync {
+        let mut count = 0
+        for (_, wait) in self.facts.async_waits {
+            if wait.group == group {
+                count += 1
+            }
+        }
+        if count < 1 {
+            return
+        }
+        let walking = Walking { own: world.own, library: world.library, into: Going::Ours }
+        let mut started: Vec[ref Expr] = []
+        check_walks_tasks_in(self, block, group, started)
+        let mut tasks: Vec[CheckWalksTask] = []
+        for each in started {
+            match each {
+                Expr::Async(inner, _, _, _) => {
+                    let task = check_walks_task(self, world, walking, id_of(each), inner) ?? continue
+                    tasks.push(task)
+                },
+                else => {},
+            }
+        }
+        let mut beside: Vec[CheckFinding] = []
+        check_walks_window(self, world, walking, block, group, tasks, beside)
+        self.findings.extend(beside.drain())
+        // **`limit: 1` written as the literal** (D15): its tasks never run
+        // at once, so only the window is asked of them.
+        if self.flow.async_one_at_a_time.contains(group) {
+            return
+        }
+        for j in 0..<tasks.len() {
+            for i in 0..<tasks.len() {
+                if i == j {
+                    continue
+                }
+                let earlier = tasks[i]
+                let later = tasks[j]
+                // Only a task started before this one, still running where
+                // this one starts, and not holding it.
+                let before = earlier.span.start < later.span.start || (earlier.span.start == later.span.start && i < j)
+                let inside = later.span.start >= earlier.span.start && later.span.end <= earlier.span.end
+                let held = earlier.span.start >= later.span.start && earlier.span.end <= later.span.end
+                if !before || inside || held || later.span.start as i64 >= earlier.until {
+                    continue
+                }
+                let clash = check_walks_task_clash(earlier, later)
+                if clash != null {
+                    let verdict = clash ?? Verdict::NotAccountedFor
+                    let why = capitalised(verdict.why())
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: later.span.clone(), code: "NK2104", message: "These two tasks can't run at the same time.", notes: [f"{why}.", "The tasks of a group run at the same time, so they can't depend on each other."], help: "If they should run in order, wait for the first before the second starts, or write them without `async`.", labels: [] })
+                    break
+                }
+            }
+        }
+    }
+
+    /// **A guard that reads a name bound inside a boxed part** (ADR-246 D5
+    /// item 2, #97). The guard runs before the arm takes the part apart, so the
+    /// lowering binds those names a second time inside the guard, and this
+    /// records which of them the guard reads and which of those are copied out
+    /// for it (a number, a `bool`, a `char`, and a view, which is a copy too:
+    /// the guard compares the `&str`, not the `&&str` the box lends, #680).
+    pub fn a_guard_reading_inside_a_box[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, pattern: ref MatchPattern, body: ref Expr, guard: ref Expr) sync {
+        let mut inside: Vec[String] = []
+        self.names_inside_boxes(world, pattern, inside)
+        if inside.len() == 0 {
+            return
+        }
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        for each in check_visit_preorder(guard) {
+            check_walks_reads(world, host, each, inside, read)
+        }
+        if read.len() == 0 {
+            return
+        }
+        let mut typed: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+        self.typed_inside_boxes(world, pattern, typed)
+        let mut copied: collections::BTreeSet[String] = collections::BTreeSet()
+        for name in read {
+            let ty = typed[name]?.clone() ?? continue
+            if (a_copy_by_value(ty) || ty.is_a_view()) && !check_core_flow_a_slice(ty) {
+                copied.insert(name.clone())
+            }
+        }
+        self.facts.guards_inside_boxes.insert(id_of(body) as i64, copied)
+    }
+
+    /// **The free calls and the forms in a claim that are not a read**
+    /// (ADR-269 D3). Methods are the frame's; this is what the tree says.
+    pub fn a_claim_reaches[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, condition: ref Expr, mut not_pure: Vec[String]) sync {
+        let mut found: Vec[String] = []
+        for each in check_visit_preorder(condition) {
+            self.a_claim_looks_at(world, host, each, found)
+        }
+        not_pure.extend(found)
+    }
+
+    fn a_claim_looks_at[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, expr: ref Expr, mut found: Vec[String]) sync {
+        self.a_claim_reads(world, expr, found)
+        if check_visit_has_holes(expr) {
+            for hole in host.literal_holes(expr) {
+                for inner in check_visit_preorder(hole) {
+                    self.a_claim_looks_at(world, host, inner, found)
+                }
+            }
+        }
+    }
+
+    fn a_claim_reads(ref self, world: ref CheckWorld, expr: ref Expr, mut found: Vec[String]) sync {
+        let form = check_walks_form(expr)
+        if form.len() > 0 {
+            found.push(f"the condition {form}")
+        }
+        match expr {
+            Expr::Call { func, .. } => self.a_claim_names(world, func, found),
+            else => {},
+        }
+    }
+
+    fn a_claim_names(ref self, world: ref CheckWorld, func: ref Expr, mut found: Vec[String]) sync {
+        let mut name: String = ""
+        match func {
+            Expr::Variable(symbol, _) => {
+                name = world.words.resolve(symbol).clone()
+            },
+            Expr::Path(segments, _) => {
+                let mut parts: Vec[String] = []
+                for segment in segments {
+                    parts.push(world.words.resolve(segment).clone())
+                }
+                let joined = parts.join("::")
+                name = world.here.unaliased(joined)
+            },
+            else => {
+                found.push("The condition calls something that isn't a plain name.")
+                return
+            },
+        }
+        // A value is made, not a call made: a variant, a type's constructor, a
+        // hull.
+        let mut constructs = self.variant_parts.contains_key(name) || self.declares_a_type(world, name) || is_hull(name)
+        if !constructs {
+            let at = name.find("::")
+            if at != null {
+                let cut = at ?? 0
+                let ty = name[0..<cut].clone()
+                let variant = name[cut + "::".len()..].clone()
+                constructs = self.is_variant(ty, variant)
+            }
+        }
+        if constructs {
+            return
+        }
+        let resolved = resolve_call(world, name)
+        if resolved == null {
+            found.push(f"The compiler knows nothing about `{name}`, so it might change something.")
+            return
+        }
+        let call = resolved ?? return
+        let why = check_not_pure_because(call.contract)
+        if why != null {
+            let because = why ?? ""
+            found.push(f"`{name}` {because}")
+        }
+    }
+}
+
+/// What a form in a claim does that a read does not, in a word the message
+/// says; empty for the forms a claim may hold.
+fn check_walks_form(expr: ref Expr) -> String {
+    return match expr {
+        Expr::Spawn { .. } => "starts a task",
+        Expr::Async(_, _, _, _) => "starts a task",
+        Expr::Select(_, _) => "waits in a `select`",
+        Expr::Overlap(_, _) => "runs an `overlap`",
+        Expr::Dsl { .. } => "runs a `dsl` block",
+        Expr::Asm { .. } => "runs `unsafe` code",
+        Expr::Unsafe(_, _) => "runs `unsafe` code",
+        Expr::Try(_, _) => "can fail",
+        Expr::Throw(_, _) => "can fail",
+        Expr::TryCatch { .. } => "can fail",
+        Expr::Return(_, _) => "jumps",
+        Expr::Break(_) => "jumps",
+        Expr::Continue(_) => "jumps",
+        Expr::Block(_, _) => "contains a block, which might change something",
+        Expr::AsyncGroup(_, _, _, _, _) => "waits for a group of tasks",
+        Expr::If { .. } => "contains a block, which might change something",
+        Expr::Match { .. } => "contains a block, which might change something",
+        Expr::Closure { .. } => "contains a block, which might change something",
+        else => "",
+    }
+}
+
+/// The names of `inside` that this expression reads, and those of its holes.
+fn check_walks_reads[H: CheckHost](world: ref CheckWorld, host: ref H, expr: ref Expr, inside: ref Vec[String], mut read: collections::BTreeSet[String]) {
+    match expr {
+        Expr::Variable(symbol, _) => {
+            let name = world.words.resolve(symbol).clone()
+            for bound in inside {
+                if bound == name {
+                    read.insert(name.clone())
+                }
+            }
+        },
+        else => {},
+    }
+    if check_visit_has_holes(expr) {
+        for hole in host.literal_holes(expr) {
+            for inner in check_visit_preorder(hole) {
+                check_walks_reads(world, host, inner, inside, read)
+            }
+        }
+    }
+}

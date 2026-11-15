@@ -21,7 +21,7 @@ use nikaia::contracts::ty::{self, Ty};
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
 
-const TOOLS_DESCRIBED: &str = include_str!("../../../nikaia-std/src/tools/described.contracts");
+const TOOLS_DESCRIBED: &str = include_str!("../../../nikaia-std/src/compiler/described.contracts");
 
 fn library() -> Ledger {
     Ledger::parse(STD).expect("std's shipped ledger parses")
@@ -351,7 +351,7 @@ fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
             let in_tools = path
                 .parent()
                 .and_then(|dir| dir.file_name())
-                .is_some_and(|dir| dir == "tools" || dir == "solver");
+                .is_some_and(|dir| dir == "compiler" || dir == "solver");
             match in_tools {
                 true => tools.push((path, parsed)),
                 false => loose.push(parsed),
@@ -379,7 +379,7 @@ fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
             .sum::<usize>();
     }
     // **A tool is read as `lower-std` reads it: in its package** (ADR-294),
-    // every other file of `src/tools` beside it, and with the Rust the tools
+    // every other file of `src/compiler` beside it, and with the Rust the tools
     // read described (ADR-294 D9.3): without it every `names.resolve(..)` in
     // `traits.nika` is unanswered, and so is what it hands back (0.0.320).
     // **The package's ledger is inferred once**, as `lower-std` infers it - per

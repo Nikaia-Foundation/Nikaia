@@ -13,7 +13,7 @@
 // changes without somebody reading the diff** is: the report is compared with
 // `EXPECTED.txt`, and a block that stops lowering, or starts, is a changed line.
 // The readings are those of the specification's `specbook`
-// (`crates/nikaia-std/src/tools/specbook.nika`), which a program outside `std`
+// (`crates/nikaia-std/src/compiler/specbook.nika`), which a program outside `std`
 // cannot use.
 //
 //     cd tests/page-examples && nikaia test                   # the check, in CI

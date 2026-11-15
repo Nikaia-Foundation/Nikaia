@@ -4,7 +4,7 @@
 Stage 1 of ADR-001 D4 is Nikaia compiling Nikaia, and ADR-294 reaches it a
 module at a time. This counts where the road stands: the lines of the
 toolchain that are Rust (`crates/nikaia/src`), the lines that are Nikaia (the
-`.nika` files under `crates/nikaia-std/src/tools/` the toolchain calls), and the
+`.nika` files under `crates/nikaia-std/src/compiler/` the toolchain calls), and the
 share of the second in both.
 
 A line is one that says something: blank lines and lines that are only a
@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RUST = ROOT / "crates" / "nikaia" / "src"
-TOOLS = ROOT / "crates" / "nikaia-std" / "src" / "tools"
+TOOLS = ROOT / "crates" / "nikaia-std" / "src" / "compiler"
 
 # The toolchain's Nikaia, and the Rust module each one took the place of or
 # serves. `http1.nika` is not here: it is `std`'s HTTP server, which a program

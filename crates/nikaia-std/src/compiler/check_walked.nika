@@ -1,0 +1,506 @@
+// crates/nikaia-std/src/compiler/check_walked.nika
+//
+// **What the checker does once the walk is over** (ADR-294, #125, #558, C-7,
+// U-d6): the findings put in their final form, the method sets the emitter
+// reads, and the unrolling report. Free functions over the state.
+
+use std::collections
+use std::text
+
+/// **`NK1245` comes after every other refusal** (ADR-286 D41): a type nothing
+/// can tell is most often what another refusal left behind, so where the file
+/// holds another error that error is the one said.
+/// And so does `NK1342`, a value whose type is unknown (#1322).
+fn check_walked_unknown_last(mut state: CheckState) sync {
+    let mut other_error = false
+    let mut untold = false
+    for f in state.findings.clone() {
+        match f.severity {
+            CheckSeverity::Error => {
+                if f.code == "NK1245" {
+                    untold = true
+                } else if f.code != "NK1342" {
+                    other_error = true
+                }
+            }
+            else => {}
+        }
+    }
+    if !other_error && !untold {
+        return
+    }
+    // A value whose type is unknown (`NK1342`) mostly follows from an
+    // expression the compiler cannot tell (`NK1245`): only the cause stays.
+    let mut kept: Vec[CheckFinding] = []
+    for f in state.findings.clone() {
+        let dropped = f.code == "NK1342" || (other_error && f.code == "NK1245")
+        if !dropped {
+            kept.push(f)
+        }
+    }
+    state.findings = kept
+}
+
+/// **`a` or `an` by the word that follows** (#511), in every message, note,
+/// help and label of every finding.
+fn check_walked_articles(mut state: CheckState) sync {
+    let mut said: Vec[CheckFinding] = []
+    for f in state.findings.clone() {
+        let mut one = f
+        one.message = articles(one.message)
+        let mut notes: Vec[String] = []
+        for note in one.notes {
+            notes.push(articles(note))
+        }
+        one.notes = notes
+        let help_was: String? = one.help?.clone()
+        match help_was {
+            help => {
+                one.help = articles(help)
+            }
+            null => {}
+        }
+        let mut labels: Vec[CheckLabel] = []
+        for label in one.labels {
+            let mut l = label.clone()
+            l.text = articles(l.text)
+            labels.push(l)
+        }
+        one.labels = labels
+        said.push(one)
+    }
+    state.findings = said
+}
+
+/// **The method sets the emitter reads**: only the calls that provably fail,
+/// and only where the name is not also a call that does not; the same
+/// subtraction for what pauses; and a checked conversion is dropped where a
+/// widening one stands at the same place.
+fn check_walked_method_facts(mut state: CheckState) sync {
+    for at in state.flow.fallible_methods.clone() {
+        if !state.flow.opaque_methods.contains(at) {
+            state.facts.fallible_methods.insert(at)
+        }
+    }
+    for at in state.flow.pausing_methods.clone() {
+        if !state.flow.settled_methods.contains(at) {
+            state.facts.pausing_methods.insert(at)
+        }
+    }
+    for at in state.flow.widening_casts.clone() {
+        state.facts.narrowing_casts.remove(at)
+    }
+}
+
+/// The findings and the facts in their final form, but for the order of the
+/// findings, which the adapter sets.
+pub fn check_walked_settle(mut state: CheckState) sync {
+    check_walked_unknown_last(state)
+    check_walked_articles(state)
+    check_walked_method_facts(state)
+    // The order is the span's start; the sort is stable.
+    state.findings.sort_by_key(fn(f) { f.span.start })
+}
+
+/// **The call a kept function stands for** (`Parsed::kept_function_call`): the
+/// names of its parameters and the call itself, with ids of their own. The
+/// adapter caches it by name and arity.
+pub fn check_walked_kept_call(func: ref Expr, arity: i64, receiver: bool, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> (Vec[winnow_grammar::Symbol], Expr) sync {
+    let mut names: Vec[winnow_grammar::Symbol] = []
+    let mut args: Vec[Expr] = []
+    let mut at = 0
+    while at < arity {
+        let name = intern(f"__nikaia_arg{at}")
+        names.push(name)
+        args.push(Expr::Variable(name, fresh_id()))
+        at += 1
+    }
+    let call = match func {
+        Expr::Path(segments, _) => {
+            if receiver && args.len() > 0 {
+                let first = args.remove(0)
+                Expr::MethodCall { receiver: first, method: segments[segments.len() - 1], args: args, config: [], id: fresh_id() }
+            } else {
+                Expr::Call { func: Expr::Path(segments.clone(), fresh_id()), args: args, config: [], id: fresh_id() }
+            }
+        }
+        Expr::Variable(name, _) => Expr::Call { func: Expr::Variable(name, fresh_id()), args: args, config: [], id: fresh_id() }
+        else => panic("a kept function is a name or a path")
+    }
+    return (names, call)
+}
+
+/// **The signed values in unsigned slots, asked of the walk** (ADR-285 D32):
+/// one `proven` says is `>= 0` where it stands is taken as it is; one that is
+/// not is the slot's refusal, with the two ways to say it. `proven` answers
+/// for a set of nodes which of them are proved non-negative, given the facts
+/// (`bounds::proven`, until `bounds` moves).
+pub fn check_walked_unsigned_slots(mut state: CheckState, proven: fn(ref CheckFacts, ref collections::BTreeSet[i64]) -> collections::BTreeSet[i64] sync) sync {
+    let mut slots: Vec[CheckUnsignedSlot] = []
+    for (_, held) in state.flow.unsigned_slots.clone() {
+        for slot in held {
+            slots.push(slot.clone())
+        }
+    }
+    state.flow.unsigned_slots = collections::BTreeMap()
+    if slots.len() == 0 {
+        return
+    }
+    let mut nodes: collections::BTreeSet[i64] = collections::BTreeSet()
+    for slot in slots.clone() {
+        nodes.insert(slot.node)
+    }
+    let held = proven(state.facts, nodes)
+    for slot in slots {
+        if !held.contains(slot.node) {
+            state.findings.push(check_unsigned_slot_refused(slot))
+        }
+    }
+}
+
+/// **The unrolling report** (`--explain`): one line for each function that
+/// walks a parameter's fields, and one for each copy written.
+pub fn check_walked_unrolling(walks_fields: ref collections::BTreeMap[String, String], unrolled: ref collections::BTreeMap[(String, String), Vec[FieldContract]]) -> String {
+    let mut out: String = ""
+    for (function, parameter) in walks_fields {
+        let mut any = false
+        for ((written, on), fields) in unrolled {
+            if written != function {
+                continue
+            }
+            any = true
+            out.push_str(f"comptime: `{function}` unrolled over `{on}` as `{check_specialised(function, on)}`\n")
+            for field in fields {
+                out.push_str(f"    {field.name}: {field.ty.text()}\n")
+            }
+        }
+        if !any {
+            out.push_str(f"comptime: `{function}` walks `{parameter}::fields` and nothing calls it, so no copy is written\n")
+        }
+    }
+    return out
+}
+
+/// **The value as the author wrote it**, where this compiler can say so: a
+/// literal, a name, a negation, and an ellipsis for the rest
+/// (`CheckHost::written` once). The text of a string literal is Rust's `{:?}`
+/// (`String::quoted`); `words` names a symbol.
+pub fn check_walked_written(value: ref Expr, words: ref winnow_grammar::InternerContext) -> String {
+    return match value {
+        Expr::LitInt { value: n, negative, .. } => if negative && n != 0 { f"-{n}" } else { f"{n}" }
+        Expr::LitBool(yes, _) => f"{yes}"
+        Expr::LitStr { text: s, .. } => s.quoted()
+        Expr::Variable(name, _) => words.resolve(name).clone()
+        Expr::Unary { op: UnaryOp::Neg, expr, .. } => f"-{check_walked_written(expr, words)}"
+        else => "…"
+    }
+}
+
+/// **What the walk reads off the item tree before it starts** (ADR-294,
+/// #125, C7-r1): the grammars of this file and their entry rules, the `std`
+/// modules it brings into scope, `std`'s modules, and the handles and
+/// functions its `extern` blocks declare.
+pub fn check_walked_seed(mut state: CheckState, world: ref CheckWorld) sync {
+    for item in world.here.items {
+        match item.node {
+            Item::Grammar(def) => {
+                let mut entries: collections::BTreeSet[String] = collections::BTreeSet()
+                for rule in def.rules {
+                    if rule.is_entry {
+                        entries.insert(world.here.text(rule.name))
+                    }
+                }
+                state.grammars.insert(world.here.text(def.name), entries)
+            }
+            Item::Import { path, .. } => {
+                if path.len() == 2 && world.here.text(path[0]) == "std" {
+                    state.std_in_scope.insert(world.here.text(path[1]))
+                }
+            }
+            Item::Extern { declarations, opaque, .. } => {
+                for handle in opaque {
+                    state.opaque_handles.insert(world.here.text(handle.node.name))
+                }
+                for declared in declarations {
+                    state.foreign_names.insert(world.here.text(declared.node.name))
+                }
+            }
+            else => {}
+        }
+    }
+    // The distinct prefixes first and the tests after, because there are a
+    // few dozen modules and some thousand keys.
+    let mut prefixes: collections::BTreeSet[String] = collections::BTreeSet()
+    for (key, _) in world.library.functions {
+        check_walked_prefix_into(key, prefixes)
+    }
+    for (key, _) in world.library.types {
+        check_walked_prefix_into(key, prefixes)
+    }
+    for prefix in prefixes {
+        // `scalar` and the number types are types the language has, not
+        // modules: `scalar::from` and `u64::MAX` are reached without a `use`
+        // (Part I 2.2, #1003), and `use std::u64` is `NK1156`'s (#1186).
+        if !world.library.types.contains_key(prefix) && !world.library.functions.contains_key(f"{prefix}::new") && prefix != "scalar" && !check_numeric(prefix) {
+            state.std_modules.insert(prefix.clone())
+        }
+    }
+}
+
+/// The part of a key before its first `::`, where it has one.
+fn check_walked_prefix_into(key: ref String, mut prefixes: collections::BTreeSet[String]) {
+    let cut = key.find("::") ?? return
+    prefixes.insert(key[0..<cut].clone())
+}
+
+/// **What one variant declares it carries**, by position, in whichever file
+/// of the program declares the `enum`: this one first.
+pub fn check_walked_payload_of(world: ref CheckWorld, ty: ref String, variant: ref String) -> Vec[Ty]? {
+    let here = check_payload_in(world.here, ty, variant)
+    if here != null {
+        return here
+    }
+    for view in world.beside {
+        let found = check_payload_in(view, ty, variant)
+        if found != null {
+            return found
+        }
+    }
+    return null
+}
+
+/// **Where a run that stopped at `place` (`@<file>:<byte>`) stopped**, seen
+/// from file `here`: a place in this file is shown, and one in another is
+/// named by the function it is in. The files are the program's, this one
+/// among them; a check handed none is this file alone, which then stands
+/// first.
+pub fn check_walked_place_of(world: ref CheckWorld, place: ref String, here: i64) -> CheckPlace {
+    let none = CheckPlace { at: -1, function: null }
+    let rest = (place.strip_prefix("@") ?? return none).clone()
+    let colon = rest.find(":") ?? return none
+    let unit = text::parse_i64(rest[0..<colon]) ?? return none
+    let byte = text::parse_i64(rest[colon + 1..]) ?? return none
+    if unit < 0 || byte < 0 || byte > 4294967295 {
+        return none
+    }
+    if unit == here {
+        return CheckPlace { at: byte, function: null }
+    }
+    let mut function: String? = null
+    if world.here_at < 0 {
+        if unit == 0 {
+            function = check_walked_function_at(world.here, byte)
+        } else if unit - 1 < world.beside.len() {
+            function = check_walked_function_at(world.beside[unit - 1], byte)
+        }
+    } else if unit < world.beside.len() {
+        function = check_walked_function_at(world.beside[unit], byte)
+    }
+    return CheckPlace { at: -1, function: function }
+}
+
+/// The name of the function of a file whose item holds `byte`.
+fn check_walked_function_at(view: ref ParsedView, byte: i64) -> String? {
+    for item in view.items {
+        match item.node {
+            Item::Fn { name, .. } => {
+                let named = name ?? continue
+                if item.span.start as i64 <= byte && byte < item.span.end as i64 {
+                    return view.text(named)
+                }
+            }
+            else => {}
+        }
+    }
+    return null
+}
+
+/// **A type as a program writes it, read** (ADR-281 D3, ADR-010 D10): the
+/// one spelling the language does not have refused, the type built from the
+/// annotation, and an ordered map or set whose key has no order refused
+/// (`NK1247`), over everything inside it. Asked at the positions a program
+/// writes a type.
+pub fn check_walked_declared(mut state: CheckState, world: ref CheckWorld, ty: ref Type, span: ref Span) -> Ty sync {
+    state.spelling(world, ty, span)
+    let written = written_ty(world.here.words, world.here.aliases, ty)
+    let refused = collect_keys_unordered(world.parts_beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, world, written, span)
+    state.findings.extend(refused)
+    return written
+}
+
+/// **What the prover found, put into the facts** (ADR-269 D4, D5, D18): the
+/// checked entries, how each call reaches them and what the ledger
+/// publishes; a `std` precondition at a call becomes a claim of the program
+/// (#1003), held, refused (`NK1300`) and listed as an `assert` is; and each
+/// claim the prover reached is told how it is held.
+pub fn check_walked_proved(mut state: CheckState, entries: collections::BTreeMap[String, Vec[PreconditionCheck]], reaches: collections::BTreeMap[(String, String), CallReach], published: collections::BTreeMap[String, Published], std_claims: ref collections::BTreeMap[(i64, i64), String], held: ref collections::BTreeMap[(i64, i64), ClaimHeld], outside: collections::BTreeMap[(i64, String), OutsideIndex]) sync {
+    state.facts.entries = entries
+    state.facts.outside_indices = outside
+    state.facts.reaches = reaches
+    state.facts.published = published
+    for (key, written) in std_claims {
+        state.facts.claims.insert(key.clone(), FactClaim { held: null, written: written.clone(), left: null, right: null, assumed: false })
+    }
+    for (key, how) in held {
+        let mut claim = state.facts.claims.get(key) ?? continue
+        claim.held = how.clone()
+    }
+}
+
+/// **What the prover found** (`prove::Proved`), as the walk reads it: the
+/// findings, how each claim is held, the checked entries, how each call
+/// reaches them, what the ledger publishes and `std`'s preconditions at the
+/// calls.
+pub struct CheckWalkedProved {
+    pub findings: Vec[CheckFinding],
+    pub held: collections::BTreeMap[(i64, i64), ClaimHeld],
+    pub entries: collections::BTreeMap[String, Vec[PreconditionCheck]],
+    pub reaches: collections::BTreeMap[(String, String), CallReach],
+    pub published: collections::BTreeMap[String, Published],
+    pub std_claims: collections::BTreeMap[(i64, i64), String],
+    /// Each index data from outside reaches, and what became of it
+    /// (ADR-396 D5).
+    pub outside: collections::BTreeMap[(i64, String), OutsideIndex],
+}
+
+/// **The passes of the compiler the walk runs once it is over** (ADR-294,
+/// #125, M10): each still Rust where it reads the parsed file whole, so each
+/// is a question to `check/host.rs`, answered with findings.
+pub trait CheckWalkedPasses {
+    /// The DSL parameters a call forgot, and the ones it invented (ADR-296 D5).
+    fn dsl_findings(ref self) -> Vec[CheckFinding] sync
+    /// Which of `nodes` are proved `>= 0` where they stand (`bounds::proven`).
+    fn nonnegative(ref self, facts: ref CheckFacts, nodes: ref collections::BTreeSet[i64]) -> collections::BTreeSet[i64] sync
+    /// The prover's answer for every claim the walk kept (ADR-269 D4), a call
+    /// an open claim reads run as a `comptime` is where the build can
+    /// (ADR-359 D11-D13).
+    fn proved(ref self, facts: ref CheckFacts) -> CheckWalkedProved sync
+    /// The functions and fields of the package outside data reaches
+    /// (`prove_run::prove_outside`, #1573).
+    fn outside(ref self, facts: ref CheckFacts) -> ProverOutside sync
+    /// A naked view parameter kept past the call (`NK2302`).
+    fn view_findings(ref self) -> Vec[CheckFinding] sync
+    /// A change in place of data a view still to be used may point into
+    /// (`NK2305`, ADR-views-3 D9).
+    fn view_change_findings(ref self, lent: ref collections::BTreeSet[i64], coalesced: ref collections::BTreeSet[i64], mut_viewed: ref collections::BTreeSet[i64], receiver_views: ref collections::BTreeSet[i64]) -> Vec[CheckFinding] sync
+    /// The buffer plans, kept for the emitter where they are made against
+    /// `std` alone, as it makes them (#727), and the tether's refusals
+    /// (`NK2303`, ADR-283 D9).
+    fn tethered(ref self) -> (Vec[BufferPlan]?, Vec[CheckFinding]) sync
+    /// What an `impl` owes the `trait` it names (Part I 4.7).
+    fn trait_findings(ref self) -> Vec[CheckFinding] sync
+    /// A type nothing declares (Part I 2.2, ADR-096).
+    fn type_findings(ref self) -> Vec[CheckFinding] sync
+}
+
+/// **The checker's walk of one file, from the seed to the settled findings**
+/// (`check::walked`, ADR-294, #125, M10). `harvesting` stops it once the calls
+/// have been typed (ADR-304 D6); `computes` runs the walks that answer only
+/// with findings and proofs, which the ledger's pass does not (#727).
+pub fn check_walked_walk[H: CheckHost, P: CheckWalkedPasses](mut state: CheckState, world: ref CheckWorld, host: ref H, passes: ref P, harvesting: bool, computes: bool) sync {
+    check_walked_seed(state, world)
+    let dsl_drivers: collections::BTreeSet[String] = drivers(world.here.words, world.here.items).drain().collect()
+    state.dsl_drivers = dsl_drivers
+    state.collect_types(world)
+    state.collect_copies(world)
+    check_program_program(state, world, host)
+    // **Only the call sites were wanted**, and everything below answers a
+    // different question at a cost the asking unit has already paid for
+    // itself (ADR-304 D6).
+    if harvesting {
+        return
+    }
+    // **The calls that stand in the program's other files**, before the turns
+    // are walked, because a copy is written by the unit that declares the
+    // function and decided at the call - which may be a file away (Part I 9.1).
+    check_program_instantiations_beside(state, world, host)
+    // **And once more per unrolled turn** (ADR-304 D7, D6), which the walk
+    // above is what found: a call may stand above the function it names.
+    check_program_unroll(state, world, host)
+    check_walked_unsigned_slots(state, fn(facts, nodes) { passes.nonnegative(facts, nodes) })
+    state.walls_a_refusal_explains()
+    state.facts.walks_fields = state.walks_fields.clone()
+    // ADR-296 D5: a question about a statement's holes rather than a type.
+    state.findings.extend(passes.dsl_findings())
+    // **What carries outside data** (ADR-396 D1, #1573), in the ledger's pass
+    // too: a function whose result comes from outside is a source its
+    // ledger names, which a package that calls it reads.
+    state.facts.outside = passes.outside(state.facts)
+    // **The ledger's pass reports nothing** (#727): what its caller reads is
+    // which calls resolve where and what each body stores, never a finding or
+    // a proof.
+    if computes {
+        // **Every `assert` outside a test is proved where it can be**
+        // (ADR-269 D4), after the walk, because the checker is what decided
+        // which calls are the prelude's.
+        let proved = passes.proved(state.facts)
+        state.findings.extend(proved.findings)
+        check_walked_proved(state, proved.entries, proved.reaches, proved.published, proved.std_claims, proved.held, proved.outside)
+        // Where a value goes, not what a type is (`NK2302`).
+        state.findings.extend(passes.view_findings())
+        // Where a view points and when it is used (`NK2305`).
+        let coalesced = vc_coalesced(state.facts)
+        let mut_viewed = vc_mut_viewed(state.facts)
+        state.findings.extend(passes.view_change_findings(state.facts.lent_lets, coalesced, mut_viewed, state.facts.receiver_views))
+        // A view handed back that points into a buffer the body owns (`NK2303`).
+        let (plans, refused) = passes.tethered()
+        if plans != null {
+            state.facts.keep_plans = plans
+        }
+        state.findings.extend(refused)
+    }
+    // Part I 4.7: it reads the ledger's **finished** `sync` column (ADR-080).
+    state.findings.extend(passes.trait_findings())
+    check_crossings_language_impls(state, world)
+    // Part I 2.2: a written *name*, not a value's type (ADR-096).
+    state.findings.extend(passes.type_findings())
+    // **What no function body held**, typed the same way (ADR-285).
+    state.numbers_typed_by_their_uses()
+    // **Arms that disagree, where no position asked them** (#596).
+    for (_, finding) in state.arm_disagreements.drain() {
+        state.findings.push(finding)
+    }
+    // The findings and method sets in their final form; the order is the span's.
+    check_walked_settle(state)
+}
+
+/// **The `std` library a walk resolves against, with the described crates'
+/// boundary** (`project::Foreign::library`): a described entry joins where
+/// `std` has none by its name, and `std` wins a collision. What a call into
+/// a described crate keeps decides how its argument is written (#155).
+pub fn check_walked_with_described(mut library: Ledger, described: ref Ledger) sync {
+    for (name, contract) in described.functions {
+        library.functions.entry(name.clone()).or_insert_with(fn() { contract.clone() })
+    }
+    for (name, contract) in described.types {
+        library.types.entry(name.clone()).or_insert_with(fn() { contract.clone() })
+    }
+}
+
+/// **The two doors that take several locks at once** (ADR-281): not ledger
+/// entries and not grammar, but ordinary calls with a trailing lambda
+/// (Part I 5.3) that the checker types.
+pub enum CheckMultiLock {
+    /// `access_all`: every lock read in place, none of them changed.
+    Reading,
+    /// `update_all`: every lock written, one new value each.
+    Writing,
+}
+
+impl CheckMultiLock {
+    /// The name a program writes, or `null` for anything else.
+    pub fn named(name: String) -> CheckMultiLock? sync {
+        return match name {
+            "access_all" => CheckMultiLock::Reading,
+            "update_all" => CheckMultiLock::Writing,
+            else => null,
+        }
+    }
+
+    pub fn written(self) -> String sync {
+        return match self {
+            CheckMultiLock::Reading => "access_all",
+            CheckMultiLock::Writing => "update_all",
+        }
+    }
+}

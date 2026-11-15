@@ -1,0 +1,351 @@
+// crates/nikaia-std/src/compiler/check_arms.nika
+//
+// **Arms that meet at `T?`, and a lambda that ends in text** (ADR-282 D4,
+// ADR-279, ADR-285, #312, #435), moved from the compiler's checker (ADR-294,
+// #125, #558, C-5d).
+
+use std::collections
+
+/// One arm of a choice as the checker saw it: the value it ends in, where it
+/// has one, and the type that came out.
+pub struct CheckArm {
+    pub tail: ref Expr?,
+    pub ty: Ty,
+}
+
+fn an_arm_ends_in_null(arm: ref CheckArm) -> bool {
+    let tail = arm.tail ?? return false
+    return ends_in_null(tail)
+}
+
+fn an_arm_is_a_nullable(arm: ref CheckArm) -> bool {
+    return match arm.ty {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+}
+
+/// A number written down takes its type from where it stands (ADR-285).
+fn an_arm_is_a_number(arm: ref CheckArm) -> bool {
+    let tail = arm.tail ?? return false
+    return match tail {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && a_written_number(expr),
+        else => false,
+    }
+}
+
+fn a_written_number(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        else => false,
+    }
+}
+
+fn an_arm_is_a_text_literal(arm: ref CheckArm) -> bool {
+    let tail = arm.tail ?? return false
+    return match tail {
+        Expr::LitStr { .. } => true,
+        else => false,
+    }
+}
+
+/// A `String?` whose arm is not a literal: text of its own beside the arms.
+fn an_arm_is_owned_text(arm: ref CheckArm, text: ref Ty) -> bool {
+    if arm.ty == text {
+        return true
+    }
+    if an_arm_is_a_text_literal(arm) {
+        return false
+    }
+    return match arm.ty {
+        Ty::Nullable(inner) => inner == text,
+        else => false,
+    }
+}
+
+fn the_type_inside(ty: ref Ty) -> Ty {
+    return match ty {
+        Ty::Nullable(inner) => inner.clone(),
+        else => ty.clone(),
+    }
+}
+
+/// **Two arm types that agree where both are known** (the fix forward of
+/// 43312d30): `xs.clone()` beside `[]` or `[5]`, a `Vec[i64]` beside a
+/// `Vec` whose element nothing typed yet, meet at `Vec[i64]`; a tuple meets
+/// part by part. An unknown part takes the other's; any other difference is
+/// no meeting (`null`).
+fn the_types_meet_with_holes(a: ref Ty, b: ref Ty) -> Ty? {
+    if a.is_unknown() {
+        return b.clone()
+    }
+    if b.is_unknown() {
+        return a.clone()
+    }
+    return match (a, b) {
+        (Ty::Named { name: x, args: xa, view: xv }, Ty::Named { name: y, args: ya, view: yv }) => {
+            if x != y || xv != yv || xa.len() != ya.len() {
+                return null
+            }
+            let args = the_parts_meet_with_holes(xa, ya) ?? return null
+            Ty::Named { name: x.clone(), args: args, view: xv }
+        },
+        (Ty::Tuple(xs), Ty::Tuple(ys)) => {
+            if xs.len() != ys.len() {
+                return null
+            }
+            let parts = the_parts_meet_with_holes(xs, ys) ?? return null
+            Ty::Tuple(parts)
+        },
+        (Ty::Nullable(x), Ty::Nullable(y)) => {
+            let inner = the_types_meet_with_holes(x, y) ?? return null
+            Ty::Nullable(inner)
+        },
+        else => {
+            if a != b {
+                return null
+            }
+            a.clone()
+        },
+    }
+}
+
+/// The parts of two types of as many parts, met one by one.
+fn the_parts_meet_with_holes(xs: ref Vec[Ty], ys: ref Vec[Ty]) -> Vec[Ty]? {
+    let mut met: Vec[Ty] = []
+    for (x, y) in xs.iter().zip(ys.iter()) {
+        let part = the_types_meet_with_holes(x, y) ?? return null
+        met.push(part)
+    }
+    return met
+}
+
+/// **Arms that meet where each is known** (`the_types_meet_with_holes`): the
+/// type of the choice, or `null` where two arms differ in a known part or
+/// an arm is of no known type at all.
+pub fn arms_meet_with_holes(arms: ref Vec[CheckArm]) -> Ty? {
+    if arms.len() < 2 {
+        return null
+    }
+    let mut met: Ty = Ty::Unknown
+    for arm in arms {
+        // **A hole is a part of an arm's type, never the whole arm**: an arm
+        // of no known type - a number a use types, a choice whose own arms
+        // disagree - is the position's to settle, as before.
+        if arm.ty.is_unknown() {
+            return null
+        }
+        met = the_types_meet_with_holes(met, arm.ty) ?? return null
+    }
+    return met
+}
+
+/// Whether the type seen so far, if any, is this one.
+fn the_plain_type_agrees(plain: ref Ty?, inner: ref Ty) -> bool {
+    let seen = plain ?? return true
+    return seen == inner
+}
+
+impl CheckState {
+    /// **Arms that meet at `T?`** because one of them is `null`: the plain ones
+    /// are `Some(…)` below, and the choice is a `T?`. Asked only where every
+    /// arm that is not `null` is a `T` or a `T?` of one `T`, so a choice this
+    /// cannot type stays unknown. Or because one of them is a `T?` already
+    /// (#435). A number takes its type from where it stands, and a text literal
+    /// takes `String` where its neighbours are text of their own (ADR-282 D4).
+    pub fn arms_meet_at_null(ref mut self, world: ref CheckWorld, arms: ref Vec[CheckArm]) -> Ty? sync {
+        let mut asked = false
+        for arm in arms {
+            if an_arm_ends_in_null(arm) || an_arm_is_a_nullable(arm) {
+                asked = true
+            }
+        }
+        if !asked {
+            return null
+        }
+        let text = a_string_type()
+        let mut literals_own = false
+        let mut all_literals = true
+        for arm in arms {
+            if an_arm_is_owned_text(arm, text) {
+                literals_own = true
+            }
+            if !(an_arm_ends_in_null(arm) || an_arm_is_a_text_literal(arm)) {
+                all_literals = false
+            }
+        }
+        literals_own = literals_own || all_literals
+        let mut plain: Ty? = null
+        let mut literals = false
+        for arm in arms {
+            if an_arm_ends_in_null(arm) || an_arm_is_a_number(arm) {
+                continue
+            }
+            if literals_own && an_arm_is_a_text_literal(arm) {
+                literals = true
+                continue
+            }
+            let inner = the_type_inside(arm.ty)
+            if arm.tail == null {
+                return null
+            }
+            // **An arm of a type not worked out beside a `null`** is a plain
+            // value too (#586): `if even { x } else { null }` in a lambda,
+            // whose parameter has no written type, wrote `x` beside `None`.
+            // A `T?` arm is known as one (`an_arm_is_a_nullable`), so what is
+            // left is plain.
+            if inner.is_unknown() {
+                continue
+            }
+            // **Arms meet where each is known** (`the_types_meet_with_holes`):
+            // `if found { [] } else { null }` beside a `Vec[String]` is a
+            // `Vec[String]?`, its `[]` of no known element yet.
+            let seen: Ty = plain ?? Ty::Unknown
+            plain = the_types_meet_with_holes(seen, inner) ?? return null
+        }
+        if literals {
+            if !the_plain_type_agrees(plain, text) {
+                return null
+            }
+            if plain == null {
+                plain = text.clone()
+            }
+        }
+        for arm in arms {
+            self.an_arm_beside_a_null(world, arm, literals, text)
+        }
+        return Ty::Nullable(plain ?? Ty::Unknown)
+    }
+
+    /// A plain arm is `Some` below, and a text literal among them a `String`.
+    fn an_arm_beside_a_null(ref mut self, world: ref CheckWorld, arm: ref CheckArm, literals: bool, text: ref Ty) sync {
+        let tail = arm.tail ?? return
+        if an_arm_is_a_nullable(arm) || ends_in_null_literal(tail) {
+            return
+        }
+        if literals && an_arm_is_a_text_literal(arm) {
+            self.text_literal(world, text, tail, true)
+        }
+        self.some_at_the_tails(tail)
+    }
+
+    /// **A lambda's text literal is built where its type keeps text**: the value
+    /// a lambda ends in is handed to whoever calls it, as a function's is
+    /// (ADR-282 D4).
+    pub fn a_lambdas_text_is_its_own(ref mut self, world: ref CheckWorld, want: ref Ty, value: ref Expr) sync {
+        match want {
+            Ty::Fn { result, .. } => {
+                match value {
+                    Expr::Closure { body, .. } => self.a_closure_ends_in(world, result, body),
+                    else => {},
+                }
+            },
+            else => {},
+        }
+    }
+
+    fn a_closure_ends_in(ref mut self, world: ref CheckWorld, result: ref Ty?, body: ref Block) sync {
+        let kept = result ?? return
+        let tail = block_tail(body)
+        if tail.len() == 1 {
+            self.text_literal(world, kept, tail[0], true)
+        }
+    }
+}
+
+fn ends_in_null_literal(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitNull(_) => true,
+        else => false,
+    }
+}
+
+/// An arm that ends in an integer literal, through braces.
+fn an_arm_is_an_integer(arm: ref CheckArm) -> bool {
+    let tail = arm.tail ?? return false
+    return match check_peeled(tail) {
+        Expr::LitInt { .. } => true,
+        else => false,
+    }
+}
+
+/// **Arms that are known and disagree** (#596, `NK1245`): the compiler cannot
+/// tell the type of the value, and no arm is unknown for another refusal's
+/// sake. The finding stands at `span`; the caller moves the caret to the first
+/// arm that is not the first one's type (#107).
+pub fn arms_that_disagree(arms: ref Vec[CheckArm], is_if: bool, span: ref Span) -> CheckFinding? {
+    if arms.len() < 2 {
+        return null
+    }
+    // A number nothing typed yet is a use's to type, so it is a number.
+    let mut known: Vec[Ty] = []
+    let mut numbers = 0
+    for arm in arms {
+        let ty = arm.ty.unseen()
+        if wholly_known(ty) {
+            let unit = match ty {
+                Ty::Tuple(parts) => parts.len() == 0,
+                else => false,
+            }
+            if unit {
+                return null
+            }
+            known.push(ty)
+        } else if an_arm_is_an_integer(arm) {
+            numbers = numbers + 1
+        } else {
+            return null
+        }
+    }
+    let mut alike = true
+    let mut at = 1
+    while at < known.len() {
+        if known[at] != known[at - 1] {
+            alike = false
+        }
+        at = at + 1
+    }
+    if numbers > 0 {
+        for ty in known {
+            if integer_named(value_of_a_copy(ty)) == null {
+                alike = false
+            }
+        }
+    }
+    if alike {
+        return null
+    }
+    let mut word: String = "match"
+    let mut article: String = "`match`"
+    if is_if {
+        word = "if"
+        article = "`if`"
+    }
+    let mut shown: Vec[String] = []
+    for ty in known {
+        let text = ty.text()
+        if !shown.contains(text) {
+            shown.push(text)
+        }
+    }
+    if numbers > 0 {
+        shown.push("a number")
+    }
+    let mut listed: String = ""
+    let mut index = 0
+    while index < shown.len() {
+        let one = shown[index].clone()
+        if index + 1 == shown.len() {
+            listed = f"{listed} and `{one}`"
+        } else if index == 0 {
+            listed = f"`{one}`"
+        } else {
+            listed = f"{listed}, `{one}`"
+        }
+        index = index + 1
+    }
+    return check_refusal("NK1245", span, f"The arms of this {article} are {listed}, so the compiler can't tell what type its value is.", [f"What is not known is not checked, so the value of a `{word}` whose arms disagree is refused rather than left to the language below."], f"Make the arms of the {article} the same type.")
+}

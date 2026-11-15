@@ -20,7 +20,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 //
 // **They are read by a grammar written in Nikaia**
 // ([ADR-290](../../docs/specification/adr/adr-290.md) D13):
-// `crates/nikaia-std/src/tools/rust.nika`, lowered ahead of time and reached
+// `crates/nikaia-std/src/compiler/rust.nika`, lowered ahead of time and reached
 // from here as an ordinary Rust module — `nikaia_std::tools::rust`, a call and
 // nothing else ([ADR-290](../../docs/specification/adr/adr-290.md) D16). What
 // stood here before was a hand-written character scanner that matched `pub fn`

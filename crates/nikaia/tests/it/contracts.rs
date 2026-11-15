@@ -743,7 +743,7 @@ fn the_shipped_std_ledger_agrees_with_its_nikaia_sources() {
     assert!(checked > 0, "no Nikaia module in std was checked");
 }
 
-/// **A `.nika` under `src/tools` is not `std`**, and `std.contracts` must not
+/// **A `.nika` under `src/compiler` is not `std`**, and `std.contracts` must not
 /// name it.
 ///
 /// The test above says what a module beside `lib.rs` means: `std` offers it,
@@ -763,7 +763,7 @@ fn a_toolchain_module_is_not_part_of_std() {
         .expect("std ships a ledger");
     let shipped = Ledger::parse(&shipped).expect("std's ledger parses");
 
-    let tools = repo_root().join("crates/nikaia-std/src/tools");
+    let tools = repo_root().join("crates/nikaia-std/src/compiler");
     let mut checked = 0;
 
     for entry in std::fs::read_dir(&tools).expect("read the toolchain's sources") {
@@ -780,7 +780,7 @@ fn a_toolchain_module_is_not_part_of_std() {
             assert!(
                 !shipped.functions.contains_key(&key),
                 "std.contracts names `{key}`, which is the toolchain's and not \
-                 std's. A module under `src/tools` is not offered to a Nikaia \
+                 std's. A module under `src/compiler` is not offered to a Nikaia \
                  program (ADR-290 D16); move it beside `lib.rs` or take the \
                  entry out."
             );

@@ -1,0 +1,622 @@
+// crates/nikaia-std/src/compiler/build_eval.nika
+//
+// **What a build-time initialiser of literals comes to** (ADR-287, ADR-311,
+// ADR-318, ADR-321 D1): the folder for what no run is needed for - a literal,
+// a tuple, a list, a struct and a variant, `f"…"`, an operator, an `if` whose
+// branches are values, an index, a field, another `comptime`, a file the build
+// reads and a grammar run on a text. **Nothing here calls a function**: build-
+// time code that calls one is compiled and run with the program (ADR-321 D1),
+// and a call that reaches this folder is refused as not computed here.
+// Reading the program's files, what a build may read and compiling and running
+// a grammar stay with the compiler, which the folder asks through `BtHost`.
+//
+// Nothing here panics and nothing loops; what it will not do it refuses, and
+// says which kind of "not" it is.
+
+use std::collections
+use std::text
+
+/// **What the folder does not compute**: code that runs, which is compiled and
+/// run with the program where it stands in a `comptime`'s own initialiser
+/// (ADR-321 D1), and is never interpreted.
+comptime BT_NOT_FOLDED: ref String = "build-time code that runs is compiled and run with the program, never interpreted, and this compiler compiles it only where it stands in the `comptime`'s own initialiser"
+
+/// The way out of it.
+comptime BT_FOLD_WAY_OUT: ref String = "compute it in a `comptime` of its own, declared above this one, and name that here"
+
+/// The one call the folder answers, before it reads its argument (ADR-310 D3).
+comptime BT_ASSET: ref String = "asset"
+
+/// What a grammar run came to.
+pub struct BtRan {
+    /// Whether the grammar and its entry rule are the program's.
+    pub found: bool,
+    pub value: BuildValue?,
+    /// Why the grammar did not run, where nothing came back.
+    pub wall: CheckWall?,
+}
+
+/// What a file read at build time came to.
+pub struct BtRead {
+    pub text: String?,
+    pub denied: Denied?,
+}
+
+/// What the evaluator asks of the compiler.
+pub trait BtHost {
+    /// What a symbol of file `unit` is.
+    fn text(ref self, unit: i64, symbol: winnow_grammar::Symbol) -> String sync
+    /// Which numbers name a character: Unicode's table.
+    fn char_of(ref self, n: i64) -> scalar? sync
+    /// What a name outside a build-time body is worth: a `comptime` already
+    /// evaluated, or a `let` whose value folded.
+    fn known(ref self, name: ref String) -> BuildValue? sync
+    /// The initialiser of the `comptime` item `name` of file `unit`.
+    fn constant(ref self, unit: i64, name: ref String) -> Expr? sync
+    /// Whether `ty::variant` names a variant of an `enum` the program declares.
+    fn variant_of(ref self, unit: i64, ty: ref String, variant: ref String) -> bool sync
+    fn run_grammar(ref self, unit: i64, which: ref String, rule: ref String, input: ref String) -> BtRan sync
+    fn read(ref self, path: ref String) -> BtRead sync
+}
+
+/// Why a build-time expression did not come to a value.
+pub enum BtRefusal {
+    /// This evaluator does not know the shape. **Not an error by itself.**
+    Unevaluable,
+    /// Understood, and not something this evaluator can do here.
+    NotHere { what: String, why: String, way_out: String },
+    /// A constant worked out from itself.
+    Circular { ring: Vec[String] },
+    /// A file this build may not read (ADR-310 D4 to D5).
+    MayNotRead { path: String, why: Denied },
+    /// A path that is not a literal (D4).
+    PathIsComputed,
+    /// An index this array does not have.
+    OutOfBounds { at: Integer, len: i64 },
+    /// A grammar this compiler could not run (issue #178): the sentence is
+    /// the checker's to write.
+    GrammarWall { owner: String, rule: String, why: CheckWall },
+}
+
+impl Error for BtRefusal {
+    fn message(ref self) -> String {
+        return match self {
+            BtRefusal::Unevaluable => "a build-time expression this does not read",
+            BtRefusal::NotHere { what, .. } => f"`{what}` is not here",
+            BtRefusal::Circular { ring } => f"a constant built from itself: {ring.join(" -> ")}",
+            BtRefusal::MayNotRead { path, .. } => f"`{path}` may not be read",
+            BtRefusal::PathIsComputed => "a path that is not a literal",
+            BtRefusal::OutOfBounds { len, .. } => f"an index outside {len}",
+            BtRefusal::GrammarWall { owner, rule, .. } => f"the grammar `{owner}` stopped at `{rule}`",
+        }
+    }
+}
+
+/// Where a fold stands: the file being checked, and the constants being worked
+/// out, innermost last.
+struct BtState {
+    unit: i64,
+    resolving: Vec[String],
+}
+
+/// **What is not folded here**: `what`, refused with the way out of a
+/// `comptime` of its own.
+fn bt_not_folded(what: String) -> BtRefusal {
+    return BtRefusal::NotHere { what: what, why: BT_NOT_FOLDED.clone(), way_out: BT_FOLD_WAY_OUT.clone() }
+}
+
+/// What an initialiser comes to.
+pub fn bt_evaluate[H: BtHost](expr: ref Expr, host: ref H) -> BuildValue sync throws {
+    let mut state = BtState { unit: 0, resolving: [] }
+    return bt_expr(expr, host, state)
+}
+
+/// A float as the source wrote it.
+fn bt_float(written: ref String) -> f64 throws {
+    let number = text::parse_f64(written)
+    if number == null {
+        throw BtRefusal::Unevaluable
+    }
+    return number ?? 0.0
+}
+
+fn bt_expr[H: BtHost](expr: ref Expr, host: ref H, mut state: BtState) -> BuildValue sync throws {
+    return match expr {
+        Expr::LitInt { value, negative, .. } => BuildValue::Int(integer(value, negative)),
+        Expr::LitFloat(written, _) => BuildValue::Float(bt_float(written)),
+        Expr::LitBool(value, _) => BuildValue::Bool(value),
+        Expr::LitStr { text, .. } => {
+            let decoded = decoded(text) fn(n) { host.char_of(n) }
+            if decoded == null {
+                throw BtRefusal::Unevaluable
+            }
+            BuildValue::Text(decoded ?? "")
+        },
+        Expr::Tuple(parts, _) => {
+            let mut held: Vec[BuildValue] = []
+            for part in parts {
+                held.push(bt_expr(part, host, state))
+            }
+            BuildValue::Tuple(held)
+        },
+        // **`f"…"` is text with code in it** (ADR-309), and the code is Nikaia,
+        // so this evaluator can read it.
+        Expr::LitInterpolated { parts, .. } => bt_interpolated(parts, host, state),
+        // **A variant that carries nothing**: `Shade::Odd`, which is a value and
+        // not a call.
+        Expr::Path(path, _) => {
+            if path.len() != 2 {
+                throw BtRefusal::Unevaluable
+            }
+            let ty = host.text(state.unit, path[0])
+            let variant = host.text(state.unit, path[1])
+            if !host.variant_of(state.unit, ty, variant) {
+                throw BtRefusal::Unevaluable
+            }
+            BuildValue::Variant { ty: ty, variant: variant, payload: [] }
+        },
+        Expr::Variable(symbol, _) => bt_variable(symbol, host, state),
+        Expr::Unary { .. } => bt_unary_expr(expr, host, state),
+        Expr::Binary { .. } => bt_binary_expr(expr, host, state),
+        // **An `if` is an expression always** (Part I 3.1), so it is one here too.
+        Expr::If { cond, then_branch, else_branch, .. } => bt_if_value(cond, then_branch, else_branch, host, state),
+        // **A list literal is the aggregate's only constructor here** (ADR-135).
+        Expr::ListLit { items, .. } => {
+            let mut values: Vec[BuildValue] = []
+            for item in items {
+                values.push(bt_expr(item, host, state))
+            }
+            BuildValue::List(values)
+        },
+        Expr::Index { base, index, .. } => {
+            let on = bt_expr(base, host, state)
+            let at = bt_expr(index, host, state)
+            bt_element(on, at)
+        },
+        // Kap 4.2's literal. The shorthand `Point { x, y }` names locals, and an
+        // initialiser folded here has none.
+        Expr::StructLit { name, fields, .. } => {
+            let ty = host.text(state.unit, name)
+            let mut held: collections::BTreeMap[String, BuildValue] = collections::BTreeMap()
+            for field in fields {
+                let written = host.text(state.unit, field.name)
+                let given = field.value?.clone()
+                if given != null {
+                    held.insert(written, bt_expr(given ?? Expr::LitNull(fresh_id()), host, state))
+                } else {
+                    throw BtRefusal::Unevaluable
+                }
+            }
+            BuildValue::Struct { name: ty, fields: held }
+        },
+        Expr::Field { base, name, .. } => bt_field(base, name, host, state),
+        // **A method is a call**, compiled and run where it is computed at all
+        // (ADR-321 D1).
+        Expr::MethodCall { method, .. } => {
+            throw bt_not_folded(f".{host.text(state.unit, method)}()")
+        },
+        Expr::Call { func, args, config, .. } => bt_call_expr(func, args, config, host, state),
+        else => {
+            throw BtRefusal::Unevaluable
+        },
+    }
+}
+
+fn bt_variable[H: BtHost](symbol: winnow_grammar::Symbol, host: ref H, mut state: BtState) -> BuildValue sync throws {
+    let name = host.text(state.unit, symbol)
+    // **The checking file's scope**, which holds what the walk above this one
+    // has already worked out.
+    let known = host.known(name)
+    if known != null {
+        return known ?? BuildValue::Bool(false)
+    }
+    // …and otherwise the **item**, read from the file that wrote it. A constant
+    // is an item, so it is visible wherever its file is - which is what makes
+    // a forward reference a program.
+    return bt_constant_item(name, host, state)
+}
+
+fn bt_unary_expr[H: BtHost](whole: ref Expr, host: ref H, mut state: BtState) -> BuildValue sync throws {
+    return match whole {
+        Expr::Unary { op, expr, .. } => bt_unary(op, bt_expr(expr, host, state)),
+        else => {
+            throw BtRefusal::Unevaluable
+        },
+    }
+}
+
+fn bt_binary_expr[H: BtHost](whole: ref Expr, host: ref H, mut state: BtState) -> BuildValue sync throws {
+    return match whole {
+        Expr::Binary { op, lhs, rhs, .. } => bt_binary(op, lhs, rhs, host, state),
+        else => {
+            throw BtRefusal::Unevaluable
+        },
+    }
+}
+
+fn bt_unary(op: ref UnaryOp, inner: ref BuildValue) -> BuildValue throws {
+    return match inner {
+        BuildValue::Int(v) => {
+            if op == UnaryOp::Neg {
+                BuildValue::Int(integer_negated(v))
+            } else {
+                throw BtRefusal::Unevaluable
+            }
+        },
+        BuildValue::Bool(v) => {
+            if op == UnaryOp::Not {
+                BuildValue::Bool(!v)
+            } else {
+                throw BtRefusal::Unevaluable
+            }
+        },
+        else => {
+            throw BtRefusal::Unevaluable
+        },
+    }
+}
+
+fn bt_if_value[H: BtHost](cond: ref Expr, then_branch: ref Block, else_branch: ref Block?, host: ref H, mut state: BtState) -> BuildValue sync throws {
+    let verdict = bt_expr(cond, host, state)
+    let yes = match verdict {
+        BuildValue::Bool(held) => held,
+        else => {
+            throw BtRefusal::Unevaluable
+        },
+    }
+    if yes {
+        return bt_branch(then_branch, host, state)
+    }
+    let taken = else_branch ?? throw BtRefusal::Unevaluable
+    return bt_branch(taken, host, state)
+}
+
+/// **A branch that is a value**, and nothing else: a block with statements is
+/// code, compiled and run with the program (ADR-321 D1).
+fn bt_branch[H: BtHost](block: ref Block, host: ref H, mut state: BtState) -> BuildValue sync throws {
+    if block.stmts.len() != 1 {
+        throw bt_not_folded("{ … }")
+    }
+    return match block.stmts[0].node {
+        Stmt::Expr(inner) => bt_expr(inner, host, state),
+        else => {
+            throw bt_not_folded("{ … }")
+        },
+    }
+}
+
+fn bt_element(on: ref BuildValue, index_value: ref BuildValue) -> BuildValue throws {
+    return match element_at(on, index_value) {
+        ElementRead::Found(value) => value,
+        ElementRead::OutOfBounds { at, len } => {
+            throw BtRefusal::OutOfBounds { at: at, len: len }
+        },
+        ElementRead::Unreadable => {
+            throw BtRefusal::Unevaluable
+        },
+    }
+}
+
+fn bt_field[H: BtHost](base: ref Expr, name: winnow_grammar::Symbol, host: ref H, mut state: BtState) -> BuildValue sync throws {
+    let on = bt_expr(base, host, state)
+    let field = host.text(state.unit, name)
+    return match on {
+        BuildValue::Struct { fields, .. } => {
+            let found = fields.get(field)
+            if found == null {
+                throw BtRefusal::Unevaluable
+            }
+            found?.clone() ?? BuildValue::Bool(false)
+        },
+        else => {
+            throw BtRefusal::Unevaluable
+        },
+    }
+}
+
+fn bt_call_expr[H: BtHost](func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], host: ref H, mut state: BtState) -> BuildValue sync throws {
+    return match func {
+        // **A grammar's entry, run by compiling the parser it generates** (issue
+        // #178), or a variant with a payload, which is written the same way.
+        // Anything else called is code, which the folder does not run.
+        Expr::Path(path, _) => {
+            if config.len() > 0 || path.len() != 2 {
+                throw bt_not_folded("a call")
+            }
+            let parser = host.text(state.unit, path[0])
+            let rule = host.text(state.unit, path[1])
+            // An `enum` this program declares wins, because a grammar and an
+            // `enum` under one name is a name declared twice and `NK1148`'s to
+            // refuse, not this walk's.
+            if host.variant_of(state.unit, parser, rule) {
+                let mut payload: Vec[BuildValue] = []
+                for arg in args {
+                    payload.push(bt_expr(arg, host, state))
+                }
+                return BuildValue::Variant { ty: parser, variant: rule, payload: payload }
+            }
+            if args.len() != 1 {
+                throw bt_not_folded(f"{parser}::{rule}(…)")
+            }
+            let input = match bt_expr(args[0], host, state) {
+                BuildValue::Text(held) => held,
+                else => {
+                    throw BtRefusal::Unevaluable
+                },
+            }
+            let ran = host.run_grammar(state.unit, parser, rule, input)
+            if !ran.found {
+                throw bt_not_folded(f"{parser}::{rule}(…)")
+            }
+            let value = ran.value?.clone()
+            if value == null {
+                let why = ran.wall?.clone() ?? throw BtRefusal::Unevaluable
+                throw BtRefusal::GrammarWall { owner: parser, rule: rule, why: why }
+            }
+            value ?? BuildValue::Bool(false)
+        },
+        Expr::Variable(symbol, _) => {
+            let name = host.text(state.unit, symbol)
+            // **`asset("…")` is answered before the arguments are** (ADR-310 D3,
+            // D7). A name that folds to `"config.json"` is a path that was
+            // *computed*, and reading it would make *named in the code*
+            // something a reader cannot decide by looking at the line.
+            if name == BT_ASSET {
+                return bt_asset(args, host)
+            }
+            throw bt_not_folded(f"{name}(…)")
+        },
+        else => {
+            throw BtRefusal::Unevaluable
+        },
+    }
+}
+
+fn bt_binary[H: BtHost](op: ref BinaryOp, lhs: ref Expr, rhs: ref Expr, host: ref H, mut state: BtState) -> BuildValue sync throws {
+    // **`&&` and `||` short-circuit**, which is not an optimisation here: a body
+    // may guard a call with one, and evaluating the far side of a guard is how a
+    // build-time evaluator reaches what the guard was keeping it away from.
+    if op == BinaryOp::And || op == BinaryOp::Or {
+        let left = match bt_expr(lhs, host, state) {
+            BuildValue::Bool(held) => held,
+            else => {
+                throw BtRefusal::Unevaluable
+            },
+        }
+        if op == BinaryOp::And && !left {
+            return BuildValue::Bool(false)
+        }
+        if op == BinaryOp::Or && left {
+            return BuildValue::Bool(true)
+        }
+        return match bt_expr(rhs, host, state) {
+            BuildValue::Bool(right) => BuildValue::Bool(right),
+            else => {
+                throw BtRefusal::Unevaluable
+            },
+        }
+    }
+    let left = bt_expr(lhs, host, state)
+    let right = bt_expr(rhs, host, state)
+    return bt_operate(op, left, right)
+}
+
+/// An operator on two values already in hand.
+fn bt_operate(op: ref BinaryOp, left: ref BuildValue, right: ref BuildValue) -> BuildValue throws {
+    let made = operated(op, left, right)
+    if made == null {
+        throw BtRefusal::Unevaluable
+    }
+    return made ?? BuildValue::Bool(false)
+}
+
+/// **`f"…"` while the program is built** (ADR-309, D3 - a hole is code and every
+/// analysis sees it, this one included).
+///
+/// What is rebuilt is the **written** form: a number contributes its digits, a
+/// `bool` its word, and text its own written form. **A format spec is not
+/// read.** `f"{n:>8}"` asks for a width, and what that means is `std::fmt`'s
+/// rather than this language's.
+fn bt_interpolated[H: BtHost](parts: ref Vec[FPart], host: ref H, mut state: BtState) -> BuildValue sync throws {
+    // Built from the parts the grammar parsed (ADR-309 D6, D9): each run of text
+    // as written, and each hole as `{}` or `{:spec}`.
+    let mut format: String = ""
+    let mut values: Vec[BuildValue] = []
+    for part in parts {
+        match part {
+            FPart::Text(written) => format.push_str(written),
+            FPart::Hole { expr, spec, .. } => {
+                if spec != null {
+                    format.push_str("{:")
+                    format.push_str(spec ?? "")
+                    format.push_str("}")
+                } else {
+                    format.push_str("{}")
+                }
+                values.push(bt_expr(expr, host, state))
+            },
+        }
+    }
+    // **The literal parts are still *written*.** A chunk is read by `decoded`
+    // exactly as a plain literal is, and a hole's value is already decoded.
+    let mut out: String = ""
+    let mut chunk: String = ""
+    let mut taken = 0
+    let chars: Vec[scalar] = format.chars().collect()
+    let mut at = 0
+    while at < chars.len() {
+        let c = chars[at]
+        at += 1
+        if c == '\\' {
+            // An escape is two characters and the chunk keeps both, so that
+            // `decoded` sees what the source wrote.
+            chunk.push('\\')
+            if at >= chars.len() {
+                throw BtRefusal::Unevaluable
+            }
+            let escape = chars[at]
+            at += 1
+            chunk.push(escape)
+            // `\u{…}` carries its braces, and they are not the format's.
+            if escape == 'u' && at < chars.len() && chars[at] == '{' {
+                while at < chars.len() {
+                    let inner = chars[at]
+                    at += 1
+                    chunk.push(inner)
+                    if inner == '}' {
+                        break
+                    }
+                }
+            }
+        } else if c == '{' && at < chars.len() && chars[at] == '{' {
+            // `{{` and `}}` are how a format string spells one brace, and text
+            // spells it with one.
+            at += 1
+            bt_flush(chunk, out, host)
+            chunk = f""
+            out.push('{')
+        } else if c == '}' && at < chars.len() && chars[at] == '}' {
+            at += 1
+            bt_flush(chunk, out, host)
+            chunk = f""
+            out.push('}')
+        } else if c == '{' {
+            // `{}` and nothing else: anything between the braces is a spec,
+            // which this does not read.
+            if at >= chars.len() || chars[at] != '}' {
+                throw BtRefusal::Unevaluable
+            }
+            at += 1
+            bt_flush(chunk, out, host)
+            chunk = f""
+            if taken >= values.len() {
+                throw BtRefusal::Unevaluable
+            }
+            match values[taken].clone() {
+                BuildValue::Int(n) => out.push_str(integer_text(n)),
+                BuildValue::Bool(yes) => {
+                    if yes {
+                        out.push_str("true")
+                    } else {
+                        out.push_str("false")
+                    }
+                },
+                BuildValue::Text(held) => out.push_str(held),
+                else => {
+                    throw BtRefusal::Unevaluable
+                },
+            }
+            taken += 1
+        } else {
+            chunk.push(c)
+        }
+    }
+    bt_flush(chunk, out, host)
+    return BuildValue::Text(out)
+}
+
+/// The literal text collected so far, decoded and written out.
+fn bt_flush[H: BtHost](chunk: ref String, mut out: String, host: ref H) sync throws {
+    if chunk.len() == 0 {
+        return
+    }
+    let decoded = decoded(chunk) fn(n) { host.char_of(n) }
+    if decoded == null {
+        throw BtRefusal::Unevaluable
+    }
+    out.push_str(decoded ?? "")
+}
+
+/// **A constant of this file, worked out on demand.**
+///
+/// The one lookup that makes a constant behave like the item it is. A function
+/// declared below its caller has always been callable - items are
+/// order-independent - and a constant was not, because the walk that binds them
+/// goes down the file.
+///
+/// **And the ring is refused by name.** `comptime A = B` beside `comptime B = A`
+/// has no base case to reach, so it is not the call depth that catches it - the
+/// stack of names being worked out is, and it can say which ones.
+fn bt_constant_item[H: BtHost](name: ref String, host: ref H, mut state: BtState) -> BuildValue sync throws {
+    for held in state.resolving {
+        if held == name {
+            let mut ring = state.resolving.clone()
+            ring.push(name.clone())
+            throw BtRefusal::Circular { ring: ring }
+        }
+    }
+    let value = host.constant(state.unit, name) ?? throw BtRefusal::Unevaluable
+    state.resolving.push(name.clone())
+    // A refusal ends the whole evaluation, so the ring need not be unwound on the
+    // way out.
+    let out = bt_expr(value, host, state)
+    state.resolving.pop()
+    return out
+}
+
+/// **The file a build reads** (ADR-310 D3): a string literal and nothing else
+/// (D4) - not "an expression that evaluates to text", because a name that folds
+/// to one is exactly what this refuses, and the refusal has to happen before the
+/// fold.
+fn bt_asset[H: BtHost](args: ref Vec[Expr], host: ref H) -> BuildValue sync throws {
+    if args.len() != 1 {
+        throw BtRefusal::PathIsComputed
+    }
+    let written = match args[0] {
+        Expr::LitStr { text, .. } => text.clone(),
+        else => {
+            throw BtRefusal::PathIsComputed
+        },
+    }
+    let path = decoded(written) fn(n) { host.char_of(n) }
+    if path == null {
+        throw BtRefusal::PathIsComputed
+    }
+    let wanted = path ?? ""
+    let read = host.read(wanted)
+    if read.text != null {
+        return BuildValue::Text(read.text?.clone() ?? "")
+    }
+    let denied = read.denied?.clone() ?? Denied::NoList
+    throw BtRefusal::MayNotRead { path: wanted, why: denied }
+}
+
+
+/// **Why a function may not run while the program is built**, read off its
+/// ledger entry (ADR-287 D13, D14): it can pause, nothing says what it
+/// touches, or it touches more than the build's own parameters. Nothing where
+/// it may run.
+pub fn bt_may_not_run(contract: ref FnContract) -> String? sync {
+    if !contract.sync_claim.is_sync() {
+        return "It can pause, and nothing run at build time may pause."
+    }
+    if !contract.touches_known {
+        return "Nothing says what it touches outside the program."
+    }
+    if !contract.touches.iter().all(bt_is_the_builds_own) {
+        return "It touches the world outside the program."
+    }
+    return null
+}
+
+/// What the program's ledger recorded for option `at` of `key` - qualified
+/// by the package for one that is not the program's - where a run's
+/// sub-program is being read and the ledger holds a value.
+pub fn bt_known_default(ledger: ref Ledger, package: String?, key: ref String, at: i64) -> String? sync {
+    let k = match package {
+        null => key.clone(),
+        package => f"{package}::{key}",
+    }
+    let text = (((ledger.functions.get(k) ?? return null).signature ?? return null).config.get(at) ?? return null).default
+    return (if !text.is_empty() { text.clone() } else { null })
+}
+
+/// Whether a touch is the build's own parameters (ADR-287 D14).
+///
+/// **`cli::args` passes, deliberately**: same parameters, same code. A build's
+/// own arguments are an input like its source is, and a body that shapes a
+/// table differently for two declared parameters is doing the thing `comptime`
+/// is for.
+pub fn bt_is_the_builds_own(touch: ref Touch) -> bool sync {
+    return touch.text() == "args read"
+}

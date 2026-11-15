@@ -1,0 +1,527 @@
+// crates/nikaia-std/src/compiler/prover_scope.nika
+//
+// **What a body may know at one point** (ADR-269), moved from the compiler's
+// `prove` (ADR-294, #436 step 4): the names that are variables of the proof,
+// the facts about them as terms of the walk's arena (`prover_arena.nika`),
+// and what holds of the parameters on the way here.
+
+use std::collections
+
+/// What a body may know at one point.
+pub struct ProverScope {
+    /// Names that are variables of the proof: immutable whole numbers.
+    pub ints: collections::BTreeSet[String],
+    /// Names whose value came from outside the program (ADR-010).
+    pub tainted: collections::BTreeSet[String],
+    /// **Where each name of `tainted` came from** (ADR-396 D1): the source
+    /// its value reads (`io::read_to_string`, `Request::query`), for the
+    /// message of an index it reaches. Read only for a name `tainted` holds.
+    pub sources: collections::BTreeMap[String, String],
+    /// Names bound anywhere in this body, so a callee's name that a local
+    /// shadows is not the callee.
+    pub locals: collections::BTreeSet[String],
+    pub facts: Vec[i64],
+    /// **Each whole number's value at the function's entry**, as a term over
+    /// its parameters (ADR-269 D15): after `let y = x - 1`, `y` is `x - 1`,
+    /// and after `let x = x + 1`, `x` is the parameter plus one.
+    pub entry: collections::BTreeMap[String, i64],
+    /// **What holds of the parameters on the way here**: the branches taken
+    /// and the guards passed, at the entry. Nothing once a loop, a lambda or a
+    /// block this walk cannot see stands between the entry and here (D3).
+    pub path: Vec[i64]?,
+    /// **Whether every state the facts allow is one the program reaches
+    /// here** - unless it stops or leaves before, which no claim is about.
+    /// Facts are as a rule weaker than what is true: a condition the prover
+    /// cannot read, a fact dropped with a name bound again, a loop that may
+    /// end early each narrow what reaches a point without a fact saying how.
+    /// Only where nothing did can a value the facts allow be shown to reach
+    /// a claim that is false for it (ADR-269 D8).
+    pub exact: bool,
+    /// The whole numbers the facts do not pin to what the program computes:
+    /// a parameter, whatever its callers pass; a call's result, of which
+    /// only its postconditions are known; a length nobody counted.
+    pub loose: collections::BTreeSet[String],
+    /// **The calls with arguments the build knows that each binding's value
+    /// reads** (ADR-359 D11), directly or through the bindings it reads, by
+    /// `call_result_name`: what a claim over the binding may have run.
+    pub calls_of: collections::BTreeMap[String, collections::BTreeSet[String]],
+    /// **What each call's callee's body returns** (ADR-359 D1, D2), by the
+    /// name the call's result is bound to: each exit's path and value with
+    /// this call's arguments in place of the parameters. Not a fact: a claim
+    /// what is known leaves open is asked once more with them.
+    pub summed: collections::BTreeMap[String, Vec[SummaryAlt]],
+    /// **The bindings whose value leaned on a summary** (ADR-359 D6, D8): a
+    /// divisor it pinned, with where that value came from, for a refutation's
+    /// note.
+    pub leaned: collections::BTreeMap[String, Vec[String]],
+    /// **The mutable whole numbers the walk follows** (ADR-361 D1): bound
+    /// by `let mut` to a value it reads, never handed to a call nor changed
+    /// by a deferred body. Each is a variable of the proof until the next
+    /// assignment, and a loop that changes it is read through its invariant.
+    pub mutables: collections::BTreeSet[String],
+    /// **The loops passed whose names are not bound again since** (ADR-361
+    /// D2): a claim what is known leaves open is asked through them.
+    pub loops: Vec[LoopRecord],
+    /// **The loops whose body this point stands in** (ADR-361 D2, D3),
+    /// outermost first: each state name `i` was `i^S` at the head of the
+    /// turn (`loop_turn_name`), a tie the facts hold from there. A claim what
+    /// is known leaves open is asked with each one's invariant at that head.
+    pub around: Vec[LoopRecord],
+    /// **What the earlier values of the followed mutable whole numbers make
+    /// known** (ADR-361 D9): the facts that read a value an assignment left
+    /// behind (`x#12`, `x` before the statement at byte 12), and what a branch
+    /// that changed one leaves. A claim what is known leaves open is asked
+    /// once more with them (D2).
+    pub history: Vec[i64],
+    /// **The whole numbers a mask or a shift bounds**, by name: the bounds
+    /// the value they were last given has (`prover_bit_range`), kept so a
+    /// loop that gives them only such values keeps them (D-a, #776).
+    pub bits: collections::BTreeMap[String, ProverBits],
+    /// **The names bound to a map** (ADR-396 D4): `m[k]` reads a key, not a
+    /// position, so no index bound is asked of it.
+    pub maps: collections::BTreeSet[String],
+    /// **The guards that made a fact of `facts`** (ADR-396 D5), by the fact:
+    /// the byte of the guard and its condition, written, for `--bounds` to
+    /// name the guard that proves an index data from outside reaches.
+    pub guards: collections::BTreeMap[i64, (i64, String)],
+}
+
+/// The bounds `lo <= x <= hi` a mask or a shift gives a whole number.
+pub struct ProverBits {
+    pub lo: i64,
+    pub hi: i64,
+}
+
+impl ProverScope {
+    /// Nothing known, and no path from the entry.
+    pub fn unknown() -> ProverScope {
+        return ProverScope {
+            ints: collections::BTreeSet(),
+            tainted: collections::BTreeSet(),
+            sources: collections::BTreeMap(),
+            locals: collections::BTreeSet(),
+            facts: [],
+            entry: collections::BTreeMap(),
+            path: null,
+            exact: false,
+            loose: collections::BTreeSet(),
+            calls_of: collections::BTreeMap(),
+            summed: collections::BTreeMap(),
+            leaned: collections::BTreeMap(),
+            mutables: collections::BTreeSet(),
+            loops: [],
+            around: [],
+            history: [],
+            bits: collections::BTreeMap(),
+            maps: collections::BTreeSet(),
+            guards: collections::BTreeMap(),
+        }
+    }
+
+    /// A function's entry: nothing known yet, and every state reaches it.
+    pub fn at_the_entry() -> ProverScope {
+        let mut scope = ProverScope::unknown()
+        scope.path = []
+        scope.exact = true
+        return scope
+    }
+
+    /// `name` is bound again: nothing known about the old binding holds.
+    pub fn rebind(ref mut self, arena: ref TermArena, name: ref String) {
+        // **The paths of fields from it go with it** (ADR-306 D17).
+        let under = f"{name}."
+        // **And its elements, and the elements it indexes** (ADR-306 D33).
+        let element = f"{name}["
+        let index = f"[{name}]"
+        let mut parts: collections::BTreeSet[String] = collections::BTreeSet()
+        let own = length_of(name)
+        for n in self.ints {
+            if (n.starts_with(under) || n.starts_with(element) || n.ends_with(index)) && n != own {
+                parts.insert((n.strip_suffix(".len()") ?? n).clone())
+            }
+        }
+        for part in parts {
+            self.rebind(arena, part)
+        }
+        let length = length_of(name)
+        self.ints.remove(name)
+        self.ints.remove(length)
+        self.tainted.remove(name)
+        self.entry.remove(name)
+        self.entry.remove(length)
+        self.locals.insert(name.clone())
+        self.loose.remove(name)
+        self.loose.remove(length)
+        self.calls_of.remove(name)
+        self.summed.remove(name)
+        self.leaned.remove(name)
+        self.bits.remove(name)
+        if !self.loops.is_empty() {
+            let mut standing: Vec[LoopRecord] = []
+            for record in self.loops {
+                if !record.problem.state.contains(name) {
+                    standing.push(record.clone())
+                }
+            }
+            self.loops = standing
+        }
+        let mut gone: Vec[String] = []
+        for (bound, alts) in self.summed {
+            for alt in alts {
+                if arena.mentions(alt.guard, name) || arena.mentions(alt.value, name) || arena.mentions(alt.guard, length) || arena.mentions(alt.value, length) {
+                    gone.push(bound.clone())
+                    break
+                }
+            }
+        }
+        for bound in gone {
+            self.summed.remove(bound)
+        }
+        let mut kept: Vec[i64] = []
+        for fact in self.facts {
+            if !arena.mentions(fact, name) && !arena.mentions(fact, length) {
+                kept.push(fact)
+            }
+        }
+        // What a dropped fact said about another name is lost with it.
+        if kept.len() != self.facts.len() {
+            self.exact = false
+        }
+        self.facts = kept
+        if !self.history.is_empty() {
+            let mut earlier: Vec[i64] = []
+            for fact in self.history {
+                if !arena.mentions(fact, name) && !arena.mentions(fact, length) {
+                    earlier.push(fact)
+                }
+            }
+            self.history = earlier
+        }
+    }
+
+    /// **`name` is assigned** (ADR-361 D9): what was known of its value is
+    /// known of `earlier`, a name of its own among the history, and `name`
+    /// itself is known of nothing yet.
+    pub fn renamed(ref mut self, mut arena: TermArena, name: ref String, earlier: ref String) {
+        self.bits.remove(name)
+        let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+        given.insert(name.clone(), arena.var(earlier))
+        let mut history: Vec[i64] = []
+        for fact in self.history {
+            if arena.mentions(fact, name) {
+                history.push(arena.substitute(fact, given))
+            } else {
+                history.push(fact)
+            }
+        }
+        let mut kept: Vec[i64] = []
+        for fact in self.facts {
+            if arena.mentions(fact, name) {
+                history.push(arena.substitute(fact, given))
+            } else {
+                kept.push(fact)
+            }
+        }
+        if kept.len() != self.facts.len() {
+            self.exact = false
+        }
+        self.facts = kept
+        self.history = history
+        self.ints.insert(earlier.clone())
+        if self.loose.contains(name) {
+            self.loose.insert(earlier.clone())
+        }
+        let at = self.entry.remove(name)
+        if at != null {
+            self.entry.insert(earlier.clone(), at ?? 0)
+        }
+        // What a loop or a call's summary said of the old value is not
+        // carried over.
+        let ints = self.ints.clone()
+        self.rebind(arena, name)
+        self.ints = ints
+    }
+
+    /// **The guard that proves `goal`, where one does** (ADR-396 D5): the
+    /// last fact a guard made that reads a name the goal reads, as
+    /// `guards` has it - its byte and its condition, written.
+    pub fn guard_of(ref self, arena: ref TermArena, goal: i64) -> (i64, String)? {
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(goal, names)
+        let mut found: (i64, String)? = null
+        for fact in self.facts {
+            let guard = self.guards.get(fact) ?? continue
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            arena.variables(fact, read)
+            if ties(read, names) {
+                found = guard.clone()
+            }
+        }
+        return found
+    }
+
+    /// **Whether the history can say anything about `claim`**: it reads a
+    /// name the claim reads, or one the facts tie to it.
+    pub fn history_reads(ref self, arena: ref TermArena, claim: i64) -> bool {
+        if self.history.is_empty() {
+            return false
+        }
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(claim, names)
+        let mut grown = true
+        while grown {
+            let before = names.len()
+            for fact in self.facts {
+                let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+                arena.variables(fact, read)
+                if ties(read, names) {
+                    names.extend(read.clone())
+                }
+            }
+            grown = names.len() != before
+        }
+        for fact in self.history {
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            arena.variables(fact, read)
+            if ties(read, names) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// The facts and the history together.
+    pub fn with_history(ref self) -> Vec[i64] {
+        let mut all = self.facts.clone()
+        all.extend(self.history.clone())
+        return all
+    }
+
+    /// `name` is a list or text that does not change, so `name.len()` is a
+    /// variable of the proof: a length is never negative, and a literal's is
+    /// known.
+    pub fn has_length(ref mut self, mut arena: TermArena, name: ref String, known: i64?) {
+        let length = length_of(name)
+        self.ints.insert(length.clone())
+        let len = arena.var(length)
+        let zero = arena.int(0)
+        self.facts.push(arena.ge(len, zero))
+        let n = known ?? {
+            self.loose.insert(length)
+            return
+        }
+        let value = arena.int(n)
+        self.facts.push(arena.equal(len, value))
+        self.entry.insert(length, value)
+    }
+
+    /// `name` is a whole number that is never negative.
+    pub fn not_negative(ref mut self, mut arena: TermArena, name: ref String) {
+        let n = arena.var(name)
+        let zero = arena.int(0)
+        self.facts.push(arena.ge(n, zero))
+    }
+
+    /// `term` at the function's entry: each name it reads replaced by its
+    /// value there. Nothing where it reads a name whose value at the entry is
+    /// not known - the result of a call, a mutable binding.
+    pub fn at_entry(ref self, mut arena: TermArena, term: i64) -> i64? {
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(term, read)
+        let mut values: collections::BTreeMap[String, i64] = collections::BTreeMap()
+        for name in read {
+            let value = self.entry[name] ?? return null
+            values.insert(name.clone(), value)
+        }
+        return arena.substitute(term, values)
+    }
+
+    /// A branch taken or a guard passed: `condition` at the entry joins the
+    /// path, and a condition the walk cannot carry there ends it.
+    pub fn on_the_path(ref mut self, mut arena: TermArena, condition: i64?) {
+        let at = condition ?? {
+            self.path = null
+            return
+        }
+        let c = self.at_entry(arena, at) ?? {
+            self.path = null
+            return
+        }
+        self.path = pushed(copied_path(self.path), c)
+    }
+
+    /// **The precondition a claim makes** (ADR-269 D15, D16): `path → claim`
+    /// at the entry, where both read only the function's parameters and the
+    /// lengths of its lists, and the result is no larger than a fixed number
+    /// of terms - counted, so that whether a claim is a precondition does not
+    /// depend on the machine.
+    pub fn precondition_at(ref self, mut arena: TermArena, claim: i64, params: ref collections::BTreeSet[String]) -> i64? {
+        let path = copied_path(self.path) ?? return null
+        let at_entry = self.at_entry(arena, claim) ?? return null
+        let mut term = at_entry
+        if !path.is_empty() {
+            let taken = arena.and(path)
+            let not_taken = arena.not(taken)
+            term = arena.or([not_taken, at_entry])
+        }
+        if !only_parameters(arena, term, params) || arena.size(term) > precondition_terms() {
+            return null
+        }
+        // **A claim that reads no parameter at the entry asks nothing of a
+        // caller** (Part I 5.5): no call can make it hold or break it.
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(term, read)
+        if read.is_empty() {
+            return null
+        }
+        return term
+    }
+
+    /// **The claim alone at the entry**, where the path to it does not carry
+    /// there (a condition on a value the body made): what a `pub` function
+    /// that leaves the check open must still state (ADR-396 D6) - no path,
+    /// so it asks for more than the body needs, never less.
+    pub fn claim_at_entry(ref self, mut arena: TermArena, claim: i64, params: ref collections::BTreeSet[String]) -> i64? {
+        let term = self.at_entry(arena, claim) ?? return null
+        if !only_parameters(arena, term, params) || arena.size(term) > precondition_terms() {
+            return null
+        }
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(term, read)
+        if read.is_empty() {
+            return null
+        }
+        return term
+    }
+
+    /// `claim` as a postcondition: `returned` is `result`, every other name
+    /// its value at the entry; nothing where that leaves a name that is not a
+    /// parameter or the length of one.
+    pub fn postcondition_at(ref self, mut arena: TermArena, claim: i64, returned: ref String, params: ref collections::BTreeSet[String]) -> i64? {
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(claim, read)
+        let result = arena.var(result_name())
+        let mut values: collections::BTreeMap[String, i64] = collections::BTreeMap()
+        for name in read {
+            if name == returned {
+                values.insert(name.clone(), result)
+            } else {
+                let value = self.entry[name] ?? return null
+                values.insert(name.clone(), value)
+            }
+        }
+        let term = arena.substitute(claim, values)
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(term, names)
+        for name in names {
+            if name != result_name() && !is_a_parameter(name, params) {
+                return null
+            }
+        }
+        return term
+    }
+
+    /// **The names a state that breaks `claim` is made of** (ADR-269 D8): the
+    /// claim's, and every name a fact ties them to - where the facts are
+    /// exactly what reaches here and pin each of them, no parameter, no
+    /// call's result, nothing they lean on. Nothing anywhere else.
+    pub fn pinned_names(ref self, arena: ref TermArena, claim: i64) -> collections::BTreeSet[String]? {
+        if !self.exact {
+            return null
+        }
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(claim, names)
+        let mut grown = true
+        while grown {
+            let before = names.len()
+            for fact in self.facts {
+                let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+                arena.variables(fact, read)
+                if ties(read, names) {
+                    names.extend(read.clone())
+                }
+            }
+            grown = names.len() != before
+        }
+        for n in names {
+            if self.loose.contains(n) || !self.ints.contains(n) {
+                return null
+            }
+        }
+        return names
+    }
+
+    /// **`name` is a whole number inside `bits`** (#776): a mask's or a
+    /// shift's value, of which nothing more is known.
+    pub fn bounded_bits(ref mut self, mut arena: TermArena, name: ref String, bits: ref ProverBits) {
+        self.ints.insert(name.clone())
+        self.loose.insert(name.clone())
+        let named = arena.var(name)
+        let lo = arena.int(bits.lo)
+        let above = arena.le(lo, named)
+        self.facts.push(above)
+        let hi = arena.int(bits.hi)
+        let below = arena.le(named, hi)
+        self.facts.push(below)
+        self.bits.insert(name.clone(), ProverBits { lo: bits.lo, hi: bits.hi })
+    }
+
+    /// A block whose bindings this walk cannot see: no facts, no variables.
+    pub fn blind(ref self) -> ProverScope {
+        let mut scope = ProverScope::unknown()
+        scope.tainted = self.tainted.clone()
+        scope.sources = self.sources.clone()
+        scope.locals = self.locals.clone()
+        scope.maps = self.maps.clone()
+        return scope
+    }
+}
+
+/// The variable `name.len()` stands for.
+pub fn length_of(name: ref String) -> String {
+    return f"{name}.len()"
+}
+
+/// The name a postcondition gives the value handed back.
+pub fn result_name() -> String {
+    return "result"
+}
+
+/// How many terms a precondition carried back to the entry may have
+/// (ADR-269 D16).
+pub fn precondition_terms() -> i64 {
+    return 64
+}
+
+fn pushed(path: Vec[i64]?, c: i64) -> Vec[i64]? {
+    let mut p = path ?? return null
+    p.push(c)
+    return p
+}
+
+pub fn copied_path(path: ref Vec[i64]?) -> Vec[i64]? {
+    let p = path ?? return null
+    return p.clone()
+}
+
+/// Whether `term` reads only the function's parameters and their lengths.
+fn only_parameters(arena: ref TermArena, term: i64, params: ref collections::BTreeSet[String]) -> bool {
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    arena.variables(term, read)
+    for name in read {
+        if !is_a_parameter(name, params) {
+            return false
+        }
+    }
+    return true
+}
+
+/// Whether one of `read` is among `names`.
+fn ties(read: ref collections::BTreeSet[String], names: ref collections::BTreeSet[String]) -> bool {
+    for n in read {
+        if names.contains(n) {
+            return true
+        }
+    }
+    return false
+}

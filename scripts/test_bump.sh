@@ -5,7 +5,7 @@ E=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(git -C "$E" rev-parse --show-toplevel)
 T=${TMPDIR:-/tmp}/bump-test; rm -rf $T; mkdir -p $T; cd $T
 git init -q --bare bare.git
-mkdir seed; git -C "$ROOT" archive HEAD docs/specification CHANGELOG.md scripts assets/badges crates/nikaia/src crates/nikaia-std/src/tools | tar -x -C seed
+mkdir seed; git -C "$ROOT" archive HEAD docs/specification CHANGELOG.md scripts assets/badges crates/nikaia/src crates/nikaia-std/src/compiler | tar -x -C seed
 git -C seed init -q -b develop; git -C seed config user.email t@t; git -C seed config user.name t
 git -C seed add -A; git -C seed commit -qm base; git -C seed push -q $T/bare.git develop
 git clone -q -b develop bare.git a; git clone -q -b develop bare.git b
@@ -13,12 +13,12 @@ for d in a b; do git -C $d config user.email t@t; git -C $d config user.name t; 
 B="python3 $E/bump.py"
 # session a
 cd $T/a
-printf 'fn a_x() -> i64 sync {\n    return 1\n}\n' > crates/nikaia-std/src/tools/a_x.nika
+printf 'fn a_x() -> i64 sync {\n    return 1\n}\n' > crates/nikaia-std/src/compiler/a_x.nika
 VA=$($B new --title "a: one thing (#1)" --entry "moved a_x" --nika a_x.nika="check: a thing")
 git add -A; git commit -qm "a: one thing ($VA)"; git push -q origin HEAD:develop
 # session b: same base, same number, plus a spec text change elsewhere
 cd $T/b
-printf 'fn b_y() -> i64 sync {\n    return 2\n}\n' > crates/nikaia-std/src/tools/b_y.nika
+printf 'fn b_y() -> i64 sync {\n    return 2\n}\n' > crates/nikaia-std/src/compiler/b_y.nika
 sed -i 's/^### 1.1. What Nikaia is$/### 1.1. What Nikaia is (b)/' docs/specification/10-nikaia-light.md
 VB=$($B new --version $VA --title "b: other thing (#2)" --entry "moved b_y" --nika b_y.nika="emit: b thing")
 git add -A; git commit -qm "b: other thing ($VB)"

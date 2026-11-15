@@ -53,7 +53,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // ## Where it is written
 //
 // **The walk, the doors and the fixpoint are Nikaia**
-// (`nikaia-std/src/tools/locks.nika`, #125). What stays here is handing in
+// (`nikaia-std/src/compiler/locks.nika`, #125). What stays here is handing in
 // each unit with its aliases and its literals' holes, the checker's resolved
 // calls as plain data, and writing the answer into the ledger.
 //

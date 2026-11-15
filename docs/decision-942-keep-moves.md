@@ -55,7 +55,7 @@ below, counting owners, copying, or refusing. Which one is the decision.
   program shape needs it; it is not bookkeeping. No program in the repository
   has it yet (grep: only the two tests of step 2).
 * Step 2 (commit 1b1d740, 0.0.1272) is built: `view_changes`
-  (`crates/nikaia-std/src/tools/view_changes.nika`, `vc_moved_parts`) follows a
+  (`crates/nikaia-std/src/compiler/view_changes.nika`, `vc_moved_parts`) follows a
   text moved into a struct field, tuple or list, and a change in place of that
   part while `v` lives is `NK2305` (ADR-views-3 D9). Step 1, the lowering, is open
   and was sent back for a decision by the builder (comment on #942).

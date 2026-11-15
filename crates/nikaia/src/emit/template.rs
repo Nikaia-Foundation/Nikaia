@@ -4,7 +4,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 //
 // The `html` template DSL (ADR-017), compiled where the template is written.
 //
-// **The splitting is Nikaia** since 0.0.252: `nikaia-std/src/tools/template.nika`
+// **The splitting is Nikaia** since 0.0.252: `nikaia-std/src/compiler/template.nika`
 // holds the HTML scan that decides where a hole sits and whether escaping can
 // make it safe, lowered by `nikaia lower-std` and reached here as
 // `nikaia_std::tools::template` (ADR-290's route, ADR-294's road). What stays

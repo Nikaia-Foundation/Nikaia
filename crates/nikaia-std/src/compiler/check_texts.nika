@@ -1,0 +1,813 @@
+// crates/nikaia-std/src/compiler/check_texts.nika
+//
+// **Text built where a typed position asks for it** (ADR-282 D4, ADR-152, #558,
+// #125), moved from the compiler's checker: a text literal standing where
+// `String` is wanted is built as text of its own, through the arms of an `if`,
+// a `match` or a block, inside a `Vec[String]` literal and inside tuples and
+// lists of tuples; a `'a'` where a `u8` is wanted is a byte. The facts go
+// straight into `CheckState.facts`.
+
+use std::collections
+
+fn text_key(expr: ref Expr) -> i64 sync {
+    return id_of(expr) as i64
+}
+
+/// The `char` code an ASCII byte has, and nothing above: a `'…'` is a byte only
+/// where it is one character of ASCII.
+fn ascii_scalar(n: i64) -> scalar? sync {
+    if n < 0 || n > 127 {
+        return null
+    }
+    return (n as u8) as scalar
+}
+
+/// Whether a `'…'` written as `written` can be a byte: one ASCII character, or
+/// a `'\xNN'` above `\x7F`, which is only one.
+pub fn literal_is_a_byte(written: ref String) -> bool sync {
+    if a_high_byte(written) != null {
+        return true
+    }
+    let text = decoded(written) fn(n) { ascii_scalar(n) } ?? return false
+    return text.chars().count() == 1 && text.len() == 1
+}
+
+/// A `'…'` that is a byte, as the language below writes it: `b'x'`, with `\`
+/// and `'` escaped and anything not printable as `\xNN`.
+pub fn check_byte_literal(written: ref String) -> String sync {
+    let text = decoded(written) fn(n) { ascii_scalar(n) } ?? ""
+    let mut byte: i64 = a_high_byte(written) ?? -1
+    for b in text.bytes() {
+        if byte < 0 {
+            byte = b as i64
+        }
+    }
+    if byte < 0 {
+        byte = 0
+    }
+    let c = (byte as u8) as scalar
+    if byte == 92 || byte == 39 {
+        return f"b'\\{c}'"
+    }
+    if byte >= 32 && byte <= 126 {
+        return f"b'{c}'"
+    }
+    let digits = "0123456789abcdef"
+    let high = byte / 16
+    let low = byte % 16
+    let h = digits.bytes[high] as scalar
+    let l = digits.bytes[low] as scalar
+    return f"b'\\x{h}{l}'"
+}
+
+/// The last expression of a block, as a list of none or one.
+fn block_tail(block: ref Block) -> Vec[ref Expr] sync {
+    if block.stmts.len() == 0 {
+        return []
+    }
+    return match block.stmts[block.stmts.len() - 1].node {
+        Stmt::Expr(value) => [value],
+        else => [],
+    }
+}
+
+/// Whether a block ends in a statement that jumps: `return`, `break` or
+/// `continue`, which leave no value at the block's end.
+fn check_texts_ends_in_a_jump(block: ref Block) -> bool sync {
+    if block.stmts.len() == 0 {
+        return false
+    }
+    return match block.stmts[block.stmts.len() - 1].node {
+        Stmt::Return(_) => true,
+        Stmt::Break => true,
+        Stmt::Continue => true,
+        else => false,
+    }
+}
+
+/// Whether an expression's value is a text literal at every end.
+pub fn ends_in_text(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::LitStr { .. } => true,
+        Expr::If { then_branch, else_branch, .. } => if else_branch == null { false } else { both_tails_text(then_branch, else_branch ?? return false) },
+        Expr::Match { arms, .. } => all_arms_text(arms),
+        Expr::Block(block, _) => tail_is_text(block),
+        Expr::AsyncGroup(block, _, _, _, _) => tail_is_text(block),
+        else => false,
+    }
+}
+
+fn both_tails_text(first: ref Block, second: ref Block) -> bool sync {
+    return tail_is_text(first) && tail_is_text(second)
+}
+
+fn tail_is_text(block: ref Block) -> bool sync {
+    let tail = block_tail(block)
+    return tail.len() == 1 && ends_in_text(tail[0])
+}
+
+fn all_arms_text(arms: ref Vec[MatchArm]) -> bool sync {
+    if arms.len() == 0 {
+        return false
+    }
+    for arm in arms {
+        if !ends_in_text(arm.body) {
+            return false
+        }
+    }
+    return true
+}
+
+/// Whether an arm's body leaves a value: not a `throw`, nor a block that
+/// ends in one or in a jump.
+fn check_texts_arm_leaves(body: ref Expr) -> bool sync {
+    return match body {
+        Expr::Throw(..) => false,
+        Expr::Block(block, _) => !check_texts_ends_in_a_jump(block) && !check_texts_ends_in_a_throw(block),
+        else => true,
+    }
+}
+
+fn check_texts_ends_in_a_throw(block: ref Block) -> bool sync {
+    for tail in block_tail(block) {
+        return match tail {
+            Expr::Throw(..) => true,
+            else => false,
+        }
+    }
+    return false
+}
+
+/// Whether an expression's value is `null` at its end.
+pub fn ends_in_null(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::LitNull(_) => true,
+        Expr::Block(block, _) => tail_is_null(block),
+        Expr::AsyncGroup(block, _, _, _, _) => tail_is_null(block),
+        else => false,
+    }
+}
+
+fn tail_is_null(block: ref Block) -> bool sync {
+    let tail = block_tail(block)
+    return tail.len() == 1 && ends_in_null(tail[0])
+}
+
+fn a_string_type() -> Ty sync {
+    return Ty::Named { name: "String", args: [], view: false }
+}
+
+/// A name the method of a call is written as.
+fn method_word(world: ref CheckWorld, expr: ref Expr) -> String sync {
+    return match expr {
+        Expr::MethodCall { method, args, .. } => if args.len() == 0 { world.words.resolve(method).clone() } else { "" },
+        else => "",
+    }
+}
+
+/// The receiver of a method call, as a list of none or one.
+fn receiver_of(expr: ref Expr) -> Vec[ref Expr] sync {
+    return match expr {
+        Expr::MethodCall { receiver, .. } => [receiver],
+        else => [],
+    }
+}
+
+/// Whether every value an expression ends in is a text or a `'…'` literal:
+/// the arms of an `if` or a `match` handed to a `u8` are bytes (#773), as
+/// those handed to a `String` are text of their own. `text` is whether a
+/// text literal counts, or only a `'…'`.
+fn check_texts_ends_in_literal(expr: ref Expr, text: bool) -> bool sync {
+    match expr {
+        Expr::LitStr { .. } => return text,
+        Expr::LitChar(_, _) => return true,
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise = else_branch ?? return false
+            let first = block_tail(then_branch)
+            let second = block_tail(otherwise)
+            return first.len() == 1 && second.len() == 1 && check_texts_ends_in_literal(first[0], text) && check_texts_ends_in_literal(second[0], text)
+        },
+        Expr::Match { arms, .. } => {
+            if arms.len() == 0 {
+                return false
+            }
+            for arm in arms {
+                if !check_texts_ends_in_literal(arm.body, text) {
+                    return false
+                }
+            }
+            return true
+        },
+        Expr::Block(block, _) => {
+            let ends = block_tail(block)
+            return ends.len() == 1 && check_texts_ends_in_literal(ends[0], text)
+        },
+        Expr::AsyncGroup(block, _, _, _, _) => {
+            let ends = block_tail(block)
+            return ends.len() == 1 && check_texts_ends_in_literal(ends[0], text)
+        },
+        else => return false,
+    }
+}
+
+pub fn a_text_literal_expr(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::LitStr { .. } => true,
+        else => false,
+    }
+}
+
+impl CheckState {
+    /// **A text literal where `String` is wanted is built as text of its own**
+    /// (ADR-282 D4). The type it comes to, or nothing where this is not that
+    /// case. `owned` is whether the position keeps what it is given.
+    pub fn text_literal(ref mut self, world: ref CheckWorld, want: ref Ty, value: ref Expr, owned: bool) -> Ty? sync {
+        match want {
+            Ty::Nullable(inner) => return self.text_literal(world, inner, value, owned),
+            else => {},
+        }
+        if method_word(world, value) == "to_string" {
+            let receiver = receiver_of(value)
+            if receiver.len() == 1 && a_text_literal_expr(receiver[0]) {
+                return self.text_literal(world, want, receiver[0], owned)
+            }
+        }
+        match value {
+            Expr::LitChar(written, _) => {
+                let u8_wanted = match want {
+                    Ty::Named { name, args, view } => !view && name == "u8" && args.len() == 0,
+                    else => false,
+                }
+                if u8_wanted && literal_is_a_byte(written) {
+                    self.facts.byte_literals.insert(text_key(value))
+                    return Ty::Named { name: "u8", args: [], view: false }
+                }
+                // **A scalar that is not ASCII is several bytes** (ADR-320
+                // D8): `NK1212`, once, and the position's type stands.
+                let key = text_key(value)
+                if u8_wanted && self.flow.wide_chars.contains_key(key) {
+                    if !self.flow.chars_refused.contains(key) {
+                        self.flow.chars_refused.insert(key)
+                        let wide = self.flow.wide_chars[key]?.clone() ?? (2, Span { start: 0, end: 0 })
+                        let length = wide.0
+                        let note = "A `'…'` is a `u8` only where it is one ASCII character or a `'\\xNN'` (Part I 2.6); in UTF-8 any other scalar is two to four bytes."
+                        self.findings.push(check_refusal("NK1212", wide.1, f"`'{written}'` is a scalar of {length} bytes, and a `u8` is one.", [note.clone()], f"Its bytes are a text literal's: `\"{written}\".bytes`; where one character is meant, ask for a `scalar`."))
+                    }
+                    return Ty::Named { name: "u8", args: [], view: false }
+                }
+            },
+            Expr::Variable(symbol, _) => {
+                // **A `let` of a `'…'` is a byte where its use asks one**
+                // (ADR-320 D8, as a number's is, ADR-285 D23).
+                let u8_wanted = match want {
+                    Ty::Named { name, args, view } => !view && name == "u8" && args.len() == 0,
+                    else => false,
+                }
+                if u8_wanted {
+                    let name = world.words.resolve(symbol).clone()
+                    let local = self.binding(name) ?? return null
+                    let found = self.flow.open_chars[local.id] ?? return null
+                    let mut open = found.clone()
+                    open.bytes.insert(text_key(value))
+                    self.flow.open_chars.insert(local.id, open)
+                    return Ty::Named { name: "u8", args: [], view: false }
+                }
+            },
+            Expr::LitStr { .. } => {
+                if a_plain_string(want) {
+                    if owned {
+                        self.facts.owned_texts.insert(text_key(value))
+                    }
+                    return a_string_type()
+                }
+            },
+            Expr::If { then_branch, else_branch, .. } => {
+                if else_branch != null {
+                    let otherwise = else_branch ?? return null
+                    let first = block_tail(then_branch)
+                    let second = block_tail(otherwise)
+                    if first.len() == 1 && second.len() == 1 && check_texts_ends_in_literal(first[0], true) && check_texts_ends_in_literal(second[0], true) {
+                        self.text_literal(world, want, first[0], owned)
+                        return self.text_literal(world, want, second[0], owned)
+                    }
+                    return null
+                }
+            },
+            Expr::Match { arms, .. } => {
+                // An arm that throws or jumps leaves no value (#1322).
+                let mut answered: Ty? = null
+                for arm in arms {
+                    if check_texts_arm_leaves(arm.body) && !check_texts_ends_in_literal(arm.body, true) {
+                        return null
+                    }
+                }
+                for arm in arms {
+                    if check_texts_arm_leaves(arm.body) {
+                        answered = self.text_literal(world, want, arm.body, owned)
+                    }
+                }
+                return answered
+            },
+            Expr::Block(block, _) => {
+                let ends = block_tail(block)
+                if ends.len() == 1 && check_texts_ends_in_literal(ends[0], true) {
+                    return self.text_literal(world, want, ends[0], owned)
+                }
+                return null
+            },
+            Expr::AsyncGroup(block, _, _, _, _) => {
+                let ends = block_tail(block)
+                if ends.len() == 1 && check_texts_ends_in_literal(ends[0], true) {
+                    return self.text_literal(world, want, ends[0], owned)
+                }
+                return null
+            },
+            // **A list of text written out, or of tuples of it, is text of
+            // its own** (ADR-282 D4): `[("A", "1")]` handed to a
+            // `Vec[(String, String)]` builds each `String` where it is kept
+            // (ADR-243 D5's `env`).
+            // A list lent to a `ref Vec[String]` is one too (#803).
+            Expr::ListLit { items, .. } => {
+                let element: Ty = match want {
+                    Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { args[0].clone() } else { Ty::Unknown },
+                    else => Ty::Unknown,
+                }
+                if items.len() > 0 && check_texts_all_text(element, items) {
+                    for item in items {
+                        self.text_literal(world, element, item, true)
+                    }
+                    // Built here, lent where a `ref` is asked.
+                    return want.owned()
+                }
+                // **A list of `'…'` handed to a `Vec[u8]` is a list of
+                // bytes** (ADR-320 D8, ADR-375 D2): each is the byte it
+                // would be where one `u8` is asked, `bytes::ByteSet([';', '\n'])`.
+                if items.len() > 0 && check_texts_all_chars(element, items) {
+                    for item in items {
+                        self.text_literal(world, element, item, true)
+                    }
+                    return want.clone()
+                }
+            },
+            Expr::Tuple(parts, _) => {
+                let wanted: Vec[Ty] = match want {
+                    Ty::Tuple(each) => each.clone(),
+                    else => [],
+                }
+                if parts.len() > 0 && wanted.len() == parts.len() && check_texts_tuple_all_text(wanted, parts) {
+                    let mut i = 0
+                    while i < parts.len() {
+                        self.text_literal(world, wanted[i], parts[i], true)
+                        i += 1
+                    }
+                    return want.clone()
+                }
+            },
+            else => {},
+        }
+        return null
+    }
+
+    /// **A plain arm beside a `null` is `Some`** (ADR-279): every end of the
+    /// arm that is not `null` is recorded.
+    pub fn some_at_the_tails(ref mut self, arm: ref Expr) sync {
+        match arm {
+            Expr::If { then_branch, else_branch, .. } => {
+                if else_branch != null {
+                    for block in [then_branch, else_branch ?? return] {
+                        let tail = block_tail(block)
+                        if tail.len() == 1 {
+                            self.some_at_the_tails(tail[0])
+                        } else if !check_texts_ends_in_a_jump(block) {
+                            self.facts.some_tails.insert(text_key(arm))
+                            return
+                        }
+                    }
+                    return
+                }
+                self.facts.some_tails.insert(text_key(arm))
+            },
+            Expr::Block(block, _) => {
+                let tail = block_tail(block)
+                if tail.len() == 1 {
+                    self.some_at_the_tails(tail[0])
+                } else if !check_texts_ends_in_a_jump(block) {
+                    self.facts.some_tails.insert(text_key(arm))
+                }
+            },
+            Expr::AsyncGroup(block, _, _, _, _) => {
+                let tail = block_tail(block)
+                if tail.len() == 1 {
+                    self.some_at_the_tails(tail[0])
+                } else if !check_texts_ends_in_a_jump(block) {
+                    self.facts.some_tails.insert(text_key(arm))
+                }
+            },
+            Expr::Match { arms, .. } => {
+                for each in arms {
+                    self.some_at_the_tails(each.body)
+                }
+            },
+            Expr::LitNull(_) => {},
+            // **A jumping end stays bare** (#657): it leaves with a value of
+            // its own, and `Some(return ..)` would wrap nothing.
+            Expr::Return(_, _) => {},
+            Expr::Break(_) => {},
+            Expr::Continue(_) => {},
+            Expr::Throw(_, _) => {},
+            else => {
+                self.facts.some_tails.insert(text_key(arm))
+            },
+        }
+    }
+
+    /// **A list of tuples with text literals beside other parts** (#1449):
+    /// each item is the tuple `tuple_literal` makes of it, so `[("a", [1])]`
+    /// handed to a `Vec[(String, Vec[i64])]` builds its text where it is kept,
+    /// as one such tuple handed alone does (#750). The list type it comes to,
+    /// or nothing where an item is not such a tuple.
+    pub fn tuple_list_literal(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
+        let element: Ty = match want {
+            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { args[0].clone() } else { return null },
+            else => return null,
+        }
+        let held: Ty = match found {
+            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { args[0].clone() } else { return null },
+            else => return null,
+        }
+        match value {
+            Expr::ListLit { items, .. } => {
+                let mut answered: Ty? = null
+                for item in items {
+                    let got = self.tuple_literal(world, held, element, item) ?? return null
+                    if answered == null {
+                        answered = got
+                    }
+                }
+                let each = answered ?? return null
+                return Ty::Named { name: "Vec", args: [each], view: false }
+            },
+            else => return null,
+        }
+    }
+
+    /// **A tuple of text literals where a tuple with text is wanted**: the
+    /// tuple type it comes to, where any part was built.
+    pub fn tuple_literal(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
+        // A tuple's parts, or those of the tuple a `(A, B)?` holds (ADR-364).
+        let wants: Vec[Ty] = match want {
+            Ty::Tuple(parts) => parts.clone(),
+            Ty::Nullable(inner) => match inner {
+                Ty::Tuple(parts) => parts.clone(),
+                else => return null,
+            },
+            else => return null,
+        }
+        // **The wanted type reaches every end of an `if`, a `match` or a
+        // block** (ADR-364), as it reaches a text literal's: each end is a
+        // tuple literal or `null`, or none is built.
+        match value {
+            Expr::Tuple(_, _) => {},
+            else => {
+                if !ends_in_tuple(value) {
+                    return null
+                }
+                let (plain, nullable) = match found {
+                    Ty::Nullable(inner) => (inner.clone(), true),
+                    else => (found.clone(), false),
+                }
+                let mut answered: Ty? = null
+                for end in tuple_ends(value) {
+                    let a_null = match end {
+                        Expr::LitNull(_) => true,
+                        else => false,
+                    }
+                    if !a_null {
+                        answered = self.tuple_literal(world, plain, want, end)
+                        if answered == null {
+                            return null
+                        }
+                    }
+                }
+                let built = answered ?? return null
+                if nullable {
+                    return Ty::Nullable(built)
+                }
+                return built
+            },
+        }
+        let founds: Vec[Ty] = match found {
+            Ty::Tuple(parts) => parts.clone(),
+            else => return null,
+        }
+        let parts = literal_tuple_parts(value)
+        if wants.len() != parts.len() || founds.len() != parts.len() {
+            return null
+        }
+        let mut built = false
+        let mut answered: Vec[Ty] = []
+        let mut at = 0
+        while at < parts.len() {
+            let mut got = self.text_literal(world, wants[at], parts[at], true)
+            if got == null {
+                got = self.tuple_literal(world, founds[at], wants[at], parts[at])
+            }
+            // **An element or a field read off a place, as a part that
+            // declares a view, is lent** (ADR-views-3 D5, #655): `(2, given[1])`
+            // under `(i64, ref E?)` is `(2, Some(&given[1]))`.
+            if got == null && check_core_stmt_element_view(self, world, parts[at], founds[at], wants[at]) == 1 {
+                self.facts.lent_reads.insert(node_key(parts[at]))
+                if check_overflow_a_nullable(wants[at]) {
+                    // Its option is this one; a wrap of the part as a plain
+                    // value (#887) would be a second.
+                    self.facts.wrapped.remove(id_of(parts[at]) as i64)
+                    self.facts.nullable_args.insert(id_of(parts[at]) as i64, FactWrap::Constructor)
+                }
+                got = wants[at].clone()
+            }
+            // **A `null` where the part is a `T?`** is that `T?` (#957):
+            // `(null, 1)` under `(String?, i64)`, beside `("y", 2)`.
+            if got == null && check_overflow_a_nullable(wants[at]) {
+                match parts[at] {
+                    Expr::LitNull(_) => {
+                        got = wants[at].clone()
+                    },
+                    else => {}
+                }
+            }
+            if got != null {
+                built = true
+                answered.push(got ?? Ty::Unknown)
+            } else {
+                answered.push(founds[at].clone())
+            }
+            at = at + 1
+        }
+        if !built {
+            return null
+        }
+        return Ty::Tuple(answered)
+    }
+
+    /// **A list of tuple literals where a list of tuples with text is wanted.**
+    pub fn list_of_tuple_literals(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
+        let name = match want {
+            Ty::Named { name, view, .. } => if view { return null } else { name.clone() },
+            else => return null,
+        }
+        let wanted_args = named_arguments(want)
+        let found_args = named_arguments(found)
+        let items = list_items(value)
+        if name != "Vec" || items.len() == 0 || wanted_args.len() != 1 || found_args.len() != 1 {
+            return null
+        }
+        let a_tuple = match wanted_args[0] {
+            Ty::Tuple(_) => true,
+            else => false,
+        }
+        if !a_tuple {
+            return null
+        }
+        let mut built: Ty? = null
+        for item in items {
+            built = self.tuple_literal(world, found_args[0], wanted_args[0], item)
+            if built == null {
+                return null
+            }
+        }
+        let element = built ?? return null
+        return Ty::Named { name: name, args: [element], view: false }
+    }
+}
+
+/// Whether an expression's value is a tuple literal at every end.
+pub fn ends_in_tuple(expr: ref Expr) -> bool sync {
+    let ends = tuple_ends(expr)
+    if ends.len() == 0 {
+        return false
+    }
+    let mut tuples = 0
+    for end in ends {
+        match end {
+            Expr::Tuple(_, _) => { tuples = tuples + 1 },
+            Expr::LitNull(_) => {},
+            else => return false,
+        }
+    }
+    return tuples > 0
+}
+
+/// The ends of an `if` with an `else`, a `match` or a block, down to what is
+/// none of them; an expression that is none of them is its own end.
+pub fn tuple_ends(expr: ref Expr) -> Vec[ref Expr] sync {
+    let mut out: Vec[ref Expr] = []
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise = else_branch ?? return []
+            for block in [then_branch, otherwise] {
+                let tail = block_tail(block)
+                if tail.len() != 1 {
+                    return []
+                }
+                for end in tuple_ends(tail[0]) {
+                    out.push(end)
+                }
+            }
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                for end in tuple_ends(arm.body) {
+                    out.push(end)
+                }
+            }
+        },
+        Expr::Block(block, _) => {
+            let tail = block_tail(block)
+            if tail.len() != 1 {
+                return []
+            }
+            return tuple_ends(tail[0])
+        },
+        Expr::AsyncGroup(block, _, _, _, _) => {
+            let tail = block_tail(block)
+            if tail.len() != 1 {
+                return []
+            }
+            return tuple_ends(tail[0])
+        },
+        else => out.push(expr),
+    }
+    return out
+}
+
+fn literal_tuple_parts(value: ref Expr) -> Vec[ref Expr] sync {
+    return match value {
+        Expr::Tuple(parts, _) => refs_of(parts),
+        else => [],
+    }
+}
+
+fn list_items(value: ref Expr) -> Vec[ref Expr] sync {
+    return match value {
+        Expr::ListLit { items, .. } => refs_of(items),
+        else => [],
+    }
+}
+
+fn named_arguments(ty: ref Ty) -> Vec[Ty] sync {
+    return match ty {
+        Ty::Named { args, .. } => args.clone(),
+        else => [],
+    }
+}
+
+fn refs_of(items: ref Vec[Expr]) -> Vec[ref Expr] sync {
+    let mut out: Vec[ref Expr] = []
+    for item in items {
+        out.push(item)
+    }
+    return out
+}
+
+/// `NK1212` for a `'\xNN'` above `\x7F` left a `scalar`: it names a byte, and
+/// the scalar of that number is written `\u{…}`. `name` is the `let` that
+/// binds it, where one does.
+fn check_texts_a_byte_as_a_scalar(written: ref String, name: String?, span: ref Span) -> CheckFinding sync {
+    let value = a_high_byte(written) ?? 128
+    let hex = hex_of(value)
+    let note = "Above `\\x7F` a `'\\xNN'` names a byte, which is a `u8` and no `scalar`: the scalar of that number is another character, two bytes in UTF-8 (Part I 2.6)."
+    let mut annotated = f"`let b: u8 = '{written}'`"
+    if name != null {
+        annotated = f"`let {name ?? ""}: u8 = '{written}'`"
+    }
+    return check_refusal("NK1212", span, f"`'{written}'` is the byte {value}, and it is used as a `scalar`.", [note.clone()], f"For the scalar U+00{hex.to_uppercase()}, write `'\\u{{{hex}}}'`; for the byte, declare it a `u8`: {annotated}.")
+}
+
+impl CheckState {
+    /// **The `'…'`s whose uses decide `u8` or `scalar`, decided once the body
+    /// is walked** (ADR-320 D8, as numbers are, ADR-285 D24): a `let` read
+    /// only where a `u8` is wanted is a byte, one read both ways is `NK1200`,
+    /// and a `'\xNN'` above `\x7F` that no use made a byte is `NK1212`.
+    pub fn chars_typed_by_their_uses(ref mut self) sync {
+        for (_, open) in self.flow.open_chars {
+            let mut first_byte: Span? = null
+            let mut first_scalar: Span? = null
+            for (read, at) in open.reads {
+                if open.bytes.contains(read) {
+                    if first_byte == null || (first_byte?.start ?? 0) > at.start {
+                        first_byte = at.clone()
+                    }
+                } else if first_scalar == null || (first_scalar?.start ?? 0) > at.start {
+                    first_scalar = at.clone()
+                }
+            }
+            if first_byte != null && first_scalar != null {
+                let byte_at = first_byte ?? open.at.clone()
+                let scalar_at = first_scalar ?? open.at.clone()
+                let mut first = "scalar"
+                let mut second = "u8"
+                let mut later = byte_at.clone()
+                if byte_at.start < scalar_at.start {
+                    first = "u8"
+                    second = "scalar"
+                    later = scalar_at.clone()
+                }
+                let note = "A `'…'` takes its type from how it's used, `u8` or `scalar`, and these uses want both."
+                self.findings.push(check_refusal("NK1200", later, f"You're using `{open.name}` as {an_or_a(first)} `{first}` and here as {an_or_a(second)} `{second}`.", [note.clone()], f"Declare its type, `let {open.name}: u8 = '{open.written}'`, and convert with `as` where the other one is needed."))
+            } else if first_byte != null {
+                self.facts.byte_literals.insert(open.literal)
+            } else if a_high_byte(open.written) != null {
+                self.findings.push(check_texts_a_byte_as_a_scalar(open.written, open.name.clone(), open.at))
+            }
+        }
+        self.flow.open_chars = collections::BTreeMap()
+        for (literal, held) in self.flow.high_bytes {
+            if !self.facts.byte_literals.contains(literal) {
+                self.findings.push(check_texts_a_byte_as_a_scalar(held.0, null, held.1))
+            }
+        }
+        self.flow.high_bytes = collections::BTreeMap()
+    }
+}
+
+/// Whether each of `items` is text written out for `element`: a text literal
+/// for a `String`, a tuple of them for a tuple of `String`s.
+/// Whether `element` is `u8` and each of `items` a `'…'`, or `element` a
+/// `Vec` of such and each of `items` a list of them: `[[';'], ['\n']]`.
+fn check_texts_all_chars(element: ref Ty, items: ref Vec[Expr]) -> bool sync {
+    let (bytes, inner) = match element {
+        Ty::Named { name, args, view } => (!view && name == "u8" && args.len() == 0, if !view && name == "Vec" && args.len() == 1 { args[0].clone() } else { Ty::Unknown }),
+        else => (false, Ty::Unknown),
+    }
+    for item in items {
+        match item {
+            Expr::LitChar(..) => {
+                if !bytes {
+                    return false
+                }
+            },
+            Expr::ListLit { items: nested, .. } => {
+                if nested.len() == 0 || !check_texts_all_chars(inner, nested) {
+                    return false
+                }
+            },
+            Expr::If { .. } | Expr::Match { .. } | Expr::Block(..) => {
+                if !bytes || !check_texts_ends_in_literal(item, false) {
+                    return false
+                }
+            },
+            else => return false,
+        }
+    }
+    return bytes || !inner.is_unknown()
+}
+
+fn check_texts_all_text(element: ref Ty, items: ref Vec[Expr]) -> bool sync {
+    for item in items {
+        if !check_texts_text_for(element, item) {
+            return false
+        }
+    }
+    return true
+}
+
+fn check_texts_text_for(element: ref Ty, item: ref Expr) -> bool sync {
+    // **A list of `String?` written out is text of its own too** (#828):
+    // each text is wrapped where it is kept, a `null` stays one.
+    match element {
+        Ty::Nullable(inner) => return check_texts_is_null(item) || check_texts_text_for(inner, item),
+        else => {},
+    }
+    if a_plain_string(element) {
+        return a_text_literal_expr(item)
+    }
+    let each: Vec[Ty] = match element {
+        Ty::Tuple(each) => each.clone(),
+        else => [],
+    }
+    if each.len() == 0 {
+        return false
+    }
+    return match item {
+        Expr::Tuple(parts, _) => parts.len() == each.len() && check_texts_tuple_all_text(each, parts),
+        else => false,
+    }
+}
+
+fn check_texts_tuple_all_text(each: ref Vec[Ty], parts: ref Vec[Expr]) -> bool sync {
+    let mut i = 0
+    while i < parts.len() {
+        if !check_texts_text_for(each[i], parts[i]) {
+            return false
+        }
+        i += 1
+    }
+    return true
+}
+
+fn check_texts_is_null(item: ref Expr) -> bool sync {
+    return match item {
+        Expr::LitNull(_) => true,
+        else => false,
+    }
+}

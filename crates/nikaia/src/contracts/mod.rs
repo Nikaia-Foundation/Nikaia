@@ -53,7 +53,7 @@ use crate::parser::Parsed;
 
 /// **The ledger's small records are declared in Nikaia**
 /// ([ADR-294](../../../docs/specification/adr/adr-294.md) step (b)):
-/// `nikaia-std/src/tools/ty.nika`, beside the type language their fields
+/// `nikaia-std/src/compiler/ty.nika`, beside the type language their fields
 /// hold. Re-exported here so that every reader keeps its path.
 pub use nikaia_std::tools::ty::{
     ConfigContract, Crosses, FieldContract, FnContract, Ledger, Lock, Notes, Provenance, Signature,

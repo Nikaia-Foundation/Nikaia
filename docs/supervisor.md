@@ -82,7 +82,7 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   later job off (it kept `develop` red from the first self-hosting move until
   0.0.773, so `main` did not move). Lints about code the lowering writes are
   allowed on the `tools` module in `crates/nikaia-std/src/lib.rs`, not fixed in
-  the generated files (`crates/nikaia-std/src/tools/lowered/*.rs`, index
+  the generated files (`crates/nikaia-std/src/compiler/lowered/*.rs`, index
   `lowered.rs`; a change to one `.nika` changes one file). CI takes the newest
   stable; when `rustup check` shows this machine's `stable` behind it, run
   clippy with that version too (`docs/builder-facts-lookup.md`, *Tests and the gate*;

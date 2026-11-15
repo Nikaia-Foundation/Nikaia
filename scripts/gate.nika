@@ -10,7 +10,7 @@
 //
 // A builder's whole gate in one call, in this order: `build` (cargo build
 // --profile fast -p nikaia), `lower-std` (only when a
-// `crates/nikaia-std/src/tools/*.nika` changed: lower-std, red when it
+// `crates/nikaia-std/src/compiler/*.nika` changed: lower-std, red when it
 // rewrites a lowered file whose `.nika` is as committed, and when it changes a
 // lowered file, build and lower-std again, which must change nothing more: the
 // fixpoint), `fmt` (cargo fmt --check), `clippy` (--all-targets, -D
@@ -118,7 +118,7 @@ fn gate_build() -> String throws {
 }
 
 fn gate_lowered_hash() -> String throws {
-    return process::run("sh", ["-c", "cat crates/nikaia-std/src/tools/lowered/*.rs crates/nikaia-std/src/tools/lowered.rs | sha256sum"]).stdout.trim().clone()
+    return process::run("sh", ["-c", "cat crates/nikaia-std/src/compiler/lowered/*.rs crates/nikaia-std/src/compiler/lowered.rs | sha256sum"]).stdout.trim().clone()
 }
 
 // A lower-std run refused a file when it exits non-zero or prints an error.
@@ -161,24 +161,24 @@ fn gate_log_lower_times(all: String) throws {
 fn gate_lowered_drift(changed: Vec[String]) -> String throws {
     let mut own: Vec[String] = []
     for path in changed { if gate_is_tools_nika(path.clone()) { gate_push_new(own, path.clone()) } }
-    let edited = process::run("git", ["diff", "--name-only", "HEAD", "--", "crates/nikaia-std/src/tools"])
-    let added = process::run("git", ["ls-files", "--others", "--exclude-standard", "--", "crates/nikaia-std/src/tools"])
+    let edited = process::run("git", ["diff", "--name-only", "HEAD", "--", "crates/nikaia-std/src/compiler"])
+    let added = process::run("git", ["ls-files", "--others", "--exclude-standard", "--", "crates/nikaia-std/src/compiler"])
     for line in (edited.stdout + "\n" + added.stdout).split("\n") {
         let path = line.trim().clone()
         if gate_is_tools_nika(path.clone()) { gate_push_new(own, path) }
     }
-    let diff = process::run("git", ["diff", "--name-only", "HEAD", "--", "crates/nikaia-std/src/tools/lowered", "crates/nikaia-std/src/tools/lowered.rs"])
+    let diff = process::run("git", ["diff", "--name-only", "HEAD", "--", "crates/nikaia-std/src/compiler/lowered", "crates/nikaia-std/src/compiler/lowered.rs"])
     let mut drift: Vec[String] = []
     for line in diff.stdout.split("\n") {
         let path = line.trim().clone()
         if path == "" { continue }
-        if path == "crates/nikaia-std/src/tools/lowered.rs" {
+        if path == "crates/nikaia-std/src/compiler/lowered.rs" {
             if own.len() == 0 { drift.push(path) }
             continue
         }
-        let file = path.strip_prefix("crates/nikaia-std/src/tools/lowered/") ?? continue
+        let file = path.strip_prefix("crates/nikaia-std/src/compiler/lowered/") ?? continue
         let stem = file.strip_suffix(".rs") ?? continue
-        if !own.contains(f"crates/nikaia-std/src/tools/{stem}.nika") { drift.push(path) }
+        if !own.contains(f"crates/nikaia-std/src/compiler/{stem}.nika") { drift.push(path) }
     }
     if drift.len() == 0 { return "green" }
     let files = drift.join(" ")
@@ -202,14 +202,14 @@ fn gate_fixpoint(changed: Vec[String]) -> String throws {
 }
 
 fn gate_is_tools_nika(path: String) -> bool {
-    let rest = path.strip_prefix("crates/nikaia-std/src/tools/") ?? return false
+    let rest = path.strip_prefix("crates/nikaia-std/src/compiler/") ?? return false
     return rest.ends_with(".nika") && !rest.contains("/")
 }
 
 // The checker or the emitter: the whole of tests/compiler runs (builder.md).
 fn gate_needs_package(path: String) -> bool {
     if path.starts_with("crates/nikaia/src/check/") || path.starts_with("crates/nikaia/src/emit/") { return true }
-    let rest = path.strip_prefix("crates/nikaia-std/src/tools/") ?? return false
+    let rest = path.strip_prefix("crates/nikaia-std/src/compiler/") ?? return false
     return gate_is_tools_nika(path.clone()) && (rest.starts_with("check_") || rest.starts_with("emit_"))
 }
 
@@ -341,7 +341,7 @@ fn gate_step(step: String, dry: bool, tools: bool, whole: bool, kept: Vec[String
         return gate_build()
     }
     if step == "lower-std" {
-        if !tools { return "green skipped: no crates/nikaia-std/src/tools/*.nika changed" }
+        if !tools { return "green skipped: no crates/nikaia-std/src/compiler/*.nika changed" }
         if dry { return "would run: target/fast/nikaia lower-std (red on a lowered file that drifts from its committed .nika), and to the fixpoint" }
         return gate_fixpoint(changed)
     }

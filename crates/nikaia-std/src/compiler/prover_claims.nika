@@ -1,0 +1,251 @@
+// crates/nikaia-std/src/compiler/prover_claims.nika
+//
+// **The claims the prover carries between functions** (ADR-269 D15, D17,
+// D18), moved from the compiler's `prove` (ADR-294, #436 step 4): a
+// precondition's claims at a function's entry, a postcondition's over
+// `result`, and another package's contract read back into terms. A term is
+// a place in the walk's arena (`prover_arena.nika`).
+
+use std::collections
+
+/// **A check nobody writes, over a function's parameters** (ADR-306 D15,
+/// ADR-395 D1): an index's bound or a divisor's `d != 0` that the body
+/// leaves open, carried back to the entry as an `assert`'s claim is. Never a
+/// precondition: a call asks only whether its arguments rule it out
+/// (ADR-269 D8), and the check stays in the callee.
+pub struct UnwrittenCheck {
+    /// The goal at the function's entry, over its parameters.
+    pub term: i64,
+    /// The index or the division, written: `10 / d`.
+    pub written: String,
+    /// What it does where it fails: `divides by zero`.
+    pub fails: String,
+    /// The goal as a reader writes it: `d != 0`.
+    pub holds: String,
+    /// Whether it is an index's or a slice's bounds (ADR-396 D1).
+    pub index: bool,
+    /// The function the check stands in where a call carried it here, ""
+    /// where it is this function's own: carried through a call only for
+    /// data from outside (ADR-396 D1).
+    pub within: String,
+    /// Where it stands in the function it is asked of: the index or the
+    /// division, or the call that carried it here - where a `pub` function
+    /// that leaves it open is refused (ADR-396 D6).
+    pub site: Span,
+}
+
+/// **An index that data from outside the program reaches, and what became
+/// of it** (ADR-396 D5), for `--bounds`: where it stands - the index, or the
+/// call that hands it the value - the name and its source, and whether the
+/// walk proved it, with the guard that did where one did.
+pub struct OutsideIndex {
+    /// The byte of the index or of the call.
+    pub at: i64,
+    /// The index, written, with the function it stands in where a call
+    /// reaches it: `` `names[month]` in `month_name` ``.
+    pub written: String,
+    /// The name from outside the index reads.
+    pub name: String,
+    /// Where its value came from (`io::read_to_string`), "" where the walk
+    /// does not know.
+    pub source: String,
+    pub proved: bool,
+    /// The byte of the guard that proves it, -1 where none does.
+    pub guard_at: i64,
+    /// That guard's condition, written.
+    pub guard: String,
+}
+
+/// One claim of a precondition (ADR-269 D15).
+pub struct PreClaim {
+    /// The condition at the function's entry, over its parameters: the
+    /// `assert`'s claim carried back through the body - `mode == 1 → x > 1`
+    /// for `assert(y > 0)` after `let y = x - 1` inside `if mode == 1`.
+    pub term: i64,
+    /// The `assert`'s condition, written, for messages.
+    pub written: String,
+    /// The condition at the entry as a reader writes it, where it is not the
+    /// claim as written: `mode == 1 → x - 1 > 0` (ADR-269 D21).
+    pub computed: String?,
+    /// The `assert`'s `message:`, where it is text as written.
+    pub message: String?,
+    /// **The function the `assert` stands in**, where it is not this one:
+    /// a callee's precondition carried back through a call (ADR-269 D15).
+    pub origin: String?,
+    /// The call it was carried back from - where it starts, the callee and
+    /// the claim's place in the callee's list - so that the second pass
+    /// knows the call needs no check of its own.
+    pub site: CarriedFrom?,
+}
+
+impl PreClaim {
+    /// What a failed check of it says: the condition, and where a computed
+    /// one came from (ADR-269 D21).
+    pub fn failure(ref self, function: ref String) -> String {
+        let computed = claim_text_of(self.computed) ?? return f"precondition of `{function}`: `{self.written}`"
+        let origin = claim_text_of(self.origin) ?? return f"precondition of `{function}`: `{computed}`, from `assert({self.written})`"
+        return f"precondition of `{function}`: `{computed}`, from `assert({self.written})` in `{origin}`"
+    }
+
+    /// Whether it was carried back from the call `site`.
+    pub fn carried_from(ref self, site: ref CarriedFrom) -> bool {
+        let mine = carried_site_of(self.site) ?? return false
+        return mine == site
+    }
+}
+
+/// **The call a claim was carried back from** (ADR-269 D15): where it
+/// starts, the callee, and the claim's place in the callee's list.
+pub struct CarriedFrom {
+    pub at: i64,
+    pub callee: String,
+    pub place: i64,
+}
+
+/// A function's precondition: its claims, each at its entry.
+pub struct Precondition {
+    pub claims: Vec[PreClaim],
+}
+
+impl Precondition {
+    pub fn none() -> Precondition {
+        return Precondition { claims: [] }
+    }
+}
+
+/// One claim of a postcondition (ADR-269 D17).
+pub struct PostClaim {
+    /// Over `result` and the function's parameters.
+    pub term: i64,
+    /// The `assert`'s condition, written.
+    pub written: String,
+}
+
+/// **One exit of a function's result summary** (ADR-359 D1): where the
+/// path to it holds at the entry (`guard`, over the parameters), the value
+/// handed back is `value`. `term` is `!guard || result == value`; `written`
+/// says where it came from, for a note (D8) and the ledger (D3).
+pub struct SummaryExit {
+    pub guard: i64,
+    pub value: i64,
+    pub term: i64,
+    pub written: String,
+}
+
+/// **A summary's exit at one call** (ADR-359 D2): its path and value with
+/// the call's arguments in place of the parameters, the call as written, and
+/// where the value came from.
+pub struct SummaryAlt {
+    pub guard: i64,
+    pub value: i64,
+    pub callee: String,
+    pub call: String,
+    pub why: String,
+}
+
+/// **Another package's function, as its ledger states it** (ADR-269 D18):
+/// its parameters, whether it hands back a whole number, and its contract
+/// read back into terms.
+pub struct Foreign {
+    pub params: Vec[String],
+    pub whole_result: bool,
+    pub requires: Vec[PreClaim],
+    pub ensures: Vec[PostClaim],
+}
+
+fn claim_text_of(text: ref String?) -> String? {
+    let t = text ?? return null
+    return t.clone()
+}
+
+fn carried_site_of(site: ref CarriedFrom?) -> CarriedFrom? {
+    let s = site ?? return null
+    return s.clone()
+}
+
+/// **What another package's function looks like to the prover** (ADR-269
+/// D18): its parameters' names, the names its conditions may read - each
+/// whole-number parameter, each list's length and `result` - and whether it
+/// hands back a whole number.
+pub struct ForeignShape {
+    pub params: Vec[String],
+    pub names: collections::BTreeSet[String],
+    pub whole_result: bool,
+}
+
+/// The shape of `contract`'s function, read from its signature.
+pub fn foreign_shape(contract: ref FnContract) -> ForeignShape {
+    let mut shape = ForeignShape { params: [], names: collections::BTreeSet(), whole_result: false }
+    shape.names.insert(result_name())
+    let signature = contract.signature ?? return shape
+    for (param, ty) in signature.params {
+        match ty {
+            Ty::Named { name, args, view } => {
+                if args.is_empty() && !view && is_whole_number(name) {
+                    shape.names.insert(param.clone())
+                }
+                if has_a_length(name) {
+                    shape.names.insert(length_of(param))
+                }
+            },
+            else => {},
+        }
+        shape.params.push(param.clone())
+    }
+    shape.whole_result = whole_result_of(signature.result)
+    return shape
+}
+
+fn whole_result_of(result: ref Ty?) -> bool {
+    let ty = result ?? return false
+    return match ty {
+        Ty::Named { name, args, view } => args.is_empty() && !view && is_whole_number(name),
+        else => false,
+    }
+}
+
+/// **Another package's contract, read back into terms** (ADR-269 D18):
+/// `requires` and `ensures` hold, for each condition the ledger states, its
+/// term - or `-1` where it did not read back, which is left out and only
+/// ever proves less. Each claim keeps the `assert` it came from.
+pub fn foreign_from(contract: ref FnContract, shape: ForeignShape, requires: ref Vec[i64], ensures: ref Vec[i64]) -> Foreign {
+    let mut foreign = Foreign { params: shape.params, whole_result: shape.whole_result, requires: [], ensures: [] }
+    for at in 0..<requires.len() {
+        let term = requires[at]
+        if term < 0 {
+            continue
+        }
+        let written = assert_of(contract, at)
+        let text = contract.requires[at]
+        let mut computed: String? = null
+        if written != text {
+            computed = text.clone()
+        }
+        foreign.requires.push(PreClaim { term: term, written: written, computed: computed, message: null, origin: null, site: null })
+    }
+    for at in 0..<ensures.len() {
+        let term = ensures[at]
+        if term < 0 {
+            continue
+        }
+        foreign.ensures.push(PostClaim { term: term, written: assert_of(contract, contract.requires.len() + at) })
+    }
+    return foreign
+}
+
+/// The condition of the `assert` the ledger's `at`-th claim came from.
+fn assert_of(contract: ref FnContract, at: i64) -> String {
+    if at >= contract.from.len() {
+        return ""
+    }
+    let from = contract.from[at]
+    if !from.starts_with("assert(") || !from.ends_with(")") {
+        return ""
+    }
+    let c: Vec[scalar] = from.chars().collect()
+    let mut inner: String = ""
+    for k in 7..<c.len() - 1 {
+        inner.push(c[k])
+    }
+    return inner
+}

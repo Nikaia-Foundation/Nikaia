@@ -1,0 +1,311 @@
+// crates/nikaia-std/src/compiler/emit_needs.nika
+//
+// **What a program's preamble has to say, and the table of its lines**
+// (ADR-294, #125, E12-1): `EmitNeeds`, read off each file's items and joined
+// over all of them, writes the lines at the top of the emitted file; the
+// abort table (ADR-300 D9) is appended at its end. The Rust side
+// (`emit/mod.rs`) re-exports `EmitNeeds` as `emit::Needs`.
+
+use std::collections
+
+impl EmitState {
+    /// **Whether this file lowers to the block types** (ADR-327 D4, #490):
+    /// `Vec`, `String`, `vec![…]` and `format!(…)` are `nikaia_std::block`'s
+    /// `List`, `Text` and the two built in place, for programs and the tools
+    /// alike, one rule for every file. A grammar's file too: winnow-grammar
+    /// 0.2 writes the standard library by full path in what it expands, and
+    /// the grammar says `collect nikaia_std::block::List;`, so its
+    /// repetitions collect into a block's list (`emit_grammar_over`).
+    pub fn on_block_types(ref self) -> bool {
+        return true
+    }
+}
+
+/// The import that lowers a program to the block types where it does
+/// (`on_block_types`); nothing otherwise. Explicit, not a glob: a glob's
+/// `vec` would be ambiguous with the standard library's macro.
+pub fn block_types_import(on: bool) -> String {
+    if on {
+        return "#[allow(unused_imports)]\npub use nikaia_std::block::names::{CopyOwned, String, Vec, format, vec};\n"
+    }
+    return ""
+}
+
+/// **Rust's `String`, made a block's text** where a program lowers to the
+/// block types: `nikaia_std::block::Text::from(…)` around a value the
+/// language below builds as a `String` (`to_string`, `to_uppercase`,
+/// `replace`, a joined list, a literal made owned), the same memory (ADR-327
+/// D8); nothing where the setting is off. `Text::from` of a `Text` is the
+/// value, so a sum that is already one passes.
+pub fn block_text_open(on: bool) -> String {
+    if on {
+        return "nikaia_std::block::Text::from("
+    }
+    return ""
+}
+
+/// The other half of `block_text_open`.
+pub fn block_text_close(on: bool) -> String {
+    if on {
+        return ")"
+    }
+    return ""
+}
+
+/// **The method a call resolves to is `std`'s on text or a list**, or
+/// unresolved: only such a call answers Rust's `String`; a `join` of the
+/// program's own type answers what it declares (#490).
+pub fn emit_callee_is_std_text(callee: ref String?) -> bool {
+    let key = callee ?? return true
+    if key.starts_with("str::") || key.starts_with("String::") || key.starts_with("Vec::") {
+        return true
+    }
+    // A number's, a `bool`'s or a `char`'s `to_string` is Rust's too.
+    for scalar in ["i64::", "i32::", "u8::", "u32::", "u64::", "int::", "f64::", "f32::", "bool::", "char::"] {
+        if key.starts_with(scalar) {
+            return true
+        }
+    }
+    return false
+}
+
+/// **A method whose Rust answers a `String`**, which a program on the block
+/// types makes a block's text around the call: each of these, on text, is
+/// text of its own in Nikaia (`join` with its separator, on a list of text).
+pub fn answers_rust_text(written: ref String, args: i64) -> bool {
+    if args == 0 {
+        return written == "to_string" || written == "to_uppercase" || written == "to_lowercase"
+    }
+    if args == 1 {
+        return written == "repeat" || written == "join"
+    }
+    return (written == "replace" && args == 2) || (written == "replacen" && args == 3)
+}
+
+/// What a program's preamble has to say, over all of its files.
+///
+/// `uses_std` and the rest are per-file facts, and the preamble is written
+/// once - so they are joined here rather than guessed at from the entry.
+pub struct EmitNeeds {
+    pub uses_grammar: bool,
+    pub driver: bool,
+    pub uses_std: bool,
+    /// Kap 7.1: a function here declares `throws`, so the error surface is
+    /// reachable and `std`'s is what carries it.
+    pub fails: bool,
+    /// Kap 4.7 across a package: every trait an `impl` in this unit names with
+    /// a package in front of it (ADR-286).
+    ///
+    /// Rust needs a trait **in scope** before its methods can be called, and
+    /// `impl http::Handler for Fixed` does not put it there. So a trait a
+    /// package publishes could be implemented and then not called, in the
+    /// backend's words about the generated file: *"trait `Handler` … is
+    /// implemented but not in scope; perhaps you want to import it"* - a rule
+    /// the program has no way to satisfy, because Nikaia has no import to
+    /// write (ADR-286 D11 brings no names in).
+    ///
+    /// The **same shape in one file compiles**, which is what says this is one
+    /// missing emitted line rather than a question: there the trait is in the
+    /// same module and needs no import.
+    pub foreign_traits: collections::BTreeSet[String],
+}
+
+impl EmitNeeds {
+    /// A program that needs nothing yet: what `join` starts from.
+    pub fn none() -> EmitNeeds {
+        return EmitNeeds { uses_grammar: false, driver: false, uses_std: false, fails: false, foreign_traits: collections::BTreeSet() }
+    }
+
+    /// **Read off the items, with no emitter built** (#727): what a program
+    /// needs is which items it declares and which grammar entries its
+    /// functions enter, the same reading `emit_tables_items` makes of them,
+    /// and building an emitter for it inferred the ledger and ran the checker
+    /// and the prover once more per file.
+    pub fn of(world: ref EmitWorld) -> EmitNeeds {
+        let mut grammars: collections::BTreeMap[String, GrammarDef] = collections::BTreeMap()
+        let mut uses_std = false
+        let mut fails = false
+        for item in world.items {
+            match item.node {
+                Item::Grammar(def) => {
+                    grammars.insert(world.words.resolve(def.name).clone(), def.clone())
+                },
+                Item::Import { .. } => {
+                    uses_std = true
+                },
+                Item::Fn { can_throw, .. } => {
+                    if can_throw {
+                        fails = true
+                    }
+                },
+                else => {},
+            }
+        }
+        return EmitNeeds {
+            uses_grammar: !grammars.is_empty(),
+            driver: emit_uses_driver(world, grammars),
+            uses_std: uses_std,
+            fails: fails,
+            foreign_traits: foreign_traits(world.words, world.items),
+        }
+    }
+
+    /// Both files' needs, as one program's.
+    pub fn join(ref self, other: ref EmitNeeds) -> EmitNeeds {
+        let mut traits = self.foreign_traits.clone()
+        traits.extend(other.foreign_traits.clone())
+        return EmitNeeds {
+            uses_grammar: self.uses_grammar || other.uses_grammar,
+            driver: self.driver || other.driver,
+            uses_std: self.uses_std || other.uses_std,
+            fails: self.fails || other.fails,
+            foreign_traits: traits,
+        }
+    }
+
+    /// The lines at the top of the emitted file.
+    pub fn preamble(ref self) -> String {
+        let mut out: String = ""
+        if self.uses_grammar {
+            out.push_str("use winnow_grammar::grammar;\n")
+        }
+        if self.driver {
+            out.push_str("use winnow_grammar::rt::Parallelism;\n")
+            out.push_str("use winnow_grammar::ParseContext;\n")
+        }
+        // **Always, and allowed to be unused.** It used to be written only
+        // where the program had a `use std::…` line of its own, which is not
+        // the same question: `HashMap` is a name the prelude provides and a
+        // program may write it without importing anything, and such a program
+        // lowered to a file where `TrustedMap` was undeclared - `rustc` about
+        // a file nobody wrote (Part III, C.1). The import is one line, a
+        // locally declared name shadows a glob, and `#[allow]` keeps an unused
+        // one from reaching a reader. `pub use`, because the grammar module
+        // the backend generates reaches these names through a glob of its
+        // own, and a private import is not re-exported into one.
+        out.push_str("#[allow(unused_imports)]\npub use nikaia_std::prelude::*;\n")
+        out.push_str(block_types_import(true))
+        if self.fails {
+            // Kap 7.1: `error.full()` is a method on whatever a `catch` bound,
+            // so the trait has to be in scope even in a program that imports
+            // no `std` module of its own.
+            out.push_str("#[allow(unused_imports)]\npub use nikaia_std::error::Full;\n")
+        }
+        // **A trait reached across a package is imported** (ADR-286), as the
+        // path the program already wrote, because that is the path the
+        // generated crate resolves. `allow(unused_imports)` for the same
+        // reason the two lines above carry it (Part III C.1).
+        for path in self.foreign_traits {
+            out.push_str(f"#[allow(unused_imports)]\npub use {path};\n")
+        }
+        return out
+    }
+}
+
+/// **The abort table** (ADR-300 D9): one row per line of the generated file
+/// that came from a `.nika` line - the generated line, the file, and the line
+/// there. Sorted by the generated line, because the lookup at run time is a
+/// binary search and sorting once here costs the program nothing.
+///
+/// **Every mapped line, and not the ones that "can abort".** Which constructs
+/// abort is a list that would have to be kept correct as the emitter grows, and
+/// getting it wrong means an abort with no Nikaia line - the defect this closes.
+/// The source map already knows which lines came from somewhere, so the table
+/// is that knowledge kept rather than a second judgement about it. What it
+/// costs is a row per line in the binary, which the record accepts: *"paid by
+/// every program and needed by the ones that fail, which is the same trade a
+/// panic message itself already makes."*
+///
+/// **Appended, never prepended.** A table written above the program would move
+/// every line it names, and correcting for its own height is a circle. Rust
+/// does not care where an item sits.
+///
+/// `rows` are the source map's entries as `(generated start, source start,
+/// unit)`, in the order the emitter recorded them, outermost first for any one
+/// place; `paths` are the program's files, indexed the way the map indexes
+/// them, and `sources` their texts.
+///
+/// **The outermost entry wins**: a whole generated *line* is better named by
+/// the statement it came from than by the sub-expression that happens to
+/// start it, so the first entry for a line is the one kept.
+///
+/// **By file, and with the packages beside** (#1351). A package is a crate of
+/// its own (ADR-286 D19), so its lines are lines of its own generated file:
+/// the table names that file (`file!()`, which is how a panic's location
+/// names it too) and is published as `__NIKAIA_PLACES` for a program that
+/// uses the package. `beside` are the Nikaia packages this one uses, by the
+/// name it calls them; through their tables the hook reaches every package.
+/// With `has_main` the table is also `__NIKAIA_SITES`, the one `fn main`
+/// hands the hook.
+pub fn emit_needs_abort_table(rust: ref String, rows: ref Vec[(i64, i64, i64)], paths: ref Vec[String], sources: ref Vec[ref String], beside: ref Vec[String], has_main: bool) -> String {
+    let mut out: String = "\n// ADR-300 D9: the generated file and line, the `.nika` line it came from,\n// and the tables of the packages it uses (#1351).\n"
+    out.push_str("#[doc(hidden)]\npub const __NIKAIA_PLACES: nikaia_std::abort::Places = nikaia_std::abort::Places {\n")
+    out.push_str("file: file!(),\nsites: &[\n")
+    out.push_str(emit_needs_abort_rows(rust, rows, paths, sources))
+    out.push_str("],\nbeside: &[")
+    for name in beside {
+        let crate_name = name.replace("-", "_")
+        out.push_str(f"&::{crate_name}::__NIKAIA_PLACES, ")
+    }
+    out.push_str("],\n};\n")
+    if has_main {
+        out.push_str("const __NIKAIA_SITES: nikaia_std::abort::Places = __NIKAIA_PLACES;\n")
+    }
+    return out
+}
+
+/// The rows of a table, one generated line each.
+fn emit_needs_abort_rows(rust: ref String, rows: ref Vec[(i64, i64, i64)], paths: ref Vec[String], sources: ref Vec[ref String]) -> String {
+    let starts = emit_needs_line_starts(rust)
+    let mut nika: Vec[Vec[i64]] = []
+    for source in sources {
+        nika.push(emit_needs_line_starts(source))
+    }
+    let mut lines: collections::BTreeMap[i64, (i64, i64)] = collections::BTreeMap()
+    for (generated_at, source_at, unit) in rows {
+        let generated = emit_needs_line_at(starts, generated_at)
+        if unit < 0 || unit >= nika.len() {
+            continue
+        }
+        let line = emit_needs_line_at(nika[unit], source_at)
+        lines.entry(generated).or_insert((unit, line))
+    }
+    let mut out: String = ""
+    for (generated, (unit, line)) in lines {
+        let mut path = rust_string("<unknown>")
+        if unit < paths.len() {
+            path = rust_string(paths[unit])
+        }
+        out.push_str(f"    ({generated}, {path}, {line}),\n")
+    }
+    return out
+}
+
+/// Where each line of `text` starts, as byte offsets.
+fn emit_needs_line_starts(text: ref String) -> Vec[i64] {
+    let mut starts: Vec[i64] = [0]
+    let mut at = 0
+    for b in text.bytes() {
+        at += 1
+        if b as i64 == 10 {
+            starts.push(at)
+        }
+    }
+    return starts
+}
+
+/// The line, counted from one, that the byte `offset` stands on: how many
+/// line starts are at or before it.
+fn emit_needs_line_at(starts: ref Vec[i64], offset: i64) -> i64 {
+    let mut low = 0
+    let mut high = starts.len()
+    while low < high {
+        let middle = low + (high - low) / 2
+        if starts[middle] <= offset {
+            low = middle + 1
+        } else {
+            high = middle
+        }
+    }
+    return low
+}

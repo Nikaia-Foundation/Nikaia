@@ -1,0 +1,346 @@
+// crates/nikaia-std/src/compiler/emit_tables.nika
+//
+// **The tables of views** (ADR-294, #125, #855, E11-5): which structs and enums
+// of a file hold a view into the input (Part II, 10.6), and the view-holding
+// fields of each struct that holds two or more (ADR-views-3 D8, D10). The Rust
+// side (`emit/mod.rs`) calls these with the unit's interner and items and puts
+// the answers in its own tables.
+//
+// E12-1 adds the rest of the tables `with_contracts` reads off the items and
+// the ledgers: the grammars, structs and methods of a unit, the structs and
+// errors of the files beside it, the tethered types, the slots a described
+// package's ledger gives, the described functions over maps and the
+// package's view-holding types.
+
+use std::collections
+
+/// Whether `ty` names, anywhere, one of the types `outside` holds. By name,
+/// because a `Symbol` belongs to the parse that interned it.
+pub fn emit_tables_names_outside(words: ref winnow_grammar::InternerContext, ty: ref Type, outside: ref collections::BTreeSet[String]) -> bool {
+    if outside.is_empty() {
+        return false
+    }
+    let code = ty.code ?? return emit_tables_named_plain(words, ty, outside)
+    let result = code.result ?? return false
+    return emit_tables_names_outside(words, result, outside)
+}
+
+fn emit_tables_named_plain(words: ref winnow_grammar::InternerContext, ty: ref Type, outside: ref collections::BTreeSet[String]) -> bool {
+    if outside.contains(words.resolve(ty.name)) {
+        return true
+    }
+    for inner in ty.generics {
+        if emit_tables_names_outside(words, inner, outside) {
+            return true
+        }
+    }
+    return false
+}
+
+/// Whether `ty` names one of the `borrowing` types.
+pub fn emit_tables_names_borrowing(ty: ref Type, borrowing: ref Vec[winnow_grammar::Symbol]) -> bool {
+    let code = ty.code ?? return emit_tables_borrowing_plain(ty, borrowing)
+    // A result that is one of two views handed in is the call's (#730).
+    let mut named = 0
+    for part in ty.generics {
+        if !holds_view(part) && emit_tables_names_borrowing(part, borrowing) {
+            named += 1
+        }
+    }
+    if views_the_call_s(ty, named) {
+        return false
+    }
+    let result = code.result ?? return false
+    return emit_tables_names_borrowing(result, borrowing)
+}
+
+fn emit_tables_borrowing_plain(ty: ref Type, borrowing: ref Vec[winnow_grammar::Symbol]) -> bool {
+    if borrowing.contains(ty.name) {
+        return true
+    }
+    for inner in ty.generics {
+        if emit_tables_names_borrowing(inner, borrowing) {
+            return true
+        }
+    }
+    return false
+}
+
+fn emit_tables_any_holds(words: ref winnow_grammar::InternerContext, types: ref Vec[Type], outside: ref collections::BTreeSet[String]) -> bool {
+    for ty in types {
+        if holds_view(ty) || emit_tables_names_outside(words, ty, outside) {
+            return true
+        }
+    }
+    return false
+}
+
+/// Which structs and enums hold a view into the parser's input: transitively,
+/// so a fixpoint. `outside` names the types another file of the package is
+/// known to hold a view with (Part I 9.1, #544).
+pub fn emit_tables_borrowing_structs_beside(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], outside: ref collections::BTreeSet[String]) -> Vec[winnow_grammar::Symbol] {
+    let mut names: Vec[winnow_grammar::Symbol] = []
+    let mut fields_of: Vec[Vec[Type]] = []
+    let mut borrowing: Vec[winnow_grammar::Symbol] = []
+    for item in items {
+        let mut types: Vec[Type] = []
+        let mut declared: winnow_grammar::Symbol? = null
+        match item.node {
+            Item::Enum { name, variants, .. } => {
+                // An enum holds views the way a struct does, in the types of
+                // what its variants carry.
+                declared = name
+                for variant in variants {
+                    match variant.fields {
+                        VariantFields::Unit => {},
+                        VariantFields::Tuple(tuple) => {
+                            for ty in tuple {
+                                types.push(ty.clone())
+                            }
+                        },
+                        VariantFields::Named(named) => {
+                            for field in named {
+                                types.push(field.ty.clone())
+                            }
+                        },
+                    }
+                }
+            },
+            Item::Struct { name, fields, .. } => {
+                declared = name
+                for field in fields {
+                    types.push(field.ty.clone())
+                }
+            },
+            else => {},
+        }
+        let at = declared ?? continue
+        if emit_tables_any_holds(words, types, outside) {
+            borrowing.push(at)
+        }
+        names.push(at)
+        fields_of.push(types)
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        let mut at = 0
+        for name in names {
+            if !borrowing.contains(name) {
+                for ty in fields_of[at] {
+                    if emit_tables_names_borrowing(ty, borrowing) {
+                        borrowing.push(name)
+                        changed = true
+                        break
+                    }
+                }
+            }
+            at += 1
+        }
+    }
+    return borrowing
+}
+
+/// The view-holding fields of each struct of a unit that holds two or more
+/// (ADR-views-3 D8, D10): one lifetime each, `pub` or not, in the order written.
+/// An error keeps one place.
+pub fn emit_tables_view_slots(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], borrowing: ref collections::BTreeSet[String]) -> Vec[(String, Vec[String])] {
+    let errors = declared_errors(words, items)
+    let mut slots: Vec[(String, Vec[String])] = []
+    for item in items {
+        match item.node {
+            Item::Struct { name, fields, is_extern, .. } => {
+                if is_extern {
+                    continue
+                }
+                let text = words.resolve(name).clone()
+                if errors.contains(text) {
+                    continue
+                }
+                let mut held: Vec[String] = []
+                for field in fields {
+                    if holds_view(field.ty) || emit_tables_names_outside(words, field.ty, borrowing) {
+                        held.push(words.resolve(field.name).clone())
+                    }
+                }
+                if held.len() >= 2 {
+                    slots.push((text, held))
+                }
+            },
+            else => {},
+        }
+    }
+    return slots
+}
+
+/// **What the emitter reads off a unit's items before it writes one**
+/// (#125, E12-1): the grammars by name, the structs, each `impl`'s methods by
+/// `Type::name` and by their name alone, whether a `use` line stands, and
+/// whether a function declares `throws`.
+pub struct EmitTablesItems {
+    pub grammars: collections::BTreeMap[String, GrammarDef],
+    pub structs: collections::BTreeSet[String],
+    pub methods: collections::BTreeMap[String, EmitMethod],
+    /// A method by its name alone, where one `impl` declares it.
+    pub by_name: collections::BTreeMap[String, EmitMethod],
+    pub uses_std: bool,
+    pub fails: bool,
+}
+
+/// The tables of one unit's items.
+pub fn emit_tables_items(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> EmitTablesItems {
+    let mut tables = EmitTablesItems {
+        grammars: collections::BTreeMap(),
+        structs: collections::BTreeSet(),
+        methods: collections::BTreeMap(),
+        by_name: collections::BTreeMap(),
+        uses_std: false,
+        fails: false,
+    }
+    // Two impls, one name: nothing here can tell them apart, so neither is
+    // used.
+    let mut twice: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in items {
+        match item.node {
+            Item::Grammar(def) => {
+                tables.grammars.insert(words.resolve(def.name).clone(), def.clone())
+            },
+            Item::Struct { name, .. } => {
+                tables.structs.insert(words.resolve(name).clone())
+            },
+            Item::Import { .. } => {
+                tables.uses_std = true
+            },
+            Item::Fn { can_throw, .. } => {
+                if can_throw {
+                    tables.fails = true
+                }
+            },
+            Item::Impl { target, methods, .. } => {
+                let owner = words.resolve(target.name).clone()
+                for method in methods {
+                    emit_tables_method_into(words, owner, method, tables, twice)
+                }
+            },
+            else => {},
+        }
+    }
+    return tables
+}
+
+fn emit_tables_method_into(words: ref winnow_grammar::InternerContext, owner: String, method: ref Spanned[Item], mut tables: EmitTablesItems, mut twice: collections::BTreeSet[String]) {
+    match method.node {
+        Item::Fn { name, receiver, args, ret_type, .. } => {
+            let named = name ?? return
+            let text = words.resolve(named).clone()
+            let info = EmitMethod { receiver: receiver?.clone(), returns_value: ret_type != null, args: args.clone() }
+            tables.methods.insert(f"{owner}::{text}", info.clone())
+            if twice.contains(text) {
+                return
+            }
+            if tables.by_name.contains_key(text) {
+                tables.by_name.remove(text)
+                twice.insert(text)
+                return
+            }
+            tables.by_name.insert(text, info)
+        },
+        else => {},
+    }
+}
+
+/// The structs the other files of the package declare, by name.
+pub fn emit_tables_structs_beside(beside: ref Vec[ParsedView]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for other in beside {
+        for item in other.items {
+            match item.node {
+                Item::Struct { name, .. } => {
+                    out.insert(other.text(name))
+                },
+                else => {},
+            }
+        }
+    }
+    return out
+}
+
+/// The types the units declare an `impl Error for …` for (`declared_errors`).
+pub fn emit_tables_declared_errors(units: ref Vec[ParsedView]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for unit in units {
+        out.extend(declared_errors(unit.words, unit.items))
+    }
+    return out
+}
+
+/// The types tied to the input: those this unit's ledger tethers, and the
+/// view-holding structs of the files beside it.
+pub fn emit_tables_tethered(own: ref Ledger, beside: ref Vec[ParsedView]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for (name, contract) in own.types {
+        if !contract.tethered.is_empty() {
+            out.insert(name.clone())
+        }
+    }
+    let none: collections::BTreeSet[String] = collections::BTreeSet()
+    for other in beside {
+        for held in emit_tables_borrowing_structs_beside(other.words, other.items, none) {
+            out.insert(other.text(held))
+        }
+    }
+    return out
+}
+
+/// **The places of each type another package declares** (ADR-views-3 D10): the
+/// ledger's `tethered` lists its view fields in the order written, one
+/// lifetime each where there are two or more. An enum, and a type a function
+/// there throws, keeps one place.
+pub fn emit_tables_read_view_slots(ledger: ref Ledger) -> collections::BTreeMap[String, Vec[String]] {
+    let mut thrown: collections::BTreeSet[String] = collections::BTreeSet()
+    for (_, function) in ledger.functions {
+        thrown.extend(function.fails_with.clone())
+    }
+    let mut out: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    for (name, contract) in ledger.types {
+        if contract.tethered.len() >= 2 && contract.variants.is_empty() && !thrown.contains(name) {
+            out.insert(name.clone(), contract.tethered.clone())
+        }
+    }
+    return out
+}
+
+/// The functions of a described Rust crate with a map in their signature,
+/// by their last segment.
+pub fn emit_tables_described_maps(described: ref Ledger) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for (key, contract) in described.functions {
+        let signature = contract.signature ?? continue
+        let text = signature.text()
+        if text.contains("HashMap") || text.contains("HashSet") {
+            out.push((key.rsplit("::").next() ?? "").clone())
+        }
+    }
+    return out
+}
+
+/// Every view-holding type the files of a package declare, by name: each
+/// file's `emit_tables_borrowing_structs_beside` read against what the others
+/// found, until nothing more is found - a struct in one file can hold an
+/// `enum` of a second that holds a struct of a third.
+pub fn emit_tables_package_borrowing(units: ref Vec[ParsedView]) -> collections::BTreeSet[String] {
+    let mut found: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut grew = true
+    while grew {
+        let before = found.len()
+        for unit in units {
+            let mut more: Vec[String] = []
+            for held in emit_tables_borrowing_structs_beside(unit.words, unit.items, found) {
+                more.push(unit.text(held))
+            }
+            found.extend(more.clone())
+        }
+        grew = found.len() != before
+    }
+    return found
+}

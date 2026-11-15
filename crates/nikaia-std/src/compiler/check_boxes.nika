@@ -1,0 +1,450 @@
+// crates/nikaia-std/src/compiler/check_boxes.nika
+//
+// **What a pattern asks of a part the compiler boxed, and the `match` that
+// misses a case** - moved from the compiler's checker (ADR-294, #125, #558,
+// C-5b). `Expr::Add(Expr::Num(n), b)` looks inside a box (ADR-246 D4, D5); the
+// lowering reaches one level of that, and the rest is `NK1193`. A `match`
+// that names too few variants is `NK1151` (ADR-291).
+
+use std::collections
+
+/// Where a pattern stands, for what the lowering of a boxed part reaches
+/// (ADR-246 D5).
+pub enum CheckDepth {
+    /// The arm's own pattern.
+    Arm,
+    /// Inside a boxed part the arm looks into.
+    InsideABox,
+    /// One alternative of an `|`.
+    InAlternative,
+}
+
+impl CheckState {
+    /// **`NK1193`: a pattern that looks inside a part the compiler boxed,
+    /// further than the lowering reaches** (ADR-246 D4, D5).
+    pub fn a_pattern_inside_a_box(ref mut self, world: ref CheckWorld, pattern: ref MatchPattern, span: ref Span) sync {
+        self.a_pattern_inside_a_box_at(world, pattern, span, CheckDepth::Arm)
+    }
+
+    fn a_pattern_inside_a_box_at(ref mut self, world: ref CheckWorld, pattern: ref MatchPattern, span: ref Span, at: CheckDepth) sync {
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                let mut written: Vec[String] = []
+                for symbol in path {
+                    written.push(world.words.resolve(symbol).clone())
+                }
+                for index in 0..<parts.len() {
+                    let part = parts[index]
+                    if !self.boxed_part(world, path, index) || binds_a_part(part) {
+                        self.a_pattern_inside_a_box_at(world, part, span, at)
+                    } else {
+                        let mut why: String = ""
+                        let mut reported = true
+                        match at {
+                            CheckDepth::Arm => {
+                                // One level is lowered; what is inside that part
+                                // has to bind its own boxed parts by name.
+                                self.a_pattern_inside_a_box_at(world, part, span, CheckDepth::InsideABox)
+                                reported = false
+                            }
+                            CheckDepth::InsideABox => {
+                                why = "inside a part that is itself behind a pointer"
+                            }
+                            CheckDepth::InAlternative => {
+                                why = "in one alternative of an `|` pattern"
+                            }
+                        }
+                        if reported {
+                            let owner = written.join("::")
+                            self.findings.push(check_refusal("NK1193", span, f"This pattern looks inside part {index} of `{owner}`, which holds its own type, {why}, and patterns can't look that far yet.", ["A part that holds its own type is stored behind a pointer. A pattern can look inside one such part per arm, outside an `|`."], "Bind the part to a name here, and `match` on that name inside the arm."))
+                        }
+                    }
+                }
+            }
+            MatchPattern::Or(alternatives) => {
+                for alternative in alternatives {
+                    self.a_pattern_inside_a_box_at(world, alternative, span, CheckDepth::InAlternative)
+                }
+            }
+            else => {}
+        }
+    }
+
+    /// The names a pattern binds **whole** to a boxed part: `a` in
+    /// `Expr::Add(a, b)`, which the arm opens and a guard reads through the
+    /// box.
+    pub fn boxed_names(ref self, world: ref CheckWorld, pattern: ref MatchPattern) -> Vec[String] sync {
+        let mut out: Vec[String] = []
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                for at in 0..<parts.len() {
+                    let part = parts[at]
+                    match part {
+                        MatchPattern::Path(one) => {
+                            if one.len() == 1 && self.boxed_part(world, path, at) {
+                                out.push(world.words.resolve(one[0]).clone())
+                            }
+                        }
+                        MatchPattern::Tuple { .. } => {
+                            if !self.boxed_part(world, path, at) {
+                                for name in self.boxed_names(world, part) {
+                                    out.push(name)
+                                }
+                            }
+                        }
+                        else => {}
+                    }
+                }
+            }
+            else => {}
+        }
+        return out
+    }
+
+    /// The types of the names bound inside the boxed parts a pattern looks
+    /// into, where the variant says them: each part is typed by the path its
+    /// own pattern names, which is the boxed type.
+    pub fn typed_inside_boxes(ref self, world: ref CheckWorld, pattern: ref MatchPattern, mut out: collections::BTreeMap[String, Ty]) sync {
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                for at in 0..<parts.len() {
+                    let part = parts[at]
+                    if self.boxed_part(world, path, at) && !binds_a_part(part) {
+                        let mut owner: String = ""
+                        match part {
+                            MatchPattern::Tuple { path, .. } => {
+                                if path.len() >= 2 {
+                                    owner = world.words.resolve(path[path.len() - 2]).clone()
+                                }
+                            }
+                            MatchPattern::Named { path, .. } => {
+                                if path.len() >= 2 {
+                                    owner = world.words.resolve(path[path.len() - 2]).clone()
+                                }
+                            }
+                            else => {}
+                        }
+                        if owner.len() > 0 {
+                            let on = Ty::Named { name: owner, args: [], view: false }
+                            let typed = self.pattern_parts(world, part, on)
+                            for (name, ty) in typed {
+                                out.insert(name.clone(), ty.clone())
+                            }
+                        }
+                    } else {
+                        self.typed_inside_boxes(world, part, out)
+                    }
+                }
+            }
+            MatchPattern::Or(alternatives) => {
+                for alternative in alternatives {
+                    self.typed_inside_boxes(world, alternative, out)
+                }
+            }
+            else => {}
+        }
+    }
+
+    /// The names a pattern binds inside the boxed parts it looks into.
+    pub fn names_inside_boxes(ref self, world: ref CheckWorld, pattern: ref MatchPattern, mut out: Vec[String]) sync {
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                for at in 0..<parts.len() {
+                    let part = parts[at]
+                    if self.boxed_part(world, path, at) && !binds_a_part(part) {
+                        for name in pattern_names(world, part) {
+                            out.push(name)
+                        }
+                    } else {
+                        self.names_inside_boxes(world, part, out)
+                    }
+                }
+            }
+            MatchPattern::Or(alternatives) => {
+                for alternative in alternatives {
+                    self.names_inside_boxes(world, alternative, out)
+                }
+            }
+            else => {}
+        }
+    }
+
+    /// **Whether part `at` of a variant's tuple is behind a box** (ADR-246 D1).
+    pub fn boxed_part(ref self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], at: i64) -> bool sync {
+        if path.len() < 2 {
+            return false
+        }
+        let owner = world.words.resolve(path[path.len() - 2]).clone()
+        let variant = world.words.resolve(path[path.len() - 1]).clone()
+        if !self.facts.boxed_members.contains_key(owner) {
+            return false
+        }
+        let members = self.facts.boxed_members[owner]?.clone() ?? collections::BTreeSet()
+        return members.contains(boxed_member(variant, at, ""))
+    }
+
+    /// **Whether an arm's pattern looks inside a boxed part**: such an arm is
+    /// lowered with a guard (ADR-246 D5), and like any guarded arm it covers
+    /// no variant on its own (`NK1151`).
+    pub fn looks_inside_a_box(ref self, world: ref CheckWorld, pattern: ref MatchPattern) -> bool sync {
+        match pattern {
+            MatchPattern::Tuple { path, parts } => {
+                for at in 0..<parts.len() {
+                    let part = parts[at]
+                    if self.boxed_part(world, path, at) && !binds_a_part(part) {
+                        return true
+                    }
+                    if self.looks_inside_a_box(world, part) {
+                        return true
+                    }
+                }
+            }
+            MatchPattern::Or(alternatives) => {
+                for alternative in alternatives {
+                    if self.looks_inside_a_box(world, alternative) {
+                        return true
+                    }
+                }
+            }
+            else => {}
+        }
+        return false
+    }
+
+    /// **`NK1151`: a `match` that names too few cases.** A guarded arm covers
+    /// nothing (ADR-291 D11); where the type is not known nothing is claimed
+    /// (D3); an error of several types is a handler's, which always needs
+    /// `else` (ADR-280 D4); `bool` is two arms; an enum's variants are
+    /// counted, an or-pattern naming every variant in it (D10).
+    ///
+    /// **Over a `T?` with a `null` arm** (ADR-352 D2) the nothing is covered by
+    /// an unguarded `null` arm or by `else`, and the other arms are counted
+    /// against the `T`: a bare name there binds the `T` and covers it.
+    ///
+    /// **Over `error`, a type named whole covers that type** (ADR-357 D1,
+    /// #673): its bare name or its path, and the `match` is complete when
+    /// every type that can arrive is covered.
+    pub fn a_match_that_misses_a_case(ref mut self, world: ref CheckWorld, on: ref Ty, arms: ref Vec[MatchArm], over_error: bool, span: ref Span) sync {
+        match on {
+            Ty::Nullable(inner) => {
+                if shapes_has_a_null_arm(arms) {
+                    let mut covered = false
+                    for arm in arms {
+                        if arm.guard == null && (shapes_is_null(arm.pattern) || shapes_is_otherwise(arm.pattern)) {
+                            covered = true
+                        }
+                    }
+                    if !covered {
+                        self.a_case_is_missing("null", span)
+                        return
+                    }
+                    self.a_match_that_misses_a_case_of(world, inner, arms, over_error, span)
+                    return
+                }
+            }
+            else => {}
+        }
+        self.a_match_that_misses_a_case_of(world, on, arms, over_error, span)
+    }
+
+    fn a_match_that_misses_a_case_of(ref mut self, world: ref CheckWorld, on: ref Ty, arms: ref Vec[MatchArm], over_error: bool, span: ref Span) sync {
+        for arm in arms {
+            let a_type = over_error && self.a_type_named_whole(world, arm.pattern) != null
+            if arm.guard == null && catches_everything(arm.pattern) && !a_type {
+                return
+            }
+        }
+        let mut name: String = ""
+        match on {
+            Ty::Named { name: written, args, view } => {
+                if written == "Error" && args.len() > 1 && !view {
+                    // **A closed set's members are each named** (ADR-351
+                    // D3, ADR-357 D1): every type that can arrive, by its
+                    // variants or by its name.
+                    self.a_closed_set_that_misses_a_case(world, args, arms, span)
+                    return
+                }
+                name = written.clone()
+            }
+            else => return
+        }
+        if over_error {
+            for arm in arms {
+                if arm.guard == null && (self.a_type_named_whole(world, arm.pattern) ?? "") == name {
+                    return
+                }
+            }
+        }
+        if name == "bool" {
+            let mut has_true = false
+            let mut has_false = false
+            for arm in arms {
+                match arm.pattern {
+                    MatchPattern::Literal(literal) => {
+                        match literal {
+                            Expr::LitBool(value, _) => {
+                                if value {
+                                    has_true = true
+                                } else {
+                                    has_false = true
+                                }
+                            }
+                            else => {}
+                        }
+                    }
+                    else => {}
+                }
+            }
+            if !has_true || !has_false {
+                let mut missing: Vec[String] = []
+                if !has_true {
+                    missing.push("true")
+                }
+                if !has_false {
+                    missing.push("false")
+                }
+                let text = missing.join("`, `")
+                self.a_case_is_missing(text, span)
+            }
+            return
+        }
+        if !self.enums.contains_key(name) {
+            // **A struct pattern that only binds covers every value** (#730,
+            // Part I 3.4): `Point { x, .. }` over a `Point`.
+            for arm in arms {
+                if arm.guard == null && check_boxes_a_whole_struct(world, arm.pattern, name) {
+                    return
+                }
+            }
+            self.a_case_is_missing("else", span)
+            return
+        }
+        let variants = self.enums[name]?.clone() ?? collections::BTreeSet()
+        let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+        for arm in arms {
+            if arm.guard == null && !self.looks_inside_a_box(world, arm.pattern) {
+                variants_named(world, arm.pattern, named)
+            }
+        }
+        let mut missing: Vec[String] = []
+        for variant in variants {
+            if !named.contains(variant) {
+                missing.push(f"{name}::{variant}")
+            }
+        }
+        if missing.len() > 0 {
+            let text = missing.join("`, `")
+            self.a_case_is_missing(text, span)
+        }
+    }
+
+    /// **The type an arm's pattern names whole** (ADR-357 D1): a bare name of
+    /// one of the program's types, or a path that is a type of the program's
+    /// or of a library's (`regex::Error`). `null` for a binding, a variant
+    /// and every other pattern.
+    pub fn a_type_named_whole(ref self, world: ref CheckWorld, pattern: ref MatchPattern) -> String? sync {
+        let mut parts: Vec[String] = []
+        match pattern {
+            MatchPattern::Path(path) => {
+                for symbol in path {
+                    parts.push(world.words.resolve(symbol).clone())
+                }
+            },
+            else => return null,
+        }
+        let written = parts.join("::")
+        if self.structs.contains_key(written) || self.enums.contains_key(written) {
+            return written
+        }
+        if parts.len() >= 2 && (world.library.types.contains_key(written) || world.own.types.contains_key(written)) {
+            return written
+        }
+        return null
+    }
+
+    // Every member of a closed set of errors, and each case of one that is an
+    // enum, has an arm.
+    fn a_closed_set_that_misses_a_case(ref mut self, world: ref CheckWorld, members: ref Vec[Ty], arms: ref Vec[MatchArm], span: ref Span) sync {
+        let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+        for arm in arms {
+            if arm.guard == null {
+                check_boxes_qualified(world, arm.pattern, named)
+            }
+        }
+        let mut missing: Vec[String] = []
+        for member in members {
+            let name: String = match member {
+                Ty::Named { name, .. } => name.clone(),
+                else => continue,
+            }
+            if named.contains(name) {
+                continue
+            }
+            if !self.enums.contains_key(name) {
+                missing.push(name.clone())
+                continue
+            }
+            let variants = self.enums[name]?.clone() ?? collections::BTreeSet()
+            for variant in variants {
+                if !named.contains(f"{name}::{variant}") {
+                    missing.push(f"{name}::{variant}")
+                }
+            }
+        }
+        if missing.len() > 0 {
+            let text = missing.join("`, `")
+            self.a_case_is_missing(text, span)
+        }
+    }
+}
+
+// What an arm names, qualified: `Type::Variant` for a variant, `Type` for a
+// binding of a whole member (`Type(e)`, `Type { .. }`).
+fn check_boxes_qualified(world: ref CheckWorld, pattern: ref MatchPattern, mut out: collections::BTreeSet[String]) sync {
+    match pattern {
+        MatchPattern::Path(path) => check_boxes_path(world, path, out),
+        MatchPattern::Tuple { path, .. } => check_boxes_path(world, path, out),
+        MatchPattern::Named { path, .. } => check_boxes_path(world, path, out),
+        MatchPattern::Or(alternatives) => {
+            for alternative in alternatives {
+                check_boxes_qualified(world, alternative, out)
+            }
+        }
+        else => {}
+    }
+}
+
+fn check_boxes_path(world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], mut out: collections::BTreeSet[String]) sync {
+    let n = path.len() as i64
+    if n == 1 {
+        out.insert(world.words.resolve(path[0]).clone())
+    } else if n >= 2 {
+        out.insert(f"{world.words.resolve(path[n - 2])}::{world.words.resolve(path[n - 1])}")
+        // **And whole**, as a library's member is named: `io::IoError::NotFound`
+        // and `regex::Error` (ADR-357 D1).
+        let mut whole: Vec[String] = []
+        for symbol in path {
+            whole.push(world.words.resolve(symbol).clone())
+        }
+        out.insert(whole.join("::"))
+    }
+}
+
+/// Whether `pattern` is a struct pattern over `name` whose every field is a
+/// binding, `_`, or such a pattern again: it matches every value of the struct.
+fn check_boxes_a_whole_struct(world: ref CheckWorld, pattern: ref MatchPattern, name: ref String) -> bool sync {
+    return match pattern {
+        MatchPattern::Named { path, fields, .. } => {
+            if path.len() != 1 || f"{world.words.resolve(path[0])}" != name {
+                return false
+            }
+            for field in fields {
+                if !catches_everything(field.pat) {
+                    return false
+                }
+            }
+            true
+        },
+        else => false,
+    }
+}

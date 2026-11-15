@@ -1,5 +1,7 @@
 # ADR-views-1: A Part Taken out of a `let mut` View of a Place Is Given Back Before the View Ends, as out of a `mut` Parameter
 
+> **Note (#1600, 2026-11-15):** `crates/nikaia-std/src/tools/` has moved to `crates/nikaia-std/src/compiler/` (its generated Rust to `compiler/lowered/`). The text below keeps the old path; the Rust module is still `nikaia_std::tools`.
+
 **Status:** Accepted
 **Date:** October 29, 2026 (owner's decision, option 1; #949); D6 October 29, 2026 (owner's decision, option 1; #979)
 **Answers:** how a program takes a part out of a place it changes through a

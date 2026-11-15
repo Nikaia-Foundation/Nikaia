@@ -1,0 +1,613 @@
+// crates/nikaia-std/src/compiler/bounds_body.nika
+//
+// **What a loop's body does, as the aggressive bounds and overflow walk asks
+// it** (ADR-306 D4, D7), moved from the compiler's `bounds` (ADR-294, #125):
+// whether a `break` leaves the loop from its body, which lists a turn pushes
+// onto exactly once, and which names a lambda, a task, an `overlap` branch or
+// a `select` arm changes or hands on - a name the walk may not keep a fact
+// about, since what runs there runs when it likes.
+//
+// Each is a question asked of every statement and expression in a body, so
+// one walk answers all three, told which by `Ask`.
+
+use std::collections
+
+enum Ask {
+    /// A `break`, `continue`, `return`, `throw` or `?` anywhere: a way out of
+    /// a turn before its end.
+    Leaves,
+    /// A `break` that leaves this loop: not one inside a loop, a lambda or a
+    /// task within it.
+    Breaks,
+    /// **Every `break` and `continue` that leaves this loop's turn**, counted:
+    /// not one inside a loop, a lambda or a task within it.
+    Jumps,
+    /// What changes `list`'s length or hands it on: one for a method
+    /// `keeps_length` does not know, two for passing it to a call that is
+    /// not one of the free functions named in the set, whose parameters are
+    /// all read-only.
+    Changes(String, collections::BTreeSet[String]),
+    /// The names a deferred body changes or hands on.
+    Pinned,
+    /// **Every name assigned anywhere** (ADR-361 D1): what a loop's turn may
+    /// change, deferred or not.
+    Assigned,
+    /// **The names the prover may not follow as a mutable whole number**
+    /// (ADR-361 D1): what a deferred body changes, and every name handed to a
+    /// call or a method, which a `mut` parameter changes in place with
+    /// nothing at the call to show it (Part I 6.4). Not a name handed to one
+    /// of the functions named in the set, whose parameters are all read-only,
+    /// nor a method's receiver: no method on a whole number changes it. Both
+    /// only outside a deferred body.
+    Untracked(collections::BTreeSet[String]),
+    /// **What may give `name` a value other than `binding`** (ADR-361 D13,
+    /// #1516): an assignment to it that is not `name = binding`, one in a
+    /// deferred body or a `match` arm (whose pattern may bind the name
+    /// again), and the name handed to a call or a method, whose `mut`
+    /// parameter may change it.
+    Follows(String, String),
+}
+
+struct Tally {
+    found: bool,
+    count: i64,
+    names: collections::BTreeSet[String],
+}
+
+fn tally() -> Tally {
+    return Tally { found: false, count: 0, names: collections::BTreeSet() }
+}
+
+/// **Whether a `break` leaves this loop from its body** - not from a loop, a
+/// lambda or a task inside it.
+pub fn breaks(body: ref Block, words: ref winnow_grammar::InternerContext) -> bool {
+    let mut found = tally()
+    tally_block(body, Ask::Breaks, false, words, found)
+    return found.found
+}
+
+/// **How many `break`s and `continue`s leave this loop's turn** from its
+/// body (ADR-361 D10): each is a place an invariant must hold.
+pub fn turn_jumps(body: ref Block, words: ref winnow_grammar::InternerContext) -> i64 {
+    let mut found = tally()
+    tally_block(body, Ask::Jumps, false, words, found)
+    return found.count
+}
+
+/// **The names a lambda, a task, an `overlap` branch or a `select` arm in
+/// `body` changes or hands on**: what it assigns (through an index or a
+/// field to the name under them), a method's receiver, and a call's
+/// arguments that are names.
+pub fn pinned_in(body: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut found = tally()
+    tally_block(body, Ask::Pinned, false, words, found)
+    return found.names
+}
+
+/// **Every name a statement assigns**, at any depth (ADR-361 D1).
+pub fn assigned_in_statement(stmt: ref Stmt, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut found = tally()
+    tally_statement(stmt, Ask::Assigned, false, words, found)
+    return found.names
+}
+
+/// **Every name a block assigns**, at any depth (ADR-361 D1).
+pub fn assigned_in(body: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut found = tally()
+    tally_block(body, Ask::Assigned, false, words, found)
+    return found.names
+}
+
+/// **Every name an expression assigns**, at any depth (ADR-361 D1).
+pub fn assigned_in_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut found = tally()
+    tally_expr(expr, Ask::Assigned, false, words, found)
+    return found.names
+}
+
+/// **Whether `body` changes `name` only by `name = binding`** (ADR-361 D13,
+/// #1516): every assignment to it is that one, outside a deferred body and a
+/// `match` arm, it is handed to no call or method, and nothing in the body
+/// binds `binding` again, so each value it takes there is one the binding
+/// had.
+pub fn follows_only(body: ref Block, name: ref String, binding: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    let mut found = tally()
+    tally_block(body, Ask::Follows(name.clone(), binding.clone()), false, words, found)
+    return !found.found && !rebinds(body, binding, words)
+}
+
+/// **The names in `body` the prover may not follow as mutable whole
+/// numbers** (ADR-361 D1): changed by a deferred body or through an index or
+/// a field, or handed to a call or a method that may change it: not to one
+/// of `readers`, the functions whose parameters are all read-only (Part I:
+/// only a `mut` parameter changes the caller's value).
+pub fn untracked_in(body: ref Block, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] sync {
+    let mut found = tally()
+    tally_block(body, Ask::Untracked(readers.clone()), false, words, found)
+    return found.names
+}
+
+/// **The lists a loop's body pushes onto exactly once per turn** (ADR-306
+/// D4): one `xs.push(v)` among the body's own statements, nothing else that
+/// changes `xs`'s length or hands it on, nothing that binds it again, it is
+/// not `pinned`, and there is no way out of a turn before its end.
+pub fn filled_once(body: ref Block, pinned: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> Vec[String] {
+    let mut leaving = tally()
+    tally_block(body, Ask::Leaves, false, words, leaving)
+    if leaving.found {
+        return []
+    }
+    let mut pushed: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    for stmt in body.stmts {
+        let list = pushed_onto(stmt.node, words) ?? continue
+        let before = pushed.get(list) ?? 0
+        pushed.insert(list, before + 1)
+    }
+    let mut once: Vec[String] = []
+    for (list, count) in pushed {
+        if count != 1 || pinned.contains(list) {
+            continue
+        }
+        let mut changes = tally()
+        tally_block(body, Ask::Changes(list.clone(), collections::BTreeSet()), false, words, changes)
+        if changes.count == 1 && !rebinds(body, list, words) {
+            once.push(list.clone())
+        }
+    }
+    return once
+}
+
+/// `xs.push(v)` as a statement of its own: the list's name.
+fn pushed_onto(stmt: ref Stmt, words: ref winnow_grammar::InternerContext) -> String? {
+    let value = match stmt {
+        Stmt::Expr(value) => value,
+        else => return null,
+    }
+    return match value {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if words.resolve(method) != "push" || args.len() != 1 {
+                return null
+            }
+            variable_text(receiver, words)
+        },
+        else => null,
+    }
+}
+
+fn variable_text(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    return match expr {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        else => null,
+    }
+}
+
+/// A callee by the name it is written with: `f`, `scalar::from`.
+fn body_callee_text(func: ref Expr, words: ref winnow_grammar::InternerContext) -> String? sync {
+    return match func {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        Expr::Path(segments, _) => {
+            let mut joined: String = ""
+            for segment in segments {
+                if !joined.is_empty() {
+                    joined.push_str("::")
+                }
+                joined.push_str(words.resolve(segment))
+            }
+            joined
+        },
+        else => null,
+    }
+}
+
+/// The name an assignment's target is under, through indexes and fields.
+fn assigned_root(target: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    return match target {
+        Expr::Index { base, .. } => assigned_root(base, words),
+        Expr::Field { base, .. } => assigned_root(base, words),
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        else => null,
+    }
+}
+
+fn add_variables(exprs: ref Vec[Expr], words: ref winnow_grammar::InternerContext, mut names: collections::BTreeSet[String]) {
+    for e in exprs {
+        let name = variable_text(e, words) ?? continue
+        names.insert(name)
+    }
+}
+
+fn add_variable(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut names: collections::BTreeSet[String]) {
+    let name = variable_text(expr, words) ?? return
+    names.insert(name)
+}
+
+fn add_root(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut names: collections::BTreeSet[String]) {
+    let name = assigned_root(expr, words) ?? return
+    names.insert(name)
+}
+
+fn add_roots(exprs: ref Vec[Expr], words: ref winnow_grammar::InternerContext, mut names: collections::BTreeSet[String]) {
+    for e in exprs {
+        add_root(e, words, names)
+    }
+}
+
+fn names_the(exprs: ref Vec[Expr], list: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    for e in exprs {
+        if (variable_text(e, words) ?? "") == list {
+            return true
+        }
+    }
+    return false
+}
+
+fn tally_block(block: ref Block, ask: ref Ask, deferred: bool, words: ref winnow_grammar::InternerContext, mut tally: Tally) {
+    for stmt in block.stmts {
+        tally_statement(stmt.node, ask, deferred, words, tally)
+    }
+}
+
+fn tally_statement(stmt: ref Stmt, ask: ref Ask, deferred: bool, words: ref winnow_grammar::InternerContext, mut tally: Tally) {
+    match ask {
+        Ask::Leaves => match stmt {
+            Stmt::Break => { tally.found = true },
+            Stmt::Continue => { tally.found = true },
+            Stmt::Return(_) => { tally.found = true },
+            else => {},
+        },
+        Ask::Breaks => match stmt {
+            Stmt::Break => { tally.found = true },
+            // A `break` in a loop inside leaves that loop.
+            Stmt::For { .. } => return,
+            Stmt::While { .. } => return,
+            else => {},
+        },
+        Ask::Jumps => match stmt {
+            Stmt::Break => { tally.count += 1 },
+            Stmt::Continue => { tally.count += 1 },
+            Stmt::For { .. } => return,
+            Stmt::While { .. } => return,
+            else => {},
+        },
+        Ask::Pinned => {
+            if deferred {
+                match stmt {
+                    Stmt::Assign { target, .. } => {
+                        let root = assigned_root(target, words)
+                        if root != null {
+                            tally.names.insert(root ?? "")
+                        }
+                    },
+                    else => {},
+                }
+            }
+        },
+        Ask::Changes(_, _) => {},
+        Ask::Assigned => match stmt {
+            Stmt::Assign { target, .. } => {
+                let root = assigned_root(target, words)
+                if root != null {
+                    tally.names.insert(root ?? "")
+                }
+            },
+            else => {},
+        },
+        Ask::Follows(name, binding) => match stmt {
+            Stmt::Assign { target, op, value } => {
+                if (assigned_root(target, words) ?? "") == name {
+                    let plain = op == null
+                        && variable_text(target, words) != null
+                        && (variable_text(value, words) ?? "") == binding
+                    if deferred || !plain {
+                        tally.found = true
+                    }
+                }
+            },
+            else => {},
+        },
+        Ask::Untracked(_) => {
+            match stmt {
+                Stmt::Assign { target, .. } => {
+                    // Through an index or a field, or from a deferred body.
+                    let root = assigned_root(target, words)
+                    let direct = variable_text(target, words) != null
+                    if root != null && (deferred || !direct) {
+                        tally.names.insert(root ?? "")
+                    }
+                },
+                else => {},
+            }
+        },
+    }
+    match stmt {
+        Stmt::For { iter, body, .. } => {
+            tally_expr(iter, ask, deferred, words, tally)
+            tally_block(body, ask, deferred, words, tally)
+        },
+        Stmt::While { cond, body } => {
+            tally_expr(cond, ask, deferred, words, tally)
+            tally_block(body, ask, deferred, words, tally)
+        },
+        Stmt::Let { value, .. } => tally_expr(value, ask, deferred, words, tally),
+        Stmt::Comptime { value, .. } => tally_expr(value, ask, deferred, words, tally),
+        Stmt::Expr(value) => tally_expr(value, ask, deferred, words, tally),
+        Stmt::Assign { target, value, .. } => {
+            tally_expr(target, ask, deferred, words, tally)
+            tally_expr(value, ask, deferred, words, tally)
+        },
+        Stmt::Return(value) => tally_maybe(value, ask, deferred, words, tally),
+        else => {},
+    }
+}
+
+fn tally_maybe(expr: ref Expr?, ask: ref Ask, deferred: bool, words: ref winnow_grammar::InternerContext, mut tally: Tally) {
+    tally_expr(expr ?? return, ask, deferred, words, tally)
+}
+
+fn tally_maybe_block(block: ref Block?, ask: ref Ask, deferred: bool, words: ref winnow_grammar::InternerContext, mut tally: Tally) {
+    tally_block(block ?? return, ask, deferred, words, tally)
+}
+
+fn tally_all(exprs: ref Vec[Expr], ask: ref Ask, deferred: bool, words: ref winnow_grammar::InternerContext, mut tally: Tally) {
+    for e in exprs {
+        tally_expr(e, ask, deferred, words, tally)
+    }
+}
+
+fn tally_config(config: ref Vec[ConfigArg], ask: ref Ask, deferred: bool, words: ref winnow_grammar::InternerContext, mut tally: Tally) {
+    for c in config {
+        tally_expr(c.value, ask, deferred, words, tally)
+    }
+}
+
+fn tally_fields(fields: ref Vec[FieldInit], ask: ref Ask, deferred: bool, words: ref winnow_grammar::InternerContext, mut tally: Tally) {
+    for field in fields {
+        tally_maybe(field.value, ask, deferred, words, tally)
+    }
+}
+
+/// What one expression, by itself, says to the question.
+fn tally_here(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_grammar::InternerContext, mut tally: Tally) {
+    match ask {
+        Ask::Leaves => match expr {
+            Expr::Break(_) => { tally.found = true },
+            Expr::Continue(_) => { tally.found = true },
+            Expr::Return(_, _) => { tally.found = true },
+            Expr::Throw(_, _) => { tally.found = true },
+            Expr::Try(_, _) => { tally.found = true },
+            else => {},
+        },
+        Ask::Breaks => match expr {
+            Expr::Break(_) => { tally.found = true },
+            else => {},
+        },
+        Ask::Jumps => match expr {
+            Expr::Break(_) => { tally.count += 1 },
+            Expr::Continue(_) => { tally.count += 1 },
+            else => {},
+        },
+        Ask::Changes(list, readers) => match expr {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                if (variable_text(receiver, words) ?? "") == list && !keeps_length(words.resolve(method)) {
+                    tally.count += 1
+                } else if names_the(args, list, words) {
+                    tally.count += 2
+                }
+            },
+            Expr::SafeMethod { receiver, method, args, .. } => {
+                if (variable_text(receiver, words) ?? "") == list && !keeps_length(words.resolve(method)) {
+                    tally.count += 1
+                } else if names_the(args, list, words) {
+                    tally.count += 2
+                }
+            },
+            Expr::Call { func, args, .. } if names_the(args, list, words) => {
+                if !readers.contains(variable_text(func, words) ?? "") {
+                    tally.count += 2
+                }
+            },
+            else => {},
+        },
+        Ask::Assigned => {},
+        Ask::Follows(name, _) => match expr {
+            Expr::Call { args, .. } => {
+                if names_the(args, name, words) {
+                    tally.found = true
+                }
+            },
+            Expr::MethodCall { args, .. } => {
+                if names_the(args, name, words) {
+                    tally.found = true
+                }
+            },
+            Expr::SafeMethod { args, .. } => {
+                if names_the(args, name, words) {
+                    tally.found = true
+                }
+            },
+            Expr::Match { arms, .. } => {
+                for arm in arms {
+                    if assigned_in_expr(arm.body, words).contains(name) {
+                        tally.found = true
+                    }
+                }
+            },
+            else => {},
+        },
+        Ask::Untracked(readers) => match expr {
+            Expr::MethodCall { receiver, args, .. } => {
+                if deferred {
+                    add_variable(receiver, words, tally.names)
+                }
+                add_variables(args, words, tally.names)
+            },
+            Expr::SafeMethod { receiver, args, .. } => {
+                if deferred {
+                    add_variable(receiver, words, tally.names)
+                }
+                add_variables(args, words, tally.names)
+            },
+            Expr::Call { func, args, .. } => {
+                if deferred || !readers.contains(body_callee_text(func, words) ?? "") {
+                    add_variables(args, words, tally.names)
+                }
+            },
+            else => {},
+        },
+        // **A deferred body that may change a value pins the name it is
+        // under** (ADR-306 D17): `t.slots.push(x)` in a lambda pins `t`.
+        Ask::Pinned => {
+            if deferred {
+                match expr {
+                    Expr::MethodCall { receiver, args, .. } => {
+                        add_root(receiver, words, tally.names)
+                        add_roots(args, words, tally.names)
+                    },
+                    Expr::SafeMethod { receiver, args, .. } => {
+                        add_root(receiver, words, tally.names)
+                        add_roots(args, words, tally.names)
+                    },
+                    Expr::Call { args, .. } => add_roots(args, words, tally.names),
+                    else => {},
+                }
+            }
+        },
+    }
+}
+
+/// The expression, then each expression and each block directly inside it.
+/// A lambda, a task, an `overlap` and a `select` arm's body are deferred, and
+/// a question about this loop's own `break` does not look inside a lambda or
+/// a task.
+fn tally_expr(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_grammar::InternerContext, mut tally: Tally) {
+    tally_here(expr, ask, deferred, words, tally)
+    let mut stops = false
+    match ask {
+        Ask::Breaks => match expr {
+            Expr::Closure { .. } => { stops = true },
+            Expr::Spawn { .. } => { stops = true },
+            else => {},
+        },
+        Ask::Jumps => match expr {
+            Expr::Closure { .. } => { stops = true },
+            Expr::Spawn { .. } => { stops = true },
+            else => {},
+        },
+        else => {},
+    }
+    if stops {
+        return
+    }
+    match expr {
+        Expr::Match { value, arms, .. } => {
+            tally_expr(value, ask, deferred, words, tally)
+            for arm in arms {
+                tally_maybe(arm.guard, ask, deferred, words, tally)
+                tally_expr(arm.body, ask, deferred, words, tally)
+            }
+        },
+        Expr::Range { start, end, .. } => {
+            tally_expr(start, ask, deferred, words, tally)
+            tally_expr(end, ask, deferred, words, tally)
+        },
+        Expr::Tuple(items, _) => tally_all(items, ask, deferred, words, tally),
+        Expr::ListRepeat { value, count, .. } => {
+            tally_expr(value, ask, deferred, words, tally)
+            tally_expr(count, ask, deferred, words, tally)
+        },
+        Expr::ListLit { items, .. } => tally_all(items, ask, deferred, words, tally),
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts {
+                match part {
+                    FPart::Hole { expr, .. } => tally_expr(expr, ask, deferred, words, tally),
+                    else => {},
+                }
+            }
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            tally_expr(cond, ask, deferred, words, tally)
+            tally_block(then_branch, ask, deferred, words, tally)
+            tally_maybe_block(else_branch, ask, deferred, words, tally)
+        },
+        Expr::Call { func, args, config, .. } => {
+            tally_expr(func, ask, deferred, words, tally)
+            tally_all(args, ask, deferred, words, tally)
+            tally_config(config, ask, deferred, words, tally)
+        },
+        Expr::Spawn { body, .. } => tally_expr(body, ask, true, words, tally),
+        Expr::MethodCall { receiver, args, config, .. } => {
+            tally_expr(receiver, ask, deferred, words, tally)
+            tally_all(args, ask, deferred, words, tally)
+            tally_config(config, ask, deferred, words, tally)
+        },
+        Expr::SafeMethod { receiver, args, config, .. } => {
+            tally_expr(receiver, ask, deferred, words, tally)
+            tally_all(args, ask, deferred, words, tally)
+            tally_config(config, ask, deferred, words, tally)
+        },
+        Expr::Field { base, .. } => tally_expr(base, ask, deferred, words, tally),
+        Expr::SafeField { base, .. } => tally_expr(base, ask, deferred, words, tally),
+        Expr::StructLit { fields, .. } => tally_fields(fields, ask, deferred, words, tally),
+        Expr::With { base, fields, .. } => {
+            tally_expr(base, ask, deferred, words, tally)
+            tally_fields(fields, ask, deferred, words, tally)
+        },
+        Expr::Unary { expr, .. } => tally_expr(expr, ask, deferred, words, tally),
+        Expr::Try(inner, _) => tally_expr(inner, ask, deferred, words, tally),
+        Expr::Async(inner, _, _, _) => tally_expr(inner, ask, deferred, words, tally),
+        Expr::Throw(inner, _) => tally_expr(inner, ask, deferred, words, tally),
+        Expr::Cast { expr, .. } => tally_expr(expr, ask, deferred, words, tally),
+        Expr::TryCatch { expr, handler, .. } => {
+            tally_expr(expr, ask, deferred, words, tally)
+            tally_block(handler, ask, deferred, words, tally)
+        },
+        Expr::Binary { lhs, rhs, .. } => {
+            tally_expr(lhs, ask, deferred, words, tally)
+            tally_expr(rhs, ask, deferred, words, tally)
+        },
+        Expr::Return(value, _) => tally_maybe(value, ask, deferred, words, tally),
+        Expr::Index { base, index, .. } => {
+            tally_expr(base, ask, deferred, words, tally)
+            tally_expr(index, ask, deferred, words, tally)
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            tally_expr(value, ask, deferred, words, tally)
+            tally_expr(fallback, ask, deferred, words, tally)
+        },
+        Expr::Select(arms, _) => {
+            for arm in arms {
+                tally_expr(arm.value, ask, deferred, words, tally)
+                tally_block(arm.body, ask, true, words, tally)
+            }
+        },
+        Expr::Block(b, _) => tally_block(b, ask, deferred, words, tally),
+        Expr::AsyncGroup(b, _, _, _, _) => tally_block(b, ask, deferred, words, tally),
+        Expr::Overlap(b, _) => tally_block(b, ask, true, words, tally),
+        Expr::Unsafe(b, _) => tally_block(b, ask, deferred, words, tally),
+        Expr::Closure { body, .. } => tally_block(body, ask, true, words, tally),
+        else => {},
+    }
+}
+
+/// **Whether a statement may change `list`'s length** (#782): a method
+/// `keeps_length` does not know on it, or the list handed to a call or a
+/// method, at any depth.
+pub fn changes_length_in_statement(stmt: ref Stmt, list: ref String, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> bool {
+    let mut changes = tally()
+    tally_statement(stmt, Ask::Changes(list.clone(), readers.clone()), false, words, changes)
+    return changes.count > 0
+}
+
+/// **Whether an expression may change `list`'s length** (#782), at any depth.
+pub fn changes_length_in_expr(expr: ref Expr, list: ref String, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> bool {
+    let mut changes = tally()
+    tally_expr(expr, Ask::Changes(list.clone(), readers.clone()), false, words, changes)
+    return changes.count > 0
+}
+
+/// **Whether a block may change `list`'s length** (#782), at any depth.
+pub fn changes_length_in(body: ref Block, list: ref String, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> bool {
+    let mut changes = tally()
+    tally_block(body, Ask::Changes(list.clone(), readers.clone()), false, words, changes)
+    return changes.count > 0
+}
