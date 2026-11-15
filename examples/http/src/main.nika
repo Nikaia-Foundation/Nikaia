@@ -293,9 +293,9 @@ pub fn listen(
     keep handler: fn(keep Request) -> Response;
     body_cap: i64 = 1048576,
     head_cap: i64 = 16384,
-    head_timeout: time::Duration? = null,
+    head_timeout: time::Duration = 10.seconds(),
     body_bytes_per_second: i64 = 500,
-    idle_timeout: time::Duration? = null,
+    idle_timeout: time::Duration = 75.seconds(),
     connections: i64 = 0,
     tls: net::Tls? = null
 ) throws {
@@ -303,16 +303,10 @@ pub fn listen(
     let bound = listener.address()
     println(f"http: listening on {bound}")
 
-    // The defaults are 10 seconds and 75 seconds (ADR-326 D6, D9), decided
-    // here: a default that calls a method is not computed while the program is
-    // built.
-    let head_limit = head_timeout ?? 10.seconds()
-    let idle_limit = idle_timeout ?? 75.seconds()
-
     // `connections: 0` means serve forever. Any other number stops accepting
     // after that many connections and returns once they are answered.
     listener.serve(fn(mut connection) {
-        answer(connection, handler, head_limit, idle_limit; body_cap: body_cap, head_cap: head_cap, body_bytes_per_second: body_bytes_per_second)
+        answer(connection, handler, head_timeout, idle_timeout; body_cap: body_cap, head_cap: head_cap, body_bytes_per_second: body_bytes_per_second)
     }; connections: connections)
 }
 

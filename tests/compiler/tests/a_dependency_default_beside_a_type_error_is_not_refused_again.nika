@@ -1,0 +1,29 @@
+// #1530: a type error in a dependency package also drew NK1127 "this
+// compiler's fault" at each `time::Duration = 10.seconds()` option default
+// of that package, built from its consumer; one file alone did not show it.
+// One mistake, one error: only the type error is said.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/lib/src", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/lib/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"rust-library\"\n")
+    fs::write(f"{tmp}/lib/src/main.nika", fs::Root::Anywhere, "use std::time\n\npub fn wait(n: i64; head: time::Duration = 10.seconds(), idle: time::Duration = 75.seconds()) -> i64 {\n\treturn n + 1\n}\n\nfn broken() -> i64 {\n\tlet b = Bytes()\n\treturn 1\n}\n")
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use lib\n\nfn main() throws {\n\tprintln(lib::wait(1))\n}\n")
+    let out = process::run(toolchain(), ["build"]; dir: f"{tmp}/app")
+    for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+        if line.contains("NK") || line.contains("type error") {
+            println(line)
+        }
+    }
+    println(f"exit {out.code}")
+    process::run("rm", ["-rf", tmp])
+}
