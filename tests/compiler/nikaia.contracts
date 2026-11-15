@@ -62,6 +62,15 @@ panics = false
 touches = []
 signature = "(ref self; m: collections::HashMap[String, i64]? = None) -> i64"
 
+[fn."PackageTraitHolder::named"]
+panics = false
+touches = []
+signature = "(ref self) -> String"
+
+[fn."PackageTraitNamed::named"]
+pub = true
+signature = "(ref self) -> String"
+
 [fn."TraitKeepBesideSink::put"]
 pub = true
 keeps = ["text"]
@@ -198,6 +207,14 @@ touches = []
 views = ["xs: borrowed"]
 signature = "(xs: ref Vec[i64], i: i64) -> i64"
 
+[fn."package_trait_holder"]
+pub = true
+sync = "inferred"
+keeps = ["name"]
+panics = false
+touches = []
+signature = "(name: String) -> PackageTraitHolder"
+
 [fn."places"]
 pub = true
 sync = "inferred"
@@ -308,7 +325,11 @@ locks = "?"
 views = ["text: borrowed"]
 signature = "[S: TraitKeepBesideSink](mut sink: S, text: String) -> i64"
 
+[trait."PackageTraitNamed"]
+
 [trait."TraitKeepBesideSink"]
+
+[impl."PackageTraitNamed for PackageTraitHolder"]
 
 [type."Branching"]
 pub = true
@@ -347,6 +368,10 @@ pub = true
 fields = ["pub depth: i64"]
 
 [type."OptionBeside"]
+pub = true
+fields = ["pub name: String"]
+
+[type."PackageTraitHolder"]
 pub = true
 fields = ["pub name: String"]
 

@@ -453,6 +453,15 @@ impl EmitState {
                 } else {
                     out.push(f"// use {joined}\n")
                 }
+                // **A package's traits come into Rust's scope with it** (#116):
+                // a method of `db::Statement` called on a `db::Raw` is Rust's
+                // trait method, found only where the trait is in scope.
+                if segments.len() == 1 && segments[0] != "std" {
+                    let traits = emit_item_package_traits(world, self.own_contracts, segments[0])
+                    if traits.len() > 0 {
+                        out.push(f"#[allow(unused_imports)]\nuse {segments[0]}::{{{traits.join(", ")}}};\n")
+                    }
+                }
             },
             // **The same `const` the body form writes, one level out**
             // (ADR-287): the spelling is the checker's, keyed by the item's
@@ -848,4 +857,26 @@ impl EmitState {
         }
         out.push(f"{signature} {{ {body} }}\n")
     }
+}
+
+/// The traits of the package `package`, each as `Name as _`: what brings
+/// their methods into Rust's scope. A dependency's ledger is absorbed under
+/// its name into the unit's own contracts `own` (`modules::absorb_into`);
+/// the library ledger is read too, for what `std` ships beside it.
+fn emit_item_package_traits(world: ref EmitWorld, own: ref Ledger, package: ref String) -> Vec[String] {
+    let prefix = f"{package}::"
+    let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+    for (key, _) in own.traits {
+        let name = key.strip_prefix(prefix) ?? ""
+        if !name.contains("::") && !name.is_empty() {
+            names.insert(f"{name} as _")
+        }
+    }
+    for (key, _) in world.library.traits {
+        let name = key.strip_prefix(prefix) ?? ""
+        if !name.contains("::") && !name.is_empty() {
+            names.insert(f"{name} as _")
+        }
+    }
+    return names.iter().cloned().collect()
 }

@@ -1,0 +1,10 @@
+use compiler_tests
+
+/// A method of a package's trait called on the package's type, from another
+/// package: the trait comes into scope with `use compiler_tests`, so the
+/// method resolves (#116; before, rustc refused the code, NK1343, as with
+/// `db::raw(text).text()`).
+fn main() throws {
+	let holder = compiler_tests::package_trait_holder("Ada")
+	println(holder.named())
+}
