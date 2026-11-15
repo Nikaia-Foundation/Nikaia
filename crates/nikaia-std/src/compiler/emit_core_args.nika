@@ -49,43 +49,157 @@ fn emit_arg_opening_inside(inner: ref Ty) -> String {
 }
 
 /// **The Rust owner a type of a described crate's contract names**
-/// (ADR-327 D8, #1541): `Vec` for `Vec[T]`, `String` for `String`, as owned,
-/// not lent; empty for every other type. A list of texts is not one: its
-/// elements are a block's `Text` and Rust's `String`, which no conversion of
-/// the list as it is makes one.
-pub fn emit_rust_owner(ty: ref Ty) -> String {
+/// (ADR-327 D8, #1541, #1547): `String` for text, `Vec` for a list, as owned,
+/// not lent, and the outermost of them where an option or a tuple holds one
+/// (`Vec[u8]?`, `(Vec[u8], u64)`) or a list holds lists or texts
+/// (`Vec[String]`); empty for a type with none, and for one no crossing
+/// reaches (`emit_rust_crossing`).
+pub fn emit_rust_owner(ty: ref Ty) -> String sync {
+    if emit_rust_crossing(ty, true, 0) == null {
+        return ""
+    }
+    return emit_rust_owner_word(ty)
+}
+
+fn emit_rust_owner_word(ty: ref Ty) -> String sync {
     return match ty {
-        Ty::Named { name, args, view } => if view {
-            ""
-        } else if name == "String" && args.is_empty() {
-            "String"
-        } else if name == "Vec" && args.len() == 1 && !emit_ty_holds_text(args[0]) {
-            "Vec"
-        } else {
-            ""
+        Ty::Named { name, args, .. } => if name == "String" && args.is_empty() { "String" } else if name == "Vec" { "Vec" } else { "" },
+        Ty::Nullable(inner) => emit_rust_owner_word(inner),
+        Ty::Tuple(parts) => {
+            for part in parts {
+                let word = emit_rust_owner_word(part)
+                if word != "" {
+                    return word
+                }
+            }
+            return ""
         },
         else => "",
     }
 }
 
-fn emit_ty_holds_text(ty: ref Ty) -> bool {
+/// Whether a type holds text or a list somewhere inside, where no crossing
+/// reaches: a map's, a type variable's.
+fn emit_ty_holds_text(ty: ref Ty) -> bool sync {
     return match ty {
-        Ty::Named { name, args, .. } => name == "String" || args.iter().any(fn(a) { emit_ty_holds_text(a) }),
+        Ty::Named { name, args, .. } => name == "String" || name == "Vec" || args.iter().any(fn(a) { emit_ty_holds_text(a) }),
         Ty::Tuple(parts) => parts.iter().any(fn(a) { emit_ty_holds_text(a) }),
+        Ty::Nullable(inner) => emit_ty_holds_text(inner),
         else => true,
     }
 }
 
-/// The Rust owner parameter `i` of the described crate's function `callee`
-/// takes (`emit_rust_owner`); empty where `callee` is not one of a described
-/// crate's.
-pub fn emit_rust_owner_param(described: ref Ledger, callee: ref String, i: i64) -> String {
-    let contract = described.functions.get(callee) ?? return ""
-    let signature = contract.signature ?? return ""
-    if i >= signature.params.len() {
-        return ""
+/// **How a value of type `ty` crosses to a Rust owner (`toward`), or back
+/// from one** (ADR-327 D8, D9, #1541, #1547): the text written before the
+/// value and after it, `null` where the type holds no list or text, or one no
+/// crossing reaches (a map, a type variable). Each list and each text crosses
+/// as it is, the memory it was built in handed over (`handed_list`,
+/// `handed_text`) or taken over (`List::from`, `Text::from`): a list of lists
+/// or texts element by element (a block's `Text` and Rust's `String` are not
+/// the same element), an option inside it, a tuple part by part. `depth`
+/// names the bindings, so a crossing inside another binds names of its own.
+pub fn emit_rust_crossing(ty: ref Ty, toward: bool, depth: i64) -> (String, String)? sync {
+    return match ty {
+        Ty::Named { name, args, view } => emit_rust_crossing_named(name, args, view, toward, depth),
+        Ty::Nullable(inner) => {
+            let (open, close) = emit_rust_crossing(inner, toward, depth + 1) ?? return null
+            let each = f"x{depth}"
+            return ("(", f").map(|{each}| {open}{each}{close})")
+        },
+        Ty::Tuple(parts) => emit_rust_crossing_tuple(parts, toward, depth),
+        else => null,
     }
-    return emit_rust_owner(signature.params[i].1)
+}
+
+fn emit_rust_crossing_named(name: ref String, args: ref Vec[Ty], view: bool, toward: bool, depth: i64) -> (String, String)? sync {
+    if view {
+        return null
+    }
+    if name == "String" && args.is_empty() {
+        let open: String = if toward { "nikaia_std::block::handed_text(" } else { "nikaia_std::block::Text::from(" }
+        let close: String = ")"
+        return (open, close)
+    }
+    if name == "Vec" && args.len() == 1 {
+        return emit_rust_crossing_list(args[0], toward, depth)
+    }
+    return null
+}
+
+fn emit_rust_crossing_list(item: ref Ty, toward: bool, depth: i64) -> (String, String)? sync {
+    let whole: String = if toward { "nikaia_std::block::handed_list(" } else { "nikaia_std::block::List::from(" }
+    let inner = emit_rust_crossing(item, toward, depth + 1)
+    if inner == null {
+        if emit_ty_holds_text(item) {
+            return null
+        }
+        let close: String = ")"
+        return (whole, close)
+    }
+    let (open, close) = inner ?? return null
+    let each = f"x{depth}"
+    let mapped = f".into_iter().map(|{each}| {open}{each}{close}).collect::<::std::vec::Vec<_>>()"
+    if toward {
+        return (whole, f"){mapped}")
+    }
+    return (f"{whole}(", f"){mapped})")
+}
+
+fn emit_rust_crossing_tuple(parts: ref Vec[Ty], toward: bool, depth: i64) -> (String, String)? sync {
+    let mut names: Vec[String] = []
+    let mut made: Vec[String] = []
+    let mut any = false
+    let mut k = 0
+    for part in parts {
+        let name = f"t{depth}_{k}"
+        k = k + 1
+        let crossing = emit_rust_crossing(part, toward, depth + 1)
+        if crossing == null {
+            if emit_ty_holds_text(part) {
+                return null
+            }
+            made.push(name.clone())
+        } else {
+            let (open, close) = crossing ?? return null
+            made.push(f"{open}{name}{close}")
+            any = true
+        }
+        names.push(name)
+    }
+    if !any {
+        return null
+    }
+    let mut open = String()
+    open.push_str("{ let (")
+    open.push_str(names.join(", "))
+    open.push_str(") = ")
+    let mut close = String()
+    close.push_str("; (")
+    close.push_str(made.join(", "))
+    close.push_str(") }")
+    return (open, close)
+}
+
+/// How argument `i` of the described crate's function `callee` crosses to
+/// its Rust owner (`emit_rust_crossing`), past the receiver of a method;
+/// `null` where `callee` is not one of a described crate's or the argument
+/// holds no list or text. `inside` is an argument the call puts into an
+/// option itself (`Some(…)`): its crossing is the option's item's.
+pub fn emit_rust_owner_param(described: ref Ledger, callee: ref String, i: i64, inside: bool) -> (String, String)? sync {
+    let contract = described.functions.get(callee) ?? return null
+    let signature = contract.signature ?? return null
+    let params = call_arguments(signature)
+    if i >= params.len() {
+        return null
+    }
+    let ty = params[i].1.clone()
+    if inside {
+        return match ty {
+            Ty::Nullable(item) => emit_rust_crossing(item, true, 0),
+            else => emit_rust_crossing(ty, true, 0),
+        }
+    }
+    return emit_rust_crossing(ty, true, 0)
 }
 
 fn emit_arg_lends_own(contract: ref FnContract, at: i64, library: ref Ledger, described: ref Ledger) -> bool {
@@ -553,14 +667,20 @@ impl EmitState {
         // (ADR-327 D8, #1541): what the call hands over is placed outside the
         // task's block (a local handed to a call never is in it), so the
         // conversion gives Rust the memory the list was built in, no copy.
-        let rust_owner = if method_callee == null && !lend && !change && !self.own_contracts.functions.contains_key(callee) { emit_rust_owner_param(self.described, callee, i) } else { "" }
+        // A method of a described type crosses the same way (#1547), and a
+        // list of texts, an option or a tuple holding a list, part by part.
+        let owner_key = method_callee?.clone() ?? callee.clone()
+        let rust_owner = if !lend && !change && !emit_arg_is_null(arg) && !self.own_contracts.functions.contains_key(owner_key) { emit_rust_owner_param(self.described, owner_key, i, before == "Some(") } else { null }
         // **And it leaves the task's account at the call** (ADR-327 D9,
         // #1541): the Rust owner keeps it.
-        if rust_owner == "Vec" {
-            out.push("nikaia_std::block::handed_list(")
-        } else if rust_owner == "String" {
-            out.push("nikaia_std::block::handed_text(")
+        let mut owner_open: String = String()
+        let mut owner_close: String = String()
+        if rust_owner != null {
+            let (open, close) = rust_owner ?? return
+            owner_open = open
+            owner_close = close
         }
+        out.push(owner_open)
         if either {
             out.push("nikaia_std::either_text::either(")
         }
@@ -737,9 +857,7 @@ impl EmitState {
         if copy_in {
             out.push(".clone()")
         }
-        if rust_owner != "" {
-            out.push(")")
-        }
+        out.push(owner_close)
         out.push(after)
         // A kept function value copied from a place (#1031), where the
         // argument hands it over: not lent, not lent as its closure.

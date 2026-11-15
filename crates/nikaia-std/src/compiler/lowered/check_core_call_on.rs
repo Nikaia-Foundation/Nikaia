@@ -874,6 +874,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         check_core_call_on_reached(state, Some("fs::Path::text_of"));
     } else { check_core_call_on_reached(state, Some(&nikaia_std::block::Text::from(key.to_string()))); }
     state.flow.last_resolved = Some(nikaia_std::block::Text::from(key.to_string()));
+    check_core_call_rust_owner(state, world, key, contract, args, span);
     if contract.mutates {
         state.facts.mut_receivers.insert(node);
         check_narrow_written_through(state, receiver);

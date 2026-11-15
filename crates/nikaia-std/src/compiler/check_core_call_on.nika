@@ -1122,6 +1122,9 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         check_core_call_on_reached(state, key.clone())
     }
     state.flow.last_resolved = key.clone()
+    // A method of a described type takes its list or text as Rust's own too
+    // (ADR-327 D8, #1547).
+    check_core_call_rust_owner(state, world, key, contract, args, span)
     if contract.mutates {
         state.facts.mut_receivers.insert(node)
         check_narrow_written_through(state, receiver)

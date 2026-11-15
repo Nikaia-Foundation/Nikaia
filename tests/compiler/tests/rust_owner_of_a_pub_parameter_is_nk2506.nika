@@ -11,7 +11,7 @@ fn toolchain() -> String throws {
 }
 
 /// The crate `keeper` and a program beside it that calls it, described by
-/// hand: `nikaia describe` reads no `&[u8]` (#1541's report).
+/// hand, as `nikaia describe` drafts it (`describe_reads_a_slice_parameter`, #1545).
 fn project(tmp: ref String) throws {
     process::run("mkdir", ["-p", f"{tmp}/rs/src", f"{tmp}/app/src", f"{tmp}/app/contracts"])
     fs::write(f"{tmp}/rs/Cargo.toml", fs::Root::Anywhere, "[package]\nname = \"keeper\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\n\n[workspace]\n")
