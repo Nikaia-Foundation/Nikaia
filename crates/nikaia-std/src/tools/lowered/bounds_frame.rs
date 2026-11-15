@@ -5,7 +5,7 @@ pub(crate) fn frame_depth() -> i64 { 4 }
 
 pub(crate) fn frame_rounds() -> i64 { 64 }
 
-pub fn bounds_around(program: &Program, beside: &[&Program], beside_words: &[&winnow_grammar::InternerContext], ledgers: &[&Ledger], std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>, words: &winnow_grammar::InternerContext) -> Around {
+pub fn bounds_around(program: &Program, beside: &[&BoundsBeside], ledgers: &[&Ledger], std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>, words: &winnow_grammar::InternerContext) -> Around {
     let mut around = Around { functions: collections::BTreeMap::new(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet::new(), frames: collections::BTreeMap::new(), rules: vec![], held: collections::BTreeMap::new(), derived: no_derived(), fields: collections::BTreeSet::new(), field_writers: collections::BTreeSet::new(), field_bounds: collections::BTreeMap::new(), returning: collections::BTreeSet::new() };
     for item in program.items.iter() {
         match &item.node {
@@ -46,8 +46,8 @@ pub fn bounds_around(program: &Program, beside: &[&Program], beside_words: &[&wi
     if !settled { context.around.frames = collections::BTreeMap::new(); }
     let rules = rules_candidates(program, &context, words);
     context.around.rules = rules;
-    context.around.derived = derived_of(program, beside, beside_words, words);
-    let seen = fields_seen(program, beside, beside_words, words);
+    context.around.derived = derived_of(program, beside, words);
+    let seen = fields_seen(program, beside, words);
     context.around.fields = seen.keys;
     context.around.field_writers = seen.writers;
     context.around
@@ -295,20 +295,48 @@ pub(crate) struct FieldsScan {
     pub(crate) walked: bool,
     pub(crate) wrote: bool,
     pub(crate) here: bool,
+    pub(crate) recording: bool,
+    pub(crate) lost: collections::BTreeSet<String>,
 }
 
-pub fn fields_seen(program: &Program, beside: &[&Program], beside_words: &[&winnow_grammar::InternerContext], words: &winnow_grammar::InternerContext) -> FieldsSeen {
-    let mut scan = FieldsScan { live: collections::BTreeMap::new(), walked: false, wrote: false, here: true };
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BoundsBeside {
+    pub names: collections::BTreeSet<String>,
+    pub declared: collections::BTreeSet<String>,
+    pub reached: collections::BTreeSet<String>,
+    pub has_main: bool,
+    pub lost: collections::BTreeSet<String>,
+}
+
+pub fn bounds_beside(program: &Program, words: &winnow_grammar::InternerContext) -> BoundsBeside {
+    let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in program.items.iter() { derived_item_names(&item.node, words, &mut names); }
+    let mut scan = FieldsScan { live: collections::BTreeMap::new(), walked: false, wrote: false, here: false, recording: true, lost: collections::BTreeSet::new() };
+    let mut reached: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let has_main = fields_declared(program, words, false, &mut scan, &mut reached);
+    let mut declared: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (name, _) in scan.live.iter() { declared.insert(nikaia_std::block::Text::from(name.to_string())); }
+    let mut ignored: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    for item in program.items.iter() { fields_item(item, words, &mut scan, &mut ignored); }
+    BoundsBeside { names, declared, reached, has_main, lost: scan.lost }
+}
+
+pub fn fields_seen(program: &Program, beside: &[&BoundsBeside], words: &winnow_grammar::InternerContext) -> FieldsSeen {
+    let mut scan = FieldsScan { live: collections::BTreeMap::new(), walked: false, wrote: false, here: true, recording: false, lost: collections::BTreeSet::new() };
     let mut reached: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut a_program = fields_declared(program, words, true, &mut scan, &mut reached);
-    for (k, other) in beside.iter().enumerate().map(|(at, item)| (at as i64, item)) { a_program = fields_declared(other, *nikaia_std::index::get(&beside_words, nikaia_std::index::at(k)), false, &mut scan, &mut reached) || a_program; }
+    for other in beside.iter() {
+        let other = *other;
+        for name in other.declared.iter() { scan.live.insert(nikaia_std::block::Text::from(name.to_string()), false); }
+        for name in other.reached.iter() { reached.insert(nikaia_std::block::Text::from(name.to_string())); }
+        a_program = other.has_main || a_program;
+    }
     if !a_program { for name in reached.iter() { fields_lose(name, &mut scan); } }
     let mut writers: collections::BTreeSet<i64> = collections::BTreeSet::new();
     for item in program.items.iter() { fields_item(item, words, &mut scan, &mut writers); }
-    scan.here = false;
-    for (k, other) in beside.iter().enumerate().map(|(at, item)| (at as i64, item)) {
-        let mut ignored: collections::BTreeSet<i64> = collections::BTreeSet::new();
-        for item in other.items.iter() { fields_item(item, *nikaia_std::index::get(&beside_words, nikaia_std::index::at(k)), &mut scan, &mut ignored); }
+    for other in beside.iter() {
+        let other = *other;
+        for name in other.lost.iter() { fields_lose(name, &mut scan); }
     }
     let mut keys: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (name, live) in scan.live.iter() {
@@ -382,11 +410,21 @@ pub(crate) fn fields_item(item: &Spanned<Item>, words: &winnow_grammar::Interner
 }
 
 pub(crate) fn fields_write(name: &str, scan: &mut FieldsScan) {
+    if scan.recording {
+        scan.lost.insert(nikaia_std::block::Text::from(name.to_string()));
+        return;
+    }
     if !nikaia_std::index::or(scan.live.get(name), || false) { return; }
     if scan.walked && scan.here { scan.wrote = true; } else { scan.live.insert(nikaia_std::block::Text::from(name.to_string()), false); }
 }
 
-pub(crate) fn fields_lose(name: &str, scan: &mut FieldsScan) { if nikaia_std::index::or(scan.live.get(name), || false) { scan.live.insert(nikaia_std::block::Text::from(name.to_string()), false); } }
+pub(crate) fn fields_lose(name: &str, scan: &mut FieldsScan) {
+    if scan.recording {
+        scan.lost.insert(nikaia_std::block::Text::from(name.to_string()));
+        return;
+    }
+    if nikaia_std::index::or(scan.live.get(name), || false) { scan.live.insert(nikaia_std::block::Text::from(name.to_string()), false); }
+}
 
 pub(crate) fn fields_block(block: &Block, words: &winnow_grammar::InternerContext, scan: &mut FieldsScan) { for stmt in block.stmts.iter() { fields_stmt(&stmt.node, words, scan); } }
 

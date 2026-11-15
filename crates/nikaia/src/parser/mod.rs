@@ -365,6 +365,10 @@ pub struct Parsed {
     /// that types it and the emitter that writes it, so the ids they look the
     /// call up by agree ([`Parsed::kept_function_call`]).
     kept_calls: std::sync::Mutex<std::collections::HashMap<(String, usize), KeptCall>>,
+    /// **What this file says to the bounds walks of the package's other
+    /// files** (`bounds_beside`, #1581): read at the first walk that has it
+    /// beside, once the tree is final, and not again for each other file.
+    bounds_beside: std::sync::OnceLock<nikaia_std::tools::bounds_frame::BoundsBeside>,
     /// **The next id this file has not given**
     /// ([ADR-340](../../../docs/specification/adr/adr-340.md) D1): where the
     /// parse of the file stopped counting, and where a hole parsed later
@@ -390,6 +394,14 @@ pub struct Parsed {
 }
 
 impl Parsed {
+    /// What this file says to the bounds walk of another file of its package
+    /// (`tools/bounds_frame.nika`'s `bounds_beside`), read once.
+    pub fn bounds_beside(&self) -> &nikaia_std::tools::bounds_frame::BoundsBeside {
+        self.bounds_beside.get_or_init(|| {
+            nikaia_std::tools::bounds_frame::bounds_beside(&self.program, &self.interner)
+        })
+    }
+
     /// Where the expression `id` was written, if the parser made it.
     pub fn span_of(&self, id: u32) -> Option<ast::Span> {
         nikaia_std::tools::parsed_tree::parsed_span_of(&self.expr_spans, id)
@@ -523,6 +535,7 @@ impl Parsed {
             refused_moves: self.refused_moves.clone(),
             holes: Default::default(),
             kept_calls: Default::default(),
+            bounds_beside: Default::default(),
             next_id: std::sync::Mutex::new(*self.next_id.lock().expect("a hole parse panicked")),
             expr_spans: self.expr_spans.clone(),
             comments: self.comments.clone(),
@@ -826,6 +839,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
         refused_moves: std::collections::BTreeMap::new(),
         holes: Default::default(),
         kept_calls: Default::default(),
+        bounds_beside: Default::default(),
         next_id: std::sync::Mutex::new(after_ids),
         expr_spans,
         comments,

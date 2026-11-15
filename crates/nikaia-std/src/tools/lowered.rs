@@ -3308,7 +3308,7 @@ pub mod bounds_derived {
 }
 pub mod bounds_frame {
     #[allow(unused_imports)]
-    pub use super::{bounds_around, frame_at_call, frame_writes, FieldsSeen, fields_seen};
+    pub use super::{bounds_around, frame_at_call, frame_writes, FieldsSeen, BoundsBeside, bounds_beside, fields_seen};
 }
 pub mod bounds_interval {
     #[allow(unused_imports)]

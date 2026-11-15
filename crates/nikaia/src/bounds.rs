@@ -110,8 +110,7 @@ pub fn proven_traced(
     let all = nikaia_std::tools::bounds_proven::bounds_proven(
         &parsed.program,
         &parsed.interner,
-        &beside.iter().map(|p| &p.program).collect::<Vec<_>>(),
-        &beside.iter().map(|p| &p.interner).collect::<Vec<_>>(),
+        &beside.iter().map(|p| p.bounds_beside()).collect::<Vec<_>>(),
         facts,
         ledgers,
         nonnegative,
