@@ -321,7 +321,7 @@ impl EmitState {
                 return Ok(());
             }
         }
-        let shares_a_handle = i < takes_a_handle.len() as i64 && *unsafe { nikaia_std::proven::read(&takes_a_handle, (i) as usize) } && emit_arg_names_a_place(arg);
+        let shares_a_handle = i < takes_a_handle.len() as i64 && *unsafe { nikaia_std::proven::read(&takes_a_handle, (i) as usize) } && emit_arg_names_a_place(arg) && !self.facts.moved_handles.contains(&node);
         let hands_on_kept = emit_arg_is_variable(arg) && !self.facts.named_fn_values.contains_key(&node) && self.keeps_code_at(&nikaia_std::index::or(match method_callee {
             Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
@@ -448,12 +448,13 @@ impl EmitState {
                 changed.extend(mutable.iter().cloned());
                 let inner = EmitScope { changed: changed, ..EmitScope::plain() };
                 let valueless = self.facts.valueless_lambdas.contains(&node_key(arg));
+                let leaves = emit_a_body_that_leaves(world, body);
                 if self.facts.failing_lambdas.contains(&node_key(arg)) {
                     let plain = EmitFlow::plain().at(inside.statement);
                     let failing = EmitFlow { can_throw: true, ..plain };
-                    out.push("{ let __nikaia_done = ");
+                    out.push(if leaves { "{ " } else { "{ let __nikaia_done = " });
                     self.emit_core_block(world, walk, out, host, body, depth, failing, &inner, &if valueless { EmitTail::Statement } else { EmitTail::Value })?;
-                    out.push("; Ok(__nikaia_done) }");
+                    out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" });
                 } else { self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(inside.statement), &inner, &if valueless { EmitTail::Statement } else { EmitTail::Return })?; }
                 if !runs { out.push(")"); }
             },

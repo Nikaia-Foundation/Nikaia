@@ -774,12 +774,20 @@ fn a_second_project_links_the_std_the_first_one_built() {
     let built = nikaia(&["build"], &second);
     assert!(built.status.success(), "{}", said(&built));
 
-    assert_eq!(
-        compiled_stds(&shared_cache_dir()),
-        after_first,
-        "the second project linked the compiled std the first one left and wrote \
-         no new one - neither a second copy nor a fresh write of this one"
-    );
+    // Entries only may have been added meanwhile: the other tests of this binary
+    // share the cache and build under other settings, each its own key. What this
+    // build must not do is move one that was there, so every file seen after the
+    // first build is checked for the same write time.
+    let now = compiled_stds(&shared_cache_dir());
+    for (path, when) in &after_first {
+        assert_eq!(
+            now.get(path),
+            Some(when),
+            "the second project linked the compiled std the first one left and did \
+             not write over {}",
+            path.display()
+        );
+    }
 
     // The defect this decision removes, stated as an absence: nothing of the
     // compiler is in a project's build graph any more.

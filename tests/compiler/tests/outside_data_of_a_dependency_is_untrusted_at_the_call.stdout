@@ -1,0 +1,20 @@
+error[NK1302]: `names[at]` is not proved in bounds, and `at` comes from outside the program.
+  --> src/main.nika:8:2
+   |
+ 8 | 	println(names[at])
+   |  ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `at` comes from `lib::Request::query`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+   = note: What is known here does not exclude `at` can be -1, `names.len()` can be 3, for which `0 <= at < names.len()` fails.
+   = help: Check it where it arrives, with a guard the program handles: `throw BadInput(at) if !(0 <= at && at < names.len())`, or the early `return` that rejects it. After that line, the index is proved.
+error[NK1202]: `at >= 0` is a claim about data from outside the program.
+  --> src/main.nika:9:2
+   |
+ 9 | 	assert(at >= 0)
+   |  ^^^^^^^^^^^^^^^
+   |
+   = note: `at` comes from outside the program, so nothing the compiler can see says what it holds.
+   = note: That it is wrong is a case the program has to handle, not a defect an `assert` catches.
+   = help: Check it where it arrives, with a guard the program handles: `throw BadInput(at) if !(at >= 0)`, or `return … if !(at >= 0)`. After that line, this `assert` is proved.
+2 type errors
+exit 1

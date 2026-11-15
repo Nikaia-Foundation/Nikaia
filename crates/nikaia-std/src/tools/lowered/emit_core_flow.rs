@@ -211,10 +211,11 @@ impl EmitState {
         let valueless = self.facts.valueless_lambdas.contains(&node_key(node));
         let value_tail = if valueless { EmitTail::Statement } else { EmitTail::Value };
         let return_tail = if valueless { EmitTail::Statement } else { EmitTail::Return };
+        let leaves = emit_a_body_that_leaves(world, body);
         if !copied && self.facts.failing_lambdas.contains(&node_key(node)) {
-            out.push("{ let __nikaia_done = ");
+            out.push(if leaves { "{ " } else { "{ let __nikaia_done = " });
             self.emit_core_block(world, walk, out, host, body, depth, EmitFlow { can_throw: true, ..inside }, &inside_scope, &value_tail)?;
-            out.push("; Ok(__nikaia_done) }");
+            out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" });
             if a_task { out.push(")"); }
             return Ok(());
         }
@@ -283,10 +284,11 @@ impl EmitState {
             out.push("Box::pin(async move ");
         }
         let valueless = self.facts.valueless_lambdas.contains(&node_key(node));
+        let leaves = emit_a_body_that_leaves(world, body);
         if fails {
-            out.push("{ let __nikaia_done = ");
+            out.push(if leaves { "{ " } else { "{ let __nikaia_done = " });
             self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, &if valueless { EmitTail::Statement } else { EmitTail::Value })?;
-            out.push("; Ok(__nikaia_done) }");
+            out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" });
         } else { self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, &if valueless { EmitTail::Statement } else { EmitTail::Return })?; }
         if pauses {
             if result != "_" { out.push("); __nikaia_future }"); } else { out.push(&format!(") as {}<'_, _>", emit_boxed_future_in(host.overlaps_user_code()))); }

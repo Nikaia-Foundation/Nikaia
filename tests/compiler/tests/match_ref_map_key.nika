@@ -1,0 +1,66 @@
+// A map read keyed by a `match` binding (#1304): the key is lent as the
+// reference it is, also where the arm binds the name with `ref`.
+use std::collections
+
+pub enum SolverTerm {
+	Bool(bool),
+	Int(i64),
+	Var(String),
+	Add(i64, i64),
+	Sub(i64, i64),
+	Neg(i64),
+	Mul(i64, i64),
+	Quot(i64, i64),
+	Le(i64, i64),
+	Lt(i64, i64),
+	Ge(i64, i64),
+	Gt(i64, i64),
+	Eq(i64, i64),
+	Ne(i64, i64),
+	And(Vec[i64]),
+	Or(Vec[i64]),
+	Not(i64),
+	Other,
+}
+
+fn value(
+	nodes: ref Vec[SolverTerm],
+	id: i64,
+	values: ref collections::BTreeMap[String, i64],
+) -> i64? {
+	let node = nodes[id].clone()
+	return match node {
+		SolverTerm::Var(name) => values[name] ?? 0,
+		SolverTerm::Int(n) => n,
+		else => null,
+	}
+}
+
+// Read twice and measured, so the arm binds `ref name`.
+fn twice(
+	nodes: ref Vec[SolverTerm],
+	id: i64,
+	values: ref collections::BTreeMap[String, i64],
+) -> i64? {
+	let node = nodes[id].clone()
+	return match node {
+		SolverTerm::Var(name) => {
+			let a = values[name] ?? 0
+			let b = values.get(name.clone()) ?? 0
+			if name.len() > 5 {
+				return null
+			}
+			a + b
+		},
+		SolverTerm::Int(n) => n,
+		else => null,
+	}
+}
+
+fn main() throws {
+	let nodes = [SolverTerm::Var("x"), SolverTerm::Int(3)]
+	let mut values: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	values.insert("x", 7)
+	println(f"{value(nodes, 0, values) ?? -1} {value(nodes, 1, values) ?? -1}")
+	println(f"{twice(nodes, 0, values) ?? -1} {twice(nodes, 1, values) ?? -1}")
+}

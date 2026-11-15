@@ -445,6 +445,10 @@ pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
     state.repeats.push(CheckRepeats::a_lambda(depth));
     state.scope.push(frame);
     let saved = state.enter_boundary("lambda");
+    let outer_handed: Option<CheckHanded> = match state.handed_over.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
     state.handed_over = Some(CheckHanded { pauses: false, fails: false, caught: false, promised: promised.clone() });
     let outer = check_core_lambda_enter(state);
     let walked = check_core_block(state, world, host, body);
@@ -454,7 +458,7 @@ pub fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     };
-    state.handed_over = None;
+    state.handed_over = outer_handed;
     state.leave_boundary(&saved);
     state.scope.pop();
     state.repeats.pop();

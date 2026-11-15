@@ -317,6 +317,7 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
             state.flow.barrier = "task"
             state.flow.async_depth += 1
             state.flow.async_started += 1
+            state.flow.starts_async = true
             let changed_from = state.changed.len()
             let mut run = false
             match inner {
@@ -442,6 +443,7 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
             }
             if child {
                 state.flow.async_started += 1
+                state.flow.starts_async = true
                 // A child task's group is the door's block, which waits for
                 // it with the lock held (`NK2203`).
                 state.an_async_inside_a_door(span)
@@ -759,6 +761,16 @@ fn check_core_expr_throw[H: CheckHost](mut state: CheckState, world: ref CheckWo
     let thrown = check_core_expr(state, world, host, inner, span)
     state.a_thrown_value_that_is_not_an_error(inner, thrown, span)
     state.a_thrown_type_with_no_error(world, thrown, span)
+    // **A `throw` fails the lambda it is in** (ADR-277 D7, #1369), as a
+    // failing call there does.
+    if state.handed_over != null {
+        let held = state.handed_over?.clone() ?? return Ty::Unknown
+        if !held.caught {
+            let mut handed = held
+            handed.fails = true
+            state.handed_over = handed
+        }
+    }
     state.a_way_out("throw", "", span)
     return Ty::Unknown
 }

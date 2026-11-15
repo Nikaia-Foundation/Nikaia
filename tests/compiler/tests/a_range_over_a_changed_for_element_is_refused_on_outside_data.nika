@@ -1,0 +1,25 @@
+// A `for mut` element changed in the body keeps no length for the prover:
+// `f.lines.clear()` empties the list the range was taken from, so
+// `f.lines[i]` on outside data is refused (ADR-396 D1, D4; #1624).
+use std::process
+
+struct F {
+    lines: Vec[String],
+}
+
+fn fields(mut files: Vec[F]) -> i64 {
+    let mut n = 0
+    for mut f in files {
+        for i in 0..<f.lines.len() {
+            f.lines.clear()
+            n += f.lines[i].len()
+        }
+    }
+    return n
+}
+
+fn main() throws {
+    let text = process::run("echo", ["ab cde"]).stdout
+    let mut files = [F { lines: text.split(" ").collect() }]
+    println(fields(files))
+}

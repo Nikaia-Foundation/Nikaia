@@ -3665,7 +3665,7 @@ pub mod check_simd {
 }
 pub mod check_state {
     #[allow(unused_imports)]
-    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, CheckHeldTaking, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
+    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, CheckHeldTaking, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
 }
 pub mod check_takes {
     #[allow(unused_imports)]
@@ -3819,7 +3819,10 @@ pub mod emit_function {
     #[allow(unused_imports)]
     pub use super::{EmitSeedsBegin, EmitSeedsEnd, EmitSplit, EmitSig};
 }
-pub mod emit_function_body {}
+pub mod emit_function_body {
+    #[allow(unused_imports)]
+    pub use super::{emit_a_body_that_leaves};
+}
 pub mod emit_grammar {
     #[allow(unused_imports)]
     pub use super::{emit_stream_walk_name};
@@ -4145,7 +4148,7 @@ pub mod proofs_book {
 }
 pub mod prove_run {
     #[allow(unused_imports)]
-    pub use super::{PROVE_RUN_ROUNDS, ProveClaimRun, ProveComptimes, ProveWalked, prove_comptimes_of, prove_rounds, prove_answer, prove_model, prove_implies, prove_with_published};
+    pub use super::{PROVE_RUN_ROUNDS, ProveClaimRun, ProveComptimes, ProveWalked, prove_comptimes_of, prove_rounds, prove_answer, prove_model, prove_implies, prove_with_published, prove_outside};
 }
 pub mod prove_terms {
     #[allow(unused_imports)]
@@ -4161,11 +4164,11 @@ pub mod prover_arena {
 }
 pub mod prover_calls {
     #[allow(unused_imports)]
-    pub use super::{FreeFunction, free_function, own_method, arguments_in_order, may_throw, from_outside, outside_source};
+    pub use super::{FreeFunction, free_function, own_method, arguments_in_order, may_throw, from_outside, outside_source, ProverOutside, prover_outside};
 }
 pub mod prover_claims {
     #[allow(unused_imports)]
-    pub use super::{UnwrittenCheck, PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape, foreign_shape, foreign_from};
+    pub use super::{UnwrittenCheck, OutsideIndex, PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape, foreign_shape, foreign_from};
 }
 pub mod prover_loops {
     #[allow(unused_imports)]
@@ -4193,7 +4196,7 @@ pub mod prover_state {
 }
 pub mod prover_walk {
     #[allow(unused_imports)]
-    pub use super::{ProverWalk, prover_bodies, prover_an_assert_call, prover_assumed_in_unsafe, prover_an_assume};
+    pub use super::{ProverWalk, prover_bodies, prover_outside_record, prover_an_assert_call, prover_assumed_in_unsafe, prover_an_assume};
 }
 pub mod render {
     #[allow(unused_imports)]
@@ -4209,7 +4212,7 @@ pub mod rustc_words {
 }
 pub mod sharing {
     #[allow(unused_imports)]
-    pub use super::{Fallback, every_fallback, Decision, Sharing, every_count_plain, sharing_report, slot, split_slot, holds_a_word, held_that_does_not_copy, literal_type, published_reason, handed_on_to, unseen, by_value_shared, is_hull, holds_shared, shared_fields, declared_field_type, rust_name, lock_name, FIELDS, Handle, Forced, Slots, decided, declared_here, allocates_here, hands_back_a_plain_value, origin_reason, named_handle, named_type, walks_in_parallel, a_parallel_method, call_path, SharingWalk, sharing_of};
+    pub use super::{Fallback, every_fallback, Decision, Sharing, every_count_plain, sharing_report, slot, split_slot, holds_a_word, held_that_does_not_copy, literal_type, published_reason, handed_on_to, unseen, by_value_shared, is_hull, holds_shared, shared_fields, declared_field_type, rust_name, lock_name, FIELDS, Handle, Forced, Slots, decided, declared_here, allocates_here, hands_back_a_plain_value, origin_reason, named_handle, named_type, walks_in_parallel, a_parallel_method, call_path, SharingWalk, SharingMoves, sharing_moves_unknown, sharing_moves_of, sharing_of};
 }
 pub mod signature {
     #[allow(unused_imports)]

@@ -444,6 +444,65 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_handle_handed_on(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, whole: &Span) {
+        let name = match value {
+            Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
+            _ => return,
+        };
+        let node = node_key(value);
+        let found = match self.flow.read_index.get(&(node, whole.start as i64)) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return };
+        let read = (*nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(found))).clone();
+        let taken = CheckTaken { path: nikaia_std::block::Text::from(name.to_string()), ty: ty.clone(), from: whole.start as i64, at: whole.end as i64, seq: read.seq, choices: self.branch.copy_owned(), until: None, to: String::from(""), binding: read.binding };
+        self.a_handle_pending(&name, node, "", false, taken);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_handle_stored_by_name(&mut self, name: &str, ty: &Ty, node: i64, whole: &Span) {
+        let taken = CheckTaken { path: nikaia_std::block::Text::from(name.to_string()), ty: ty.clone(), from: whole.start as i64, at: whole.end as i64, seq: -1, choices: self.branch.copy_owned(), until: None, to: String::from(""), binding: self.binding_id(name) };
+        self.a_handle_pending(name, node, name, false, taken);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_handle_a_task_takes(&mut self, name: &str, ty: &Ty, task: i64, span: &Span) {
+        let taken = CheckTaken { path: nikaia_std::block::Text::from(name.to_string()), ty: ty.clone(), from: span.end as i64, at: span.end as i64, seq: -1, choices: self.branch.copy_owned(), until: None, to: String::from(""), binding: self.binding_id(name) };
+        self.a_handle_pending(name, task, name, true, taken);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_handle_pending(&mut self, name: &str, node: i64, field: &str, task: bool, taken: CheckTaken) {
+        if !self.task_bindings.is_empty() && !task || self.lent_here(name) { return; }
+        let bound = self.frame_of(name);
+        if bound < 0 { return; }
+        let mut at = self.repeats.len() as i64;
+        while at > 0 {
+            at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
+            if unsafe { nikaia_std::proven::read(&self.repeats, (at) as usize) }.frame <= bound { break; }
+            if !(*unsafe { nikaia_std::proven::read(&self.repeats, (at) as usize) }).revives(name) { return; }
+        }
+        self.flow.pending_handles.push(CheckPendingHandle { node, field: nikaia_std::block::Text::from(field.to_string()), task, taken });
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn handles_read_again(&mut self) {
+        let pending = self.flow.pending_handles.copy_owned();
+        self.flow.pending_handles = vec![];
+        for one in pending.iter() {
+            if !one.task && self.flow.starts_async { continue; }
+            if !one.task && self.read_later_beside(&one.taken) || self.first_read_after(&one.taken).is_some() { continue; }
+            if one.task { self.facts.task_handles.remove(&(one.node, nikaia_std::block::Text::from(one.field.to_string()))); } else if one.field != "" { self.facts.stored_handle_fields.remove(&(one.node, nikaia_std::block::Text::from(one.field.to_string()))); } else {
+                self.facts.stored_handles.remove(&one.node);
+                self.facts.moved_handles.insert(one.node);
+            }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn read_later_beside(&self, taken: &CheckTaken) -> bool {
+        for read in self.reads_on_paths.iter() { if read.binding == taken.binding && read.seq > taken.seq && a_path_overlaps(&read.path, &taken.path) && read.at >= taken.from && read.at < taken.at { return true; } }
+        false
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn assigned_read(&self, taken: &CheckTaken) -> i64 {
         let mut first: i64 = -1;
         for written in self.written_at.iter() { if written.1 == taken.from && a_path_overlaps(&written.0, &taken.path) { for read in self.reads_on_paths.iter() { if read.binding == taken.binding && read.at == taken.from && read.path == written.0 && (first < 0 || read.seq < first) { first = read.seq; } } } }

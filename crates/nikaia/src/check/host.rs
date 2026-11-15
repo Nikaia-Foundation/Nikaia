@@ -436,6 +436,8 @@ impl CheckWalkedPasses for Host<'_> {
             &facts.comptime_values,
             &facts.whole_lets,
             &facts.method_callees,
+            &facts.field_owners,
+            &facts.outside,
             &facts.zero_divisors,
             &facts.arithmetic,
             &facts.unfit_numbers,
@@ -456,7 +458,18 @@ impl CheckWalkedPasses for Host<'_> {
             reaches: proved.reaches,
             published: proved.published,
             std_claims: proved.std_claims,
+            outside: proved.outside,
         }
+    }
+
+    fn outside(&self, facts: &CheckFacts) -> crate::prove::ProverOutside {
+        crate::prove::outside_of(
+            self.parsed,
+            self.own,
+            self.library,
+            &facts.method_callees,
+            &facts.field_owners,
+        )
     }
 
     fn view_findings(&self) -> Vec<Finding> {

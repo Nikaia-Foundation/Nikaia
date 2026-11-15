@@ -1216,6 +1216,16 @@ fn check_core_ops_a_fn(declared: ref Ty?) -> bool sync {
     }
 }
 
+/// What a declared function type allows the lambda it names (ADR-277 D2):
+/// none where no function type is declared.
+fn check_core_ops_promised(declared: ref Ty?) -> CheckPromises? sync {
+    let ty: ref Ty = declared ?? return null
+    return match ty {
+        Ty::Fn { is_sync, can_throw, .. } => CheckPromises { may_pause: !is_sync, may_fail: can_throw },
+        else => null,
+    }
+}
+
 /// **A lambda** (ADR-277): its arguments are the ones it names, of the types
 /// the place it stands in says (#497).
 pub fn check_core_ops_closure[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], body: ref Block, span: ref Span) -> Ty sync {
@@ -1248,12 +1258,29 @@ pub fn check_core_ops_closure[H: CheckHost](mut state: CheckState, world: ref Ch
     state.scope.push(frame)
     // Part I 3.3: a lambda is a closure below, and a jump does not leave one.
     let saved = state.enter_boundary("lambda")
+    // **A place whose type says what the code may do** (Part I 7.1, #1369):
+    // the body is watched as a handed lambda's is, so a failure stops at the
+    // lambda's edge and is weighed against the type, not the function around.
+    let outer_handed: CheckHanded? = state.handed_over?.clone()
+    let promised: CheckPromises? = check_core_ops_promised(declared)
+    if promised != null {
+        let held: CheckPromises = promised?.clone() ?? CheckPromises { may_pause: true, may_fail: true }
+        state.handed_over = CheckHanded { pauses: false, fails: false, caught: false, promised: held }
+    }
     let outer = check_core_lambda_enter(state)
     let walked = check_core_block(state, world, host, body)
     // **A map's read as its last value is copied out** (#997), as a lambda's
     // handed to a call is.
     state.a_map_read_handed_back(world, walked, body)
     let tail = check_core_lambda_leave(state, outer, walked, body)
+    if promised != null {
+        let fails = state.handed_over?.fails ?? false
+        state.handed_over = outer_handed
+        if fails && !(promised?.may_fail ?? true) {
+            let place: Ty = declared?.clone() ?? Ty::Unknown
+            state.a_failing_lambda_where_the_type_does_not_fail(place, span)
+        }
+    }
     check_core_ops_lambda_tail_wrapped(state, world, host, declared, tail, body)
     // A place whose code owns its text takes none the lambda does not own
     // (#1264).

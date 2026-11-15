@@ -21,6 +21,7 @@ pub struct ProverScope {
     pub history: Vec<i64>,
     pub bits: collections::BTreeMap<String, ProverBits>,
     pub maps: collections::BTreeSet<String>,
+    pub guards: collections::BTreeMap<i64, (i64, String)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,7 +31,7 @@ pub struct ProverBits {
 }
 
 impl ProverScope {
-    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), sources: collections::BTreeMap::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new(), maps: collections::BTreeSet::new() } }
+    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), sources: collections::BTreeMap::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new(), maps: collections::BTreeSet::new(), guards: collections::BTreeMap::new() } }
     pub fn at_the_entry() -> ProverScope {
         let mut scope = ProverScope::unknown();
         scope.path = Some(vec![]);
@@ -113,6 +114,19 @@ impl ProverScope {
         let ints = self.ints.copy_owned();
         self.rebind(&arena, name);
         self.ints = ints;
+    }
+    pub fn guard_of(&self, arena: &TermArena, goal: i64) -> Option<(i64, String)> {
+        let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+        arena.variables(goal, &mut names);
+        let mut found: Option<(i64, String)> = None;
+        for fact in self.facts.iter() {
+            let fact = nikaia_std::num::value(fact);
+            let guard = match self.guards.get(&fact) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+            arena.variables(fact, &mut read);
+            if ties(&read, &names) { found = Some(guard.clone()); }
+        }
+        found
     }
     pub fn history_reads(&self, arena: &TermArena, claim: i64) -> bool {
         if self.history.is_empty() { return false; }

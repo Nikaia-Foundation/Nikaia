@@ -22,6 +22,12 @@ pub struct BoundsReportFacts {
 	/// The derived preconditions, each with the call sites that prove it
 	/// (ADR-391 D4, `derived_rows`).
 	pub derived: Vec[String],
+	/// **Each index data from outside reaches** (ADR-396 D5), as the
+	/// prover's walk left it (`CheckFacts::outside_indices`).
+	pub outside: collections::BTreeMap[(i64, String), OutsideIndex],
+	/// Whether the build lets an unproved claim through with a check
+	/// (`unproved-claims = "warn"`, ADR-396 D3).
+	pub unproved_warn: bool,
 }
 
 /// One site a check stands at.
@@ -152,12 +158,45 @@ pub fn bounds_report_checked(
 		let line = site.line.to_string()
 		out.push_str(f"  {bounds_report_spaces(line, 4)}{line}  {site.text}{bounds_report_spaces(site.text, width)}  {how}\n")
 	}
+	// **Each index data from outside reaches** (ADR-396 D5): its source,
+	// and whether it is proved, with the guard that proves it, refused
+	// (`NK1302`), or checked because the build lets it through.
+	for row in bounds_report_outside(facts, source) {
+		out.push_str(f"  outside  {row}\n")
+	}
 	// **What callers proved** (ADR-391 D4): each derived precondition, with
 	// the lines of the calls that prove it.
 	for row in bounds_report_derived(facts.derived, source) {
 		out.push_str(f"  derived  {row}\n")
 	}
 	return out
+}
+
+/// **Each index data from outside reaches, as `--bounds` writes it**
+/// (ADR-396 D5), in the order of the file: the line it stands at (the call
+/// that hands it the value, where a call does), the index, the name and its
+/// source, and the verdict - `proved by the guard on line 14
+/// (`!(0 <= m && m < 12)`)`, `refused NK1302`, or `checked (unproved-claims =
+/// warn)`.
+fn bounds_report_outside(facts: ref BoundsReportFacts, source: ref String) -> Vec[String] {
+	let mut rows: Vec[String] = []
+	for (_, found) in facts.outside {
+		let mut from = "from outside"
+		if found.source != "" {
+			from = f"from `{found.source}`"
+		}
+		let mut verdict = "refused NK1302"
+		if found.proved {
+			verdict = "proved"
+			if found.guard_at >= 0 {
+				verdict = f"proved by the guard on line {bounds_report_line(source, found.guard_at)} (`{found.guard}`)"
+			}
+		} else if facts.unproved_warn {
+			verdict = "checked (unproved-claims = warn)"
+		}
+		rows.push(f"{bounds_report_line(source, found.at)}  {found.written}, `{found.name}` {from}: {verdict}")
+	}
+	return rows
 }
 
 /// **Each derived precondition as the reports write it** (ADR-391 D4), from

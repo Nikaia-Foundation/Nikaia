@@ -587,6 +587,9 @@ pub trait LedgerInferHost {
     /// Every unit checked against the package's declarations in `ledger`,
     /// with the other units beside it.
     fn check_units(ref self, ledger: ref Ledger) sync
+    /// The functions whose result comes from outside, by the ledger's key,
+    /// as the units' check found them (#1573).
+    fn outside_results(ref self) -> collections::BTreeSet[String] sync
     fn infer_sync(ref self, mut ledger: Ledger) sync
     /// Whether the prover reads `condition` back over `readable`.
     fn reads_back(ref self, condition: ref String, readable: ref collections::BTreeSet[String]) -> bool sync
@@ -624,6 +627,7 @@ pub fn ledger_infer_package[H: LedgerInferHost](mut ledger: Ledger, units: ref V
     // which is the other half of D2: a call to the file next door resolves
     // there too, so the method calls the walks below read are the package's.
     host.check_units(ledger)
+    ledger_untrusted_results(ledger, host.outside_results())
     host.infer_sync(ledger)
     // **An expression function's `ensures`** (ADR-314 D3): after `sync`,
     // which it is only given for.
@@ -749,4 +753,17 @@ fn ledger_option_default[H: LedgerInferHost](view: ref ParsedView, computed: ref
     }
     let option = config.get(computed.at) ?? return null
     return host.computed_literal(computed.unit, computed.option, option.default, written_ty(view.words, view.aliases, option.ty))
+}
+
+/// **A function whose result comes from outside is a source** (ADR-010 D2,
+/// ADR-396 D1, #1573): the check found outside data reaches its result, so
+/// the ledger writes it `provenance = "untrusted"`, and a package that
+/// calls it treats the result as `std`'s sources are treated.
+fn ledger_untrusted_results(mut ledger: Ledger, results: ref collections::BTreeSet[String]) sync {
+    for key in results {
+        let mut contract = ledger.functions[key] ?? continue
+        if contract.provenance == null {
+            contract.provenance = Provenance::Untrusted
+        }
+    }
 }

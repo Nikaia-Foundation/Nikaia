@@ -210,8 +210,9 @@ pub fn check_walked_declared(state: &mut CheckState, world: &CheckWorld<'_, '_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_walked_proved(state: &mut CheckState, entries: collections::BTreeMap<String, Vec<PreconditionCheck>>, reaches: collections::BTreeMap<(String, String), CallReach>, published: collections::BTreeMap<String, Published>, std_claims: &collections::BTreeMap<(i64, i64), String>, held: &collections::BTreeMap<(i64, i64), ClaimHeld>) {
+pub fn check_walked_proved(state: &mut CheckState, entries: collections::BTreeMap<String, Vec<PreconditionCheck>>, reaches: collections::BTreeMap<(String, String), CallReach>, published: collections::BTreeMap<String, Published>, std_claims: &collections::BTreeMap<(i64, i64), String>, held: &collections::BTreeMap<(i64, i64), ClaimHeld>, outside: collections::BTreeMap<(i64, String), OutsideIndex>) {
     state.facts.entries = entries;
+    state.facts.outside_indices = outside;
     state.facts.reaches = reaches;
     state.facts.published = published;
     for (key, written) in std_claims.iter() { state.facts.claims.insert(key.clone(), FactClaim { held: None, written: nikaia_std::block::Text::from(written.to_string()), left: None, right: None, assumed: false }); }
@@ -229,12 +230,14 @@ pub struct CheckWalkedProved {
     pub reaches: collections::BTreeMap<(String, String), CallReach>,
     pub published: collections::BTreeMap<String, Published>,
     pub std_claims: collections::BTreeMap<(i64, i64), String>,
+    pub outside: collections::BTreeMap<(i64, String), OutsideIndex>,
 }
 
 pub trait CheckWalkedPasses {
     fn dsl_findings(&self) -> Vec<CheckFinding>;
     fn nonnegative(&self, facts: &CheckFacts, nodes: &collections::BTreeSet<i64>) -> collections::BTreeSet<i64>;
     fn proved(&self, facts: &CheckFacts) -> CheckWalkedProved;
+    fn outside(&self, facts: &CheckFacts) -> ProverOutside;
     fn view_findings(&self) -> Vec<CheckFinding>;
     fn view_change_findings(&self, lent: &collections::BTreeSet<i64>, coalesced: &collections::BTreeSet<i64>, mut_viewed: &collections::BTreeSet<i64>, receiver_views: &collections::BTreeSet<i64>) -> Vec<CheckFinding>;
     fn tethered(&self) -> (Option<Vec<BufferPlan>>, Vec<CheckFinding>);
@@ -258,10 +261,11 @@ pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckSt
     state.walls_a_refusal_explains();
     state.facts.walks_fields = state.walks_fields.copy_owned();
     state.findings.extend(passes.dsl_findings());
+    state.facts.outside = passes.outside(&state.facts);
     if computes {
         let proved = passes.proved(&state.facts);
         state.findings.extend(proved.findings);
-        check_walked_proved(state, proved.entries, proved.reaches, proved.published, &proved.std_claims, &proved.held);
+        check_walked_proved(state, proved.entries, proved.reaches, proved.published, &proved.std_claims, &proved.held, proved.outside);
         state.findings.extend(passes.view_findings());
         let coalesced = vc_coalesced(&state.facts);
         let mut_viewed = vc_mut_viewed(&state.facts);

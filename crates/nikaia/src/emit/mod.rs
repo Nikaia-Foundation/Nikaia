@@ -914,6 +914,7 @@ impl nikaia_std::tools::emit_contracts::EmitContractsHost for ContractsHost<'_> 
             own,
             self.library,
             self.build.crossings_are_possible(),
+            None,
         )
         .counts
     }

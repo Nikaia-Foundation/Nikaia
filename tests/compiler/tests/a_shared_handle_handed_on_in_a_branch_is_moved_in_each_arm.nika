@@ -1,0 +1,36 @@
+// Each arm of a branch has its own last use: a handle handed on in an arm
+// that does not read it again is moved there, in either arm (ADR-312 D2,
+// #1502).
+struct Noisy { name: String }
+
+impl Drop for Noisy {
+	fn drop(mut self) {
+		println(f"{self.name} goes") catch { }
+	}
+}
+
+fn take(_s: SharedMut[Noisy], said: String) throws {
+	println(f"took it {said}")
+}
+
+fn hand_on(s: SharedMut[Noisy], left: bool) throws {
+	if left {
+		take(s, "on the left")
+	} else {
+		take(s, "on the right")
+	}
+	println("hand_on goes on")
+}
+
+fn main() throws {
+	let left = SharedMut(Noisy { name: "left" })
+	hand_on(left, true)
+	let right = SharedMut(Noisy { name: "right" })
+	hand_on(right, false)
+	let kept = SharedMut(Noisy { name: "kept" })
+	if true {
+		take(kept, "in the arm")
+	}
+	take(kept, "after the arm")
+	println("main goes on")
+}

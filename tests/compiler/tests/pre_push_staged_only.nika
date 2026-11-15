@@ -3,7 +3,7 @@
 // self-hosting share, and the `version` step (`bump.py check`, which redraws
 // the badges) read the working tree, so it was red for every committer. In a
 // temp repository made of HEAD with this checkout's scripts, a tools file
-// grows by a thousand code lines, unstaged, and an unrelated file is staged:
+// grows by five thousand code lines, unstaged, and an unrelated file is staged:
 // every step stays green. Staged, the same growth turns `badges` and
 // `version` red.
 use std::fs
@@ -50,11 +50,11 @@ fn main() throws {
     sh(tmp.clone(), f"mkdir work; git -C {repo} archive HEAD | tar -x -C work")
     sh(work.clone(), f"cp {repo}/scripts/pre-push.nika {repo}/scripts/bump.py {repo}/scripts/badges.py {repo}/scripts/self_hosting.py scripts/; git init -q -b develop; {id}; git add -A; git commit -q -m base")
     let tool = "crates/nikaia-std/src/tools/fmt.nika"
-    sh(work.clone(), f"for i in $(seq 1000); do echo \"fn grown_$i() -> i64 {{ $i }}\"; done >> {tool}; echo note >> README.md; git add README.md")
+    sh(work.clone(), f"for i in $(seq 5000); do echo \"fn grown_$i() -> i64 {{ $i }}\"; done >> {tool}; echo note >> README.md; git add README.md")
     println("unstaged tools move, a docs file staged:")
     println(steps(nikaia.clone(), work.clone()))
     sh(work.clone(), f"git add {tool}")
     println("the tools move staged:")
-    println(steps(nikaia.clone(), work.clone()))
+    println(steps(nikaia, work))
     process::run("rm", ["-rf", tmp])
 }

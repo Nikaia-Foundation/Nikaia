@@ -684,10 +684,24 @@ pub struct SharingWalk {
     pub scope: collections::BTreeMap<String, Ty>,
     pub library_keys: collections::BTreeMap<String, String>,
     pub own_keys: collections::BTreeMap<String, String>,
+    pub moves: SharingMoves,
 }
 
-pub fn sharing_of(program: &Program, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, crossings_are_possible: bool) -> Sharing {
-    let mut walk = SharingWalk { slots: Slots::new(declared_here(asked.names, &program.items)), parallel: collections::BTreeSet::new(), function: String::from(""), scope: collections::BTreeMap::new(), library_keys: collections::BTreeMap::new(), own_keys: collections::BTreeMap::new() };
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SharingMoves {
+    pub known: bool,
+    pub moved: collections::BTreeSet<i64>,
+    pub stored: collections::BTreeSet<i64>,
+    pub stored_fields: collections::BTreeSet<(i64, String)>,
+    pub task_handles: collections::BTreeSet<(i64, String)>,
+}
+
+pub fn sharing_moves_unknown() -> SharingMoves { SharingMoves { known: false, moved: collections::BTreeSet::new(), stored: collections::BTreeSet::new(), stored_fields: collections::BTreeSet::new(), task_handles: collections::BTreeSet::new() } }
+
+pub fn sharing_moves_of(facts: &CheckFacts) -> SharingMoves { SharingMoves { known: true, moved: facts.moved_handles.copy_owned(), stored: facts.stored_handles.copy_owned(), stored_fields: facts.stored_handle_fields.copy_owned(), task_handles: facts.task_handles.copy_owned() } }
+
+pub fn sharing_of(program: &Program, asked: &Asked<'_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ty_of: &impl Fn(&Type) -> Ty, crossings_are_possible: bool, moves: SharingMoves) -> Sharing {
+    let mut walk = SharingWalk { slots: Slots::new(declared_here(asked.names, &program.items)), parallel: collections::BTreeSet::new(), function: String::from(""), scope: collections::BTreeMap::new(), library_keys: collections::BTreeMap::new(), own_keys: collections::BTreeMap::new(), moves };
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { .. } => { sharing_function(&item.node, "", asked, holes_of, ty_of, &mut walk); },
@@ -878,7 +892,7 @@ pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_o
         Expr::Spawn { body, .. } => {
             let body = nikaia_std::boxed::open(body);
             for named in names_used_by(body, asked) {
-                if a_handle_by_value(&named, &walk) { walk.slots.duplicates(&walk.function, &named, String::from("used by a `spawn` body, which takes a handle of its own")); }
+                if a_handle_by_value(&named, &walk) && (!walk.moves.known || walk.moves.task_handles.contains(&(node_key(body), nikaia_std::block::Text::from(named.to_string())))) { walk.slots.duplicates(&walk.function, &named, String::from("used by a `spawn` body, which takes a handle of its own")); }
                 a_crossing_reaches(&named, "a `spawn` body uses it, and a task runs on a thread of its own", None, asked, walk);
             }
             sharing_expression(body, asked, holes_of, ty_of, walk);
@@ -904,7 +918,7 @@ pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_o
         Expr::StructLit { name, fields, .. } => {
             let name = *name;
             let owner = nikaia_std::block::Text::from(asked.names.resolve(name).to_string());
-            for field in fields.iter() { struct_field(&owner, field, asked, &holes_of, &ty_of, walk); }
+            for field in fields.iter() { struct_field(&owner, node_key(expr), field, asked, &holes_of, &ty_of, walk); }
         },
         Expr::LitInterpolated { .. } => { for hole in holes_of(expr) { sharing_expression(&hole, asked, holes_of, ty_of, walk); } },
         Expr::Closure { body, .. } => {
@@ -963,7 +977,15 @@ pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_o
             sharing_expression(value, asked, holes_of, ty_of, walk);
             sharing_expression(count, asked, holes_of, ty_of, walk);
         },
-        Expr::ListLit { items, .. } => { for item in items.iter() { sharing_expression(item, asked, holes_of, ty_of, walk); } },
+        Expr::ListLit { items, .. } => {
+            for item in items.iter() {
+                if walk.moves.stored.contains(&node_key(item)) {
+                    let named = named_handle(item, asked.names, &walk.scope);
+                    if named.is_some() { walk.slots.duplicates(&walk.function, nikaia_std::index::or(named.as_deref(), || ""), String::from("put into a list, which holds a handle of its own")); }
+                }
+                sharing_expression(item, asked, holes_of, ty_of, walk);
+            }
+        },
         _ => { },
     }
 }
@@ -986,7 +1008,7 @@ pub(crate) fn a_handle_by_value(named: &str, walk: &SharingWalk) -> bool {
     by_value_shared(ty)
 }
 
-pub(crate) fn struct_field(owner: &str, field: &FieldInit, asked: &Asked<'_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, ty_of: &dyn Fn(&Type) -> Ty, walk: &mut SharingWalk) {
+pub(crate) fn struct_field(owner: &str, literal: i64, field: &FieldInit, asked: &Asked<'_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, ty_of: &dyn Fn(&Type) -> Ty, walk: &mut SharingWalk) {
     let field_name = nikaia_std::block::Text::from(asked.names.resolve(field.name).to_string());
     let value = nikaia_std::index::or(match field.value.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1002,6 +1024,9 @@ pub(crate) fn struct_field(owner: &str, field: &FieldInit, asked: &Asked<'_, '_,
         } { Some(__nikaia_value) => __nikaia_value, None => return };
         walk.slots.note(FIELDS, &key, ty, true, false);
         walk.slots.join(&slot(&walk.function, &named), &slot(FIELDS, &key));
+        let mut stored = false;
+        if field.value.is_none() { stored = walk.moves.stored_fields.contains(&(literal, nikaia_std::block::Text::from(field_name.to_string()))); } else { stored = walk.moves.stored.contains(&node_key(&value)); }
+        if stored { walk.slots.duplicates(&walk.function, &named, format!("stored in `{}`, which holds a handle of its own", key)); }
     } else {
         let declared = declared_field_type(owner, &field_name, asked);
         if declared.is_some() && holds_shared(nikaia_std::index::or(declared.as_ref(), || &Ty::Unknown)) {
@@ -1051,7 +1076,7 @@ pub(crate) fn sharing_arguments(called: &SharingCall, args: &[Expr], config: &[C
             a_lambda_handed_on((described).as_ref(), at, &arg, asked, &holes_of, &ty_of, walk);
             continue;
         }
-        a_handle_handed_on(called, (described).as_ref(), at, nikaia_std::index::or(handle.as_deref(), || ""), walk);
+        a_handle_handed_on(called, (described).as_ref(), at, nikaia_std::index::or(handle.as_deref(), || ""), walk.moves.moved.contains(&node_key(&arg)), walk);
     }
     for setting in config.iter() {
         let why = format!("it is handed to `{}` as the option `{}`, and no contract says what happens to a `Shared` in an option", nikaia_std::index::or(match called.callee.as_ref() {
@@ -1091,7 +1116,7 @@ pub(crate) fn an_argument_that_is_not_a_handle(called: &SharingCall, described: 
     walk.slots.join(&source, &slot(&known.key, &param));
 }
 
-pub(crate) fn a_handle_handed_on(called: &SharingCall, described: Option<&Described>, at: i64, handle: &str, walk: &mut SharingWalk) {
+pub(crate) fn a_handle_handed_on(called: &SharingCall, described: Option<&Described>, at: i64, handle: &str, moved: bool, walk: &mut SharingWalk) {
     let function = nikaia_std::block::Text::from(walk.function.to_string());
     if described.is_none() {
         walk.slots.force(&function, handle, unseen((called.callee).as_deref()), Some(unseen_kind(called)));
@@ -1106,8 +1131,8 @@ pub(crate) fn a_handle_handed_on(called: &SharingCall, described: Option<&Descri
         walk.slots.force(&function, handle, format!("`{}` takes it in a position no contract describes", callee), Some(Fallback::UncoveredArgument));
         return;
     }
-    let param = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&known.params, (at) as usize) }.0.to_string());
-    if by_value_shared(&unsafe { nikaia_std::proven::read(&known.params, (at) as usize) }.1) { walk.slots.duplicates(&function, handle, handed_on_to(&known.key, &param)); }
+    let param = nikaia_std::block::Text::from(nikaia_std::index::get(&known.params, nikaia_std::index::at(at)).0.to_string());
+    if by_value_shared(&unsafe { nikaia_std::proven::read(&known.params, (at) as usize) }.1) && !moved { walk.slots.duplicates(&function, handle, handed_on_to(&known.key, &param)); }
     walk.slots.join(&slot(&function, handle), &slot(&known.key, &param));
 }
 

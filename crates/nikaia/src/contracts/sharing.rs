@@ -131,6 +131,7 @@ pub fn analyse_program(
     own: &Ledger,
     library: &Ledger,
     crossings_are_possible: bool,
+    facts: Option<&crate::check::CheckFacts>,
 ) -> Sharing {
     // **Where nothing can cross, there is nothing to decide**
     // ([ADR-312](../../../../docs/specification/adr/adr-312.md) D10). At
@@ -161,12 +162,18 @@ pub fn analyse_program(
         &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
         &|ty: &crate::ast::Type| Ty::from_ast(parsed, ty),
         crossings_are_possible,
+        // Which handovers duplicate a handle is the checker's (ADR-312 D2,
+        // #1502); without a check every one counts, as before.
+        match facts {
+            Some(facts) => nikaia_std::tools::sharing::sharing_moves_of(facts),
+            None => nikaia_std::tools::sharing::sharing_moves_unknown(),
+        },
     )
 }
 
 /// Every `Shared` value in a program, and which count it would get.
 pub fn analyse(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<Decision> {
-    analyse_program(parsed, own, library, true).decisions
+    analyse_program(parsed, own, library, true, None).decisions
 }
 
 /// Fill in the `sharing` column of a ledger, from the bodies.
@@ -182,7 +189,7 @@ pub fn analyse(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<Decision>
 /// switch would be the thing ADR-312 D6 refuses. What is emitted is the
 /// emitter's question and it asks it with the setting in hand.
 pub fn infer(ledger: &mut Ledger, parsed: &Parsed, library: &Ledger) {
-    let summaries = analyse_program(parsed, ledger, library, true).summaries;
+    let summaries = analyse_program(parsed, ledger, library, true, None).summaries;
     for (key, classes) in summaries {
         if let Some(contract) = ledger.functions.get_mut(&key) {
             contract.sharing = classes;
@@ -202,11 +209,13 @@ pub fn report(
     own: &Ledger,
     library: &Ledger,
     crossings_are_possible: bool,
+    facts: Option<&crate::check::CheckFacts>,
 ) -> String {
     nikaia_std::tools::sharing::sharing_report(&analyse_program(
         parsed,
         own,
         library,
         crossings_are_possible,
+        facts,
     ))
 }

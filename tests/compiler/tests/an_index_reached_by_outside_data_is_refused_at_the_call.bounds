@@ -1,0 +1,4 @@
+bounds in tests/an_index_reached_by_outside_data_is_refused_at_the_call.nika: 1 indexes, 0 proved; 0 operations, 0 proved
+     9  names[month]  checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+  outside  15  `names[month]` in `month_name`, `month` from `io::read_to_string`: refused NK1302
+  derived  month_name: 0 <= month, month <= 12, proved at the calls on lines 15

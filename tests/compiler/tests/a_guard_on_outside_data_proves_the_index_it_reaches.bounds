@@ -1,3 +1,4 @@
 bounds in tests/a_guard_on_outside_data_proves_the_index_it_reaches.nika: 1 indexes, 1 proved; 0 operations, 0 proved
      9  names[month]  proved
+  outside  15  `names[month]` in `month_name`, `month` from `io::read_to_string`: proved by the guard on line 14 (`!(month >= 0 && month < 12)`)
   derived  month_name: 0 <= month, month <= 12, month < 12, proved at the calls on lines 15

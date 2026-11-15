@@ -30,6 +30,28 @@ pub struct UnwrittenCheck {
     pub within: String,
 }
 
+/// **An index that data from outside the program reaches, and what became
+/// of it** (ADR-396 D5), for `--bounds`: where it stands - the index, or the
+/// call that hands it the value - the name and its source, and whether the
+/// walk proved it, with the guard that did where one did.
+pub struct OutsideIndex {
+    /// The byte of the index or of the call.
+    pub at: i64,
+    /// The index, written, with the function it stands in where a call
+    /// reaches it: `` `names[month]` in `month_name` ``.
+    pub written: String,
+    /// The name from outside the index reads.
+    pub name: String,
+    /// Where its value came from (`io::read_to_string`), "" where the walk
+    /// does not know.
+    pub source: String,
+    pub proved: bool,
+    /// The byte of the guard that proves it, -1 where none does.
+    pub guard_at: i64,
+    /// That guard's condition, written.
+    pub guard: String,
+}
+
 /// One claim of a precondition (ADR-269 D15).
 pub struct PreClaim {
     /// The condition at the function's entry, over its parameters: the

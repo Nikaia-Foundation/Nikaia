@@ -1512,7 +1512,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     }
     if bindings.len() == 1 && elements.len() == 1 {
         match *unsafe { nikaia_std::proven::read(&elements, (0) as usize) } {
-            Ty::Named { ref name, .. } => { if has_a_length(name) { state.facts.whole_lets.insert(span.start as i64, nikaia_std::block::Text::from(name.to_string())); } },
+            Ty::Named { ref name, ref args, .. } => { if has_a_length(name) || args.is_empty() && !is_whole_number(name) { state.facts.whole_lets.insert(span.start as i64, nikaia_std::block::Text::from(name.to_string())); } },
             _ => { },
         }
     }

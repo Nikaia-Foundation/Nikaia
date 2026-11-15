@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1385 (Draft)
+**Version:** 0.0.1386 (Draft)
 **Date:** 2026-11-15
 
 ---
@@ -2466,9 +2466,9 @@ what would have changed it. It changes no decision.
 
 **The second owner arises without a written step.** Where a handle on a
 `Shared[T]` or a `SharedMut[T]` is handed on **by value**, passed to a function
-that keeps it or used by a task (Part II, 11.2), the handle is **duplicated**.
-Each handle is cleaned up at the end of its own block (6.1). No method is
-called. A duplicated handle copies no data: one value, one more owner. The rule
+that keeps it, stored into a field or a list, or used by a task (Part II,
+11.2), and its name is read again after that, the handle is **duplicated**. At
+its last use it is **moved**, as any value is (8.3). No method is called. A duplicated handle copies no data: one value, one more owner. The rule
 is the same for both shared types; a `SharedMut[T]` may go into a task of the program's own, and not into code nothing written down describes
 (Part II, 11.2).
 
@@ -2544,12 +2544,12 @@ call, and the call gives the number its type as any other argument does.
 of those) is **moved** where it is handed on to something that keeps it (6.5,
 8.3). For data, the `.clone()` is written in the source.
 
-**Each handle lives to the end of its own block, whether or not it is used
-again.** The duplication is not conditional on a later use, so the value is
-cleaned up where the caller's handle ends, which may be later than the task
-that holds the other one. A program that wants the cleanup earlier ends the
-block earlier (6.1). `--sharing` names each duplication site beside the count
-it printed for that value.
+**A duplicated handle lives to the end of its own block; a moved one as long
+as what it went into** (ADR-312 D3). The value is cleaned up when its last
+handle goes: where a handle was handed on at its last use, that is when the
+callee, the struct or the task that took it ends. `--sharing` names each
+duplication site that remains beside the count it printed for that value; a
+handover at a last use is a move and is not listed.
 
 **`SharedMut[T]` is one name and two hulls.** Which hull a value gets is
 decided per value, as the owner count is. A message, a printed type and a

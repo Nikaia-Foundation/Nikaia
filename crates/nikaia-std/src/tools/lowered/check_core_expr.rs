@@ -259,6 +259,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             state.flow.barrier = Some(String::from("task"));
             state.flow.async_depth += 1;
             state.flow.async_started += 1;
+            state.flow.starts_async = true;
             let changed_from = state.changed.len() as i64;
             let mut run = false;
             match inner {
@@ -367,6 +368,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             if written_async && state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
             if child {
                 state.flow.async_started += 1;
+                state.flow.starts_async = true;
                 state.an_async_inside_a_door(span);
             }
             check_core_ops_spawn(state, world, host, body, written_async, child, span)
@@ -587,6 +589,17 @@ pub(crate) fn check_core_expr_throw<H: CheckHost>(state: &mut CheckState, world:
     let thrown = check_core_expr(state, world, host, inner, span);
     state.a_thrown_value_that_is_not_an_error(inner, &thrown, span);
     state.a_thrown_type_with_no_error(world, &thrown, span);
+    if state.handed_over.is_some() {
+        let held = match match state.handed_over.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        if !held.caught {
+            let mut handed = held;
+            handed.fails = true;
+            state.handed_over = Some(handed);
+        }
+    }
     state.a_way_out("throw", "", span);
     Ty::Unknown
 }

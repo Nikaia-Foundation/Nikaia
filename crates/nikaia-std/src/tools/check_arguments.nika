@@ -380,6 +380,12 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             let value = given_here ?? continue
             state.hands_over(world, value, found_here, f"passed to `{written}`, which keeps it", span)
         }
+        // **A handle handed on by value is moved at its last use** (ADR-312
+        // D2, #1502); the lowering duplicates it everywhere else.
+        if given_here != null && check_core_places_a_handle(declared) {
+            let value = given_here ?? continue
+            state.a_handle_handed_on(world, value, found_here, span)
+        }
         // **A type variable only this argument decides takes the argument's
         // own type** (0.0.230, #155): a text literal is a `String`.
         let mut literal_wants = want.clone()

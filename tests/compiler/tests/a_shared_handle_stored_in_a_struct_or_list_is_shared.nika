@@ -1,22 +1,44 @@
 // A handle on a shared value put into a struct literal's field or a list
-// is duplicated, so the name can be read afterwards (ADR-312 D1, #1411).
+// is duplicated, so the name can be read afterwards (ADR-312 D1, #1411); at
+// its last use it is moved, and the value goes with the struct (D2, D3,
+// #1502).
 struct H { a: SharedMut[i64] }
 struct G { s: Shared[i64] }
 
+struct Noisy { name: String }
+
+impl Drop for Noisy {
+	fn drop(mut self) {
+		println(f"{self.name} goes") catch { }
+	}
+}
+
+struct N { s: SharedMut[Noisy] }
+
+fn take_all(_n: N, _list: Vec[SharedMut[Noisy]]) throws {
+	println("took the struct and the list")
+}
+
 fn main() throws {
-    let a = SharedMut(0)
-    let h = H { a: a }
-    println(f"{a.get()}")
-    println(f"{h.a.get()}")
-    let shorthand = H { a }
-    let from_field = H { a: h.a }
-    let list = [a, h.a]
-    a.set(7)
-    println(f"{shorthand.a.get()} {from_field.a.get()} {list[0].get()} {list[1].get()}")
-    let s = Shared(5)
-    let g = G { s: s }
-    println(f"{s} {g.s}")
-    let last = SharedMut(1)
-    let once = H { a: last }
-    println(f"{once.a.get()}")
+	let a = SharedMut(0)
+	let h = H { a: a }
+	println(f"{a.get()}")
+	println(f"{h.a.get()}")
+	let shorthand = H { a }
+	let from_field = H { a: h.a }
+	let list = [a, h.a]
+	a.set(7)
+	println(f"{shorthand.a.get()} {from_field.a.get()} {list[0].get()} {list[1].get()}")
+	let s = Shared(5)
+	let g = G { s: s }
+	println(f"{s} {g.s}")
+	let last = SharedMut(1)
+	let once = H { a: last }
+	println(f"{once.a.get()}")
+	let field = SharedMut(Noisy { name: "the field" })
+	let item = SharedMut(Noisy { name: "the item" })
+	take_all(N { s: field }, [item])
+	let s = SharedMut(Noisy { name: "the shorthand" })
+	take_all(N { s }, [])
+	println("main goes on")
 }

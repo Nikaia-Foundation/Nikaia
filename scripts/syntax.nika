@@ -132,14 +132,14 @@ fn syntax_test(key: String) throws {
 		if name.to_lowercase().contains(by_name.clone()) {
 			let n = fs::read_to_string(path.clone(), fs::Root::Anywhere).len()
 			if best == "" || n < best_len {
-				best = path.clone()
+				best = path
 				best_len = n
 			}
 		} else if best == "" {
 			let text = fs::read_to_string(path.clone(), fs::Root::Anywhere)
 			if text.to_lowercase().contains(key.clone())
 				&& (by_text == "" || text.len() < by_text_len) {
-					by_text = path.clone()
+					by_text = path
 					by_text_len = text.len()
 				}
 		}

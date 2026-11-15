@@ -149,6 +149,14 @@ pub struct CheckPendingConcat {
     pub taken: CheckTaken,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckPendingHandle {
+    pub node: i64,
+    pub field: String,
+    pub task: bool,
+    pub taken: CheckTaken,
+}
+
 pub fn a_path_overlaps(read: &str, taken: &str) -> bool {
     if read == taken { return true; }
     if read.starts_with(AsRef::<str>::as_ref(taken)) && nikaia_std::index::or(read.strip_prefix(AsRef::<str>::as_ref(taken)), || "").starts_with('.') { return true; }

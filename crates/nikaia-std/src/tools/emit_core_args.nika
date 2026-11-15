@@ -494,9 +494,10 @@ impl EmitState {
                 return
             }
         }
-        // ADR-312 D1: a handle on a shared value is **duplicated, never moved**,
-        // where it is handed on by value, and only where the argument names one.
-        let shares_a_handle = i < takes_a_handle.len() && takes_a_handle[i] && emit_arg_names_a_place(arg)
+        // ADR-312 D1, D2: a handle on a shared value is **duplicated** where it
+        // is handed on by value, only where the argument names one, and only
+        // where the name is read again: at its last use it moves (#1502).
+        let shares_a_handle = i < takes_a_handle.len() && takes_a_handle[i] && emit_arg_names_a_place(arg) && !self.facts.moved_handles.contains(node)
         // **A kept function value handed to code that keeps it is cloned**
         // (#1008): a `Kept` is an `Arc`, and the name may be read again
         // (a second call, a loop, a recursive call).
@@ -792,12 +793,16 @@ impl EmitState {
                 // **Code that hands back nothing drops the body's value**
                 // (#1321).
                 let valueless = self.facts.valueless_lambdas.contains(node_key(arg))
+                // **A body that leaves at its end has no `Ok` after it**
+                // (#1369): it would be unreachable, and `Ok` of no value is no
+                // `Result` of the type's.
+                let leaves = emit_a_body_that_leaves(world, body)
                 if self.facts.failing_lambdas.contains(node_key(arg)) {
                     let plain = EmitFlow::plain().at(inside.statement)
                     let failing = plain with { can_throw: true }
-                    out.push("{ let __nikaia_done = ")
+                    out.push(if leaves { "{ " } else { "{ let __nikaia_done = " })
                     self.emit_core_block(world, walk, out, host, body, depth, failing, inner, if valueless { EmitTail::Statement } else { EmitTail::Value })
-                    out.push("; Ok(__nikaia_done) }")
+                    out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" })
                 } else {
                     self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(inside.statement), inner, if valueless { EmitTail::Statement } else { EmitTail::Return })
                 }

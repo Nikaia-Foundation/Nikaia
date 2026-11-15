@@ -1,0 +1,6 @@
+bounds in tests/match_ref_map_key.nika: 2 indexes, 2 proved; 1 operations, 0 proved
+    31  nodes[id]  proved
+    45  nodes[id]  proved
+    53  a + b      checked: a value read out of a list, of which the walk knows no fact (#797, #798): a map's value (ADR-306 D24)
+  derived  twice: 0 <= id, id <= nodes.len(), id < nodes.len(), proved at the calls on lines 65, 65
+  derived  value: 0 <= id, id <= nodes.len(), id < nodes.len(), proved at the calls on lines 64, 64

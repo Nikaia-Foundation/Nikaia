@@ -515,7 +515,7 @@ pub(crate) fn sv_real_value(arena: &TermArena, id: i64, values: &collections::BT
     let node = arena.at(id);
     match node {
         SolverTerm::Int(n) => Some(sv_int(n)),
-        SolverTerm::Var(ref name) => Some(sv_real_named(values, name)),
+        SolverTerm::Var(ref name) => Some(nikaia_std::index::or(*nikaia_std::index::get(&values, name), || sv_int(0).into())),
         SolverTerm::Add(a, b) => {
             let x = match sv_real_value(arena, a, values) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let y = match sv_real_value(arena, b, values) { Some(__nikaia_value) => __nikaia_value, None => return None };

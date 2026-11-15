@@ -40,6 +40,7 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
         walk.std_claims = collections::BTreeMap::new();
         walk.reaches = collections::BTreeMap::new();
         walk.findings = vec![];
+        walk.outside = collections::BTreeMap::new();
         walk.state.broken = collections::BTreeSet::new();
         prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
         settled = walk.state.broken.is_empty();

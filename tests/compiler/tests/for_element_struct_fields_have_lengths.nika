@@ -1,0 +1,32 @@
+// A `for` over structs: the lists in the element's fields have lengths, so a
+// range over `f.lines.len()` bounds its index even where the data comes from
+// outside the program (ADR-396 D4).
+use std::process
+
+struct Page {
+    path: String,
+    lines: Vec[String],
+}
+
+fn load() -> Vec[Page] throws {
+    let mut out: Vec[Page] = []
+    let text = process::run("echo", ["a b"]).stdout
+    out.push(Page { path: "p", lines: text.split(" ").collect() })
+    return out
+}
+
+fn total(pages: ref Vec[Page]) -> i64 {
+    let mut n = 0
+    for f in pages {
+        for i in 0..<f.lines.len() {
+            let line = f.lines[i].clone()
+            n += line.len()
+        }
+    }
+    return n
+}
+
+fn main() throws {
+    let pages = load()
+    println(total(pages))
+}

@@ -80,6 +80,10 @@ pub struct ProverScope {
     /// **The names bound to a map** (ADR-396 D4): `m[k]` reads a key, not a
     /// position, so no index bound is asked of it.
     pub maps: collections::BTreeSet[String],
+    /// **The guards that made a fact of `facts`** (ADR-396 D5), by the fact:
+    /// the byte of the guard and its condition, written, for `--bounds` to
+    /// name the guard that proves an index data from outside reaches.
+    pub guards: collections::BTreeMap[i64, (i64, String)],
 }
 
 /// The bounds `lo <= x <= hi` a mask or a shift gives a whole number.
@@ -110,6 +114,7 @@ impl ProverScope {
             history: [],
             bits: collections::BTreeMap(),
             maps: collections::BTreeSet(),
+            guards: collections::BTreeMap(),
         }
     }
 
@@ -235,6 +240,24 @@ impl ProverScope {
         let ints = self.ints.clone()
         self.rebind(arena, name)
         self.ints = ints
+    }
+
+    /// **The guard that proves `goal`, where one does** (ADR-396 D5): the
+    /// last fact a guard made that reads a name the goal reads, as
+    /// `guards` has it - its byte and its condition, written.
+    pub fn guard_of(ref self, arena: ref TermArena, goal: i64) -> (i64, String)? {
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(goal, names)
+        let mut found: (i64, String)? = null
+        for fact in self.facts {
+            let guard = self.guards.get(fact) ?? continue
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            arena.variables(fact, read)
+            if ties(read, names) {
+                found = guard.clone()
+            }
+        }
+        return found
     }
 
     /// **Whether the history can say anything about `claim`**: it reads a

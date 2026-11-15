@@ -20,6 +20,12 @@ pub(crate) fn emit_ends_in_a_jump(world: &EmitWorld<'_, '_, '_, '_>, stmt: &Stmt
     }
 }
 
+pub fn emit_a_body_that_leaves(world: &EmitWorld<'_, '_, '_, '_>, body: &Block) -> bool {
+    let count = body.stmts.len() as i64;
+    if count == 0 { return false; }
+    emit_ends_in_a_jump(world, &unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }.node)
+}
+
 pub(crate) fn emit_is_a_forever_loop(world: &EmitWorld<'_, '_, '_, '_>, stmt: &Stmt) -> bool {
     match stmt {
         Stmt::While { cond, body } => emit_is_literal_true(cond) && !breaks(body, world.words),

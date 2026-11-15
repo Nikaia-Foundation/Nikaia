@@ -51,6 +51,7 @@ signature = "(ref mut self, k: i64) -> String"
 pub = true
 panics = true
 touches = ["file('/dev/null') read"]
+provenance = "untrusted"
 signature = "(ref mut self, k: i64) -> String"
 
 [fn."copy_places"]

@@ -41,7 +41,9 @@ pub fn trace_at(asked: String) {
 /// The report, for one file. What is proved does not depend on what the
 /// build drops (ADR-306 D14), only on `through_loops`
 /// (`prove-through-loops:on`, ADR-361 D10); the first line says whether this
-/// build writes it without its check.
+/// build writes it without its check. `unproved_warn`
+/// (`unproved-claims = "warn"`) says an index data from outside reaches and
+/// nothing proves is checked, not refused (ADR-396 D3, D5).
 #[allow(clippy::too_many_arguments)]
 pub fn report(
     parsed: &Parsed,
@@ -53,6 +55,7 @@ pub fn report(
     bounds: BoundsChecks,
     overflow: OverflowChecks,
     through_loops: bool,
+    unproved_warn: bool,
 ) -> String {
     let checked = crate::check::check(parsed, own, library);
     report_checked(
@@ -66,6 +69,7 @@ pub fn report(
         bounds,
         overflow,
         through_loops,
+        unproved_warn,
     )
 }
 
@@ -84,6 +88,7 @@ pub fn report_checked(
     bounds: BoundsChecks,
     overflow: OverflowChecks,
     through_loops: bool,
+    unproved_warn: bool,
 ) -> String {
     let published = crate::prove::with_published(own, &checked.facts.published);
     let asked = TRACE.get();
@@ -111,6 +116,8 @@ pub fn report_checked(
         proven_arithmetic: proven.arithmetic.iter().copied().collect(),
         proven_negations: proven.negations.iter().copied().collect(),
         derived: proven.derived,
+        outside: checked.facts.outside_indices.clone(),
+        unproved_warn,
     };
     let report = bounds_report_checked(
         &parsed.program,

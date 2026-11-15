@@ -2106,8 +2106,9 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     // `for` as a `let`'s type is.
     if bindings.len() == 1 && elements.len() == 1 {
         match elements[0] {
-            Ty::Named { name, .. } => {
-                if has_a_length(name) {
+            Ty::Named { name, args, .. } => {
+                // A struct element has the fields of a parameter's type.
+                if has_a_length(name) || (args.is_empty() && !is_whole_number(name)) {
                     state.facts.whole_lets.insert(span.start as i64, name.clone())
                 }
             },

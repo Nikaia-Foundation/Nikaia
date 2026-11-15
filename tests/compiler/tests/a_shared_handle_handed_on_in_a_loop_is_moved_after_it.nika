@@ -1,0 +1,22 @@
+// A handle handed on inside a loop is read again by the next round, so it is
+// duplicated there; after the loop its last use moves it (ADR-312 D2, #1502).
+struct Noisy { name: String }
+
+impl Drop for Noisy {
+	fn drop(mut self) {
+		println(f"{self.name} goes") catch { }
+	}
+}
+
+fn take(_s: SharedMut[Noisy], said: String) throws {
+	println(f"took it {said}")
+}
+
+fn main() throws {
+	let s = SharedMut(Noisy { name: "the value" })
+	for round in 0..<2 {
+		take(s, f"in round {round}")
+	}
+	take(s, "after the loop")
+	println("main goes on")
+}

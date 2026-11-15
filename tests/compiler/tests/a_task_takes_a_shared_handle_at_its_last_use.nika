@@ -1,0 +1,24 @@
+// A task that uses a handle takes one of its own only where the name is read
+// after the spawn; at its last use the handle is moved into the task and
+// goes with it (ADR-312 D1, D2, D3, #1502).
+struct Noisy { name: String }
+
+impl Drop for Noisy {
+	fn drop(mut self) {
+		println(f"{self.name} goes") catch { }
+	}
+}
+
+fn one(_s: SharedMut[Noisy]) -> i64 {
+	return 1
+}
+
+fn main() throws {
+	let kept = SharedMut(Noisy { name: "kept" })
+	let first = spawn fn { one(kept) }
+	println(f"the first task saw {first.join()} value")
+	let moved = SharedMut(Noisy { name: "moved" })
+	let second = spawn fn { one(moved) + one(kept) }
+	println(f"the second task saw {second.join()} values")
+	println("main goes on")
+}
