@@ -1,0 +1,14 @@
+use compiler_tests
+use std::collections
+
+/// A map of literal text handed to an option of another package's method
+/// keeps text of its own, as at the program's own method: the option is the
+/// owned map the ledger writes, and the map was refused with NK1106 ("you're
+/// passing `collections::HashMap[ref String, i64]`"). Found building
+/// `packages/db`: `db::raw(text).execute(conn; parameters: parameters)` (#116).
+fn main() throws {
+	let mut m: collections::HashMap[String, i64] = collections::HashMap()
+	m.insert("a", 1)
+	m.insert("b", 2)
+	println(compiler_tests::OptionBeside { name: "o" }.counted(m: m))
+}

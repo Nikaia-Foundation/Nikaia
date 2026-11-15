@@ -4194,10 +4194,10 @@ pub(crate) fn declared_options(callee: &str, walk: &TierWalk) -> Vec<(String, Ty
 
 pub(crate) fn own_method_options(method: &str, config: &[ConfigArg], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     if config.is_empty() { return; }
-    let keys = match match *nikaia_std::index::get(&walk.declared.methods, method) {
+    let keys = nikaia_std::index::or(match *nikaia_std::index::get(&walk.declared.methods, method) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    }, || vec![].into());
     let key = if keys.len() == 1 { nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&keys, (0) as usize) }).to_string()) } else { String::from("") };
     own_option_containers(&key, config, ask, walk);
 }

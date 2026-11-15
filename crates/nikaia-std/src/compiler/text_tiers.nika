@@ -5845,13 +5845,17 @@ fn declared_options(callee: ref String, walk: ref TierWalk) -> Vec[(String, Type
     return function.options.clone()
 }
 
-/// The options handed to a method of this program's (`own_option_containers`);
-/// their declared types are read where one method has the name.
+/// The options handed to a method (`own_option_containers`); their declared
+/// types are read where one method of this program's has the name.
 fn own_method_options(method: ref String, config: ref Vec[ConfigArg], ask: ref TierAsk, mut walk: TierWalk) {
     if config.len() == 0 {
         return
     }
-    let keys = walk.declared.methods[method]?.clone() ?? return
+    // **A method of a package's is the same** (#116): an option of
+    // `db::Raw::execute` is the owned container its ledger signature writes,
+    // so a map of literal keys handed to `parameters:` keeps its keys. Its
+    // declared types are not read: the receiver's type is not known here.
+    let keys = walk.declared.methods[method]?.clone() ?? []
     let key = if keys.len() == 1 { keys[0].clone() } else { "" }
     own_option_containers(key, config, ask, walk)
 }

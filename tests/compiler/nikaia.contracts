@@ -54,6 +54,14 @@ touches = ["file('/dev/null') read"]
 provenance = "untrusted"
 signature = "(ref mut self, k: i64) -> String"
 
+[fn."OptionBeside::counted"]
+pub = true
+sync = "inferred"
+keeps = ["m"]
+panics = false
+touches = []
+signature = "(ref self; m: collections::HashMap[String, i64]? = None) -> i64"
+
 [fn."TraitKeepBesideSink::put"]
 pub = true
 keeps = ["text"]
@@ -337,6 +345,10 @@ fields = ["pub count: i64"]
 [type."Nest"]
 pub = true
 fields = ["pub depth: i64"]
+
+[type."OptionBeside"]
+pub = true
+fields = ["pub name: String"]
 
 [type."Places"]
 pub = true
