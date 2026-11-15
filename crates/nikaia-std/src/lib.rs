@@ -789,6 +789,9 @@ pub mod prelude {
     pub use crate::hash::{TrustedMap, TrustedSet};
     pub use crate::html;
     pub use std::cmp::Ordering;
+    // **What an `impl Hash`'s `hash` feeds** (ADR-010 D12): any hasher of the
+    // standard library's, behind the `mut` reference the parameter lowers to.
+    pub type Hasher<'a> = dyn std::hash::Hasher + 'a;
     // **HTTP/1.1's text half** ([ADR-289](../../../docs/specification/adr/adr-289.md)
     // D5), which the `http` package calls. **Not named `http`**: a program
     // reaches a *package* by that word, and a `std` module of the same name

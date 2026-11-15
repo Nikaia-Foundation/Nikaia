@@ -5,7 +5,7 @@ pub(crate) const UNNAMED: &str = "?";
 
 pub const AS_VALUE: &str = "<as a value>";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MethodsCalled {
     pub resolved: collections::BTreeSet<String>,
     pub unseen: bool,
@@ -13,7 +13,7 @@ pub struct MethodsCalled {
     pub swallowed: collections::BTreeMap<String, collections::BTreeSet<String>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ThrowsGraph {
     pub methods: collections::BTreeMap<String, MethodsCalled>,
     pub direct: collections::BTreeMap<String, collections::BTreeSet<String>>,
@@ -281,7 +281,7 @@ pub(crate) fn struct_type(written: &str) -> String {
     ty
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Thrown {
     pub direct: collections::BTreeSet<String>,
     pub calls: collections::BTreeSet<String>,
@@ -290,7 +290,7 @@ pub struct Thrown {
     pub fatal_calls: collections::BTreeMap<String, collections::BTreeSet<String>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Contribution {
     pub call: Option<String>,
     pub given: Vec<String>,

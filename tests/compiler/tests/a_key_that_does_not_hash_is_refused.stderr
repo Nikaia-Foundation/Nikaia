@@ -1,0 +1,41 @@
+error[NK1260]: `HashMap` finds its keys by their hash, and `Name` doesn't hash.
+   --> tests/a_key_that_does_not_hash_is_refused.nika:19:17
+    |
+ 19 | struct Holder { by_name: collections::HashMap[Name, i64] }
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `Name` says with its own `impl Eq` when two values are equal, so a hash made from its fields could tell two equal values apart.
+    = help: Write `impl Hash for Name { … }` that feeds `into.add(…)` what `eq` compares, or key the `HashMap` by a text or a number.
+error[NK1260]: `HashSet` finds its keys by their hash, and `Q` doesn't hash: its part `f64` doesn't.
+   --> tests/a_key_that_does_not_hash_is_refused.nika:21:10
+    |
+ 21 | fn count(m: collections::HashSet[Q]) -> i64 { m.len() }
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: An integer, a `String`, a `bool`, a `scalar`, `Bytes`, a tuple, list or option of those, and a `struct` or an `enum` you declare whose parts all hash, hash. A float doesn't (`NaN` isn't equal to itself), nor does a map or a set, and a type from a library hashes only where its ledger says `hashes = true`.
+    = help: Key the `HashSet` by a text or a number, or leave the part that doesn't hash out of the key.
+error[NK1260]: `HashMap` finds its keys by their hash, and `f64` doesn't hash.
+   --> tests/a_key_that_does_not_hash_is_refused.nika:24:5
+    |
+ 24 |     let floats: collections::HashMap[f64, i64] = collections::HashMap()
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: An integer, a `String`, a `bool`, a `scalar`, `Bytes`, a tuple, list or option of those, and a `struct` or an `enum` you declare whose parts all hash, hash. A float doesn't (`NaN` isn't equal to itself), nor does a map or a set, and a type from a library hashes only where its ledger says `hashes = true`.
+    = help: Key the `HashMap` by a text or a number, or leave the part that doesn't hash out of the key.
+error[NK1260]: `HashSet` finds its keys by their hash, and `Outer` doesn't hash: its part `f64` doesn't.
+   --> tests/a_key_that_does_not_hash_is_refused.nika:25:5
+    |
+ 25 |     let nested: collections::HashSet[Outer] = collections::HashSet()
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: An integer, a `String`, a `bool`, a `scalar`, `Bytes`, a tuple, list or option of those, and a `struct` or an `enum` you declare whose parts all hash, hash. A float doesn't (`NaN` isn't equal to itself), nor does a map or a set, and a type from a library hashes only where its ledger says `hashes = true`.
+    = help: Key the `HashSet` by a text or a number, or leave the part that doesn't hash out of the key.
+error[NK1260]: `HashMap` finds its keys by their hash, and `text::Form` doesn't hash.
+   --> tests/a_key_that_does_not_hash_is_refused.nika:26:5
+    |
+ 26 |     let forms: collections::HashMap[text::Form, i64] = collections::HashMap()
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: An integer, a `String`, a `bool`, a `scalar`, `Bytes`, a tuple, list or option of those, and a `struct` or an `enum` you declare whose parts all hash, hash. A float doesn't (`NaN` isn't equal to itself), nor does a map or a set, and a type from a library hashes only where its ledger says `hashes = true`.
+    = help: Key the `HashMap` by a text or a number, or leave the part that doesn't hash out of the key.
+5 type errors

@@ -1,0 +1,33 @@
+// #591, ADR-010 D12: a type with its own `impl Eq` hashes by its own
+// `impl Hash`, which feeds `into.add` what `eq` compares: "A" and "a" are
+// one key, in a map and, through a derived `Hash`, in a set.
+use std::collections
+
+struct Name { text: String, seen: i64 }
+
+impl Eq for Name {
+    fn eq(ref self, other: ref Self) -> bool sync {
+        return self.text.to_lowercase() == other.text.to_lowercase()
+    }
+}
+
+impl Hash for Name {
+    fn hash(ref self, mut into: Hasher) sync {
+        into.add(self.text.to_lowercase())
+    }
+}
+
+struct Pair { name: Name, n: i64 }
+
+fn main() throws {
+    let mut by_name: collections::HashMap[Name, i64] = collections::HashMap()
+    by_name.insert(Name { text: "A", seen: 1 }, 1)
+    by_name.insert(Name { text: "a", seen: 2 }, 2)
+    by_name.insert(Name { text: "b", seen: 3 }, 3)
+    println(f"{by_name.len()} {by_name[Name { text: "A", seen: 9 }] ?? 0}")
+
+    let mut pairs: collections::HashSet[Pair] = collections::HashSet()
+    pairs.insert(Pair { name: Name { text: "X", seen: 1 }, n: 1 })
+    pairs.insert(Pair { name: Name { text: "x", seen: 2 }, n: 1 })
+    println(f"{pairs.len()}")
+}

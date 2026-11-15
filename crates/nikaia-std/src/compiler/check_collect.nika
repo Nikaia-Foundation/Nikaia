@@ -18,11 +18,15 @@ fn collect_default_written(default: ref FieldDefault?) -> String {
     return "computed"
 }
 
-/// **`NK1247` for a type a declaration writes** (ADR-010 D10): the
-/// comparison asked over what the state has collected so far.
+/// **`NK1247` and `NK1260` for a type a declaration writes** (ADR-010 D10,
+/// D11): the comparison asked over what the state has collected so far.
 pub fn collect_keys_unordered(beside: ref collections::BTreeMap[String, Vec[Ty]], structs: ref collections::BTreeMap[String, Vec[FieldContract]], enums: ref collections::BTreeMap[String, collections::BTreeSet[String]], payloads: ref collections::BTreeMap[String, Vec[Ty]], parameters: ref collections::BTreeMap[String, Vec[String]], world: ref CheckWorld, ty: ref Ty, span: ref Span) -> Vec[CheckFinding] {
     let asking = CheckComparable { beside: beside, structs: structs, enums: enums, payloads: payloads, parameters: parameters, own: world.own, library: world.library }
-    return compare_keys_with_no_order(asking, ty, span)
+    let mut refused = compare_keys_with_no_order(asking, ty, span)
+    for finding in compare_keys_that_do_not_hash(asking, ty, span) {
+        refused.push(finding)
+    }
+    return refused
 }
 
 impl CheckState {

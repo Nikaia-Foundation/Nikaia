@@ -334,7 +334,7 @@ fn a_tool_reads_the_names_of_the_tree_as_described() {
 
     let tool = lowered_in("tools", source).expect("a tool lowers against the description");
     assert!(
-        tool.contains("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub struct Named"),
+        tool.contains("#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]\npub struct Named"),
         "{tool}"
     );
     assert!(!tool.contains("async fn is_main"), "{tool}");

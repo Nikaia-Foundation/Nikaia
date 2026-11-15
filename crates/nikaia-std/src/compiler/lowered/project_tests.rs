@@ -66,7 +66,7 @@ impl nikaia_std::error::Full for __NikaiaThrows_ProjectTestsRefusal__io_IoError 
 
 
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectTestsOutcome {
     pub ended_well: bool,
     pub stopped: bool,
@@ -77,7 +77,7 @@ pub struct ProjectTestsOutcome {
     pub bounds: Vec<(String, Bytes, Bytes)>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OutputTest {
     pub name: String,
     pub dir: fs::Path,
@@ -90,7 +90,7 @@ pub struct OutputTest {
     pub args: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProgramTest {
     pub name: String,
     pub dir: fs::Path,
@@ -454,7 +454,7 @@ pub fn project_tests_ran_outcome(program: &ProgramTest, code: i64, stdout: Bytes
     ProjectTestsOutcome { ended_well, stopped, passed: ended_right && printed_right, stdout, stderr: said, files: vec![], bounds: vec![] }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProjectTestsRefusal {
     Refused(String),
 }
@@ -473,7 +473,7 @@ impl std::fmt::Display for ProjectTestsRefusal {
 }
 impl std::error::Error for ProjectTestsRefusal {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectTestsRan {
     pub code: i64,
     pub stdout: Bytes,
@@ -489,7 +489,7 @@ pub trait ProjectTestsProgramHost {
     fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectTestsBatched {
     pub binary: fs::Path,
     pub entry: fs::Path,
@@ -623,7 +623,7 @@ pub(crate) async fn project_tests_prepared<H: ProjectTestsProgramHost>(host: &H,
     Ok(entry)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectTestsReports {
     pub bounds: String,
     pub asserts: String,
@@ -676,7 +676,7 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     Ok(project_tests_bounds_outcome(program, &outcome, &report, &asserts))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProjectTestsBlessed {
     Unchanged,
     Written,
@@ -781,7 +781,7 @@ pub async fn project_tests_bless(output: &OutputTest, outcomes: &[(String, Proje
     Ok(ProjectTestsBlessed::Written)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectTestsFailed {
     pub label: String,
     pub outcomes: Vec<(String, ProjectTestsOutcome)>,

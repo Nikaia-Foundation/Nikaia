@@ -215,7 +215,7 @@ impl EmitState {
                 if seeded { emit_seeds_declare_type(&mut walk.place, 0); }
                 let mut derives = self.derives(world, name);
                 let by_hand = seeded && generics.is_empty() && !self.borrowing.contains(&text) && derives.contains("PartialEq");
-                if by_hand { derives = nikaia_std::block::Text::from(nikaia_std::block::Text::from(derives.replace(", PartialEq", "")).replace(", Eq", "")); }
+                if by_hand { derives = nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(derives.replace(", PartialEq", "")).replace(", Eq", "")).replace(", Hash", "")); }
                 out.push(test_gate);
                 out.push(&derives);
                 if is_extern { out.push("#[repr(C)]\n"); }
@@ -416,12 +416,12 @@ impl EmitState {
             out.push(&format!("impl{} nikaia_std::cleanup::{} for {}{} {{\n    fn cleanup(&mut self) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ::std::string::String>>{} + '_>> {{\n        Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({}::cleanup(self){}) }})\n    }}\n}}\n", declares, bridge, target_name, applied, send, target_name, awaited));
             return Ok(());
         }
-        if has_trait && (trait_text == "Eq" || trait_text == "Ord") && !emit_item_declares_trait(world, &trait_text) {
+        if has_trait && (trait_text == "Eq" || trait_text == "Ord" || trait_text == "Hash") && !emit_item_declares_trait(world, &trait_text) {
             out.push(&format!("impl{} {}{} {{\n", declares, target_name, applied));
             for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, None, None)?; }
             out.push("}\n");
             let me = format!("{}{}", target_name, applied);
-            if trait_text == "Eq" { out.push(&format!("impl{} PartialEq for {} {{\n    fn eq(&self, other: &Self) -> bool {{ {}::eq(self, other) }}\n}}\nimpl{} Eq for {} {{}}\n", declares, me, target_name, declares, me)); } else { out.push(&format!("impl{} PartialOrd for {} {{\n    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {{ Some(std::cmp::Ord::cmp(self, other)) }}\n}}\nimpl{} Ord for {} {{\n    fn cmp(&self, other: &Self) -> std::cmp::Ordering {{ {}::compare(self, other) }}\n}}\n", declares, me, declares, me, target_name)); }
+            if trait_text == "Eq" { out.push(&format!("impl{} PartialEq for {} {{\n    fn eq(&self, other: &Self) -> bool {{ {}::eq(self, other) }}\n}}\nimpl{} Eq for {} {{}}\n", declares, me, target_name, declares, me)); } else if trait_text == "Hash" { out.push(&format!("impl{} std::hash::Hash for {} {{\n    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {{ {}::hash(self, state) }}\n}}\n", declares, me, target_name)); } else { out.push(&format!("impl{} PartialOrd for {} {{\n    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {{ Some(std::cmp::Ord::cmp(self, other)) }}\n}}\nimpl{} Ord for {} {{\n    fn cmp(&self, other: &Self) -> std::cmp::Ordering {{ {}::compare(self, other) }}\n}}\n", declares, me, declares, me, target_name)); }
             return Ok(());
         }
         let hidden = self.seeds.arity(&target_name);

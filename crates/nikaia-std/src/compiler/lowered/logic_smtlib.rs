@@ -79,26 +79,26 @@ pub(crate) fn lg_smt_int(n: i64) -> String {
     format!("(- {})", -n)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LgScript {
     pub arena: TermArena,
     pub assertions: Vec<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LgReadError {
     Syntax(String),
     Unsupported(String),
     Undeclared(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LgRead {
     Script(LgScript),
     Failed(LgReadError),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum LgSexp {
     Atom(String),
     List(Vec<LgSexp>),
@@ -123,7 +123,7 @@ pub(crate) fn lg_unquoted(name: &str) -> String {
     nikaia_std::block::Text::from(name.to_string())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum LgParsedSexps {
     Done(Vec<LgSexp>),
     Failed(LgReadError),
@@ -201,13 +201,13 @@ pub(crate) fn lg_parse(source: &str) -> LgParsedSexps {
     LgParsedSexps::Done((*unsafe { nikaia_std::proven::read(&stack, (0) as usize) }).copy_owned())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum LgTermRead {
     Term(i64),
     Failed(LgReadError),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct LgReader {
     pub(crate) arena: TermArena,
     pub(crate) declared: collections::BTreeSet<String>,

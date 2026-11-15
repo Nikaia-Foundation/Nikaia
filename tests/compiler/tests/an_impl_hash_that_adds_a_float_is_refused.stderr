@@ -1,0 +1,9 @@
+error[NK1260]: `add` feeds the hasher, and `f64` doesn't hash.
+   --> tests/an_impl_hash_that_adds_a_float_is_refused.nika:13:9
+    |
+ 13 |         into.add(1.5)
+    |         ^^^^^^^^^^^^^
+    |
+    = note: What `add` takes is hashed by its own hash, so it has to have one: an integer, a `String`, a `bool`, a `scalar`, `Bytes`, a tuple, list or option of those, or a type of yours that hashes. A float doesn't (`NaN` isn't equal to itself).
+    = help: Feed it the parts `eq` compares that hash, such as an integer or a text made from the value.
+1 type error

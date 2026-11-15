@@ -126,7 +126,7 @@ pub(crate) fn sv_extended(held: &mut Vec<SvHeld>, lo: i64, hi: i64, book: &mut S
     Some(*nikaia_std::index::get(&row.cols, nikaia_std::index::at(k)))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct SvDots {
     pub(crate) uv: i64,
     pub(crate) vv: i64,

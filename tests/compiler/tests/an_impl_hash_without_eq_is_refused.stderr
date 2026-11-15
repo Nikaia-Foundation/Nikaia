@@ -1,0 +1,9 @@
+error[NK1249]: `impl Hash for Point` needs `Point` to be `Eq`.
+  --> tests/an_impl_hash_without_eq_is_refused.nika:8:1
+   |
+ 8 | impl Hash for Point {
+   | ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A map finds a key by its hash and then by `==`, so the hash is only sound beside an equality that is total, and a type holding a float has none.
+   = help: Write `impl Eq for Point`, or take out the part that has no equality.
+1 type error

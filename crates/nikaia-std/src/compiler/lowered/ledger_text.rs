@@ -213,6 +213,7 @@ pub(crate) fn type_text(contract: &TypeContract) -> String {
     if contract.compares { out.push_str("compares = true\n"); }
     if contract.equates { out.push_str("equates = true\n"); }
     if contract.orders { out.push_str("orders = true\n"); }
+    if contract.hashes { out.push_str("hashes = true\n"); }
     if contract.copies { out.push_str("copies = true\n"); }
     if contract.iterates_fallibly { out.push_str("iterates = \"throws\"\n"); }
     if !contract.touches.is_empty() { out.push_str(&format!("touches = [{}]\n", quoted_all(&contract.touches))); }

@@ -251,7 +251,7 @@ pub fn fb_folds(pattern: &Pattern) -> Vec<&FoldSpec> {
     out
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FbTy {
     pub name: String,
     pub args: Vec<FbTy>,
@@ -268,7 +268,7 @@ impl FbTy {
     pub(crate) fn is_map(&self) -> bool { (self.name == "HashMap" || self.name == "BTreeMap") && self.args.len() == 2 }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct FbRange {
     pub(crate) below: u64,
     pub(crate) above: u64,
@@ -292,7 +292,7 @@ pub(crate) fn fb_range(ty: &str) -> Option<FbRange> {
 
 pub(crate) fn fb_is_whole(ty: &str) -> bool { fb_range(ty).is_some() }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct FbAmount {
     pub(crate) amount: u64,
     pub(crate) negative: bool,
@@ -532,19 +532,19 @@ impl<'a> FbIndex<'a, 'a, 'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct FbLambda {
     pub(crate) once: bool,
     pub(crate) bound: Vec<FbBound>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct FbBound {
     pub(crate) name: String,
     pub(crate) ty: FbTy,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct FbWalk {
     pub(crate) k: collections::BTreeMap<String, u64>,
     pub(crate) dead: collections::BTreeSet<String>,
@@ -881,7 +881,7 @@ impl FbWalk {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct FbMerge {
     pub(crate) sites: collections::BTreeMap<String, Vec<i64>>,
     pub(crate) bad: collections::BTreeSet<String>,
@@ -1089,7 +1089,7 @@ impl FbMerge {
 
 pub(crate) fn fb_fold_owner(at: i64) -> i64 { -2 - at }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FbUses {
     pub(crate) names: collections::BTreeMap<i64, collections::BTreeSet<String>>,
     pub(crate) touches: collections::BTreeMap<String, collections::BTreeSet<i64>>,

@@ -73,7 +73,7 @@ pub trait LspHost {
     fn definition(&self, entry: &str, open: &collections::BTreeMap<String, String>, alone: bool, offset: i64) -> Option<(String, Span, String)>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LspRefusal {
     Framing(String),
 }

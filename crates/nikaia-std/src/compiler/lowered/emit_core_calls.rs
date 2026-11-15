@@ -1134,6 +1134,14 @@ impl EmitState {
             out.push(")");
             return Ok(());
         }
+        if name == "add" && args.len() == 1 && self.facts.hasher_adds.contains(&node_key(receiver)) {
+            out.push("std::hash::Hash::hash(&(");
+            self.emit_core_nested(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, 255, depth, flow, scope)?;
+            out.push("), &mut &mut *");
+            self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)?;
+            out.push(")");
+            return Ok(());
+        }
         if (name == "rfind" || name == "replacen") && self.facts.text_finds.contains(&node_key(receiver)) {
             out.push(&format!("nikaia_std::search::{}(&", name));
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)?;
@@ -1267,8 +1275,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple94460| {
-        let (i, word) = __nikaia_tuple94460;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple95081| {
+        let (i, word) = __nikaia_tuple95081;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

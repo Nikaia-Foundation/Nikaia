@@ -214,7 +214,7 @@ pub fn literal_of(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Opt
 
 pub(crate) fn is_a_scalar_value(value: &BuildValue) -> bool { matches!(value, BuildValue::Int(_) | BuildValue::Float(_) | BuildValue::Bool(_)) }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PublishedEnsures {
     pub key: String,
     pub condition: String,
@@ -249,7 +249,7 @@ pub fn expression_ensures(item: &Item, words: &winnow_grammar::InternerContext, 
     Some(PublishedEnsures { key, condition })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ComputedAt {
     pub key: String,
     pub at: i64,

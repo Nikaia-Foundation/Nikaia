@@ -1559,13 +1559,14 @@ fn drive_report_pushed(dry: bool, brief: String) throws {
 }
 
 // The issue a brief belongs to: the first part of four digits of its name
-// after the prefix (`d1-1252-briefs` -> 1252, `b44-1206-x` -> 1206), "" when
-// it has none.
+// after the prefix (`d1-1252-briefs` -> 1252, `b44-1206-x` -> 1206), or of
+// any digits after `issue-` (`issue-591` -> 591, the briefs the driver writes
+// itself), "" when it has none.
 fn drive_issue(brief: String) -> String throws {
 	let parts = drive_stem(brief).split("-").collect()
 	for i in 1..<parts.len() {
 		let part = parts[i].clone()
-		let mut digits = part.len() == 4
+		let mut digits = part.len() == 4 || (parts[0] == "issue" && i == 1 && part.len() > 0)
 		for c in part.scalars { if !c.is_ascii_digit() { digits = false } }
 		if digits { return part }
 	}
@@ -2088,6 +2089,16 @@ fn drive_improve_body(name: String, issue: String, items: Vec[String]) -> String
 	return body + drive_footer()
 }
 
+// The title of an issue for the improvement lane: where it came from (the
+// issue of the run, else the brief's NAME) and the first ITEM without its
+// field name, `After #591: the issue names a Rust test file ...`.
+fn drive_improve_title(name: String, issue: String, item: String) -> String {
+	let from = if issue == "" { name } else { f"#{issue}" }
+	let colon = item.find(": ") ?? item.len()
+	let text = if colon == item.len() { item.clone() } else { f"{item[colon + ": ".len()..]}" }
+	return drive_found_title(f"After {from}: {text}")
+}
+
 // Files what a report says went badly (drive_improve_items) as one issue
 // labelled `ready` and `improve` for the improvement lane (owner,
 // 2026-11-15); `<brief>: improve #N` goes into DIR/found.txt (a report with
@@ -2099,8 +2110,9 @@ fn drive_improve_file(dir: String, brief: String) throws {
 	if items.len() == 0 { return }
 	let name = drive_stem(brief.clone())
 	if drive_read(f"{dir}/found.txt").contains(f"{name}: improve #") { return }
-	let title = drive_found_title(f"{name}: {items[0]}")
-	let number = drive_issue_new(title, drive_improve_body(name.clone(), drive_issue(brief), items), ["ready", "improve"])
+	let issue = drive_issue(brief)
+	let title = drive_improve_title(name.clone(), issue.clone(), items[0].clone())
+	let number = drive_issue_new(title, drive_improve_body(name.clone(), issue, items), ["ready", "improve"])
 	if number == "" {
 		println(f"improve file failed for {name}")
 		return
@@ -2808,7 +2820,7 @@ fn main() throws {
 			println("none")
 			return
 		}
-		println(drive_found_title(f"{args[2]}: {items[0]}"))
+		println(drive_improve_title(args[2].clone(), args[3].clone(), items[0].clone()))
 		println("ready,improve")
 		print(drive_improve_body(args[2].clone(), args[3].clone(), items))
 		return

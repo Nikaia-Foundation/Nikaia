@@ -340,7 +340,7 @@ pub(crate) fn a_bare_bit_operation(side: &Expr) -> bool {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CheckKept {
     pub notes: Vec<String>,
     pub help: String,

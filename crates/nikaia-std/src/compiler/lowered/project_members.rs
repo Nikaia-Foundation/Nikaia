@@ -69,7 +69,7 @@ impl nikaia_std::error::Full for __NikaiaThrows_ProjectMembersRefusal__io_IoErro
 
 
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectMembersManifest {
     pub name: Option<String>,
     pub keys: Vec<String>,
@@ -135,7 +135,7 @@ pub(crate) fn project_members_holds_sources(dir: &std::path::Path) -> bool {
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProjectMembersRefusal {
     Manifest,
     Refused(String),
@@ -158,7 +158,7 @@ impl std::fmt::Display for ProjectMembersRefusal {
 }
 impl std::error::Error for ProjectMembersRefusal {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectMembersDependency {
     pub name: String,
     pub root: fs::Path,
@@ -211,7 +211,7 @@ pub(crate) async fn project_members_renames_in<H: ProjectMembersHost>(dependency
     Ok(out)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectMembersMember {
     pub name: String,
     pub root: fs::Path,
@@ -433,7 +433,7 @@ pub trait ProjectMembersForeignHost {
     fn crate_root(&self, root: &std::path::Path, name: &str) -> Option<fs::Path>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectMembersForeign {
     pub declared: collections::BTreeSet<String>,
     pub described: collections::BTreeSet<String>,

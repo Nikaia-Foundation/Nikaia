@@ -10,7 +10,9 @@ pub(crate) fn collect_default_written(default: Option<&FieldDefault>) -> String 
 #[allow(clippy::too_many_arguments)]
 pub fn collect_keys_unordered(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
-    compare_keys_with_no_order(&asking, ty, span)
+    let mut refused = compare_keys_with_no_order(&asking, ty, span);
+    for finding in compare_keys_that_do_not_hash(&asking, ty, span) { refused.push(finding); }
+    refused
 }
 
 impl CheckState {

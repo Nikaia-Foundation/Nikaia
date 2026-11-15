@@ -1713,6 +1713,17 @@ impl EmitState {
             out.push(")")
             return
         }
+        // **`into.add(part)` is the part's own hash** (ADR-010 D12): `into` is
+        // a `&mut dyn Hasher`, lent once more so the standard library's sized
+        // `H` is the reference.
+        if name == "add" && args.len() == 1 && self.facts.hasher_adds.contains(node_key(receiver)) {
+            out.push("std::hash::Hash::hash(&(")
+            self.emit_core_nested(world, walk, out, host, args[0], 255, depth, flow, scope)
+            out.push("), &mut &mut *")
+            self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)
+            out.push(")")
+            return
+        }
         // **`rfind` and `replacen` count in `i64`**, as `find` does: the
         // language below's own take and give a `usize`. **Each, and `find`,
         // takes a text or one scalar** (#877), lent with `&` whichever it is.

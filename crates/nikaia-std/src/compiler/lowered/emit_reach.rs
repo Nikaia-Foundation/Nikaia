@@ -10,7 +10,7 @@ pub(crate) fn reach_pausing_keys(contracts: &Ledger) -> collections::BTreeSet<St
     pausing
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ReachIndex {
     pub keys: collections::BTreeSet<String>,
     pub by_last: collections::BTreeMap<String, Vec<String>>,

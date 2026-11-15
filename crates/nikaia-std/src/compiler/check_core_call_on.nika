@@ -292,6 +292,31 @@ fn check_core_call_on_compares(beside: ref collections::BTreeMap[String, Vec[Ty]
     return asking.totally(on)
 }
 
+/// **The part of `on` that does not hash** (ADR-010 D12), for what an
+/// `impl Hash` feeds `into.add`; `null` where all of it hashes. A type
+/// parameter hashes by its `Hash` bound.
+fn check_core_call_on_unhashed(beside: ref collections::BTreeMap[String, Vec[Ty]], structs: ref collections::BTreeMap[String, Vec[FieldContract]], enums: ref collections::BTreeMap[String, collections::BTreeSet[String]], payloads: ref collections::BTreeMap[String, Vec[Ty]], parameters: ref collections::BTreeMap[String, Vec[String]], bounds: ref collections::BTreeMap[String, Vec[String]], world: ref CheckWorld, on: ref Ty) -> Ty? {
+    match on {
+        Ty::Named { name, args, .. } => {
+            if args.len() == 0 && bounds.contains_key(name) {
+                let held: Vec[String] = bounds[name]?.clone() ?? []
+                if held.contains("Hash") && !world.own.traits.contains_key("Hash") {
+                    return null
+                }
+                return on.clone()
+            }
+        }
+        Ty::Unknown => return null,
+        Ty::Var { .. } => return null,
+        else => {}
+    }
+    let asking = CheckComparable { beside: beside, structs: structs, enums: enums, payloads: payloads, parameters: parameters, own: world.own, library: world.library }
+    if asking.hashes(on) {
+        return null
+    }
+    return asking.unhashed(on)
+}
+
 /// **A `Seen[T]` is the `T` it stamps** (ADR-281 D26).
 fn check_core_call_on_seen(on: ref Ty) -> Ty? {
     match on {
@@ -349,6 +374,25 @@ fn check_core_call_on_undescribed[H: CheckHost](mut state: CheckState, world: re
             }
             return check_core_call_on_named("bool")
         }
+    }
+    // **`into.add(part)` feeds an `impl Hash`'s hasher** (ADR-010 D12): the
+    // part hashes itself, so it has to hash (NK1260); it never pauses.
+    if type_name == "Hasher" && entry == "add" && args.len() == 1 && !world.own.types.contains_key("Hasher") {
+        let given = check_core_expr(state, world, host, args[0], span)
+        let unhashed: Ty? = check_core_call_on_unhashed(world.parts_beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, state.type_parameters, world, given)
+        if unhashed != null {
+            let part: Ty = unhashed ?? Ty::Unknown
+            let shown = given.text()
+            let mut said: String = f"`add` feeds the hasher, and `{shown}` doesn't hash."
+            if part.text() != shown {
+                said = f"`add` feeds the hasher, and `{shown}` doesn't hash: its part `{part.text()}` doesn't."
+            }
+            state.findings.push(check_refusal("NK1260", span, said, ["What `add` takes is hashed by its own hash, so it has to have one: an integer, a `String`, a `bool`, a `scalar`, `Bytes`, a tuple, list or option of those, or a type of yours that hashes. A float doesn't (`NaN` isn't equal to itself)."], "Feed it the parts `eq` compares that hash, such as an integer or a text made from the value."))
+        }
+        state.facts.hasher_adds.insert(id_of(receiver) as i64)
+        check_core_call_on_reached(state, "Hash::hash")
+        check_core_call_on_quiet(state, receiver)
+        return Ty::Tuple([])
     }
     let stamped: Ty? = check_core_call_on_seen(on)
     if stamped != null {

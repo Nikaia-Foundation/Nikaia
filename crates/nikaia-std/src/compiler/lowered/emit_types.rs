@@ -174,7 +174,10 @@ impl EmitState {
         if self.facts.copies.contains(&text) { parts.push("Copy"); }
         if self.facts.compares.contains(&text) {
             parts.push("PartialEq");
-            if self.facts.compares_totally.contains(&text) { parts.push("Eq"); }
+            if self.facts.compares_totally.contains(&text) {
+                parts.push("Eq");
+                if self.facts.hashes.contains(&text) { parts.push("Hash"); }
+            }
         }
         format!("#[derive({})]\n", nikaia_std::block::Text::from(parts.join(", ")))
     }

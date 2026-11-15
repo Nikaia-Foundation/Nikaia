@@ -1,0 +1,29 @@
+// #591, ADR-010 D11: a HashMap or HashSet key that does not hash is NK1260
+// at the position the type is written, naming the part that does not hash;
+// for a type with its own `impl Eq` the help writes the `impl Hash`.
+use std::collections
+use std::text
+
+struct Q { x: f64 }
+
+struct Outer { inner: Q, n: i64 }
+
+struct Name { text: String }
+
+impl Eq for Name {
+    fn eq(ref self, other: ref Self) -> bool sync {
+        return self.text.to_lowercase() == other.text.to_lowercase()
+    }
+}
+
+struct Holder { by_name: collections::HashMap[Name, i64] }
+
+fn count(m: collections::HashSet[Q]) -> i64 { m.len() }
+
+fn main() throws {
+    let floats: collections::HashMap[f64, i64] = collections::HashMap()
+    let nested: collections::HashSet[Outer] = collections::HashSet()
+    let forms: collections::HashMap[text::Form, i64] = collections::HashMap()
+    let ordered: collections::BTreeMap[String, Q] = collections::BTreeMap()
+    println(f"{floats.len()} {nested.len()} {forms.len()} {ordered.len()}")
+}

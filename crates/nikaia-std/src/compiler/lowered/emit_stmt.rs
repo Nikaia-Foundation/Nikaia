@@ -56,7 +56,7 @@ pub(crate) fn emit_stmt_put_call(keep: &KeepAt, opaque: bool) -> String {
     format!("{}.{}(", emit_keep_expr(keep, false), method)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct EmitStmtKept {
     pub(crate) put: Option<String>,
     pub(crate) packed: bool,

@@ -3435,7 +3435,7 @@ pub mod check_collect {
 }
 pub mod check_compare {
     #[allow(unused_imports)]
-    pub use super::{CompareStrength, CheckComparable, compare_refusal, CompareDeclared, compare_declared, compare_standard_bounds, compare_keys_with_no_order, compare_language_impls};
+    pub use super::{CompareStrength, CheckComparable, compare_refusal, CompareDeclared, compare_declared, compare_standard_bounds, compare_keys_with_no_order, compare_keys_that_do_not_hash, compare_language_impls};
 }
 pub mod check_consts {
     #[allow(unused_imports)]
@@ -4393,4 +4393,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "c220518a2d025083cf60b481ef3a7eb8163cb43f25d849f327d697b7bfc453d4";
+pub const LOWERED_DIGEST: &str = "cafcb1b1f915272431ac701b34b29709dd7c9b94d5780c21c6a4be644c54fd3c";

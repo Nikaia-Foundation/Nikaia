@@ -1273,7 +1273,7 @@ pub(crate) fn prover_join(walk: &mut ProverWalk, scope: &mut ProverScope, then_s
     prover_join_arms(walk, scope, &sides, &span);
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct ProverArm {
     pub(crate) scope: ProverScope,
     pub(crate) leaves: bool,
@@ -2665,7 +2665,7 @@ pub(crate) fn prover_known_calls(walk: &mut ProverWalk, expr: &Expr, scope: &Pro
     found
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct ProverRan {
     pub(crate) held: ClaimHeld,
     pub(crate) findings: Vec<Finding>,

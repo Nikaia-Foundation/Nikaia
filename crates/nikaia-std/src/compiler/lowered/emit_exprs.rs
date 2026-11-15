@@ -18,7 +18,7 @@ pub(crate) fn emit_takes_self(contract: &FnContract) -> bool {
     (unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "self")
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct EmitArg {
     pub(crate) name: String,
     pub(crate) ty: Ty,

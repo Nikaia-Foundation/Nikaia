@@ -67,10 +67,11 @@ impl CheckComparable {
         return self.asking(ty, CompareStrength::Orders, seen)
     }
 
-    /// **Whether it hashes (`Hash`)** (ADR-010 D13): an `Eq` type of the
-    /// language's own that the language below hashes. A declared type does
-    /// not yet, until its hash is derived (#591); a float, an unordered map
-    /// or set and a type only a ledger describes do not.
+    /// **Whether it hashes (`Hash`)** (ADR-010 D11-D13): an `Eq` type of the
+    /// language's own that the language below hashes; a declared type where
+    /// every part hashes (its hash derived from them) or that has an
+    /// `impl Hash`, but not one with only an `impl Eq`; a library type where
+    /// its ledger says `hashes`. A float, an unordered map or set do not.
     pub fn hashes(ref self, ty: ref Ty) -> bool {
         let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
         return self.asking(ty, CompareStrength::Hashes, seen)
@@ -229,15 +230,30 @@ impl CheckComparable {
             return true
         }
         seen.insert(key)
-        let declared = self.structs.contains_key(name) || self.enums.contains_key(name) || self.beside.contains_key(name)
+        // **A library type hashes where its ledger says so** (ADR-010 D11):
+        // its enums sit among the state's own for `match`, but its Rust
+        // derives nothing a walk of the variants could promise.
+        if how == CompareStrength::Hashes && !self.own.types.contains_key(name) {
+            let contract = self.library.types.get(name)
+            if contract != null {
+                return contract?.hashes ?? false
+            }
+        }
+        let declared =self.structs.contains_key(name) || self.enums.contains_key(name) || self.beside.contains_key(name)
         if declared {
             if how == CompareStrength::Hashes {
-                return false
-            }
-            if how == CompareStrength::Orders {
+                // **A hand-written hash answers; a hand-written equality
+                // alone refuses** (ADR-010 D11, D12): a hash derived from the
+                // fields would disagree with it.
+                if self.implements("Hash", name) {
+                    return true
+                }
+                if self.implements("Eq", name) {
+                    return false
+                }
+            } else if how == CompareStrength::Orders {
                 return self.implements("Ord", name)
-            }
-            if self.implements("Eq", name) {
+            } else if self.implements("Eq", name) {
                 return true
             }
         }
@@ -292,13 +308,87 @@ impl CheckComparable {
                 CompareStrength::Compares => contract.compares,
                 CompareStrength::Orders => contract.orders,
                 CompareStrength::Totally => contract.equates,
-                CompareStrength::Hashes => false,
+                CompareStrength::Hashes => contract.hashes,
             }
             if claimed {
                 return true
             }
         }
         return false
+    }
+
+    /// **The part that keeps `ty` from hashing** (ADR-010 D11), for
+    /// `NK1260`'s message: the innermost part that does not hash, or `ty`
+    /// itself where nothing inside it is to blame.
+    pub fn unhashed(ref self, ty: ref Ty) -> Ty {
+        let mut at = ty.clone()
+        let mut turns = 0
+        while turns < 32 {
+            turns = turns + 1
+            let mut next: Ty? = null
+            for part in self.hash_parts(at) {
+                if !self.hashes(part) {
+                    next = part.clone()
+                    break
+                }
+            }
+            if next == null {
+                return at
+            }
+            at = next ?? return at
+        }
+        return at
+    }
+
+    /// The parts whose hash decides `ty`'s, as `named` walks them; none
+    /// where `ty` answers by itself.
+    fn hash_parts(ref self, ty: ref Ty) -> Vec[Ty] {
+        return match ty {
+            Ty::Tuple(parts) => parts.clone(),
+            Ty::Nullable(inner) => [inner.clone()],
+            Ty::Pointed { item, slice, .. } => if slice { [item.clone()] } else { [] },
+            Ty::Named { name, args, .. } => self.hash_parts_named(name, args),
+            else => [],
+        }
+    }
+
+    fn hash_parts_named(ref self, name: ref String, args: ref Vec[Ty]) -> Vec[Ty] {
+        if COMPARE_UNORDERED.contains(name) || name == "f32" || name == "f64" {
+            return []
+        }
+        if COMPARE_CONTAINERS.contains(name) {
+            return args.clone()
+        }
+        if self.implements("Hash", name) || self.implements("Eq", name) {
+            return []
+        }
+        if self.structs.contains_key(name) {
+            let fields = self.structs.get(name) ?? return []
+            let mut bound: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+            let params = self.parameters.get(name)
+            if params != null {
+                let names = params ?? return []
+                let mut at = 0
+                for param in names {
+                    if at < args.len() {
+                        bound.insert(param.clone(), args[at].clone())
+                    }
+                    at = at + 1
+                }
+            }
+            let mut parts: Vec[Ty] = []
+            for field in fields {
+                parts.push(substitute(field.ty, bound))
+            }
+            return parts
+        }
+        if self.enums.contains_key(name) {
+            return self.payloads_of(name)
+        }
+        if self.beside.contains_key(name) {
+            return (self.beside.get(name) ?? return []).clone()
+        }
+        return []
     }
 
     /// Every type a declared `enum`'s variants hold, or a library one's.
@@ -342,6 +432,8 @@ pub fn compare_refusal(asking: ref CheckComparable, left: ref Ty, right: ref Ty,
 pub struct CompareDeclared {
     pub compares: Vec[String],
     pub totally: Vec[String],
+    /// Those whose hash is derived from their fields (ADR-010 D11).
+    pub hashes: Vec[String],
 }
 
 /// **Which declared types compare** (ADR-204 D1), for the derive the emitter
@@ -356,7 +448,7 @@ pub fn compare_declared(asking: ref CheckComparable, here: ref ParsedView) -> Co
             else => {},
         }
     }
-    let mut found = CompareDeclared { compares: [], totally: [] }
+    let mut found = CompareDeclared { compares: [], totally: [], hashes: [] }
     for name in declared {
         // An `impl Eq` is the equality (ADR-341 D5).
         if asking.implements("Eq", name) {
@@ -386,6 +478,12 @@ pub fn compare_declared(asking: ref CheckComparable, here: ref ParsedView) -> Co
         found.compares.push(name.clone())
         if totally {
             found.totally.push(name.clone())
+            // **Hashed from its fields where every one hashes** (ADR-010
+            // D11); an `impl Hash` writes its own and skips the derive.
+            let whole = Ty::Named { name: name.clone(), args: [], view: false }
+            if !asking.implements("Hash", name) && asking.hashes(whole) {
+                found.hashes.push(name.clone())
+            }
         }
     }
     return found
@@ -543,7 +641,7 @@ pub fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref coll
                     if asking.hashes(held) {
                         continue
                     }
-                    refused.push(check_refusal("NK1164", span, f"`{key}` needs a `Hash` here, but `{shown}` isn't one.", [f"`{key}` declares `[{parameter}: Hash]`, so the type passed has to hash, and `{shown}` doesn't: a float has no equality to hash by, and a type you declare does not hash yet."], "Pass a type that hashes: a number, `String`, `bool`, `scalar`, or a tuple, list or option of those."))
+                    refused.push(check_refusal("NK1164", span, f"`{key}` needs a `Hash` here, but `{shown}` isn't one.", [f"`{key}` declares `[{parameter}: Hash]`, so the type passed has to hash, and `{shown}` doesn't: a float has no equality to hash by, and a type with its own `impl Eq` hashes only with an `impl Hash`."], "Pass a type that hashes: a number, `String`, `bool`, `scalar`, or a tuple, list or option of those."))
                     continue
                 }
                 if own_bounds.contains("Hash") {
@@ -630,6 +728,58 @@ pub fn compare_keys_with_no_order(asking: ref CheckComparable, ty: ref Ty, span:
     return refused
 }
 
+/// **`NK1260`: a `HashMap` or `HashSet` keyed by a type that does not hash**
+/// (ADR-010 D11), anywhere in `ty`. The message names the part that does not
+/// hash, and for a hand-written equality the `impl Hash` that would answer it.
+pub fn compare_keys_that_do_not_hash(asking: ref CheckComparable, ty: ref Ty, span: ref Span) -> Vec[CheckFinding] {
+    let mut refused: Vec[CheckFinding] = []
+    let mut stack: Vec[Ty] = [ty.clone()]
+    while stack.len() > 0 {
+        let one = stack.pop() ?? break
+        match one {
+            Ty::Named { name, args, .. } => {
+                let last = compare_base(name)
+                if (last == "HashMap" || last == "HashSet") && args.len() > 0 && !asking.hashes(args[0]) {
+                    refused.push(compare_unhashed_refusal(asking, last, args[0], span))
+                }
+                for arg in args {
+                    stack.push(arg.clone())
+                }
+            },
+            Ty::Tuple(parts) => {
+                for part in parts {
+                    stack.push(part.clone())
+                }
+            },
+            Ty::Nullable(inner) => stack.push(inner.clone()),
+            else => {},
+        }
+    }
+    return refused
+}
+
+/// The `NK1260` of one key: `what` is the map or set, `key` its key type.
+fn compare_unhashed_refusal(asking: ref CheckComparable, what: ref String, key: ref Ty, span: ref Span) -> CheckFinding {
+    let shown = key.text()
+    let part = asking.unhashed(key)
+    let part_shown = part.text()
+    let part_name = match part {
+        Ty::Named { name, .. } => name.clone(),
+        else => "",
+    }
+    let mut message: String = f"`{what}` finds its keys by their hash, and `{shown}` doesn't hash."
+    if part_shown != shown {
+        message = f"`{what}` finds its keys by their hash, and `{shown}` doesn't hash: its part `{part_shown}` doesn't."
+    }
+    let declared = asking.structs.contains_key(part_name) || asking.enums.contains_key(part_name) || asking.beside.contains_key(part_name)
+    if declared && asking.implements("Eq", part_name) {
+        let note = f"`{part_name}` says with its own `impl Eq` when two values are equal, so a hash made from its fields could tell two equal values apart."
+        return check_refusal("NK1260", span, message, [note], f"Write `impl Hash for {part_name} {{ … }}` that feeds `into.add(…)` what `eq` compares, or key the `{what}` by a text or a number.")
+    }
+    let note: String = "An integer, a `String`, a `bool`, a `scalar`, `Bytes`, a tuple, list or option of those, and a `struct` or an `enum` you declare whose parts all hash, hash. A float doesn't (`NaN` isn't equal to itself), nor does a map or a set, and a type from a library hashes only where its ledger says `hashes = true`."
+    return check_refusal("NK1260", span, message, [note], f"Key the `{what}` by a text or a number, or leave the part that doesn't hash out of the key.")
+}
+
 /// The bounds of a type parameter in scope, or `["?"]` where `ty` is not one.
 fn compare_parameter_bounds(ty: ref Ty, parameters: ref collections::BTreeMap[String, Vec[String]]) -> Vec[String] {
     let name = match ty {
@@ -661,7 +811,7 @@ pub fn compare_language_impls(asking: ref CheckComparable, here: ref ParsedView)
 fn compare_language_impl(asking: ref CheckComparable, here: ref ParsedView, trait_name: winnow_grammar::Symbol?, target: ref Type, span: ref Span) -> CheckFinding? {
     let symbol = trait_name ?? return null
     let trait_text = here.text(symbol)
-    if (trait_text != "Eq" && trait_text != "Ord") || asking.own.traits.contains_key(trait_text) {
+    if (trait_text != "Eq" && trait_text != "Ord" && trait_text != "Hash") || asking.own.traits.contains_key(trait_text) {
         return null
     }
     let name = here.text(target.name)
@@ -673,6 +823,12 @@ fn compare_language_impl(asking: ref CheckComparable, here: ref ParsedView, trai
     if trait_text == "Ord" && !asking.totally(named) {
         let note: String = "An order that disagrees with equality gives an ordered map no meaning, and a type holding a float is not `Eq`."
         return check_refusal("NK1249", span, f"`impl Ord for {name}` needs `{name}` to be `Eq`.", [note], f"Write `impl Eq for {name}`, or take out the part that has no equality.")
+    }
+    // **A hash agrees with equality, so it needs one that is total**
+    // (ADR-010 D12): two values `==` says are one have to hash alike.
+    if trait_text == "Hash" && !asking.totally(named) {
+        let note: String = "A map finds a key by its hash and then by `==`, so the hash is only sound beside an equality that is total, and a type holding a float has none."
+        return check_refusal("NK1249", span, f"`impl Hash for {name}` needs `{name}` to be `Eq`.", [note], f"Write `impl Eq for {name}`, or take out the part that has no equality.")
     }
     return null
 }

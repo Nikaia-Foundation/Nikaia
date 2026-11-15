@@ -28,7 +28,7 @@ pub struct CheckCompiled {
     pub said: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CheckPlace {
     pub at: i64,
     pub function: Option<String>,

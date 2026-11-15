@@ -1314,6 +1314,10 @@ pub struct TypeContract {
     /// **Its equality is an equivalence** - Rust's `Eq` - for a type whose
     /// parts are the library's (ADR-341 D4). Absent means it is not taken for one.
     pub equates: bool,
+    /// **A key of a hash map** (`HashMap`, `HashSet`): Rust's `Hash` beside
+    /// `Eq`, for a type whose parts are the library's. Absent means it has
+    /// none (`NK1260`, ADR-010 D11).
+    pub hashes: bool,
     pub copies: bool,
     pub touches: Vec[String],
     pub tethered: Vec[String],
@@ -1343,6 +1347,7 @@ impl TypeContract {
             compares: false,
             orders: false,
             equates: false,
+            hashes: false,
             copies: false,
             touches: [],
             tethered: [],

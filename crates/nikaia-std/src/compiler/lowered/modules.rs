@@ -139,7 +139,7 @@ pub fn lost_sync(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledg
     out
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModulesPause {
     pub chain: Vec<String>,
     pub unit: i64,
@@ -359,7 +359,7 @@ pub fn modules_test_wrappers(titles: &[String], first: i64) -> String {
 
 pub fn modules_test_only_mark() -> String { String::from("cfg(test)") }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModulesReach {
     pub(crate) names: Vec<String>,
     pub(crate) tests: Vec<bool>,
@@ -633,7 +633,7 @@ pub trait ModulesHost {
     fn foreign_crates(&self, path: &std::path::Path) -> Vec<String>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ModulesRefusal {
     Parse,
     Refused(String),
@@ -658,7 +658,7 @@ impl std::fmt::Display for ModulesRefusal {
 }
 impl std::error::Error for ModulesRefusal {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModulesUnit {
     pub path: fs::Path,
     pub source: String,
@@ -667,7 +667,7 @@ pub struct ModulesUnit {
     pub renames: collections::BTreeMap<String, String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ModulesStanding {
     InProject,
     Alone,
@@ -861,7 +861,7 @@ pub trait ModulesProgramHost {
     fn own_ledger(&self, from: i64, to: i64, library: &Ledger) -> Ledger;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModulesProgramParts {
     pub contracts: Ledger,
     pub as_its_own: collections::BTreeMap<String, Ledger>,
