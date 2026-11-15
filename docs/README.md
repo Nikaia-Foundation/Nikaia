@@ -63,6 +63,9 @@ is normative and nothing may depend on it to know what a program means.
   `selfhosting`, `compiler`, `spec`), exactly one **status** label says what can
   be done with it - `ready` (decided; can be built now), `decision` (needs the
   owner first), `blocked` (waits on another issue being built, named in it),
+  `wip` (being built: a lane or a driver run has it, or its build runs in the
+  issues named in it; it is closed when they are built; a driver run sets it
+  beside `ready` and takes it off again unless the run finished the issue),
   `note` (a hint, a measurement still to take, or an issue that only collects
   others) - and **Priority** and **Effort** give the order. The label
   [`future`](https://github.com/Nikaia-Foundation/Nikaia/issues?q=is%3Aopen+label%3Afuture)

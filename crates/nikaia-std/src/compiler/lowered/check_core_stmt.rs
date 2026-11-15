@@ -1174,6 +1174,14 @@ pub(crate) fn check_core_stmt_add_sub_mul(op: Option<&BinaryOp>) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_divides(op: Option<&BinaryOp>) -> bool {
+    if op.is_none() { return false; }
+    let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return false };
+    *o == BinaryOp::Div || *o == BinaryOp::Rem
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_slot_operator(op: Option<&BinaryOp>) -> bool {
     if op.is_none() { return false; }
     let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -1350,6 +1358,11 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
     if op.is_some() && !check_core_stmt_a_shift(std::convert::identity(op)) {
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         if !state.an_integer_beside_a_float(world, target, &into, value, &found, span) { state.a_compound_over_two_integer_types(world, &o.clone(), target, &into, value, &found, span); }
+    }
+    if check_core_stmt_divides(op) && check_core_stmt_a_name_or_field(target) {
+        let plain = nikaia_std::index::or(check_core_stmt_plain_name(&into.unseen()), || "".into());
+        let given = nikaia_std::index::or(check_core_stmt_plain_name(&value_of_a_copy(&found.unseen())), || "".into());
+        if is_whole_number(&plain) && given == plain { state.facts.divisions.insert(span.start as i64, nikaia_std::block::Text::from(plain.to_string())); }
     }
     if check_core_stmt_add_sub_mul(op) && (check_core_stmt_a_name_or_field(target) || check_core_stmt_an_index(target)) {
         let plain = check_core_stmt_plain_name(&into.unseen());

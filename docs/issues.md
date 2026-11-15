@@ -16,9 +16,9 @@ it, like the checks in `docs/supervisor.md`.
 * **I1. Title names the symptom or the goal**, in words a reader knows
   without the issue: "a match on a field of a `mut` parameter moves it", not
   "NK0412 in check_refs" or a brief code.
-* **I2. One status label**: `ready`, `decision`, `blocked` or `note`
+* **I2. One status label**: `ready`, `decision`, `blocked`, `wip` or `note`
   (`docs/README.md`), beside the type and the area label. `blocked` names the
-  issue it waits on; `decision` holds a decision paper (options, examples, a
+  issue it waits on; `wip` is being built, by a lane or in the issues it names; `decision` holds a decision paper (options, examples, a
   recommendation).
 * **I3. Plain language.** An error code stands beside its message, never
   alone; a function name beside what it does. No internal targets, dates for

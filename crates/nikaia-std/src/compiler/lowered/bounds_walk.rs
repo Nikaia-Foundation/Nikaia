@@ -15,6 +15,7 @@ pub struct BoundsContext {
     pub std_receivers: collections::BTreeMap<i64, String>,
     pub simd_loads: collections::BTreeMap<i64, i64>,
     pub shifts: collections::BTreeMap<i64, String>,
+    pub divisions: collections::BTreeMap<i64, String>,
     pub given: collections::BTreeMap<String, Range>,
     pub negations: collections::BTreeMap<i64, String>,
     pub classes: collections::BTreeMap<String, Range>,
@@ -1295,6 +1296,35 @@ pub(crate) fn bounding_count_fits(walk: &mut BoundsWalk, count: &Expr, ty: &str,
     let lo = match range.lo { Some(__nikaia_value) => __nikaia_value, None => return false };
     let hi = match range.hi { Some(__nikaia_value) => __nikaia_value, None => return false };
     lo >= 0 && hi < width
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn bounding_divides(walk: &mut BoundsWalk, lhs: &Expr, rhs: &Expr, ty: &str, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {
+    let typed = nikaia_std::index::or(Range::of_type(ty), || Range { lo: Some(-1), hi: None });
+    let least = nikaia_std::index::or(typed.lo, || -1);
+    let term = bounding_lin(walk, rhs, facts, context, program, words);
+    if term.is_none() {
+        let range = match bounding_range(walk, rhs, facts, context, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let under: i64 = if least < 0 { -1 } else { 0 };
+        let above = range.lo.is_some() && nikaia_std::index::or(range.lo, || 0) > 0;
+        let below = range.hi.is_some() && nikaia_std::index::or(range.hi, || 0) < under;
+        return above || below;
+    }
+    let d = nikaia_std::index::or(term, || 0);
+    let zero = walk.arena.int(0);
+    let mut goal = walk.arena.unequal(d, zero);
+    if least < 0 {
+        let minus_one = walk.arena.int(-1);
+        let mut apart = walk.arena.unequal(d, minus_one);
+        let dividend = bounding_lin(walk, lhs, facts, context, program, words);
+        if dividend.is_some() {
+            let low = walk.arena.int(least.max(unsafe { nikaia_std::proven::sub::<i64>(0, solvable()) }));
+            let higher = walk.arena.gt(nikaia_std::index::or(dividend, || 0), low);
+            apart = { let __nikaia_value = walk.arena.or(vec![apart, higher]); __nikaia_value };
+        }
+        goal = { let __nikaia_value = walk.arena.and(vec![goal, apart]); __nikaia_value };
+    }
+    bounding_proves(&walk, facts, goal, ask)
 }
 
 pub(crate) fn bounding_literal(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. }) }
@@ -3627,7 +3657,13 @@ pub(crate) fn bounding_assign_place(walk: &mut BoundsWalk, facts: &mut BoundsFac
 pub(crate) fn bounding_compound(walk: &mut BoundsWalk, op: Option<&BinaryOp>, target: &Expr, value: &Expr, at: i64, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
     let operation = match op { Some(__nikaia_value) => __nikaia_value, None => return };
     let arithmetic = matches!(operation, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul);
-    if !arithmetic || walk.collecting { return; }
+    if walk.collecting { return; }
+    let divided = *nikaia_std::index::get(&context.divisions, &at);
+    if divided.is_some() {
+        if bounding_place_path(target, words).is_some() && bounding_divides(walk, target, value, nikaia_std::index::or(divided, || ""), facts, context, program, words, ask) { walk.proven.arithmetic.insert(at); }
+        return;
+    }
+    if !arithmetic { return; }
     let place = bounding_place_path(target, words);
     if place.is_none() { return; }
     let ty = match *nikaia_std::index::get(&context.arithmetic, &at) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -4341,6 +4377,11 @@ pub(crate) fn bounding_binary(walk: &mut BoundsWalk, op: &BinaryOp, lhs: &Expr, 
     let shifted = *nikaia_std::index::get(&context.shifts, &at);
     if shifted.is_some() && !bounding_literal(rhs) {
         if !walk.collecting && bounding_count_fits(walk, rhs, nikaia_std::index::or(shifted, || ""), &facts, context, program, words, &ask) { walk.proven.arithmetic.insert(at); } else if !walk.collecting { walk.open += 1; }
+        return;
+    }
+    let divided = *nikaia_std::index::get(&context.divisions, &at);
+    if divided.is_some() {
+        if !walk.collecting && bounding_divides(walk, lhs, rhs, nikaia_std::index::or(divided, || ""), &facts, context, program, words, &ask) { walk.proven.arithmetic.insert(at); }
         return;
     }
     let arithmetic = matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul);

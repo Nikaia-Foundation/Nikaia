@@ -244,6 +244,27 @@ fn check_core_ops_whole_name(side: ref Expr, ty: ref Ty) -> String sync {
     }
 }
 
+/// **The whole-number type a `/` or `%` divides in**, or the empty text:
+/// both sides of that one type, or a literal dividend beside it (#1578).
+fn check_core_ops_division(lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty) -> String sync {
+    // A literal divisor other than zero (`NK1118`'s) is no check at all.
+    if check_core_ops_lit_int(rhs) || !check_core_ops_whole(lhs, left) || !check_core_ops_whole(rhs, right) {
+        return ""
+    }
+    let a = check_core_ops_whole_name(lhs, left)
+    let b = check_core_ops_whole_name(rhs, right)
+    if a == "" {
+        if !is_whole_number(b) {
+            return ""
+        }
+        return b
+    }
+    if (b != "" && a != b) || !is_whole_number(a) {
+        return ""
+    }
+    return a
+}
+
 /// **A literal beside an unsigned side is of that side's type** (ADR-285 D3).
 fn check_core_ops_literal_beside(mut state: CheckState, op: BinaryOp, side: ref Expr, other: ref Ty, count: bool) sync {
     let value = value_of_a_copy(other.unseen())
@@ -478,6 +499,15 @@ fn check_core_ops_outcome[H: CheckHost](mut state: CheckState, world: ref CheckW
     // **An operator's result is a value of its own** (#1240): it points into
     // neither operand, so a view on either side does not make it one.
     let found = if check_core_ops_arithmetic(op) { unviewed_type(same) } else { same }
+    // **A division is a goal of the walk too** (ADR-396 D7, #1578): its
+    // divisor, kept apart from `arithmetic`, whose proved sites lose their
+    // check; a divisor's never does (ADR-395 D3).
+    if op == BinaryOp::Div || op == BinaryOp::Rem {
+        let divided = check_core_ops_division(lhs, left, rhs, right)
+        if divided != "" {
+            state.facts.divisions.insert(at.start as i64, divided.clone())
+        }
+    }
     if named != "" {
         state.facts.arithmetic.insert(at.start as i64, named)
     } else if check_core_ops_unchecked(op) && check_core_ops_whole_or_open(state, world, lhs, left) && check_core_ops_whole_or_open(state, world, rhs, right) {

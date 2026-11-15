@@ -5,6 +5,7 @@
 pub struct BoundsReportFacts {
     pub lists: collections::BTreeSet<i64>,
     pub arithmetic: collections::BTreeMap<i64, String>,
+    pub divisions: collections::BTreeMap<i64, String>,
     pub negations: collections::BTreeMap<i64, String>,
     pub proven_indices: collections::BTreeSet<i64>,
     pub proven_arithmetic: collections::BTreeSet<i64>,
@@ -187,12 +188,16 @@ pub(crate) fn bounds_report_block(block: &Block, args: &[FnArg], body: &Block, w
     }
 }
 
-pub(crate) fn bounds_report_checked_op(op: &BinaryOp) -> bool { matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul) }
+pub(crate) fn bounds_report_checked_op(op: &BinaryOp) -> bool { matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem) }
+
+pub(crate) fn bounds_report_seen(facts: &BoundsReportFacts, at: i64) -> bool { facts.arithmetic.contains_key(&at) || facts.divisions.contains_key(&at) }
 
 pub(crate) fn bounds_report_symbol(op: &BinaryOp) -> &'static str {
     match op {
         BinaryOp::Add => "+",
         BinaryOp::Sub => "-",
+        BinaryOp::Div => "/",
+        BinaryOp::Rem => "%",
         _ => "*",
     }
 }
@@ -203,8 +208,8 @@ pub(crate) fn bounds_report_stmt(stmt: &Stmt, span: &Span, args: &[FnArg], body:
     let line = bounds_report_line(source, at);
     match stmt {
         Stmt::Assign { target, op, value } => {
-            let which = nikaia_std::index::or(op, || BinaryOp::Div);
-            if bounds_report_checked_op(&which) && facts.arithmetic.contains_key(&at) {
+            let which = nikaia_std::index::or(op, || BinaryOp::BitAnd);
+            if bounds_report_checked_op(&which) && bounds_report_seen(facts, at) {
                 let proved = facts.proven_arithmetic.contains(&at);
                 let mut blocked: Option<String> = None;
                 if !proved { blocked = Some(blocked_operation(&which, target, value, args, body, words, walk.callers)); }
@@ -275,7 +280,7 @@ pub(crate) fn bounds_report_site(expr: &Expr, line: i64, args: &[FnArg], body: &
         Expr::Binary { op, lhs, rhs, span, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
             let at = span.start as i64;
-            if bounds_report_checked_op(op) && facts.arithmetic.contains_key(&at) {
+            if bounds_report_checked_op(op) && bounds_report_seen(facts, at) {
                 let proved = facts.proven_arithmetic.contains(&at);
                 let mut blocked: Option<String> = None;
                 if !proved { blocked = Some(blocked_operation(op, lhs, rhs, args, body, words, walk.callers)); }

@@ -2,8 +2,9 @@
 //
 // **The `--bounds` report's walk** (ADR-306, #389), moved from the compiler's
 // `bounds_report` (ADR-294, #125): every index into a list and every `+`, `-`
-// and `*` the optimizations of ADR-306 may drop the check of, and what became
-// of each. The reason a check stayed is `bounds_reasons.nika`; what is proved
+// and `*` the optimizations of ADR-306 may drop the check of, every `/` and
+// `%` whose divisor is not a literal (ADR-396 D7, #1578), and what became of
+// each. The reason a check stayed is `bounds_reasons.nika`; what is proved
 // is handed in as sets of nodes, built by the compiler.
 
 use std::collections
@@ -15,6 +16,10 @@ use std::text
 pub struct BoundsReportFacts {
 	pub lists: collections::BTreeSet[i64],
 	pub arithmetic: collections::BTreeMap[i64, String],
+	/// **Every `/` and `%` whose divisor is not a literal** (ADR-396 D7,
+	/// #1578), as `CheckFacts::divisions` has them; proved ones are in
+	/// `proven_arithmetic`, and their check stays (ADR-395 D3).
+	pub divisions: collections::BTreeMap[i64, String],
 	pub negations: collections::BTreeMap[i64, String],
 	pub proven_indices: collections::BTreeSet[i64],
 	pub proven_arithmetic: collections::BTreeSet[i64],
@@ -340,20 +345,31 @@ fn bounds_report_block(
 	}
 }
 
-/// Whether an operator is one the walk asks about: `+`, `-`, `*`.
+/// Whether an operator is one the walk asks about: `+`, `-`, `*`, and `/`
+/// and `%`, whose divisor is a goal (ADR-396 D7, #1578).
 fn bounds_report_checked_op(op: BinaryOp) -> bool {
 	return match op {
 		BinaryOp::Add => true,
 		BinaryOp::Sub => true,
 		BinaryOp::Mul => true,
+		BinaryOp::Div => true,
+		BinaryOp::Rem => true,
 		else => false,
 	}
+}
+
+/// Whether the check sees the operation at `at`: an overflow in
+/// `arithmetic`, a divisor in `divisions`.
+fn bounds_report_seen(facts: ref BoundsReportFacts, at: i64) -> bool {
+	return facts.arithmetic.contains_key(at) || facts.divisions.contains_key(at)
 }
 
 fn bounds_report_symbol(op: BinaryOp) -> String {
 	return match op {
 		BinaryOp::Add => "+",
 		BinaryOp::Sub => "-",
+		BinaryOp::Div => "/",
+		BinaryOp::Rem => "%",
 		else => "*",
 	}
 }
@@ -375,8 +391,8 @@ fn bounds_report_stmt(
 	// statement's first byte, where no operator of an expression stands.
 	match stmt {
 		Stmt::Assign { target, op, value } => {
-			let which = op ?? BinaryOp::Div
-			if bounds_report_checked_op(which) && facts.arithmetic.contains_key(at) {
+			let which = op ?? BinaryOp::BitAnd
+			if bounds_report_checked_op(which) && bounds_report_seen(facts, at) {
 				let proved = facts.proven_arithmetic.contains(at)
 				let mut blocked: String? = null
 				if !proved {
@@ -506,7 +522,7 @@ fn bounds_report_site(
 		},
 		Expr::Binary { op, lhs, rhs, span, .. } => {
 			let at = span.start as i64
-			if bounds_report_checked_op(op) && facts.arithmetic.contains_key(at) {
+			if bounds_report_checked_op(op) && bounds_report_seen(facts, at) {
 				let proved = facts.proven_arithmetic.contains(at)
 				let mut blocked: String? = null
 				if !proved {

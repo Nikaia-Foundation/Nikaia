@@ -31,8 +31,8 @@ The rules every session and agent needs. What only the main session does
   `closes #N` (any tense, in prose too) for an issue the commit does not
   finish; write `the fix for #N`. `(#N)` and `Part of #N` close nothing.
 * **Every open issue carries exactly one status label**: `ready`, `decision`,
-  `blocked` or `note` (`docs/README.md`). Whoever files an issue or changes its
-  state sets the label.
+  `blocked`, `wip` or `note` (`docs/README.md`). Whoever files an issue or
+  changes its state sets the label.
 
 ## Parallel agents share one checkout
 

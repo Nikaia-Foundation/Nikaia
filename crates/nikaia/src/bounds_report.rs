@@ -111,6 +111,7 @@ pub fn report_checked(
     let facts = BoundsReportFacts {
         lists: checked.facts.list_indices.clone(),
         arithmetic: checked.facts.arithmetic.clone(),
+        divisions: checked.facts.divisions.clone(),
         negations: checked.facts.negations.clone(),
         proven_indices: proven.indices.iter().copied().collect(),
         proven_arithmetic: proven.arithmetic.iter().copied().collect(),
