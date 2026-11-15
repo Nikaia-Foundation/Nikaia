@@ -129,7 +129,10 @@ impl EmitState {
         for each in visited_in_expr(guarded) {
             match each {
                 Expr::Closure { .. } => { for inner in visited_in_expr(each) { apart.insert(node_key(inner)); } },
-                Expr::TryCatch { .. } => { for inner in visited_in_expr(each) { apart.insert(node_key(inner)); } },
+                Expr::TryCatch { expr, .. } => {
+                    let expr = nikaia_std::boxed::open(expr);
+                    for inner in visited_in_expr(expr) { apart.insert(node_key(inner)); }
+                },
                 _ => { },
             }
         }

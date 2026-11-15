@@ -240,8 +240,10 @@ impl EmitState {
                         apart.insert(node_key(inner))
                     }
                 },
-                Expr::TryCatch { .. } => {
-                    for inner in visited_in_expr(each) {
+                // Only the nested `catch`'s guarded half goes to it; a
+                // failing call in its handler comes here (#1641).
+                Expr::TryCatch { expr, .. } => {
+                    for inner in visited_in_expr(expr) {
                         apart.insert(node_key(inner))
                     }
                 },

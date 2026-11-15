@@ -1809,6 +1809,21 @@ fn check_core_flow_no_answer(mut state: CheckState) sync {
     state.flow.guarded = guarded
 }
 
+/// Whether a nested guard's failures could not all be named (ADR-308): one
+/// with no answer, or a thrown set that is open (`?`, a given error type).
+fn check_core_flow_may_pass(held: ref CheckGuarded?) -> bool sync {
+    let guarded: ref CheckGuarded = held ?? return true
+    if guarded.unanswered {
+        return true
+    }
+    for name in guarded.thrown {
+        if name == "?" || throws_given(name) {
+            return true
+        }
+    }
+    return false
+}
+
 /// The lambda's own record of a `catch` (ADR-277 D7): set, and what it was.
 fn check_core_flow_lambda_caught(mut state: CheckState, caught: bool) -> bool? sync {
     let mut handed: CheckHanded = state.handed_over?.clone() ?? return null
@@ -1893,7 +1908,14 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
     let answers = check_core_expr(state, world, host, guarded_expr, span)
     let held: CheckGuarded? = state.flow.guarded?.clone()
     state.flow.guarded = enclosing
-    if state.flow.guarded != null {
+    // **A nested `catch` fails the enclosing one only by what passes it**
+    // (Part I 7.1, ADR-308, #1641): its handler is walked under the
+    // enclosing guard, so a failing call or a `throw` there (`throw error`
+    // too, #1635) is counted as it is met, and a fatal error the handler
+    // does not name is handed on by `a_fatal_error_passes`. Only a guarded
+    // half whose failures could not all be named may pass an unnamed fatal
+    // one, and that stays unanswered rather than become *cannot fail*.
+    if state.flow.guarded != null && check_core_flow_may_pass(held) {
         check_core_flow_no_answer(state)
     }
     state.flow.caught = outer
