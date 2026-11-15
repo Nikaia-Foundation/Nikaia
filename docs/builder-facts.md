@@ -224,4 +224,9 @@ together with the specification section and an example test.
 * `git merge --no-commit --autostash` keeps the other agents' changes stashed until the merge is committed, so regenerate inside the uncommitted merge, never after it. (issue-1333)
 * A fails-before copy of a `tests/compiler` script test falls back to `target/fast/nikaia` when it can't find its toolchain; point `toolchain()` at `$S/old/nikaia` in the copy. (issue-1333)
 * During a merge, `git status --porcelain` also lists the files the merge staged; use `git diff --name-only` (worktree against index) to see only what a regeneration changed. (issue-1333)
+* `nikaia cache prune` counts only directories two levels down (`<kind>/<key>`) that hold a `.nikaia-used` stamp; a test that builds in an unstamped directory grows the cache unseen. (issue-1469)
+* A `nikaia cache prune` test sets the entry's age with `touch -d '3 days ago' <entry>/.nikaia-used` and points `NIKAIA_CACHE_DIR` at a temp directory; on unix an entry used recently is still removed, unless a build holds its lock. (issue-1469)
+* A `--locked` run in place uses the package's own `target/nikaia/cache`; to search every proof again, run a copy of the package without `target/` and with fresh `NIKAIA_CACHE_DIR` and `CARGO_TARGET_DIR`. (issue-1513)
+* A `--locked` flake on an example is usually a stale `nikaia.proofs` hidden by a warm cache; check `git log -- examples/X` after the failing run before suspecting timing (the prover's `LgBudget` counts steps, not time). (issue-1513)
+* A commit that adds Rust makes `assets/badges/self-hosted.svg` stale at HEAD, so pre-push `badges`/`version` and `tests/compiler/pre_push_staged_only` turn red until the supervisor runs `badges.py`. (issue-1582)
 

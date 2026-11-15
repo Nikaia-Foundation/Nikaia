@@ -208,6 +208,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * A local's `from` is set for a call result too; to test "this local views another", add `!local.made`. (issue-1490)
 * In the text-tier walk, a rule that reads `walk.adopted` must insert into `walk.reads.adopted` without a condition, or the round that adopts never walks the unit again. (issue-1501)
 * `names_in` counted a struct-literal field label as a read of a local of that name. This is fixed in ba1ec3be; a stray `let v = v;` in lowered output points at this kind of false read. (issue-1501)
+* The lowering cache of a program lives in `PROJECT/target/nikaia/cache/`, and its key changes with every compiler rebuild, so a planted entry must go in after the last build. (issue-1582)
 
 ### Grammar
 
@@ -269,6 +270,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **A script cannot `use` another script or find its own binary**; a test
   cannot set `RUSTFLAGS` or see git state: check by hand runs, say so under
   `Deviation`.
+* A `sync` tools function cannot call `fs::write` (NK2202); write through the host, e.g. `host.write_if_changed`. (issue-1582)
 
 ### Prover
 
