@@ -660,6 +660,7 @@ impl EmitState {
         }
         out.push(f"{owner} {{ ")
         let mut i = 0
+        let trusting = walk.trusting
         for field in fields {
             if i > 0 {
                 out.push(", ")
@@ -667,6 +668,8 @@ impl EmitState {
             i += 1
             let written = escaped_name(emit_text(world, field.name))
             let plain = emit_text(world, field.name)
+            // **The map a fast map field is given is made fast** (#1607).
+            walk.trusting = trusting || self.fast_slots.contains(f"f:{owner}.{plain}")
             out.push(written)
             // Part I 2.3: a plain value in a field the struct declares nullable,
             // by the value's id.
@@ -751,6 +754,7 @@ impl EmitState {
                 }
             }
         }
+        walk.trusting = trusting
         // **A field left out takes its default** (ADR-331 D5): the value the
         // ledger recorded, written as an option's is.
         let mut names: Vec[String] = []

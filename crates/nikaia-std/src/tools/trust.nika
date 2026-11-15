@@ -332,6 +332,20 @@ struct MapEnv {
     /// not `extern`), with their number of parameters: the only ones whose
     /// every caller is seen, so the only ones a map may pass through.
     privates: collections::BTreeMap[winnow_grammar::Symbol, i64],
+    /// **The map fields this file follows** (ADR-010 D9, #1607), as
+    /// `Struct.field`: a field of a struct the file declares, not `pub` and
+    /// with no type parameters, whose type is written `HashMap[..]` or
+    /// `HashSet[..]` with no default, and which is not `pub` itself, so no
+    /// other file uses it (Part I 9.2). A `pub` struct's map field is a
+    /// hidden type parameter instead (D9 step 3).
+    map_fields: collections::BTreeSet[String],
+    /// The names of those fields: a use `x.counts` is read by the name, as
+    /// the walk reads the tree and not the receiver's type, so fields of one
+    /// name are one class.
+    field_names: collections::BTreeSet[String],
+    /// The structs whose literals are followed field by field: declared here,
+    /// not `pub`, not `extern`, with no type parameters.
+    followed_structs: collections::BTreeSet[String],
 }
 
 /// **The classes of the map positions of one file** (ADR-010 D9, #581): a
@@ -402,6 +416,9 @@ struct MapWalk {
     /// Each value a log sink is given, judged once the bindings are settled
     /// (ADR-398 D3).
     sinks: Vec[EscSink],
+    /// What a use of a map field hands it (#1607), by the field's position,
+    /// judged as `kept` is.
+    field_kept: Vec[(String, KeyDeps)],
 }
 
 /// One value a log sink writes: an f-string's hole or a whole argument, by
@@ -496,7 +513,7 @@ fn mc_poison_function(mut classes: MapClasses, name: ref String, arity: i64) {
 /// The names every function of a file shares: the source methods, the
 /// program's own functions and its private ones.
 fn tm_env(program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger) -> MapEnv {
-    let mut env = MapEnv { sources: collections::BTreeSet(), cleaners: collections::BTreeSet(), own: collections::BTreeSet(), privates: collections::BTreeMap() }
+    let mut env = MapEnv { sources: collections::BTreeSet(), cleaners: collections::BTreeSet(), own: collections::BTreeSet(), privates: collections::BTreeMap(), map_fields: collections::BTreeSet(), field_names: collections::BTreeSet(), followed_structs: collections::BTreeSet() }
     for (key, contract) in library.functions {
         let provenance = contract.provenance ?? continue
         // **A method, by its name**: `net::Connection::read` is read through
@@ -526,10 +543,55 @@ fn tm_env(program: ref Program, words: ref winnow_grammar::InternerContext, libr
                     }
                 }
             },
+            Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
+                if !is_public && !is_extern && generics.len() == 0 {
+                    let owner = words.resolve(name).clone()
+                    env.followed_structs.insert(owner.clone())
+                    for field in fields {
+                        if !field.is_public && field.default == null && tm_a_map_type(field.ty, words) {
+                            let field_name = words.resolve(field.name).clone()
+                            env.map_fields.insert(f"{owner}.{field_name}")
+                            env.field_names.insert(field_name)
+                        }
+                    }
+                }
+            },
             else => {}
         }
     }
     return env
+}
+
+/// Whether a written type is `HashMap[..]` or `HashSet[..]`, by its last name.
+fn tm_a_map_type(ty: ref Type, words: ref winnow_grammar::InternerContext) -> bool {
+    if ty.is_view || ty.is_tuple {
+        return false
+    }
+    let written = words.resolve(ty.name)
+    let parts: Vec[ref String] = written.split("::").collect()
+    let last = parts[parts.len() - 1]
+    return last == "HashMap" || last == "HashSet"
+}
+
+/// The class position of a map field, by its name (#1607).
+fn tm_field_node(name: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext) -> String {
+    return f"f:{words.resolve(name)}"
+}
+
+/// Whether `name` is the name of a map field the file follows.
+fn tm_a_map_field(name: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, env: ref MapEnv) -> bool {
+    return env.field_names.contains(words.resolve(name))
+}
+
+/// The field a receiver names where it is `x.counts` of a followed map
+/// field, else nothing.
+fn tm_field_named(receiver: ref Expr, words: ref winnow_grammar::InternerContext, env: ref MapEnv) -> winnow_grammar::Symbol? {
+    return match receiver {
+        Expr::Field { name, .. } => {
+            if tm_a_map_field(name, words, env) { name.clone() } else { null }
+        },
+        else => null,
+    }
 }
 
 /// The classes of the maps of one file, and which of them keep the fast hash:
@@ -538,6 +600,16 @@ fn tm_env(program: ref Program, words: ref winnow_grammar::InternerContext, libr
 pub fn trusted_maps(program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger) -> MapPlan {
     let env = tm_env(program, words, library)
     let mut classes = MapClasses { parent: collections::BTreeMap(), poisoned: collections::BTreeSet(), lets: [], slots: [], unread: false, escaped: [] }
+    // **A map field is a position** (ADR-010 D9, #1607): `f:Struct.field`
+    // is the one the emitter asks, one class with `f:field`, which every
+    // use by the name reaches.
+    for written in env.map_fields {
+        let parts: Vec[ref String] = written.split(".").collect()
+        let slot = f"f:{written}"
+        let by_name = f"f:{parts[parts.len() - 1]}"
+        classes.slots.push(slot.clone())
+        mc_union(classes, slot, by_name)
+    }
     let mut counter = 0
     for item in program.items {
         match item.node {
@@ -614,7 +686,7 @@ fn tm_remember(name: winnow_grammar::Symbol?, words: ref winnow_grammar::Interne
 fn tm_walk_function(fname: ref String, alone: bool, args: ref Vec[FnArg], body: ref Block, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut classes: MapClasses) {
     let ret = f"r:{fname}"
     let mut first: collections::BTreeMap[winnow_grammar::Symbol, i64] = collections::BTreeMap()
-    let mut walk = MapWalk { nodes: [], ret: ret.clone(), scopes: [], given: [], made: [], kept: [], escapes: collections::BTreeSet(), bound: collections::BTreeMap(), unread: false, at: 0, sinks: [] }
+    let mut walk = MapWalk { nodes: [], ret: ret.clone(), scopes: [], given: [], made: [], kept: [], escapes: collections::BTreeSet(), bound: collections::BTreeMap(), unread: false, at: 0, sinks: [], field_kept: [] }
     if alone {
         classes.slots.push(ret.clone())
     } else {
@@ -662,6 +734,17 @@ fn tm_walk_function(fname: ref String, alone: bool, args: ref Vec[FnArg], body: 
         }
         if !keys_trusted {
             mc_poison(classes, walk.nodes[kept.id])
+        }
+    }
+    for (field, deps) in walk.field_kept {
+        let mut keys_trusted = deps.known
+        for dep in deps.ids {
+            if !trusted.contains(dep) {
+                keys_trusted = false
+            }
+        }
+        if !keys_trusted {
+            mc_poison(classes, field)
         }
     }
     // **Any other use is the map leaving**: bound again, returned from a
@@ -792,6 +875,18 @@ fn tm_walk_block(block: ref Block, words: ref winnow_grammar::InternerContext, l
                 }
             },
             Stmt::Assign { target, value, .. } => {
+                // **A map field given a map** (#1607): the value flows into
+                // the field's position, as into a `let`'s.
+                let field = tm_field_named(target, words, env)
+                if field != null {
+                    let named = field ?? continue
+                    match target {
+                        Expr::Field { base, .. } => tm_walk_expr(base, words, library, env, classes, walk),
+                        else => {}
+                    }
+                    tm_flow(tm_field_node(named, words), value, words, library, env, classes, walk)
+                    continue
+                }
                 tm_walk_expr(target, words, library, env, classes, walk)
                 tm_walk_expr(value, words, library, env, classes, walk)
                 match target {
@@ -811,6 +906,14 @@ fn tm_walk_block(block: ref Block, words: ref winnow_grammar::InternerContext, l
                         let id = tm_resolve(name.clone(), walk)
                         if id >= 0 {
                             walk.kept.push(MapKept { id: id, deps: tm_nothing() })
+                        }
+                    },
+                    // Iterating a map field hands it nothing (#1607).
+                    Expr::Field { base, name, .. } => {
+                        if tm_a_map_field(name, words, env) {
+                            tm_walk_expr(base, words, library, env, classes, walk)
+                        } else {
+                            tm_walk_expr(iter, words, library, env, classes, walk)
                         }
                     },
                     else => tm_walk_expr(iter, words, library, env, classes, walk),
@@ -921,6 +1024,16 @@ fn tm_flow(sink: ref String, value: ref Expr, words: ref winnow_grammar::Interne
     }
 }
 
+/// A value given to a map field (#1607): a map made here joins no class,
+/// as for a `let`; anything else flows as `tm_flow` says.
+fn tm_into(sink: ref String, value: ref Expr, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut classes: MapClasses, mut walk: MapWalk) {
+    if is_a_map_made(value, words) {
+        tm_walk_expr(value, words, library, env, classes, walk)
+    } else {
+        tm_flow(sink, value, words, library, env, classes, walk)
+    }
+}
+
 /// The map `receiver` names, if it names one: its binding, else `-1`.
 fn map_named(receiver: ref Expr, words: ref winnow_grammar::InternerContext, walk: ref MapWalk) -> i64 {
     return match receiver {
@@ -948,12 +1061,26 @@ fn tm_walk_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, libr
         },
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let id = map_named(receiver, words, walk)
+            let field = tm_field_named(receiver, words, env)
             if id >= 0 && words.resolve(method) != "clone" {
                 let mut all = tm_nothing()
                 for a in args {
                     all = tm_join(all, tm_deps_of(a, words, library, env, walk))
                 }
                 walk.kept.push(MapKept { id: id, deps: all })
+            } else if field != null && words.resolve(method) != "clone" {
+                // **A method of a map field** (#1607): what it is handed may
+                // become a key, as for a map named by a binding.
+                let named = field ?? return
+                let mut all = tm_nothing()
+                for a in args {
+                    all = tm_join(all, tm_deps_of(a, words, library, env, walk))
+                }
+                walk.field_kept.push((tm_field_node(named, words), all))
+                match receiver {
+                    Expr::Field { base, .. } => tm_walk_expr(base, words, library, env, classes, walk),
+                    else => {}
+                }
             } else {
                 tm_walk_expr(receiver, words, library, env, classes, walk)
             }
@@ -966,9 +1093,18 @@ fn tm_walk_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, libr
         },
         Expr::Index { base, index, .. } => {
             let id = map_named(base, words, walk)
+            let field = tm_field_named(base, words, env)
             if id >= 0 {
                 let deps = tm_deps_of(index, words, library, env, walk)
                 walk.kept.push(MapKept { id: id, deps: deps })
+            } else if field != null {
+                let named = field ?? return
+                let deps = tm_deps_of(index, words, library, env, walk)
+                walk.field_kept.push((tm_field_node(named, words), deps))
+                match base {
+                    Expr::Field { base, .. } => tm_walk_expr(base, words, library, env, classes, walk),
+                    else => {}
+                }
             } else {
                 tm_walk_expr(base, words, library, env, classes, walk)
             }
@@ -1002,8 +1138,20 @@ fn tm_walk_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, libr
         Expr::Try(inner, _) => tm_walk_expr(inner, words, library, env, classes, walk),
         Expr::Async(inner, _, _, _) => tm_walk_expr(inner, words, library, env, classes, walk),
         Expr::Throw(inner, _) => tm_walk_expr(inner, words, library, env, classes, walk),
-        Expr::Field { base, .. } => tm_walk_expr(base, words, library, env, classes, walk),
-        Expr::SafeField { base, .. } => tm_walk_expr(base, words, library, env, classes, walk),
+        // **A map field used as a value** (#1607): handed on, returned or
+        // bound, it goes where no class follows it.
+        Expr::Field { base, name, .. } => {
+            if tm_a_map_field(name, words, env) {
+                mc_poison(classes, tm_field_node(name, words))
+            }
+            tm_walk_expr(base, words, library, env, classes, walk)
+        },
+        Expr::SafeField { base, name, .. } => {
+            if tm_a_map_field(name, words, env) {
+                mc_poison(classes, tm_field_node(name, words))
+            }
+            tm_walk_expr(base, words, library, env, classes, walk)
+        },
         Expr::Coalesce { value, fallback, .. } => {
             tm_walk_expr(value, words, library, env, classes, walk)
             tm_walk_expr(fallback, words, library, env, classes, walk)
@@ -1053,18 +1201,51 @@ fn tm_walk_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, libr
         // A struct literal is code this does not follow (the function stays
         // unread), but what it is built from leaves: a map named in a field is a
         // map that may stand at a hidden parameter (D9).
-        Expr::StructLit { fields, .. } => {
+        //
+        // **A literal of a struct the file follows is read field by field**
+        // (#1607): a map field's value flows into its position; every other
+        // field's value is walked where it stands.
+        Expr::StructLit { name, fields, .. } => {
+            let owner = words.resolve(name).clone()
+            let followed = env.followed_structs.contains(owner)
             for field in fields {
-                if field.value != null {
-                    tm_walk_expr(field.value ?? return, words, library, env, classes, walk)
+                let field_name = words.resolve(field.name)
+                let into = f"{owner}.{field_name}"
+                if followed && env.map_fields.contains(into) {
+                    let node = tm_field_node(field.name, words)
+                    if field.value != null {
+                        tm_into(node, field.value ?? return, words, library, env, classes, walk)
+                    } else {
+                        let id = tm_resolve(field.name.clone(), walk)
+                        if id >= 0 {
+                            mc_union(classes, node, walk.nodes[id].clone())
+                        } else {
+                            mc_poison(classes, node)
+                        }
+                    }
                 } else {
-                    let id = tm_resolve(field.name.clone(), walk)
-                    if id >= 0 {
-                        walk.escapes.insert(id)
+                    if tm_a_map_field(field.name, words, env) {
+                        mc_poison(classes, tm_field_node(field.name, words))
+                    }
+                    if field.value != null {
+                        tm_walk_expr(field.value ?? return, words, library, env, classes, walk)
+                    } else {
+                        let id = tm_resolve(field.name.clone(), walk)
+                        if id >= 0 {
+                            walk.escapes.insert(id)
+                        }
+                        if id == -2 {
+                            let arity = env.privates.get(field.name) ?? -1
+                            if arity >= 0 {
+                                mc_poison_function(classes, field_name, arity)
+                            }
+                        }
                     }
                 }
             }
-            walk.unread = true
+            if !followed {
+                walk.unread = true
+            }
         },
         Expr::Path(_, _) => {},
         Expr::LitInt { .. } => {},
@@ -1266,7 +1447,7 @@ pub fn escaped_sinks(program: ref Program, words: ref winnow_grammar::InternerCo
 fn es_walk_function(args: ref Vec[FnArg], body: ref Block, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut plan: EscapePlan) {
     let mut classes = MapClasses { parent: collections::BTreeMap(), poisoned: collections::BTreeSet(), lets: [], slots: [], unread: false, escaped: [] }
     let mut first: collections::BTreeMap[winnow_grammar::Symbol, i64] = collections::BTreeMap()
-    let mut walk = MapWalk { nodes: [], ret: "r", scopes: [], given: [], made: [], kept: [], escapes: collections::BTreeSet(), bound: collections::BTreeMap(), unread: false, at: 0, sinks: [] }
+    let mut walk = MapWalk { nodes: [], ret: "r", scopes: [], given: [], made: [], kept: [], escapes: collections::BTreeSet(), bound: collections::BTreeMap(), unread: false, at: 0, sinks: [], field_kept: [] }
     for arg in args {
         let id = walk.given.len()
         let name = arg.name.clone()
@@ -1395,13 +1576,13 @@ fn es_value(sink: ref String, value: ref Expr, words: ref winnow_grammar::Intern
 /// The log sinks in code the walk does not follow: what they write is judged
 /// with no name bound, so only what literals make counts as trusted.
 fn es_fog(expr: ref Expr, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut walk: MapWalk) {
-    let mut blank = MapWalk { nodes: [], ret: "r", scopes: [], given: [], made: [], kept: [], escapes: collections::BTreeSet(), bound: collections::BTreeMap(), unread: false, at: walk.at, sinks: [] }
+    let mut blank = MapWalk { nodes: [], ret: "r", scopes: [], given: [], made: [], kept: [], escapes: collections::BTreeSet(), bound: collections::BTreeMap(), unread: false, at: walk.at, sinks: [], field_kept: [] }
     es_fog_into(expr, words, library, env, blank)
     walk.sinks.extend(blank.sinks)
 }
 
 fn es_fog_block(block: ref Block, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut walk: MapWalk) {
-    let mut blank = MapWalk { nodes: [], ret: "r", scopes: [], given: [], made: [], kept: [], escapes: collections::BTreeSet(), bound: collections::BTreeMap(), unread: false, at: walk.at, sinks: [] }
+    let mut blank = MapWalk { nodes: [], ret: "r", scopes: [], given: [], made: [], kept: [], escapes: collections::BTreeSet(), bound: collections::BTreeMap(), unread: false, at: walk.at, sinks: [], field_kept: [] }
     es_fog_block_into(block, words, library, env, blank)
     walk.sinks.extend(blank.sinks)
 }
