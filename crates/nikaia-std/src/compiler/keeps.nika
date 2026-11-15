@@ -2346,7 +2346,7 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
                 let mut found = false
                 for held in declared {
                     if held.name == arg.ty.name {
-                        of = collections::BTreeMap()
+                        of.clear()
                         for (field, ty) in held.fields {
                             of.insert(field.clone(), written_ty(view.words, view.aliases, ty))
                         }

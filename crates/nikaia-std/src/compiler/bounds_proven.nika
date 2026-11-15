@@ -159,7 +159,7 @@ pub fn bounds_proven(
 				let entries = context.around.derived.entry.len()
 				derived_note(context.around, walked)
 				if context.around.derived.entry.len() != entries {
-					context.around.held = collections::BTreeMap()
+					context.around.held.clear()
 				}
 				bp_add(out, walked)
 			},
@@ -172,7 +172,7 @@ pub fn bounds_proven(
 	let none: Vec[FnArg] = []
 	// What a grammar binding matched changes every walk: each finds the
 	// rules that hold itself.
-	context.around.held = collections::BTreeMap()
+	context.around.held.clear()
 	for item in program.items {
 		match item.node {
 			Item::Grammar(def) => {

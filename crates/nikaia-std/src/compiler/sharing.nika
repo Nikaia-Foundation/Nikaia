@@ -1076,7 +1076,7 @@ fn sharing_function(item: ref Item, owner: ref String, asked: ref Asked, holes_o
     match item {
         Item::Fn { name, args, body, ret_type, is_public, .. } => {
             walk.function = key_of_function(name, owner, asked.names)
-            walk.scope = collections::BTreeMap()
+            walk.scope.clear()
             for arg in args {
                 let ty = ty_of(arg.ty)
                 let named = asked.names.resolve(arg.name).clone()

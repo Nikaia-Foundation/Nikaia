@@ -2762,6 +2762,14 @@ sync = true
 touches = []
 signature = "[T](mut self: ref collections::HashSet[T], value: ?) -> bool"
 
+# Take every value out of the set, keeping it (#1674).
+[fn."collections::HashSet::clear"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](mut self: ref collections::HashSet[T])"
+
 # How many values the set holds.
 [fn."collections::HashSet::len"]
 pub = true
@@ -2827,6 +2835,14 @@ panics = false
 sync = true
 touches = []
 signature = "[T](mut self: ref collections::BTreeSet[T], value: ?) -> bool"
+
+# Take every value out of the set, keeping it (#1674).
+[fn."collections::BTreeSet::clear"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](mut self: ref collections::BTreeSet[T])"
 
 # Whether the set holds this value.
 [fn."collections::BTreeSet::contains"]
@@ -2924,6 +2940,15 @@ panics = false
 sync = true
 touches = []
 signature = "[K, V](mut self: ref collections::BTreeMap[K, V], key: ?) -> V?"
+
+# Take every entry out of the map, keeping it, as `collections::HashMap::clear`
+# does (#1674).
+[fn."collections::BTreeMap::clear"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[K, V](mut self: ref collections::BTreeMap[K, V])"
 
 # Whether the map holds this key.
 [fn."collections::BTreeMap::contains_key"]

@@ -111,7 +111,7 @@ pub fn bounds_around(
 		round += 1
 	}
 	if !settled {
-		context.around.frames = collections::BTreeMap()
+		context.around.frames.clear()
 	}
 	// **The rules between list fields** read with the frames found
 	// (ADR-369 D4, `bounds_rules.nika`): checked where a body uses them.

@@ -3,11 +3,11 @@
 
 pub fn published_entries(ledger: &Ledger, foreign: &collections::BTreeSet<String>) -> Ledger {
     let mut out = ledger.clone();
-    out.functions = collections::BTreeMap::new();
+    out.functions.clear();
     for (key, contract) in ledger.functions.iter() { if !of_another(key, foreign) { out.functions.insert(nikaia_std::block::Text::from(key.to_string()), contract.clone()); } }
-    out.types = collections::BTreeMap::new();
+    out.types.clear();
     for (key, contract) in ledger.types.iter() { if !of_another(key, foreign) { out.types.insert(nikaia_std::block::Text::from(key.to_string()), contract.clone()); } }
-    out.traits = collections::BTreeMap::new();
+    out.traits.clear();
     for (key, methods) in ledger.traits.iter() { if !of_another(key, foreign) { out.traits.insert(nikaia_std::block::Text::from(key.to_string()), methods.copy_owned()); } }
     out
 }

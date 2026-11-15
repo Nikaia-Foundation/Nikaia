@@ -1342,13 +1342,13 @@ impl EmitState {
         }
         if waits < 0 && fallback { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate the fallback of `async e` yet where nothing names its binding or only another task does (#986): name it in a statement of this group."), at: Some(span.start as i64) }, &"emit_async_binding")); }
         if waits < 0 {
-            walk.async_joining = collections::BTreeMap::new();
+            walk.async_joining.clear();
             if named != "" { walk.async_handles.insert(named, nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&inside, (0) as usize) }).to_string())); }
             return Ok(true);
         }
         let mut kept = EmitOut::empty();
         self.emit_stmt_written(world, walk, &mut kept, host, node, span, depth, &tail, here, scope)?;
-        walk.async_joining = collections::BTreeMap::new();
+        walk.async_joining.clear();
         walk.async_pending.push((nikaia_std::block::Text::from(kept.buf.to_string()), named, waits));
         Ok(true)
     }

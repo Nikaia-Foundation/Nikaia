@@ -1524,7 +1524,7 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
                 let mut found = false;
                 for held in declared.iter() {
                     if held.name == arg.ty.name {
-                        of = collections::BTreeMap::new();
+                        of.clear();
                         for (field, ty) in held.fields.iter() { of.insert(nikaia_std::block::Text::from(field.to_string()), written_ty(view.words, view.aliases, ty)); }
                         found = true;
                     }

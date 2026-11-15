@@ -2118,7 +2118,7 @@ impl EmitState {
         }
         if waits < 0 {
             // Named in another task alone (D8): that task waits for it.
-            walk.async_joining = collections::BTreeMap()
+            walk.async_joining.clear()
             if named != "" {
                 walk.async_handles.insert(named, inside[0].clone())
             }
@@ -2126,7 +2126,7 @@ impl EmitState {
         }
         let mut kept = EmitOut::empty()
         self.emit_stmt_written(world, walk, kept, host, node, span, depth, tail, here, scope)
-        walk.async_joining = collections::BTreeMap()
+        walk.async_joining.clear()
         walk.async_pending.push((kept.buf.clone(), named, waits))
         return true
     }

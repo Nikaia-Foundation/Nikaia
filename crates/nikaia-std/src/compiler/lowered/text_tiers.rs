@@ -3060,7 +3060,7 @@ pub(crate) fn late_function(item: &Item, ask: &TierAsk<'_, '_, '_, '_, '_>, late
 }
 
 pub(crate) fn late_body(body: &Block, names: &[String], ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) {
-    late.bound = collections::BTreeMap::new();
+    late.bound.clear();
     late.frames = vec![];
     late.loops = 0;
     late.leaving = 0;
@@ -3068,10 +3068,10 @@ pub(crate) fn late_body(body: &Block, names: &[String], ask: &TierAsk<'_, '_, '_
     late.pending = vec![];
     late.branch_args = vec![];
     late.branches = 0;
-    late.views = collections::BTreeMap::new();
-    late.viewers = collections::BTreeMap::new();
-    late.held = collections::BTreeMap::new();
-    late.temporaries = collections::BTreeSet::new();
+    late.views.clear();
+    late.viewers.clear();
+    late.held.clear();
+    late.temporaries.clear();
     late_open(late);
     late.params_from = late.serial;
     for name in names.iter() { late_bind(nikaia_std::block::Text::from(name.to_string()), late); }
@@ -4700,8 +4700,8 @@ pub(crate) fn changed_adopted(a: &collections::BTreeMap<i64, Declaring>, b: &col
 }
 
 pub(crate) fn fresh_tier_frame(walk: &mut TierWalk) {
-    walk.locals = collections::BTreeMap::new();
-    walk.ties = collections::BTreeMap::new();
+    walk.locals.clear();
+    walk.ties.clear();
     walk.frames = vec![];
     walk.result = None;
     walk.in_hole = false;
@@ -4711,8 +4711,8 @@ pub(crate) fn fresh_tier_frame(walk: &mut TierWalk) {
 
 pub(crate) fn walk_body(body: &Block, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     walk.function = String::from("");
-    walk.locals = collections::BTreeMap::new();
-    walk.ties = collections::BTreeMap::new();
+    walk.locals.clear();
+    walk.ties.clear();
     walk.frames = vec![];
     walk.result = None;
     walk.in_hole = false;
@@ -4728,8 +4728,8 @@ pub(crate) fn walk_grammar(def: &GrammarDef, ask: &TierAsk<'_, '_, '_, '_, '_>, 
     for rule in def.rules.iter() {
         let key = format!("{}::{}", gname, ask.names.resolve(rule.name));
         for alt in rule.alts.iter() {
-            walk.locals = collections::BTreeMap::new();
-            walk.ties = collections::BTreeMap::new();
+            walk.locals.clear();
+            walk.ties.clear();
             walk.frames = vec![];
             walk.result = Some(nikaia_std::block::Text::from(key.to_string()));
             walk.in_hole = false;
@@ -4887,8 +4887,8 @@ pub(crate) fn walk_function(item: &Item, target: Option<&str>, ask: &TierAsk<'_,
     };
     let key = tier_key(target, &own_name((name).as_ref(), ask.names));
     walk.function = own_name((name).as_ref(), ask.names);
-    walk.locals = collections::BTreeMap::new();
-    walk.ties = collections::BTreeMap::new();
+    walk.locals.clear();
+    walk.ties.clear();
     walk.frames = vec![];
     walk.result = Some(nikaia_std::block::Text::from(key.to_string()));
     walk.in_hole = false;

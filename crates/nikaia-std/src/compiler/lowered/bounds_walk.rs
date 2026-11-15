@@ -226,7 +226,7 @@ pub(crate) fn bounds_rounds(walk: &mut BoundsWalk, args: &[FnArg], body: &Block,
     }
     if !settled {
         if !walk.shape.roots.is_empty() { walk.assumed = context.around.field_bounds.copy_owned(); }
-        walk.assumed_ends = collections::BTreeMap::new();
+        walk.assumed_ends.clear();
         walk.proven = no_proofs();
         bounding_pass(walk, args, body, context, program, words, ask);
     }
@@ -241,7 +241,7 @@ pub(crate) fn bounds_rounds(walk: &mut BoundsWalk, args: &[FnArg], body: &Block,
 }
 
 pub fn bounds_fields(context: &mut BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
-    context.around.field_bounds = collections::BTreeMap::new();
+    context.around.field_bounds.clear();
     if context.around.fields.is_empty() { return; }
     let writers = context.around.field_writers.copy_owned();
     let mut bodies: Vec<&Spanned<Item>> = vec![];
@@ -265,13 +265,13 @@ pub fn bounds_fields(context: &mut BoundsContext, program: &Program, words: &win
         context.around.field_bounds = kept;
         if (context.around.field_bounds.len() as i64) == before { return; }
     }
-    context.around.field_bounds = collections::BTreeMap::new();
+    context.around.field_bounds.clear();
 }
 
 pub(crate) fn fields_round(context: &mut BoundsContext, bodies: &[&Spanned<Item>], program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> collections::BTreeMap<String, Range> {
     let mut written: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
     let mut lost: collections::BTreeSet<String> = collections::BTreeSet::new();
-    context.around.held = collections::BTreeMap::new();
+    context.around.held.clear();
     for item in bodies.iter() {
         let item = *item;
         match &item.node {
@@ -288,7 +288,7 @@ pub(crate) fn fields_round(context: &mut BoundsContext, bodies: &[&Spanned<Item>
             _ => { },
         }
     }
-    context.around.held = collections::BTreeMap::new();
+    context.around.held.clear();
     let mut out: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
     for (key, bound) in written.iter() {
         let bound = *bound;
@@ -351,12 +351,12 @@ pub(crate) fn bounding_is_list_type(ty: &Type, words: &winnow_grammar::InternerC
 }
 
 pub(crate) fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
-    walk.written = collections::BTreeMap::new();
-    walk.poisoned = collections::BTreeSet::new();
-    walk.written_ends = collections::BTreeMap::new();
+    walk.written.clear();
+    walk.poisoned.clear();
+    walk.written_ends.clear();
     walk.return_below = None;
-    walk.return_names = collections::BTreeSet::new();
-    walk.return_seen = collections::BTreeSet::new();
+    walk.return_names.clear();
+    walk.return_seen.clear();
     walk.return_lost = false;
     walk.return_range = None;
     walk.return_unranged = false;
@@ -1486,7 +1486,7 @@ pub(crate) fn bounding_settle(walk: &mut BoundsWalk, facts: &mut BoundsFacts) {
             parts.push(part);
         }
     }
-    walk.defining = collections::BTreeMap::new();
+    walk.defining.clear();
     for part in parts.iter() {
         let part = nikaia_std::num::value(part);
         if !facts.facts.contains(&part) { bounding_push(&walk, facts, part); }
@@ -2599,7 +2599,7 @@ pub(crate) fn bounding_maybe_block(walk: &mut BoundsWalk, block: Option<&Block>,
 }
 
 pub(crate) fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &dyn Fn(&TermArena, &[i64], i64) -> bool) -> bool {
-    walk.defining = collections::BTreeMap::new();
+    walk.defining.clear();
     match stmt {
         Stmt::Let { names, ty, value, .. } => {
             bounding_let(walk, names, (ty).as_ref(), value, facts, context, program, words, &ask);
@@ -5487,14 +5487,14 @@ pub fn bounds_returns(context: &mut BoundsContext, program: &Program, words: &wi
 }
 
 pub(crate) fn bounding_returns_settle(context: &mut BoundsContext, found: collections::BTreeMap<String, BoundsReturns>) {
-    context.around.returning = collections::BTreeSet::new();
+    context.around.returning.clear();
     for (name, wanted) in found.iter() { if wanted.each { context.around.returning.insert(nikaia_std::block::Text::from(name.to_string())); } }
     context.returns = found;
 }
 
 pub(crate) fn bounding_returns_round(context: &mut BoundsContext, bodies: &[&Spanned<Item>], assumed: &collections::BTreeMap<String, BoundsReturns>, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> collections::BTreeMap<String, BoundsReturns> {
     let mut found: collections::BTreeMap<String, BoundsReturns> = collections::BTreeMap::new();
-    context.around.held = collections::BTreeMap::new();
+    context.around.held.clear();
     for item in bodies.iter() {
         let item = *item;
         match &item.node {
@@ -5564,7 +5564,7 @@ pub(crate) fn bounding_returns_round(context: &mut BoundsContext, bodies: &[&Spa
             _ => { },
         }
     }
-    context.around.held = collections::BTreeMap::new();
+    context.around.held.clear();
     found
 }
 

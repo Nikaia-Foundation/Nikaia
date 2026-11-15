@@ -551,7 +551,7 @@ fn bounds_rounds(
 		if !walk.shape.roots.is_empty() {
 			walk.assumed = context.around.field_bounds.clone()
 		}
-		walk.assumed_ends = collections::BTreeMap()
+		walk.assumed_ends.clear()
 		walk.proven = no_proofs()
 		bounding_pass(walk, args, body, context, program, words, ask)
 	}
@@ -586,7 +586,7 @@ pub fn bounds_fields(
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
-	context.around.field_bounds = collections::BTreeMap()
+	context.around.field_bounds.clear()
 	if context.around.fields.is_empty() {
 		return
 	}
@@ -627,7 +627,7 @@ pub fn bounds_fields(
 			return
 		}
 	}
-	context.around.field_bounds = collections::BTreeMap()
+	context.around.field_bounds.clear()
 }
 
 /// One round of [`bounds_fields`]: what every body wrote into each field,
@@ -644,7 +644,7 @@ fn fields_round(
 	// The rules that hold depend on the context alone, not on the body
 	// walked: found once a round, by the first body that needs them, not
 	// once a body (#1581).
-	context.around.held = collections::BTreeMap()
+	context.around.held.clear()
 	for item in bodies {
 		match item.node {
 			Item::Fn { args, body, .. } => {
@@ -665,7 +665,7 @@ fn fields_round(
 			else => {},
 		}
 	}
-	context.around.held = collections::BTreeMap()
+	context.around.held.clear()
 	let mut out: collections::BTreeMap[String, Range] = collections::BTreeMap()
 	for (key, bound) in written {
 		if !lost.contains(key) {
@@ -826,12 +826,12 @@ fn bounding_pass(
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
-	walk.written = collections::BTreeMap()
-	walk.poisoned = collections::BTreeSet()
-	walk.written_ends = collections::BTreeMap()
+	walk.written.clear()
+	walk.poisoned.clear()
+	walk.written_ends.clear()
 	walk.return_below = null
-	walk.return_names = collections::BTreeSet()
-	walk.return_seen = collections::BTreeSet()
+	walk.return_names.clear()
+	walk.return_seen.clear()
 	walk.return_lost = false
 	walk.return_range = null
 	walk.return_unranged = false
@@ -2647,7 +2647,7 @@ fn bounding_settle(mut walk: BoundsWalk, mut facts: BoundsFacts) {
 			parts.push(part)
 		}
 	}
-	walk.defining = collections::BTreeMap()
+	walk.defining.clear()
 	for part in parts {
 		if !facts.facts.contains(part) {
 			bounding_push(walk, facts, part)
@@ -4488,7 +4488,7 @@ fn bounding_stmt(
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
-	walk.defining = collections::BTreeMap()
+	walk.defining.clear()
 	match stmt {
 		Stmt::Let { names, ty, value, .. } => {
 			bounding_let(walk, names, ty, value, facts, context, program, words, ask)
@@ -9563,7 +9563,7 @@ pub fn bounds_returns(
 /// **The returns found, settled**: the functions a `let` root may be bound
 /// to a call of are those found to return a list (ADR-306 D24).
 fn bounding_returns_settle(mut context: BoundsContext, found: collections::BTreeMap[String, BoundsReturns]) {
-	context.around.returning = collections::BTreeSet()
+	context.around.returning.clear()
 	for (name, wanted) in found {
 		if wanted.each {
 			context.around.returning.insert(name.clone())
@@ -9588,7 +9588,7 @@ fn bounding_returns_round(
 	let mut found: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
 	// **The rules that hold, found once a round** (#1581): its bodies all
 	// walk the same context.
-	context.around.held = collections::BTreeMap()
+	context.around.held.clear()
 	for item in bodies {
 		match item.node {
 			Item::Fn { name, args, body, .. } => {
@@ -9683,7 +9683,7 @@ fn bounding_returns_round(
 			else => {},
 		}
 	}
-	context.around.held = collections::BTreeMap()
+	context.around.held.clear()
 	return found
 }
 

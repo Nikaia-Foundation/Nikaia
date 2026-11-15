@@ -4369,7 +4369,7 @@ fn late_function(item: ref Item, ask: ref TierAsk, mut late: TierLate) {
 }
 
 fn late_body(body: ref Block, names: Vec[String], ask: ref TierAsk, mut late: TierLate) {
-    late.bound = collections::BTreeMap()
+    late.bound.clear()
     late.frames = []
     late.loops = 0
     late.leaving = 0
@@ -4377,10 +4377,10 @@ fn late_body(body: ref Block, names: Vec[String], ask: ref TierAsk, mut late: Ti
     late.pending = []
     late.branch_args = []
     late.branches = 0
-    late.views = collections::BTreeMap()
-    late.viewers = collections::BTreeMap()
-    late.held = collections::BTreeMap()
-    late.temporaries = collections::BTreeSet()
+    late.views.clear()
+    late.viewers.clear()
+    late.held.clear()
+    late.temporaries.clear()
     late_open(late)
     late.params_from = late.serial
     for name in names {
@@ -6562,8 +6562,8 @@ fn changed_adopted(a: ref collections::BTreeMap[i64, Declaring], b: ref collecti
 
 /// A walk outside any function: no locals, no result.
 fn fresh_tier_frame(mut walk: TierWalk) {
-    walk.locals = collections::BTreeMap()
-    walk.ties = collections::BTreeMap()
+    walk.locals.clear()
+    walk.ties.clear()
     walk.frames = []
     walk.result = null
     walk.in_hole = false
@@ -6573,8 +6573,8 @@ fn fresh_tier_frame(mut walk: TierWalk) {
 
 fn walk_body(body: ref Block, ask: ref TierAsk, mut walk: TierWalk) {
     walk.function = ""
-    walk.locals = collections::BTreeMap()
-    walk.ties = collections::BTreeMap()
+    walk.locals.clear()
+    walk.ties.clear()
     walk.frames = []
     walk.result = null
     walk.in_hole = false
@@ -6596,8 +6596,8 @@ fn walk_grammar(def: ref GrammarDef, ask: ref TierAsk, mut walk: TierWalk) {
     for rule in def.rules {
         let key = f"{gname}::{ask.names.resolve(rule.name)}"
         for alt in rule.alts {
-            walk.locals = collections::BTreeMap()
-            walk.ties = collections::BTreeMap()
+            walk.locals.clear()
+            walk.ties.clear()
             walk.frames = []
             walk.result = key.clone()
             walk.in_hole = false
@@ -6829,8 +6829,8 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     }
     let key = tier_key(target, own_name(name, ask.names))
     walk.function = own_name(name, ask.names)
-    walk.locals = collections::BTreeMap()
-    walk.ties = collections::BTreeMap()
+    walk.locals.clear()
+    walk.ties.clear()
     walk.frames = []
     walk.result = key.clone()
     walk.in_hole = false

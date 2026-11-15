@@ -56,7 +56,7 @@ fn check_program_impl[H: CheckHost](mut state: CheckState, world: ref CheckWorld
         state.subject_arguments = arguments.clone()
         check_function_function(state, world, host, method.node, method.span, named)
     }
-    state.enclosing = collections::BTreeMap()
+    state.enclosing.clear()
     state.subject_arguments = []
 }
 

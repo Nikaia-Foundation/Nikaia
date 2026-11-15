@@ -266,7 +266,7 @@ pub(crate) fn proofs_answered(t: &ProofsThread, normal: &LgNormal, key: &str) ->
 }
 
 pub(crate) fn proofs_remember(t: &mut ProofsThread, key: &str, asked: &ProofsAsked, entry: Option<&ProofsEntry>) {
-    if (t.answered.len() as i64) >= PROOFS_ANSWERED { t.answered = collections::BTreeMap::new(); }
+    if (t.answered.len() as i64) >= PROOFS_ANSWERED { t.answered.clear(); }
     let kept = match asked {
         ProofsAsked::Refuted(_) => match entry {
             Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),

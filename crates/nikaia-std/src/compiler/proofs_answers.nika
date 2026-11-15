@@ -351,7 +351,7 @@ fn proofs_answered(t: ref ProofsThread, normal: ref LgNormal, key: ref String) -
 /// `PROOFS_ANSWERED` answers the thread starts over.
 fn proofs_remember(mut t: ProofsThread, key: ref String, asked: ref ProofsAsked, entry: ref ProofsEntry?) {
     if t.answered.len() >= PROOFS_ANSWERED {
-        t.answered = collections::BTreeMap()
+        t.answered.clear()
     }
     let kept = match asked {
         ProofsAsked::Refuted(_) => entry?.clone(),

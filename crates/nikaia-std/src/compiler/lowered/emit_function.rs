@@ -778,7 +778,7 @@ impl EmitState {
                             walk.async_groups = outer_groups;
                             walk.async_pausing = outer_pausing;
                             walk.async_pending = vec![];
-                            walk.async_handles = collections::BTreeMap::new();
+                            walk.async_handles.clear();
                             if pausing == "" && inner.buf.contains(".await") { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet in a function that pauses (#988)."), at: Some(i64::from(nikaia_std::index::get(&body.stmts, 0).span.start)) }, &"emit_function")); }
                             let name = emit_async_group_name(group);
                             let grouped = throws_ && self.emit_async_tasks_channel(&channel) == channel;

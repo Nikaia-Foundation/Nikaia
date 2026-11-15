@@ -1402,7 +1402,7 @@ impl CheckState {
         let loans = self.flow.clone_loans.clone()
         self.flow.clones = []
         self.flow.clone_loans = []
-        self.flow.clone_owners = collections::BTreeSet()
+        self.flow.clone_owners.clear()
         for one in clones {
             if self.a_clone_read_after(one) {
                 continue
