@@ -447,7 +447,7 @@ pub(crate) fn check_core_call_place_text(world: &CheckWorld<'_, '_, '_, '_, '_, 
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_described<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, key: &str, contract: &FnContract, args: &[Expr], found: &[Ty], config: &[ConfigArg], passed: &[(String, Ty)], span: &Span) -> Ty {
-    state.reachable(name, contract, span);
+    state.reachable(name, !world.own.functions.contains_key(key), contract, span);
     check_core_call_rust_owner(state, world, name, contract, args, span);
     if contract.threads.may() { state.crosses_into_an_unseen_call(world, name, args, found, config, passed, span, &format!("`{}` is described as starting a thread of its own (`threads = true`), so what it is given may be looked at from one", name)); }
     let given = check_core_call_from_given(&state, world, host, contract, args);

@@ -72,14 +72,26 @@ impl CheckState {
     /// not built (D2). The check stays because the boundary it is about is the
     /// one that is left, and it is the day a package arrives that a private name
     /// needs refusing.
-    pub fn reachable(ref mut self, name: ref String, contract: ref FnContract, span: ref Span) sync {
+    ///
+    /// **`std` is a package too** (#1606): a ledger entry with `pub = false`
+    /// (`text::steers_a_log`) is `std`'s own helper, and the Rust below it is
+    /// not `pub`. `of_std` says the key is in `std`'s ledger and not in the
+    /// package being checked. Its span goes into `std_helpers_reached`, so the
+    /// caller that checks `std`'s own files, which may write `env::pairs()`,
+    /// lets it through (`check_access_inside_std`).
+    pub fn reachable(ref mut self, name: ref String, of_std: bool, contract: ref FnContract, span: ref Span) sync {
         let at = name.find("::") ?? return
         let module = name[0..<at].clone()
         let item = name[at + 2..<name.len()].clone()
-        if !self.modules.contains(module) || contract.public {
+        let helper = of_std && self.std_modules.contains(module) && !self.modules.contains(module)
+        if !(self.modules.contains(module) || helper) || contract.public {
             return
         }
-        self.findings.push(check_refusal("NK1110", span, f"You can't use `{item}` from here: it's private to `{module}`.", ["Everything is private to its package unless it's declared `pub`."], f"Write `pub fn {item}` in `{module}`, or use something it makes public."))
+        if helper {
+            self.facts.std_helpers_reached.insert(span.start as i64)
+        }
+        let help: String = if self.modules.contains(module) { f"Write `pub fn {item}` in `{module}`, or use something it makes public." } else { f"`{item}` is a helper inside `std`; use something `{module}` makes public." }
+        self.findings.push(check_refusal("NK1110", span, f"You can't use `{item}` from here: it's private to `{module}`.", ["Everything is private to its package unless it's declared `pub`."], help))
     }
 
     /// `NK1109`: an option a function does not have.
@@ -295,4 +307,19 @@ fn a_last_segment(world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], 
     if path.len() > 0 {
         out.insert(world.words.resolve(path[path.len() - 1]).clone())
     }
+}
+
+/// **`std` reaches its own helpers** (#1606): drops the `NK1110` of each call
+/// in `std_helpers_reached`. Only the caller that checks a file of `std`'s
+/// Nikaia knows the file is `std`'s; its Rust lives in the same crate as the
+/// helper, which is `pub(crate)` there or a sibling of it.
+pub fn check_access_inside_std(findings: ref Vec[CheckFinding], reached: ref collections::BTreeSet[i64]) -> Vec[CheckFinding] {
+    let mut kept: Vec[CheckFinding] = []
+    for f in findings {
+        if f.code == "NK1110" && reached.contains(f.span.start as i64) {
+            continue
+        }
+        kept.push(f.clone())
+    }
+    return kept
 }

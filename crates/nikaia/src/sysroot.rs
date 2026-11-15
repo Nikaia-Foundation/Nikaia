@@ -311,6 +311,7 @@ pub fn lower_std_module(path: &Path) -> Result<String> {
         &crate::assets::Reads::none(),
     );
     crate::check::refuse_assumes_in_std(&mut checked);
+    crate::check::allow_std_helpers_in_std(&mut checked);
     let refusals: Vec<&crate::check::Finding> = checked
         .findings
         .iter()
@@ -602,6 +603,7 @@ fn check_tools_file(
         &crate::assets::Reads::none(),
     );
     crate::check::refuse_assumes_in_std(&mut checked);
+    crate::check::allow_std_helpers_in_std(&mut checked);
     checked
 }
 

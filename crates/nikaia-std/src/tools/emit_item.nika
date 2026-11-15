@@ -305,7 +305,12 @@ impl EmitState {
                 for field in fields {
                     let field_text = emit_text(world, field.name)
                     let slot = f"{text}.{field_text}"
+                    // **A map field no untrusted key reaches keeps the fast
+                    // hash** (ADR-010 D9, #1607), as a `let` of that class.
+                    let outer = walk.trusting
+                    walk.trusting = outer || (!is_public && self.fast_slots.contains(f"f:{slot}"))
                     let mut lowered = self.emit_fn_ty(world, walk, host, field.ty, EmitLifetimes::Named, "<field>", slot)
+                    walk.trusting = outer
                     // **A view of a list is a slice**, as a parameter's is
                     // (#458): what a `ref Vec[T]` parameter hands the field is
                     // a `&[T]`.

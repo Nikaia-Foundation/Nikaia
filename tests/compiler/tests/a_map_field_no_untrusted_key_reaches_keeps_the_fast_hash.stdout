@@ -1,0 +1,10 @@
+-- --trust
+input provenance: untrusted
+    cli::args is untrusted
+-- the fields
+counts: collections::TrustedMap<&'static str, i64>,
+words: collections::HashSet<String>,
+let mut t = Tally { counts: collections::TrustedMap::default() };
+let mut s = Seen { words: collections::HashSet::new() };
+-- run
+2 1

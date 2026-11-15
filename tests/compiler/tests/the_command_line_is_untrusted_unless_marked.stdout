@@ -7,11 +7,9 @@ Checked p.nika
 error[NK1300]: `assert(n > 0)` is not proved: nothing before it shows it.
 -- a map keyed by cli::args, no marker
 input provenance: untrusted
-    cli::Args::nth is trusted
     cli::args is untrusted
 -- a map keyed by cli::args, trusted: true
 input provenance: trusted
-    cli::Args::nth is trusted
     cli::args is trusted: `trusted: true` at p.nika:6
 -- the ledger
 [fn."main"]

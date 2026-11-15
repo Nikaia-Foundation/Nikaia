@@ -225,7 +225,10 @@ impl EmitState {
                 for field in fields.iter() {
                     let field_text = emit_text(world, field.name);
                     let slot = format!("{}.{}", text, field_text);
+                    let outer = walk.trusting;
+                    walk.trusting = outer || !is_public && self.fast_slots.contains(&format!("f:{}", slot));
                     let mut lowered = self.emit_fn_ty(world, walk, host, &field.ty, &EmitLifetimes::Named, "<field>", &slot);
+                    walk.trusting = outer;
                     if lowered.starts_with("&'a Vec<") && lowered.ends_with('>') {
                         let element = nikaia_std::index::or(nikaia_std::index::or(lowered.strip_prefix("&'a Vec<"), || "").strip_suffix('>'), || "");
                         lowered = format!("&'a [{}]", element);

@@ -1,0 +1,55 @@
+// #1601, ADR-397: `env::vars(prefix)` lists the variables whose name starts
+// with `prefix`, sorted by name, and leaves out an empty value as `env::var`
+// does. The child gets its variables through `process::run`'s `env:`. The
+// values are untrusted: an `assert` about one is `NK1202`, and `trusted:
+// true` makes it a claim as any other, which `--trust` names with its place.
+//
+// A value that is not Unicode is not tested: `env:` is `Vec[(String,
+// String)]` and cannot hand a child one.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn said(nikaia: String, tmp: String, label: String, source: String, verb: Vec[String]) throws {
+    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
+    let mut args = verb.clone()
+    args.push("p.nika")
+    let env = [("NKV_ZETA", "26"), ("NKV_ALPHA", "1"), ("NKV_EMPTY", ""), ("NKV_MID", "13"), ("NKW_OTHER", "x")]
+    let out = process::run(nikaia, args; dir: tmp.clone(), env: env)
+    println(f"-- {label}")
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        let kept = line.starts_with("error") || line.starts_with("Checked") || line.starts_with("NKV") || line.starts_with("count") || line.starts_with("input provenance") || line.starts_with("    ") && line.contains(" is ")
+        if kept {
+            println(line.replace(tmp, "TMP"))
+        }
+    }
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let head = "use std::env\nuse std::text\n\nfn main() throws {\n"
+    let listed = "    for (name, value) in env::vars(\"NKV_\") {\n        println(f\"{name}={value}\")\n    }\n    println(f\"count {env::vars(\"\").len() > 3}\")\n}\n"
+    said(nikaia, tmp, "the prefix, the order, no empty value", f"{head}{listed}", ["run"])
+    let plain = "    let n: i64 = text::parse_i64(env::vars(\"NKV_MID\")[0].1) ?? 8\n"
+    let marked = "    let n: i64 = text::parse_i64(env::vars(\"NKV_MID\"; trusted: true)[0].1) ?? 8\n"
+    let tail = "    assert(n > 0)\n    println(n)\n}\n"
+    said(nikaia, tmp, "an assert on env::vars", f"{head}{plain}{tail}", ["check"])
+    said(nikaia, tmp, "trusted: true, a claim as any other", f"{head}{marked}{tail}", ["check"])
+    let map = "use std::env\nuse std::collections\n\nfn main() throws {\n    let mut m = collections::HashMap()\n    for (name, value) in env::vars(\"NKV_\""
+    let rest = ") {\n        m.insert(value, name)\n    }\n    println(m.len())\n}\n"
+    said(nikaia, tmp, "a map keyed by env::vars, no marker", f"{map}{rest}", ["lower", "--trust", "-o", "p.rs"])
+    said(nikaia, tmp, "a map keyed by env::vars, trusted: true", f"{map}; trusted: true{rest}", ["lower", "--trust", "-o", "p.rs"])
+    println("-- the ledger")
+    for line in fs::read_to_string(f"{tmp}/nikaia.contracts", fs::Root::Anywhere).lines() {
+        if line.starts_with("[fn.") || line.starts_with("trusted") {
+            println(line)
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}

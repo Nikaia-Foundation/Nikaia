@@ -27,12 +27,15 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn reachable(&mut self, name: &str, contract: &FnContract, span: &Span) {
+    pub fn reachable(&mut self, name: &str, of_std: bool, contract: &FnContract, span: &Span) {
         let at = match nikaia_std::search::find(&name, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
         let module = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string());
         let item = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(at + 2..)).to_string());
-        if !self.modules.contains(&module) || contract.public { return; }
-        self.findings.push(check_refusal("NK1110", span, format!("You can't use `{}` from here: it's private to `{}`.", item, module), vec![String::from("Everything is private to its package unless it's declared `pub`.")], Some(format!("Write `pub fn {}` in `{}`, or use something it makes public.", item, module))));
+        let helper = of_std && self.std_modules.contains(&module) && !self.modules.contains(&module);
+        if !(self.modules.contains(&module) || helper) || contract.public { return; }
+        if helper { self.facts.std_helpers_reached.insert(span.start as i64); }
+        let help: String = if self.modules.contains(&module) { format!("Write `pub fn {}` in `{}`, or use something it makes public.", item, module) } else { format!("`{}` is a helper inside `std`; use something `{}` makes public.", item, module) };
+        self.findings.push(check_refusal("NK1110", span, format!("You can't use `{}` from here: it's private to `{}`.", item, module), vec![String::from("Everything is private to its package unless it's declared `pub`.")], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -150,4 +153,13 @@ pub fn variants_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn a_last_segment(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) { if !path.is_empty() { out.insert(nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 1)) as usize) }).to_string())); } }
+
+pub fn check_access_inside_std(findings: &[CheckFinding], reached: &collections::BTreeSet<i64>) -> Vec<CheckFinding> {
+    let mut kept: Vec<CheckFinding> = vec![];
+    for f in findings.iter() {
+        if f.code == "NK1110" && reached.contains(&(f.span.start as i64)) { continue; }
+        kept.push(f.clone());
+    }
+    kept
+}
 

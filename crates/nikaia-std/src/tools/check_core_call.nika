@@ -582,7 +582,7 @@ fn check_core_call_place_text(world: ref CheckWorld, arg: ref Expr) -> String? s
 /// A call the ledger describes: reached, asked, and typed from its signature
 /// and what the arguments bind.
 fn check_core_call_described[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: ref String, key: ref String, contract: ref FnContract, args: ref Vec[Expr], found: ref Vec[Ty], config: ref Vec[ConfigArg], passed: ref Vec[(String, Ty)], span: ref Span) -> Ty sync {
-    state.reachable(name, contract, span)
+    state.reachable(name, !world.own.functions.contains_key(key), contract, span)
     check_core_call_rust_owner(state, world, name, contract, args, span)
     // **A described call is asked too, where the description says the word**
     // (ADR-290 D7).

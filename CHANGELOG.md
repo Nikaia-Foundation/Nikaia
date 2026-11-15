@@ -8,6 +8,27 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1382] — 2026-11-15
+
+**Builders' changes (#1073, #1187)**
+- Lowering: a text put into a keep is handed to a map's `get`, `contains_key` or `remove` once lent, after a block that binds its name again too; a `for` or match-arm binding of that name is lent as its own value (#1073).
+- pre-push: `version` (bump.py check) runs on the index copy, so another agent's unstaged `.nika` no longer turns it red (#1187)
+
+## [0.0.1381] — 2026-11-15
+
+**Builders' changes (#1598, #1599, #1601, #1602, #1606, #1607)**
+- env::var is untrusted (ADR-397): an assert about an environment value is NK1202 unless the call says `trusted: true`, maps keyed by it get the keyed hash, and the marker is recorded in the ledger; the specification documents env::vars(prefix).
+- Untrusted text reaches the log escaped: in a program that reads untrusted input, eprint, eprintln, panic and assert messages, and the long form of an uncaught or detached error, write control, line-separator and bidi characters and the backslash in literal form (
+, \u{1b}, \\). Literal text and trusted values are never escaped, and a trusted program's output is unchanged. text::escape_control(s) does the same by hand, and --trust lists each escaping call and its source (ADR-398).
+- The command line is untrusted (ADR-399): an assert about a `cli::args()` word is NK1202, whose help names a guard, a parameter of `main` (checked where the words arrive) and `cli::args(trusted: true)`; `--trust` reports the command line, through `cli::args` or `main`'s parameters.
+- An `if` or `match` whose one arm is a text kept for a later push and whose other makes new text lowers again (was an internal error, NK1343).
+- Comparing a `T?` the program proved set with a `T` lowers again (was an internal error, NK1343).
+- env::vars(prefix) lists the environment's variables whose name starts with prefix, sorted by name, without empty or non-Unicode ones; the values are untrusted unless the call says trusted: true (ADR-397). Written in Nikaia over one Rust primitive.
+- lower-std lowers a std runtime or tools file that has the name of a std module it imports.
+- An `if` or `match` whose every arm is the same text, kept for a later push, lowers again (was an internal error, NK1343) - the value moves the text as a plain `let` does.
+- A std helper (a ledger entry with pub = false, such as text::steers_a_log or env::pairs) called from a program is refused by the checker with NK1110 instead of failing in rustc as an internal error.
+- A map in a struct field keeps the fast hash under untrusted input where no untrusted key reaches it (ADR-010 D9); --trust names cli::args, not each Args method.
+
 ## [0.0.1380] — 2026-11-15
 
 **std: every map has extend, and an extend links its source's text tier to the target's (ADR-collections-1 D6) (#1605)**

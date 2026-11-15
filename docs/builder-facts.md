@@ -216,4 +216,7 @@ together with the specification section and an example test.
 * A `.stdout`-only test passes even when the compiler prints a warning; add an empty `.stderr` beside it to pin "no warning". (issue-1491)
 * Files of the views-3 migration may carry `keep` marks the old binary already warned NK1334 on; when your fix makes `keep` mean kept, drop such marks where the file means lent. (issue-1491)
 * `a_list_element_past_a_jump_is_refused_where_an_own_value_is_wanted` is red on develop before #1501 (the `by_val` NK1102 is missing), so don't chase it in a list filter run. (issue-1501)
+* A local is put into a keep (`put_viewed`) only when a view of it leaves the function, e.g. `let v = parse(text); return v`; a plain user program with a map lookup never gets a keep frame. (issue-1073)
+* The emitter's `walk.kept_names` maps each kept name to its `let`'s start, and `emit_stmt_block_plain` restores it at the end of each block; a new binder that shadows a name needs no special handling, because the checker's `declared`/`bound_at` facts resolve each use. (issue-1073)
+* `CheckFacts.declared` and `bound_at` (#1396) are filled on every build, so the emitter can resolve a variable use to its binding's span through them. (issue-1073)
 

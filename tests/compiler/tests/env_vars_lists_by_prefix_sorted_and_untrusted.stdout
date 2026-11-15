@@ -1,0 +1,18 @@
+-- the prefix, the order, no empty value
+NKV_ALPHA=1
+NKV_MID=13
+NKV_ZETA=26
+count true
+-- an assert on env::vars
+error[NK1202]: `n > 0` is a claim about data from outside the program.
+-- trusted: true, a claim as any other
+error[NK1300]: `assert(n > 0)` is not proved: nothing before it shows it.
+-- a map keyed by env::vars, no marker
+input provenance: untrusted
+    env::vars is untrusted
+-- a map keyed by env::vars, trusted: true
+input provenance: trusted
+    env::vars is trusted: `trusted: true` at p.nika:6
+-- the ledger
+[fn."main"]
+trusted = ["env::vars at p.nika:6"]

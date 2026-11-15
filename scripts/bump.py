@@ -38,7 +38,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(subprocess.run(['git', 'rev-parse', '--show-toplevel'], capture_output=True, text=True).stdout.strip() or '.')
+# The checkout this script lies in, as badges.py has it: `pre-push.nika` runs
+# `check` in a copy of the index inside target/, whose git toplevel is the
+# shared working tree (#1187).
+ROOT = Path(__file__).resolve().parent.parent
 SPEC = [ROOT / 'docs' / 'specification' / f for f in ('10-nikaia-light.md', '20-nikaia-advance.md', '30-nikaia-tooling.md')]
 CHANGELOG = ROOT / 'CHANGELOG.md'
 SELF = ROOT / 'scripts' / 'self_hosting.py'
