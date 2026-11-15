@@ -942,8 +942,9 @@ fn drive_badges() throws {
 // `nikaia.derived`, `nikaia.proofs`; ADR-270 D4) follow the
 // sources and the compiler as the badges do (#1591): before each suite they
 // are built again on a clean target from HEAD (`scripts/ledgers.nika --
-// --refresh --tree HEAD`, with the compiler BUILD makes of this checkout)
-// and only the ledger files that changed are committed. A build that fails is
+// --refresh --tree HEAD`, with the compiler of HEAD, drive_tree_exe) and
+// only the ledger files that changed are committed. BUILD still builds this
+// checkout's compiler, the driver's own. A build that fails is
 // printed and left to CI's `--check`, which is red on it too.
 fn drive_ledgers(build: String) throws {
 	let built = process::run("sh", ["-c", f"{build} 2>&1"])
@@ -966,17 +967,73 @@ fn drive_ledgers(build: String) throws {
 	println(f"LEDGERS regenerated and committed: {paths.join(" ")}")
 }
 
-// Runs `scripts/ledgers.nika -- --refresh` on the git tree TREE with this
-// checkout's compiler; the ledger paths it rewrote. A failed directory is
+// The worktree and target directory the compiler of a git tree is built in
+// (#1665): the shared checkout holds the other lanes' uncommitted compiler
+// sources and lowered files, so a compiler built there answers for a tree
+// that is not the one under test.
+fn drive_tree_dir() -> String { return "target/ledger-tree" }
+
+// Builds the compiler of the git tree TREE in a detached worktree of its own,
+// `target/ledger-tree`, made once and moved to TREE with `read-tree -u` (only
+// the changed files are rewritten, so the build stays incremental), with its
+// own target directory `target/ledger-target`; the path of the binary, or ""
+// with the reason printed when it cannot be built.
+fn drive_tree_exe(tree: String) -> String throws {
+	let wt = drive_tree_dir()
+	if !fs::exists(f"{wt}/.git", fs::Root::Anywhere) {
+		process::run("git", ["worktree", "prune"])
+		let made = process::run("git", ["worktree", "add", "--detach", "-f", wt.clone(), "HEAD"])
+		if !made.ok {
+			println(f"LEDGERS not refreshed: no worktree for the tree: {made.stderr.trim()}")
+			return ""
+		}
+	}
+	// `git -C` on a missing worktree would reach the shared checkout's index.
+	let top = process::run("git", ["-C", wt.clone(), "rev-parse", "--show-toplevel"]).stdout.trim().clone()
+	let want = process::run("realpath", [wt.clone()]).stdout.trim().clone()
+	if top != want {
+		println(f"LEDGERS not refreshed: {wt} is not a worktree of its own")
+		return ""
+	}
+	let moved = process::run("git", ["-C", wt.clone(), "read-tree", "--reset", "-u", tree.clone()])
+	if !moved.ok {
+		println(f"LEDGERS not refreshed: the worktree did not take {tree}: {moved.stderr.trim()}")
+		return ""
+	}
+	let target = process::run("realpath", ["-m", "target/ledger-target"]).stdout.trim().clone()
+	let built = process::run(
+		"sh",
+		["-c", f"cd '{want}' && CARGO_TARGET_DIR='{target}' cargo build -q --profile fast -p nikaia 2>&1"],
+	)
+	if !built.ok {
+		println(f"LEDGERS not refreshed: the compiler of {tree} did not build")
+		println(drive_tail(built.stdout, 20))
+		return ""
+	}
+	return f"{target}/fast/nikaia"
+}
+
+// Runs `scripts/ledgers.nika -- --refresh` on the git tree TREE with the
+// compiler of TREE, in its worktree (drive_tree_exe), and copies the ledger
+// files it rewrote into this checkout; their paths. A failed directory is
 // printed (`LEDGERS failed ...`) and its files are left as they were. A
-// checkout without the script or a compiler has no ledgers to refresh.
+// checkout without the script has no ledgers to refresh.
 fn drive_ledgers_refresh(tree: String) -> Vec[String] throws {
-	if drive_exe() == "" || !fs::exists("scripts/ledgers.nika", fs::Root::Anywhere) { return [] }
-	let exe = process::run("realpath", [drive_exe()]).stdout.trim().clone()
-	let out = process::run(exe.clone(), ["run", "scripts/ledgers.nika", "--", "--refresh", "--tree", tree, "--exe", exe])
+	if !fs::exists("scripts/ledgers.nika", fs::Root::Anywhere) { return [] }
+	let exe = drive_tree_exe(tree.clone())
+	if exe == "" { return [] }
+	let wt = process::run("realpath", [drive_tree_dir()]).stdout.trim().clone()
+	let out = process::run(
+		"sh",
+		["-c", f"cd '{wt}' && '{exe}' run scripts/ledgers.nika -- --refresh --tree {tree} --exe '{exe}'"],
+	)
 	let mut paths: Vec[String] = []
 	for line in out.stdout.split("\n") {
-		if line.starts_with("refreshed ") { paths.push((line.strip_prefix("refreshed ") ?? "").trim().clone()) }
+		if line.starts_with("refreshed ") {
+			let path = (line.strip_prefix("refreshed ") ?? "").trim().clone()
+			let copied = process::run("cp", [f"{wt}/{path}", path.clone()])
+			if copied.ok { paths.push(path) }
+		}
 	}
 	if !out.ok { println("LEDGERS failed\n" + drive_tail(out.stdout + out.stderr, 30)) }
 	return paths
