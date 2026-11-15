@@ -92,6 +92,12 @@ it, like the checks in `docs/supervisor.md`.
   probe reduced from the real code: the function and every `ref mut self`
   method of its type, with stub types, kept as the acceptance check; a
   synthetic probe passed while the real code stayed checked (#1470).
+  Such an item also checks for each site that the rule can read the field:
+  a `pub` field gets no found bound when its type can be seen from outside
+  the package (ADR-306 D22). So the issue lists each site's field as private
+  or `pub`, and a `pub` one counts only under an item that makes it private
+  first (#1653: `SvRow`'s list fields are `pub`, so its `sv_*` sites could
+  not move; #1629 made `SvSimplex`'s fields private for that reason).
   Each group's probe is shown still checked on the binary of the day (its
   `--bounds` row in the issue); a probe that already proves counts nothing,
   and the issue names the real site instead (#1634: its probe was proved by
