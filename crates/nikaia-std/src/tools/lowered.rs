@@ -3385,7 +3385,7 @@ pub mod cexport_python {
 }
 pub mod check_access {
     #[allow(unused_imports)]
-    pub use super::{names_the_argument, dotted_path, variants_named};
+    pub use super::{names_the_argument, dotted_path, variants_named, check_access_inside_std};
 }
 pub mod check_arguments {
     #[allow(unused_imports)]
@@ -4355,7 +4355,7 @@ pub mod tree_build {
 }
 pub mod trust {
     #[allow(unused_imports)]
-    pub use super::{Wrote, spelled, written_root, Reason, says_trusted, SourceCall, source_calls, mark_trusted, main_parameters_source, takes_the_command_line, Place, render, MapPlan, trusted_maps};
+    pub use super::{Wrote, spelled, written_root, Reason, says_trusted, SourceCall, source_calls, mark_trusted, main_parameters_source, takes_the_command_line, Place, render, MapPlan, trusted_maps, EscapePlan, EscapedCall, no_escapes, escaped_sinks, render_escapes};
 }
 pub mod ty {
     #[allow(unused_imports)]

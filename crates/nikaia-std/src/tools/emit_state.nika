@@ -110,6 +110,10 @@ pub struct EmitState {
     pub opaque_handles: collections::BTreeMap[String, String],
     /// Each `extern` function's result type.
     pub foreign_results: collections::BTreeMap[String, Type],
+    /// The holes of an `f"…"` a log sink writes escaped, and the values it
+    /// writes whole escaped (ADR-398 D3): none in a trusted program.
+    pub escaped_holes: collections::BTreeSet[i64],
+    pub escaped_wholes: collections::BTreeSet[i64],
     /// The `let`s whose value is trusted input, by the start of the statement.
     pub trusted_lets: collections::BTreeSet[i64],
     /// The parameters (`p:<fn>:<n>`) and results (`r:<fn>`) of the private

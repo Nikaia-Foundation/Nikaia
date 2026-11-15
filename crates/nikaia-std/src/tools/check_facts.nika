@@ -89,6 +89,10 @@ pub struct CheckAsyncWait {
 }
 
 pub struct CheckFacts {
+    /// **A call of a `std` helper** (`pub = false` in `std`'s ledger, #1606),
+    /// by the start of the call's span: refused (`NK1110`) in a program, and
+    /// let through by `check_access_inside_std` where the file is `std`'s own.
+    pub std_helpers_reached: collections::BTreeSet[i64],
     /// What a task binds and still holds at a pause (ADR-055 D6): seen by the tests.
     pub held_across_a_pause: collections::BTreeSet[(i64, String)],
     pub comptime_values: collections::BTreeMap[i64, (String, String)],
@@ -391,6 +395,10 @@ pub struct CheckFacts {
     /// D4): as the argument of `extend` it is written `xs.iter().cloned()`,
     /// no list in between.
     pub collection_clones: collections::BTreeSet[i64],
+    /// **`m.clone()` of a map**, by the call's id (ADR-collections-1 D6, D4):
+    /// as the argument of `extend` it is written
+    /// `m.iter().map(|(k, v)| (k.clone(), v.clone()))`, no map in between.
+    pub map_clones: collections::BTreeSet[i64],
     /// **A `comptime` array of text handed to `extend` of a container of owned
     /// `String`** (#966), by the argument: the constant is `[&str; N]` below, so
     /// each item is made a `String` as it goes in.
@@ -664,6 +672,7 @@ pub struct CheckFacts {
 impl CheckFacts {
     pub fn empty() -> CheckFacts {
         return CheckFacts {
+            std_helpers_reached: collections::BTreeSet(),
             held_across_a_pause: collections::BTreeSet(),
             comptime_values: collections::BTreeMap(),
             turn_comptime_values: collections::BTreeMap(),
@@ -782,6 +791,7 @@ impl CheckFacts {
             let_kept_lambdas: collections::BTreeSet(),
             owned_entry_keys: collections::BTreeSet(),
             collection_clones: collections::BTreeSet(),
+            map_clones: collections::BTreeSet(),
             text_extends: collections::BTreeSet(),
             kept_lambdas: collections::BTreeMap(),
             kept_results: collections::BTreeMap(),

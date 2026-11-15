@@ -1,0 +1,32 @@
+use std::channel
+
+// A generic parameter handed to `send` leaves the giver (ADR-327 D9), as a
+// concrete one does: `forward[T]` takes `x: T` by value and moves it on,
+// rather than lending it and handing rustc a reference (#1544).
+
+struct Job { name: String }
+
+fn forward[T](tx: channel::Sender[T], x: T) { tx.send(x) }
+
+fn made(word: String) -> String {
+    let mut g = String()
+    g.push_str(word)
+    return g
+}
+
+fn main() throws {
+    let (tx, rx) = channel::bounded[String](4)
+    forward(tx, made("text"))
+    let heard: String? = rx.recv()
+    println(heard ?? "none")
+
+    let (jobs, done) = channel::bounded[Job](4)
+    forward(jobs, Job { name: made("job") })
+    let job: Job? = done.recv()
+    println(job?.name ?? "none")
+
+    let (nums, got) = channel::bounded[i64](4)
+    forward(nums, 7)
+    let n: i64? = got.recv()
+    println(n ?? 0)
+}

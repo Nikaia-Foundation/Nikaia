@@ -1,0 +1,7 @@
+// #1606: a `std` ledger entry with `pub = false` is `std`'s own helper, so a
+// program that calls it is refused by the checker (NK1110), not by rustc.
+use std::text
+
+fn main() throws {
+    println(text::steers_a_log(10))
+}

@@ -449,11 +449,13 @@ impl EmitState {
         if cleaned { out.push(&format!("{}::new(", emit_cleaned(host.overlaps_user_code()))); }
         out.push(&format!("{} {{ ", owner));
         let mut i = 0;
+        let trusting = walk.trusting;
         for field in fields.iter() {
             if i > 0 { out.push(", "); }
             i += 1;
             let written = escaped_name(&emit_text(world, field.name));
             let plain = emit_text(world, field.name);
+            walk.trusting = trusting || self.fast_slots.contains(&format!("f:{}.{}", owner, plain));
             out.push(&written);
             let wrapped = self.facts.nullable_fields.contains_key(&(node_key(node), nikaia_std::block::Text::from(plain.to_string())));
             let (around_before, around_after) = self.emit_place_around(node, &plain)?;
@@ -504,6 +506,7 @@ impl EmitState {
                 if boxed { out.push(&format!(": Box::new({})", put)); } else { out.push(&format!(": {}", put)); }
             }
         }
+        walk.trusting = trusting;
         let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for field in fields.iter() { names.push(emit_text(world, field.name)); }
         let mut after_one = !fields.is_empty();

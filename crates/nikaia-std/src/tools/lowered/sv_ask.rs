@@ -22,7 +22,7 @@ pub(crate) fn sv_ask_compared(arena: &TermArena, facts: &[i64], goal: i64, budge
     let new = sv_smt_engine(arena, facts, goal, budget, String::from("both")).driven;
     let fm_kind = sv_ask_fm_kind(arena, facts, goal, &fm);
     let new_kind = sv_ask_new_kind(arena, facts, goal, &new);
-    if fm_kind != "unknown" && new_kind != "unknown" && fm_kind != new_kind { panic(format!("sv_ask: Fourier-Motzkin says {}, the new engine {}, on {}", fm_kind, new_kind, lg_normal_of(arena, facts, goal).text())); }
+    if fm_kind != "unknown" && new_kind != "unknown" && fm_kind != new_kind { panic(format!("sv_ask: Fourier-Motzkin says {}, the new engine {}, on {}", nikaia_std::text::escape_control(&format!("{}", fm_kind)), nikaia_std::text::escape_control(&format!("{}", new_kind)), nikaia_std::text::escape_control(&format!("{}", lg_normal_of(arena, facts, goal).text())))); }
     match fm {
         LgAnswer::Unknown { .. } => new,
         _ => SvDriven::Answer(fm),
@@ -33,7 +33,7 @@ pub(crate) fn sv_ask_fm_kind(arena: &TermArena, facts: &[i64], goal: i64, fm: &L
     match fm {
         LgAnswer::Proved { certificate } => {
             let why = lg_verify(arena, facts, goal, certificate);
-            if why.is_some() { panic(format!("sv_ask: Fourier-Motzkin's certificate does not check ({})", why.as_ref().unwrap().debug())); }
+            if why.is_some() { panic(format!("sv_ask: Fourier-Motzkin's certificate does not check ({})", nikaia_std::text::escape_control(&format!("{}", why.as_ref().unwrap().debug())))); }
             return "proved";
         },
         LgAnswer::Refuted { model } => {

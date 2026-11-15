@@ -377,18 +377,31 @@ impl CheckState {
         return found.id
     }
 
-    // The innermost frame a name is bound in, or -1.
+    // The frame the innermost binding of a name was made in, or -1. **A
+    // proof's marker is not a binding** (ADR-382, #1574): `if x != null`
+    // pushes a copy of `x`'s binding, same id, into the frame it proves, and
+    // `x` is still bound where it was declared, outside a loop around it.
     fn frame_of(ref self, name: ref String) -> i64 {
         let mut frame_at = self.scope.len()
+        let mut found: i64 = -1
+        let mut id: i64 = -1
         while frame_at > 0 {
             frame_at = frame_at - 1
-            for local in self.scope[frame_at] {
-                if local.name == name {
-                    return frame_at
+            let mut at = self.scope[frame_at].len()
+            while at > 0 {
+                at = at - 1
+                if self.scope[frame_at][at].name == name {
+                    if found < 0 {
+                        id = self.scope[frame_at][at].id
+                    }
+                    if self.scope[frame_at][at].id != id {
+                        return found
+                    }
+                    found = frame_at as i64
                 }
             }
         }
-        return -1
+        return found
     }
 
     // The nearest body that may run again around a name bound at `bound`, and

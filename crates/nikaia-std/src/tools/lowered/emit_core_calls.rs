@@ -317,7 +317,11 @@ impl EmitState {
         self.emit_expr(world, walk, out, host, &condition, depth, flow, scope)?;
         out.push(&format!(") {{ nikaia_std::abort::{}({}, ", failed, rust_string(&claim.written)));
         let message = emit_call_option_named(world, config, "message");
-        if !message.is_empty() {
+        if !message.is_empty() && self.escaped_wholes.contains(&node_key(unsafe { nikaia_std::proven::read(&message, (0) as usize) })) {
+            out.push("Some(&(nikaia_std::text::escape_control(&format!(\"{}\", ");
+            self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&message, (0) as usize) }, depth, flow, scope)?;
+            out.push(")))), ");
+        } else if !message.is_empty() {
             out.push("Some(&(");
             self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&message, (0) as usize) }, depth, flow, scope)?;
             out.push(")), ");
@@ -832,6 +836,20 @@ impl EmitState {
                 _ => { },
             }
         }
+        if name == "extend" && args.len() == 1 && receiver.is_some() && self.facts.map_clones.contains(&node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) })) {
+            let target = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
+                Expr::MethodCall { receiver: source, .. } => {
+                    let source = nikaia_std::boxed::open(source);
+                    self.emit_core_postfix_base(world, walk, out, host, target, depth, flow, scope)?;
+                    out.push(".extend(");
+                    self.emit_core_postfix_base(world, walk, out, host, source, depth, flow, scope)?;
+                    out.push(".iter().map(|(key, value)| (key.clone(), value.clone())))");
+                    return Ok(());
+                },
+                _ => { },
+            }
+        }
         if name == "extend" && args.len() == 1 && receiver.is_some() && self.facts.text_extends.contains(&node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) })) {
             let target = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             self.emit_core_postfix_base(world, walk, out, host, target, depth, flow, scope)?;
@@ -1249,8 +1267,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple93272| {
-        let (i, word) = __nikaia_tuple93272;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple94457| {
+        let (i, word) = __nikaia_tuple94457;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

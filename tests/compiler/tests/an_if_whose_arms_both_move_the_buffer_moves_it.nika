@@ -1,0 +1,30 @@
+// #1602: `let said = match n { 0 => base, else => base }`, then pushed. Every
+// tail is the kept text itself, none made here, so the keep plan lent `base`
+// out of the frame's keep and the pushed value was a view where the list
+// holds owned text (NK1343). Such an `if`, `match` or block moves the buffer,
+// as `let said = base` does.
+fn both(word: String, n: i64) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let base = f"<{word}>"
+    let said = match n {
+        0 => base,
+        else => { base },
+    }
+    out.push(said)
+    return out
+}
+
+fn twice(word: String, c: bool) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let guard = f"Check {word} here."
+    let help = if c { guard } else { guard }
+    out.push(help)
+    return out
+}
+
+fn main() throws {
+    println(both("x", 0)[0])
+    println(both("y", 2)[0])
+    println(twice("a", true)[0])
+    println(twice("b", false)[0])
+}

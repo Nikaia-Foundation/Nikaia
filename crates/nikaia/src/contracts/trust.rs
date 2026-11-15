@@ -349,6 +349,27 @@ pub fn render(trust: &Trust, path: &str, source: &str) -> String {
     )
 }
 
+/// **`--trust` with the log sinks that escape** (ADR-398 D5): [`render`], then
+/// the sinks that write untrusted text escaped — none where nothing read is
+/// untrusted, as the emitter escapes none there.
+pub fn render_with_escapes(
+    trust: &Trust,
+    parsed: &Parsed,
+    library: &Ledger,
+    path: &str,
+    source: &str,
+) -> String {
+    use nikaia_std::tools::trust as nika;
+    let mut out = render(trust, path, source);
+    let plan = if trust.provenance == Provenance::Untrusted {
+        nika::escaped_sinks(&parsed.program, &parsed.interner, library)
+    } else {
+        nika::no_escapes()
+    };
+    out.push_str(&nika::render_escapes(&plan, &source.to_text(), path));
+    out
+}
+
 /// **The maps that keep the fast hash in a program that reads untrusted input**
 /// ([ADR-010](../../../docs/specification/adr/adr-010.md) D1, #431): trust is
 /// a container's, the join of what goes into it, and not the program's.

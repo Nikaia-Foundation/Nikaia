@@ -110,6 +110,8 @@ website/safe/index.html #7 refused (a body) [NK1117,NK1117]  a.update fn(mut acc
 website/safe/outside-data.html #1 refused (as written) [NK1202]  use std::process
 website/safe/outside-data.html #2 lowered (as written)  use std::process
 website/safe/outside-data.html #3 lowered (as written)  use std::fs
+website/safe/outside-data.html #4 refused (as written) [NK1202]  use std::env
+website/safe/outside-data.html #5 lowered (as written)  use std::io
 website/safe/stuck-tasks.html #1 refused (as written) [NK2202]  use std::time
 website/safe/stuck-tasks.html #2 refused (a body) [NK1117,NK1117]  update_all(a, b) fn(mut from, mut to) {
 website/safe/unhandled-errors.html #1 refused (as written) [NK2605]  use std::fs

@@ -452,8 +452,8 @@ fn the_tools_lower_the_same_on_one_thread_as_on_every_core() {
     );
 }
 
-/// **On several threads, the refusal said is the first in file order**
-/// (#667), as it was when the files were lowered one after the other.
+/// **On several threads, the refusals are said in file order** (#667, #1508):
+/// every refused file is said, the first in file order first.
 #[test]
 fn the_first_refused_file_is_the_one_reported_on_every_core() {
     let dir = std::env::temp_dir().join(format!("nikaia-tools-first-{}", std::process::id()));
@@ -469,8 +469,16 @@ fn the_first_refused_file_is_the_one_reported_on_every_core() {
         .expect_err("every file is refused");
     let said = format!("{refused:#}");
     let _ = std::fs::remove_dir_all(&dir);
-    assert!(said.contains("a_first"), "{said}");
-    assert!(!said.contains("b_second"), "{said}");
+    let at = |name: &str| {
+        said.find(name)
+            .unwrap_or_else(|| panic!("{name} missing: {said}"))
+    };
+    assert!(
+        at("a_first") < at("b_second")
+            && at("b_second") < at("c_third")
+            && at("c_third") < at("d_fourth"),
+        "{said}"
+    );
 }
 
 /// **Each file of a package is cached on its own** (#667): nothing changed

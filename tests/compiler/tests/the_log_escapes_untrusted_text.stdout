@@ -1,0 +1,26 @@
+-- standard input and the environment, untrusted
+bob\n\u{1b}[2J\u{202e}x\\y$
+got bob\n\u{1b}[2J\u{202e}x\\y$
+end$
+one$
+two^Ithree\four$
+kept a^Ib$
+clean bob\n\u{1b}[2J\u{202e}x\\y$
+env e\u{1b}v$
+p.nika:16: the program stopped: stop bob\n\u{1b}[2J\u{202e}x\\y$
+-- a trusted program, as written
+one$
+two^Ithree\four$
+a^Ib\c$
+kept a^Ib\c$
+end$
+-- an uncaught error
+Error: bad input bob\n\u{1b}[2J\u{202e}x\\y$
+  raised at main$
+  (no trace; set NIKAIA_TRACE=1 to capture one)$
+-- --trust
+log sinks that write untrusted text escaped:
+    p.nika:7  eprintln escapes text from io::read_to_string
+    p.nika:8  eprintln escapes text from io::read_to_string
+    p.nika:15  eprintln escapes text from env::var
+    p.nika:16  panic escapes text from io::read_to_string

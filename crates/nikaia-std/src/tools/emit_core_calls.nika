@@ -439,7 +439,12 @@ impl EmitState {
         self.emit_expr(world, walk, out, host, condition, depth, flow, scope)
         out.push(f") {{ nikaia_std::abort::{failed}({rust_string(claim.written)}, ")
         let message = emit_call_option_named(world, config, "message")
-        if message.len() > 0 {
+        if message.len() > 0 && self.escaped_wholes.contains(node_key(message[0])) {
+            // ADR-398 D3: an untrusted message is written escaped.
+            out.push("Some(&(nikaia_std::text::escape_control(&format!(\"{}\", ")
+            self.emit_expr(world, walk, out, host, message[0], depth, flow, scope)
+            out.push(")))), ")
+        } else if message.len() > 0 {
             out.push("Some(&(")
             self.emit_expr(world, walk, out, host, message[0], depth, flow, scope)
             out.push(")), ")
@@ -1209,6 +1214,21 @@ impl EmitState {
                     out.push(".extend(")
                     self.emit_core_postfix_base(world, walk, out, host, source, depth, flow, scope)
                     out.push(".iter().cloned())")
+                    return
+                },
+                else => {}
+            }
+        }
+        // **`m.extend(other.clone())` of a map** (ADR-collections-1 D6, D4):
+        // each pair is the copy, and no map is built in between.
+        if name == "extend" && args.len() == 1 && receiver != null && self.facts.map_clones.contains(node_key(args[0])) {
+            let target = receiver ?? return
+            match args[0] {
+                Expr::MethodCall { receiver: source, .. } => {
+                    self.emit_core_postfix_base(world, walk, out, host, target, depth, flow, scope)
+                    out.push(".extend(")
+                    self.emit_core_postfix_base(world, walk, out, host, source, depth, flow, scope)
+                    out.push(".iter().map(|(key, value)| (key.clone(), value.clone())))")
                     return
                 },
                 else => {}

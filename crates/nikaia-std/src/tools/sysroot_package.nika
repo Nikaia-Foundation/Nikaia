@@ -378,7 +378,15 @@ pub fn sysroot_package_assemble(names: ref Vec[String], lowered: ref Vec[String]
     for (_, one) in modules {
         rust.push_str(one)
     }
-    for (_, one) in facades {
+    for (stem, one) in facades {
+        // **A file named as a `std` module it imports** (`env.nika` with
+        // `use std::env`, #1601) gets no module of its own: `pub mod env`
+        // beside `use nikaia_std::env` is one name defined twice, and the
+        // file's `env::pairs()` would read the module rather than `std`'s.
+        // Its items stay where every file's are, at the package root.
+        if imports.contains(f"use nikaia_std::{stem};") {
+            continue
+        }
         rust.push_str(one)
     }
     let mut package: Vec[(String, String)] = [(SYSROOT_TOOLS_PACKAGE.clone(), rust)]

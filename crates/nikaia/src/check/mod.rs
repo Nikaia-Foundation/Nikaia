@@ -794,6 +794,15 @@ pub fn refuse_assumes_in_std(checked: &mut Checked) {
     checked.findings.extend(refused);
 }
 
+/// **`std` reaches its own helpers** (`NK1110`, #1606):
+/// `tools/check_access.nika`.
+pub fn allow_std_helpers_in_std(checked: &mut Checked) {
+    checked.findings = nikaia_std::tools::check_access::check_access_inside_std(
+        &checked.findings,
+        &checked.facts.std_helpers_reached,
+    );
+}
+
 /// In Nikaia (`tools/written.nika`, ADR-294, #125).
 pub fn written(parsed: &Parsed, expr: &Expr) -> String {
     nikaia_std::tools::written::written_expression(&parsed.interner, expr)

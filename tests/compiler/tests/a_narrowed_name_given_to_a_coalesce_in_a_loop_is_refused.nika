@@ -1,0 +1,37 @@
+// A name an `if` proved not `null`, handed over inside a loop it was
+// declared outside of, is taken on each turn: `NK2105`, through `??` and
+// plainly, and past an early `continue` (#1574). The proof's marker is not
+// a binding of its own inside the loop.
+fn keep(mut out: Vec[String], name: String, source: String) {
+    out.push(name)
+    out.push(source)
+}
+
+fn through_a_coalesce(names: Vec[String], source: String?) -> i64 {
+    let mut out: Vec[String] = []
+    for n in names {
+        if source != null { keep(out, n.clone(), source ?? "") }
+    }
+    return out.len()
+}
+
+fn plainly(names: Vec[String], source: String?) -> i64 {
+    let mut out: Vec[String] = []
+    for n in names {
+        if source != null { keep(out, n.clone(), source) }
+    }
+    return out.len()
+}
+
+fn past_a_continue(names: Vec[String], source: String?) -> i64 {
+    let mut out: Vec[String] = []
+    for n in names {
+        if source == null { continue }
+        keep(out, n.clone(), source ?? "")
+    }
+    return out.len()
+}
+
+fn main() throws {
+    println(through_a_coalesce(["a"], null) + plainly(["a"], null) + past_a_continue(["a"], null))
+}

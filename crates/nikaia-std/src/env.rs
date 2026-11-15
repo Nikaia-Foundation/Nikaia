@@ -15,3 +15,23 @@ pub fn var(name: &str) -> Option<crate::block::Text> {
 pub fn temp_dir() -> crate::fs::Path {
     std::env::temp_dir()
 }
+
+/// **Every variable of the environment, as the operating system holds it**
+/// (#1601): each name and value as raw bytes, in the order the system lists
+/// them, a name with an empty value and bytes that are not Unicode included.
+/// The one primitive under `env::vars`, which is Nikaia
+/// (`runtime/env.nika`): the prefix, what is left out and the order are
+/// decided there, not here.
+pub(crate) fn pairs() -> Vec<(crate::bytes::Bytes, crate::bytes::Bytes)> {
+    std::env::vars_os()
+        .map(|(name, value)| {
+            (
+                crate::bytes::Bytes::from(name.into_encoded_bytes()),
+                crate::bytes::Bytes::from(value.into_encoded_bytes()),
+            )
+        })
+        .collect()
+}
+
+/// `env::vars(prefix)`: its Nikaia half, `runtime/env.nika` (#1601, ADR-397).
+pub use crate::runtime::vars;

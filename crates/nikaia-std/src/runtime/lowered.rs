@@ -19,7 +19,20 @@ use nikaia_std::list::ListExt as _;
 #[allow(unused_imports)]
 use nikaia_std::text::TextNormalized as _;
 #[allow(unused_imports)]
+use nikaia_std::env;
+#[allow(unused_imports)]
 use nikaia_std::text;
+
+#[allow(unsafe_code)]
+mod env_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/env.rs");
+}
+#[allow(unused_imports)]
+pub use env_lowered::*;
 
 #[allow(unsafe_code)]
 mod http1_lowered {

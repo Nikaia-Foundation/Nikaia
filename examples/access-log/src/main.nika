@@ -19,6 +19,7 @@
 use std::fs
 use std::cli
 use std::collections
+use std::text
 
 grammar Log {
 
@@ -121,7 +122,13 @@ fn main() throws {
     // A malformed line is an error that `catch` prints: its line and column
     // in the whole file, and what was expected there. No summary is printed.
     let report = Log::file(data) catch {
-        eprintln(f"{path}: {error}")
+        // The message is several lines (the line, a caret under the column),
+        // and what it quotes comes from the file: escape each line by hand
+        // (ADR-398 D4), so the lines stay lines and the log stays safe.
+        let shown = f"{path}: {error}"
+        for line in shown.split("\n") {
+            eprintln(text::escape_control(line.clone()))
+        }
         return
     }
 

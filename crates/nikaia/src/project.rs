@@ -1414,6 +1414,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             && newly.keeps.is_empty()
             && promised == program.contracts;
         let mut checked_facts = BTreeMap::new();
+        let mut refused: Vec<String> = Vec::new();
         let (checked, book) = crate::proofs::with_book(book, || -> Result<()> {
             for (at, unit) in program.units.iter().enumerate() {
                 let contracts = match &unit.package {
@@ -1452,10 +1453,27 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                 if lsp && let Some(facts) = &facts {
                     self.unit_facts.borrow_mut().insert(at, facts.clone());
                 }
-                warnings += &checked?;
+                // **A refused unit does not stop the others** (#1508): the
+                // file next door may hold the refusal this one's follows from
+                // (an `NK1171` in a callee makes it read as pausing, and the
+                // `sync` caller's `NK2202` was all a build said), so every
+                // unit says its findings and the tallies are joined.
+                match checked {
+                    Ok(said) => warnings += &said,
+                    Err(e) => match e.downcast_ref::<diagnostics::Refused>() {
+                        Some(tally) if tally.at.is_none() && tally.finding.is_none() => {
+                            refused.push(tally.message.clone());
+                            continue;
+                        }
+                        _ => return Err(e),
+                    },
+                }
                 if keep && let Some(facts) = facts {
                     checked_facts.insert(at, facts);
                 }
+            }
+            if !refused.is_empty() {
+                return Err(diagnostics::refuse(refused.join(", ")));
             }
             Ok(())
         });
@@ -2061,7 +2079,7 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                 settings.build.overflow,
                 settings.build.prove_through_loops,
             ),
-            "trust" => crate::contracts::trust::render(
+            "trust" => crate::contracts::trust::render_with_escapes(
                 &crate::contracts::trust::analyse_in(
                     &unit.parsed,
                     &program
@@ -2072,6 +2090,8 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                         .collect::<Vec<_>>(),
                     library,
                 ),
+                &unit.parsed,
+                library,
                 &unit.path.display().to_text(),
                 &unit.source,
             ),

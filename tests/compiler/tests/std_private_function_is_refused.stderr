@@ -1,0 +1,9 @@
+error[NK1110]: You can't use `steers_a_log` from here: it's private to `text`.
+  --> tests/std_private_function_is_refused.nika:6:5
+   |
+ 6 |     println(text::steers_a_log(10))
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Everything is private to its package unless it's declared `pub`.
+   = help: `steers_a_log` is a helper inside `std`; use something `text` makes public.
+1 type error

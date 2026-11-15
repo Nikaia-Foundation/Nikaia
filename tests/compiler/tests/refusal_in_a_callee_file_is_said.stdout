@@ -1,0 +1,19 @@
+error[NK2202]: `outer` is `sync`, but it calls `inner`, which can pause.
+  --> TMP/app/src/main.nika:2:9
+   |
+ 2 | 	return inner()
+   |         ^^^^^ this can pause
+   |
+   = note: A `sync` function promises that it never pauses and does no I/O.
+   = note: `inner` isn't declared `sync` in this program.
+   = help: Remove `sync` from `outer`, or move the call out of it.
+error[NK1171]: `Vec` has no method called `frobnicate`.
+  --> TMP/app/src/inner.nika:3:2
+   |
+ 3 | 	a.frobnicate()
+   |  ^^^^^^^^^^^^^^
+   |
+   = note: What can be called is what is written down: `.frobnicate()` is in no declaration, ledger or description this program reads.
+   = help: Only what is written down for `Vec` can be called; a Rust function or method of the same name is not reached.
+1 call a `sync` function may not make, 1 type error
+exit 1

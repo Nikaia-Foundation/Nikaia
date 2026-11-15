@@ -80,3 +80,22 @@ pub fn parse_u64(text: &str) -> Option<u64> {
     Some(value)
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn escape_control(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.chars() {
+        let code = c as i64;
+        if c == '\n' { out.push_str("\\n"); } else if c == '\r' { out.push_str("\\r"); } else if c == '\t' { out.push_str("\\t"); } else if c == '\\' { out.push_str("\\\\"); } else if steers_a_log(code) {
+            out.push_str("\\u{");
+            out.push_str(&format!("{:x}", code));
+            out.push('}');
+        } else { out.push(c); }
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn steers_a_log(code: i64) -> bool { matches!(code, 0..=31 | 127..=159 | 1564 | 8206..=8207 | 8232..=8238 | 8294..=8297) }
+

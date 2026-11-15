@@ -301,7 +301,10 @@ pub fn sysroot_package_assemble(names: &[String], lowered: &[String], views: &[P
     }
     rust.push_str("\n");
     for (_, one) in modules.iter() { rust.push_str(one); }
-    for (_, one) in facades.iter() { rust.push_str(one); }
+    for (stem, one) in facades.iter() {
+        if imports.contains(&format!("use nikaia_std::{};", stem)) { continue; }
+        rust.push_str(one);
+    }
     let mut package: Vec<(String, String)> = vec![(nikaia_std::block::Text::from(SYSROOT_TOOLS_PACKAGE.to_string()), rust)];
     for entry in files.into_iter() { package.push(entry); }
     package
