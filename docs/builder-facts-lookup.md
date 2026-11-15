@@ -297,6 +297,13 @@ goes into the section of its topic, in one line, with the run that paid for it.
   The two can differ: `check --bounds FILE` proved a site D23 reaches that
   `lower-std --bounds` did not (#1465); a figure is claimed only from
   `lower-std`. (issue-1414)
+* **`--asserts` lists `assert` claims only (ADR-361 D7)**; an index or
+  counter the walk leaves checked, with the loop its reason names, shows in
+  `--bounds`. An issue that asks for it under `--asserts` means `--bounds`. (issue-1634)
+* **A `--bounds` reason's wording is quoted verbatim by the `.bounds` files**
+  (23 for the loop reasons): before changing one, `grep -l 'PHRASE'
+  tests/compiler/tests/*.bounds` and bless them all in one `nikaia test` run
+  (one `--filter` per test). (issue-1634)
 * **A `for` binding is a number of the walk** (`CheckFacts.whole_loops`):
   check it before blaming the prover when a guard on `for k in ks` is lost.
   (issue-1414)

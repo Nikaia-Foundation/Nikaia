@@ -81,6 +81,10 @@ it, like the checks in `docs/supervisor.md`.
   probe reduced from the real code: the function and every `ref mut self`
   method of its type, with stub types, kept as the acceptance check; a
   synthetic probe passed while the real code stayed checked (#1470).
+  Each group's probe is shown still checked on the binary of the day (its
+  `--bounds` row in the issue); a probe that already proves counts nothing,
+  and the issue names the real site instead (#1634: its probe was proved by
+  D13 turn counting, and the real sites needed a field-entry fact).
 * **I9. A numbered *To build* list.** Each item is one change a builder can
   commit on its own, and names its test: a `.nika` with `.stdout` / `.stderr`
   in `tests/compiler/tests/` (or the package's tests), and the rows it must show
