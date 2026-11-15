@@ -85,6 +85,7 @@ jobs:
           CARGO_INCREMENTAL: 1
         run: |
           set -o pipefail
+          mkdir -p target/release
           cargo test --workspace --release --no-run --message-format=json |
             jq -r 'select(.reason == "compiler-artifact" and .profile.test == true and .executable != null)
                    | "\(.executable)\t\(.manifest_path | sub("/Cargo.toml$"; ""))"' |
