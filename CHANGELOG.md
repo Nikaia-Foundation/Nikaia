@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1378] — 2026-11-15
+
+**Re-record the stale ledgers of packages/yaml, packages/json, page-examples and crate-ledger, and guard the packages' with build --locked (#1604)**
+- Ledgers: re-recorded the stale books and contracts of packages/yaml, packages/json, tests/page-examples and examples/crate-ledger; a test now builds the packages and page-examples `--locked`, so a prover or inference change that leaves them stale fails the suite.
+
 ## [0.0.1377] — 2026-11-14
 
 **Compare an indexed element of text against a list of text by its text (#1603)**
