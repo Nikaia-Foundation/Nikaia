@@ -145,8 +145,8 @@ pub fn grammar_run_dump(names: &winnow_grammar::InternerContext, aliases: &colle
 }
 
 pub(crate) fn grammar_run_shapes(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger) -> Shapes {
-    let mut shapes = Shapes { enums: collections::BTreeMap::new(), structs: collections::BTreeMap::new(), constants: ledger.types.iter().filter_map(|__nikaia_tuple9703| {
-        let (name, entry) = __nikaia_tuple9703;
+    let mut shapes = Shapes { enums: collections::BTreeMap::new(), structs: collections::BTreeMap::new(), constants: ledger.types.iter().filter_map(|__nikaia_tuple9932| {
+        let (name, entry) = __nikaia_tuple9932;
         grammar_run_constant(name, &entry.constant)
     }).collect() };
     for item in program.items.iter() {

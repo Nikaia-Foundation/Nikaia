@@ -244,7 +244,7 @@ impl Codegen {
 
     /// One line per key, in key order, so the same table renders the same way
     /// however it was read.
-    fn render(&self) -> String {
+    pub(crate) fn render(&self) -> String {
         nikaia_std::compiler::sysroot_package::sysroot_package_render(&self.table)
     }
 }

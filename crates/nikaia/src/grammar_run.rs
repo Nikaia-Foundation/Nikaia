@@ -175,34 +175,6 @@ impl Workshop {
     }
 }
 
-/// The sub-project's manifest.
-///
-/// **Its own workspace**, because it lives under a `target/` that may be inside
-/// one: a member Cargo did not expect is an error about a file nobody wrote.
-/// The dependencies are the ones a generated program already gets
-/// (`project::runtime_dependencies`), so the parser compiled here is the parser
-/// the program links.
-/// Where every grammar run's parser is compiled: the user cache, beside the
-/// compiled `std` (ADR-002 D4).
-///
-/// One entry per compiler, so an old compiler's parsers are evicted as a whole
-/// (#615).
-fn shared_target() -> PathBuf {
-    let compiler = orchestrator::cache::sha256_hex(
-        format!(
-            "{}\n{}",
-            env!("CARGO_PKG_VERSION"),
-            env!("NIKAIA_RUSTC_VERSION")
-        )
-        .as_bytes(),
-    );
-    let entry = orchestrator::cache::Layout::user_cache_dir()
-        .join("build-time-parsers")
-        .join(&compiler[..16]);
-    orchestrator::cache::use_entry(&entry);
-    entry.join("target")
-}
-
 /// What the lowered build and run (`tools/grammar_run.nika`, GR) asks of the
 /// compiler: the driver, the manifest and the two directories.
 struct Host<'a> {
@@ -226,7 +198,7 @@ impl GrammarRunHost for Host<'_> {
     }
 
     fn shared_target(&self) -> PathBuf {
-        shared_target()
+        crate::project::build_time_tree()
     }
 
     fn where_tools_start(&self) -> PathBuf {
@@ -238,6 +210,13 @@ impl GrammarRunHost for Host<'_> {
     }
 }
 
+/// The sub-project's manifest.
+///
+/// **Its own workspace**, because it lives under a `target/` that may be inside
+/// one: a member Cargo did not expect is an error about a file nobody wrote.
+/// The dependencies are the ones a generated program already gets
+/// (`project::runtime_dependencies`), so the parser compiled here is the parser
+/// the program links.
 fn manifest(key: &str, program: &str) -> String {
     let dependencies = crate::project::runtime_dependencies_for(program);
     nikaia_std::compiler::grammar_decode::gr_manifest(key, &dependencies)

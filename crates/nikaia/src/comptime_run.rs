@@ -798,6 +798,10 @@ impl ComptimeBundleHost for BundleHost {
         orchestrator::cache::use_entry(at);
     }
 
+    fn shared_target(&self) -> PathBuf {
+        crate::project::build_time_tree()
+    }
+
     fn where_tools_start(&self) -> PathBuf {
         orchestrator::cache::Layout::where_tools_start()
     }
