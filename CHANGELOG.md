@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1396] — 2026-11-15
+
+**a value scaled each turn of a counted loop is proved**
+- Loops: a value multiplied by or added to a constant on each turn of a loop with a constant bound is proved (#1644); fixed a wrong proof of `t = t * c` in loops, which made `t` read as zero. Proof figure: 3093/4416 indexes (70.0 %), 1616/2764 operations (58.5 %).
+
 ## [0.0.1395] — 2026-11-15
 
 **a test program past its time limit fails instead of hanging the run**

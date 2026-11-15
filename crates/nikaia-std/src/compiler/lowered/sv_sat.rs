@@ -65,7 +65,7 @@ pub(crate) fn sv_luby(i: i64) -> i64 {
     let mut seq: i64 = 0;
     while size < i + 1 {
         seq += 1;
-        size = unsafe { nikaia_std::proven::add::<i64>(2 * size, 1) };
+        size = 2 * size + 1;
     }
     let mut x = i;
     while size - 1 != x {

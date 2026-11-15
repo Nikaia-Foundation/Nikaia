@@ -90,7 +90,7 @@ pub fn a_high_byte(literal: &str) -> Option<i64> {
 pub(crate) fn a_byte(c: &[scalar], from: i64, so_far: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> EscapeRead {
     let mut written = nikaia_std::block::Text::from(so_far.to_string());
     let mut end = from;
-    while end < from + 2 && end < c.len() as i64 {
+    while end < unsafe { nikaia_std::proven::add::<i64>(from, 2) } && end < c.len() as i64 {
         written.push(*unsafe { nikaia_std::proven::read(&c, (end) as usize) });
         end = unsafe { nikaia_std::proven::add::<i64>(end, 1) };
     }
