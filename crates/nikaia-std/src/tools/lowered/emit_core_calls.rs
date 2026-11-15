@@ -317,7 +317,11 @@ impl EmitState {
         self.emit_expr(world, walk, out, host, &condition, depth, flow, scope)?;
         out.push(&format!(") {{ nikaia_std::abort::{}({}, ", failed, rust_string(&claim.written)));
         let message = emit_call_option_named(world, config, "message");
-        if !message.is_empty() {
+        if !message.is_empty() && self.escaped_wholes.contains(&node_key(unsafe { nikaia_std::proven::read(&message, (0) as usize) })) {
+            out.push("Some(&(nikaia_std::text::escape_control(&format!(\"{}\", ");
+            self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&message, (0) as usize) }, depth, flow, scope)?;
+            out.push(")))), ");
+        } else if !message.is_empty() {
             out.push("Some(&(");
             self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&message, (0) as usize) }, depth, flow, scope)?;
             out.push(")), ");
@@ -1249,8 +1253,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple93272| {
-        let (i, word) = __nikaia_tuple93272;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple93628| {
+        let (i, word) = __nikaia_tuple93628;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

@@ -808,7 +808,7 @@ pub fn project_tests_report_failures(failed: &[ProjectTestsFailed]) -> Result<()
                 },
                 Some(output) => { project_tests_explain_output(output, outcome)?; },
             }
-            nikaia_std::io::eprint(format_args!("{}", outcome.stderr))?;
+            nikaia_std::io::eprint(format_args!("{}", nikaia_std::text::escape_control(&format!("{}", outcome.stderr))))?;
         }
     }
     Ok(())

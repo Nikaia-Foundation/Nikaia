@@ -424,6 +424,14 @@ impl EmitState {
 
     /// One argument.
     fn emit_core_argument[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, callee: ref String, method_callee: ref String?, arg: ref Expr, i: i64, boxed_mask: ref Vec[bool], part_counts: ref Vec[Count], takes_a_handle: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **A value a log sink writes escaped** (ADR-398 D3): written as its
+        // text, escaped.
+        if self.escaped_wholes.contains(node_key(arg)) {
+            out.push("nikaia_std::text::escape_control(&format!(\"{}\", ")
+            self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
+            out.push("))")
+            return
+        }
         if i < part_counts.len() {
             walk.hull_count = part_counts[i]
         } else {

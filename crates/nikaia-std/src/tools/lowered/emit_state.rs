@@ -51,6 +51,8 @@ pub struct EmitState {
     pub foreign_params: collections::BTreeMap<String, Vec<Type>>,
     pub opaque_handles: collections::BTreeMap<String, String>,
     pub foreign_results: collections::BTreeMap<String, Type>,
+    pub escaped_holes: collections::BTreeSet<i64>,
+    pub escaped_wholes: collections::BTreeSet<i64>,
     pub trusted_lets: collections::BTreeSet<i64>,
     pub fast_slots: collections::BTreeSet<String>,
     pub seeded_calls: collections::BTreeMap<String, (i64, i64)>,

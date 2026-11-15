@@ -186,7 +186,7 @@ pub(crate) async fn project_members_packages_in<H: ProjectMembersHost>(manifest:
         }
         seen.insert(nikaia_std::fs::path::clone(&(root)), nikaia_std::block::Text::from(name.to_string()));
         let dependency = match host.manifest_at(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.toml")))) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Manifest, &"project_members_packages_in").into()) };
-        if announce && dependency.has_build { nikaia_std::io::eprintln(format_args!("note: `{}`'s own `[build]` is ignored: a package is built with the settings of the program that uses it.", name))?; }
+        if announce && dependency.has_build { nikaia_std::io::eprintln(format_args!("note: `{}`'s own `[build]` is ignored: a package is built with the settings of the program that uses it.", nikaia_std::text::escape_control(&format!("{}", name))))?; }
         let mut reachable: collections::BTreeSet<String> = dependency.keys.iter().map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect();
         reachable.extend(dependency.foreign.iter().cloned());
         reachable.extend(project_members_taken_in(&dependency, &root, host).await.iter().map(|pair| { nikaia_std::block::Text::from(pair.0.to_string()) }));

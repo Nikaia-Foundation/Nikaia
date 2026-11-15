@@ -275,6 +275,12 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_argument<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, method_callee: Option<&str>, arg: &Expr, i: i64, boxed_mask: &[bool], part_counts: &[Count], takes_a_handle: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        if self.escaped_wholes.contains(&node_key(arg)) {
+            out.push("nikaia_std::text::escape_control(&format!(\"{}\", ");
+            self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
+            out.push("))");
+            return Ok(());
+        }
         if i < part_counts.len() as i64 { walk.hull_count = Some(*unsafe { nikaia_std::proven::read(&part_counts, (i) as usize) }); } else { walk.hull_count = None; }
         let copies = self.facts.kept_fn_copies.contains(&node_key(arg)) && !self.facts.kept_functions.contains_key(&node_key(arg));
         if copies { walk.uncopied = node_key(arg); }

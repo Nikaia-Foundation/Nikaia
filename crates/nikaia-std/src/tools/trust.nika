@@ -312,6 +312,9 @@ use std::collections
 struct KeyDeps {
     known: bool,
     ids: Vec[i64],
+    /// The source that made it untrusted, where one did; empty for a value
+    /// that is not followed (ADR-398 D5 names it).
+    why: String,
 }
 
 /// The names a body's functions share, which the walk of one does not change.
@@ -319,6 +322,10 @@ struct MapEnv {
     /// A method is a source where `std` names one by that name, whatever it
     /// is called on.
     sources: collections::BTreeSet[String],
+    /// The functions whose result counts as trusted whatever they are given:
+    /// `text::escape_control` for the log (ADR-398 D4), none for a map,
+    /// whose hash an escaped key still aims at.
+    cleaners: collections::BTreeSet[String],
     /// The functions of the program's own.
     own: collections::BTreeSet[String],
     /// The private functions that stand alone (not `pub`, no type parameters,
@@ -390,23 +397,47 @@ struct MapWalk {
     /// How often each name is bound in the body.
     bound: collections::BTreeMap[winnow_grammar::Symbol, i64],
     unread: bool,
+    /// The start of the statement walked.
+    at: i64,
+    /// Each value a log sink is given, judged once the bindings are settled
+    /// (ADR-398 D3).
+    sinks: Vec[EscSink],
+}
+
+/// One value a log sink writes: an f-string's hole or a whole argument, by
+/// its node, with what it is made of.
+struct EscSink {
+    at: i64,
+    sink: String,
+    key: i64,
+    /// A value written whole, not a hole.
+    whole: bool,
+    deps: KeyDeps,
 }
 
 fn tm_never() -> KeyDeps {
-    return KeyDeps { known: false, ids: [] }
+    return KeyDeps { known: false, ids: [], why: "" }
+}
+
+/// Never trusted, because `source` handed it over.
+fn tm_from(source: ref String) -> KeyDeps {
+    return KeyDeps { known: false, ids: [], why: source.clone() }
 }
 
 fn tm_nothing() -> KeyDeps {
-    return KeyDeps { known: true, ids: [] }
+    return KeyDeps { known: true, ids: [], why: "" }
 }
 
 fn tm_reading(id: i64) -> KeyDeps {
-    return KeyDeps { known: true, ids: [id] }
+    return KeyDeps { known: true, ids: [id], why: "" }
 }
 
 fn tm_join(a: ref KeyDeps, b: ref KeyDeps) -> KeyDeps {
-    if !a.known || !b.known {
-        return tm_never()
+    if !a.known {
+        return KeyDeps { known: false, ids: [], why: if a.why.is_empty() { b.why.clone() } else { a.why.clone() } }
+    }
+    if !b.known {
+        return KeyDeps { known: false, ids: [], why: b.why.clone() }
     }
     let mut ids: Vec[i64] = []
     for id in a.ids {
@@ -415,7 +446,7 @@ fn tm_join(a: ref KeyDeps, b: ref KeyDeps) -> KeyDeps {
     for id in b.ids {
         ids.push(id)
     }
-    return KeyDeps { known: true, ids: ids }
+    return KeyDeps { known: true, ids: ids, why: "" }
 }
 
 fn mc_find(classes: ref MapClasses, node: ref String) -> String {
@@ -462,11 +493,10 @@ fn mc_poison_function(mut classes: MapClasses, name: ref String, arity: i64) {
     }
 }
 
-/// The classes of the maps of one file, and which of them keep the fast hash:
-/// the `let`s, parameters and results of every class no untrusted key reaches
-/// and nothing unseen touches.
-pub fn trusted_maps(program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger) -> MapPlan {
-    let mut env = MapEnv { sources: collections::BTreeSet(), own: collections::BTreeSet(), privates: collections::BTreeMap() }
+/// The names every function of a file shares: the source methods, the
+/// program's own functions and its private ones.
+fn tm_env(program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger) -> MapEnv {
+    let mut env = MapEnv { sources: collections::BTreeSet(), cleaners: collections::BTreeSet(), own: collections::BTreeSet(), privates: collections::BTreeMap() }
     for (key, contract) in library.functions {
         let provenance = contract.provenance ?? continue
         // **A method, by its name**: `net::Connection::read` is read through
@@ -499,6 +529,14 @@ pub fn trusted_maps(program: ref Program, words: ref winnow_grammar::InternerCon
             else => {}
         }
     }
+    return env
+}
+
+/// The classes of the maps of one file, and which of them keep the fast hash:
+/// the `let`s, parameters and results of every class no untrusted key reaches
+/// and nothing unseen touches.
+pub fn trusted_maps(program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger) -> MapPlan {
+    let env = tm_env(program, words, library)
     let mut classes = MapClasses { parent: collections::BTreeMap(), poisoned: collections::BTreeSet(), lets: [], slots: [], unread: false, escaped: [] }
     let mut counter = 0
     for item in program.items {
@@ -576,7 +614,7 @@ fn tm_remember(name: winnow_grammar::Symbol?, words: ref winnow_grammar::Interne
 fn tm_walk_function(fname: ref String, alone: bool, args: ref Vec[FnArg], body: ref Block, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut classes: MapClasses) {
     let ret = f"r:{fname}"
     let mut first: collections::BTreeMap[winnow_grammar::Symbol, i64] = collections::BTreeMap()
-    let mut walk = MapWalk { nodes: [], ret: ret.clone(), scopes: [], given: [], made: [], kept: [], escapes: collections::BTreeSet(), bound: collections::BTreeMap(), unread: false }
+    let mut walk = MapWalk { nodes: [], ret: ret.clone(), scopes: [], given: [], made: [], kept: [], escapes: collections::BTreeSet(), bound: collections::BTreeMap(), unread: false, at: 0, sinks: [] }
     if alone {
         classes.slots.push(ret.clone())
     } else {
@@ -694,7 +732,7 @@ fn tm_trusted_bindings(given: ref Vec[Vec[KeyDeps]]) -> collections::BTreeSet[i6
 fn tm_bind(name: winnow_grammar::Symbol, given: ref KeyDeps, node: ref String, mut walk: MapWalk) -> i64 {
     let id = walk.given.len()
     walk.nodes.push(node.clone())
-    walk.given.push([KeyDeps { known: given.known, ids: given.ids.clone() }])
+    walk.given.push([KeyDeps { known: given.known, ids: given.ids.clone(), why: given.why.clone() }])
     tm_count_binding(name, walk)
     let last = walk.scopes.len() - 1
     walk.scopes[last].insert(name.clone(), id)
@@ -729,6 +767,7 @@ fn tm_resolve(name: winnow_grammar::Symbol, walk: ref MapWalk) -> i64 {
 fn tm_walk_block(block: ref Block, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut classes: MapClasses, mut walk: MapWalk) {
     walk.scopes.push(collections::BTreeMap())
     for stmt in block.stmts {
+        walk.at = stmt.span.start as i64
         match stmt.node {
             Stmt::Let { names, value, .. } => {
                 let given = tm_deps_of(value, words, library, env, walk)
@@ -798,6 +837,12 @@ fn tm_walk_block(block: ref Block, words: ref winnow_grammar::InternerContext, l
             },
             else => {
                 walk.unread = true
+                for expr in check_visit_stmt(stmt.node) {
+                    es_fog(expr, words, library, env, walk)
+                }
+                for inner in check_visit_stmt_blocks(stmt.node) {
+                    es_fog_block(inner, words, library, env, walk)
+                }
             }
         }
     }
@@ -938,6 +983,7 @@ fn tm_walk_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, libr
                 mc_poison(classes, ret)
                 tm_call_args(callee, args, config, words, library, env, classes, walk)
             } else {
+                es_sink_call(func, args, config, words, library, env, walk)
                 tm_walk_expr(func, words, library, env, classes, walk)
                 for a in args {
                     tm_walk_expr(a, words, library, env, classes, walk)
@@ -1030,9 +1076,11 @@ fn tm_walk_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, libr
         Expr::Break(_) => {},
         Expr::Continue(_) => {},
         // A lambda, a `match`, a `catch`, a task: names bound some way this
-        // does not follow.
+        // does not follow. A log sink inside writes what is not followed,
+        // so escaped (ADR-398 D3).
         else => {
             walk.unread = true
+            es_fog(expr, words, library, env, walk)
         }
     }
 }
@@ -1090,7 +1138,9 @@ fn tm_deps_of(value: ref Expr, words: ref winnow_grammar::InternerContext, libra
             // operator chose what it hands back, as at a call by name.
             if env.sources.contains(name) && !env.own.contains(name) && says_trusted(words, config) {
                 tm_nothing()
-            } else if env.sources.contains(name) || env.own.contains(name) {
+            } else if env.sources.contains(name) && !env.own.contains(name) {
+                tm_from(name)
+            } else if env.own.contains(name) {
                 tm_never()
             } else {
                 tm_join(tm_deps_of(receiver, words, library, env, walk), tm_all_deps(args, words, library, env, walk))
@@ -1118,13 +1168,16 @@ fn tm_call_deps(func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg],
     if env.own.contains(name) {
         return tm_never()
     }
+    if env.cleaners.contains(name) {
+        return tm_nothing()
+    }
     let contract = library.functions[name] ?? return tm_never()
     if contract.provenance != null {
         let provenance = contract.provenance ?? return tm_never()
         if provenance == Provenance::Trusted || says_trusted(words, config) {
             return tm_nothing()
         }
-        return tm_never()
+        return tm_from(name)
     }
     let mut all = tm_all_deps(args, words, library, env, walk)
     for c in config {
@@ -1155,4 +1208,246 @@ fn is_a_map_made(value: ref Expr, words: ref winnow_grammar::InternerContext) ->
         },
         else => false,
     }
+}
+
+// **Which values a log sink escapes** (ADR-398 D3, #1598): `eprint`,
+// `eprintln`, `panic` and a failed `assert`'s message write to the log, and a
+// value whose bytes the program did not choose is written there escaped.
+// Each hole of an `f"…"` is judged by its own provenance, any other value
+// whole; the literal text is never. The walk is the map walk's: the same
+// bindings, the same fixpoint, the same rule that what is not seen is
+// untrusted. Only `text::escape_control` makes a value trusted that was not
+// (D4).
+
+/// The values to escape, by node: the holes of an `f"…"`, and the values
+/// written whole; and every call that escapes one with the source that made
+/// it untrusted (D5).
+pub struct EscapePlan {
+    pub holes: collections::BTreeSet[i64],
+    pub wholes: collections::BTreeSet[i64],
+    pub calls: Vec[EscapedCall],
+}
+
+/// A log sink that escapes: the start of its statement, its name, and the
+/// source of the value it escapes.
+pub struct EscapedCall {
+    pub at: i64,
+    pub sink: String,
+    pub source: String,
+}
+
+/// Nothing escaped: a program that reads nothing untrusted (D3).
+pub fn no_escapes() -> EscapePlan {
+    return EscapePlan { holes: collections::BTreeSet(), wholes: collections::BTreeSet(), calls: [] }
+}
+
+/// The values every log sink of `program` escapes.
+pub fn escaped_sinks(program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger) -> EscapePlan {
+    let mut env = tm_env(program, words, library)
+    env.cleaners.insert("text::escape_control")
+    let mut plan = EscapePlan { holes: collections::BTreeSet(), wholes: collections::BTreeSet(), calls: [] }
+    for item in program.items {
+        match item.node {
+            Item::Fn { args, body, .. } => es_walk_function(args, body, words, library, env, plan),
+            Item::Impl { methods, .. } => {
+                for method in methods {
+                    match method.node {
+                        Item::Fn { args, body, .. } => es_walk_function(args, body, words, library, env, plan),
+                        else => {}
+                    }
+                }
+            },
+            else => {}
+        }
+    }
+    return plan
+}
+
+fn es_walk_function(args: ref Vec[FnArg], body: ref Block, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut plan: EscapePlan) {
+    let mut classes = MapClasses { parent: collections::BTreeMap(), poisoned: collections::BTreeSet(), lets: [], slots: [], unread: false, escaped: [] }
+    let mut first: collections::BTreeMap[winnow_grammar::Symbol, i64] = collections::BTreeMap()
+    let mut walk = MapWalk { nodes: [], ret: "r", scopes: [], given: [], made: [], kept: [], escapes: collections::BTreeSet(), bound: collections::BTreeMap(), unread: false, at: 0, sinks: [] }
+    for arg in args {
+        let id = walk.given.len()
+        let name = arg.name.clone()
+        walk.given.push([tm_from(f"the parameter `{words.resolve(name)}`")])
+        walk.nodes.push("p")
+        first.insert(name.clone(), id)
+    }
+    walk.scopes.push(first)
+    tm_walk_block(body, words, library, env, classes, walk)
+    // **Code not followed may assign any name**, so where some was, no
+    // binding counts as trusted.
+    let trusted = if walk.unread { collections::BTreeSet() } else { tm_trusted_bindings(walk.given) }
+    for one in walk.sinks {
+        let mut untrusted = !one.deps.known
+        let mut why = one.deps.why.clone()
+        for dep in one.deps.ids {
+            if !trusted.contains(dep) {
+                untrusted = true
+                if why.is_empty() {
+                    let mut seen: collections::BTreeSet[i64] = collections::BTreeSet()
+                    why = es_why(dep, walk.given, trusted, seen)
+                }
+            }
+        }
+        if untrusted {
+            if one.whole {
+                plan.wholes.insert(one.key)
+            } else {
+                plan.holes.insert(one.key)
+            }
+            if why.is_empty() {
+                why = "a value this does not follow"
+            }
+            let mut fresh = true
+            for call in plan.calls {
+                if call.at == one.at && call.sink == one.sink && call.source == why {
+                    fresh = false
+                }
+            }
+            if fresh {
+                plan.calls.push(EscapedCall { at: one.at, sink: one.sink.clone(), source: why })
+            }
+        }
+    }
+}
+
+/// The source behind an untrusted binding: the first one its values name.
+fn es_why(id: i64, given: ref Vec[Vec[KeyDeps]], trusted: ref collections::BTreeSet[i64], mut seen: collections::BTreeSet[i64]) -> String {
+    if seen.contains(id) {
+        return ""
+    }
+    seen.insert(id)
+    for one in given[id] {
+        if !one.why.is_empty() {
+            return one.why.clone()
+        }
+        for dep in one.ids {
+            if !trusted.contains(dep) {
+                let found = es_why(dep, given, trusted, seen)
+                if !found.is_empty() {
+                    return found
+                }
+            }
+        }
+    }
+    return ""
+}
+
+/// The log sink a call names: `eprint`, `eprintln`, `panic` or `assert`,
+/// called by its name where nothing of the program's own hides it.
+fn es_sink_name(func: ref Expr, words: ref winnow_grammar::InternerContext, env: ref MapEnv, walk: ref MapWalk) -> String {
+    return match func {
+        Expr::Variable(name, _) => {
+            let written = words.resolve(name)
+            if tm_resolve(name.clone(), walk) == -2 && !env.own.contains(written) && (written == "eprint" || written == "eprintln" || written == "panic" || written == "assert") {
+                written.clone()
+            } else {
+                ""
+            }
+        },
+        else => "",
+    }
+}
+
+/// A call to a log sink: each value it writes is judged with the names bound
+/// here. `assert` writes only its message.
+fn es_sink_call(func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut walk: MapWalk) {
+    let sink = es_sink_name(func, words, env, walk)
+    if sink.is_empty() {
+        return
+    }
+    if sink == "assert" {
+        for c in config {
+            if words.resolve(c.name) == "message" {
+                es_value(sink, c.value, words, library, env, walk)
+            }
+        }
+        return
+    }
+    for a in args {
+        es_value(sink, a, words, library, env, walk)
+    }
+}
+
+fn es_value(sink: ref String, value: ref Expr, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut walk: MapWalk) {
+    match value {
+        Expr::LitStr { .. } => {},
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts {
+                match part {
+                    FPart::Hole { expr, .. } => {
+                        let deps = tm_deps_of(expr, words, library, env, walk)
+                        walk.sinks.push(EscSink { at: walk.at, sink: sink.clone(), key: node_key(expr), whole: false, deps: deps })
+                    },
+                    else => {}
+                }
+            }
+        },
+        else => {
+            let deps = tm_deps_of(value, words, library, env, walk)
+            walk.sinks.push(EscSink { at: walk.at, sink: sink.clone(), key: node_key(value), whole: true, deps: deps })
+        },
+    }
+}
+
+/// The log sinks in code the walk does not follow: what they write is judged
+/// with no name bound, so only what literals make counts as trusted.
+fn es_fog(expr: ref Expr, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut walk: MapWalk) {
+    let mut blank = MapWalk { nodes: [], ret: "r", scopes: [], given: [], made: [], kept: [], escapes: collections::BTreeSet(), bound: collections::BTreeMap(), unread: false, at: walk.at, sinks: [] }
+    es_fog_into(expr, words, library, env, blank)
+    walk.sinks.extend(blank.sinks)
+}
+
+fn es_fog_block(block: ref Block, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut walk: MapWalk) {
+    let mut blank = MapWalk { nodes: [], ret: "r", scopes: [], given: [], made: [], kept: [], escapes: collections::BTreeSet(), bound: collections::BTreeMap(), unread: false, at: walk.at, sinks: [] }
+    es_fog_block_into(block, words, library, env, blank)
+    walk.sinks.extend(blank.sinks)
+}
+
+fn es_fog_block_into(block: ref Block, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut blank: MapWalk) {
+    for stmt in block.stmts {
+        blank.at = stmt.span.start as i64
+        for expr in check_visit_stmt(stmt.node) {
+            es_fog_into(expr, words, library, env, blank)
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            es_fog_block_into(inner, words, library, env, blank)
+        }
+    }
+}
+
+fn es_fog_into(expr: ref Expr, words: ref winnow_grammar::InternerContext, library: ref Ledger, env: ref MapEnv, mut blank: MapWalk) {
+    for one in check_visit_preorder(expr) {
+        match one {
+            Expr::Call { func, args, config, .. } => es_sink_call(func, args, config, words, library, env, blank),
+            Expr::LitInterpolated { parts, .. } => {
+                for part in parts {
+                    match part {
+                        FPart::Hole { expr, .. } => es_fog_into(expr, words, library, env, blank),
+                        else => {}
+                    }
+                }
+            },
+            else => {}
+        }
+        for inner in check_visit_expr_blocks(one) {
+            es_fog_block_into(inner, words, library, env, blank)
+        }
+    }
+}
+
+/// What `--trust` says of the log (ADR-398 D5): every sink call that escapes
+/// a value, by line, with the source that made it untrusted.
+pub fn render_escapes(plan: ref EscapePlan, text: ref String, path: ref String) -> String {
+    let mut out: String = "log sinks that write untrusted text escaped:\n"
+    if plan.calls.is_empty() {
+        out.push_str("    none - no log sink writes untrusted text\n")
+        return out
+    }
+    for call in plan.calls {
+        out.push_str(ref f"    {path}:{line_of_byte(text, call.at)}  {call.sink} escapes text from {call.source}\n")
+    }
+    return out
 }
