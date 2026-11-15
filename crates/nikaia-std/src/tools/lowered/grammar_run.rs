@@ -6,6 +6,7 @@ pub trait GrammarRunHost {
     fn manifest(&self, key: &str, program: &str) -> String;
     fn shared_target(&self) -> fs::Path;
     fn where_tools_start(&self) -> fs::Path;
+    fn unique_beside(&self, path: &std::path::Path) -> fs::Path;
 }
 
 impl CheckWall {
@@ -36,9 +37,9 @@ pub async fn grammar_run_compile_and_run<H: GrammarRunHost>(host: &H, at: &std::
     let key = hash::sha256_hex(&bytes);
     let dir = nikaia_std::fs::path::join(&(at), std::path::Path::new(&(key)));
     let source = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("src")))), std::path::Path::new(&("main.rs")));
-    grammar_run_write_if_changed(&source, &program).await?;
+    grammar_run_write_if_changed(&source, &program, &host.unique_beside(&source)).await?;
     let manifest_path = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("Cargo.toml")));
-    grammar_run_write_if_changed(&manifest_path, &host.manifest(&key, &program)).await?;
+    grammar_run_write_if_changed(&manifest_path, &host.manifest(&key, &program), &host.unique_beside(&manifest_path)).await?;
     let target = host.shared_target();
     let cargo = nikaia_std::index::or(env::var("CARGO"), || "cargo".into());
     let built = match process::run(&cargo, vec![String::from("build"), String::from("--quiet"), String::from("--manifest-path"), nikaia_std::fs::path::display(&(manifest_path)), String::from("--target-dir"), nikaia_std::fs::path::display(&(target))], &nikaia_std::fs::path::display(&(host.where_tools_start())), vec![], vec![], false, None, process::Input::Closed, process::Stream::Captured, process::Stream::Captured).await {
@@ -46,18 +47,31 @@ pub async fn grammar_run_compile_and_run<H: GrammarRunHost>(host: &H, at: &std::
         Err(error) => { return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("running cargo: {}", error) }, &"grammar_run_compile_and_run")) },
     };
     if !built.ok { return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: built.stderr }, &"grammar_run_compile_and_run")); }
-    let input_path = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("input")));
-    grammar_run_write_if_changed(&input_path, input).await?;
+    let input_path = host.unique_beside(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("input"))));
+    match fs::write(&input_path, &fs::Root::Anywhere, input, false, true).await {
+        Ok(_) => {},
+        Err(error) => { return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("writing {}: {}", nikaia_std::fs::path::display(&(input_path)), error) }, &"grammar_run_compile_and_run")); },
+    };
     let binary = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(target), std::path::Path::new(&("debug")))), std::path::Path::new(&(format!("p{}", key))));
     let ran = match process::run(&nikaia_std::fs::path::display(&(binary)), vec![nikaia_std::fs::path::display(&(input_path))], ".", vec![], vec![], false, None, process::Input::Closed, process::Stream::Captured, process::Stream::Captured).await {
         Ok(value) => value,
-        Err(error) => { return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("running {}: {}", nikaia_std::fs::path::display(&(binary)), error) }, &"grammar_run_compile_and_run")) },
+        Err(error) => {
+            match fs::remove(&input_path, &fs::Root::Anywhere, false) {
+                Ok(_) => {},
+                Err(_error) => { },
+            };
+            return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("running {}: {}", nikaia_std::fs::path::display(&(binary)), error) }, &"grammar_run_compile_and_run"))
+        },
+    };
+    match fs::remove(&input_path, &fs::Root::Anywhere, false) {
+        Ok(_) => {},
+        Err(_error) => { },
     };
     if !ran.ok { return Err(nikaia_std::error::throwing(CheckWall::Refused { detail: ran.stderr }, &"grammar_run_compile_and_run")); }
     Ok(nikaia_std::block::Text::from(ran.stdout.trim().to_string()))
 }
 
-pub(crate) async fn grammar_run_write_if_changed(path: &std::path::Path, text: &str) -> Result<(), nikaia_std::error::Thrown<CheckWall>> {
+pub(crate) async fn grammar_run_write_if_changed(path: &std::path::Path, text: &str, partial: &std::path::Path) -> Result<(), nikaia_std::error::Thrown<CheckWall>> {
     match nikaia_std::fs::path::parent(&(path)) {
         None => { },
         Some(ref parent) => {
@@ -68,9 +82,19 @@ pub(crate) async fn grammar_run_write_if_changed(path: &std::path::Path, text: &
         },
     }
     if sysroot_holds(path, text).await { return Ok(()); }
-    match fs::write(path, &fs::Root::Anywhere, text, false, true).await {
+    match fs::write(partial, &fs::Root::Anywhere, text, false, true).await {
         Ok(_) => {},
-        Err(error) => { return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("writing {}: {}", nikaia_std::fs::path::display(&(path)), error) }, &"grammar_run_write_if_changed")); },
+        Err(error) => { return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("writing {}: {}", nikaia_std::fs::path::display(&(partial)), error) }, &"grammar_run_write_if_changed")); },
+    };
+    match fs::rename(partial, path, &fs::Root::Anywhere) {
+        Ok(_) => {},
+        Err(error) => {
+            match fs::remove(partial, &fs::Root::Anywhere, false) {
+                Ok(_) => {},
+                Err(_error) => { },
+            };
+            return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("writing {}: {}", nikaia_std::fs::path::display(&(path)), error) }, &"grammar_run_write_if_changed"));
+        },
     };
     Ok(())
 }
@@ -121,8 +145,8 @@ pub fn grammar_run_dump(names: &winnow_grammar::InternerContext, aliases: &colle
 }
 
 pub(crate) fn grammar_run_shapes(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger) -> Shapes {
-    let mut shapes = Shapes { enums: collections::BTreeMap::new(), structs: collections::BTreeMap::new(), constants: ledger.types.iter().filter_map(|__nikaia_tuple8635| {
-        let (name, entry) = __nikaia_tuple8635;
+    let mut shapes = Shapes { enums: collections::BTreeMap::new(), structs: collections::BTreeMap::new(), constants: ledger.types.iter().filter_map(|__nikaia_tuple9700| {
+        let (name, entry) = __nikaia_tuple9700;
         grammar_run_constant(name, &entry.constant)
     }).collect() };
     for item in program.items.iter() {
