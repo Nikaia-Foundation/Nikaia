@@ -565,7 +565,7 @@ impl SvTh for SvSimplex {
         let col = *nikaia_std::index::get(&self.var_col, nikaia_std::index::at(v));
         let value = (*nikaia_std::index::get(&self.values, nikaia_std::index::at(v))).clone();
         let floor = sv_rat_floor(&value.c);
-        let k = if value.c.den == 1 && value.k.num < 0 { floor - 1 } else { floor };
+        let k = if value.c.den == 1 && value.k.num < 0 { match floor.checked_sub(1) { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() } } else { floor };
         let le = SvRow { cols: vec![match u32::try_from(col).ok() { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() }], ks: vec![1], constant: match k.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() } };
         let ge = SvRow { cols: vec![match u32::try_from(col).ok() { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() }], ks: vec![-1], constant: match k.checked_add(1) { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() } };
         let split = match book.split(le, ge) { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() };
@@ -1512,6 +1512,31 @@ pub(crate) fn __nikaia_test_10() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(test)]
+pub(crate) fn sv_simplex_test_split_at_min(low_first: bool) -> String {
+    let big = sv_simplex_test_lt(&vec![1, 1], 9223372036854775807i64);
+    let low = sv_simplex_test_le(&vec![0, -1], 1);
+    let atoms = if low_first { vec![low, big] } else { vec![big, low] };
+    let query = SvQuery { atoms, clauses: vec![vec![0], vec![2]], columns: 2, reals: vec![] };
+    let mut book = match sv_book(&query) { Some(__nikaia_value) => __nikaia_value, None => return String::from("no value") };
+    let mut theory = sv_simplex(vec![String::from("x"), String::from("y")]);
+    theory.cut_kind = String::from("none");
+    theory.gcd_test = false;
+    theory.push_level();
+    let a = theory.assert(0u32, &mut book);
+    let b = theory.assert(2u32, &mut book);
+    let got = theory.check(true, &lg_budget(), &mut book);
+    format!("{}, {}, {}, {} splits, {} overflows\n", sv_simplex_test_said_by(&a), sv_simplex_test_said_by(&b), sv_simplex_test_said_by(&got), theory.splits, theory.overflows)
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_11() -> Result<(), Box<dyn std::error::Error>> {
+    let out = nikaia_std::block::Text::from(nikaia_std::concat::plus(sv_simplex_test_split_at_min(true), sv_simplex_test_split_at_min(false)));
+    let expected = vec!["consistent, consistent, unknown (overflow), 1 splits, 1 overflows", "consistent, consistent, unknown (overflow), 1 splits, 1 overflows"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
 
 #[cfg(test)]
 mod nikaia_tests {
@@ -1558,5 +1583,9 @@ mod nikaia_tests {
     #[test]
     fn a_cut_s_log_with_a_rounding_left_out_or_the_cut_made_too_strong_is_rejected() {
         super::__nikaia_test_10().unwrap()
+    }
+    #[test]
+    fn a_split_below_i64_min_answers_unknown_overflow() {
+        super::__nikaia_test_11().unwrap()
     }
 }
