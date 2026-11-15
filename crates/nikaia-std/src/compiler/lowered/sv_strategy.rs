@@ -89,7 +89,7 @@ pub fn sv_features(cnf: &SvCnf) -> SvFeatures {
             a = unsafe { nikaia_std::proven::add::<i64>(a, 1) };
             continue;
         }
-        f.atoms += 1;
+        f.atoms = unsafe { nikaia_std::proven::add::<i64>(f.atoms, 1) };
         let width = unsafe { nikaia_std::proven::read(&cnf.query.atoms, (a) as usize) }.row.ks.len() as i64;
         f.nonzeros += width;
         for k in unsafe { nikaia_std::proven::read(&cnf.query.atoms, (a) as usize) }.row.ks.iter() {
@@ -109,7 +109,7 @@ pub fn sv_features(cnf: &SvCnf) -> SvFeatures {
     }
     for clause in cnf.query.clauses.iter() {
         f.boolean += clause.len() as i64;
-        if clause.len() > 1 { f.disjunctions += 1; }
+        if clause.len() > 1 { f.disjunctions = unsafe { nikaia_std::proven::add::<i64>(f.disjunctions, 1) }; }
     }
     if f.atoms > 0 {
         f.interval = ones * 1000 / f.atoms;

@@ -323,7 +323,7 @@ impl CheckState {
                 continue;
             }
             let bound = nikaia_std::block::Text::from((*nikaia_std::index::get(&types, nikaia_std::index::at(seen))).to_string());
-            let there = *nikaia_std::index::get(&places, nikaia_std::index::at(seen));
+            let there = *unsafe { nikaia_std::proven::read(&places, (seen) as usize) };
             if bound == ty { continue; }
             let mut narrow: i64 = here;
             let mut wide = nikaia_std::block::Text::from(bound.to_string());

@@ -7,7 +7,7 @@ bounds in tests/prove_a_value_read_out_of_a_map.nika: 8 indexes, 7 proved; 4 ope
     25  values[k]                          checked: a value read out of a list, of which the walk knows no fact (#797, #798): a map's value (ADR-306 D24)
     32  items[at]                          proved
     33  at += 1                            proved
-    38  sum += items[place].len()          checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    38  sum += items[place].len()          checked: a counter the loop on line 36 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
     38  items[place]                       proved
     54  self.values[k]                     proved
     60  index.values[k]                    proved

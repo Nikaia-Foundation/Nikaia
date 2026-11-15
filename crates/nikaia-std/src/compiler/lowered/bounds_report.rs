@@ -175,7 +175,7 @@ pub fn bounds_report_trace_rows(asked: &str, rows: &[String]) -> String {
     format!("bounds trace {}:\n{}\n", asked, nikaia_std::block::Text::from(rows.join("\n")))
 }
 
-pub(crate) fn bounds_report_line(source: &str, at: i64) -> i64 {
+pub fn bounds_report_line(source: &str, at: i64) -> i64 {
     let end = at.min(source.as_bytes().len() as i64);
     nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(0..end)).iter().copied().filter(|&b| { b == 10 }).count() as i64 + 1
 }
@@ -212,7 +212,7 @@ pub(crate) fn bounds_report_stmt(stmt: &Stmt, span: &Span, args: &[FnArg], body:
             if bounds_report_checked_op(&which) && bounds_report_seen(facts, at) {
                 let proved = facts.proven_arithmetic.contains(&at);
                 let mut blocked: Option<String> = None;
-                if !proved { blocked = Some(blocked_operation(&which, target, value, args, body, words, walk.callers)); }
+                if !proved { blocked = Some(blocked_operation(&which, target, value, args, body, words, source, walk.callers)); }
                 walk.sites.push(BoundsReportSite { line, text: format!("{} {}= {}", written_expression(words, target), bounds_report_symbol(&which), written_expression(words, value)), index: false, proved, blocked });
             }
         },
@@ -262,7 +262,7 @@ pub(crate) fn bounds_report_site(expr: &Expr, line: i64, args: &[FnArg], body: &
                 walk.seen.insert(key);
                 let proved = facts.proven_indices.contains(&key);
                 let mut blocked: Option<String> = None;
-                if !proved { blocked = Some(blocked_index(base, index, args, body, words, walk.callers)); }
+                if !proved { blocked = Some(blocked_index(base, index, args, body, words, source, walk.callers)); }
                 walk.sites.push(BoundsReportSite { line, text: written_expression(words, expr), index: true, proved, blocked });
             }
         },
@@ -273,7 +273,7 @@ pub(crate) fn bounds_report_site(expr: &Expr, line: i64, args: &[FnArg], body: &
                 walk.seen.insert(key);
                 let proved = facts.proven_indices.contains(&key);
                 let mut blocked: Option<String> = None;
-                if !proved { blocked = Some(blocked_index(receiver, unsafe { nikaia_std::proven::read(&given, (0) as usize) }, args, body, words, walk.callers)); }
+                if !proved { blocked = Some(blocked_index(receiver, unsafe { nikaia_std::proven::read(&given, (0) as usize) }, args, body, words, source, walk.callers)); }
                 walk.sites.push(BoundsReportSite { line, text: written_expression(words, expr), index: true, proved, blocked });
             }
         },
@@ -283,7 +283,7 @@ pub(crate) fn bounds_report_site(expr: &Expr, line: i64, args: &[FnArg], body: &
             if bounds_report_checked_op(op) && bounds_report_seen(facts, at) {
                 let proved = facts.proven_arithmetic.contains(&at);
                 let mut blocked: Option<String> = None;
-                if !proved { blocked = Some(blocked_operation(op, lhs, rhs, args, body, words, walk.callers)); }
+                if !proved { blocked = Some(blocked_operation(op, lhs, rhs, args, body, words, source, walk.callers)); }
                 walk.sites.push(BoundsReportSite { line: bounds_report_line(source, at), text: written_expression(words, expr), index: false, proved, blocked });
             }
         },

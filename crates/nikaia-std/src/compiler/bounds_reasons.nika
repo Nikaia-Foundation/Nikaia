@@ -21,6 +21,7 @@ pub fn blocked_index(
 	args: ref Vec[FnArg],
 	body: ref Block,
 	words: ref winnow_grammar::InternerContext,
+	source: ref String,
 	callers: bool,
 ) -> String {
 	let shape = match base {
@@ -49,7 +50,7 @@ pub fn blocked_index(
 	if is_element(index, words) {
 		return reason_element_from(index, body, words)
 	}
-	return from_binding(names_read(index, words), args, body, words, callers)
+	return from_binding(names_read(index, words), args, body, words, source, callers)
 }
 
 /// **The shape that kept an operation's check**, read off the site. A side
@@ -62,6 +63,7 @@ pub fn blocked_operation(
 	args: ref Vec[FnArg],
 	body: ref Block,
 	words: ref winnow_grammar::InternerContext,
+	source: ref String,
 	callers: bool,
 ) -> String {
 	let shape = site_shape(lhs, rhs)
@@ -77,7 +79,7 @@ pub fn blocked_operation(
 			names.push(name)
 		}
 	}
-	return from_binding(names, args, body, words, callers)
+	return from_binding(names, args, body, words, source, callers)
 }
 
 /// The names an expression reads, each once, in the order written.
@@ -106,13 +108,14 @@ fn from_binding(
 	args: ref Vec[FnArg],
 	body: ref Block,
 	words: ref winnow_grammar::InternerContext,
+	source: ref String,
 	callers: bool,
 ) -> String {
 	for name in names {
-		let found = binding_reason(body, body, name, false, words)
+		let found = binding_reason(body, body, name, -1, words, source)
 		if found != "" {
 			if callers
-				&& found == counter()
+				&& found.starts_with(counter_words())
 				&& counter_to_parameter(body, body, name, args, words) {
 					return not_proved_by_callers()
 				}
@@ -132,8 +135,15 @@ fn from_binding(
 	return unbounded()
 }
 
-fn counter() -> String {
-	return "a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)"
+/// **A counter left open names its loop** (ADR-361 D7, #1634): the loop
+/// at byte `at` of `source` changes it, and neither its turns nor another
+/// counter it raises with bound it.
+fn counter(source: ref String, at: i64) -> String {
+	return f"{counter_words()} on line {bounds_report_line(source, at)} changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)"
+}
+
+fn counter_words() -> String {
+	return "a counter the loop"
 }
 
 fn not_proved_by_callers() -> String {
@@ -174,26 +184,28 @@ fn counter_to_parameter(
 }
 
 /// What the binding of `name` in `block`, or a change to it, says; empty
-/// where none does.
+/// where none does. `loop_at` is the first byte of the innermost loop
+/// around `block`, -1 outside every loop.
 fn binding_reason(
 	top: ref Block,
 	block: ref Block,
 	name: ref String,
-	in_loop: bool,
+	loop_at: i64,
 	words: ref winnow_grammar::InternerContext,
+	source: ref String,
 ) -> String {
 	for stmt in block.stmts {
-		let here = statement_reason(top, stmt.node, name, in_loop, words)
+		let here = statement_reason(top, stmt.node, name, loop_at, words, source)
 		if here != "" {
 			return here
 		}
 		let looped = match stmt.node {
-			Stmt::For { .. } => true,
-			Stmt::While { .. } => true,
-			else => in_loop,
+			Stmt::For { .. } => stmt.span.start as i64,
+			Stmt::While { .. } => stmt.span.start as i64,
+			else => loop_at,
 		}
 		for inner in check_visit_stmt_blocks(stmt.node) {
-			let found = binding_reason(top, inner, name, looped, words)
+			let found = binding_reason(top, inner, name, looped, words, source)
 			if found != "" {
 				return found
 			}
@@ -206,8 +218,9 @@ fn statement_reason(
 	top: ref Block,
 	stmt: ref Stmt,
 	name: ref String,
-	in_loop: bool,
+	loop_at: i64,
 	words: ref winnow_grammar::InternerContext,
+	source: ref String,
 ) -> String {
 	match stmt {
 		Stmt::Let { names, value, .. } => {
@@ -226,8 +239,8 @@ fn statement_reason(
 			}
 		},
 		Stmt::Assign { target, op, value } => {
-			if in_loop && is_name(target, name, words) && steps(op, value, name, words) {
-				return counter()
+			if loop_at >= 0 && is_name(target, name, words) && steps(op, value, name, words) {
+				return counter(source, loop_at)
 			}
 		},
 		else => {},

@@ -371,7 +371,7 @@ impl SvSimplex {
         { let __nikaia_stored = pr; unsafe { nikaia_std::proven::write(&mut self.rows, (r) as usize, __nikaia_stored) }; }
         let mut i: i64 = 0;
         while ((i) as usize) < changed.len() {
-            { let __nikaia_stored = (*nikaia_std::index::get(&made, (i) as usize)).clone(); unsafe { nikaia_std::proven::write(&mut self.rows, (*nikaia_std::proven::read(&changed, (i) as usize)) as usize, __nikaia_stored) }; }
+            { let __nikaia_stored = (*unsafe { nikaia_std::proven::read(&made, (i) as usize) }).clone(); unsafe { nikaia_std::proven::write(&mut self.rows, (*nikaia_std::proven::read(&changed, (i) as usize)) as usize, __nikaia_stored) }; }
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         let old = *nikaia_std::index::get(&self.basic, nikaia_std::index::at(r));

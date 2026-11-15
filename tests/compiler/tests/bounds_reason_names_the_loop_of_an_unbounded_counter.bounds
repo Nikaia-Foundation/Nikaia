@@ -1,0 +1,6 @@
+bounds in tests/bounds_reason_names_the_loop_of_an_unbounded_counter.nika: 0 indexes, 0 proved; 4 operations, 1 proved
+     9  n += 1  checked: a counter the loop on line 8 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+    18  i += 1  proved
+    19  n += 1  checked: a counter the loop on line 17 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+    20  n += 1  checked: a counter the loop on line 17 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+  derived  twice: 0 <= m, proved at the calls on lines 26

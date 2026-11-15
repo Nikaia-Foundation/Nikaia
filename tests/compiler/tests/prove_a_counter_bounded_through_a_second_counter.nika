@@ -1,0 +1,66 @@
+// #1634 (ADR-361 D13, D5 item 2): a counter is proved by the bound of the
+// loop that raises it. `hits`: `hits += 1` follows from the turns `steps`
+// counts. `together`: no name counts the turns (`a` grows on one path
+// only), but no path raises `b` more than `a`, so `b - b@ <= a - a@` holds
+// at each head and `b += 1` lies below `cap`. `apart`: `b` grows by one
+// where `a` grows by two, so `b += 1` is proved, and `a += 2`, which can
+// pass `cap` by one, stays checked. `fields`: the same between two fields.
+fn hits(budget: i64, xs: ref Vec[i64]) -> i64 sync {
+	let mut steps: i64 = 0
+	let mut hits: i64 = 0
+	while steps < budget {
+		steps += 1
+		if xs.len() > 0 && xs[0] > 0 {
+			hits += 1
+		}
+	}
+	return hits
+}
+
+fn together(cap: i64, xs: ref Vec[i64]) -> i64 sync {
+	let mut a: i64 = 0
+	let mut b: i64 = 0
+	while a < cap {
+		if xs.len() > 2 {
+			a += 1
+			b += 1
+		}
+	}
+	return b
+}
+
+fn apart(cap: i64, xs: ref Vec[i64]) -> i64 sync {
+	let mut a: i64 = 0
+	let mut b: i64 = 0
+	while a < cap {
+		if xs.len() > 2 {
+			a += 1
+		} else {
+			a += 2
+			b += 1
+		}
+	}
+	return b
+}
+
+struct Tally {
+	done: i64,
+	seen: i64,
+}
+
+fn fields(cap: i64, xs: ref Vec[i64]) -> Tally sync {
+	let mut t = Tally { done: 0, seen: 0 }
+	while t.done < cap {
+		if xs.len() > 2 {
+			t.done += 1
+			t.seen += 1
+		}
+	}
+	return t
+}
+
+fn main() throws {
+	let xs = [1, 2, 3]
+	let t = fields(4, xs)
+	println(f"{hits(5, xs)} {together(3, xs)} {apart(3, [1])} {t.seen}")
+}
