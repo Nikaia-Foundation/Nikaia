@@ -104,3 +104,20 @@ and `union`'s order stay the ordered kind's). A missing one is a defect
   stands for both map kinds.
 * `extend` on a map (from pairs): neither map kind has it; D5 makes it both or
   neither.
+
+## 7. Amendment (2026-11-15, supervisor, *Language decisions*): D6 — every map has `extend`
+
+### D6 — `m.extend(pairs)` on a `HashMap` or a `BTreeMap` puts every pair into the map, as `insert` would one by one.
+
+Met by #1508 and left open by section 6: `a.extend(b)` on either map kind was
+`NK1171` (#1605). The answer is the form the language already has: D2 gives
+every set `extend`, ADR-253 D2 every list, and D5 says what one map kind has,
+the other has too. Rust's maps take `extend` from pairs (`Extend<(K, V)>`),
+Python's `dict.update` and Java's `putAll` do the same; a later pair with a
+key already in the map replaces its value, as a later `insert` does. Following
+D3, the argument is another map of the same key and value types, a list of
+`(K, V)` or a sequence of owned pairs (`m.extend(other)`, `m.extend(pairs)`,
+`m.extend(other.drain())`); it is given away, and D4's copy of each element
+applies where it is read again. Lowered to Rust's `extend`. Nobody who does
+not call it pays for it, so this is an obvious extension, decided by the
+supervisor under the *Language decisions* rule of `docs/supervisor.md`.
