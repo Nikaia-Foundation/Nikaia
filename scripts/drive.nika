@@ -1013,13 +1013,19 @@ fn drive_tree_exe(tree: String) -> String throws {
 	return f"{target}/fast/nikaia"
 }
 
-// Runs `scripts/ledgers.nika -- --refresh` on the git tree TREE with the
-// compiler of TREE, in its worktree (drive_tree_exe), and copies the ledger
+// Runs `scripts/ledgers.nika -- --refresh` on the git tree NAME (a commit or
+// tree of this checkout) with the compiler of that tree, in its worktree (drive_tree_exe), and copies the ledger
 // files it rewrote into this checkout; their paths. A failed directory is
 // printed (`LEDGERS failed ...`) and its files are left as they were. A
 // checkout without the script has no ledgers to refresh.
-fn drive_ledgers_refresh(tree: String) -> Vec[String] throws {
+fn drive_ledgers_refresh(name: String) -> Vec[String] throws {
 	if !fs::exists("scripts/ledgers.nika", fs::Root::Anywhere) { return [] }
+	// Resolved here: in the worktree `HEAD` names the worktree's own commit.
+	let tree = process::run("git", ["rev-parse", f"{name}^{{tree}}"]).stdout.trim().clone()
+	if tree == "" {
+		println(f"LEDGERS not refreshed: {name} names no tree")
+		return []
+	}
 	let exe = drive_tree_exe(tree.clone())
 	if exe == "" { return [] }
 	let wt = process::run("realpath", [drive_tree_dir()]).stdout.trim().clone()
