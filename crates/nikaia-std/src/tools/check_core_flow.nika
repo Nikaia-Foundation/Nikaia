@@ -1408,6 +1408,14 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             }
         }
     }
+    // **A name bound out of a `std` `get` is the `&T` it reads** (#1562).
+    if state.flow.std_gets.contains(id_of(value) as i64) && !typed.is_a_view() && !lent_parts {
+        for local in frame {
+            if state.takes_away(world, local.ty) && !check_owned_text(local.ty) && !state.facts.copied_bindings.contains((id_of(arm.body) as i64, local.name.clone())) {
+                state.narrowing.got_refs.insert(local.id)
+            }
+        }
+    }
     let mut in_place: collections::BTreeSet[i64] = collections::BTreeSet()
     for local in frame {
         if !state.copied(world, local.ty) {

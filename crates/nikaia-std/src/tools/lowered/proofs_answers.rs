@@ -460,7 +460,7 @@ pub fn proofs_place_of(at: i64, source: &str) -> String {
         }
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
-    format!("{}:{}", line, limit - start + 1)
+    format!("{}:{}", line, unsafe { nikaia_std::proven::add::<i64>(limit - start, 1) })
 }
 
 pub fn proofs_byte_of(place: &str, source: &str) -> Option<i64> {
@@ -485,7 +485,7 @@ pub fn proofs_byte_of(place: &str, source: &str) -> Option<i64> {
         i += 1;
     }
     if row < line { return None; }
-    let found = start + column - 1;
+    let found = unsafe { nikaia_std::proven::sub::<i64>(start + column, 1) };
     if found > end { return None; }
     Some(found)
 }

@@ -1,0 +1,21 @@
+-- refused, blessed: exit 1
+program "typed" (tests/typed.nika) ... FAILED (the program is refused and no .stderr expects it, so it is not blessed)
+program "undeclared" (tests/undeclared.nika) ... FAILED (the program is refused and no .stderr expects it, so it is not blessed)
+test result: FAILED. 0 passed; 2 failed
+typed.stdout made: false
+typed.stderr made: false
+undeclared.stdout made: false
+undeclared.stderr made: false
+-- a .stderr expects it: exit 0
+program "typed" (tests/typed.nika) ... blessed
+test result: ok. 1 passed; 0 failed
+typed.stderr starts: true
+-- bless-stderr: exit 0
+program "undeclared" (tests/undeclared.nika) ... blessed
+test result: ok. 1 passed; 0 failed
+undeclared.stdout made: false
+undeclared.stderr starts: true
+-- both pass: exit 0
+program "typed" (tests/typed.nika) ... ok
+program "undeclared" (tests/undeclared.nika) ... ok
+test result: ok. 2 passed; 0 failed

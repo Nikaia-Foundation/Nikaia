@@ -24,6 +24,8 @@ pub trait GrammarRunHost {
     fn shared_target(ref self) -> fs::Path sync
     /// The directory Cargo starts in.
     fn where_tools_start(ref self) -> fs::Path sync
+    /// A path beside `path` that no other run writes at the same time.
+    fn unique_beside(ref self, path: ref fs::Path) -> fs::Path sync
 }
 
 impl Error for CheckWall {
@@ -50,9 +52,9 @@ pub fn grammar_run_compile_and_run[H: GrammarRunHost](host: ref H, at: ref fs::P
     let key = hash::sha256_hex(bytes)
     let dir = at.join(key)
     let source = dir.join("src").join("main.rs")
-    grammar_run_write_if_changed(source, program)
+    grammar_run_write_if_changed(source, program, host.unique_beside(source))
     let manifest_path = dir.join("Cargo.toml")
-    grammar_run_write_if_changed(manifest_path, host.manifest(key, program))
+    grammar_run_write_if_changed(manifest_path, host.manifest(key, program), host.unique_beside(manifest_path))
 
     // **One target directory for every parser on the machine**: what a
     // parser depends on - `std`, `winnow`, the grammar runtime - is the
@@ -71,13 +73,20 @@ pub fn grammar_run_compile_and_run[H: GrammarRunHost](host: ref H, at: ref fs::P
 
     // **The bytes go in a file**, because that is what a parser is pointed
     // at and what the diagnostic's line and column are counted against.
-    let input_path = dir.join("input")
-    grammar_run_write_if_changed(input_path, input)
+    // **A file of this run's own** (#1248): every run of one grammar shares
+    // the directory, and two runs at once over different text each parsed
+    // whichever text was written last.
+    let input_path = host.unique_beside(dir.join("input"))
+    fs::write(input_path, fs::Root::Anywhere, input) catch {
+        throw CheckWall::DidNotBuild { detail: f"writing {input_path.display()}: {error}" }
+    }
 
     let binary = target.join("debug").join(f"p{key}")
     let ran = process::run(binary.display(), [input_path.display()]) catch {
+        fs::remove(input_path, fs::Root::Anywhere) catch {}
         throw CheckWall::DidNotBuild { detail: f"running {binary.display()}: {error}" }
     }
+    fs::remove(input_path, fs::Root::Anywhere) catch {}
     if !ran.ok {
         throw CheckWall::Refused { detail: ran.stderr }
     }
@@ -88,7 +97,11 @@ pub fn grammar_run_compile_and_run[H: GrammarRunHost](host: ref H, at: ref fs::P
 /// working: a file rewritten with identical bytes is newer than the fingerprint
 /// and rebuilds for ever. The build cache learned this the same way
 /// ([ADR-021](../../../docs/specification/adr/adr-021.md)).
-fn grammar_run_write_if_changed(path: ref fs::Path, text: String) throws {
+///
+/// **Written beside, then moved into place** (#1248): another run of the same
+/// grammar reads the file at the same time, and a file truncated for
+/// rewriting read as different text.
+fn grammar_run_write_if_changed(path: ref fs::Path, text: String, partial: ref fs::Path) throws {
     match path.parent() {
         null => {},
         parent => {
@@ -100,7 +113,11 @@ fn grammar_run_write_if_changed(path: ref fs::Path, text: String) throws {
     if sysroot_holds(path, text) {
         return
     }
-    fs::write(path, fs::Root::Anywhere, text) catch {
+    fs::write(partial, fs::Root::Anywhere, text) catch {
+        throw CheckWall::DidNotBuild { detail: f"writing {partial.display()}: {error}" }
+    }
+    fs::rename(partial, path, fs::Root::Anywhere) catch {
+        fs::remove(partial, fs::Root::Anywhere) catch {}
         throw CheckWall::DidNotBuild { detail: f"writing {path.display()}: {error}" }
     }
 }

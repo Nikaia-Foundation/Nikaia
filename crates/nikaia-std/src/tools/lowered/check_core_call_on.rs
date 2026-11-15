@@ -195,7 +195,7 @@ pub(crate) fn check_core_call_on_comparable(state: &CheckState, world: &CheckWor
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, || vec![].into());
-                for bound in bounds.iter() { if !world.own.traits.contains_key(bound) && (bound == "Ord" || !wants_order && bound == "Eq") { return true; } }
+                for bound in bounds.iter() { if !world.own.traits.contains_key(bound) && (bound == "Ord" || !wants_order && (bound == "Eq" || bound == "Hash")) { return true; } }
                 return false;
             }
         },
@@ -1351,10 +1351,10 @@ pub(crate) fn check_core_call_on_hashed_key(state: &mut CheckState, world: &Chec
     for name in check_core_call_on_parameters_in(&state, nikaia_std::index::get(&args, 0)) {
         let bounds = match state.type_parameters.get(&name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let mut allowed = false;
-        for bound in bounds.iter() { if !world.own.traits.contains_key(bound) && (bound == "Eq" || bound == "Ord") { allowed = true; } }
+        for bound in bounds.iter() { if !world.own.traits.contains_key(bound) && bound == "Hash" { allowed = true; } }
         if allowed { continue; }
         let what = if base == "HashSet" { "an element of a `HashSet`" } else { "a key of a `HashMap`" };
-        state.findings.push(check_refusal("NK1248", span, format!("`{}` needs `{}: Eq`: `{}` is {}.", entry, name, name, what), vec![format!("`{}` can be any type the caller picks, and a key is compared and hashed, so it needs a bound that says how.", name)], Some(format!("Write `[{}: Eq]`.", name))));
+        state.findings.push(check_refusal("NK1248", span, format!("`{}` needs `{}: Hash`: `{}` is {}.", entry, name, name, what), vec![format!("`{}` can be any type the caller picks, and what a hash map or set keys by is hashed and compared, so it needs the bound that says how; `Eq` alone does not make a type hash.", name)], Some(format!("Write `[{}: Hash]`.", name))));
     }
 }
 

@@ -1,0 +1,26 @@
+/// `a.min(b)` is one of the two (#1514): where `0 <= at` and the length is
+/// never negative, `end` is at least 0 and at most the length, so the cut
+/// `source.bytes[0..<end]` needs no check.
+fn line_of(source: String, at: i64) -> i64 {
+	if at < 0 {
+		return 1
+	}
+	let end = at.min(source.bytes.len())
+	return source.bytes[0..<end].iter().filter(fn(b) { b == 10 }).count() + 1
+}
+
+/// And `a.max(b)` is one of the two: below the length on both sides, it is
+/// an index inside.
+fn later(xs: ref Vec[i64], a: i64, b: i64) -> i64 {
+	if a < 0 || b < 0 || a >= xs.len() || b >= xs.len() {
+		return 0
+	}
+	return xs[a.max(b)]
+}
+
+fn main() throws {
+	println(line_of("a\nb\nc", 3))
+	println(line_of("a\nb\nc", 99))
+	println(line_of("a\nb\nc", -2))
+	println(later([4, 5, 6], 2, 1))
+}

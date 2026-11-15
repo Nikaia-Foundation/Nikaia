@@ -29,7 +29,7 @@ pub fn unclosed_quote(source: &str) -> i64 {
             at = past_the_line(&c, at);
             continue;
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     open
 }
@@ -50,7 +50,7 @@ pub fn unclosed_bracket(source: &str) -> i64 {
             at = past_the_line(&c, at);
             continue;
         } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '{' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '(' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '[' { stack.push(at); } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '}' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ')' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ']' { stack.pop(); }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     if stack.is_empty() { return -1; }
     *unsafe { nikaia_std::proven::read(&stack, (nikaia_std::proven::sub::<i64>(stack.len() as i64, 1)) as usize) }
@@ -83,7 +83,7 @@ pub fn opening_of_an_unclosed_comment(source: &str) -> i64 {
                 continue;
             }
         }
-        if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '/' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '*' {
+        if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '/' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '*' {
             open.push(at);
             at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
             continue;

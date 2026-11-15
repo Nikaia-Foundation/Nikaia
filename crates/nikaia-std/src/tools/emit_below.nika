@@ -530,13 +530,36 @@ pub fn emit_is_a_shape_bound(world: ref EmitWorld, bound: ref String) -> bool {
     return true
 }
 
+/// Whether a bound is the language's `Hash` (ADR-010 D13): the file declares
+/// no trait of that name.
+fn emit_is_the_hash_bound(world: ref EmitWorld, bound: ref String) -> bool {
+    if bound != "Hash" {
+        return false
+    }
+    for item in world.items {
+        match item.node {
+            Item::Trait { name, .. } => {
+                if escaped_name(world.words.resolve(name)) == bound {
+                    return false
+                }
+            },
+            else => {},
+        }
+    }
+    return true
+}
+
 /// A generic parameter as it is declared: its name and the bounds that travel.
 pub fn emit_bounded(world: ref EmitWorld, param: ref GenericParam) -> String {
     let name = escaped_name(world.words.resolve(param.name))
     let mut bounds: Vec[String] = []
     for bound in param.bounds {
         let written = escaped_name(world.words.resolve(bound))
-        if !emit_is_a_shape_bound(world, written) {
+        if emit_is_the_hash_bound(world, written) {
+            // **`[T: Hash]` lowers to `Hash + Eq`** (ADR-010 D13): a hash
+            // implies the equality it hashes by.
+            bounds.push("::core::hash::Hash + Eq")
+        } else if !emit_is_a_shape_bound(world, written) {
             bounds.push(written)
         }
     }

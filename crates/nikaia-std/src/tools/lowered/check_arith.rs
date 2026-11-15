@@ -115,7 +115,7 @@ impl CheckState {
             if name == "" { continue; }
             let bounds = match self.type_parameters.get(&name) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut allowed = false;
-            for bound in bounds.iter() { if !world.own.traits.contains_key(bound) && (bound == "Ord" || !ordering && bound == "Eq") { allowed = true; } }
+            for bound in bounds.iter() { if !world.own.traits.contains_key(bound) && (bound == "Ord" || !ordering && (bound == "Eq" || bound == "Hash")) { allowed = true; } }
             if allowed { return; }
             let mut symbol: &'static str = "==";
             let mut needs: &'static str = "Eq";

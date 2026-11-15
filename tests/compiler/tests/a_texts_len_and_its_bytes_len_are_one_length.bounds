@@ -1,0 +1,8 @@
+bounds in tests/a_texts_len_and_its_bytes_len_are_one_length.nika: 4 indexes, 3 proved; 3 operations, 3 proved
+     8  s.bytes[at]           proved
+    11  at += 1               proved
+    19  s.bytes[at]           proved
+    22  at += 1               proved
+    29  s.bytes[s.len() - 1]  proved
+    29  s.len() - 1           proved
+    36  s.bytes[0]            checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

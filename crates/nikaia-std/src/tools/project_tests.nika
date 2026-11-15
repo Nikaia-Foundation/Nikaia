@@ -853,7 +853,8 @@ pub fn project_tests_blessed_line(label: String, blessed: ref ProjectTestsBlesse
 }
 
 /// `--bless` for a test program: `NAME.stdout` and `NAME.stderr` are written
-/// from what happened, a refusal into `NAME.stderr` only, `NAME.stdout` made where the
+/// from what happened, a refusal into `NAME.stderr` only, where it has one or
+/// `stderr` says so, else it fails (#1236), `NAME.stdout` made where the
 /// test has none and printed something (#1238), `NAME.stderr` made likewise
 /// where `stderr` (`--bless-stderr`) says so, and the `--bounds`
 /// report into the `NAME.bounds` there is (#1069). A program that
@@ -870,6 +871,12 @@ pub fn project_tests_bless_program(program: ref ProgramTest, outcomes: ref Vec[(
     let first = outcomes[0].1
     let refused = !first.ended_well && !first.stopped && is_refusal(first.stderr)
     let stops = first.stopped && program.stops != null
+    // A refusal is an expectation only where a `.stderr` holds one, or
+    // `--bless-stderr` asks for a new one: else it fails like at a plain run
+    // and nothing is written (#1236).
+    if refused && program.stderr == null && !stderr {
+        return ProjectTestsBlessed::Refused("the program is refused and no .stderr expects it")
+    }
     if !first.ended_well && !refused && !stops && first.stderr.starts_with("the program does not compile") {
         return ProjectTestsBlessed::Refused("the program does not compile")
     }

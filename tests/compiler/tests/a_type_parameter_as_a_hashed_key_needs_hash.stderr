@@ -1,0 +1,9 @@
+error[NK1248]: `insert` needs `T: Hash`: `T` is an element of a `HashSet`.
+  --> tests/a_type_parameter_as_a_hashed_key_needs_hash.nika:6:5
+   |
+ 6 |     s.insert(x)
+   |     ^^^^^^^^^^^
+   |
+   = note: `T` can be any type the caller picks, and what a hash map or set keys by is hashed and compared, so it needs the bound that says how; `Eq` alone does not make a type hash.
+   = help: Write `[T: Hash]`.
+1 type error

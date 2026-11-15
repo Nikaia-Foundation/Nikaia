@@ -694,7 +694,7 @@ pub(crate) fn emit_seeds_closing(c: &[scalar], open: i64) -> i64 {
             depth -= 1;
             if depth == 0 { return unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     c.len() as i64
 }

@@ -88,15 +88,6 @@ fn emit_stmt_put_call(keep: ref KeepAt, opaque: bool) -> String {
     return f"{emit_keep_expr(keep, false)}.{method}("
 }
 
-/// **A name whose `let` put its buffer into a keep** (#99): a reference to
-/// it already, which is handed over as it is where a view is lent.
-fn emit_stmt_a_kept_name(world: ref EmitWorld, walk: ref EmitWalk, arg: ref Expr) -> bool {
-    return match arg {
-        Expr::Variable(name, _) => walk.kept_names.contains(emit_text(world, name)),
-        else => false,
-    }
-}
-
 /// What the keep plan of a function says about one `let`.
 struct EmitStmtKept {
     /// The keep the buffer goes into, with the call that puts it there.
@@ -118,6 +109,26 @@ fn emit_stmt_op_text(op: ref BinaryOp?) -> String {
 }
 
 impl EmitState {
+    /// **A name whose `let` put its buffer into a keep** (#99): a reference to
+    /// it already, which is handed over as it is where a view is lent. Only
+    /// that `let`'s binding (#1073): a `for`, an arm or a `let` in a block
+    /// that binds the name again is a value of its own, lent with `&`.
+    fn emit_stmt_a_kept_name(ref self, world: ref EmitWorld, walk: ref EmitWalk, arg: ref Expr) -> bool {
+        let name = match arg {
+            Expr::Variable(name, _) => emit_text(world, name),
+            else => return false,
+        }
+        let at = walk.kept_names.get(name) ?? return false
+        let found = self.facts.declared.get(node_key(arg)) ?? return true
+        return match found {
+            CheckDeclared::Binding(id) => {
+                let (span, _) = self.facts.bound_at.get(id) ?? return true
+                span.start as i64 == at
+            },
+            else => true,
+        }
+    }
+
     /// A block, with `opening` (one line) written before its statements where
     /// there is one.
     ///
@@ -191,7 +202,18 @@ impl EmitState {
     }
 
     /// A block as it is written, with no settle point after it.
+    ///
+    /// **A kept name is one in its own block** (#1073): a `let` inside that
+    /// binds the name again ends with the block, and the kept buffer is read
+    /// as the reference it is after it, not lent once more (`&text`).
     pub fn emit_stmt_block_plain[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail, opening: String?) sync throws {
+        let kept = walk.kept_names.clone()
+        self.emit_stmt_block_written(world, walk, out, host, block, depth, flow, scope, tail, opening)
+        walk.kept_names = kept
+    }
+
+    /// The statements of a block as they are written.
+    fn emit_stmt_block_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail, opening: String?) sync throws {
         if block.stmts.len() == 0 {
             if opening != null {
                 out.push(f"{{ {opening ?? ""} }}")
@@ -555,7 +577,7 @@ impl EmitState {
             let keep = plan.puts.get(at) ?? continue
             let put = emit_stmt_put_call(keep, plan.opaque_puts.contains(at))
             let local = self.emit_stmt_local(late.name)
-            walk.kept_names.insert(late.name.clone())
+            walk.kept_names.insert(late.name.clone(), at)
             let mut_word = if late.reassigned { "mut " } else { "" }
             written = f"{written} let {mut_word}{local} = {put}{local});"
         }
@@ -665,7 +687,7 @@ impl EmitState {
             return
         }
         if kept.put != null {
-            walk.kept_names.insert(bound.clone())
+            walk.kept_names.insert(bound.clone(), at)
             out.push(f"let {mut_word}{local} = {kept.put ?? ""}")
             self.emit_expr(world, walk, out, host, value, depth, flow, inner)
             out.push(");")

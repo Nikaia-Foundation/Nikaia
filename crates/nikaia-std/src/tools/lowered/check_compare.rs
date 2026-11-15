@@ -14,6 +14,7 @@ pub enum CompareStrength {
     Compares,
     Totally,
     Orders,
+    Hashes,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +40,10 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
     pub fn orders(&self, ty: &'a Ty) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         self.asking(ty, &CompareStrength::Orders, &mut seen)
+    }
+    pub fn hashes(&self, ty: &'a Ty) -> bool {
+        let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+        self.asking(ty, &CompareStrength::Hashes, &mut seen)
     }
     pub fn clones(&self, ty: &'a Ty, bounds: &'a collections::BTreeMap<String, Vec<String>>) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -122,7 +127,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         true
     }
     pub(crate) fn named(&self, name: &'a str, args: &'a Vec<Ty>, how: &CompareStrength, seen: &mut collections::BTreeSet<String>) -> bool {
-        if *how == CompareStrength::Orders && nikaia_std::list::contains(&COMPARE_UNORDERED, &name) { return false; }
+        if (*how == CompareStrength::Orders || *how == CompareStrength::Hashes) && nikaia_std::list::contains(&COMPARE_UNORDERED, &name) { return false; }
         if name == "f32" || name == "f64" { return *how == CompareStrength::Compares; }
         if nikaia_std::list::contains(&COMPARE_PLAIN, &name) { return true; }
         if nikaia_std::list::contains(&COMPARE_CONTAINERS, &name) { return self.all_of(args, &how, seen); }
@@ -136,6 +141,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         seen.insert(key);
         let declared = self.structs.contains_key(name) || self.enums.contains_key(name) || self.beside.contains_key(name);
         if declared {
+            if *how == CompareStrength::Hashes { return false; }
             if *how == CompareStrength::Orders { return self.implements("Ord", name); }
             if self.implements("Eq", name) { return true; }
         }
@@ -174,6 +180,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
                 CompareStrength::Compares => contract.compares,
                 CompareStrength::Orders => contract.orders,
                 CompareStrength::Totally => contract.equates,
+                CompareStrength::Hashes => false,
             };
             if claimed { return true; }
         }
@@ -319,7 +326,23 @@ pub fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, 
     for (parameter, traits) in wanted.iter() {
         let held = match bound.get(parameter) { Some(__nikaia_value) => __nikaia_value, None => continue };
         for wanted_trait in traits.iter() {
-            if wanted_trait != "Eq" && wanted_trait != "Ord" && wanted_trait != "Clone" || asking.own.traits.contains_key(wanted_trait) { continue; }
+            if wanted_trait != "Eq" && wanted_trait != "Ord" && wanted_trait != "Hash" && wanted_trait != "Clone" || asking.own.traits.contains_key(wanted_trait) { continue; }
+            if wanted_trait == "Hash" {
+                let own_bounds = compare_parameter_bounds(&held, parameters);
+                let shown = held.text(); #[allow(clippy::redundant_locals)] let own_bounds = own_bounds;
+                if own_bounds.len() == 1 && *unsafe { nikaia_std::proven::read(&own_bounds, (0) as usize) } == "?" {
+                    if asking.hashes(&held) { continue; }
+                    refused.push(check_refusal("NK1164", span, format!("`{}` needs a `Hash` here, but `{}` isn't one.", key, shown), vec![format!("`{}` declares `[{}: Hash]`, so the type passed has to hash, and `{}` doesn't: a float has no equality to hash by, and a type you declare does not hash yet.", key, parameter, shown)], Some(String::from("Pass a type that hashes: a number, `String`, `bool`, `scalar`, or a tuple, list or option of those."))));
+                    continue;
+                }
+                if nikaia_std::list::contains(&own_bounds, &"Hash") { continue; }
+                let shown = match held {
+                    Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
+                    _ => shown,
+                };
+                refused.push(check_refusal("NK1248", span, format!("`{}` needs `{}: Hash`: its `{}` is declared `[{}: Hash]`.", key, shown, parameter, parameter), vec![format!("`{}` can be any type the caller picks, and `Eq` does not make it hash: a type with its own `impl Eq` may have no hash.", shown)], Some(format!("Write `[{}: Hash]`.", shown))));
+                continue;
+            }
             if wanted_trait == "Clone" {
                 if asking.clones(&held, parameters) { continue; }
                 let shown = held.text();
@@ -329,7 +352,7 @@ pub fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, 
             let ordered = wanted_trait == "Ord";
             let mut met = false;
             let own_bounds = compare_parameter_bounds(&held, parameters);
-            if own_bounds.len() == 1 && *unsafe { nikaia_std::proven::read(&own_bounds, (0) as usize) } == "?" { if ordered { met = asking.orders(&held); } else { met = asking.totally(&held); } } else { for own in own_bounds.iter() { if own == "Ord" || !ordered && own == "Eq" { met = true; } } }
+            if own_bounds.len() == 1 && *unsafe { nikaia_std::proven::read(&own_bounds, (0) as usize) } == "?" { if ordered { met = asking.orders(&held); } else { met = asking.totally(&held); } } else { for own in own_bounds.iter() { if own == "Ord" || !ordered && (own == "Eq" || own == "Hash") { met = true; } } }
             if met { continue; }
             let shown = held.text();
             let mut what: &'static str = "an equality that is an equivalence";

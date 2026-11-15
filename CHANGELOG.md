@@ -8,6 +8,24 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1384] — 2026-11-15
+
+**Builders' changes (#1562)**
+- Hash is a standard bound: [T: Hash] builds a hash map over T, gives ==, and lowers to Hash + Eq. A hash key, a set element, or an argument to a Hash-bounded parameter that is an [T: Eq] type parameter is NK1248, and its help writes [T: Hash]. A literal handed beside an argument that binds T to String is an owned String. channel::bounded[T] types its ends with T.
+- A struct a map's get hands to a match arm compares with == against a new value (was a rustc refusal, &P == P).
+
+## [0.0.1383] — 2026-11-15
+
+**Builders' changes (#1236, #1248)**
+- nikaia test --bless no longer blesses a refused program: with no NAME.stderr it fails and nothing is written; an existing .stderr or --bless-stderr still records the refusal (#1236, #1262).
+- Build-time grammar runs no longer share one input file: two runs of the same grammar at once each parse their own text (#1248).
+
+## [0.0.1382] — 2026-11-15
+
+**Builders' changes (#1073, #1187)**
+- Lowering: a text put into a keep is handed to a map's `get`, `contains_key` or `remove` once lent, after a block that binds its name again too; a `for` or match-arm binding of that name is lent as its own value (#1073).
+- pre-push: `version` (bump.py check) runs on the index copy, so another agent's unstaged `.nika` no longer turns it red (#1187)
+
 ## [0.0.1381] — 2026-11-15
 
 **Builders' changes (#1598, #1599, #1601, #1602, #1606, #1607)**

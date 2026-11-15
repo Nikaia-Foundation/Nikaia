@@ -250,6 +250,18 @@ impl CheckState {
             || self.a_side_is_lent(world, side, ty)
             || check_core_stmt_got_compared(self, world, side, ty)
             || self.a_narrowed_read_lent(side)
+            || self.a_lent_arm_part(world, side)
+    }
+
+    /// **A name an arm binds out of a `std` `get` is the view below**
+    /// (#1562): `Some(other)` over the `Option<&T>` binds the `&T`, though
+    /// its type here is the `T`, so beside a value it is read through `*`.
+    fn a_lent_arm_part(ref self, world: ref CheckWorld, side: ref Expr) -> bool sync {
+        let local = match side {
+            Expr::Variable(name, _) => self.binding(world.words.resolve(name)) ?? return false,
+            else => return false,
+        }
+        return self.narrowing.got_refs.contains(local.id)
     }
 
     /// **A `T?` a test proved set, read lent** (ADR-382): below it is

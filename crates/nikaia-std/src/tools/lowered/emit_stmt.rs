@@ -56,13 +56,6 @@ pub(crate) fn emit_stmt_put_call(keep: &KeepAt, opaque: bool) -> String {
     format!("{}.{}(", emit_keep_expr(keep, false), method)
 }
 
-pub(crate) fn emit_stmt_a_kept_name(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, arg: &Expr) -> bool {
-    match arg {
-        Expr::Variable(name, _) => { let name = *name; walk.kept_names.contains(&emit_text(world, name)) },
-        _ => false,
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct EmitStmtKept {
     pub(crate) put: Option<String>,
@@ -78,6 +71,21 @@ pub(crate) fn emit_stmt_op_text(op: Option<&BinaryOp>) -> String {
 }
 
 impl EmitState {
+    pub(crate) fn emit_stmt_a_kept_name(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, arg: &Expr) -> bool {
+        let name = match arg {
+            Expr::Variable(name, _) => { let name = *name; emit_text(world, name) },
+            _ => return false,
+        };
+        let at = match walk.kept_names.get(&name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return false };
+        let found = match self.facts.declared.get(&node_key(arg)) { Some(__nikaia_value) => __nikaia_value, None => return true };
+        match found {
+            CheckDeclared::Binding(id) => {
+                let (span, _) = match self.facts.bound_at.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return true };
+                (span.start as i64) == at
+            },
+            _ => true,
+        }
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
@@ -130,6 +138,15 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_stmt_block_plain<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: &EmitTail, opening: Option<String>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let kept = walk.kept_names.copy_owned();
+        self.emit_stmt_block_written(world, walk, out, host, block, depth, flow, scope, &tail, opening)?;
+        walk.kept_names = kept;
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_block_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope, tail: &EmitTail, opening: Option<String>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if block.stmts.is_empty() {
             if opening.is_some() { out.push(&format!("{{ {} }}", nikaia_std::index::or(opening.as_deref(), || ""))); } else { out.push("{ }"); }
             return Ok(());
@@ -225,7 +242,7 @@ impl EmitState {
             self.emit_view_list_drops(out, unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span.start as i64);
             self.emit_view_list_rebinds(out, unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span.start as i64);
             out.push("\n");
-            pos += 1;
+            pos = unsafe { nikaia_std::proven::add::<i64>(pos, 1) };
         }
         walk.async_keeps = keeps;
         let finished = emit_stmt_finish_rests(walk, rests, &inner_pad);
@@ -399,7 +416,7 @@ impl EmitState {
             let keep = match plan.puts.get(&at) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let put = emit_stmt_put_call(&keep, plan.opaque_puts.contains(&at));
             let local = self.emit_stmt_local(&late.name);
-            walk.kept_names.insert(nikaia_std::block::Text::from(late.name.to_string()));
+            walk.kept_names.insert(nikaia_std::block::Text::from(late.name.to_string()), at);
             let mut_word = if late.reassigned { "mut " } else { "" };
             written = format!("{} let {}{} = {}{});", written, mut_word, local, put, local);
         }
@@ -477,7 +494,7 @@ impl EmitState {
             return Ok(());
         }
         if kept.put.is_some() {
-            walk.kept_names.insert(nikaia_std::block::Text::from(bound.to_string()));
+            walk.kept_names.insert(nikaia_std::block::Text::from(bound.to_string()), at);
             out.push(&format!("let {}{} = {}", mut_word, local, nikaia_std::index::or(kept.put.as_deref(), || "")));
             self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
             out.push(");");

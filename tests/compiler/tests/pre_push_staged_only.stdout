@@ -1,0 +1,14 @@
+unstaged tools move, a docs file staged:
+  index green
+  fmt green
+  adr-refs green
+  badges green
+  version green
+  exit 0
+the tools move staged:
+  index green
+  fmt green
+  adr-refs green
+  badges red
+  version red
+  exit 1

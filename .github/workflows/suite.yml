@@ -76,20 +76,28 @@ jobs:
             ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-incr-
 
       # Every test binary and the directory cargo would run it in (its
-      # package's), one per line: what the shards run. The tests are built
-      # first, in one cargo run with the libraries and the binaries the
-      # integration tests start, so rustc compiles `std`'s test harness
-      # beside its library instead of after the whole workspace.
+      # package's), one per line: what the shards run. **No library is
+      # compiled twice at release:** the integration tests and the binaries
+      # they start are built at release, in one cargo run; the unit tests
+      # (`--lib --bins`, each a second copy of its crate with `cfg(test)`) at
+      # `dev`, as `cargo test` builds them on a laptop, beside it at a lower
+      # priority. At release, `std`'s test harness was a second full
+      # optimised compile of the largest crate on the build's four cores.
       - name: Build the tests
         env:
           CARGO_INCREMENTAL: 1
         run: |
           set -o pipefail
           mkdir -p target/release
-          cargo test --workspace --release --no-run --message-format=json |
+          list() {
             jq -r 'select(.reason == "compiler-artifact" and .profile.test == true and .executable != null)
-                   | "\(.executable)\t\(.manifest_path | sub("/Cargo.toml$"; ""))"' |
-            sort -u >target/release/test-binaries.tsv
+                   | "\(.executable)\t\(.manifest_path | sub("/Cargo.toml$"; ""))"'
+          }
+          nice -n 10 cargo test --workspace --no-run --lib --bins --message-format=json | list >"$RUNNER_TEMP/unit.tsv" &
+          unit=$!
+          cargo test --workspace --release --no-run --test '*' --message-format=json | list >"$RUNNER_TEMP/integration.tsv"
+          wait $unit
+          sort -u "$RUNNER_TEMP/unit.tsv" "$RUNNER_TEMP/integration.tsv" >target/release/test-binaries.tsv
           cat target/release/test-binaries.tsv
 
       # What the test run did not need (the bench binaries): only links.
@@ -99,11 +107,15 @@ jobs:
         run: cargo build --workspace --release
 
       # The compiler, `std`'s rlibs (the tests hand emitted programs to rustc
-      # with `--extern` into `deps/`) and the test binaries; not cargo's
+      # with `--extern` into `deps/`), the test binaries and the unit-test
+      # executables of `target/debug` (nothing else of it); not cargo's
       # bookkeeping. Every shard runs on the same path, so the paths compiled
       # into the binaries (`CARGO_BIN_EXE_nikaia`, the checkout) hold there.
       - name: Pack the build
-        run: tar --exclude=target/release/incremental --exclude=target/release/.fingerprint -I 'zstd -T0 -1' -cf "$RUNNER_TEMP/release.tar.zst" target/release
+        run: |
+          cut -f1 target/release/test-binaries.tsv | grep '/target/debug/' | sed "s|^$PWD/||" >"$RUNNER_TEMP/unit-binaries"
+          tar --exclude=target/release/incremental --exclude=target/release/.fingerprint -I 'zstd -T0 -1' \
+            -cf "$RUNNER_TEMP/release.tar.zst" target/release -T "$RUNNER_TEMP/unit-binaries"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -117,7 +129,7 @@ jobs:
       # carry every earlier one along.
       - name: Keep the newest incremental session
         run: |
-          for d in target/release/incremental/*/; do
+          for d in target/release/incremental/*/ target/debug/incremental/*/; do
             ls -dt "$d"s-*/ 2>/dev/null | tail -n +2 | while read -r old; do
               rm -rf "$old" "${old%/}.lock"
             done

@@ -103,7 +103,7 @@ pub fn brace_groups(text: &str) -> Vec<String> {
             }
             if closed && !group.trim().is_empty() { found.push(group); }
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     found
 }
@@ -140,7 +140,7 @@ pub fn collapsed_doubled_braces(text: &str) -> Option<String> {
             at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
             continue;
         }
-        out.push(*nikaia_std::index::get(&c, (at) as usize));
+        out.push(*unsafe { nikaia_std::proven::read(&c, (at) as usize) });
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     if !doubled { return None; }

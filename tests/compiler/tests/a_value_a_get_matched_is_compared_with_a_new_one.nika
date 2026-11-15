@@ -1,0 +1,28 @@
+// A value a map's `get` hands to a `match` arm is lent, and `==` with a
+// value made fresh compares them (#1562: rustc refused `&P == P`).
+use std::collections
+
+struct P {
+	name: String,
+}
+
+fn make() -> P {
+	let mut g = String()
+	g.push_str("a")
+	return P { name: g }
+}
+
+fn main() throws {
+	let mut m: collections::BTreeMap[String, P] = collections::BTreeMap()
+	m.insert("k", make())
+	match m.get("k") {
+		null => println("none"),
+		other => {
+			if other == make() {
+				println("same")
+			} else {
+				println("other")
+			}
+		},
+	}
+}

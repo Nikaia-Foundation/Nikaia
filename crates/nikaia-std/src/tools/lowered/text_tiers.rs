@@ -2949,7 +2949,7 @@ pub(crate) fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk
             flow_value(&going_into(&owner, unsafe { nikaia_std::proven::read(&function.params, (at) as usize) }, vec![], false), Some(unsafe { nikaia_std::proven::read(&args, (at) as usize) }), &kinds, ask, walk);
             if at < function.changes.len() as i64 && *unsafe { nikaia_std::proven::read(&function.changes, (at) as usize) } { changed_in_place(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, format!("{}({})", key, tier_written(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, ask)), ask, walk); }
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
 }
 
