@@ -1606,7 +1606,9 @@ impl EmitState {
             }
             out.push(f"; Ok::<_, {scope.channel}>(__nikaia_task) }}")
             // What its error says in the log if nobody waits (ADR-346 D6).
-            out.push(f", |e: &{scope.channel}| {{ use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})")
+            // The two traits are picked by autoref, so one import is always
+            // unused: allowed, or rustc warns at every failing `spawn`.
+            out.push(f", |e: &{scope.channel}| {{ #[allow(unused_imports)] use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})")
         } else {
             let inside = EmitFlow::plain() with { statement: flow.statement }
             let inside_scope = EmitScope::plain()
