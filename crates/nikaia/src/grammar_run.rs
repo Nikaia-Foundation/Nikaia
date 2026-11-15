@@ -232,6 +232,10 @@ impl GrammarRunHost for Host<'_> {
     fn where_tools_start(&self) -> PathBuf {
         orchestrator::cache::Layout::where_tools_start()
     }
+
+    fn unique_beside(&self, path: &Path) -> PathBuf {
+        crate::comptime_run::unique_beside(path)
+    }
 }
 
 fn manifest(key: &str, program: &str) -> String {

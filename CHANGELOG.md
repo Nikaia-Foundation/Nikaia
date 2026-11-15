@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1383] — 2026-11-15
+
+**Builders' changes (#1236, #1248)**
+- nikaia test --bless no longer blesses a refused program: with no NAME.stderr it fails and nothing is written; an existing .stderr or --bless-stderr still records the refusal (#1236, #1262).
+- Build-time grammar runs no longer share one input file: two runs of the same grammar at once each parse their own text (#1248).
+
 ## [0.0.1382] — 2026-11-15
 
 **Builders' changes (#1073, #1187)**
