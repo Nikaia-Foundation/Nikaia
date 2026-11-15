@@ -45,6 +45,18 @@ pub fn translate(written: ref String, crate_word: ref String, parameters: ref Ve
         let inner = translate(rest, crate_word, parameters, types, mentioned)
         return Translated { ty: view_of(inner.ty), kept: false }
     }
+    // `[T]`, behind the `&` above, is the list Part III 15.2 says crosses to
+    // `&[T]` for free: `Array[T]` without a length (#1545). `[T; N]` has a
+    // length this does not read, and stays `?`.
+    if text.starts_with("[") && text.ends_with("]") {
+        let c: Vec[scalar] = text.chars().collect()
+        let element = slice(c, 1, c.len() - 1)
+        if element.contains(";") {
+            return Translated { ty: Ty::Unknown, kept: true }
+        }
+        let inner = translate(element, crate_word, parameters, types, mentioned)
+        return Translated { ty: Ty::Named { name: "Array", args: [inner.ty], view: false }, kept: true }
+    }
     let optional = generic_of(text, "Option")
     if optional != null {
         let inner = translate(optional ?? "", crate_word, parameters, types, mentioned)
