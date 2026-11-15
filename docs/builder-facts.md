@@ -219,4 +219,9 @@ together with the specification section and an example test.
 * A local is put into a keep (`put_viewed`) only when a view of it leaves the function, e.g. `let v = parse(text); return v`; a plain user program with a map lookup never gets a keep frame. (issue-1073)
 * The emitter's `walk.kept_names` maps each kept name to its `let`'s start, and `emit_stmt_block_plain` restores it at the end of each block; a new binder that shadows a name needs no special handling, because the checker's `declared`/`bound_at` facts resolve each use. (issue-1073)
 * `CheckFacts.declared` and `bound_at` (#1396) are filled on every build, so the emitter can resolve a variable use to its binding's span through them. (issue-1073)
+* A scratch project for `nikaia test` needs a `src/` with at least one `.nika`, or the test run fails with "cannot read …/src". (issue-1236)
+* Since #1236, plain `--bless` no longer makes a `.stderr` for a refused test program: `touch NAME.stderr` first, or use `--bless-stderr`. (issue-1236)
+* `git merge --no-commit --autostash` keeps the other agents' changes stashed until the merge is committed, so regenerate inside the uncommitted merge, never after it. (issue-1333)
+* A fails-before copy of a `tests/compiler` script test falls back to `target/fast/nikaia` when it can't find its toolchain; point `toolchain()` at `$S/old/nikaia` in the copy. (issue-1333)
+* During a merge, `git status --porcelain` also lists the files the merge staged; use `git diff --name-only` (worktree against index) to see only what a regeneration changed. (issue-1333)
 

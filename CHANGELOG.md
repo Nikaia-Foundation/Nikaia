@@ -8,6 +8,18 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1386] — 2026-11-15
+
+**Builders' changes (#1304, #1369)**
+- none (test and the workaround removal only; the lowering fix landed earlier under another commit)
+- A lambda that can fail is refused (NK1102) where the declared function type has no `throws`, instead of failing in rustc; a lambda whose body ends in `throw` builds under `fn() throws`.
+
+## [0.0.1385] — 2026-11-15
+
+**Builders' changes (#1333, #1469)**
+- drive: after a rejected push, the merge with origin/develop is re-lowered and its badges regenerated before the short checks and the push (#1333)
+- none (test only; the counting is #1521's CHANGELOG entry)
+
 ## [0.0.1384] — 2026-11-15
 
 **Builders' changes (#1562)**

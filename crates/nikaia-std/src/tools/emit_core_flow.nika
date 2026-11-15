@@ -332,10 +332,12 @@ impl EmitState {
         let valueless = self.facts.valueless_lambdas.contains(node_key(node))
         let value_tail = if valueless { EmitTail::Statement } else { EmitTail::Value }
         let return_tail = if valueless { EmitTail::Statement } else { EmitTail::Return }
+        // **A body that leaves at its end has no `Ok` after it** (#1369).
+        let leaves = emit_a_body_that_leaves(world, body)
         if !copied && self.facts.failing_lambdas.contains(node_key(node)) {
-            out.push("{ let __nikaia_done = ")
+            out.push(if leaves { "{ " } else { "{ let __nikaia_done = " })
             self.emit_core_block(world, walk, out, host, body, depth, inside with { can_throw: true }, inside_scope, value_tail)
-            out.push("; Ok(__nikaia_done) }")
+            out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" })
             if a_task {
                 out.push(")")
             }
@@ -434,11 +436,15 @@ impl EmitState {
         // the value goes inside the `Ok`. Through a `let`: `Ok({ .. })` around a
         // body of one expression is `rustc`'s *unnecessary braces*.
         // **Code that hands back nothing drops the body's value** (#1321).
+        // **A body that leaves at its end has no `Ok` after it** (#1369): it
+        // would be unreachable, and `Ok` of no value is no `Result` of the
+        // type's.
         let valueless = self.facts.valueless_lambdas.contains(node_key(node))
+        let leaves = emit_a_body_that_leaves(world, body)
         if fails {
-            out.push("{ let __nikaia_done = ")
+            out.push(if leaves { "{ " } else { "{ let __nikaia_done = " })
             self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, if valueless { EmitTail::Statement } else { EmitTail::Value })
-            out.push("; Ok(__nikaia_done) }")
+            out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" })
         } else {
             self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, if valueless { EmitTail::Statement } else { EmitTail::Return })
         }

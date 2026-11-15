@@ -1,0 +1,31 @@
+// A lambda that can fail fits `fn() throws` (Part I 7.1, #1369), also one
+// that only throws, and runs; one that catches inside fits `fn()`.
+enum Bad { Oops }
+
+impl Error for Bad {
+    fn message(self) -> String {
+        return "oops"
+    }
+}
+
+fn fails() throws {
+    throw Bad::Oops
+}
+
+fn through_a_call() throws {
+    let g: fn() throws = fn { fails() }
+    g()
+}
+
+fn through_a_throw() throws {
+    let g: fn() throws = fn { throw Bad::Oops }
+    g()
+}
+
+fn main() throws {
+    let quiet: fn() = fn { fails() catch {} }
+    quiet()
+    println("quiet")
+    through_a_call() catch { println("caught a call") }
+    through_a_throw() catch { println("caught a throw") }
+}

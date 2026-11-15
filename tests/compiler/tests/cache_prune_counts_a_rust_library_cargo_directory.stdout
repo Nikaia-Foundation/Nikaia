@@ -1,0 +1,6 @@
+exit 0
+removed TMP/cache/rust-library-user/older (4.0 KiB)
+TMP/cache: 8.0 KiB in entries, limit 9.0 KiB, 1 removed
+rust-library-user/older: false
+rust-library-splice/newer: true
+rust-library-user/newest: true

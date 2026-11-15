@@ -192,6 +192,20 @@ impl CheckState {
         }
     }
 
+    /// **`NK1102`: a lambda that can fail, put where the declared function
+    /// type cannot** (Part I 7.1, #1369). A function type without `throws`
+    /// says the code it names never fails; a lambda that does is not of that
+    /// type, as a value of another type is not. `NK2606` is the same mistake
+    /// where the place is a parameter.
+    pub fn a_failing_lambda_where_the_type_does_not_fail(ref mut self, place: ref Ty, span: ref Span) sync {
+        let shown = place.text()
+        let wanted: String = match place {
+            Ty::Fn { params, result, is_sync, .. } => Ty::Fn { params: params.clone(), result: result?.clone(), is_sync: is_sync, can_throw: true }.text(),
+            else => f"{shown} throws",
+        }
+        self.findings.push(check_refusal("NK1102", span, f"This lambda can fail, but `{shown}` says the code it names never fails.", ["A function type without `throws` cannot fail, so a lambda that can is not of that type."], f"Write `{wanted}` as the type, or handle the failure inside the lambda with `… catch {{ … }}`."))
+    }
+
     /// **`NK1189`: a copy under another name than `.clone()`**
     /// ([ADR-282](../../docs/specification/adr/adr-282.md) D8).
     ///

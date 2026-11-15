@@ -587,6 +587,17 @@ pub(crate) fn check_core_expr_throw<H: CheckHost>(state: &mut CheckState, world:
     let thrown = check_core_expr(state, world, host, inner, span);
     state.a_thrown_value_that_is_not_an_error(inner, &thrown, span);
     state.a_thrown_type_with_no_error(world, &thrown, span);
+    if state.handed_over.is_some() {
+        let held = match match state.handed_over.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        if !held.caught {
+            let mut handed = held;
+            handed.fails = true;
+            state.handed_over = Some(handed);
+        }
+    }
     state.a_way_out("throw", "", span);
     Ty::Unknown
 }

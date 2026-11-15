@@ -569,13 +569,15 @@ pub fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWo
     state.scope.push(frame)
     // The other door into a lambda's body, with the same boundary as `expr`'s.
     let saved = state.enter_boundary("lambda")
+    // The lambda this one is written in watches again once it is done.
+    let outer_handed: CheckHanded? = state.handed_over?.clone()
     state.handed_over = CheckHanded { pauses: false, fails: false, caught: false, promised: promised.clone() }
     let outer = check_core_lambda_enter(state)
     let walked = check_core_block(state, world, host, body)
     state.a_map_read_handed_back(world, walked, body)
     let tail = check_core_lambda_leave(state, outer, walked, body)
     let seen: CheckHanded? = state.handed_over?.clone()
-    state.handed_over = null
+    state.handed_over = outer_handed
     state.leave_boundary(saved)
     state.scope.pop()
     state.repeats.pop()
