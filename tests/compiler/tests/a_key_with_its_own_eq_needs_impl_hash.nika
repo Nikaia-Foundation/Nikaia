@@ -1,0 +1,17 @@
+// #591, ADR-010 D11: a type with its own `impl Eq` and no `impl Hash` is no
+// key of a HashMap (NK1260), and the help writes the `impl Hash`: a hash
+// made from its fields would tell "A" and "a" apart.
+use std::collections
+
+struct Name { text: String }
+
+impl Eq for Name {
+    fn eq(ref self, other: ref Self) -> bool sync {
+        return self.text.to_lowercase() == other.text.to_lowercase()
+    }
+}
+
+fn main() throws {
+    let by_name: collections::HashMap[Name, i64] = collections::HashMap()
+    println(by_name.len())
+}

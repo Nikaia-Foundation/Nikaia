@@ -10,7 +10,7 @@ pub fn check_impls(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
                 let written_trait = match trait_name { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let named = nikaia_std::block::Text::from(names.resolve(written_trait).to_string());
                 for one in receivers(names, items, &named, methods) { found.push(one); }
-                if (named == "Eq" || named == "Ord") && !own.traits.contains_key(&named) {
+                if (named == "Eq" || named == "Ord" || named == "Hash") && !own.traits.contains_key(&named) {
                     let target_text = nikaia_std::block::Text::from(names.resolve(target.name).to_string());
                     for one in language_trait(names, own, &named, &target_text, methods, item.span.clone()) { found.push(one); }
                     continue;
@@ -51,7 +51,7 @@ pub fn check_impls(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
 pub(crate) fn language_trait(names: &winnow_grammar::InternerContext, own: &Ledger, trait_name: &str, target: &str, methods: &[Spanned<Item>], span: Span) -> Vec<Finding> {
     let mut found: Vec<Finding> = vec![];
     let mut wanted: &'static str = "eq";
-    if trait_name == "Ord" { wanted = "compare"; }
+    if trait_name == "Ord" { wanted = "compare"; } else if trait_name == "Hash" { wanted = "hash"; }
     let mut given = false;
     for method in methods.iter() {
         match &method.node {
@@ -75,7 +75,8 @@ pub(crate) fn language_trait(names: &winnow_grammar::InternerContext, own: &Ledg
             None => None,
         }, || FnContract::empty());
         if !contract.sync_claim.is_sync() {
-            let notes: Vec<String> = vec![format!("`{}` is the language's, and an operator such as `==` or `<` cannot wait for anything.", trait_name)];
+            let mut notes: Vec<String> = vec![format!("`{}` is the language's, and an operator such as `==` or `<` cannot wait for anything.", trait_name)];
+            if trait_name == "Hash" { notes = vec![String::from("`Hash` is the language's: a map hashes a key in the middle of a lookup, which cannot wait for anything.")]; }
             found.push(refusal("NK1129", span, format!("`{}` can pause, but `{}`'s `{}` is `sync`.", key, trait_name, wanted), notes, String::from("Take out the part that waits (a read, a lock, a call that pauses) and compare what is already in hand.")));
         }
     }
@@ -143,7 +144,7 @@ pub(crate) fn wanted_receiver(names: &winnow_grammar::InternerContext, items: &[
     }
     let shared = Receiver { is_ref: true, is_mut: false, is_keep: false };
     let changed = Receiver { is_ref: true, is_mut: true, is_keep: false };
-    if trait_name == "Error" && method == "message" || trait_name == "Eq" && method == "eq" || trait_name == "Ord" && method == "compare" { return Wanted { known: true, receiver: Some(shared) }; }
+    if trait_name == "Error" && method == "message" || trait_name == "Eq" && method == "eq" || trait_name == "Ord" && method == "compare" || trait_name == "Hash" && method == "hash" { return Wanted { known: true, receiver: Some(shared) }; }
     if trait_name == "Drop" && method == "drop" || trait_name == "Cleanup" && method == "cleanup" { return Wanted { known: true, receiver: Some(changed) }; }
     Wanted { known: false, receiver: None }
 }

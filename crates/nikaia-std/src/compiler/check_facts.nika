@@ -135,6 +135,9 @@ pub struct CheckFacts {
     pub number_lets: collections::BTreeMap[i64, String],
     pub changed_elements: collections::BTreeSet[i64],
     pub text_finds: collections::BTreeSet[i64],
+    /// **`into.add(part)` of an `impl Hash`**, by the receiver's node
+    /// (ADR-010 D12): the emitter writes the part's own hash.
+    pub hasher_adds: collections::BTreeSet[i64],
     /// **A method of text whose result is a view of the text it is called
     /// on** (`s.trim()`, `s.split(",")`, ADR-views-3 D9, #1478), by the
     /// call's node: the view-change walk watches the receiver while the
@@ -725,6 +728,7 @@ impl CheckFacts {
             number_lets: collections::BTreeMap(),
             changed_elements: collections::BTreeSet(),
             text_finds: collections::BTreeSet(),
+            hasher_adds: collections::BTreeSet(),
             receiver_views: collections::BTreeSet(),
             bytes_splits: collections::BTreeSet(),
             char_patterns: collections::BTreeMap(),

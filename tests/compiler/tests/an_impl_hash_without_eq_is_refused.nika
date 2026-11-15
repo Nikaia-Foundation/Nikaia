@@ -1,0 +1,17 @@
+// #591, ADR-010 D12: `impl Hash` is for a type of the program's own whose
+// equality is total (NK1249): not for a type with a float in it, nor for a
+// type from elsewhere.
+use std::collections
+
+struct Point { x: f64, y: f64 }
+
+impl Hash for Point {
+    fn hash(ref self, mut into: Hasher) sync {
+        into.add(1)
+    }
+}
+
+fn main() throws {
+    let p = Point { x: 1.0, y: 2.0 }
+    println(p.x)
+}

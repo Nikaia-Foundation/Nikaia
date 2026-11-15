@@ -513,7 +513,7 @@ pub fn compare_language_impls(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '
 pub(crate) fn compare_language_impl(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, span: &Span) -> Option<CheckFinding> {
     let symbol = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return None };
     let trait_text = here.text(symbol);
-    if trait_text != "Eq" && trait_text != "Ord" || asking.own.traits.contains_key(&trait_text) { return None; }
+    if trait_text != "Eq" && trait_text != "Ord" && trait_text != "Hash" || asking.own.traits.contains_key(&trait_text) { return None; }
     let name = here.text(target.name);
     let declared = asking.structs.contains_key(&name) || asking.enums.contains_key(&name) || asking.beside.contains_key(&name);
     if !declared { return Some(check_refusal("NK1249", span, format!("You can't write `impl {} for {}`: your program doesn't declare it.", trait_text, name), vec![format!("`{}` for a type another package declares is that package's to say, and its ledger does.", trait_text)], Some(format!("Write it for a type you declare, or hold `{}` in a `struct` of your own.", name)))); }
@@ -521,6 +521,10 @@ pub(crate) fn compare_language_impl(asking: &CheckComparable<'_, '_, '_, '_, '_,
     if trait_text == "Ord" && !asking.totally(&named) {
         let note: String = String::from("An order that disagrees with equality gives an ordered map no meaning, and a type holding a float is not `Eq`.");
         return Some(check_refusal("NK1249", span, format!("`impl Ord for {}` needs `{}` to be `Eq`.", name, name), vec![note], Some(format!("Write `impl Eq for {}`, or take out the part that has no equality.", name))));
+    }
+    if trait_text == "Hash" && !asking.totally(&named) {
+        let note: String = String::from("A map finds a key by its hash and then by `==`, so the hash is only sound beside an equality that is total, and a type holding a float has none.");
+        return Some(check_refusal("NK1249", span, format!("`impl Hash for {}` needs `{}` to be `Eq`.", name, name), vec![note], Some(format!("Write `impl Eq for {}`, or take out the part that has no equality.", name))));
     }
     None
 }

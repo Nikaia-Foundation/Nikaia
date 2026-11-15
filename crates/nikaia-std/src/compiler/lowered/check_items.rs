@@ -476,11 +476,11 @@ impl CheckState {
         }
         let suffix = format!("::{}", written);
         let shape = written == "Struct" || written == "Enum";
-        let mut declared = !shape && (written == "Error" || written == "Drop" || written == "Cleanup" || written == "Fatal" || written == "Eq" || written == "Ord");
+        let mut declared = !shape && (written == "Error" || written == "Drop" || written == "Cleanup" || written == "Fatal" || written == "Eq" || written == "Ord" || written == "Hash");
         declared = declared || item_has_trait(world.own, written, &suffix) || item_has_trait(world.library, written, &suffix) || declares_a_type(view, written) || imports_a_package(view, written) || self.foreign_names.contains(written);
         for other in world.beside.iter() { if declares_a_type(other, written) { declared = true; } }
         if declared { return; }
-        let mut because: String = format!("An `impl` can name a trait declared with `trait {} {{ … }}` in this program or a package it uses, or one of `Error`, `Drop`, `Cleanup`, `Fatal`, `Eq` and `Ord`.", written);
+        let mut because: String = format!("An `impl` can name a trait declared with `trait {} {{ … }}` in this program or a package it uses, or one of `Error`, `Drop`, `Cleanup`, `Fatal`, `Eq`, `Ord` and `Hash`.", written);
         let mut help: String = format!("Declare `trait {}`, or name the package that declares it: `package::{}`.", written, written);
         if shape {
             because = format!("A type is a `{}` by how it's declared, not by an `impl`: every `struct` is already a `Struct` and every `enum` an `Enum`.", written);

@@ -811,7 +811,7 @@ pub fn compare_language_impls(asking: ref CheckComparable, here: ref ParsedView)
 fn compare_language_impl(asking: ref CheckComparable, here: ref ParsedView, trait_name: winnow_grammar::Symbol?, target: ref Type, span: ref Span) -> CheckFinding? {
     let symbol = trait_name ?? return null
     let trait_text = here.text(symbol)
-    if (trait_text != "Eq" && trait_text != "Ord") || asking.own.traits.contains_key(trait_text) {
+    if (trait_text != "Eq" && trait_text != "Ord" && trait_text != "Hash") || asking.own.traits.contains_key(trait_text) {
         return null
     }
     let name = here.text(target.name)
@@ -823,6 +823,12 @@ fn compare_language_impl(asking: ref CheckComparable, here: ref ParsedView, trai
     if trait_text == "Ord" && !asking.totally(named) {
         let note: String = "An order that disagrees with equality gives an ordered map no meaning, and a type holding a float is not `Eq`."
         return check_refusal("NK1249", span, f"`impl Ord for {name}` needs `{name}` to be `Eq`.", [note], f"Write `impl Eq for {name}`, or take out the part that has no equality.")
+    }
+    // **A hash agrees with equality, so it needs one that is total**
+    // (ADR-010 D12): two values `==` says are one have to hash alike.
+    if trait_text == "Hash" && !asking.totally(named) {
+        let note: String = "A map finds a key by its hash and then by `==`, so the hash is only sound beside an equality that is total, and a type holding a float has none."
+        return check_refusal("NK1249", span, f"`impl Hash for {name}` needs `{name}` to be `Eq`.", [note], f"Write `impl Eq for {name}`, or take out the part that has no equality.")
     }
     return null
 }

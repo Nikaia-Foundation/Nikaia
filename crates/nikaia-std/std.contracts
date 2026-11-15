@@ -3319,6 +3319,14 @@ hashes = true
 copies = true
 variants = ["Less", "Equal", "Greater"]
 
+# **What an `impl Hash` feeds** (ADR-010 D12): `hash(ref self, mut into:
+# Hasher)` hands each part that decides equality to `into.add(part)`, whose
+# argument has to hash itself (NK1260). Keyed with no module in front, like
+# `Ordering`; the standard library's `dyn Hasher` in the generated file. It has
+# no `fn."Hasher::add"`: the checker types `add` and the emitter writes it.
+[type."Hasher"]
+pub = true
+
 # **`compare` and `eq`, the language's** (ADR-341 D2): what a bound `[T: Ord]` or
 # `[T: Eq]` gives the body, and what a number, a text or a container has. They
 # never pause, which is what lets them stand in an `assert` and an operator.
@@ -3335,6 +3343,15 @@ panics = false
 sync = true
 touches = []
 signature = "[T](self: ref T, other: ref T) -> bool"
+
+# **`into.add(part)` is the part's own `hash`** (ADR-010 D12): it never pauses
+# either, so an `impl Hash` stays `sync`.
+[fn."Hash::hash"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: ref T, into: mut Hasher)"
 
 # `Fixed` is keyed **with no module in front**, which is `Overtaken`'s and
 # `ParseError`'s shape: a program writes it in a declaration and never reaches

@@ -572,9 +572,10 @@ impl EmitState {
             out.push(f"impl{declares} nikaia_std::cleanup::{bridge} for {target_name}{applied} {{\n    fn cleanup(&mut self) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ::std::string::String>>{send} + '_>> {{\n        Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({target_name}::cleanup(self){awaited}) }})\n    }}\n}}\n")
             return
         }
-        // **`impl Eq` and `impl Ord` are the language's** (ADR-341 D1), unless
-        // the program declares a trait of the name.
-        if has_trait && (trait_text == "Eq" || trait_text == "Ord") && !emit_item_declares_trait(world, trait_text) {
+        // **`impl Eq`, `impl Ord` and `impl Hash` are the language's**
+        // (ADR-341 D1, ADR-010 D12), unless the program declares a trait of
+        // the name.
+        if has_trait && (trait_text == "Eq" || trait_text == "Ord" || trait_text == "Hash") && !emit_item_declares_trait(world, trait_text) {
             out.push(f"impl{declares} {target_name}{applied} {{\n")
             for method in methods {
                 self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), target_name, null, null)
@@ -583,6 +584,8 @@ impl EmitState {
             let me = f"{target_name}{applied}"
             if trait_text == "Eq" {
                 out.push(f"impl{declares} PartialEq for {me} {{\n    fn eq(&self, other: &Self) -> bool {{ {target_name}::eq(self, other) }}\n}}\nimpl{declares} Eq for {me} {{}}\n")
+            } else if trait_text == "Hash" {
+                out.push(f"impl{declares} std::hash::Hash for {me} {{\n    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {{ {target_name}::hash(self, state) }}\n}}\n")
             } else {
                 out.push(f"impl{declares} PartialOrd for {me} {{\n    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {{ Some(std::cmp::Ord::cmp(self, other)) }}\n}}\nimpl{declares} Ord for {me} {{\n    fn cmp(&self, other: &Self) -> std::cmp::Ordering {{ {target_name}::compare(self, other) }}\n}}\n")
             }
