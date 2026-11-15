@@ -1,0 +1,45 @@
+/// `l >> 1`, `l ^ 1` and `l / 2` are numbers the walk bounds (#1631): under
+/// `0 <= l < pairs.len()` and `pairs.len() == 2 * half.len()`, `l >> 1` and
+/// `l / 2` lie below `half.len()` and `l ^ 1` below `pairs.len()`, also
+/// through an expression function, so none of the reads needs a check.
+fn var_of(l: i64) -> i64 {
+	return l >> 1
+}
+
+fn pick(pairs: ref Vec[i64], half: ref Vec[i64], l: i64) -> String sync {
+	if l >= 0 && l < pairs.len() && pairs.len() == 2 * half.len() {
+		let shifted = half[l >> 1]
+		let flipped = pairs[l ^ 1]
+		let called = half[var_of(l)]
+		let divided = half[l / 2]
+		return f"{shifted} {flipped} {called} {divided}"
+	}
+	return ""
+}
+
+/// What a quotient is holds of the value it was taken of, not of the one
+/// the name is given next: after `i = i / 2`, `xs[i + 3]` stays checked.
+fn halved(xs: ref Vec[i64], l: i64) -> i64 sync {
+	if l >= 0 && xs.len() > 3 {
+		let mut i = l
+		i = i / 2
+		return xs[i + 3]
+	}
+	return 0
+}
+
+/// The interval rules stay: a quotient of a large divisor and a shift of
+/// all but the sign fit their type.
+fn small(x: i64) -> i64 sync {
+	return x / 1073741824 + 1 + (x >> 63)
+}
+
+fn main() throws {
+	let pairs = [10, 11, 20, 21]
+	let half = [1, 2]
+	for l in 0..<4 {
+		println(pick(pairs, half, l))
+	}
+	println(halved([1, 2, 3, 4, 5], 2))
+	println(small(5))
+}

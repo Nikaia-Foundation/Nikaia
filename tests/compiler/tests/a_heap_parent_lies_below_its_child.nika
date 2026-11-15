@@ -1,0 +1,28 @@
+/// A binary heap's parent `(i - 1) / 2` lies below `i` for `i >= 1`
+/// (#1631), so `i = parent` does not raise the counter: the sift up keeps
+/// `i < heap.len()` at each turn and reads the heap without a check.
+fn up(mut heap: Vec[i64], at: i64) sync {
+	if at < 0 || at >= heap.len() {
+		return
+	}
+	let mut i = at
+	while i > 0 {
+		let parent = (i - 1) / 2
+		if heap[parent] <= heap[i] {
+			break
+		}
+		let t = heap[parent]
+		heap[parent] = heap[i]
+		heap[i] = t
+		i = parent
+	}
+}
+
+fn main() throws {
+	let mut heap = [1, 5, 8, 3]
+	up(heap, 3)
+	for x in heap {
+		print(f"{x} ")
+	}
+	println("")
+}

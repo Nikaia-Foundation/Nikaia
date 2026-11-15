@@ -56,8 +56,8 @@ impl PrTrivia {
         let mut low: i64 = 0;
         let mut high = self.starts.len() as i64;
         while low < high {
-            let mid = (low + high) / 2;
-            if *nikaia_std::index::get(&self.starts, nikaia_std::index::at(mid)) < at { low = mid + 1; } else { high = mid; }
+            let mid = (unsafe { nikaia_std::proven::add::<i64>(low, high) }) / 2;
+            if *unsafe { nikaia_std::proven::read(&self.starts, (mid) as usize) } < at { low = unsafe { nikaia_std::proven::add::<i64>(mid, 1) }; } else { high = mid; }
         }
         low
     }

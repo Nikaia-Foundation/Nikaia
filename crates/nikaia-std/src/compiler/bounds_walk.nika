@@ -371,6 +371,13 @@ struct BoundsWalk {
 	return_within: collections::BTreeSet[i64]?,
 	/// The context's `trace`: the bytes `--bounds-trace` asks about.
 	trace: Vec[i64],
+	/// **What a number of its own the statement being walked named is**
+	/// (#1631): `2 * q <= l <= 2 * q + 1` for `q` standing for `l >> 1`, by
+	/// `q`'s name. Only while the statement that named it is walked: a fact
+	/// pushed then that reads `q` takes these along, and leaves with them when
+	/// a name they read changes; a later statement that reads `q` again speaks
+	/// of other values.
+	defining: collections::BTreeMap[String, Vec[i64]],
 }
 
 /// **A loop's candidate invariant, while its body is walked** (ADR-361 D4):
@@ -754,6 +761,7 @@ fn bounding_new(
 		return_at_least: null,
 		return_within: null,
 		trace: context.trace.clone(),
+		defining: collections::BTreeMap(),
 	}
 	for arg in args {
 		let name = words.resolve(arg.name).clone()
@@ -1697,6 +1705,11 @@ fn bounding_known(walk: ref BoundsWalk, facts: ref BoundsFacts, asked: i64) -> V
 			}
 		}
 	}
+	for (_, defined) in walk.defining {
+		for fact in defined {
+			all.push(fact)
+		}
+	}
 	for (name, floor) in walk.floors {
 		if walk.unsized_names.contains(name) {
 			all.push(floor)
@@ -1777,8 +1790,31 @@ fn bounding_range(
 ) -> Range? {
 	let term = bounding_lin(walk, expr, facts, context, program, words)
 	if term != null {
-		return bounding_term(walk, term ?? 0, facts, ask)
+		let found = bounding_term(walk, term ?? 0, facts, ask)
+		// **A quotient, a shift or a turned bit is a number of its own**
+		// (#1631), of which the solver may find less than the interval rules
+		// of its operator do: the narrower of the two.
+		if !bounding_reads_own(walk, term ?? 0) {
+			return found
+		}
+		let shaped = bounding_range_shaped(walk, expr, facts, context, program, words, ask)
+			?? return found
+		let solved = found ?? return shaped
+		return solved.meet(shaped)
 	}
+	return bounding_range_shaped(walk, expr, facts, context, program, words, ask)
+}
+
+/// `bounding_range` by the shape of `expr`, its linear term aside.
+fn bounding_range_shaped(
+	mut walk: BoundsWalk,
+	expr: ref Expr,
+	facts: ref BoundsFacts,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> Range? {
 	match expr {
 		Expr::Binary { op, lhs, rhs, span, .. } => return bounding_range_of(
 			walk,
@@ -2259,8 +2295,13 @@ fn bounding_fits(
 			relatives.insert(0, goal)
 			goal = walk.arena.or(relatives)
 		}
-		bounding_missed(walk, facts, goal)
-		return false
+		// **The interval rules of `/`, `>>` and `^`** (#1631) where the
+		// solver finds no bound on the number of its own they are: the rules
+		// below, as before they had a term.
+		if !bounding_reads_own(walk, t) {
+			bounding_missed(walk, facts, goal)
+			return false
+		}
 	}
 	// **A side the walk only bounds** (#714): `l + x` with `a <= x <= b`
 	// lies between `l + a` and `l + b`, linear goals the solver can state.
@@ -2553,10 +2594,55 @@ fn bounding_push(walk: ref BoundsWalk, mut facts: BoundsFacts, fact: i64) {
 			return
 		}
 	}
+	// **A number of its own the statement named comes with what it is**
+	// (#1631), held as facts so that they go when what they read changes.
+	// What one reads may be another's (`l >> 1 >> 1`): each name once.
+	let mut pending: Vec[String] = read.iter().cloned().collect()
+	let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+	while !pending.is_empty() {
+		let name = pending.pop() ?? break
+		if !seen.insert(name.clone()) {
+			continue
+		}
+		let defined = walk.defining.get(name) ?? continue
+		for part in defined {
+			if part != fact && !facts.facts.contains(part) {
+				bounding_hold(facts, part)
+				let mut more: collections::BTreeSet[String] = collections::BTreeSet()
+				walk.arena.variables(part, more)
+				for other in more {
+					pending.push(other.clone())
+				}
+			}
+		}
+	}
+	bounding_hold(facts, fact)
+}
+
+/// `fact` held, the oldest fact going past the cap.
+fn bounding_hold(mut facts: BoundsFacts, fact: i64) {
 	facts.facts.push(fact)
 	if facts.facts.len() > most_held() {
 		facts.facts.remove(0)
 		facts.evicted += 1
+	}
+}
+
+/// **What the numbers of its own a value named are becomes facts** before
+/// the name it is given to changes (#1631): a definition reads the old value,
+/// and pulled in after the change it would speak of the new one.
+fn bounding_settle(mut walk: BoundsWalk, mut facts: BoundsFacts) {
+	let mut parts: Vec[i64] = []
+	for (_, defined) in walk.defining {
+		for part in defined {
+			parts.push(part)
+		}
+	}
+	walk.defining = collections::BTreeMap()
+	for part in parts {
+		if !facts.facts.contains(part) {
+			bounding_push(walk, facts, part)
+		}
 	}
 }
 
@@ -3742,9 +3828,113 @@ fn bounding_combined(mut walk: BoundsWalk, op: ref BinaryOp, l: i64, r: i64) -> 
 		BinaryOp::Add => return walk.arena.add(l, r),
 		BinaryOp::Sub => return walk.arena.sub(l, r),
 		BinaryOp::Mul => return bounding_product(walk, l, r),
+		BinaryOp::Div => return bounding_quotient(walk, l, r),
+		BinaryOp::Shr => return bounding_halved(walk, l, r),
+		BinaryOp::BitXor => {
+			if (walk.arena.constant(l) ?? 0) == 1 {
+				return bounding_flipped(walk, r)
+			}
+			if (walk.arena.constant(r) ?? 0) == 1 {
+				return bounding_flipped(walk, l)
+			}
+		},
 		else => {},
 	}
 	return null
+}
+
+/// Whether `term` reads a number of its own a `/`, `>>` or `^` made
+/// (`bounding_defined`, #1631).
+fn bounding_reads_own(walk: ref BoundsWalk, term: i64) -> bool {
+	let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+	walk.arena.variables(term, read)
+	for name in read {
+		if name.starts_with("quotient#") || name.starts_with("shifted#") || name.starts_with("half#") {
+			return true
+		}
+	}
+	return false
+}
+
+/// A fresh number of its own for the statement being walked, `what#N`;
+/// the caller puts what it is in `defining`.
+fn bounding_defined(mut walk: BoundsWalk, what: ref String) -> (String, i64) {
+	let name = f"{what}#{walk.codes}"
+	walk.codes += 1
+	let v = walk.arena.var(name)
+	return (name, v)
+}
+
+/// **`l / c` for a constant `c >= 1`** (#1631): the quotient `q` rounded
+/// toward zero, `c * q <= l <= c * q + c - 1` where `l` is not negative and
+/// `c * q - c + 1 <= l <= c * q` where it is, so `(i - 1) / 2 < i` for
+/// `i >= 1`.
+fn bounding_quotient(mut walk: BoundsWalk, l: i64, r: i64) -> i64? {
+	let c = walk.arena.constant(r) ?? return null
+	if c < 1 {
+		return null
+	}
+	if c == 1 {
+		return l
+	}
+	let (name, q) = bounding_defined(walk, "quotient")
+	let k = walk.arena.int(c)
+	let cq = walk.arena.mul(k, q)
+	let slack = walk.arena.int(c - 1)
+	let zero = walk.arena.int(0)
+	let up = walk.arena.add(cq, slack)
+	let down = walk.arena.sub(cq, slack)
+	let at_least = walk.arena.ge(l, zero)
+	let from_below = walk.arena.le(cq, l)
+	let to_above = walk.arena.le(l, up)
+	let not_negative = walk.arena.and([at_least, from_below, to_above])
+	let below = walk.arena.lt(l, zero)
+	let from_down = walk.arena.le(down, l)
+	let to_cq = walk.arena.le(l, cq)
+	let negative = walk.arena.and([below, from_down, to_cq])
+	let either = walk.arena.or([not_negative, negative])
+	walk.defining.insert(name, [either])
+	return q
+}
+
+/// **`l >> k` for a constant `k`** (#1631): a shift right rounds down,
+/// signed or not, so the result `q` is `2^k * q <= l <= 2^k * q + 2^k - 1`:
+/// `l >> 1 < n` where `0 <= l < 2 * n`.
+fn bounding_halved(mut walk: BoundsWalk, l: i64, r: i64) -> i64? {
+	let k = walk.arena.constant(r) ?? return null
+	if k < 0 || k > 62 {
+		return null
+	}
+	if k == 0 {
+		return l
+	}
+	let (name, q) = bounding_defined(walk, "shifted")
+	let power = walk.arena.int(1 << k)
+	let pq = walk.arena.mul(power, q)
+	let slack = walk.arena.int((1 << k) - 1)
+	let up = walk.arena.add(pq, slack)
+	let from_below = walk.arena.le(pq, l)
+	let to_above = walk.arena.le(l, up)
+	walk.defining.insert(name, [from_below, to_above])
+	return q
+}
+
+/// **`l ^ 1`** (#1631): `l` with its lowest bit turned, `4 * h + 1 - l` for
+/// `h` its half rounded down (`2 * h <= l <= 2 * h + 1`): `p ^ 1 < 2 * n`
+/// where `0 <= p < 2 * n`.
+fn bounding_flipped(mut walk: BoundsWalk, l: i64) -> i64 {
+	let (name, h) = bounding_defined(walk, "half")
+	let two = walk.arena.int(2)
+	let four = walk.arena.int(4)
+	let one = walk.arena.int(1)
+	let th = walk.arena.mul(two, h)
+	let up = walk.arena.add(th, one)
+	let from_below = walk.arena.le(th, l)
+	let to_above = walk.arena.le(l, up)
+	walk.defining.insert(name, [from_below, to_above])
+	let fh = walk.arena.mul(four, h)
+	let raised = walk.arena.add(fh, one)
+	return walk.arena.sub(raised, l)
 }
 
 /// `l * r`, linear where one side is a constant.
@@ -4289,6 +4479,7 @@ fn bounding_stmt(
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
+	walk.defining = collections::BTreeMap()
 	match stmt {
 		Stmt::Let { names, ty, value, .. } => {
 			bounding_let(walk, names, ty, value, facts, context, program, words, ask)
@@ -5644,7 +5835,8 @@ fn bounding_steps_up(
 }
 
 /// Whether `name = value` or `name op= value` takes from `name` (#1329):
-/// `n -= d`, `n = n - d`.
+/// `n -= d`, `n = n - d`, or may, set to another name (`i = parent`,
+/// #1631), which the walk proves is not above it.
 fn bounding_steps_down(
 	name: ref String,
 	op: ref BinaryOp?,
@@ -5657,6 +5849,7 @@ fn bounding_steps_down(
 	return match value {
 		Expr::Binary { op: taken, lhs, .. } => taken == BinaryOp::Sub
 			&& (path_of(lhs, words) ?? "") == name,
+		Expr::Variable(other, _) => words.resolve(other) != name,
 		else => false,
 	}
 }
@@ -6146,10 +6339,12 @@ fn bounding_let(
 ) {
 	bounding_expr(walk, value, facts, context, program, words, ask)
 	let value_lin = bounding_lin(walk, value, facts, context, program, words)
+	bounding_settle(walk, facts)
 	// **A number the walk bounds without a linear term**: a value read out
 	// of a list, a `%` (ADR-306 D7, D8).
 	let mut value_range: Range? = null
-	if value_lin == null {
+	// A quotient's too, where what it divides is no linear term (#1631).
+	if value_lin == null || bounding_reads_own(walk, value_lin ?? 0) {
 		let range = bounding_range(walk, value, facts, context, program, words, ask)
 			?? Range::open()
 		if range.is_bounded() {
@@ -7065,6 +7260,28 @@ fn bounding_lowers(
 	return bounding_proves(walk, facts, goal, ask)
 }
 
+/// **Whether `name = value` is proved not to raise `name`** (#1631), the
+/// value not reading it: `i = parent` with `parent = (i - 1) / 2`.
+fn bounding_set_lower(
+	mut walk: BoundsWalk,
+	facts: ref BoundsFacts,
+	name: ref String,
+	op: ref BinaryOp?,
+	value_lin: i64?,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> bool {
+	if op != null {
+		return false
+	}
+	let v = value_lin ?? return false
+	if walk.arena.mentions(v, name) {
+		return false
+	}
+	let now = walk.arena.var(name)
+	let goal = walk.arena.le(v, now)
+	return bounding_proves(walk, facts, goal, ask)
+}
+
 /// `name = value`, or `name op= value`.
 fn bounding_assign(
 	mut walk: BoundsWalk,
@@ -7089,6 +7306,7 @@ fn bounding_assign(
 		return
 	}
 	let value_lin = bounding_lin(walk, value, facts, context, program, words)
+	bounding_settle(walk, facts)
 	let now = walk.arena.var(name)
 	let mut by: i64? = null
 	if value_lin != null {
@@ -7131,18 +7349,29 @@ fn bounding_assign(
 			walk.grow_failed.insert(name.clone())
 		}
 	}
-	if walk.falling.contains(name) && !bounding_lowers(walk, facts, by, ask) {
-		walk.fall_failed.insert(name.clone())
-	}
+	if walk.falling.contains(name)
+		&& !bounding_lowers(walk, facts, by, ask)
+		&& !bounding_set_lower(walk, facts, name, op, value_lin, ask) {
+			walk.fall_failed.insert(name.clone())
+		}
 	if by != null {
 		bounding_shift(walk, facts, name, by ?? 0)
 		return
 	}
 	if op == null && value_lin != null {
+		// A quotient's range too, where what it divides is no linear term
+		// (#1631).
+		let mut own_range: Range? = null
+		if bounding_reads_own(walk, value_lin ?? 0) {
+			own_range = bounding_range(walk, value, facts, context, program, words, ask)
+		}
 		bounding_forget(walk, facts, name)
 		let n = walk.arena.var(name)
 		let fact = walk.arena.equal(n, value_lin ?? 0)
 		bounding_push(walk, facts, fact)
+		if own_range != null {
+			bounding_bounded(walk, facts, name, own_range ?? Range::open())
+		}
 		return
 	}
 	let mut range: Range? = null

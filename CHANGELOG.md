@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1391] — 2026-11-15
+
+**bounds walk: `/` by a constant, `>>` by a constant and `^ 1` are linear terms with a fresh number**
+- bounds walk: a quotient by a constant, a shift right and `^ 1` are numbers the walk bounds - `xs[l >> 1]`, `pairs[l ^ 1]`, `heap[(i - 1) / 2]` and a heap's sift-up are written without their check (#1631)
+
 ## [0.0.1390] — 2026-11-15
 
 **Bounds: a field or element read is bounded by its type, and a method's derived precondition covers self's fields (ADR-306 D34, part of #1630)**

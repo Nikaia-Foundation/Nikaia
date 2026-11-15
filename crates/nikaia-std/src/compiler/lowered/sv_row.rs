@@ -45,9 +45,9 @@ pub(crate) fn sv_row_coef(r: &SvRow, col: u32) -> i64 {
     let mut lo: i64 = 0;
     let mut hi = r.cols.len() as i64;
     while lo < hi {
-        let mid = (lo + hi) / 2;
-        if *nikaia_std::index::get(&r.cols, nikaia_std::index::at(mid)) == col { return *nikaia_std::index::get(&r.ks, nikaia_std::index::at(mid)); }
-        if *nikaia_std::index::get(&r.cols, nikaia_std::index::at(mid)) < col { lo = mid + 1; } else { hi = mid; }
+        let mid = (unsafe { nikaia_std::proven::add::<i64>(lo, hi) }) / 2;
+        if *unsafe { nikaia_std::proven::read(&r.cols, (mid) as usize) } == col { return *nikaia_std::index::get(&r.ks, nikaia_std::index::at(mid)); }
+        if *unsafe { nikaia_std::proven::read(&r.cols, (mid) as usize) } < col { lo = unsafe { nikaia_std::proven::add::<i64>(mid, 1) }; } else { hi = mid; }
     }
     0
 }
