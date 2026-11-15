@@ -398,6 +398,10 @@ build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
   ?? ...` first; a `String?` field is matched as it is (`null => .., x => ..`);
 * [works] a `ref String?` parameter takes a bare `String` (`ref String?` is
   `NK1261`, write `String?`);
+* [works: ADR-331 D5] a struct field may have a default (`pub edit: Edit? =
+  null,`), and a literal in any file of the package leaves it out: a field
+  added to a struct with many literals (`CheckFinding`) gets one, not an
+  `edit: null` in each; literals in hand-written Rust still name it;
 * [gap: ADR-views-2 §6] `mut` on one name of a tuple (`for (k, mut v) in m`),
   and so `values_mut()` / `iter_mut()`, is `NK1307`: stops the slice;
 * [design: Part I 3.3, 3.4] `a..b` includes `b`, half-open is `a..<b`; the
