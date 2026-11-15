@@ -263,15 +263,16 @@ fn main() throws {
     );
     // Two borrows and one lent handle, and not one step of the count between
     // them. D1's correction is exactly this line. The handle stored in the
-    // `Pool` literal inside `keep` is the second duplicate (#1411).
+    // `Pool` literal inside `keep` is its last use there, so it is moved
+    // (ADR-312 D1); only the handover in `main`, read again after, duplicates.
     assert_eq!(
         rust.matches(".clone()").count(),
-        2,
-        "only the by-value handover and the stored handle duplicate:\n{rust}"
+        1,
+        "only the handover read again afterwards duplicates:\n{rust}"
     );
     assert!(
-        rust.contains("db: db.clone()"),
-        "a handle stored in a field is duplicated:\n{rust}"
+        !rust.contains("db: db.clone()"),
+        "a handle stored at its last use is moved:\n{rust}"
     );
     assert!(
         rust.contains("serve(&db)") && rust.contains("peek(&db)"),
@@ -337,6 +338,7 @@ fn main() throws {
     serve(db)
     let pool = keep(db)
     println(f\"{pool.db.host}\")
+    serve(db)
 }
 ";
     let printed = report(source);
