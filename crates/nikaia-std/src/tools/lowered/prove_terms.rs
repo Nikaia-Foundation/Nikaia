@@ -162,6 +162,14 @@ pub fn call_result_name(call: &Expr) -> String { format!("result@{}", node_key(c
 pub fn claim_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &dyn Fn(&str) -> bool, pinned: &dyn Fn(&str) -> Option<i64>, out: &mut Vec<SolverTerm>) -> Option<i64> {
     match expr {
         Expr::LitBool(b, _) => { let b = *b; Some(built(SolverTerm::Bool(b), out)) },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if !args.is_empty() || words.resolve(method) != "is_empty" { return None; }
+            let length = match length_path(receiver, words, &var) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let counted = built(SolverTerm::Var(length), out);
+            let zero = built(SolverTerm::Int(0), out);
+            Some(built(SolverTerm::Eq(counted, zero), out))
+        },
         Expr::Unary { op, expr, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             if *op != UnaryOp::Not { return None; }
@@ -189,6 +197,35 @@ pub fn claim_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &dy
         } },
         _ => None,
     }
+}
+
+pub fn claim_parts(expr: &Expr, holds: bool, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool, pinned: &impl Fn(&str) -> Option<i64>, out: &mut Vec<SolverTerm>) -> Vec<i64> {
+    let mut parts: Vec<i64> = vec![];
+    claim_parts_into(expr, holds, words, var, pinned, out, &mut parts);
+    parts
+}
+
+pub(crate) fn claim_parts_into(expr: &Expr, holds: bool, words: &winnow_grammar::InternerContext, var: &dyn Fn(&str) -> bool, pinned: &dyn Fn(&str) -> Option<i64>, out: &mut Vec<SolverTerm>, parts: &mut Vec<i64>) {
+    match expr {
+        Expr::Unary { op, expr, .. } => {
+            let expr = nikaia_std::boxed::open(expr);
+            if *op == UnaryOp::Not {
+                claim_parts_into(expr, !holds, words, var, pinned, out, parts);
+                return;
+            }
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            if *op == BinaryOp::And && holds || *op == BinaryOp::Or && !holds {
+                claim_parts_into(lhs, holds, words, var, pinned, out, parts);
+                claim_parts_into(rhs, holds, words, var, pinned, out, parts);
+                return;
+            }
+        },
+        _ => { },
+    }
+    let part = match claim_term(expr, words, &var, &pinned, out) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if holds { parts.push(part); } else { parts.push(built(SolverTerm::Not(part), out)); }
 }
 
 pub(crate) fn compared(op: &BinaryOp, lhs: &Expr, rhs: &Expr, words: &winnow_grammar::InternerContext, var: &impl Fn(&str) -> bool, pinned: &impl Fn(&str) -> Option<i64>, out: &mut Vec<SolverTerm>) -> Option<i64> {

@@ -1217,31 +1217,27 @@ pub(crate) fn prover_if(walk: &mut ProverWalk, cond: &Expr, then_branch: &Block,
     let holds = claim_term(cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
     let mut fails: Option<i64> = None;
     if holds.is_some() { fails = Some(walk.arena.not(nikaia_std::index::or(holds, || 0))); }
+    let then_facts = prover_branch_facts(walk, cond, &scope, words, true, holds);
+    let else_facts = prover_branch_facts(walk, cond, &scope, words, false, fails);
     let mut then_scope = scope.clone();
-    if holds.is_some() {
-        then_scope.facts.push(nikaia_std::index::or(holds, || 0));
-        then_scope.guards.insert(nikaia_std::index::or(holds, || 0), (span.start as i64, written_of(cond)));
-    }
+    then_scope.facts.extend(then_facts.iter().cloned());
+    if holds.is_some() { then_scope.guards.insert(nikaia_std::index::or(holds, || 0), (span.start as i64, written_of(cond))); }
     then_scope.exact = then_scope.exact && holds.is_some();
     let cond_leaves = leaves_expr(cond, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, true);
     then_scope.on_the_path(&mut walk.arena, holds);
     let then_leaves = prover_block(walk, then_branch, &mut then_scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
     let mut else_scope = scope.clone();
-    let else_leaves = prover_else(walk, else_branch, &mut else_scope, fails, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+    let else_leaves = prover_else(walk, else_branch, &mut else_scope, fails, &else_facts, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
     if !(then_leaves && else_leaves) { prover_join(walk, scope, &then_scope, then_leaves, then_branch, &else_scope, else_leaves, else_branch, &span, words); }
     if then_leaves && else_leaves { return true; }
     if then_leaves {
-        if fails.is_some() {
-            scope.facts.push(nikaia_std::index::or(fails, || 0));
-            scope.guards.insert(nikaia_std::index::or(fails, || 0), (span.start as i64, written_of(cond)));
-        }
+        scope.facts.extend(else_facts);
+        if fails.is_some() { scope.guards.insert(nikaia_std::index::or(fails, || 0), (span.start as i64, written_of(cond))); }
         scope.on_the_path(&mut walk.arena, fails);
         scope.exact = scope.exact && fails.is_some() && !prover_else_leaves(else_branch, at, program, words, own, library, &holes_of, &unaliased);
     } else if else_leaves {
-        if holds.is_some() {
-            scope.facts.push(nikaia_std::index::or(holds, || 0));
-            scope.guards.insert(nikaia_std::index::or(holds, || 0), (span.start as i64, written_of(cond)));
-        }
+        scope.facts.extend(then_facts);
+        if holds.is_some() { scope.guards.insert(nikaia_std::index::or(holds, || 0), (span.start as i64, written_of(cond))); }
         scope.on_the_path(&mut walk.arena, holds);
         scope.exact = scope.exact && holds.is_some() && !leaves_block(then_branch, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, true);
     } else if leaves_block(then_branch, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, true) || prover_else_leaves(else_branch, at, program, words, own, library, &holes_of, &unaliased) { scope.exact = false; }
@@ -1249,9 +1245,14 @@ pub(crate) fn prover_if(walk: &mut ProverWalk, cond: &Expr, then_branch: &Block,
     false
 }
 
+pub(crate) fn prover_branch_facts(walk: &mut ProverWalk, cond: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, holds: bool, whole: Option<i64>) -> Vec<i64> {
+    if whole.is_some() { return vec![nikaia_std::index::or(whole, || 0)]; }
+    claim_parts(cond, holds, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes)
+}
+
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_else(walk: &mut ProverWalk, else_branch: Option<&Block>, else_scope: &mut ProverScope, fails: Option<i64>, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
-    if fails.is_some() { else_scope.facts.push(nikaia_std::index::or(fails, || 0)); }
+pub(crate) fn prover_else(walk: &mut ProverWalk, else_branch: Option<&Block>, else_scope: &mut ProverScope, fails: Option<i64>, known: &[i64], nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &dyn Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &dyn Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, written_of: &dyn Fn(&Expr) -> String, condition: &dyn Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
+    else_scope.facts.extend(known.iter().cloned());
     let block = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
     else_scope.exact = else_scope.exact && fails.is_some();
     else_scope.on_the_path(&mut walk.arena, fails);
@@ -1621,7 +1622,7 @@ pub(crate) fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, sc
             let mut side = scope.clone();
             let mut reached = claim_term(lhs, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes);
             if reached.is_some() && *op == BinaryOp::Or { reached = Some(walk.arena.not(nikaia_std::index::or(reached, || 0))); }
-            if reached.is_some() { side.facts.push(nikaia_std::index::or(reached, || 0)); }
+            side.facts.extend(prover_branch_facts(walk, lhs, scope, words, *op == BinaryOp::And, reached));
             side.exact = side.exact && reached.is_some();
             side.on_the_path(&mut walk.arena, reached);
             prover_calls_in(walk, rhs, span, &side, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
@@ -1705,7 +1706,7 @@ pub(crate) fn prover_unwritten_check(walk: &mut ProverWalk, expr: &Expr, span: S
             let below = walk.arena.lt(i, n);
             let goal = walk.arena.and(vec![from, below]);
             if walk.state.collecting {
-                let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: String::from("is out of bounds"), holds: format!("0 <= {} < {}.len()", written_of(index), written_of(base)), index: true, within: String::from("") };
+                let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: String::from("is out of bounds"), holds: format!("0 <= {} < {}.len()", written_of(index), written_of(base)), index: true, within: String::from(""), site: span };
                 walk.state.an_unwritten_check(&mut walk.arena, check, scope, at, ask, model);
                 return;
             }
@@ -1728,7 +1729,7 @@ pub(crate) fn prover_unwritten_check(walk: &mut ProverWalk, expr: &Expr, span: S
             let zero = walk.arena.int(0);
             let goal = walk.arena.unequal(d, zero);
             if walk.state.collecting {
-                let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: String::from("divides by zero"), holds: format!("{} != 0", written_of(rhs)), index: false, within: String::from("") };
+                let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: String::from("divides by zero"), holds: format!("{} != 0", written_of(rhs)), index: false, within: String::from(""), site: span };
                 walk.state.an_unwritten_check(&mut walk.arena, check, scope, at, ask, model);
                 return;
             }
@@ -1861,7 +1862,7 @@ pub(crate) fn prover_overflow_check(walk: &mut ProverWalk, expr: &Expr, op_at: i
     }
     let fails = format!("goes past what {} `{}` holds", an_or_a(&ty), ty);
     if walk.state.collecting {
-        let check = UnwrittenCheck { term: goal, written: written_of(expr), fails, holds, index: false, within: String::from("") };
+        let check = UnwrittenCheck { term: goal, written: written_of(expr), fails, holds, index: false, within: String::from(""), site: span };
         walk.state.an_unwritten_check(&mut walk.arena, check, scope, at, ask, model);
         return;
     }
@@ -1952,13 +1953,14 @@ pub(crate) fn prover_blocks_in(walk: &mut ProverWalk, expr: &Expr, scope: &Prove
             let holds = claim_term(cond, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes);
             let mut fails: Option<i64> = None;
             if holds.is_some() { fails = Some(walk.arena.not(nikaia_std::index::or(holds, || 0))); }
+            let else_facts = prover_branch_facts(walk, cond, scope, words, false, fails);
             let mut then_scope = scope.clone();
-            if holds.is_some() { then_scope.facts.push(nikaia_std::index::or(holds, || 0)); }
+            then_scope.facts.extend(prover_branch_facts(walk, cond, scope, words, true, holds));
             then_scope.exact = then_scope.exact && holds.is_some();
             then_scope.on_the_path(&mut walk.arena, holds);
             prover_block(walk, then_branch, &mut then_scope, &at.inside(false), program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
             let mut else_scope = scope.clone();
-            prover_else(walk, (else_branch).as_ref(), &mut else_scope, fails, &at.inside(false), program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
+            prover_else(walk, (else_branch).as_ref(), &mut else_scope, fails, &else_facts, &at.inside(false), program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
         },
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
@@ -2000,7 +2002,7 @@ pub(crate) fn prover_a_call(walk: &mut ProverWalk, callee: &str, call: i64, args
     if walk.state.collecting && walk.state.known_unwritten.contains_key(callee) {
         let function = match free_function(program, words, callee) { Some(__nikaia_value) => __nikaia_value, None => return };
         let all = arguments_in_order(&function, args, config, words);
-        walk.state.carry_unwritten(&mut walk.arena, words, callee, &function.params, &all, scope, at, ask, model);
+        walk.state.carry_unwritten(&mut walk.arena, words, callee, &function.params, &all, span, scope, at, ask, model);
         return;
     }
     if (walk.findings.len() as i64) == told && !walk.state.collecting && walk.state.unwritten.contains_key(callee) {
@@ -2046,7 +2048,7 @@ pub(crate) fn prover_a_method_call(walk: &mut ProverWalk, receiver: &Expr, metho
         let found = match pre { Some(__nikaia_value) => __nikaia_value, None => return };
         prover_record_call(walk, &callee, &target.params, &found.claims, &all, None, span, scope, at, words, ask, model, escape, written_of);
     }
-    if walk.state.collecting { walk.state.carry_unwritten(&mut walk.arena, words, &callee, &target.params, &all, scope, at, ask, model); } else if (walk.findings.len() as i64) == told { prover_unwritten_call(walk, &callee, &target.params, &all, span, scope, words, ask, model); }
+    if walk.state.collecting { walk.state.carry_unwritten(&mut walk.arena, words, &callee, &target.params, &all, span, scope, at, ask, model); } else if (walk.findings.len() as i64) == told { prover_unwritten_call(walk, &callee, &target.params, &all, span, scope, words, ask, model); }
 }
 
 #[allow(clippy::too_many_arguments)]

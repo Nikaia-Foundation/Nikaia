@@ -38,6 +38,7 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
         walk.state.preconditions = collections::BTreeMap()
         walk.state.candidates = collections::BTreeMap()
         walk.state.unwritten = collections::BTreeMap()
+        walk.state.unstated = collections::BTreeMap()
         prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
         preconditions = walk.state.preconditions.clone()
         unwritten = walk.state.unwritten.clone()

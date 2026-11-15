@@ -108,9 +108,11 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn decided_by_this_argument(&self, signature: &Signature, wanted: &[(String, Ty)], at: i64) -> bool {
+    #[allow(non_snake_case)]
+    pub fn decided_by_this_argument__unchecked(&self, signature: &Signature, wanted: &[(String, Ty)], at: i64) -> bool {
+        ();
         if at >= wanted.len() as i64 { return false; }
-        let name = match &nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1 {
+        let name = match &unsafe { nikaia_std::proven::read(&wanted, (at) as usize) }.1 {
             Ty::Var { name, view } => {
                 let view = *view;
                 if view { return false; }
@@ -127,6 +129,8 @@ impl CheckState {
         }
         true
     }
+    #[allow(dead_code)]
+    pub fn decided_by_this_argument(&self, signature: &Signature, wanted: &[(String, Ty)], at: i64) -> bool { if !((0i128) <= (at.clone() as i128)) { nikaia_std::abort::assertion_failed("precondition of `CheckState::decided_by_this_argument`: `0 <= at`", None, &[("at", (&&nikaia_std::abort::Operand(&(at.clone() as i128))).shown()), ]) } self.decided_by_this_argument__unchecked(signature, wanted, at) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn kept_arguments_are_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty]) {

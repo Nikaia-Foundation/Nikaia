@@ -168,6 +168,7 @@ impl CheckState {
     /// Whether parameter `at` is a by-value type variable that nothing else in
     /// the signature binds: no receiver, and no other parameter names it.
     pub fn decided_by_this_argument(ref self, signature: ref Signature, wanted: ref Vec[(String, Ty)], at: i64) -> bool sync {
+        assert(0 <= at)
         if at >= wanted.len() {
             return false
         }

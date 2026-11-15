@@ -96,7 +96,8 @@ pub(crate) fn sv_cancelling(xj: i64, yj: i64) -> Option<Vec<i64>> {
 }
 
 pub fn sv_dense_eliminate(x: &[i64], y: &[i64], j: i64) -> Option<Vec<i64>> {
-    let ab = match sv_cancelling(*nikaia_std::index::get(&x, nikaia_std::index::at(j)), *nikaia_std::index::get(&y, nikaia_std::index::at(j))) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if j < 0 || j >= x.len() as i64 || j >= y.len() as i64 { return None; }
+    let ab = match sv_cancelling(*unsafe { nikaia_std::proven::read(&x, (j) as usize) }, *unsafe { nikaia_std::proven::read(&y, (j) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
     sv_dense_combine(*nikaia_std::index::get(&ab, 0), x, *nikaia_std::index::get(&ab, 1), y)
 }
 

@@ -24,6 +24,11 @@ pub struct ProverState {
     /// call to the caller's entry, for data from outside that a caller may
     /// hand on (ADR-396 D1): the pass repeats until they stop changing.
     pub known_unwritten: collections::BTreeMap[String, Vec[UnwrittenCheck]],
+    /// **The checks a body leaves open over its parameters where the path
+    /// to them does not carry to the entry**, by function, as pass 1 found
+    /// them: asked of no caller, but a `pub` function that leaves one open
+    /// is refused all the same (ADR-396 D6).
+    pub unstated: collections::BTreeMap[String, Vec[UnwrittenCheck]],
     /// Which function calls which, by name: a call inside a cycle is not
     /// carried back, so that recursion cannot grow a precondition forever.
     pub edges: collections::BTreeSet[(String, String)],
@@ -138,6 +143,7 @@ impl ProverState {
             known: collections::BTreeMap(),
             unwritten: collections::BTreeMap(),
             known_unwritten: collections::BTreeMap(),
+            unstated: collections::BTreeMap(),
             edges: collections::BTreeSet(),
             candidates: collections::BTreeMap(),
             postconditions: collections::BTreeMap(),
@@ -926,12 +932,22 @@ impl ProverState {
                 return
             }
         }
-        let term = scope.precondition_at(arena, check.term, at.params) ?? return
+        let carried = scope.precondition_at(arena, check.term, at.params)
+        if carried == null && scope.claim_at_entry(arena, check.term, at.params) == null {
+            return
+        }
         if is_proved(ask(arena, scope.facts, check.term)) || refuting_values(arena, scope.facts, check.term, ask, model) != null {
             return
         }
+        let term = carried ?? {
+            let claim = scope.claim_at_entry(arena, check.term, at.params) ?? return
+            let mut open = self.unstated.remove(owner) ?? []
+            open.push(UnwrittenCheck { term: claim, written: check.written, fails: check.fails, holds: check.holds, index: check.index, within: check.within, site: check.site })
+            self.unstated.insert(owner, open)
+            return
+        }
         let mut found = self.unwritten.remove(owner) ?? []
-        found.push(UnwrittenCheck { term: term, written: check.written, fails: check.fails, holds: check.holds, index: check.index, within: check.within })
+        found.push(UnwrittenCheck { term: term, written: check.written, fails: check.fails, holds: check.holds, index: check.index, within: check.within, site: check.site })
         self.unwritten.insert(owner, found)
     }
 
@@ -942,7 +958,7 @@ impl ProverState {
     /// #1568), meets it - an index, a divisor or a whole number's range. The walk before's checks, as
     /// for preconditions; not through a call that can come back here, nor
     /// in a test.
-    pub fn carry_unwritten(ref mut self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], args: ref Vec[Expr], scope: ref ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
+    pub fn carry_unwritten(ref mut self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], args: ref Vec[Expr], span: Span, scope: ref ProverScope, at: ref ProverWhere, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
         let owner = carrying_function(at.function) ?? return
         if self.in_test || self.reaches(callee, owner) {
             return
@@ -955,7 +971,7 @@ impl ProverState {
             if within == "" {
                 within = callee.clone()
             }
-            self.an_unwritten_check(arena, UnwrittenCheck { term: goal, written: check.written.clone(), fails: check.fails.clone(), holds: check.holds.clone(), index: check.index, within: within }, scope, at, ask, model)
+            self.an_unwritten_check(arena, UnwrittenCheck { term: goal, written: check.written.clone(), fails: check.fails.clone(), holds: check.holds.clone(), index: check.index, within: within, site: span }, scope, at, ask, model)
         }
     }
 

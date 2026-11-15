@@ -312,8 +312,10 @@ pub fn sysroot_package_assemble(names: &[String], lowered: &[String], views: &[P
 
 pub(crate) const SYSROOT_PACKAGE_HANDED: &[&str] = &["scalar", "IntoEither", "IntoEitherMaybe", "TextQuoted"];
 
-pub fn sysroot_package_with_dependencies(package: &[(String, String)], dependencies: &[(String, Vec<(String, String)>)]) -> Vec<(String, String)> {
-    let mut index = nikaia_std::block::Text::from(nikaia_std::index::get(&package, 0).1.to_string());
+#[allow(non_snake_case)]
+pub fn sysroot_package_with_dependencies__unchecked(package: &[(String, String)], dependencies: &[(String, Vec<(String, String)>)]) -> Vec<(String, String)> {
+    ();
+    let mut index = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&package, (0) as usize) }.1.to_string());
     let mut files: Vec<(String, String)> = vec![];
     for at in 1..package.len() as i64 { files.push((*unsafe { nikaia_std::proven::read(&package, (at) as usize) }).clone()); }
     let handed = SYSROOT_PACKAGE_HANDED.iter().join(", ");
@@ -326,4 +328,6 @@ pub fn sysroot_package_with_dependencies(package: &[(String, String)], dependenc
     all.extend(files);
     all
 }
+#[allow(dead_code)]
+pub fn sysroot_package_with_dependencies(package: &[(String, String)], dependencies: &[(String, Vec<(String, String)>)]) -> Vec<(String, String)> { if !((package.len() as i128) > (0i128)) { nikaia_std::abort::assertion_failed("precondition of `sysroot_package_with_dependencies`: `package.len() > 0`", None, &[("package.len()", (&&nikaia_std::abort::Operand(&(package.len() as i128))).shown()), ]) } sysroot_package_with_dependencies__unchecked(package, dependencies) }
 

@@ -377,6 +377,23 @@ impl ProverScope {
         return term
     }
 
+    /// **The claim alone at the entry**, where the path to it does not carry
+    /// there (a condition on a value the body made): what a `pub` function
+    /// that leaves the check open must still state (ADR-396 D6) - no path,
+    /// so it asks for more than the body needs, never less.
+    pub fn claim_at_entry(ref self, mut arena: TermArena, claim: i64, params: ref collections::BTreeSet[String]) -> i64? {
+        let term = self.at_entry(arena, claim) ?? return null
+        if !only_parameters(arena, term, params) || arena.size(term) > precondition_terms() {
+            return null
+        }
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        arena.variables(term, read)
+        if read.is_empty() {
+            return null
+        }
+        return term
+    }
+
     /// `claim` as a postcondition: `returned` is `result`, every other name
     /// its value at the entry; nothing where that leaves a name that is not a
     /// parameter or the length of one.

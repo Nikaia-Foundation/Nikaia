@@ -28,6 +28,10 @@ pub struct UnwrittenCheck {
     /// where it is this function's own: carried through a call only for
     /// data from outside (ADR-396 D1).
     pub within: String,
+    /// Where it stands in the function it is asked of: the index or the
+    /// division, or the call that carried it here - where a `pub` function
+    /// that leaves it open is refused (ADR-396 D6).
+    pub site: Span,
 }
 
 /// **An index that data from outside the program reaches, and what became
