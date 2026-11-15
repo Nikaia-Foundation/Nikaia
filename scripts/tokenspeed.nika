@@ -312,10 +312,10 @@ fn ts_agent(path: String, name: String, root: String) -> TsAgent throws {
             let chunk = chunks[c].clone()
             let tool = ts_value(chunk.clone(), "\"name\":\"")
             if tool == "Edit" || tool == "Write" {
-                let f = ts_value(chunk.clone(), "\"file_path\":\"")
+                let f = ts_value(chunk, "\"file_path\":\"")
                 if f != "" { files.push(f.replace(root.clone() + "/", "")) }
             } else if tool == "Bash" {
-                let cmd = ts_value(chunk.clone(), "\"command\":\"")
+                let cmd = ts_value(chunk, "\"command\":\"")
                 if cmd.contains("git add") { adds.push(cmd) }
             }
         }

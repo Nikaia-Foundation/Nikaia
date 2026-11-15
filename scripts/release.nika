@@ -46,7 +46,7 @@ fn release_cap(line: String) -> String throws {
 // `#a #b ...` of the titles, `n entries`.
 fn release_summary(titles: Vec[String]) -> String {
     let mut issues: Vec[String] = []
-    for t in titles.clone() {
+    for t in titles {
         for word in t.split(" ") {
             let w = word.trim().trim_end_matches(",").trim_end_matches(";").trim_end_matches(")").trim_start_matches("(")
             if w.starts_with("#") && w.len() > 1 && !issues.contains(w.clone()) { issues.push(w.clone()) }
@@ -266,7 +266,7 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
         lines.push(release_cap(f"BUMP (dry run) {heading}: {bullets.len()} entries"))
         return lines
     }
-    let summary = release_summary(titles.clone())
+    let summary = release_summary(titles)
     let done = release_bump(heading, bullets)
     if done.starts_with("BUMP") {
         let list = f"{dir}/released.txt"
@@ -334,7 +334,7 @@ fn main() throws {
     while true {
         let lines = release_once(dir.clone(), dry)
         let mut stop = false
-        for line in lines.clone() {
+        for line in lines {
             if !shown.contains(line.clone()) { println(line.clone()) }
             if line.starts_with("RED") { stop = true }
         }
