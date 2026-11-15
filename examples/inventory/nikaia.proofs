@@ -3,6 +3,12 @@
 # question in normal form, and `proved` with its certificate,
 # `refuted` with its model, or `unknown` with the solver that gave up.
 # Every entry is checked when it is read; a wrong one is searched again.
+2542bc32c649277cfcb8cf1b9de4dc936bd90eacf2a36b5381264ea6e99d995e proved R(h1,h3,c0:1:1:1)
+35e3fbbde9952f57b651efbc514f30d7c4d14ee8663c72acae6425a0d2fd98b3 unknown fourier-motzkin-1+sv-1
 633d97d67f8f07387140e200cad03b1488b2b308717fac19d8a75c5d02491f9c refuted v0=0,v1=1
 6b7bf23e4f37c4220592947d4a7e52b6158cd6392f4ce2450493923914d5376e proved R(h1,h3,h4,c2:1:0:1,c3:1:1:1)
+7a27d0dd86272f7d5f66ac5849a7e3e49497dee918f5e1ddee9f209d32c923ae unknown fourier-motzkin-1+sv-1
+98ccb31b00606a59bc38cb6d153ea1375339fd9a97c700578b7f86981a48a285 proved R(h2,h3,c1:1:0:1)
+c27f2443b115c407d51f5975fbbfb9fde331acda7395716710258e15b1561ea1 unknown fourier-motzkin-1+sv-1
+c65990e48b84f0358049758a1491e0be99f2be141870428e3daa02c58c9d6b79 unknown fourier-motzkin-1+sv-1
 fdf69d6e360158f5108858ab1627dcc9771c224b5364f283ee01cfea776126c9 refuted v0=0,v1=-1

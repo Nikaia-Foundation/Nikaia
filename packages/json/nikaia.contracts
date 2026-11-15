@@ -136,7 +136,7 @@ signature = "(mut r: Reader, path: String) -> String"
 [fn."to_string"]
 pub = true
 sync = "inferred"
-panics = true
+panics = false
 places = true
 touches = []
 views = ["v: borrowed"]
@@ -152,7 +152,7 @@ signature = "(mut r: Reader, path: String, depth: i64) -> Value"
 
 [fn."write_string"]
 sync = "inferred"
-panics = true
+panics = false
 places = true
 touches = []
 views = ["s: borrowed"]
@@ -160,7 +160,7 @@ signature = "(s: String, mut out: String)"
 
 [fn."write_value"]
 sync = "inferred"
-panics = true
+panics = false
 places = true
 touches = []
 views = ["v: borrowed"]
