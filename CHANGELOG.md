@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1390] — 2026-11-15
+
+**Bounds: a field or element read is bounded by its type, and a method's derived precondition covers self's fields (ADR-306 D34, part of #1630)**
+- Bounds: a field or element read is bounded by its type, and a method's derived precondition covers self's fields (ADR-306 D34, part of #1630)
+
 ## [0.0.1389] — 2026-11-15
 
 **A catch over a catch that cannot fail is NK1134; one whose handler fails catches it (#1641)**
