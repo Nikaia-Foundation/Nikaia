@@ -20,9 +20,12 @@
 // sets `wip` on it first and, by its report, keeps it (done, `Fixes:` names
 // #N; promote closes the issue), swaps `ready` for `blocked` (blocked), or
 // removes it (anything else), drive_wip_after; an escalation mid-run leaves
-// `wip` for the supervisor to clear. At a block's end the debriefs'
-// `Fact:` lines go into the facts files (`facts-collect.nika -- --apply`,
-// committed as docs, `FACTS <n> entered`). Before a block, the first unrun
+// `wip` for the supervisor to clear. A `#N` line stays in batch.txt after its
+// run, and batch.nika counts a brief with a report as run, so an issue left
+// `ready` is not queued nor run again in this DIR: a retry is a new line
+// `#N SUFFIX` (brief `issue-N-SUFFIX.md`) or the old line and report removed.
+// At a block's end the debriefs' `Fact:` lines go into the facts files
+// (`facts-collect.nika -- --apply`, committed as docs, `FACTS <n> entered`). Before a block, the first unrun
 // docs/briefs/bugs brief with a `Blocks:` line runs first. Test flags:
 // `--focus-next FILE [SKIPPED...]`, `--focus-log DIR AREA BRIEF...` (the
 // block's comment), `--focus-issue FILE NAME|DIR...`, `--blocks DIR`,
@@ -1971,8 +1974,10 @@ fn drive_wip_start(dry: bool, brief: String) throws {
 // `Result:` and `Fixes:`: `keep` (done and `Fixes:` names #N: `wip` stays
 // until promote closes the issue, so it is not queued again), `block`
 // (blocked: `wip` and `ready` go, `blocked` comes, the supervisor decides),
-// `remove` (anything else, partial or no report: `wip` goes, `ready` stays,
-// the next queue picks it up again).
+// `remove` (anything else, partial or no report: `wip` goes, `ready` stays;
+// the `#N` line stays in batch.txt, so drive_queue_add does not queue it again
+// here: the supervisor retries it with a `#N SUFFIX` line, or removes the
+// line and its report so the next queue picks it up again).
 fn drive_wip_after(result: String, fixes: String, issue: String) -> String {
 	let word = drive_word(result)
 	if word == "done" {
