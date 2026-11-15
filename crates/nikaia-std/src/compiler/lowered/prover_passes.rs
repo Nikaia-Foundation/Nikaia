@@ -23,6 +23,7 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
         walk.state.preconditions = collections::BTreeMap::new();
         walk.state.candidates = collections::BTreeMap::new();
         walk.state.unwritten = collections::BTreeMap::new();
+        walk.state.unstated = collections::BTreeMap::new();
         prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
         preconditions = walk.state.preconditions.copy_owned();
         unwritten = walk.state.unwritten.copy_owned();

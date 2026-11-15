@@ -22,14 +22,14 @@ You build one small slice of an issue in the Nikaia repository and end.
   holds or the budget runs low (`Result: partial`, the items left). Judge the
   issue against `docs/issues.md` in the `Issue:` field.
 * **The report file has exactly the brief's fields** (`Result:`, `Pushed:`,
-  `Tests:`, `Deviation:`, `Found:`, `Needs:`, `Changelog:`, `Issue:`, ...), one line
+  `Tests:`, `Deviation:`, `Found:`, `Needs:`, `Changelog:`, `Issue:`, `Friction:`, ...), one line
   each, no prose: `scripts/release.nika` parses them. `Gate:` is the bare
   word `green` or `red` (`Gate: cheap checks green` cuts the batch, v23
   2026-11-05). With nothing committed (`Result: blocked`), `Gate:` is `green`:
   the gate judges commits, and a red gate on none stops the driver for
   nothing (#1473). A test added for a fix
   is run once against the unfixed compiler (stash the fix) and the report
-  says it failed there. **New tests are Nikaia programs in `tests/compiler/`,
+  says it failed there. **New tests are Nikaia programs in `tests/compiler/tests/`,
   never a new Rust `#[test]`** (CLAUDE.md).
 * **If the task names a brief file, read it first**; it replaces reading the
   plan, the call graph and the issue yourself. A research task (no edits, no
@@ -46,7 +46,7 @@ You build one small slice of an issue in the Nikaia repository and end.
   before writing a line. A refusal there stops the run at once.
 * **Who finds a blocking defect fixes it** (owner, 2026-11-01). A compiler,
   lowering or `std` defect that blocks your step is fixed by you, at once,
-  whatever lane the brief is from: in the compiler, with a `tests/compiler/`
+  whatever lane the brief is from: in the compiler, with a `tests/compiler/tests/`
   test, as its own commit, then the step goes on. Never work around it in the
   moved code. Only when the fix does not fit the time box below, or needs a
   decision, stop: commit nothing that routes around it, report
@@ -54,9 +54,12 @@ You build one small slice of an issue in the Nikaia repository and end.
 * **A Found in your area is fixed, not reported** (owner, 2026-11-06). A
   defect you meet off your path but inside your lane's area (the views lane: a
   view or slice defect) that fits the run is fixed in the same run, with a
-  `tests/compiler/` test, as its own commit, and named in `Body:`. `Found:`
+  `tests/compiler/tests/` test, as its own commit, and named in `Body:`. `Found:`
   holds only what lies outside the area, does not fit the run or needs a
-  decision; the driver files each `Found:` as an issue.
+  decision; the driver files each `Found:` as an issue for the bug lane, and
+  `Issue:`, `Deviation:`, `Needs:` and `Friction:` (what cost you turns for
+  nothing: a tool, a rule, a red check that was not yours) as one issue for the
+  improvement lane. Say friction there, not in `Body:`.
 * **A missing form stops the slice too** (owner, 2026-10-29; CLAUDE.md, *A
   missing form stops the work*). A `std` entry, a method, a syntax or a
   conversion Nikaia lacks is not written around (no get-clone-insert for

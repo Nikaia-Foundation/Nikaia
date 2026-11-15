@@ -577,7 +577,7 @@ impl SvSat {
             self.wasted += *unsafe { nikaia_std::proven::read(&self.arena, (c) as usize) } as i64 + 3;
             self.book.log.delete(self.clause_id(c));
             self.stats.deleted += 1;
-            going -= 1;
+            going = unsafe { nikaia_std::proven::sub::<i64>(going, 1) };
         }
         if self.wasted * 2 > self.arena.len() as i64 { self.compact(); } else {
             let mut kept: Vec<u32> = vec![];
@@ -641,7 +641,7 @@ impl SvSat {
             { let __nikaia_stored = *unsafe { nikaia_std::proven::read(&self.activity, (v) as usize) } / 1073741824; unsafe { nikaia_std::proven::write(&mut self.activity, (v) as usize, __nikaia_stored) }; }
             v = unsafe { nikaia_std::proven::add::<i64>(v, 1) };
         }
-        self.bump = self.bump / 1073741824 + 1;
+        self.bump = unsafe { nikaia_std::proven::add::<i64>(self.bump / 1073741824, 1) };
     }
     pub(crate) fn above(&self, a: u32, b: u32) -> bool {
         let x = *nikaia_std::index::get(&self.activity, nikaia_std::index::at(a as i64));
@@ -654,7 +654,7 @@ impl SvSat {
         self.heap_up(unsafe { nikaia_std::proven::sub::<i64>(self.heap.len() as i64, 1) });
     }
     pub(crate) fn heap_pop(&mut self) -> u32 {
-        let top = *nikaia_std::index::get(&self.heap, 0);
+        let top = *unsafe { nikaia_std::proven::read(&self.heap, (0) as usize) };
         let last = unsafe { nikaia_std::proven::sub::<i64>(self.heap.len() as i64, 1) };
         let moved = *unsafe { nikaia_std::proven::read(&self.heap, (last) as usize) };
         { let __nikaia_stored = moved; unsafe { nikaia_std::proven::write(&mut self.heap, (0) as usize, __nikaia_stored) }; }
@@ -680,7 +680,7 @@ impl SvSat {
     }
     pub(crate) fn heap_down(&mut self, start: i64) {
         let mut i = start;
-        let v = *nikaia_std::index::get(&self.heap, nikaia_std::index::at(i));
+        let v = *unsafe { nikaia_std::proven::read(&self.heap, (i) as usize) };
         let n = self.heap.len() as i64;
         loop {
             let left = 2 * i + 1;

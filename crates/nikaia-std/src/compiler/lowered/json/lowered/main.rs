@@ -191,7 +191,7 @@ pub(crate) fn number(r: &mut Reader, path: &str) -> Result<Value, nikaia_std::er
     let mut i = start;
     while i < r.pos {
         text.push(*nikaia_std::index::get(&r.cs, nikaia_std::index::at(i)));
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     Ok(Value::Number(text))
 }
@@ -393,7 +393,7 @@ pub(crate) fn write_string(s: &str, out: &mut String) {
         let code = c as i64;
         if c == '"' { out.push_str("\\\""); } else if c == '\\' { out.push_str("\\\\"); } else if c == '\n' { out.push_str("\\n"); } else if c == '\r' { out.push_str("\\r"); } else if c == '\t' { out.push_str("\\t"); } else if code == 8 { out.push_str("\\b"); } else if code == 12 { out.push_str("\\f"); } else if code < 32 {
             out.push_str("\\u00");
-            out.push(*nikaia_std::index::get(&digits, nikaia_std::index::at(code / 16)));
+            out.push(*unsafe { nikaia_std::proven::read(&digits, (code / 16) as usize) });
             out.push(*unsafe { nikaia_std::proven::read(&digits, (code % 16) as usize) });
         } else { out.push(c); }
     }

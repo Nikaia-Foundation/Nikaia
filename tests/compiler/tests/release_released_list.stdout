@@ -1,0 +1,7 @@
+without released.txt:
+STOP T/released.txt missing
+with an empty released.txt:
+STOP issue-1.md.report.md: Result: partial
+with the report released:
+cycle, lane without reports: released.txt true
+cycle, lane with reports: released.txt false

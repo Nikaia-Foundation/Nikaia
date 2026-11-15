@@ -1364,6 +1364,15 @@ pub(crate) fn check_core_flow_no_answer(state: &mut CheckState) {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_may_pass(held: Option<&CheckGuarded>) -> bool {
+    let guarded: &CheckGuarded = match held { Some(__nikaia_value) => __nikaia_value, None => return true };
+    if guarded.unanswered { return true; }
+    for name in guarded.thrown.iter() { if name == "?" || throws_given(name) { return true; } }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_lambda_caught(state: &mut CheckState, caught: bool) -> Option<bool> {
     let mut handed: CheckHanded = match match state.handed_over.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1437,7 +1446,7 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
         None => None,
     };
     state.flow.guarded = enclosing;
-    if state.flow.guarded.is_some() { check_core_flow_no_answer(state); }
+    if state.flow.guarded.is_some() && check_core_flow_may_pass((held).as_ref()) { check_core_flow_no_answer(state); }
     state.flow.caught = outer;
     state.flow.swallowed = swallowed_outer;
     if lambda_outer.is_some() { check_core_flow_lambda_caught(state, nikaia_std::index::or(lambda_outer, || false)); }

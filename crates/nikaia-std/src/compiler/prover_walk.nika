@@ -1620,9 +1620,11 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
     if holds != null {
         fails = walk.arena.not(holds ?? 0)
     }
+    let then_facts = prover_branch_facts(walk, cond, scope, words, true, holds)
+    let else_facts = prover_branch_facts(walk, cond, scope, words, false, fails)
     let mut then_scope = scope.clone()
+    then_scope.facts.extend(then_facts.clone())
     if holds != null {
-        then_scope.facts.push(holds ?? 0)
         then_scope.guards.insert(holds ?? 0, (span.start as i64, written_of(cond)))
     }
     // A branch on a condition the prover cannot read is reached by some
@@ -1632,7 +1634,7 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
     then_scope.on_the_path(walk.arena, holds)
     let then_leaves = prover_block(walk, then_branch, then_scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     let mut else_scope = scope.clone()
-    let else_leaves = prover_else(walk, else_branch, else_scope, fails, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+    let else_leaves = prover_else(walk, else_branch, else_scope, fails, else_facts, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     if !(then_leaves && else_leaves) {
         prover_join(walk, scope, then_scope, then_leaves, then_branch, else_scope, else_leaves, else_branch, span, words)
     }
@@ -1642,15 +1644,15 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
         return true
     }
     if then_leaves {
+        scope.facts.extend(else_facts)
         if fails != null {
-            scope.facts.push(fails ?? 0)
             scope.guards.insert(fails ?? 0, (span.start as i64, written_of(cond)))
         }
         scope.on_the_path(walk.arena, fails)
         scope.exact = scope.exact && fails != null && !prover_else_leaves(else_branch, at, program, words, own, library, holes_of, unaliased)
     } else if else_leaves {
+        scope.facts.extend(then_facts)
         if holds != null {
-            scope.facts.push(holds ?? 0)
             scope.guards.insert(holds ?? 0, (span.start as i64, written_of(cond)))
         }
         scope.on_the_path(walk.arena, holds)
@@ -1664,12 +1666,20 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
     return false
 }
 
-/// An `else` branch, walked knowing its condition failed; whether it always
-/// leaves. No branch never leaves.
-fn prover_else(mut walk: ProverWalk, else_branch: ref Block?, mut else_scope: ProverScope, fails: i64?, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> bool {
-    if fails != null {
-        else_scope.facts.push(fails ?? 0)
+/// **The facts a branch on `cond` knows**: `whole`, the condition (or its
+/// negation, `holds` false) where the prover reads it, else what it reads of
+/// its parts (`claim_parts`, #1576).
+fn prover_branch_facts(mut walk: ProverWalk, cond: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, holds: bool, whole: i64?) -> Vec[i64] {
+    if whole != null {
+        return [whole ?? 0]
     }
+    return claim_parts(cond, holds, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+}
+
+/// An `else` branch, walked knowing its condition failed (`known`, what the
+/// prover reads of that); whether it always leaves. No branch never leaves.
+fn prover_else(mut walk: ProverWalk, else_branch: ref Block?, mut else_scope: ProverScope, fails: i64?, known: ref Vec[i64], nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> bool {
+    else_scope.facts.extend(known.clone())
     let block = else_branch ?? return false
     else_scope.exact = else_scope.exact && fails != null
     else_scope.on_the_path(walk.arena, fails)
@@ -2186,9 +2196,7 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
             if reached != null && op == BinaryOp::Or {
                 reached = walk.arena.not(reached ?? 0)
             }
-            if reached != null {
-                side.facts.push(reached ?? 0)
-            }
+            side.facts.extend(prover_branch_facts(walk, lhs, scope, words, op == BinaryOp::And, reached))
             side.exact = side.exact && reached != null
             side.on_the_path(walk.arena, reached)
             prover_calls_in(walk, rhs, span, side, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
@@ -2297,7 +2305,7 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
             let below = walk.arena.lt(i, n)
             let goal = walk.arena.and([from, below])
             if walk.state.collecting {
-                let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: "is out of bounds", holds: f"0 <= {written_of(index)} < {written_of(base)}.len()", index: true, within: "" }
+                let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: "is out of bounds", holds: f"0 <= {written_of(index)} < {written_of(base)}.len()", index: true, within: "", site: span }
                 walk.state.an_unwritten_check(walk.arena, check, scope, at, ask, model)
                 return
             }
@@ -2330,7 +2338,7 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
             let zero = walk.arena.int(0)
             let goal = walk.arena.unequal(d, zero)
             if walk.state.collecting {
-                let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: "divides by zero", holds: f"{written_of(rhs)} != 0", index: false, within: "" }
+                let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: "divides by zero", holds: f"{written_of(rhs)} != 0", index: false, within: "", site: span }
                 walk.state.an_unwritten_check(walk.arena, check, scope, at, ask, model)
                 return
             }
@@ -2495,7 +2503,7 @@ fn prover_overflow_check(mut walk: ProverWalk, expr: ref Expr, op_at: i64, span:
     }
     let fails = f"goes past what {an_or_a(ty)} `{ty}` holds"
     if walk.state.collecting {
-        let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: fails, holds: holds, index: false, within: "" }
+        let check = UnwrittenCheck { term: goal, written: written_of(expr), fails: fails, holds: holds, index: false, within: "", site: span }
         walk.state.an_unwritten_check(walk.arena, check, scope, at, ask, model)
         return
     }
@@ -2627,15 +2635,14 @@ fn prover_blocks_in(mut walk: ProverWalk, expr: ref Expr, scope: ref ProverScope
             if holds != null {
                 fails = walk.arena.not(holds ?? 0)
             }
+            let else_facts = prover_branch_facts(walk, cond, scope, words, false, fails)
             let mut then_scope = scope.clone()
-            if holds != null {
-                then_scope.facts.push(holds ?? 0)
-            }
+            then_scope.facts.extend(prover_branch_facts(walk, cond, scope, words, true, holds))
             then_scope.exact = then_scope.exact && holds != null
             then_scope.on_the_path(walk.arena, holds)
             prover_block(walk, then_branch, then_scope, at.inside(false), program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             let mut else_scope = scope.clone()
-            prover_else(walk, else_branch, else_scope, fails, at.inside(false), program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+            prover_else(walk, else_branch, else_scope, fails, else_facts, at.inside(false), program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
         },
         Expr::TryCatch { expr, handler, .. } => {
             prover_blocks_in(walk, expr, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
@@ -2692,7 +2699,7 @@ fn prover_a_call(mut walk: ProverWalk, callee: ref String, call: i64, args: ref 
     if walk.state.collecting && walk.state.known_unwritten.contains_key(callee) {
         let function = free_function(program, words, callee) ?? return
         let all = arguments_in_order(function, args, config, words)
-        walk.state.carry_unwritten(walk.arena, words, callee, function.params, all, scope, at, ask, model)
+        walk.state.carry_unwritten(walk.arena, words, callee, function.params, all, span, scope, at, ask, model)
         return
     }
     if walk.findings.len() == told && !walk.state.collecting && walk.state.unwritten.contains_key(callee) {
@@ -2754,7 +2761,7 @@ fn prover_a_method_call(mut walk: ProverWalk, receiver: ref Expr, method: winnow
         prover_record_call(walk, callee, target.params, found.claims, all, null, span, scope, at, words, ask, model, escape, written_of)
     }
     if walk.state.collecting {
-        walk.state.carry_unwritten(walk.arena, words, callee, target.params, all, scope, at, ask, model)
+        walk.state.carry_unwritten(walk.arena, words, callee, target.params, all, span, scope, at, ask, model)
     } else if walk.findings.len() == told {
         prover_unwritten_call(walk, callee, target.params, all, span, scope, words, ask, model)
     }

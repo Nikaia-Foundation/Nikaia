@@ -80,6 +80,7 @@ pub trait EmitContractsHost {
 /// package's call graphs where they were worked out once for all its files
 /// (`emit_contracts_package_graphs`, #1279), else they are worked out here.
 pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H, parsed: ref P, units: ref Vec[ParsedView], beside: ref Vec[ParsedView], program: ref Program, own_contracts: Ledger, described: ref Ledger, library: ref Ledger, checked: CheckFacts?, checked_plans: Vec[BufferPlan]?, refused: ref collections::BTreeMap[i64, TierRefusal], build: ref EmitContractsBuild, graphs: EmitReachGraphs?) -> EmitContractsMade sync {
+    assert(units.len() > 0)
     let words = units[0].words
     let items = units[0].items
     let tables = emit_tables_items(words, items)

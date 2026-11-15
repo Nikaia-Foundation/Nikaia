@@ -6,10 +6,15 @@
 //
 // A report is `REPORTS_DIR/*.report.md` with the lines `Result:`, `Pushed:`
 // and `Changelog:` (`none` for no entry); the ones already released are named
-// in `REPORTS_DIR/released.txt`, one per line. Prints at most five lines:
+// in `REPORTS_DIR/released.txt`, one per line. Without that file nothing is
+// guessed (#1111: an mtime guess lost a lane's entries): it prints `STOP
+// REPORTS_DIR/released.txt missing` and raises nothing; `cycle.nika` writes it
+// empty on a lane's first run. The architect's and QA's reports
+// (`architect-*`, `qa-*`) are not builder reports and are not read. Prints at
+// most five lines:
 //
 //     CI <sha8> <state> [failed jobs]   (CI unknown when `gh` fails)
-//     STOP <report>: <Result or Deviation line>
+//     STOP <report>: <Result or Deviation line> | STOP <dir>/released.txt missing
 //     RED <sha8> <jobs>                 (the tip of develop is red: no bump)
 //     BUMP 0.0.X <titles> | NO BUMP: <why> | PUSH REJECTED
 //
@@ -34,7 +39,6 @@ struct ReleaseReport {
     pushed: String,
     deviation: String,
     changelog: String,
-    old: bool,
 }
 
 // A line of output is at most 160 characters.
@@ -140,30 +144,30 @@ fn release_ci() -> String throws {
     return f"CI {sha} failure {names}"
 }
 
+// Whether a report is a builder's: the architect's and QA's are not (#1111).
+fn release_builder_report(name: String) -> bool {
+    return name.ends_with(".report.md") && !name.starts_with("architect-") && !name.starts_with("qa-")
+}
+
+// The reports of `dir` that `released.txt` does not name; the caller has
+// checked that the file exists.
 fn release_reports(dir: String) -> Vec[ReleaseReport] throws {
     let mut released: Vec[String] = []
-    let list = f"{dir}/released.txt"
-    let listed = fs::exists(list.clone(), fs::Root::Anywhere)
-    let since = text::parse_i64(release_git(["log", "-1", "--format=%ct", "--", "CHANGELOG.md"])) ?? 0
-    if listed {
-        for line in fs::read_to_string(list, fs::Root::Anywhere).split("\n") {
-            let parts = line.trim().split("/").collect()
-            if parts.len() > 0 { released.push(parts[parts.len() - 1].clone()) }
-        }
+    for line in fs::read_to_string(f"{dir}/released.txt", fs::Root::Anywhere).split("\n") {
+        let parts = line.trim().split("/").collect()
+        if parts.len() > 0 { released.push(parts[parts.len() - 1].clone()) }
     }
     let mut found: Vec[ReleaseReport] = []
     for entry in fs::read_dir(dir.clone(), fs::Root::Anywhere) {
         let name = entry.to_text()
-        if !name.ends_with(".report.md") || released.contains(name.clone()) { continue }
+        if !release_builder_report(name.clone()) || released.contains(name.clone()) { continue }
         let text = fs::read_to_string(f"{dir}/{name}", fs::Root::Anywhere)
-        let stamp = text::parse_i64(process::run("stat", ["-c", "%Y", f"{dir}/{name}"]).stdout.trim()) ?? 0
         found.push(ReleaseReport {
             name: name,
             result: release_field(text.clone(), "Result:"),
             pushed: release_field(text.clone(), "Pushed:"),
             deviation: release_field(text.clone(), "Deviation:"),
             changelog: release_field(text, "Changelog:"),
-            old: !listed && stamp < since,
         })
     }
     return found
@@ -231,12 +235,11 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
     let mut entries: Vec[String] = []
     let mut fixes: Vec[String] = []
     let mut names: Vec[String] = []
-    let mut skipped = 0
+    if !fs::exists(f"{dir}/released.txt", fs::Root::Anywhere) {
+        lines.push(release_cap(f"STOP {dir}/released.txt missing"))
+        return lines
+    }
     for r in release_reports(dir.clone()) {
-        if r.old {
-            skipped += 1
-            continue
-        }
         if r.result != "done" || r.pushed == "rejected" || r.pushed == "none" || r.pushed == "" {
             let mut why = f"Result: {r.result}"
             if r.result == "done" { why = f"Deviation: {r.deviation}" }
@@ -251,7 +254,6 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
         entries.push(r.changelog.clone())
         names.push(r.name.clone())
     }
-    if skipped > 0 { lines.push(f"SKIPPED {skipped} old reports") }
     if red != "" {
         lines.push(red)
         return lines
@@ -270,8 +272,8 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
     let done = release_bump(heading, bullets)
     if done.starts_with("BUMP") {
         let list = f"{dir}/released.txt"
-        let mut old: String = ""
-        if fs::exists(list.clone(), fs::Root::Anywhere) { old = fs::read_to_string(list.clone(), fs::Root::Anywhere) }
+        let mut old = fs::read_to_string(list.clone(), fs::Root::Anywhere)
+        if old != "" && !old.ends_with("\n") { old = old + "\n" }
         fs::write(list, fs::Root::Anywhere, old + names.join("\n") + "\n")
     }
     if done.starts_with("BUMP") {

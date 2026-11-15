@@ -3304,7 +3304,7 @@ pub mod bounds_body {
 }
 pub mod bounds_derived {
     #[allow(unused_imports)]
-    pub use super::{DerivedClaim, DerivedFunction, Derived, no_derived, derived_of, derived_order, derived_note, derived_written, derived_rows, derived_callees};
+    pub use super::{DerivedClaim, DerivedFunction, Derived, no_derived, derived_of, derived_key, derived_order, derived_note, derived_written, derived_rows, derived_callees};
 }
 pub mod bounds_frame {
     #[allow(unused_imports)]
@@ -4152,7 +4152,7 @@ pub mod prove_run {
 }
 pub mod prove_terms {
     #[allow(unused_imports)]
-    pub use super::{lin_term, text_literal_length, length_path, element_name, element_index, divisor_name, call_result_name, claim_term, nothing_pinned, folded_whole};
+    pub use super::{lin_term, text_literal_length, length_path, element_name, element_index, divisor_name, call_result_name, claim_term, claim_parts, nothing_pinned, folded_whole};
 }
 pub mod prove_text {
     #[allow(unused_imports)]

@@ -241,6 +241,17 @@ pub fn call_result_name(call: ref Expr) -> String {
 pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> i64? {
     return match expr {
         Expr::LitBool(b, _) => built(SolverTerm::Bool(b), out),
+        // **`xs.is_empty()` is `xs.len() == 0`** (#1576), where the length is
+        // a name of its own as `lin_term` reads it.
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if !args.is_empty() || words.resolve(method) != "is_empty" {
+                return null
+            }
+            let length = length_path(receiver, words, var) ?? return null
+            let counted = built(SolverTerm::Var(length), out)
+            let zero = built(SolverTerm::Int(0), out)
+            built(SolverTerm::Eq(counted, zero), out)
+        },
         Expr::Unary { op, expr, .. } => {
             if op != UnaryOp::Not {
                 return null
@@ -268,6 +279,41 @@ pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, va
             else => null,
         },
         else => null,
+    }
+}
+
+/// **What a condition the prover cannot read whole still says** (#1576):
+/// where it holds (`holds`), each part of an `&&` it reads holds; where it
+/// fails, each part of an `||` it reads fails; a `!` swaps the two.
+/// `return 0 if key != "exit" || args.len() == 0` leaves `args.len() != 0`.
+pub fn claim_parts(expr: ref Expr, holds: bool, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> Vec[i64] {
+    let mut parts: Vec[i64] = []
+    claim_parts_into(expr, holds, words, var, pinned, out, parts)
+    return parts
+}
+
+fn claim_parts_into(expr: ref Expr, holds: bool, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm], mut parts: Vec[i64]) {
+    match expr {
+        Expr::Unary { op, expr, .. } => {
+            if op == UnaryOp::Not {
+                claim_parts_into(expr, !holds, words, var, pinned, out, parts)
+                return
+            }
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            if (op == BinaryOp::And && holds) || (op == BinaryOp::Or && !holds) {
+                claim_parts_into(lhs, holds, words, var, pinned, out, parts)
+                claim_parts_into(rhs, holds, words, var, pinned, out, parts)
+                return
+            }
+        },
+        else => {},
+    }
+    let part = claim_term(expr, words, var, pinned, out) ?? return
+    if holds {
+        parts.push(part)
+    } else {
+        parts.push(built(SolverTerm::Not(part), out))
     }
 }
 

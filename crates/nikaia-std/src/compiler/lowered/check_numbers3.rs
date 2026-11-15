@@ -161,7 +161,7 @@ impl CheckState {
                     let mut level: i64 = 0;
                     while level < member.1.levels {
                         written = format!("Vec<{}>", written);
-                        level += 1;
+                        level = unsafe { nikaia_std::proven::add::<i64>(level, 1) };
                     }
                     let in_place = self.flow.open_literal_lists.contains(&member.0);
                     if !self.flow.open_map_parts.contains_key(&member.0) && !in_place { self.facts.number_lets.insert(member.1.at.start as i64, written); }

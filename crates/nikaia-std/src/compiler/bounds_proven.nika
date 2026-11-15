@@ -99,6 +99,7 @@ pub fn bounds_proven(
 		text_classes: collections::BTreeMap(),
 		around: around,
 		whole_fields: facts.whole_fields.clone(),
+		whole_types: facts.whole_types.clone(),
 		whole_loops: facts.whole_loops.clone(),
 		whole_parts: facts.whole_parts.clone(),
 		array_lengths: facts.array_lengths.clone(),

@@ -30,7 +30,7 @@ pub(crate) fn sv_fast_skip() -> SvFastRun { SvFastRun { end: SvFastEnd::Skip, wo
 pub(crate) fn sv_fast_bound(book: &SvBook, l: u32) -> Option<SvFastBound> {
     let at = (l / 2u32) as i64;
     if at >= book.atoms.len() as i64 { return None; }
-    let width = nikaia_std::index::get(&book.atoms, nikaia_std::index::at(at)).row.cols.len() as i64;
+    let width = unsafe { nikaia_std::proven::read(&book.atoms, (at) as usize) }.row.cols.len() as i64;
     if width > 2 { return None; }
     match unsafe { nikaia_std::proven::read(&book.atoms, (at) as usize) }.rel {
         SvRel::Le => { },
@@ -54,7 +54,7 @@ pub(crate) fn sv_fast_choice_free(cnf: &SvCnf) -> bool {
     for clause in cnf.query.clauses.iter() {
         if clause.len() != 1 { return false; }
         let at = (*unsafe { nikaia_std::proven::read(&clause, (0) as usize) } / 2u32) as i64;
-        if at < cnf.definition.len() as i64 && *nikaia_std::index::get(&cnf.definition, nikaia_std::index::at(at)) { return false; }
+        if at < cnf.definition.len() as i64 && *unsafe { nikaia_std::proven::read(&cnf.definition, (at) as usize) } { return false; }
     }
     true
 }
@@ -152,7 +152,7 @@ pub(crate) fn sv_fast_interval(book: &mut SvBook, cnf: &SvCnf, ids: &[u32]) -> S
         let value = if has_lo { lo } else if has_hi { hi } else { 0 };
         let at = col as i64;
         if at < cnf.names.len() as i64 { values.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&cnf.names, (at) as usize) }).to_string()), value); }
-        col += 1;
+        col = unsafe { nikaia_std::proven::add::<u32>(col, 1) };
     }
     SvFastEnd::Sat(values)
 }

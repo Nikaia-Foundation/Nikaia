@@ -42,8 +42,10 @@ pub trait EmitContractsHost {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, parsed: &P, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], program: &Program, own_contracts: Ledger, described: &Ledger, library: &Ledger, checked: Option<CheckFacts>, checked_plans: Option<Vec<BufferPlan>>, refused: &collections::BTreeMap<i64, TierRefusal>, build: &EmitContractsBuild, graphs: Option<EmitReachGraphs>) -> EmitContractsMade {
-    let words = nikaia_std::index::get(&units, 0).words;
+#[allow(non_snake_case)]
+pub fn emit_contracts_state__unchecked<H: EmitContractsHost, P: EmitHolesHost>(host: &H, parsed: &P, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], program: &Program, own_contracts: Ledger, described: &Ledger, library: &Ledger, checked: Option<CheckFacts>, checked_plans: Option<Vec<BufferPlan>>, refused: &collections::BTreeMap<i64, TierRefusal>, build: &EmitContractsBuild, graphs: Option<EmitReachGraphs>) -> EmitContractsMade {
+    ();
+    let words = unsafe { nikaia_std::proven::read(&units, (0) as usize) }.words;
     let items = unsafe { nikaia_std::proven::read(&units, (0) as usize) }.items;
     let tables = emit_tables_items(words, items);
     let propagation = match build.leaves_values {
@@ -65,23 +67,23 @@ pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, pa
     let fold_callees = emit_holes_fold_callees(parsed, words, &tables.grammars);
     let keep_plans: collections::BTreeMap<String, BufferPlan> = nikaia_std::index::or(checked_plans, || host.buffer_plans(&own_contracts).into()).into_iter().map(|plan| { (nikaia_std::block::Text::from(plan.key.to_string()), plan) }).collect();
     let proven_indices: collections::BTreeSet<i64> = propagation.list_indices.iter().copied().filter(|&node| { build.bounds_removed && proven.indices.contains(&node) }).collect();
-    let proven_arithmetic: collections::BTreeMap<i64, String> = propagation.arithmetic.iter().chain(propagation.shifts.iter()).filter(|&__nikaia_tuple8599| {
-        let (at, _) = __nikaia_tuple8599; let at = nikaia_std::num::value(at);
+    let proven_arithmetic: collections::BTreeMap<i64, String> = propagation.arithmetic.iter().chain(propagation.shifts.iter()).filter(|&__nikaia_tuple8627| {
+        let (at, _) = __nikaia_tuple8627; let at = nikaia_std::num::value(at);
         build.overflow_removed && proven.arithmetic.contains(&at)
-    }).map(|__nikaia_tuple8677| {
-        let (at, ty) = __nikaia_tuple8677; let at = nikaia_std::num::value(at);
+    }).map(|__nikaia_tuple8705| {
+        let (at, ty) = __nikaia_tuple8705; let at = nikaia_std::num::value(at);
         (at, nikaia_std::block::Text::from(ty.to_string()))
     }).collect();
-    let proven_negations: collections::BTreeMap<i64, String> = propagation.negations.iter().filter(|&__nikaia_tuple8821| {
-        let (at, _) = __nikaia_tuple8821; let at = nikaia_std::num::value(at);
+    let proven_negations: collections::BTreeMap<i64, String> = propagation.negations.iter().filter(|&__nikaia_tuple8849| {
+        let (at, _) = __nikaia_tuple8849; let at = nikaia_std::num::value(at);
         build.overflow_removed && proven.negations.contains(&at)
-    }).map(|__nikaia_tuple8898| {
-        let (at, ty) = __nikaia_tuple8898; let at = nikaia_std::num::value(at);
+    }).map(|__nikaia_tuple8926| {
+        let (at, ty) = __nikaia_tuple8926; let at = nikaia_std::num::value(at);
         (at, nikaia_std::block::Text::from(ty.to_string()))
     }).collect();
     let believed_arithmetic: collections::BTreeMap<i64, String> = if unchecked { propagation.arithmetic.copy_owned() } else { collections::BTreeMap::new() };
-    let mut state = EmitState { described: described.clone(), view_slots: emit_tables_read_view_slots(&own_contracts).into_iter().filter(|__nikaia_tuple9651| {
-        let (name, _) = __nikaia_tuple9651;
+    let mut state = EmitState { described: described.clone(), view_slots: emit_tables_read_view_slots(&own_contracts).into_iter().filter(|__nikaia_tuple9679| {
+        let (name, _) = __nikaia_tuple9679;
         name.contains("::")
     }).chain(units.iter().flat_map(|unit| { emit_tables_view_slots(unit.words, unit.items, &package_wide) })).chain(emit_tables_read_view_slots(described).into_iter()).collect(), borrowing: emit_tables_borrowing_structs_beside(words, items, &package_wide).iter().map(|s| { nikaia_std::block::Text::from(words.resolve(*s).to_string()) }).chain(package_wide.iter().cloned()).collect(), tethered: emit_tables_tethered(&own_contracts, beside), declared_errors: emit_tables_declared_errors(units), carries_input: host.carries_input(&own_contracts), fold_callees, by_name: tables.by_name, grammars: tables.grammars, methods: tables.methods, keep_plans, structs: tables.structs, structs_beside: emit_tables_structs_beside(beside), template_holes: collections::BTreeMap::new(), template_errors: collections::BTreeMap::new(), hole_wraps: host.hole_wraps(), kept_calls: collections::BTreeMap::new(), uses_std: tables.uses_std, is_std: false, package_grammar: units.iter().any(|unit| { unit.items.iter().any(|item| { matches!(item.node, Item::Grammar(_)) }) }), crate_root: nikaia_std::block::Text::from(build.crate_root.to_string()), offered_to_rust: build.offered_to_rust, fails: tables.fails, trusted_input: build.trusted, unchecked_assumes: unchecked, believed_arithmetic, escaped_holes: escapes.holes, escaped_wholes: escapes.wholes, trusted_lets: plan.lets, escaped_lets: plan.escaped, fast_slots: plan.slots, seeded_calls: host.seeded_calls(), seeds: host.seeds(), proven_indices, proven_arithmetic, proven_negations, proven_calls: proven.calls, facts: propagation, cleaned_types: nikaia_std::index::or(match own_contracts.implementations.get("Cleanup") {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -99,6 +101,8 @@ pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, pa
     let ask = VcAsk { names: words, items, own: &state.own_contracts, library, lent: &state.facts.lent_lets, coalesced: &coalesced, refused, viewed: nikaia_std::index::get(&units, 0).viewed_arms, mut_viewed: &mut_viewed, receiver_views: &state.facts.receiver_views };
     EmitContractsMade { give_ups: vc_analyse(&ask, &|e| { emit_holes_literal(parsed, words, e) }).give_ups, state, order_proofs }
 }
+#[allow(dead_code)]
+pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, parsed: &P, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], program: &Program, own_contracts: Ledger, described: &Ledger, library: &Ledger, checked: Option<CheckFacts>, checked_plans: Option<Vec<BufferPlan>>, refused: &collections::BTreeMap<i64, TierRefusal>, build: &EmitContractsBuild, graphs: Option<EmitReachGraphs>) -> EmitContractsMade { if !((units.len() as i128) > (0i128)) { nikaia_std::abort::assertion_failed("precondition of `emit_contracts_state`: `units.len() > 0`", None, &[("units.len()", (&&nikaia_std::abort::Operand(&(units.len() as i128))).shown()), ]) } emit_contracts_state__unchecked(host, parsed, units, beside, program, own_contracts, described, library, checked, checked_plans, refused, build, graphs) }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmitReachGraphs {

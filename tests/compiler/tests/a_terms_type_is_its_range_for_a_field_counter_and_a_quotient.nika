@@ -1,0 +1,31 @@
+/// A term's type is its range (ADR-306 D34): a field read is an `i64`, so a
+/// `self.splits += 1` under `self.splits < limit.cases` cannot pass the type's
+/// top, as for a parameter; and a quotient of an `i64` by a constant of at
+/// least 2 lies well inside the type, so `+ 1` on it needs no check.
+struct Limit { cases: i64 }
+
+struct Search { splits: i64, bump: i64 }
+
+impl Search {
+	fn step(mut self, limit: ref Limit) sync {
+		if self.splits >= limit.cases {
+			return
+		}
+		self.splits += 1
+	}
+
+	fn rescale(mut self) sync {
+		self.bump = self.bump / 1073741824 + 1
+	}
+}
+
+fn scaled(b: i64) -> i64 sync {
+	return b / 1073741824 + 1
+}
+
+fn main() throws {
+	let mut s = Search { splits: 0, bump: 5 }
+	s.step(Limit { cases: 3 })
+	s.rescale()
+	println(f"{s.splits} {s.bump} {scaled(3)}")
+}

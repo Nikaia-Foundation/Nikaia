@@ -1,0 +1,7 @@
+bounds in tests/a_methods_derived_precondition_over_its_own_fields.nika: 3 indexes, 3 proved; 1 operations, 1 proved
+    10  self.heap[0]         proved
+    14  self.heap[start]     proved
+    15  self.heap[start]     proved
+    23  self.heap.len() - 1  proved
+  derived  down: 0 <= start, start <= self.heap.len(), start < self.heap.len(), proved at the calls on lines 26
+  derived  top: 0 < self.heap.len(), proved at the calls on lines 22
