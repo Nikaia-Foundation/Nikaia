@@ -2059,8 +2059,8 @@ fn drive_found_body(name: String, issue: String, found: String, needs: String) -
 	if needs != ""
 		&& drive_word(needs) != "none" { body = body + f"\n## Needs\n\n{needs.trim()}\n" }
 	body = body
-		+ "\n## To build\n\n- [ ] Reproduce the Found: a compiler, lowering or `std` defect with a probe (`nikaia run scripts/probe.nika -- SNIPPET`), a defect in `docs/` or `scripts/` with the command or check that shows it; a behaviour the code does on purpose (name the function or ADR) closes it as by design.\n- [ ] Fix it where it lives, with a test in `tests/compiler/tests/`, unless a check that already runs (name it, e.g. `check-adr-refs.py` for a docs citation) turns red on it.\n"
-	body = body + "\n## Done when\n\nThe probe or check gives the specified result and the test or check that guards it is green.\n"
+		+ "\n## To build\n\n- [ ] Reproduce the Found: a compiler, lowering or `std` defect with a probe (`nikaia run scripts/probe.nika -- SNIPPET`), a defect in `docs/` or `scripts/` with the command or check that shows it; a behaviour the code does on purpose (name the function or ADR) closes it as by design. The Found line may lack them (#1710): the commit message, or the report's `Body:` when closed, gives the probe or check with its expected output, the ADR or Part I-III section that says so, and its actual output (docs/issues.md I5, I6), and the cause, file and function, traced or suspected (I7).\n- [ ] Fix it where it lives, with a test in `tests/compiler/tests/`, unless a check that already runs (name it, e.g. `check-adr-refs.py` for a docs citation) turns red on it.\n"
+	body = body + "\n## Done when\n\nThe probe or check gives the expected output the first item names from its ADR or Part I-III section, and a `tests/compiler/tests/` test (or the named check) that failed on the unfixed tree is green; or the issue is closed as by design, naming the function or ADR.\n"
 	return body + drive_footer()
 }
 
