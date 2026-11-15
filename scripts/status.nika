@@ -27,14 +27,6 @@ fn status_field(text: String, key: String) -> String {
     return ""
 }
 
-// A `Supervisor: <date>: accepted ...` or `... auto-accepted ...` line, any of them.
-fn status_accepted(text: String) -> bool {
-    for line in text.split("\n") {
-        if line.starts_with("Supervisor:") && (line.contains(": accepted") || line.contains(": auto-accepted")) { return true }
-    }
-    return false
-}
-
 fn status_ci() -> String throws {
     let runs = process::run("gh", ["api", "repos/:owner/:repo/actions/runs?branch=develop&per_page=10", "--jq", ".workflow_runs[] | [.head_sha[0:8], .status, (.conclusion // \"none\"), (.id|tostring)] | join(\" \")"])
     if !runs.ok { return "CI unknown" }
@@ -63,8 +55,7 @@ fn status_batch(dir: String) -> String throws {
     return "BATCH unknown (no target/fast/nikaia)"
 }
 
-// Done reports, and partial ones with an accept line (release.nika, #1694),
-// with a Changelog line that released.txt does not name; the
+// Done reports with a Changelog line that released.txt does not name; the
 // architect's and QA's reports are not counted, as in release.nika. Without
 // released.txt, `BUMP blocked: DIR/released.txt missing` (#1111).
 fn status_bump(dir: String) -> String throws {
@@ -77,9 +68,7 @@ fn status_bump(dir: String) -> String throws {
         if released.contains(name.clone()) { continue }
         let text = fs::read_to_string(f"{dir}/{name}", fs::Root::Anywhere)
         let changelog = status_field(text.clone(), "Changelog:")
-        let result = status_field(text.clone(), "Result:")
-        let partial = result.starts_with("partial") && status_accepted(text)
-        if (result == "done" || partial) && changelog != "" && changelog != "none" { pending += 1 }
+        if status_field(text, "Result:") == "done" && changelog != "" && changelog != "none" { pending += 1 }
     }
     if pending == 0 { return "BUMP none" }
     return f"BUMP pending: {pending} entries"
