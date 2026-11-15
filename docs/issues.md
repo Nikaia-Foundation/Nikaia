@@ -201,6 +201,13 @@ issue lacked that would have saved it turns or a wrong turn:
   asks for the false part; a false claim no rule covers is a `rules-gap`
   (#1706: a wrong claim of how the driver behaves was cited as I5, the probe).
 
+A point the run has already closed as noise in its `Body:` (a mislabelled
+rule number a driver-filed issue copied from an earlier report, a slip
+with nothing to build) is not judged again in `Issue:`: the driver files
+each `Issue:` answer as a new improvement issue, and the echo only files
+the closed point once more (#1708: #1703's run closed its I3 label as a
+citation slip and still answered `wrong I3`).
+
 Several answers are joined with `;`. The supervisor counts them per rule and
 per author; a rule that is broken often is made easier to keep, a gap that
 comes back twice is a rule.
