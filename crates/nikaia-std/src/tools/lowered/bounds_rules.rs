@@ -717,12 +717,6 @@ pub(crate) fn rules_settle(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, 
     found
 }
 
-pub(crate) fn rules_held_all(context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> collections::BTreeMap<String, Vec<BoundsRule>> {
-    let mut out: collections::BTreeMap<String, Vec<BoundsRule>> = collections::BTreeMap::new();
-    for rule in context.around.rules.iter() { if !out.contains_key(&rule.owner) { out.insert(nikaia_std::block::Text::from(rule.owner.to_string()), rules_holding(&rule.owner, context, program, words, ask)); } }
-    out
-}
-
 pub(crate) fn rules_owner_of(program: &Program, body: &Block, words: &winnow_grammar::InternerContext) -> String {
     let first = match body.stmts.first() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
     for item in program.items.iter() {

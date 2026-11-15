@@ -963,18 +963,6 @@ fn rules_settle(mut walk: BoundsWalk, args: ref Vec[FnArg], body: ref Block, con
     return found
 }
 
-/// **The rules that hold of each type with candidates** (`rules_holding`),
-/// for the bodies of one round that walk with the same context.
-fn rules_held_all(context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> collections::BTreeMap[String, Vec[BoundsRule]] {
-    let mut out: collections::BTreeMap[String, Vec[BoundsRule]] = collections::BTreeMap()
-    for rule in context.around.rules {
-        if !out.contains_key(rule.owner) {
-            out.insert(rule.owner.clone(), rules_holding(rule.owner, context, program, words, ask))
-        }
-    }
-    return out
-}
-
 /// The type whose method `body` is, where it takes `self`; empty for any
 /// other body.
 fn rules_owner_of(program: ref Program, body: ref Block, words: ref winnow_grammar::InternerContext) -> String {

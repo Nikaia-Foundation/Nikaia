@@ -247,14 +247,9 @@ pub fn bounds_fields(context: &mut BoundsContext, program: &Program, words: &win
             _ => { },
         }
     }
-    for _round in 0..2 {
-        context.around.held = rules_held_all(&context, program, words, ask);
-        context.around.field_bounds = fields_round(&context, &bodies, program, words, ask);
-    }
+    for _round in 0..2 { context.around.field_bounds = fields_round(context, &bodies, program, words, ask); }
     for _round in 0..4 {
-        context.around.held = rules_held_all(&context, program, words, ask);
-        let found = fields_round(&context, &bodies, program, words, ask);
-        context.around.held = collections::BTreeMap::new();
+        let found = fields_round(context, &bodies, program, words, ask);
         let before = context.around.field_bounds.len() as i64;
         let mut kept: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
         for (key, bound) in context.around.field_bounds.iter() {
@@ -268,14 +263,16 @@ pub fn bounds_fields(context: &mut BoundsContext, program: &Program, words: &win
     context.around.field_bounds = collections::BTreeMap::new();
 }
 
-pub(crate) fn fields_round(context: &BoundsContext, bodies: &[&Spanned<Item>], program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> collections::BTreeMap<String, Range> {
+pub(crate) fn fields_round(context: &mut BoundsContext, bodies: &[&Spanned<Item>], program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> collections::BTreeMap<String, Range> {
     let mut written: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
     let mut lost: collections::BTreeSet<String> = collections::BTreeSet::new();
+    context.around.held = collections::BTreeMap::new();
     for item in bodies.iter() {
         let item = *item;
         match &item.node {
             Item::Fn { args, body, .. } => {
-                let proven = bounds_aggressive(args, body, collections::BTreeSet::new(), context, program, words, ask);
+                let proven = bounds_aggressive(args, body, collections::BTreeSet::new(), &context, program, words, ask);
+                for (of, holding) in proven.held.iter() { context.around.held.insert(nikaia_std::block::Text::from(of.to_string()), holding.copy_owned()); }
                 for (key, bound) in proven.fields.iter() {
                     let bound = *bound;
                     let was = written.get(key);
@@ -286,6 +283,7 @@ pub(crate) fn fields_round(context: &BoundsContext, bodies: &[&Spanned<Item>], p
             _ => { },
         }
     }
+    context.around.held = collections::BTreeMap::new();
     let mut out: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
     for (key, bound) in written.iter() {
         let bound = *bound;
@@ -4825,7 +4823,7 @@ pub fn bounds_returns(context: &mut BoundsContext, program: &Program, words: &wi
     if assumed.is_empty() { return; }
     for (name, wanted) in assumed.iter() { if wanted.each { context.around.returning.insert(nikaia_std::block::Text::from(name.to_string())); } }
     context.returns = assumed.copy_owned();
-    let mut collected = bounding_returns_round(&context, &bodies, &assumed, program, words, ask);
+    let mut collected = bounding_returns_round(context, &bodies, &assumed, program, words, ask);
     for _more in 0..assumed.len() as i64 {
         let mut known = assumed.copy_owned();
         for (name, found) in collected.iter() {
@@ -4836,7 +4834,7 @@ pub fn bounds_returns(context: &mut BoundsContext, program: &Program, words: &wi
             }
         }
         context.returns = known.copy_owned();
-        let again = bounding_returns_round(&context, &bodies, &known, program, words, ask);
+        let again = bounding_returns_round(context, &bodies, &known, program, words, ask);
         let before = bounding_returns_ranged(&collected);
         collected = again;
         if bounding_returns_ranged(&collected) == before { break; }
@@ -4855,7 +4853,7 @@ pub fn bounds_returns(context: &mut BoundsContext, program: &Program, words: &wi
     let rounds = bounding_returns_count(&assumed) + 1;
     for _round in 0..rounds {
         context.returns = assumed.copy_owned();
-        let found = bounding_returns_round(&context, &bodies, &assumed, program, words, ask);
+        let found = bounding_returns_round(context, &bodies, &assumed, program, words, ask);
         if bounding_returns_count(&found) == bounding_returns_count(&assumed) {
             bounding_returns_settle(context, found);
             return;
@@ -4871,8 +4869,9 @@ pub(crate) fn bounding_returns_settle(context: &mut BoundsContext, found: collec
     context.returns = found;
 }
 
-pub(crate) fn bounding_returns_round(context: &BoundsContext, bodies: &[&Spanned<Item>], assumed: &collections::BTreeMap<String, BoundsReturns>, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> collections::BTreeMap<String, BoundsReturns> {
+pub(crate) fn bounding_returns_round(context: &mut BoundsContext, bodies: &[&Spanned<Item>], assumed: &collections::BTreeMap<String, BoundsReturns>, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> collections::BTreeMap<String, BoundsReturns> {
     let mut found: collections::BTreeMap<String, BoundsReturns> = collections::BTreeMap::new();
+    context.around.held = collections::BTreeMap::new();
     for item in bodies.iter() {
         let item = *item;
         match &item.node {
@@ -4880,7 +4879,7 @@ pub(crate) fn bounding_returns_round(context: &BoundsContext, bodies: &[&Spanned
                 let name = *name;
                 let key = nikaia_std::block::Text::from(words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }).to_string());
                 let wanted = match assumed.get(&key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                let mut walk = bounding_new(args, body, bp_names(&nonnegative_locals(body), words), context, program, words);
+                let mut walk = bounding_new(args, body, bp_names(&nonnegative_locals(body), words), &context, program, words);
                 for k in 0..args.len() as i64 {
                     let param = nikaia_std::block::Text::from(words.resolve(unsafe { nikaia_std::proven::read(&args, (k) as usize) }.name).to_string());
                     if wanted.below.contains(&k) && walk.lists.contains(&param) { walk.return_params.push(param); } else { walk.return_params.push(String::from("")); }
@@ -4897,7 +4896,8 @@ pub(crate) fn bounding_returns_round(context: &BoundsContext, bodies: &[&Spanned
                     walk.return_scalars.push(scalar);
                     walk.return_lens.push(list);
                 }
-                let proven = bounds_rounds(&mut walk, args, body, context, program, words, ask);
+                let proven = bounds_rounds(&mut walk, args, body, &context, program, words, ask);
+                for (of, holding) in proven.held.iter() { context.around.held.insert(nikaia_std::block::Text::from(of.to_string()), holding.copy_owned()); }
                 let mut held: collections::BTreeSet<i64> = collections::BTreeSet::new();
                 let mut sized: collections::BTreeSet<i64> = collections::BTreeSet::new();
                 let returned = proven.returned.is_some();
@@ -4941,6 +4941,7 @@ pub(crate) fn bounding_returns_round(context: &BoundsContext, bodies: &[&Spanned
             _ => { },
         }
     }
+    context.around.held = collections::BTreeMap::new();
     found
 }
 
