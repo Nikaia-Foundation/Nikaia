@@ -131,6 +131,10 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
         true => MapPlan { lets: collections::BTreeSet(), slots: collections::BTreeSet(), escaped: if host.has_seeds() { trusted_maps(program, words, library).escaped } else { collections::BTreeSet() } },
         false => trusted_maps(program, words, library),
     }
+    // **What a log sink writes escaped** (ADR-398 D3): nothing where the
+    // package reads nothing untrusted, so a trusted program's log is the
+    // bytes it wrote.
+    let escapes = if build.trusted { no_escapes() } else { escaped_sinks(program, words, library) }
     let package_wide = emit_tables_package_borrowing(units)
     let unchecked = build.bounds_removed || build.overflow_removed
     let fold_callees = emit_holes_fold_callees(parsed, words, tables.grammars)
@@ -177,6 +181,8 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
         trusted_input: build.trusted,
         unchecked_assumes: unchecked,
         believed_arithmetic: believed_arithmetic,
+        escaped_holes: escapes.holes,
+        escaped_wholes: escapes.wholes,
         trusted_lets: plan.lets,
         escaped_lets: plan.escaped,
         fast_slots: plan.slots,

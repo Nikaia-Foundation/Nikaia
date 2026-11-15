@@ -2079,7 +2079,7 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                 settings.build.overflow,
                 settings.build.prove_through_loops,
             ),
-            "trust" => crate::contracts::trust::render(
+            "trust" => crate::contracts::trust::render_with_escapes(
                 &crate::contracts::trust::analyse_in(
                     &unit.parsed,
                     &program
@@ -2090,6 +2090,8 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                         .collect::<Vec<_>>(),
                     library,
                 ),
+                &unit.parsed,
+                library,
                 &unit.path.display().to_text(),
                 &unit.source,
             ),

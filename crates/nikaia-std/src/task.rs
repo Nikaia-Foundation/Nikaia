@@ -1025,7 +1025,12 @@ pub fn report_detached() -> Option<i32> {
     let reports = std::mem::take(&mut *DETACHED.lock().unwrap_or_else(|e| e.into_inner()));
     let mut first = None;
     for report in reports {
-        eprintln!("Error in a detached task: {}", report.text);
+        // ADR-398 D3: the error's text, escaped; the words around it are the
+        // runtime's.
+        eprintln!(
+            "Error in a detached task: {}",
+            crate::text::escape_control(&report.text)
+        );
         if first.is_none() {
             first = report.code;
         }

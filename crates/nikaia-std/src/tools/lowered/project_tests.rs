@@ -65,6 +65,7 @@ impl nikaia_std::error::Full for __NikaiaThrows_ProjectTestsRefusal__io_IoError 
 
 
 
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectTestsOutcome {
     pub ended_well: bool,
@@ -808,7 +809,7 @@ pub fn project_tests_report_failures(failed: &[ProjectTestsFailed]) -> Result<()
                 },
                 Some(output) => { project_tests_explain_output(output, outcome)?; },
             }
-            nikaia_std::io::eprint(format_args!("{}", outcome.stderr))?;
+            for line in outcome.stderr.lines() { nikaia_std::io::eprintln(format_args!("{}", text::escape_control(&nikaia_std::block::Text::from(line.to_string()))))?; }
         }
     }
     Ok(())

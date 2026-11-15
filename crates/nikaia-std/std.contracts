@@ -4939,6 +4939,31 @@ touches = []
 views = ["text: borrowed"]
 signature = "(text: ref String) -> u64?"
 
+# The text with every character that could steer a log escaped, as a
+# string literal writes it: `\n`, `\r`, `\t`, `\\`, and `\u{1b}` for any
+# other C0 or C1 control, DEL, the line and paragraph separators and the
+# bidirectional controls (ADR-398 D2). What it hands back is trusted, so
+# `eprintln` does not escape it a second time (D4).
+#
+# `eprint`, `eprintln` and `panic` escape untrusted text themselves; this is
+# for a program that writes its own log.
+[fn."text::escape_control"]
+pub = true
+panics = false
+sync = true
+touches = []
+views = ["s: borrowed"]
+signature = "(s: String) -> String"
+
+# Whether the scalar `code` steers a log: C0, DEL, C1, a line or paragraph
+# separator, or a bidi control (ADR-398 D2).
+[fn."text::steers_a_log"]
+pub = false
+panics = false
+sync = true
+touches = []
+signature = "(code: i64) -> bool"
+
 # The number this text writes as an `f64`, or nothing where it writes none.
 #
 # An optional `-` or `+`, decimal digits, an optional `.` followed by digits,

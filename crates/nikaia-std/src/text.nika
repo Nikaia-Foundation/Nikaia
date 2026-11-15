@@ -143,3 +143,52 @@ pub fn parse_u64(text: ref String) -> u64? sync {
     }
     return value
 }
+
+/// The text with every character that could steer a log escaped, as a
+/// string literal writes it: `\n`, `\r`, `\t`, `\\`, and `\u{1b}` for any
+/// other C0 or C1 control, DEL, the line and paragraph separators and the
+/// bidirectional controls (ADR-398 D2). What it hands back is trusted, so
+/// `eprintln` does not escape it a second time (D4).
+///
+/// `eprint`, `eprintln` and `panic` escape untrusted text themselves; this is
+/// for a program that writes its own log.
+//
+// Written in Nikaia, as `std::text` is (ADR-014 D1); the sinks of D1 call it
+// from the lowered program.
+pub fn escape_control(s: String) -> String sync {
+    let mut out = String()
+    for c in s.chars() {
+        let code = c as i64
+        if c == '\n' {
+            out.push_str("\\n")
+        } else if c == '\r' {
+            out.push_str("\\r")
+        } else if c == '\t' {
+            out.push_str("\\t")
+        } else if c == '\\' {
+            out.push_str("\\\\")
+        } else if steers_a_log(code) {
+            out.push_str("\\u{")
+            out.push_str(f"{code:x}")
+            out.push('}')
+        } else {
+            out.push(c)
+        }
+    }
+    return out
+}
+
+/// D2's characters past the four with a short form: C0, DEL, C1, U+2028,
+/// U+2029, and the bidirectional controls U+061C, U+200E, U+200F,
+/// U+202A-U+202E and U+2066-U+2069.
+fn steers_a_log(code: i64) -> bool sync {
+    return match code {
+        0..31 => true,
+        127..159 => true,
+        1564 => true,
+        8206..8207 => true,
+        8232..8238 => true,
+        8294..8297 => true,
+        else => false,
+    }
+}

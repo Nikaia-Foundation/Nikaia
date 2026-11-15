@@ -213,7 +213,14 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_format_string<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, parts: &[FPart], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let mut head: String = String::from("\"");
-        head.push_str(&format_of(parts));
+        if self.escaped_holes.is_empty() { head.push_str(&format_of(parts)); } else {
+            for part in parts.iter() {
+                match part {
+                    FPart::Text(text) => { head.push_str(text); },
+                    FPart::Hole { expr, spec, .. } => { head.push_str(&if self.escaped_holes.contains(&node_key(expr)) { String::from("{}") } else { a_hole_format((spec).as_deref()) }); },
+                }
+            }
+        }
         head.push_str("\"");
         out.push(&head);
         let mut changing = -1;
@@ -230,13 +237,16 @@ impl EmitState {
         n = 0;
         for part in parts.iter() {
             match part {
-                FPart::Hole { expr, at, .. } => {
+                FPart::Hole { expr, at, spec } => {
                     let at = *at;
                     out.push(", ");
                     let copied = n < changing;
                     n += 1;
                     if copied { out.push("ToOwned::to_owned(&("); }
+                    let escaped = self.escaped_holes.contains(&node_key(expr));
+                    if escaped { out.push(&format!("nikaia_std::text::escape_control(&format!(\"{}\", ", a_hole_format((spec).as_deref()))); }
                     self.emit_core_hole(world, walk, out, host, at as i64, expr, depth, flow, scope)?;
+                    if escaped { out.push("))"); }
                     if copied { out.push("))"); }
                 },
                 _ => { },

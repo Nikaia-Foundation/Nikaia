@@ -309,8 +309,19 @@ impl EmitState {
     /// The literal as a Rust format string, with its holes as arguments
     /// (ADR-309 D6, D9).
     pub fn emit_core_format_string[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, parts: ref Vec[FPart], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **A hole a log sink escapes** (ADR-398 D3) is formatted by its own
+        // spec first and escaped whole, so the head reads it as `{}`.
         let mut head: String = "\""
-        head.push_str(format_of(parts))
+        if self.escaped_holes.is_empty() {
+            head.push_str(format_of(parts))
+        } else {
+            for part in parts {
+                match part {
+                    FPart::Text(text) => head.push_str(text),
+                    FPart::Hole { expr, spec, .. } => head.push_str(if self.escaped_holes.contains(node_key(expr)) { "{}" } else { a_hole_format(spec) }),
+                }
+            }
+        }
         head.push_str("\"")
         out.push(head)
         // **A hole that changes what an earlier one reads** (#937): the parts
@@ -333,14 +344,21 @@ impl EmitState {
         n = 0
         for part in parts {
             match part {
-                FPart::Hole { expr, at, .. } => {
+                FPart::Hole { expr, at, spec } => {
                     out.push(", ")
                     let copied = n < changing
                     n += 1
                     if copied {
                         out.push("ToOwned::to_owned(&(")
                     }
+                    let escaped = self.escaped_holes.contains(node_key(expr))
+                    if escaped {
+                        out.push(f"nikaia_std::text::escape_control(&format!(\"{a_hole_format(spec)}\", ")
+                    }
                     self.emit_core_hole(world, walk, out, host, at as i64, expr, depth, flow, scope)
+                    if escaped {
+                        out.push("))")
+                    }
                     if copied {
                         out.push("))")
                     }

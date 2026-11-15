@@ -1,0 +1,60 @@
+// #1598, ADR-398: untrusted text reaches the log escaped. A value read from
+// standard input or the environment is written by `eprintln`, `eprint` and a
+// `panic` with its control characters, bidirectional controls and backslash in
+// literal form; each hole of an f-string goes by its own provenance, so the
+// literal line break between holes stays one; `text::escape_control`'s result
+// counts as trusted and is not escaped twice; a trusted program's log is the
+// bytes it wrote; an uncaught error's long form escapes the error's text and
+// keeps the runtime's lines. `--trust` names each escaping call and its source. Output is
+// shown through `cat -A`, so every byte is visible.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn shown(label: String, text: String, tmp: String) throws {
+    println(f"-- {label}")
+    for line in text.lines() {
+        if !line.contains("Compiling") && !line.contains("Finished") && !line.contains("Running") {
+            println(line.replace(tmp, "TMP"))
+        }
+    }
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let untrusted = "use std::env\nuse std::io\nuse std::text\n\nfn main() throws {\n    let name = io::read_to_string()\n    eprintln(name)\n    eprintln(f\"got {name}\\nend\")\n    eprint(\"one\\ntwo\\tthree\\\\four\\n\")\n    let kept = \"a\\tb\"\n    eprintln(f\"kept {kept}\")\n    let clean = text::escape_control(name)\n    eprintln(f\"clean {clean}\")\n    let probe = env::var(\"PROBE\") ?? \"\"\n    eprintln(f\"env {probe}\")\n    panic(f\"stop {name}\")\n}\n"
+    let trusted = "fn main() throws {\n    let kept = \"a\\tb\\\\c\"\n    eprint(\"one\\ntwo\\tthree\\\\four\\n\")\n    eprintln(kept)\n    eprintln(f\"kept {kept}\\nend\")\n}\n"
+    let uncaught = "use std::io\n\nstruct Fault {\n    said: String,\n}\n\nimpl Error for Fault {\n    fn message(ref self) -> String {\n        return f\"bad input {self.said}\"\n    }\n}\n\nfn main() throws {\n    throw Fault { said: io::read_to_string() }\n}\n"
+    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, untrusted)
+    fs::write(f"{tmp}/r.nika", fs::Root::Anywhere, uncaught)
+    fs::write(f"{tmp}/q.nika", fs::Root::Anywhere, trusted)
+    // Standard input holds a line feed, ESC and U+202E; the environment ESC.
+    fs::write(f"{tmp}/run.sh", fs::Root::Anywhere, "printf 'bob\\n\\033[2J\\342\\200\\256x\\\\y' | PROBE=\"$(printf 'e\\033v')\" \"$1\" run \"$2\" 2>&1 >/dev/null | cat -A\n")
+    let p = process::run("sh", [f"{tmp}/run.sh", nikaia.clone(), "p.nika"]; dir: tmp.clone())
+    shown("standard input and the environment, untrusted", p.stdout, tmp)
+    let q = process::run("sh", [f"{tmp}/run.sh", nikaia.clone(), "q.nika"]; dir: tmp.clone())
+    shown("a trusted program, as written", q.stdout, tmp)
+    let r = process::run("sh", [f"{tmp}/run.sh", nikaia.clone(), "r.nika"]; dir: tmp.clone())
+    shown("an uncaught error", r.stdout, tmp)
+    let report = process::run(nikaia, ["lower", "--trust", "-o", "p.rs", "p.nika"]; dir: tmp.clone())
+    let mut listed = false
+    let mut lines: Vec[String] = []
+    for line in report.stdout.lines() {
+        if line.starts_with("log sinks") {
+            listed = true
+        } else if listed && !line.starts_with("    ") {
+            listed = false
+        }
+        if listed {
+            lines.push(line.clone())
+        }
+    }
+    shown("--trust", lines.join("\n"), tmp)
+    process::run("rm", ["-rf", tmp])
+}

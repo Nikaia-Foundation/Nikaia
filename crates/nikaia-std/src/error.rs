@@ -221,21 +221,23 @@ impl Raised {
     /// `{error}` prints - the short form is the one you get without thinking,
     /// and it is the one that is safe in front of a stranger.
     pub fn full(&self) -> crate::block::Text {
-        crate::block::Text::from(self.long(true))
+        crate::block::Text::from(self.long(true, false))
     }
 
     /// The long form, with the note about a missing trace said once - at the
     /// top, as [`Thrown`] says it - and not under every failure that joined.
-    fn long(&self, note_trace: bool) -> String {
+    /// `escape`d where it is printed uncaught (ADR-398 D3).
+    fn long(&self, note_trace: bool, escape: bool) -> String {
         // An envelope put on in the box to hold a list has no site of its own,
         // and says so as a library's error does (ADR-280 D3).
+        let message = shown(&self.inner, escape);
         let mut out = match self.tail.origin() == BELOW_SITE {
-            true => format!("{}\n{BELOW}", self.inner),
-            false => format!("{}\n  raised at {}", self.inner, self.tail.origin()),
+            true => format!("{message}\n{BELOW}"),
+            false => format!("{message}\n  raised at {}", self.tail.origin()),
         };
         let mut source = self.inner.source();
         while let Some(cause) = source {
-            out.push_str(&format!("\n  caused by {cause}"));
+            out.push_str(&format!("\n  caused by {}", shown(cause, escape)));
             source = cause.source();
         }
         match self.tail.trace() {
@@ -247,13 +249,14 @@ impl Raised {
         }
         for later in self.tail.secondary() {
             let long = match later.downcast_ref::<Raised>() {
-                Some(raised) => raised.long(false),
+                Some(raised) => raised.long(false, escape),
+                None if escape => crate::text::escape_control(&String::from(later.full())),
                 None => String::from(later.full()),
             };
             out.push_str(&indented(&long));
         }
         for later in self.tail.others() {
-            out.push_str(&indented(&later.long_form()));
+            out.push_str(&indented(&later.long_form_in(escape)));
         }
         out
     }
@@ -273,7 +276,17 @@ impl fmt::Display for Raised {
 /// The same for the boxed channel, and for the same reason.
 impl fmt::Debug for Raised {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.full())
+        f.write_str(&self.long(true, true))
+    }
+}
+
+/// **A text of the error's, as the long form shows it**: escaped where the
+/// form is printed uncaught (ADR-398 D3), since by then nothing says where the
+/// text came from; the lines around it are the runtime's own.
+fn shown(text: &dyn fmt::Display, escape: bool) -> String {
+    match escape {
+        true => crate::text::escape_control(&text.to_string()),
+        false => text.to_string(),
     }
 }
 
@@ -360,22 +373,23 @@ impl<E: fmt::Display> Thrown<E> {
     /// that took two of three loads down reads as two failures, the second
     /// under the first, rather than as one with the rest gone.
     pub fn full(&self) -> crate::block::Text {
-        crate::block::Text::from(self.long(true))
+        crate::block::Text::from(self.long(true, false))
     }
 
-    /// The long form, told whether to say anything about the trace.
+    /// The long form, told whether to say anything about the trace, and
+    /// whether to escape the error's texts (ADR-398 D3).
     ///
     /// **A secondary says nothing about it**: the note is about how this
     /// *process* was started, so repeating it under every joined failure says
     /// the same thing three times and buries the failures.
-    fn long(&self, note_trace: bool) -> String {
+    fn long(&self, note_trace: bool, escape: bool) -> String {
         let tail = &self.tail;
-        let mut out = full_form_with(&self.inner, tail.origin(), tail.trace(), note_trace);
+        let mut out = full_form_with(&self.inner, tail.origin(), tail.trace(), note_trace, escape);
         for later in tail.secondary() {
-            out.push_str(&indented(&later.long(false)));
+            out.push_str(&indented(&later.long(false, escape)));
         }
         for later in tail.others() {
-            out.push_str(&indented(&later.long_form()));
+            out.push_str(&indented(&later.long_form_in(escape)));
         }
         out
     }
@@ -427,10 +441,10 @@ impl<E> Site<E> {
     {
         let mut out = full_form(error, self.tail.origin(), self.tail.trace());
         for later in self.tail.secondary() {
-            out.push_str(&indented(&later.long(false)));
+            out.push_str(&indented(&later.long(false, false)));
         }
         for later in self.tail.others() {
-            out.push_str(&indented(&later.long_form()));
+            out.push_str(&indented(&later.long_form_in(false)));
         }
         crate::block::Text::from(out)
     }
@@ -466,7 +480,7 @@ fn full_form<E: fmt::Display>(
     origin: &'static str,
     trace: Option<&Backtrace>,
 ) -> String {
-    full_form_with(error, origin, trace, true)
+    full_form_with(error, origin, trace, true, false)
 }
 
 /// The same, told whether to say anything about the trace
@@ -476,15 +490,17 @@ fn full_form_with<E: fmt::Display>(
     origin: &'static str,
     trace: Option<&Backtrace>,
     note_trace: bool,
+    escape: bool,
 ) -> String {
     // **An envelope with no site says so in the sentence that already existed**
     // ([ADR-280](../../../docs/specification/adr/adr-280.md) D3). Since
     // [ADR-292](../../../docs/specification/adr/adr-292.md) D8 a library's
     // error may be enveloped for the sake of the **list**, and *raised at
     // (below Nikaia)* would be this compiler inventing a place.
+    let message = shown(error, escape);
     let mut out = match origin == BELOW_SITE {
-        true => format!("{error}\n{BELOW}"),
-        false => format!("{error}\n  raised at {origin}"),
+        true => format!("{message}\n{BELOW}"),
+        false => format!("{message}\n  raised at {origin}"),
     };
     match trace {
         Some(t) if t.status() == BacktraceStatus::Captured => {
@@ -511,7 +527,7 @@ impl<E: fmt::Display> fmt::Display for Thrown<E> {
 /// dropped on the floor. It is the long form, with them under it.
 impl<E: fmt::Display> fmt::Debug for Thrown<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.full())
+        f.write_str(&self.long(true, true))
     }
 }
 
@@ -610,13 +626,14 @@ impl<E> Thrown<E> {
 /// site and what joined it. `Send` and `Sync` so that the envelope still
 /// crosses threads where its error does.
 pub trait JoinedLater: Send + Sync {
-    /// The long form, without the note about a missing trace.
-    fn long_form(&self) -> String;
+    /// The long form, without the note about a missing trace, its texts
+    /// escaped where it is printed uncaught (ADR-398 D3).
+    fn long_form_in(&self, escape: bool) -> String;
 }
 
 impl<W: fmt::Display + Send + Sync> JoinedLater for Thrown<W> {
-    fn long_form(&self) -> String {
-        self.long(false)
+    fn long_form_in(&self, escape: bool) -> String {
+        self.long(false, escape)
     }
 }
 
