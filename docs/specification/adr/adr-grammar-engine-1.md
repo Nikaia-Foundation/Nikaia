@@ -27,10 +27,9 @@ Every `grammar` block in Nikaia, the compiler's own grammar first, is lowered
 to Rust text `grammar! { .. }`, which winnow-grammar's procedural macro reads a
 second time, analyses, checks and turns into parsers over winnow-grammar's
 runtime and winnow. The engine is about 20,000 lines of Rust in another
-repository, reached by a pinned git revision. A grammar fault surfaces as a
-macro or rustc error on generated text, a fix needs a change there and a
-revision bump here, and the analysis runs twice: once in `check_grammar.nika`,
-once in the macro. **Is the engine written in Nikaia, and if so, where does its
+repository, the largest Rust the toolchain depends on. A grammar fault surfaces
+as a macro or rustc error on generated text, and the analysis runs twice: once
+in `check_grammar.nika`, once in the macro. **Is the engine written in Nikaia, and if so, where does its
 source live and how do Rust users, who use winnow-grammar from crates.io
 without Nikaia, keep getting it?**
 
@@ -51,12 +50,12 @@ this decision avoids, since the Rust target here is lowered, not rewritten.
 
 ### Option A — Keep winnow-grammar a Rust crate
 
-Nikaia depends on it by git revision, as today.
+Nikaia depends on it as today.
 
 ### Option B — Write it in Nikaia in its own repository
 
 `keywan-ghadami/winnow-grammar` holds `.nika` sources; Nikaia takes the lowered
-crate by revision.
+crate from there.
 
 ### Option C — Write it in Nikaia in this repository, publish the Rust target
 
@@ -71,8 +70,8 @@ The Rust crate stays at 0.2 and is no longer developed.
 
 | | D1 the special case pays | D2 the compiler works | D3 no cost for the common case | D4 consistent with itself | If it is wrong |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **A** | every grammar fault pays a cross-repository fix and a revision bump | the macro re-reads text the compiler already parsed; faults are reported on generated Rust | today's parsers; no change | the one large Rust part of the toolchain outside the self-hosting rule | nothing to undo |
-| **B** | the engine's CI needs a pinned Nikaia binary; the compiler waits for a revision bump on every change | as C | as C | split: the compiler and the engine it depends on are built by different revisions of the toolchain | moving the source later is a copy |
+| **A** | nothing changes | the macro re-reads text the compiler already parsed; faults are reported on generated Rust | today's parsers; no change | the one large Rust part of the toolchain outside the self-hosting rule | nothing to undo |
+| **B** | the engine's CI needs a pinned Nikaia binary | as C | as C | split: the compiler and the engine it depends on are built by different revisions of the toolchain | moving the source later is a copy |
 | **C** | the Rust user's macro needs a hand-written shell (D3) | one analysis, one code generation; faults reported on the `.nika` source | must match today's parsers by count (D8) | one toolchain revision builds the compiler and its engine | the committed crates keep working; publication can be stopped |
 | **D** | Rust users lose the engine's further development | as C | as C | as C | reviving the Rust crate means rewriting it |
 
@@ -133,16 +132,27 @@ published name and `proc-macro = true` for a procedural-macro crate.
 The compiler's build needs the engine before any Nikaia binary exists. So the
 lowered crates are committed in this repository and the workspace depends on
 them by path, as the Nikaia half of `std` is (ADR-002 D4). CI lowers the package
-again and refuses a difference. The git revision dependency ends.
+again and refuses a difference.
 
-### D8 — The switch is made when the lowered engine passes 0.2's tests at no higher count.
+### D8 — The engine moves module by module, and every step leaves a whole crate that passes 0.2's tests at no higher count.
 
-The lowered crates pass winnow-grammar 0.2's test suite, the compiler's tests
-and the YAML package's tests, and the compiler's own parse and `benches/yaml`
-count no more instructions under callgrind than with 0.2
-([`docs/measuring.md`](../../measuring.md)). Until then the compiler keeps the
-git dependency. A test of 0.2 that compares a message may change only in the
-message's span or wording, never in what it reports.
+The first step moves winnow-grammar's Rust unchanged into
+`packages/winnow-grammar/`, and the compiler takes it by path. Each later step
+writes one module in Nikaia, has the crate's hand-written root take it from the
+lowered part (ADR-393 D7, `pub use native::<module>::*`) and deletes the Rust it
+replaces, so the public API never changes. The order runs from the leaves in:
+the interner, spans and error texts, then the runtime, then the macro's
+analysis and checking, then its code generation and reading. What is left of
+the hand-written Rust at the end is the shell of D3.
+
+Every step is a crate that could be released: it passes winnow-grammar 0.2's
+test suite, the compiler's tests and the YAML package's tests, and the
+compiler's own parse and `benches/yaml` count no more instructions under
+callgrind than before the step ([`docs/measuring.md`](../../measuring.md)). A
+test of 0.2 that compares a message may change only in the message's span or
+wording, never in what it reports. A step that cannot pass is a finding about
+Nikaia, handled by `CLAUDE.md`, *A missing form stops the work*; the crate
+before it stays as it was.
 
 ### D9 — The Rust target carries what it reaches of `nikaia-std` inside it, privately.
 
@@ -169,13 +179,10 @@ a proved site of the emitter or a topic of `crates/unsafe/`.
 ## 5. Consequences
 
 * The engine's faults are found and fixed here, by the rules for the compiler:
-  a defect is fixed in the generator, with a test, and no revision bump
-  follows.
-* The work runs in this order, each step on its own: the runtime first, behind
-  the interface the generated code calls today, so nothing generated changes;
-  then the generator (reading, analysis, checking, code generation), compared
-  against 0.2's output; then the compiler's emitter switches to it (D5); then
-  the shell (D3) and the publication (D6).
+  a defect is fixed in the generator, with a test.
+* No step is a probe to throw away: each one shrinks the hand-written Rust of a
+  crate that works. The compiler's emitter switches to the generator (D5) once
+  the generator's analysis and code generation are Nikaia.
 * The compiler and its engine are built by one revision of the toolchain;
   a language gap the engine meets is a gap of the language, handled by
   `CLAUDE.md`, *A missing form stops the work*.
