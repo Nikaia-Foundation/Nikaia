@@ -321,6 +321,7 @@ pub(crate) fn check_core_call_variant_parts<H: CheckHost>(state: &mut CheckState
         if i >= parts.len() as i64 || i >= found.len() as i64 { break; }
         if state.text_literal(world, unsafe { nikaia_std::proven::read(&parts, (i) as usize) }, arg, true).is_none() {
             state.hands_over(world, arg, unsafe { nikaia_std::proven::read(&found, (i) as usize) }, "put into a variant", span);
+            check_core_places_give_handle(state, world, arg, unsafe { nikaia_std::proven::read(&found, (i) as usize) }, span);
             if a_plain_str_view(unsafe { nikaia_std::proven::read(&found, (i) as usize) }) && a_plain_string(unsafe { nikaia_std::proven::read(&parts, (i) as usize) }) {
                 let keeper = format!("`{}` keeps its part after this line", name);
                 state.expect_kept_asked(world, unsafe { nikaia_std::proven::read(&found, (i) as usize) }, unsafe { nikaia_std::proven::read(&parts, (i) as usize) }, Some(arg), &keeper, span, "field", &|was, wanted| { format!("`{}` holds `{}`, but you're giving it `{}`.", name, wanted, was) });
@@ -949,6 +950,7 @@ pub fn check_core_tuple<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     let mut i: i64 = 0;
     for part in parts.iter() {
         state.hands_over(world, part, unsafe { nikaia_std::proven::read(&found, (i) as usize) }, "put into a tuple", span);
+        check_core_places_give_handle(state, world, part, unsafe { nikaia_std::proven::read(&found, (i) as usize) }, span);
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     Ty::Tuple(found)

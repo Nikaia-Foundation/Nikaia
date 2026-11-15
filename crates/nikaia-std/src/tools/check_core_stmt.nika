@@ -958,6 +958,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         // owned parameter does (#665).
         let owned_root = check_core_stmt_a_part_of_an_owned_parameter(state, world, value) || (mutable && check_core_stmt_a_part_of_an_unchanged_let(state, world, value))
         moved_out = a_name_or_a_field(value) && owned_root && state.findings.len() == before
+        check_core_places_give_handle(state, world, value, found, span)
     }
     // **And a `let` gives the name a value again**, as an assignment does.
     for n in bound_names {
@@ -1842,6 +1843,7 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         } else {
             let to: String = if check_core_stmt_an_index(target) { "written into a container" } else { "assigned to another name" }
             state.hands_over(world, value, found, to, span)
+            check_core_places_give_handle(state, world, value, found, span)
             // **A proved name assigned whole to a place that owns it is
             // given up** (#888), as a `let`'s is.
             if check_core_stmt_owns_whole(into) {
