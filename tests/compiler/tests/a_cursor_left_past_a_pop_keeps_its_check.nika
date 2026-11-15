@@ -1,0 +1,38 @@
+/// A whole-number field a method leaves past a list field's length (#1642):
+/// `delete_last` shortens `text` and never clamps `cursor`, so no rule
+/// `cursor <= text.len()` is found, and the read before the cursor keeps
+/// its check.
+struct Editor {
+	text: Vec[scalar],
+	cursor: i64,
+}
+
+impl Editor {
+	fn type_one(mut self, c: scalar) {
+		self.text.push(c)
+		self.cursor = self.text.len()
+	}
+
+	fn delete_last(mut self) {
+		self.text.pop()
+	}
+
+	fn left(mut self) {
+		if self.cursor > 0 { self.cursor -= 1 }
+	}
+
+	fn before_cursor(self) -> scalar {
+		if self.cursor < 1 { return ' ' }
+		return self.text[self.cursor - 1]
+	}
+}
+
+fn main() throws {
+	let mut e = Editor { text: [], cursor: 0 }
+	e.type_one('a')
+	e.type_one('b')
+	e.type_one('c')
+	e.left()
+	e.delete_last()
+	println(f"{e.before_cursor()}")
+}

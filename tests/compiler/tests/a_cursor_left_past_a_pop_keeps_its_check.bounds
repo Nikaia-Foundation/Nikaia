@@ -1,0 +1,4 @@
+bounds in tests/a_cursor_left_past_a_pop_keeps_its_check.nika: 1 indexes, 0 proved; 2 operations, 2 proved
+    21  self.cursor -= 1            proved
+    26  self.text[self.cursor - 1]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    26  self.cursor - 1             proved

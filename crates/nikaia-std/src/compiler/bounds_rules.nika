@@ -62,6 +62,9 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
     // Lists of lists of whole numbers (`T.f`, ADR-306 D28).
     let mut nested: collections::BTreeSet[String] = collections::BTreeSet()
     let mut defaults: collections::BTreeMap[String, String] = collections::BTreeMap()
+    // The private whole-number fields of each such struct, the candidates
+    // of `cap` and `floor` (#1642).
+    let mut scalars: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     for item in program.items {
         match item.node {
             Item::Struct { name, generics, fields, is_extern, .. } => {
@@ -70,8 +73,17 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                 }
                 let owner = words.resolve(name).clone()
                 let mut found: Vec[String] = []
+                let mut numbers: Vec[String] = []
                 for field in fields {
                     let ty = words.resolve(field.ty.name)
+                    if !field.is_public && field.ty.generics.is_empty() && is_whole_number(ty) {
+                        let f = words.resolve(field.name).clone()
+                        if field.default != null {
+                            defaults.insert(f"{owner}.{f}", rules_scalar_shape(field.default?.value))
+                        }
+                        numbers.push(f)
+                        continue
+                    }
                     if field.is_public || field.ty.generics.len() != 1 || (ty != "Vec" && ty != "List") {
                         continue
                     }
@@ -92,6 +104,9 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                 }
                 // One list may be a list of its own positions (ADR-306 D22).
                 if !found.is_empty() {
+                    if !numbers.is_empty() {
+                        scalars.insert(owner.clone(), numbers)
+                    }
                     lists.insert(owner, found)
                 }
             },
@@ -106,6 +121,14 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
     let mut owners: collections::BTreeSet[String] = collections::BTreeSet()
     for (owner, _) in lists {
         owners.insert(owner.clone())
+    }
+    // A write of a whole-number field outside the type's methods drops it
+    // as a list field's write does (`rules_outside`).
+    let mut every_field = lists.clone()
+    for (owner, numbers) in scalars {
+        let mut all = every_field.get(owner)?.clone() ?? []
+        all.extend(numbers.clone())
+        every_field.insert(owner.clone(), all)
     }
     let mut quiet = frame_context(context.around.clone(), context.std_receivers, context.simd_loads)
     let mut dropped: collections::BTreeSet[String] = collections::BTreeSet()
@@ -159,7 +182,7 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                     }
                     changed.lengths = kept
                 }
-                rules_outside(changed, rules_typed(args, body, "", quiet, words), lists, dropped)
+                rules_outside(changed, rules_typed(args, body, "", quiet, words), every_field, dropped)
             },
             Item::Impl { target, methods, .. } => {
                 let owner = words.resolve(target.name).clone()
@@ -169,12 +192,12 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                             let changed = bounding_changed(body, quiet, words)
                             let types = rules_typed(args, body, owner, quiet, words)
                             if (receiver?.is_mut ?? false) && lists.contains_key(owner) {
-                                let lengths = rules_inside(owner, changed, types, lists, dropped)
+                                let lengths = rules_inside(owner, changed, types, lists, every_field, dropped)
                                 let mut known = writers.get(owner)?.clone() ?? []
                                 known.push(lengths)
                                 writers.insert(owner.clone(), known)
                             } else {
-                                rules_outside(changed, types, lists, dropped)
+                                rules_outside(changed, types, every_field, dropped)
                             }
                         },
                         else => {},
@@ -195,14 +218,14 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                 let made = rules_builder(body, owners, program, words)
                 for (at, stmt) in body.stmts.iter().enumerate() {
                     if made.0.is_empty() || at != made.2 {
-                        rules_built_stmt(stmt, "", lists, defaults, built, dropped, words)
+                        rules_built_stmt(stmt, "", every_field, defaults, built, dropped, words)
                         continue
                     }
                     match stmt.node {
                         Stmt::Let { value, .. } => match value {
                             Expr::StructLit { name, fields, .. } => {
-                                rules_literal(words.resolve(name), fields, lists, defaults, built, true, words)
-                                rules_built_fields(fields, "", lists, defaults, built, dropped, words)
+                                rules_literal(words.resolve(name), fields, every_field, defaults, built, true, words)
+                                rules_built_fields(fields, "", every_field, defaults, built, dropped, words)
                             },
                             else => {},
                         },
@@ -214,7 +237,7 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                 let owner = words.resolve(target.name)
                 for method in methods {
                     match method.node {
-                        Item::Fn { body, .. } => rules_built_block(body, owner, lists, defaults, built, dropped, words),
+                        Item::Fn { body, .. } => rules_built_block(body, owner, every_field, defaults, built, dropped, words),
                         else => {},
                     }
                 }
@@ -228,6 +251,30 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
             continue
         }
         let methods = writers.get(owner)?.clone() ?? []
+        // **`floor` and `cap` of each whole-number field** (#1642): `0 <=
+        // a`, and `a <= len(b)` of each list field `b` a statement of the
+        // type's methods names beside it; every literal builds them so,
+        // and every method that writes the fields keeps them at its exits.
+        let paired = rules_paired(program, owner, words)
+        let literals = built.get(f"{owner}#lit")?.clone() ?? []
+        for a in scalars.get(owner)?.clone() ?? [] {
+            if dropped.contains(f"{owner}.{a}") {
+                continue
+            }
+            let values = rules_scalar_values(literals, a, defaults.get(f"{owner}.{a}")?.clone() ?? "other")
+            if values.iter().all(fn(v) { v == "any" || rules_shape_length(v) >= 0 }) {
+                out.push(BoundsRule { owner: owner.clone(), kind: "floor", a: a.clone(), b: "", times: 1 })
+            }
+            for b in fields {
+                if dropped.contains(f"{owner}.{b}") || !paired.contains(f"{a}|{b}") {
+                    continue
+                }
+                let lengths = built.get(f"{owner}.{b}#len")?.clone() ?? []
+                if rules_built_within(values, lengths) {
+                    out.push(BoundsRule { owner: owner.clone(), kind: "cap", a: a.clone(), b: b.clone(), times: 1 })
+                }
+            }
+        }
         for a in fields {
             if dropped.contains(f"{owner}.{a}") {
                 continue
@@ -364,6 +411,122 @@ fn rules_inner_shape(value: ref Expr?) -> String {
             return "empty"
         },
         else => return "other",
+    }
+}
+
+/// What a literal gives a whole-number field: `n:k` for a literal `k` not
+/// negative, `other` for anything else (#1642).
+fn rules_scalar_shape(value: ref Expr?) -> String {
+    let given = value ?? return "other"
+    return match given {
+        Expr::LitInt { value: digits, negative, .. } => {
+            let n = integer_as_count(integer(digits, negative)) ?? -1
+            if n >= 0 { f"n:{n}" } else { "other" }
+        },
+        else => "other",
+    }
+}
+
+/// **What each literal gives the field `a`**, in the order of the
+/// literals (`rules_literal`): its shape where the literal names it, the
+/// default where it leaves it out, `any` for a builder's.
+fn rules_scalar_values(literals: ref Vec[String], a: ref String, default: ref String) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let key = f"{a}="
+    for given in literals {
+        if given == "any" {
+            out.push("any")
+            continue
+        }
+        let mut shape = default.clone()
+        for part in given.split(";") {
+            let value = part.strip_prefix(key) ?? continue
+            shape = value.clone()
+        }
+        out.push(shape)
+    }
+    return out
+}
+
+/// Whether every literal gives the field a value at most the length it
+/// builds the list as.
+fn rules_built_within(values: ref Vec[String], lengths: ref Vec[String]) -> bool {
+    if values.len() != lengths.len() {
+        return false
+    }
+    for at in 0..<values.len() {
+        if values[at] == "any" && lengths[at] == "any" {
+            continue
+        }
+        let v = rules_shape_length(values[at])
+        let n = rules_shape_length(lengths[at])
+        if v < 0 || n < 0 || v > n {
+            return false
+        }
+    }
+    return true
+}
+
+/// **The pairs `a|b` of fields of `owner` one statement of its methods
+/// names both of on `self`** (#1642): a `cap` of `a` against `b` is a
+/// candidate only there, so that a type of many fields does not ask of
+/// every pair at every exit.
+fn rules_paired(program: ref Program, owner: ref String, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in program.items {
+        match item.node {
+            Item::Impl { target, methods, .. } => {
+                if words.resolve(target.name) != owner {
+                    continue
+                }
+                for method in methods {
+                    match method.node {
+                        Item::Fn { body, .. } => rules_paired_block(body, words, out),
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+fn rules_paired_block(block: ref Block, words: ref winnow_grammar::InternerContext, mut out: collections::BTreeSet[String]) {
+    for stmt in block.stmts {
+        let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+        for e in check_visit_stmt(stmt.node) {
+            match e {
+                Expr::Field { base, name, .. } => {
+                    if rules_is_self(base, words) {
+                        named.insert(words.resolve(name).clone())
+                    }
+                },
+                else => {},
+            }
+            for inner in check_visit_expr_blocks(e) {
+                rules_paired_block(inner, words, out)
+            }
+        }
+        match stmt.node {
+            Stmt::For { body, .. } => rules_paired_block(body, words, out),
+            Stmt::While { body, .. } => rules_paired_block(body, words, out),
+            else => {},
+        }
+        for a in named {
+            for b in named {
+                if a != b {
+                    out.insert(f"{a}|{b}")
+                }
+            }
+        }
+    }
+}
+
+fn rules_is_self(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+    return match expr {
+        Expr::Variable(name, _) => words.resolve(name) == "self",
+        else => false,
     }
 }
 
@@ -637,7 +800,7 @@ fn rules_typed_lets(block: ref Block, twice: ref collections::BTreeSet[String], 
     }
 }
 
-fn rules_inside(owner: ref String, changed: ref BoundsChanged, types: ref collections::BTreeMap[String, String], lists: ref collections::BTreeMap[String, Vec[String]], mut dropped: collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+fn rules_inside(owner: ref String, changed: ref BoundsChanged, types: ref collections::BTreeMap[String, String], lists: ref collections::BTreeMap[String, Vec[String]], every_field: ref collections::BTreeMap[String, Vec[String]], mut dropped: collections::BTreeSet[String]) -> collections::BTreeSet[String] {
     let mut lengths: collections::BTreeSet[String] = collections::BTreeSet()
     let mut away = nothing_changed()
     for path in changed.values {
@@ -673,7 +836,7 @@ fn rules_inside(owner: ref String, changed: ref BoundsChanged, types: ref collec
             }
         }
     }
-    rules_outside(away, types, lists, dropped)
+    rules_outside(away, types, every_field, dropped)
     return lengths
 }
 
@@ -783,6 +946,21 @@ fn rules_built_fields(fields: ref Vec[FieldInit], owner: ref String, lists: ref 
 /// it builds each list field as, a field it leaves out as its default.
 fn rules_literal(name: ref String, fields: ref Vec[FieldInit], lists: ref collections::BTreeMap[String, Vec[String]], defaults: ref collections::BTreeMap[String, String], mut built: collections::BTreeMap[String, Vec[String]], loose: bool, words: ref winnow_grammar::InternerContext) {
     let own = lists.get(name) ?? return
+    // What it gives each field it names, for `floor` and `cap` (#1642):
+    // `f=shape;` each, `any` for the literal of a builder, whose rules are
+    // asked where it is handed back.
+    let mut given = ""
+    if loose {
+        given = "any"
+    } else {
+        for field in fields {
+            given = f"{given}{words.resolve(field.name)}={rules_scalar_shape(field.value)};"
+        }
+    }
+    let lit_key = f"{name}#lit"
+    let mut known_given = built.get(lit_key)?.clone() ?? []
+    known_given.push(given)
+    built.insert(lit_key, known_given)
     for f in own {
         let key = f"{name}.{f}"
         let inner_key = f"{key}[]"
@@ -1165,10 +1343,17 @@ fn rules_give(mut walk: BoundsWalk, mut facts: BoundsFacts, root: ref String, ow
         if rule.owner != owner {
             continue
         }
-        if !every && !rules_writes(written, f"{root}.{rule.a}") && !rules_writes(written, f"{root}.{rule.b}") {
+        if !every && !rules_writes(written, f"{root}.{rule.a}") && (rule.b.is_empty() || !rules_writes(written, f"{root}.{rule.b}")) {
             continue
         }
         let zero = walk.arena.int(0)
+        // `0 <= a` of a whole-number field (#1642).
+        if rule.kind == "floor" {
+            let a = walk.arena.var(f"{root}.{rule.a}")
+            let low = walk.arena.ge(a, zero)
+            bounding_push(walk, facts, low)
+            continue
+        }
         let b = walk.arena.var(length_of(f"{root}.{rule.b}"))
         let b_floor = walk.arena.ge(b, zero)
         if rule.kind == "length" {
@@ -1200,10 +1385,62 @@ fn rules_give(mut walk: BoundsWalk, mut facts: BoundsFacts, root: ref String, ow
             if floored.insert(rule.b.clone()) {
                 bounding_push(walk, facts, b_floor)
             }
+        } else if rule.kind == "cap" {
+            // `a <= len(b)` of a whole-number field `a` (#1642).
+            let a = walk.arena.var(f"{root}.{rule.a}")
+            let capped = walk.arena.le(a, b)
+            bounding_push(walk, facts, capped)
+            if floored.insert(rule.b.clone()) {
+                bounding_push(walk, facts, b_floor)
+            }
         } else if floored.insert(rule.b.clone()) {
             bounding_push(walk, facts, b_floor)
         }
     }
+}
+
+/// Whether `kind` is a bound of one whole-number field (#1642): `floor`
+/// or `cap`, held at every exit as a `length` rule is.
+fn rules_of_a_field(kind: ref String) -> bool {
+    return kind == "floor" || kind == "cap"
+}
+
+/// **Whether a `floor` or `cap` rule holds of `root` here** (#1642): `0 <=
+/// root.a`, or `root.a <= len(root.b)`. A rule standing among the facts as
+/// given holds with no question asked.
+fn rules_field_holds(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, root: ref String, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+    let name = f"{root}.{rule.a}"
+    let length = length_of(f"{root}.{rule.b}")
+    for fact in facts.facts {
+        match walk.arena.at(fact) {
+            SolverTerm::Le(x, y) => {
+                if rule.kind == "cap" && rules_term_is(walk, x, 1, name) && rules_term_is(walk, y, 1, length) {
+                    return true
+                }
+            },
+            SolverTerm::Ge(x, y) => {
+                let at_zero = match walk.arena.at(y) {
+                    SolverTerm::Int(n) => n == 0,
+                    else => false,
+                }
+                if rule.kind == "floor" && at_zero && rules_term_is(walk, x, 1, name) {
+                    return true
+                }
+            },
+            else => {},
+        }
+    }
+    let a = walk.arena.var(name)
+    let goal = if rule.kind == "cap" {
+        let b = walk.arena.var(length)
+        walk.arena.le(a, b)
+    } else {
+        let zero = walk.arena.int(0)
+        walk.arena.ge(a, zero)
+    }
+    let proved = bounding_proves(walk, facts, goal, ask)
+    bounding_traced(walk, facts, goal, proved)
+    return proved
 }
 
 /// `times * b`, or `b` itself where `times` is 1.
@@ -1368,9 +1605,14 @@ fn rules_exit(mut walk: BoundsWalk, facts: ref BoundsFacts, returned: ref Expr?,
     if !walk.checking || !walk.rule_roots.contains_key("self") {
         return
     }
+    let self_owner = walk.rule_roots.get("self")?.clone() ?? ""
     for (at, rule) in walk.rules.clone().iter().enumerate() {
         if rule.kind == "length" {
             if !walk.rule_failed.contains(at) && !rules_same_length(walk, facts, rule, "self", ask) {
+                walk.rule_failed.insert(at)
+            }
+        } else if rules_of_a_field(rule.kind) {
+            if rule.owner == self_owner && !walk.rule_failed.contains(at) && !rules_field_holds(walk, facts, rule, "self", ask) {
                 walk.rule_failed.insert(at)
             }
         } else if walk.checked_results.contains(at) && !throwing {
@@ -1393,6 +1635,9 @@ fn rules_lengths_hold(mut walk: BoundsWalk, facts: ref BoundsFacts, root: ref St
     for (at, rule) in walk.rules.clone().iter().enumerate() {
         // One found failing stays failed: not asked again.
         if rule.kind == "length" && rule.owner == owner && !walk.rule_failed.contains(at) && !rules_same_length(walk, facts, rule, root, ask) {
+            walk.rule_failed.insert(at)
+        }
+        if rules_of_a_field(rule.kind) && rule.owner == owner && !walk.rule_failed.contains(at) && !rules_field_holds(walk, facts, rule, root, ask) {
             walk.rule_failed.insert(at)
         }
     }
@@ -1604,8 +1849,12 @@ fn rules_at_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref String?, me
     let on = receiver ?? ""
     let typed = context.std_receivers.get(node_key(call))?.clone() ?? ""
     if on == "self" && walk.rule_roots.contains_key("self") && typed == (walk.rule_roots.get("self")?.clone() ?? "") {
+        let self_owner = walk.rule_roots.get("self")?.clone() ?? ""
         for (at, rule) in walk.rules.clone().iter().enumerate() {
             if rule.kind == "length" && !walk.rule_failed.contains(at) && !rules_same_length(walk, facts, rule, "self", ask) {
+                walk.rule_failed.insert(at)
+            }
+            if rules_of_a_field(rule.kind) && rule.owner == self_owner && !walk.rule_failed.contains(at) && !rules_field_holds(walk, facts, rule, "self", ask) {
                 walk.rule_failed.insert(at)
             }
         }
@@ -1690,6 +1939,22 @@ fn rules_at_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref String?, me
                 continue
             }
             if rule.kind == "result" {
+                continue
+            }
+            if rules_of_a_field(rule.kind) {
+                // Of `self`, or of the value a builder builds, the exits ask
+                // for it; of any other value, a call may not take from `b`
+                // nor write `a` (#1642).
+                if root == "self" || walk.rule_built.contains(root) {
+                    continue
+                }
+                if rule.kind == "cap" && on == b && !rules_adds(method) && !keeps_length(method) {
+                    walk.rule_failed.insert(at)
+                    continue
+                }
+                if rules_writes(changed, a) {
+                    walk.rule_failed.insert(at)
+                }
                 continue
             }
             // A write of the root as a whole lies around `a` and `b` both.
