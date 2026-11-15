@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1384] — 2026-11-15
+
+**Builders' changes (#1562)**
+- Hash is a standard bound: [T: Hash] builds a hash map over T, gives ==, and lowers to Hash + Eq. A hash key, a set element, or an argument to a Hash-bounded parameter that is an [T: Eq] type parameter is NK1248, and its help writes [T: Hash]. A literal handed beside an argument that binds T to String is an owned String. channel::bounded[T] types its ends with T.
+- A struct a map's get hands to a match arm compares with == against a new value (was a rustc refusal, &P == P).
+
 ## [0.0.1383] — 2026-11-15
 
 **Builders' changes (#1236, #1248)**
