@@ -55,7 +55,9 @@
 //                                 `Deviation:`, `Needs:` and `Friction:`
 //                                 filed as one issue for the improvement
 //                                 lane (`ready`, `improve`; `IMPROVE #N
-//                                 <brief>`, drive_improve_file); each
+//                                 <brief>`, drive_improve_file; its body
+//                                 names the run's report and commit,
+//                                 #1706); each
 //                                 `Comment: #N <text>` posted on issue N
 //                                 (`COMMENT #N <brief>`, drive_comment_file,
 //                                 #1698); the batch goes on
@@ -2187,13 +2189,33 @@ fn drive_comment_file(dir: String, brief: String) throws {
 	}
 }
 
+// Where the run behind an improvement issue left its work (#1706: the
+// #1697 run looked for #1694's commit on develop for turns, and it was on no
+// branch): the report at REPORT, and from its TEXT the commit's subject
+// (`Commit:`) and the `Pushed:` it had when the issue was filed, which is
+// `local <sha>` before the batch's suite pushes it.
+fn drive_improve_source(report: String, text: String) -> String {
+	let commit = drive_field(text.clone(), "Commit")
+	let pushed = drive_field(text, "Pushed")
+	let mut out = f"\n## Source\n\nThe run's report: `{report}` (untracked, in the driver's checkout).\n"
+	if commit == "" || drive_word(commit.clone()) == "none" {
+		return out + "The run committed nothing.\n"
+	}
+	let state = if pushed == "" { "no `Pushed:`" } else { f"`Pushed: {pushed}`" }
+	out = out + f"The run's commit: `{commit}` ({state} when this issue was filed). "
+	return out
+		+ "A `local` commit reaches `develop` only when its batch's suite is green: find it by its subject (`git log -400 --all --grep`); on no branch, it was not pushed, so judge its points from the report and the code as it is.\n"
+}
+
 // The body of an issue filed for the improvement lane from ITEMS of the
-// report of NAME (issue ISSUE): where it came from, the items, a *To build*
-// and a *Done when* for the lane, then the footer.
-fn drive_improve_body(name: String, issue: String, items: Vec[String]) -> String {
+// report of NAME (issue ISSUE): where it came from, the items, where the
+// run's work is (SOURCE, drive_improve_source), a *To build* and a *Done
+// when* for the lane, then the footer.
+fn drive_improve_body(name: String, issue: String, items: Vec[String], source: String) -> String {
 	let from = if issue == "" { f"the run of `{name}`" } else { f"the run of `{name}` (#{issue})" }
 	let mut body = f"Filed by the driver from the report of {from} for the improvement lane (owner, 2026-11-15).\n\n## Reported\n\n"
 	for item in items { body = body + f"- {item}\n" }
+	body = body + source
 	body = body
 		+ "\n## To build\n\n- [ ] Judge each point: a general fix (a rule in `docs/`, a script, the driver, a template, a check that turns builders red for nothing), a compiler defect (relabel `bugs`), or noise.\n- [ ] Build the general fix, or close the point with a one-line reason.\n"
 	body = body + "\n## Done when\n\nEach point is built as a general fix, moved to the bug lane, or closed as noise with its reason.\n"
@@ -2217,13 +2239,15 @@ fn drive_improve_title(name: String, issue: String, item: String) -> String {
 fn drive_improve_file(dir: String, brief: String) throws {
 	let report = drive_report_of(brief.clone())
 	if report == "" { return }
-	let items = drive_improve_items(drive_read(report))
+	let text = drive_read(report.clone())
+	let items = drive_improve_items(text.clone())
 	if items.len() == 0 { return }
 	let name = drive_stem(brief.clone())
 	if drive_read(f"{dir}/found.txt").contains(f"{name}: improve #") { return }
 	let issue = drive_issue(brief)
 	let title = drive_improve_title(name.clone(), issue.clone(), items[0].clone())
-	let number = drive_issue_new(title, drive_improve_body(name.clone(), issue, items), ["ready", "improve"])
+	let body = drive_improve_body(name.clone(), issue, items, drive_improve_source(report, text))
+	let number = drive_issue_new(title, body, ["ready", "improve"])
 	if number == "" {
 		println(f"improve file failed for {name}")
 		return
@@ -3002,14 +3026,18 @@ fn main() throws {
 		return
 	}
 	if args.len() == 5 && args[1] == "--improve-issue" {
-		let items = drive_improve_items(drive_read(args[4]))
+		let text = drive_read(args[4].clone())
+		let items = drive_improve_items(text.clone())
 		if items.len() == 0 {
 			println("none")
 			return
 		}
 		println(drive_improve_title(args[2].clone(), args[3].clone(), items[0].clone()))
 		println("ready,improve")
-		print(drive_improve_body(args[2].clone(), args[3].clone(), items))
+		// The report is named by the brief, as the lane directory holds it
+		// (`NAME.md.report.md`), so the output does not carry a temp path.
+		let source = drive_improve_source(f"{args[2]}.md.report.md", text)
+		print(drive_improve_body(args[2].clone(), args[3].clone(), items, source))
 		return
 	}
 	// The comments a report asks for (#1698), without posting them: per

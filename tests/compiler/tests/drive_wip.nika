@@ -5,7 +5,8 @@
 // the issue it files for the improvement lane from a report's `Issue:`,
 // `Deviation:`, `Needs:` and `Friction:`, and `none` for a clean report;
 // --comment-issue (#1698): the comment it posts on issue N for a report's
-// `Comment: #N <text>`, and a `Comment:` without a number filed as improvement.
+// `Comment: #N <text>`, and a `Comment:` without a number filed as improvement;
+// an improvement issue names the run's report and commit (#1706).
 use std::fs
 use std::process
 
@@ -43,7 +44,7 @@ fn main() throws {
     drive(repo.clone(), nikaia.clone(), ["--found-issue", "issue-1267", "1267", "a Bytes field filled from a[1..] fails at rustc (Into &[u8] -> Bytes), not covered by the issue", "none"])
     drive(repo.clone(), nikaia.clone(), ["--found-issue", "v45-x", "", "a short gap", "supervisor decision"])
     let bad = process::run("mktemp", []).stdout.trim().clone()
-    fs::write(bad.clone(), fs::Root::Anywhere, "Result: done\nIssue: wrong I8: item 3 was built already\nDeviation: none\nNeeds: none\nFriction: pre-push red on a badge that was not mine\n")
+    fs::write(bad.clone(), fs::Root::Anywhere, "Result: done\nCommit: drive: a partial run stays in batch.txt\nPushed: local 1a827e65\nIssue: wrong I8: item 3 was built already\nDeviation: none\nNeeds: none\nFriction: pre-push red on a badge that was not mine\n")
     drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1624", "1624", bad.clone()])
     let good = process::run("mktemp", []).stdout.trim().clone()
     fs::write(good.clone(), fs::Root::Anywhere, "Result: done\nIssue: complete\nDeviation: none\nNeeds: none\nFriction: none\n")

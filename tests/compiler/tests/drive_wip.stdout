@@ -57,6 +57,11 @@ Filed by the driver from the report of the run of `issue-1624` (#1624) for the i
 - Issue: wrong I8: item 3 was built already
 - Friction: pre-push red on a badge that was not mine
 
+## Source
+
+The run's report: `issue-1624.md.report.md` (untracked, in the driver's checkout).
+The run's commit: `drive: a partial run stays in batch.txt` (`Pushed: local 1a827e65` when this issue was filed). A `local` commit reaches `develop` only when its batch's suite is green: find it by its subject (`git log -400 --all --grep`); on no branch, it was not pushed, so judge its points from the report and the code as it is.
+
 ## To build
 
 - [ ] Judge each point: a general fix (a rule in `docs/`, a script, the driver, a template, a check that turns builders red for nothing), a compiler defect (relabel `bugs`), or noise.
@@ -86,6 +91,11 @@ Filed by the driver from the report of the run of `issue-1676` for the improveme
 ## Reported
 
 - Comment (no issue number): on the plan, no number
+
+## Source
+
+The run's report: `issue-1676.md.report.md` (untracked, in the driver's checkout).
+The run committed nothing.
 
 ## To build
 

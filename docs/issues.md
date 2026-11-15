@@ -25,6 +25,13 @@ it, like the checks in `docs/supervisor.md`.
   outside readers, or brief codes.
 * **I4. Where it belongs**: `Part of #N` for the larger piece, `Found while
   #N` (or the commit) for where it came up, and the issues it depends on.
+* **I4a. A claim of today's behaviour is read in the code** (#1706): a
+  sentence saying what the compiler, a script or the driver does today names
+  the function and file it was read in, or the run that shows it (a probe,
+  I5; a `--bounds` row, I8a). A comment is not the code: #1694's item 3 said
+  a partial run's issue is queued again, from a stale comment in
+  `drive.nika`, and `drive_queue_add` skips a `#N` still in `batch.txt`
+  (#1697).
 
 ## A bug (something specified or plainly meant does not work)
 
@@ -187,7 +194,9 @@ issue lacked that would have saved it turns or a wrong turn:
 * `Issue: rules-gap: <what was missing>` — no rule above asks for it. The
   supervisor adds a rule or widens one, citing the run.
 * `Issue: wrong I<n>: <what>` — the issue has it, but it is false (a probe
-  that no longer fails, a wrong file, a wrong ADR).
+  that no longer fails, a wrong file, a wrong ADR). `<n>` is the rule that
+  asks for the false part; a false claim no rule covers is a `rules-gap`
+  (#1706: a wrong claim of how the driver behaves was cited as I5, the probe).
 
 Several answers are joined with `;`. The supervisor counts them per rule and
 per author; a rule that is broken often is made easier to keep, a gap that
