@@ -75,6 +75,9 @@ pub struct BoundsContext {
 	/// **The field reads of a whole-number type**, by node (ADR-306 D17):
 	/// a path of fields from a name, `p.end`, is a number of the walk.
 	pub whole_fields: collections::BTreeSet[i64],
+	/// Of `whole_fields`, each field and element read with its type
+	/// (ADR-306 D34): a term's type is its range.
+	pub whole_types: collections::BTreeMap[i64, String],
 	/// The `for` heads that bind one whole number, by the node walked.
 	pub whole_loops: collections::BTreeSet[i64],
 	/// The `for` heads that bind several names, by the node walked, with
@@ -851,7 +854,7 @@ fn bounding_pass(
 	}
 	// **What every caller proved** (ADR-391 D1): a derived precondition
 	// holds at the entry like an `assert` written at the top.
-	bounding_derived_entry(walk, facts, args, context)
+	bounding_derived_entry(walk, facts, args, body, context)
 	// **The rules between list fields** (ADR-369 D4), of `self` and of each
 	// parameter of a type that has them.
 	rules_given(walk, facts, args, words)
@@ -1737,6 +1740,27 @@ fn bounding_term(
 	return confirmed
 }
 
+/// **The whole-number type of a name, field or element** the walk reads as a
+/// term (ADR-306 D34), where it knows one.
+fn bounding_type_of(
+	walk: ref BoundsWalk,
+	expr: ref Expr,
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+) -> String? {
+	match expr {
+		Expr::Variable(name, _) => {
+			let ty = walk.typed.get(words.resolve(name)) ?? return null
+			return ty.clone()
+		},
+		Expr::Field { .. } => {},
+		Expr::Index { .. } => {},
+		else => return null,
+	}
+	let ty = context.whole_types.get(node_key(expr)) ?? return null
+	return ty.clone()
+}
+
 /// **The constants a whole number lies between**, where the walk can tell:
 /// a linear term by the solver, and around it `%` (ADR-306 D8), `>>`, `&`, a
 /// conversion, a truncation, and a value read out of a list whose values are
@@ -1996,6 +2020,38 @@ fn bounding_range_of(
 			let a = bounding_range(walk, lhs, facts, context, program, words, ask) ?? return null
 			let b = bounding_range(walk, rhs, facts, context, program, words, ask) ?? return null
 			return a.mul(b)
+		},
+		// **`x / d` with `1 <= d1 <= d <= d2` and `a <= x <= b`** lies
+		// between `a / d1` (`a / d2` where `a >= 0`) and `b / d1` (`b / d2`
+		// where `b < 0`): the quotient is rounded toward zero, so it moves
+		// with `x` and toward zero with `d` (ADR-306 D34).
+		BinaryOp::Div => {
+			let d = bounding_range(walk, rhs, facts, context, program, words, ask) ?? return null
+			let d1 = d.lo ?? return null
+			let d2 = d.hi ?? return null
+			if d1 < 1 {
+				return null
+			}
+			// **A term's type is its range** (ADR-306 D34), where nothing
+			// narrower is found: `self.bump / 1073741824` of an `i64`.
+			let mut x = bounding_range(walk, lhs, facts, context, program, words, ask) ?? Range::open()
+			let ty = bounding_type_of(walk, lhs, context, words)
+			if ty != null {
+				let held = Range::held_by_type(ty ?? "")
+				if held != null {
+					x = x.meet(held ?? Range::open())
+				}
+			}
+			let mut out = Range::open()
+			if x.lo != null {
+				let a = x.lo ?? 0
+				out.lo = if a >= 0 { a / d2 } else { a / d1 }
+			}
+			if x.hi != null {
+				let b = x.hi ?? 0
+				out.hi = if b >= 0 { b / d1 } else { b / d2 }
+			}
+			return out
 		},
 		// **`0 <= x % n < n`** where `x` is not negative and `n` is
 		// positive; `|x % n| < n` where only `n` is known.
@@ -2847,6 +2903,12 @@ fn bounding_lin(
 		Expr::Field { .. } => {
 			if context.whole_fields.contains(node_key(expr)) {
 				let path = bounding_place_path(expr, words) ?? return null
+				// **Its type is its range** (ADR-306 D34): a goal may be
+				// stated against it as against a parameter (#1054).
+				let ty = context.whole_types[node_key(expr)]
+				if ty != null && !walk.shape.twice.contains(path) {
+					walk.typed.insert(path.clone(), (ty ?? "").clone())
+				}
 				return walk.arena.var(path)
 			}
 		},
@@ -3400,12 +3462,11 @@ fn bounding_derived_entry(
 	mut walk: BoundsWalk,
 	mut facts: BoundsFacts,
 	args: ref Vec[FnArg],
+	body: ref Block,
 	context: ref BoundsContext,
 ) {
-	if args.is_empty() {
-		return
-	}
-	let held = context.around.derived.entry[args[0].span.start as i64] ?? return
+	let key = derived_key(args, body) ?? return
+	let held = context.around.derived.entry[key] ?? return
 	for claim in held {
 		// A side over every value of a list is its element (ADR-306 D21).
 		let left = if claim.left == "" { walk.arena.int(0) } else if claim.each {
@@ -7925,6 +7986,26 @@ fn bounding_method(
 		let one = walk.arena.int(-1)
 		bounding_shift(walk, facts, length, one)
 		return
+	}
+	// **`truncate(n)` with `n` at most the length leaves `n`** (ADR-306
+	// D34): `heap.truncate(last)` after `last = heap.len() - 1`. An `n`
+	// that reads the length itself is not carried past it.
+	if method == "truncate" && count == 1 {
+		let to = bounding_lin(walk, args[0], facts, context, program, words)
+		if to != null {
+			let n = to ?? 0
+			let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+			walk.arena.variables(n, read)
+			let len = walk.arena.var(length)
+			let within = walk.arena.le(n, len)
+			if !read.contains(length) && bounding_proves(walk, facts, within, ask) {
+				bounding_forget_length(walk, facts, name)
+				let now = walk.arena.var(length)
+				let fact = walk.arena.equal(now, n)
+				bounding_push(walk, facts, fact)
+				return
+			}
+		}
 	}
 	if method == "clear" && count == 0 {
 		bounding_forget_length(walk, facts, name)

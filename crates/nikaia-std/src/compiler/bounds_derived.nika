@@ -178,7 +178,7 @@ fn derived_candidate(
 				|| (receiver != null) != method
 				|| spread != null
 				|| !config.is_empty()
-				|| args.is_empty() {
+				|| (args.is_empty() && !method) {
 					return
 				}
 			if (defined[text] ?? 0) != 1 || everywhere.values.contains(text) {
@@ -189,6 +189,7 @@ fn derived_candidate(
 			if sites.is_empty() || claims.is_empty() {
 				return
 			}
+			let key = derived_key(args, body) ?? return
 			let mut params: Vec[String] = []
 			for arg in args {
 				params.push(words.resolve(arg.name).clone())
@@ -197,7 +198,7 @@ fn derived_candidate(
 				text.clone(),
 				DerivedFunction {
 					name: text.clone(),
-					key: args[0].span.start as i64,
+					key: key,
 					position: position,
 					params: params,
 					claims: claims,
@@ -207,6 +208,19 @@ fn derived_candidate(
 		},
 		else => {},
 	}
+}
+
+/// **Where a candidate's entry facts are kept**: its first parameter's byte,
+/// or, of a method that takes none but `self` (ADR-306 D34), its first
+/// statement's; none for an empty body, which reads nothing.
+pub fn derived_key(args: ref Vec[FnArg], body: ref Block) -> i64? {
+	if !args.is_empty() {
+		return args[0].span.start as i64
+	}
+	if body.stmts.is_empty() {
+		return null
+	}
+	return body.stmts[0].span.start as i64
 }
 
 /// One body's calls, kept in `scan` with every other name it meets; the
@@ -339,6 +353,9 @@ fn derived_claims(
 	}
 	let mut compared: collections::BTreeSet[String] = collections::BTreeSet()
 	let mut indexed: collections::BTreeSet[String] = collections::BTreeSet()
+	// **A method's list field read at `0`** (ADR-306 D34): `self.heap[0]`
+	// asks `0 < self.heap.len()` of the receiver at each call.
+	let mut first: collections::BTreeSet[String] = collections::BTreeSet()
 	for e in visited_in_block(body) {
 		match e {
 			Expr::Binary { op, lhs, rhs, .. } => {
@@ -359,6 +376,16 @@ fn derived_claims(
 					// at a call by the receiver's (ADR-391 D1).
 					Expr::Field { .. } => {
 						let path = path_of(base, words) ?? ""
+						if method && path.starts_with("self.") {
+							match index {
+								Expr::LitInt { value, .. } => {
+									if value == 0 {
+										first.insert(path.clone())
+									}
+								},
+								else => {},
+							}
+						}
 						if method && path.starts_with("self.") && !lists.contains(path) {
 							indexed.insert(path.clone())
 							lists.push(path)
@@ -405,6 +432,9 @@ fn derived_claims(
 		}
 	}
 	let mut claims: Vec[DerivedClaim] = []
+	for list in first {
+		claims.push(DerivedClaim { left: "", strict: true, right: list.clone(), length: true, each: false, fixed: null })
+	}
 	for p in ints {
 		if !compared.contains(p) {
 			continue

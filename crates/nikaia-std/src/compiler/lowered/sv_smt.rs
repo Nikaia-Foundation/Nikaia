@@ -242,7 +242,7 @@ pub(crate) fn sv_smt_search<T: SvTh>(s: &mut SvSmt<T>) -> SvSmtEnd {
             }
         }
         s.fresh = false;
-        s.checks += 1;
+        s.checks = unsafe { nikaia_std::proven::add::<i64>(s.checks, 1) };
         let partial = s.th.check(false, &s.budget, &mut s.sat.book);
         match partial {
             SvChecked::Conflict(_) => {
@@ -364,7 +364,7 @@ pub(crate) fn sv_smt_congruence(clause: &[u32], id: u32, short_lit: &[Vec<u32>],
     let ext = match book.extend(l, d) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let split = match book.split(t, not_t) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let first = *nikaia_std::index::get(&split.lits, 0) / 2u32;
-    let below = sv_lit(first + 1u32, false);
+    let below = sv_lit(unsafe { nikaia_std::proven::add::<u32>(first, 1u32) }, false);
     let mut cases: Vec<u32> = vec![];
     let mut j: i64 = 0;
     while j < ps.len() as i64 {

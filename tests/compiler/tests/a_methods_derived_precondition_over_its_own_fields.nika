@@ -1,0 +1,35 @@
+/// A method's derived precondition is over `self`'s fields (ADR-306 D34,
+/// ADR-391 D1): `top` reads `self.heap[0]`, and every caller has checked the
+/// heap is not empty, so `0 < self.heap.len()` is derived; `down` reads
+/// `self.heap[start]`, and its one caller hands it 0 after a `truncate` to a
+/// length above 0.
+struct Heap { heap: Vec[i64] }
+
+impl Heap {
+	fn top(ref self) -> i64 sync {
+		return self.heap[0]
+	}
+
+	fn down(mut self, start: i64) sync {
+		let v = self.heap[start]
+		self.heap[start] = v
+	}
+
+	fn pop(mut self) -> i64 sync {
+		if self.heap.len() == 0 {
+			return -1
+		}
+		let first = self.top()
+		let last = self.heap.len() - 1
+		self.heap.truncate(last)
+		if last > 0 {
+			self.down(0)
+		}
+		return first
+	}
+}
+
+fn main() throws {
+	let mut h = Heap { heap: [3, 4] }
+	println(f"{h.pop()} {h.pop()} {h.pop()}")
+}

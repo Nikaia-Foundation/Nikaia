@@ -3304,7 +3304,7 @@ pub mod bounds_body {
 }
 pub mod bounds_derived {
     #[allow(unused_imports)]
-    pub use super::{DerivedClaim, DerivedFunction, Derived, no_derived, derived_of, derived_order, derived_note, derived_written, derived_rows, derived_callees};
+    pub use super::{DerivedClaim, DerivedFunction, Derived, no_derived, derived_of, derived_key, derived_order, derived_note, derived_written, derived_rows, derived_callees};
 }
 pub mod bounds_frame {
     #[allow(unused_imports)]

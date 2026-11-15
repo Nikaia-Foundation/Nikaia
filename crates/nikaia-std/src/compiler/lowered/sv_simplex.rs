@@ -443,7 +443,7 @@ impl SvSimplex {
             let target = if at.below { nikaia_std::index::get(&self.lower, nikaia_std::index::at(b)).value.clone() } else { nikaia_std::index::get(&self.upper, nikaia_std::index::at(b)).value.clone() };
             { let __nikaia_stored = target; nikaia_std::index::set(&mut self.values, nikaia_std::index::at(b), __nikaia_stored); }
             if !self.refresh() { return self.overflow(); }
-            count += 1;
+            count = unsafe { nikaia_std::proven::add::<i64>(count, 1) };
             self.pivots += 1;
         }
     }
@@ -561,7 +561,7 @@ impl SvTh for SvSimplex {
             }
         }
         if self.splits >= limit.cases { return SvChecked::Unknown(LgUnknown::TooManyCases); }
-        self.splits += 1;
+        self.splits = unsafe { nikaia_std::proven::add::<i64>(self.splits, 1) };
         let col = *nikaia_std::index::get(&self.var_col, nikaia_std::index::at(v));
         let value = (*nikaia_std::index::get(&self.values, nikaia_std::index::at(v))).clone();
         let floor = sv_rat_floor(&value.c);

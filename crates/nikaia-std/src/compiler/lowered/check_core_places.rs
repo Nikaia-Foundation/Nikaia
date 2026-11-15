@@ -246,7 +246,12 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
     };
     let got = check_core_places_a_named_field(state, world, expr, &seen, &ty, &field, span);
     match got {
-        Ty::Named { ref name, ref args, .. } => { if args.is_empty() && is_whole_number(name) { state.facts.whole_fields.insert(id_of(expr) as i64); } },
+        Ty::Named { ref name, ref args, .. } => {
+            if args.is_empty() && is_whole_number(name) {
+                state.facts.whole_fields.insert(id_of(expr) as i64);
+                state.facts.whole_types.insert(id_of(expr) as i64, nikaia_std::block::Text::from(name.to_string()));
+            }
+        },
         _ => { },
     }
     check_core_places_array_length(state, id_of(expr) as i64, &got);
@@ -975,7 +980,12 @@ pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     if check_core_places_a_list(&b) && !args.is_empty() {
         state.facts.list_indices.insert(id_of(base) as i64);
         match *unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
-            Ty::Named { name: ref item, args: ref inner, .. } => { if inner.is_empty() && is_whole_number(item) { state.facts.whole_fields.insert(id_of(expr) as i64); } },
+            Ty::Named { name: ref item, args: ref inner, .. } => {
+                if inner.is_empty() && is_whole_number(item) {
+                    state.facts.whole_fields.insert(id_of(expr) as i64);
+                    state.facts.whole_types.insert(id_of(expr) as i64, nikaia_std::block::Text::from(item.to_string()));
+                }
+            },
             _ => { },
         }
         return (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone();

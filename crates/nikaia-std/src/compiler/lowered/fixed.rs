@@ -62,7 +62,7 @@ pub(crate) fn attempt(keys: &[String], seed: u64, buckets: i64, n: i64) -> Optio
     }
     let mut order: Vec<(i64, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for b in 0..buckets {
-        let size = (*nikaia_std::index::get(&by_bucket, (b) as usize)).len() as i64;
+        let size = (*unsafe { nikaia_std::proven::read(&by_bucket, (b) as usize) }).len() as i64;
         if size > 0 { order.push((unsafe { nikaia_std::proven::sub::<i64>(0, size) }, b)); }
     }
     order.sort();
@@ -91,7 +91,7 @@ pub(crate) fn attempt(keys: &[String], seed: u64, buckets: i64, n: i64) -> Optio
                     taken.push((slot, at));
                 }
                 if fits {
-                    { let __nikaia_stored = (d1, d2); nikaia_std::index::set(&mut disps, nikaia_std::index::at(bucket), __nikaia_stored); }
+                    { let __nikaia_stored = (d1, d2); unsafe { nikaia_std::proven::write(&mut disps, (bucket) as usize, __nikaia_stored) }; }
                     for (slot, at) in taken.iter() {
                         let slot = nikaia_std::num::value(slot);let at = nikaia_std::num::value(at);
                         { let __nikaia_stored = at; nikaia_std::index::set(&mut slots, nikaia_std::index::at(slot), __nikaia_stored); }
