@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1388] — 2026-11-15
+
+**A program without fn main is refused with NK1351 before lowering (#1622)**
+- A program without fn main is refused with NK1351 — nikaia build and nikaia run FILE of a source without fn main now stop before lowering with NK1351 and a help (add fn main() or name a library artifact), instead of rustc's E0601 reported as the internal NK1343.
+
 ## [0.0.1387] — 2026-11-15
 
 **Builders' changes (#1609, #1627, #1632, #1635)**
