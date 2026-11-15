@@ -247,7 +247,10 @@ What the owner expects from such a round:
   round - not left to whoever builds it. An ADR states the reasons and the
   rejected alternatives, not how the question was found or what was broken
   before; that is the issue's. The specification states the rule and nothing
-  else: no status, no history, no reasons, no padding.
+  else: no status, no history, no reasons, no padding. Every code example in
+  both is run through `scripts/probe.nika --check` (on stubs for what is not
+  built yet) before the build is ordered: syntax the language refuses is
+  fixed in the text, not left for the builder to decide (#1687, I6).
 * **The issue gets the history and the build order**: how the question came up,
   what was checked, the decision in short with links to the ADR and the
   specification, and a numbered *To build* list with tests that another session
