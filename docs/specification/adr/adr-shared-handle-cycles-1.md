@@ -1,4 +1,4 @@
-# ADR-cycles-1: The Compiler Refuses a Store That Closes a Cycle of Handles, Unless It Proved a Back Edge
+# ADR-shared-handle-cycles-1: The Compiler Refuses a Store That Closes a Cycle of Handles, Unless It Proved a Back Edge
 
 **Status:** Accepted
 **Date:** November 15, 2026 (owner's decision)

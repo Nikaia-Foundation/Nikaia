@@ -2556,7 +2556,7 @@ decided per value, as the owner count is. A message, a printed type and a
 ledger entry say the name the program wrote. **`Shared[Locked[T]]` is
 refused** with `NK1123`, and the message names `SharedMut[T]`.
 
-**No cycle of handles is built** ([ADR-cycles-1](adr/adr-cycles-1.md)). A
+**No cycle of handles is built** ([ADR-shared-handle-cycles-1](adr/adr-shared-handle-cycles-1.md)). A
 cycle is closed only by a write after construction: a handle stored, through a
 door of `SharedMut[T]` or into a `Locked[T]` field, into a value its target
 already reaches. A type that reaches no `SharedMut` and no `Locked` is
