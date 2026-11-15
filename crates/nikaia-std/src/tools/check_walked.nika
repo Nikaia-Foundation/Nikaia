@@ -371,6 +371,9 @@ pub trait CheckWalkedPasses {
     /// an open claim reads run as a `comptime` is where the build can
     /// (ADR-359 D11-D13).
     fn proved(ref self, facts: ref CheckFacts) -> CheckWalkedProved sync
+    /// The functions and fields of the package outside data reaches
+    /// (`prove_run::prove_outside`, #1573).
+    fn outside(ref self, facts: ref CheckFacts) -> ProverOutside sync
     /// A naked view parameter kept past the call (`NK2302`).
     fn view_findings(ref self) -> Vec[CheckFinding] sync
     /// A change in place of data a view still to be used may point into
@@ -415,6 +418,10 @@ pub fn check_walked_walk[H: CheckHost, P: CheckWalkedPasses](mut state: CheckSta
     state.facts.walks_fields = state.walks_fields.clone()
     // ADR-296 D5: a question about a statement's holes rather than a type.
     state.findings.extend(passes.dsl_findings())
+    // **What carries outside data** (ADR-396 D1, #1573), in the ledger's pass
+    // too: a function whose result comes from outside is a source its
+    // ledger names, which a package that calls it reads.
+    state.facts.outside = passes.outside(state.facts)
     // **The ledger's pass reports nothing** (#727): what its caller reads is
     // which calls resolve where and what each body stores, never a finding or
     // a proof.

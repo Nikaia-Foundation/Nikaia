@@ -181,7 +181,10 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
     if owned_result && check_core_places_a_call(base) { state.flow.owned_call_bases.insert(id_of(base) as i64); }
     let field: String = format!("{}", world.words.resolve(name));
     match unviewed_type(&on) {
-        Ty::Named { name: ref held, .. } => { state.declared_use(expr, CheckDeclared::Field(nikaia_std::block::Text::from(held.to_string()), nikaia_std::block::Text::from(field.to_string()))); },
+        Ty::Named { name: ref held, .. } => {
+            state.facts.field_owners.insert(id_of(base) as i64, nikaia_std::block::Text::from(held.to_string()));
+            state.declared_use(expr, CheckDeclared::Field(nikaia_std::block::Text::from(held.to_string()), nikaia_std::block::Text::from(field.to_string())));
+        },
         _ => { },
     }
     if field.contains("::") && !safe {

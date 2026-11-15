@@ -175,7 +175,7 @@ fn thrower_named(call: ref Expr, words: ref winnow_grammar::InternerContext, una
 /// a binding in `tainted`, or calls a source `std`'s ledger calls untrusted
 /// without writing `trusted: true` (ADR-365 D2) - anywhere inside it, as `contracts::sync`'s walk reads it: every
 /// expression, not into its blocks, the holes of its literals included.
-pub fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, callees: ref collections::BTreeMap[i64, String], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+pub fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
     match expr {
         Expr::Variable(name, _) => {
             if tainted.contains(words.resolve(name)) {
@@ -187,6 +187,11 @@ pub fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], 
             if source != null && untrusted(library, source ?? "") && !says_trusted(words, config) {
                 return true
             }
+            // **A function of the package whose result comes from outside**
+            // (#1573): its value is as untrusted as its source.
+            if source != null && state.outside.results.contains_key(source ?? "") {
+                return true
+            }
         },
         // **A source method marked `trusted: true`** (ADR-365 D2): what it
         // hands back is the operator's, whatever its receiver came from.
@@ -196,7 +201,10 @@ pub fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], 
             if says_trusted(words, config) && a_source_method(library, words.resolve(method)) {
                 return false
             }
-            if untrusted(library, callees.get(id_of(receiver) as i64) ?? "") && !says_trusted(words, config) {
+            if untrusted(library, state.method_callees.get(id_of(receiver) as i64) ?? "") && !says_trusted(words, config) {
+                return true
+            }
+            if state.outside.results.contains_key(state.method_callees.get(id_of(receiver) as i64) ?? "") {
                 return true
             }
         },
@@ -204,41 +212,44 @@ pub fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], 
             if says_trusted(words, config) && a_source_method(library, words.resolve(method)) {
                 return false
             }
-            if untrusted(library, callees.get(id_of(receiver) as i64) ?? "") && !says_trusted(words, config) {
+            if untrusted(library, state.method_callees.get(id_of(receiver) as i64) ?? "") && !says_trusted(words, config) {
+                return true
+            }
+            if state.outside.results.contains_key(state.method_callees.get(id_of(receiver) as i64) ?? "") {
                 return true
             }
         },
         else => {},
     }
     for hole in holes_of(expr) {
-        if from_outside(hole, tainted, words, library, callees, holes_of) {
+        if from_outside(hole, tainted, words, library, state, holes_of) {
             return true
         }
     }
     return match expr {
-        Expr::Call { func, args, config, .. } => from_outside(func, tainted, words, library, callees, holes_of) || any_from_outside(args, tainted, words, library, callees, holes_of) || config_from_outside(config, tainted, words, library, callees, holes_of),
-        Expr::MethodCall { receiver, args, config, .. } => from_outside(receiver, tainted, words, library, callees, holes_of) || any_from_outside(args, tainted, words, library, callees, holes_of) || config_from_outside(config, tainted, words, library, callees, holes_of),
-        Expr::SafeMethod { receiver, args, config, .. } => from_outside(receiver, tainted, words, library, callees, holes_of) || any_from_outside(args, tainted, words, library, callees, holes_of) || config_from_outside(config, tainted, words, library, callees, holes_of),
-        Expr::Binary { lhs, rhs, .. } => from_outside(lhs, tainted, words, library, callees, holes_of) || from_outside(rhs, tainted, words, library, callees, holes_of),
-        Expr::Unary { expr, .. } => from_outside(expr, tainted, words, library, callees, holes_of),
-        Expr::Try(inner, _) => from_outside(inner, tainted, words, library, callees, holes_of),
-        Expr::Async(inner, _, _, _) => from_outside(inner, tainted, words, library, callees, holes_of),
-        Expr::Throw(inner, _) => from_outside(inner, tainted, words, library, callees, holes_of),
-        Expr::Cast { expr, .. } => from_outside(expr, tainted, words, library, callees, holes_of),
-        Expr::Field { base, .. } => from_outside(base, tainted, words, library, callees, holes_of),
-        Expr::SafeField { base, .. } => from_outside(base, tainted, words, library, callees, holes_of),
-        Expr::Index { base, index, .. } => from_outside(base, tainted, words, library, callees, holes_of) || from_outside(index, tainted, words, library, callees, holes_of),
-        Expr::Range { start, end, .. } => from_outside(start, tainted, words, library, callees, holes_of) || from_outside(end, tainted, words, library, callees, holes_of),
-        Expr::Tuple(parts, _) => any_from_outside(parts, tainted, words, library, callees, holes_of),
-        Expr::Coalesce { value, fallback, .. } => from_outside(value, tainted, words, library, callees, holes_of) || from_outside(fallback, tainted, words, library, callees, holes_of),
-        Expr::TryCatch { expr, .. } => from_outside(expr, tainted, words, library, callees, holes_of),
-        Expr::If { cond, .. } => from_outside(cond, tainted, words, library, callees, holes_of),
+        Expr::Call { func, args, config, .. } => from_outside(func, tainted, words, library, state, holes_of) || any_from_outside(args, tainted, words, library, state, holes_of) || config_from_outside(config, tainted, words, library, state, holes_of),
+        Expr::MethodCall { receiver, args, config, .. } => from_outside(receiver, tainted, words, library, state, holes_of) || any_from_outside(args, tainted, words, library, state, holes_of) || config_from_outside(config, tainted, words, library, state, holes_of),
+        Expr::SafeMethod { receiver, args, config, .. } => from_outside(receiver, tainted, words, library, state, holes_of) || any_from_outside(args, tainted, words, library, state, holes_of) || config_from_outside(config, tainted, words, library, state, holes_of),
+        Expr::Binary { lhs, rhs, .. } => from_outside(lhs, tainted, words, library, state, holes_of) || from_outside(rhs, tainted, words, library, state, holes_of),
+        Expr::Unary { expr, .. } => from_outside(expr, tainted, words, library, state, holes_of),
+        Expr::Try(inner, _) => from_outside(inner, tainted, words, library, state, holes_of),
+        Expr::Async(inner, _, _, _) => from_outside(inner, tainted, words, library, state, holes_of),
+        Expr::Throw(inner, _) => from_outside(inner, tainted, words, library, state, holes_of),
+        Expr::Cast { expr, .. } => from_outside(expr, tainted, words, library, state, holes_of),
+        Expr::Field { base, name, .. } => outside_field(base, name, words, state) != null || from_outside(base, tainted, words, library, state, holes_of),
+        Expr::SafeField { base, .. } => from_outside(base, tainted, words, library, state, holes_of),
+        Expr::Index { base, index, .. } => from_outside(base, tainted, words, library, state, holes_of) || from_outside(index, tainted, words, library, state, holes_of),
+        Expr::Range { start, end, .. } => from_outside(start, tainted, words, library, state, holes_of) || from_outside(end, tainted, words, library, state, holes_of),
+        Expr::Tuple(parts, _) => any_from_outside(parts, tainted, words, library, state, holes_of),
+        Expr::Coalesce { value, fallback, .. } => from_outside(value, tainted, words, library, state, holes_of) || from_outside(fallback, tainted, words, library, state, holes_of),
+        Expr::TryCatch { expr, .. } => from_outside(expr, tainted, words, library, state, holes_of),
+        Expr::If { cond, .. } => from_outside(cond, tainted, words, library, state, holes_of),
         Expr::Match { value, arms, .. } => {
-            if from_outside(value, tainted, words, library, callees, holes_of) {
+            if from_outside(value, tainted, words, library, state, holes_of) {
                 return true
             }
             for arm in arms {
-                if maybe_from_outside(arm.guard, tainted, words, library, callees, holes_of) || from_outside(arm.body, tainted, words, library, callees, holes_of) {
+                if maybe_from_outside(arm.guard, tainted, words, library, state, holes_of) || from_outside(arm.body, tainted, words, library, state, holes_of) {
                     return true
                 }
             }
@@ -246,29 +257,29 @@ pub fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], 
         },
         Expr::StructLit { fields, .. } => {
             for field in fields {
-                if maybe_from_outside(field.value, tainted, words, library, callees, holes_of) {
+                if maybe_from_outside(field.value, tainted, words, library, state, holes_of) {
                     return true
                 }
             }
             false
         },
-        Expr::ListRepeat { value, count, .. } => from_outside(value, tainted, words, library, callees, holes_of) || from_outside(count, tainted, words, library, callees, holes_of),
-        Expr::ListLit { items, .. } => any_from_outside(items, tainted, words, library, callees, holes_of),
+        Expr::ListRepeat { value, count, .. } => from_outside(value, tainted, words, library, state, holes_of) || from_outside(count, tainted, words, library, state, holes_of),
+        Expr::ListLit { items, .. } => any_from_outside(items, tainted, words, library, state, holes_of),
         Expr::With { base, fields, .. } => {
-            if from_outside(base, tainted, words, library, callees, holes_of) {
+            if from_outside(base, tainted, words, library, state, holes_of) {
                 return true
             }
             for field in fields {
-                if maybe_from_outside(field.value, tainted, words, library, callees, holes_of) {
+                if maybe_from_outside(field.value, tainted, words, library, state, holes_of) {
                     return true
                 }
             }
             false
         },
-        Expr::Return(value, _) => maybe_from_outside(value, tainted, words, library, callees, holes_of),
+        Expr::Return(value, _) => maybe_from_outside(value, tainted, words, library, state, holes_of),
         Expr::Select(arms, _) => {
             for arm in arms {
-                if from_outside(arm.value, tainted, words, library, callees, holes_of) {
+                if from_outside(arm.value, tainted, words, library, state, holes_of) {
                     return true
                 }
             }
@@ -278,23 +289,23 @@ pub fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], 
     }
 }
 
-fn maybe_from_outside(expr: ref Expr?, tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, callees: ref collections::BTreeMap[i64, String], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+fn maybe_from_outside(expr: ref Expr?, tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
     let present = expr ?? return false
-    return from_outside(present, tainted, words, library, callees, holes_of)
+    return from_outside(present, tainted, words, library, state, holes_of)
 }
 
-fn any_from_outside(exprs: ref Vec[Expr], tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, callees: ref collections::BTreeMap[i64, String], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+fn any_from_outside(exprs: ref Vec[Expr], tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
     for e in exprs {
-        if from_outside(e, tainted, words, library, callees, holes_of) {
+        if from_outside(e, tainted, words, library, state, holes_of) {
             return true
         }
     }
     return false
 }
 
-fn config_from_outside(config: ref Vec[ConfigArg], tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, callees: ref collections::BTreeMap[i64, String], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+fn config_from_outside(config: ref Vec[ConfigArg], tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
     for c in config {
-        if from_outside(c.value, tainted, words, library, callees, holes_of) {
+        if from_outside(c.value, tainted, words, library, state, holes_of) {
             return true
         }
     }
@@ -307,7 +318,7 @@ fn config_from_outside(config: ref Vec[ConfigArg], tainted: ref collections::BTr
 /// inside it (`io::read_to_string`), or the source of a name in `tainted`
 /// it reads. Null where `from_outside` would find none, or only one this
 /// shorter walk does not reach; the message then names the binding alone.
-pub fn outside_source(expr: ref Expr, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, callees: ref collections::BTreeMap[i64, String], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> String? {
+pub fn outside_source(expr: ref Expr, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> String? {
     match expr {
         Expr::Variable(name, _) => {
             let n = words.resolve(name)
@@ -321,44 +332,83 @@ pub fn outside_source(expr: ref Expr, tainted: ref collections::BTreeSet[String]
             if source != null && untrusted(library, source ?? "") && !says_trusted(words, config) {
                 return source
             }
-            return outside_source_in(args, tainted, sources, words, library, callees, holes_of)
+            if source != null {
+                let own = state.outside.results[source ?? ""]
+                if own != null {
+                    return own?.clone()
+                }
+            }
+            return outside_source_in(args, tainted, sources, words, library, state, holes_of)
         },
         Expr::MethodCall { receiver, args, config, .. } => {
-            let callee = callees.get(id_of(receiver) as i64) ?? ""
+            let callee = state.method_callees.get(id_of(receiver) as i64) ?? ""
             if untrusted(library, callee) && !says_trusted(words, config) {
                 return callee.clone()
             }
-            return outside_source(receiver, tainted, sources, words, library, callees, holes_of) ?? outside_source_in(args, tainted, sources, words, library, callees, holes_of)
+            let own = state.outside.results[callee]
+            if own != null {
+                return own?.clone()
+            }
+            return outside_source(receiver, tainted, sources, words, library, state, holes_of) ?? outside_source_in(args, tainted, sources, words, library, state, holes_of)
         },
         Expr::SafeMethod { receiver, args, config, .. } => {
-            let callee = callees.get(id_of(receiver) as i64) ?? ""
+            let callee = state.method_callees.get(id_of(receiver) as i64) ?? ""
             if untrusted(library, callee) && !says_trusted(words, config) {
                 return callee.clone()
             }
-            return outside_source(receiver, tainted, sources, words, library, callees, holes_of) ?? outside_source_in(args, tainted, sources, words, library, callees, holes_of)
+            let own = state.outside.results[callee]
+            if own != null {
+                return own?.clone()
+            }
+            return outside_source(receiver, tainted, sources, words, library, state, holes_of) ?? outside_source_in(args, tainted, sources, words, library, state, holes_of)
         },
-        Expr::Binary { lhs, rhs, .. } => return outside_source(lhs, tainted, sources, words, library, callees, holes_of) ?? outside_source(rhs, tainted, sources, words, library, callees, holes_of),
-        Expr::Unary { expr, .. } => return outside_source(expr, tainted, sources, words, library, callees, holes_of),
-        Expr::Try(inner, _) => return outside_source(inner, tainted, sources, words, library, callees, holes_of),
-        Expr::Cast { expr, .. } => return outside_source(expr, tainted, sources, words, library, callees, holes_of),
-        Expr::Field { base, .. } => return outside_source(base, tainted, sources, words, library, callees, holes_of),
-        Expr::SafeField { base, .. } => return outside_source(base, tainted, sources, words, library, callees, holes_of),
-        Expr::Index { base, index, .. } => return outside_source(index, tainted, sources, words, library, callees, holes_of) ?? outside_source(base, tainted, sources, words, library, callees, holes_of),
-        Expr::Coalesce { value, fallback, .. } => return outside_source(value, tainted, sources, words, library, callees, holes_of) ?? outside_source(fallback, tainted, sources, words, library, callees, holes_of),
-        Expr::TryCatch { expr, .. } => return outside_source(expr, tainted, sources, words, library, callees, holes_of),
+        Expr::Binary { lhs, rhs, .. } => return outside_source(lhs, tainted, sources, words, library, state, holes_of) ?? outside_source(rhs, tainted, sources, words, library, state, holes_of),
+        Expr::Unary { expr, .. } => return outside_source(expr, tainted, sources, words, library, state, holes_of),
+        Expr::Try(inner, _) => return outside_source(inner, tainted, sources, words, library, state, holes_of),
+        Expr::Cast { expr, .. } => return outside_source(expr, tainted, sources, words, library, state, holes_of),
+        Expr::Field { base, name, .. } => return outside_field(base, name, words, state) ?? outside_source(base, tainted, sources, words, library, state, holes_of),
+        Expr::SafeField { base, .. } => return outside_source(base, tainted, sources, words, library, state, holes_of),
+        Expr::Index { base, index, .. } => return outside_source(index, tainted, sources, words, library, state, holes_of) ?? outside_source(base, tainted, sources, words, library, state, holes_of),
+        Expr::Coalesce { value, fallback, .. } => return outside_source(value, tainted, sources, words, library, state, holes_of) ?? outside_source(fallback, tainted, sources, words, library, state, holes_of),
+        Expr::TryCatch { expr, .. } => return outside_source(expr, tainted, sources, words, library, state, holes_of),
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                let named = words.resolve(field.name)
+                let found = match field.value {
+                    null => match tainted.contains(named) {
+                        true => sources[named]?.clone() ?? named.clone(),
+                        false => null,
+                    },
+                    given => outside_source(given, tainted, sources, words, library, state, holes_of),
+                }
+                if found != null {
+                    return found
+                }
+            }
+            return null
+        },
         else => {},
     }
-    return outside_source_in(holes_of(expr), tainted, sources, words, library, callees, holes_of)
+    return outside_source_in(holes_of(expr), tainted, sources, words, library, state, holes_of)
 }
 
-fn outside_source_in(exprs: ref Vec[Expr], tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, callees: ref collections::BTreeMap[i64, String], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> String? {
+fn outside_source_in(exprs: ref Vec[Expr], tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> String? {
     for e in exprs {
-        let found = outside_source(e, tainted, sources, words, library, callees, holes_of)
+        let found = outside_source(e, tainted, sources, words, library, state, holes_of)
         if found != null {
             return found
         }
     }
     return null
+}
+
+/// **The source of a field a struct literal of the package filled from
+/// outside** (#1573), `Type.field` by the struct the checker read it from;
+/// null for any other field.
+fn outside_field(base: ref Expr, name: winnow_grammar::Symbol, words: ref winnow_grammar::InternerContext, state: ref ProverState) -> String? {
+    let owner = state.field_owners.get(id_of(base) as i64) ?? return null
+    let key = f"{owner}.{words.resolve(name)}"
+    return state.outside.fields[key]?.clone()
 }
 
 fn outside_source_named(func: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
@@ -396,4 +446,191 @@ fn untrusted(library: ref Ledger, name: ref String) -> bool {
     let contract = library.functions[name] ?? return false
     let provenance = contract.provenance ?? return false
     return provenance == Provenance::Untrusted
+}
+
+/// **What carries outside data in a package** (ADR-396 D1, #1573), by the
+/// source each one reads: the functions whose result comes from outside,
+/// by the ledger's key, and the fields a struct literal fills with it, as
+/// `Type.field`. The walk follows a value through a call and a field of the
+/// package as it follows it through a binding.
+pub struct ProverOutside {
+    pub results: collections::BTreeMap[String, String],
+    pub fields: collections::BTreeMap[String, String],
+}
+
+impl ProverOutside {
+    pub fn nothing() -> ProverOutside {
+        return ProverOutside { results: collections::BTreeMap(), fields: collections::BTreeMap() }
+    }
+}
+
+/// **One round of what carries outside data** (#1573): every function and
+/// method of `program` read with what `state.outside` already holds, so the
+/// rounds repeat until nothing is added. Bindings are followed in the order
+/// they are written, without branches told apart: a value that may come
+/// from outside is taken as coming from outside.
+pub fn prover_outside(program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> ProverOutside {
+    let mut found = ProverOutside { results: state.outside.results.clone(), fields: state.outside.fields.clone() }
+    for item in program.items {
+        match item.node {
+            Item::Fn { .. } => prover_outside_function(found, item, null, words, library, state, holes_of),
+            Item::Impl { methods, target, .. } => {
+                let owner = words.resolve(target.name).clone()
+                for method in methods {
+                    prover_outside_function(found, method, owner.clone(), words, library, state, holes_of)
+                }
+            },
+            else => {},
+        }
+    }
+    return found
+}
+
+/// One function or method of `owner`: its body read twice, so a binding a
+/// loop taints later is seen where it is read before.
+fn prover_outside_function(mut found: ProverOutside, item: ref Spanned[Item], owner: String?, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+    match item.node {
+        Item::Fn { name, body, ret_type, .. } => {
+            let symbol = name ?? return
+            let plain = words.resolve(symbol)
+            let key = if owner != null { f"{owner ?? ""}::{plain}" } else { plain.clone() }
+            let mut tainted: collections::BTreeSet[String] = collections::BTreeSet()
+            let mut sources: collections::BTreeMap[String, String] = collections::BTreeMap()
+            for _ in 0..<2 {
+                prover_outside_block(found, body, key, ret_type != null, tainted, sources, words, library, state, holes_of)
+            }
+        },
+        else => {},
+    }
+}
+
+/// The statements of `block`: what each binds from outside, each `return`
+/// and, where `tail` says the block's value is the result, its last
+/// expression; each struct literal's fields; then the blocks inside.
+fn prover_outside_block(mut found: ProverOutside, block: ref Block, key: ref String, tail: bool, mut tainted: collections::BTreeSet[String], mut sources: collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+    let last = block.stmts.len() - 1
+    for (at, stmt) in block.stmts.iter().enumerate() {
+        match stmt.node {
+            Stmt::Let { names, value, .. } => {
+                if from_outside(value, tainted, words, library, state, holes_of) {
+                    let source: String = outside_source(value, tainted, sources, words, library, state, holes_of) ?? ""
+                    for name in names {
+                        let n = words.resolve(name).clone()
+                        if !source.is_empty() {
+                            sources.insert(n.clone(), source.clone())
+                        }
+                        tainted.insert(n)
+                    }
+                }
+            },
+            Stmt::Assign { target, value, .. } => {
+                match target {
+                    Expr::Variable(name, _) => {
+                        if from_outside(value, tainted, words, library, state, holes_of) {
+                            let n = words.resolve(name).clone()
+                            let source = outside_source(value, tainted, sources, words, library, state, holes_of)
+                            if source != null {
+                                sources.insert(n.clone(), source ?? "")
+                            }
+                            tainted.insert(n)
+                        }
+                    },
+                    else => {},
+                }
+            },
+            Stmt::For { bindings, iter, .. } => {
+                if from_outside(iter, tainted, words, library, state, holes_of) {
+                    let source: String = outside_source(iter, tainted, sources, words, library, state, holes_of) ?? ""
+                    for name in bindings {
+                        let n = words.resolve(name).clone()
+                        if !source.is_empty() {
+                            sources.insert(n.clone(), source.clone())
+                        }
+                        tainted.insert(n)
+                    }
+                }
+            },
+            Stmt::Return(value) => {
+                let returned = value ?? continue
+                prover_outside_result(found, returned, key, tainted, sources, words, library, state, holes_of)
+            },
+            Stmt::Expr(inner) => {
+                if tail && at == last {
+                    prover_outside_tail(found, inner, key, tainted, sources, words, library, state, holes_of)
+                }
+            },
+            else => {},
+        }
+        for expr in check_visit_stmt(stmt.node) {
+            prover_outside_expr(found, expr, key, tainted, sources, words, library, state, holes_of)
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            prover_outside_block(found, inner, key, false, tainted, sources, words, library, state, holes_of)
+        }
+    }
+}
+
+/// A block's last expression where it is the function's result: an `if`'s
+/// and a block's by their own last expression, a `match` by each arm's.
+fn prover_outside_tail(mut found: ProverOutside, expr: ref Expr, key: ref String, mut tainted: collections::BTreeSet[String], mut sources: collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+    match expr {
+        Expr::If { then_branch, else_branch, .. } => {
+            prover_outside_block(found, then_branch, key, true, tainted, sources, words, library, state, holes_of)
+            let other = else_branch ?? return
+            prover_outside_block(found, other, key, true, tainted, sources, words, library, state, holes_of)
+        },
+        Expr::Block(block, _) => prover_outside_block(found, block, key, true, tainted, sources, words, library, state, holes_of),
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                prover_outside_tail(found, arm.body, key, tainted, sources, words, library, state, holes_of)
+            }
+        },
+        else => prover_outside_result(found, expr, key, tainted, sources, words, library, state, holes_of),
+    }
+}
+
+/// `value` handed back by the function `key`: when it comes from outside,
+/// so does the function's result.
+fn prover_outside_result(mut found: ProverOutside, value: ref Expr, key: ref String, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+    if found.results.contains_key(key) || !from_outside(value, tainted, words, library, state, holes_of) {
+        return
+    }
+    let source = outside_source(value, tainted, sources, words, library, state, holes_of) ?? key.clone()
+    found.results.insert(key.clone(), source)
+}
+
+/// One expression outside the blocks it holds: a `return` inside it hands
+/// its value back, a struct literal fills each field with what it is given.
+fn prover_outside_expr(mut found: ProverOutside, expr: ref Expr, key: ref String, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+    match expr {
+        Expr::Return(value, _) => {
+            let returned = value ?? return
+            prover_outside_result(found, returned, key, tainted, sources, words, library, state, holes_of)
+        },
+        Expr::StructLit { name, fields, .. } => {
+            let owner = words.resolve(name)
+            for field in fields {
+                let named = words.resolve(field.name)
+                let at = f"{owner}.{named}"
+                if found.fields.contains_key(at) {
+                    continue
+                }
+                match field.value {
+                    null => {
+                        // `Reading { name }`: the binding of the same name.
+                        if tainted.contains(named) {
+                            found.fields.insert(at.clone(), sources[named]?.clone() ?? named.clone())
+                        }
+                    },
+                    given => {
+                        if from_outside(given, tainted, words, library, state, holes_of) {
+                            let source = outside_source(given, tainted, sources, words, library, state, holes_of) ?? at.clone()
+                            found.fields.insert(at.clone(), source)
+                        }
+                    },
+                }
+            }
+        },
+        else => {},
+    }
 }

@@ -36,6 +36,9 @@ pub use nikaia_std::tools::prover_results::{
 /// (ADR-359 D7, D11, D12): `tools/prove_run.nika`.
 pub use nikaia_std::tools::prove_run::{ProveClaimRun as ClaimRun, ProveComptimes as Comptimes};
 
+/// What carries outside data in a package (#1573): `tools/prover_calls.nika`.
+pub use nikaia_std::tools::prover_calls::ProverOutside;
+
 /// How each call the prover saw reaches its callee, by callee and arguments
 /// as written. A call it did not see is not here, and reaches the checked
 /// entry.
@@ -65,12 +68,16 @@ pub struct Proved {
 /// `let` without a written type that binds a whole number (#1358); and the
 /// entry each method call resolved to (#1446); and the divisors `NK1118`
 /// refused (#1566); and each `+`, `-`, `*`'s type and the statements
-/// `NK1116` refused, for the overflow goal (ADR-306 D15, #1476).
+/// `NK1116` refused, for the overflow goal (ADR-306 D15, #1476); and the
+/// struct each field read came from and what carries outside data (#1573).
+#[allow(clippy::too_many_arguments)]
 pub fn comptimes_of(
     parsed: &Parsed,
     values: &BTreeMap<i64, (String, String)>,
     whole_lets: &BTreeMap<i64, String>,
     method_callees: &BTreeMap<i64, String>,
+    field_owners: &BTreeMap<i64, String>,
+    outside: &ProverOutside,
     zero_divisors: &BTreeSet<i64>,
     arithmetic: &BTreeMap<i64, String>,
     unfit_numbers: &BTreeSet<i64>,
@@ -81,6 +88,8 @@ pub fn comptimes_of(
         values,
         whole_lets,
         method_callees,
+        field_owners,
+        outside,
         zero_divisors,
         arithmetic,
         unfit_numbers,
@@ -326,6 +335,26 @@ fn answer_of(held: &TermArena, facts: &[i64], goal: i64) -> SolverAnswer {
 /// A checked model of `facts` and `goal`'s negation: `prove_run::prove_model`.
 fn model_of(held: &TermArena, facts: &[i64], goal: i64) -> Option<BTreeMap<String, i64>> {
     prove_run::prove_model(held, facts, goal, crate::proofs::ask(held, facts, goal))
+}
+
+/// **What carries outside data in a package** (ADR-396 D1, #1573):
+/// `prove_run::prove_outside`, with the literals' holes.
+pub fn outside_of(
+    parsed: &Parsed,
+    own: &Ledger,
+    library: &Ledger,
+    method_callees: &BTreeMap<i64, String>,
+    field_owners: &BTreeMap<i64, String>,
+) -> ProverOutside {
+    prove_run::prove_outside(
+        &parsed.program,
+        &parsed.interner,
+        own,
+        library,
+        method_callees,
+        field_owners,
+        &|e| crate::emit::literal_expressions(parsed, e),
+    )
 }
 
 /// **The ledger with what the prover published of each function** (ADR-269

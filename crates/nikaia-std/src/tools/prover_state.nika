@@ -62,6 +62,11 @@ pub struct ProverState {
     /// **Each divisor the checker refused with `NK1118`**, by its node
     /// (#1566): its zero is that refusal's, and no `d != 0` is asked of it.
     pub zero_divisors: collections::BTreeSet[i64],
+    /// The checker's `field_owners`, by the field base's node (#1573).
+    pub field_owners: collections::BTreeMap[i64, String],
+    /// **What carries outside data in this package** (#1573): the functions
+    /// whose result does and the `Type.field`s a struct literal fills with it.
+    pub outside: ProverOutside,
     /// **The type of each `+`, `-` and `*` on whole numbers**, by the byte
     /// its operator starts at, as the checker's `arithmetic` (ADR-306 D15).
     pub arithmetic: collections::BTreeMap[i64, String],
@@ -146,6 +151,8 @@ impl ProverState {
             comptime_at: collections::BTreeMap(),
             whole_lets: collections::BTreeMap(),
             zero_divisors: collections::BTreeSet(),
+            field_owners: collections::BTreeMap(),
+            outside: ProverOutside::nothing(),
             arithmetic: collections::BTreeMap(),
             unfit_numbers: collections::BTreeSet(),
             method_callees: collections::BTreeMap(),

@@ -16,6 +16,8 @@ pub struct ProveComptimes {
     pub at: collections::BTreeMap<i64, i64>,
     pub whole_lets: collections::BTreeMap<i64, String>,
     pub method_callees: collections::BTreeMap<i64, String>,
+    pub field_owners: collections::BTreeMap<i64, String>,
+    pub outside: ProverOutside,
     pub zero_divisors: collections::BTreeSet<i64>,
     pub arithmetic: collections::BTreeMap<i64, String>,
     pub unfit_numbers: collections::BTreeSet<i64>,
@@ -28,8 +30,8 @@ pub struct ProveWalked {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn prove_comptimes_of(program: &Program, words: &winnow_grammar::InternerContext, values: &collections::BTreeMap<i64, (String, String)>, whole_lets: &collections::BTreeMap<i64, String>, method_callees: &collections::BTreeMap<i64, String>, zero_divisors: &collections::BTreeSet<i64>, arithmetic: &collections::BTreeMap<i64, String>, unfit_numbers: &collections::BTreeSet<i64>) -> ProveComptimes {
-    let mut found = ProveComptimes { by_name: collections::BTreeMap::new(), at: collections::BTreeMap::new(), whole_lets: whole_lets.copy_owned(), method_callees: method_callees.copy_owned(), zero_divisors: zero_divisors.copy_owned(), arithmetic: arithmetic.copy_owned(), unfit_numbers: unfit_numbers.copy_owned() };
+pub fn prove_comptimes_of(program: &Program, words: &winnow_grammar::InternerContext, values: &collections::BTreeMap<i64, (String, String)>, whole_lets: &collections::BTreeMap<i64, String>, method_callees: &collections::BTreeMap<i64, String>, field_owners: &collections::BTreeMap<i64, String>, outside: &ProverOutside, zero_divisors: &collections::BTreeSet<i64>, arithmetic: &collections::BTreeMap<i64, String>, unfit_numbers: &collections::BTreeSet<i64>) -> ProveComptimes {
+    let mut found = ProveComptimes { by_name: collections::BTreeMap::new(), at: collections::BTreeMap::new(), whole_lets: whole_lets.copy_owned(), method_callees: method_callees.copy_owned(), field_owners: field_owners.copy_owned(), outside: outside.clone(), zero_divisors: zero_divisors.copy_owned(), arithmetic: arithmetic.copy_owned(), unfit_numbers: unfit_numbers.copy_owned() };
     for (at, (below, written)) in values.iter() {
         let at = nikaia_std::num::value(at);
         if !prove_whole(below) { continue; }
@@ -106,6 +108,8 @@ pub(crate) fn prove_state(pinned: &collections::BTreeMap<String, i64>, comptimes
     state.whole_lets = comptimes.whole_lets.copy_owned();
     state.method_callees = comptimes.method_callees.copy_owned();
     state.zero_divisors = comptimes.zero_divisors.copy_owned();
+    state.field_owners = comptimes.field_owners.copy_owned();
+    state.outside = comptimes.outside.clone();
     state.arithmetic = comptimes.arithmetic.copy_owned();
     state.unfit_numbers = comptimes.unfit_numbers.copy_owned();
     state.not_run = not_run.copy_owned();
@@ -166,5 +170,23 @@ pub fn prove_with_published(own: &Ledger, published: &collections::BTreeMap<Stri
         for required in found.requires.iter() { if !nikaia_std::list::contains(&contract.requires, &required) { contract.requires.push(nikaia_std::block::Text::from(required.to_string())); } }
     }
     ledger
+}
+
+pub fn prove_outside(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, method_callees: &collections::BTreeMap<i64, String>, field_owners: &collections::BTreeMap<i64, String>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> ProverOutside {
+    let mut state = ProverState::fresh();
+    state.method_callees = method_callees.copy_owned();
+    state.field_owners = field_owners.copy_owned();
+    let bound = unsafe { nikaia_std::proven::add::<i64>(program.items.len() as i64, 2) };
+    for _ in 0..bound {
+        let found = prover_outside(program, words, library, &state, holes_of);
+        let settled = (found.results.len() as i64) == state.outside.results.len() as i64 && (found.fields.len() as i64) == state.outside.fields.len() as i64;
+        state.outside = found;
+        if settled { break; }
+    }
+    for (key, contract) in own.functions.iter() {
+        let provenance = match contract.provenance { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if provenance == Provenance::Untrusted && !state.outside.results.contains_key(key) { state.outside.results.insert(nikaia_std::block::Text::from(key.to_string()), nikaia_std::block::Text::from(key.to_string())); }
+    }
+    state.outside
 }
 

@@ -265,7 +265,10 @@ fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref Check
     }
     let field: String = f"{world.words.resolve(name)}"
     match unviewed_type(on) {
-        Ty::Named { name: held, .. } => state.declared_use(expr, CheckDeclared::Field(held.clone(), field.clone())),
+        Ty::Named { name: held, .. } => {
+            state.facts.field_owners.insert(id_of(base) as i64, held.clone())
+            state.declared_use(expr, CheckDeclared::Field(held.clone(), field.clone()))
+        },
         else => {},
     }
     // **`x.name::member` asks a type** (ADR-330 D5): only a reflected

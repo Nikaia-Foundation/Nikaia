@@ -235,6 +235,7 @@ pub trait CheckWalkedPasses {
     fn dsl_findings(&self) -> Vec<CheckFinding>;
     fn nonnegative(&self, facts: &CheckFacts, nodes: &collections::BTreeSet<i64>) -> collections::BTreeSet<i64>;
     fn proved(&self, facts: &CheckFacts) -> CheckWalkedProved;
+    fn outside(&self, facts: &CheckFacts) -> ProverOutside;
     fn view_findings(&self) -> Vec<CheckFinding>;
     fn view_change_findings(&self, lent: &collections::BTreeSet<i64>, coalesced: &collections::BTreeSet<i64>, mut_viewed: &collections::BTreeSet<i64>, receiver_views: &collections::BTreeSet<i64>) -> Vec<CheckFinding>;
     fn tethered(&self) -> (Option<Vec<BufferPlan>>, Vec<CheckFinding>);
@@ -258,6 +259,7 @@ pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckSt
     state.walls_a_refusal_explains();
     state.facts.walks_fields = state.walks_fields.copy_owned();
     state.findings.extend(passes.dsl_findings());
+    state.facts.outside = passes.outside(&state.facts);
     if computes {
         let proved = passes.proved(&state.facts);
         state.findings.extend(proved.findings);

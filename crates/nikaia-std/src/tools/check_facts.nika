@@ -221,6 +221,13 @@ pub struct CheckFacts {
     /// **The method a call resolves to by its receiver's type** (#842), by the
     /// receiver's node, as the ledger keys it (`Holder::put`).
     pub method_callees: collections::BTreeMap[i64, String],
+    /// **The struct a field is read from** (#1573), by the node of the
+    /// field's base: the prover carries outside data through `Type.field`.
+    pub field_owners: collections::BTreeMap[i64, String],
+    /// **What carries outside data in the package** (ADR-396 D1, #1573):
+    /// read off the walk's facts in the ledger's pass too, which runs no
+    /// prover, so a dependency's ledger names its sources.
+    pub outside: ProverOutside,
     /// **A vector's load, read as the cut it reads** (ADR-377 D3), by the
     /// node of the called path: the bytes it reads, or minus the most a
     /// `Lanes` reads on any CPU level where its count is the build's.
@@ -727,6 +734,8 @@ impl CheckFacts {
             shifts: collections::BTreeMap(),
             std_receivers: collections::BTreeMap(),
             method_callees: collections::BTreeMap(),
+            field_owners: collections::BTreeMap(),
+            outside: ProverOutside::nothing(),
             declared: collections::BTreeMap(),
             bound_at: collections::BTreeMap(),
             declared_at: collections::BTreeMap(),

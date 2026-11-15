@@ -1,0 +1,37 @@
+// What a function of the package hands back, and what a struct field holds,
+// is as untrusted as the source it was read from (ADR-396 D1, #1573): an
+// index on it is NK1302 and an `assert` about it NK1202, the note naming the
+// source, not the function or the field.
+use std::io
+use std::text
+
+struct Request {
+	body: String,
+}
+
+impl Request {
+	fn query(ref self) -> String {
+		return self.body
+	}
+}
+
+fn read() -> Request {
+	let body = io::read_to_string() catch { "" }
+	return Request { body }
+}
+
+fn line() -> String {
+	return io::read_to_string() catch { "" }
+}
+
+fn main() throws {
+	let names = ["red", "green", "blue"]
+	let at = text::parse_i64(line()) ?? 0
+	println(names[at])
+	let request = read()
+	let picked = text::parse_i64(request.query()) ?? 0
+	println(names[picked])
+	let n = text::parse_i64(request.body) ?? 0
+	assert(n >= 0)
+	println(n)
+}

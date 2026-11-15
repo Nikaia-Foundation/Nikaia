@@ -4145,7 +4145,7 @@ pub mod proofs_book {
 }
 pub mod prove_run {
     #[allow(unused_imports)]
-    pub use super::{PROVE_RUN_ROUNDS, ProveClaimRun, ProveComptimes, ProveWalked, prove_comptimes_of, prove_rounds, prove_answer, prove_model, prove_implies, prove_with_published};
+    pub use super::{PROVE_RUN_ROUNDS, ProveClaimRun, ProveComptimes, ProveWalked, prove_comptimes_of, prove_rounds, prove_answer, prove_model, prove_implies, prove_with_published, prove_outside};
 }
 pub mod prove_terms {
     #[allow(unused_imports)]
@@ -4161,7 +4161,7 @@ pub mod prover_arena {
 }
 pub mod prover_calls {
     #[allow(unused_imports)]
-    pub use super::{FreeFunction, free_function, own_method, arguments_in_order, may_throw, from_outside, outside_source};
+    pub use super::{FreeFunction, free_function, own_method, arguments_in_order, may_throw, from_outside, outside_source, ProverOutside, prover_outside};
 }
 pub mod prover_claims {
     #[allow(unused_imports)]
