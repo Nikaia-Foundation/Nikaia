@@ -1061,7 +1061,7 @@ fn drive_tree_exe(tree: String) -> String throws {
 		println(f"LEDGERS not refreshed: {wt} is not a worktree of its own")
 		return ""
 	}
-	let moved = process::run("git", ["-C", wt.clone(), "read-tree", "--reset", "-u", tree.clone()])
+	let moved = process::run("git", ["-C", wt, "read-tree", "--reset", "-u", tree.clone()])
 	if !moved.ok {
 		println(f"LEDGERS not refreshed: the worktree did not take {tree}: {moved.stderr.trim()}")
 		return ""
