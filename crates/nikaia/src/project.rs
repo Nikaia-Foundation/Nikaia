@@ -2998,9 +2998,15 @@ fn run_program_tests<'a>(
         .map(|_| std::sync::OnceLock::new())
         .collect();
     let batches = &batches;
+    // **The longest first** (`project_tests_order`): the run ends with its
+    // last program, so a long one started last is the run's tail.
+    let times = project_tests::project_tests_times_file(&Layout::user_cache_dir(), root);
+    let order = block_on(project_tests::project_tests_order(programs, &times));
+    let order = &order;
     let next = AtomicUsize::new(0);
     let (send, receive) = std::sync::mpsc::channel();
-    std::thread::scope(|scope| {
+    let mut ran = Vec::new();
+    let run = std::thread::scope(|scope| {
         let next = &next;
         let batch_places = &batch_places;
         scope.spawn(move || {
@@ -3020,11 +3026,12 @@ fn run_program_tests<'a>(
         for place in &places {
             let send = send.clone();
             scope.spawn(move || {
-                loop {
-                    let k = next.fetch_add(1, Ordering::SeqCst);
-                    let Some(program) = programs.get(k) else {
-                        break;
-                    };
+                while let Some(&k) = order.get(next.fetch_add(1, Ordering::SeqCst)) {
+                    let k = k as usize;
+                    let program = &programs[k];
+                    // Its time without the waits for the builds.
+                    let started = std::time::Instant::now();
+                    let mut waited = std::time::Duration::ZERO;
                     // The reports once per program, not once per setting.
                     let outcomes =
                         program_reports(program, root, &place[0].0).and_then(|reports| {
@@ -3033,8 +3040,10 @@ fn run_program_tests<'a>(
                                 .zip(place)
                                 .zip(batches)
                                 .map(|((setting, place), batch)| {
-                                    let batch =
-                                        batch.wait().as_ref().map_err(|e| anyhow!("{e}"))?;
+                                    let waiting = std::time::Instant::now();
+                                    let batch = batch.wait();
+                                    waited += waiting.elapsed();
+                                    let batch = batch.as_ref().map_err(|e| anyhow!("{e}"))?;
                                     let batched = batch.get(&program.name);
                                     run_program_test(
                                         program, root, setting, &place.0, batched, &reports,
@@ -3043,7 +3052,8 @@ fn run_program_tests<'a>(
                                 })
                                 .collect::<Result<Vec<_>>>()
                         });
-                    if send.send((k, outcomes)).is_err() {
+                    let millis = started.elapsed().saturating_sub(waited).as_millis() as i64;
+                    if send.send((k, millis, outcomes)).is_err() {
                         break;
                     }
                 }
@@ -3052,7 +3062,8 @@ fn run_program_tests<'a>(
         drop(send);
         let mut finished = BTreeMap::new();
         let mut shown = 0;
-        for (k, outcomes) in receive {
+        for (k, millis, outcomes) in receive {
+            ran.push((programs[k].name.to_string(), millis));
             finished.insert(k, outcomes);
             while let Some(outcomes) = finished.remove(&shown) {
                 let reported = outcomes.and_then(|outcomes| done(&programs[shown], outcomes));
@@ -3070,7 +3081,9 @@ fn run_program_tests<'a>(
             }
         }
         Ok(())
-    })
+    });
+    block_on(project_tests::project_tests_remember(&times, &ran));
+    run
 }
 
 /// The one build per SETTING of the PROGRAMS (`project_tests_batches`).
