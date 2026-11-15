@@ -189,6 +189,9 @@ pub struct CheckFacts {
     /// the bounds walk reads a path of fields to one as a number. And the
     /// calls of that type a `let` binds (#781).
     pub whole_fields: collections::BTreeSet[i64],
+    /// **Of `whole_fields`, the field and element reads, with their type**
+    /// (ADR-306 D34): a term's type is its range.
+    pub whole_types: collections::BTreeMap[i64, String],
     /// **The `for` heads that bind one whole number**, by the node of what
     /// they walk (ADR-306 D7): the bounds walk reads the binding as a number.
     pub whole_loops: collections::BTreeSet[i64],
@@ -739,6 +742,7 @@ impl CheckFacts {
             std_lengths: collections::BTreeSet(),
             sized_lengths: collections::BTreeSet(),
             whole_fields: collections::BTreeSet(),
+            whole_types: collections::BTreeMap(),
             whole_loops: collections::BTreeSet(),
             whole_parts: collections::BTreeMap(),
             whole_lets: collections::BTreeMap(),

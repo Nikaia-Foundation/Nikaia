@@ -1,0 +1,4 @@
+bounds in tests/a_terms_type_is_its_range_for_a_field_counter_and_a_quotient.nika: 0 indexes, 0 proved; 3 operations, 3 proved
+    14  self.splits += 1            proved
+    18  self.bump / 1073741824 + 1  proved
+    23  b / 1073741824 + 1          proved

@@ -155,6 +155,7 @@ fn frame_context(
 		text_classes: collections::BTreeMap(),
 		around: around,
 		whole_fields: collections::BTreeSet(),
+		whole_types: collections::BTreeMap(),
 		whole_loops: collections::BTreeSet(),
 		whole_parts: collections::BTreeMap(),
 		array_lengths: collections::BTreeMap(),

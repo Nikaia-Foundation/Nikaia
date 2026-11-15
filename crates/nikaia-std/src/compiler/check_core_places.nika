@@ -353,6 +353,7 @@ fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref Check
         Ty::Named { name, args, .. } => {
             if args.is_empty() && is_whole_number(name) {
                 state.facts.whole_fields.insert(id_of(expr) as i64)
+                state.facts.whole_types.insert(id_of(expr) as i64, name.clone())
             }
         },
         else => {}
@@ -1304,6 +1305,7 @@ pub fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWor
             Ty::Named { name: item, args: inner, .. } => {
                 if inner.is_empty() && is_whole_number(item) {
                     state.facts.whole_fields.insert(id_of(expr) as i64)
+                    state.facts.whole_types.insert(id_of(expr) as i64, item.clone())
                 }
             },
             else => {}

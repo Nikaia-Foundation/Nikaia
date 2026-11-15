@@ -152,7 +152,7 @@ impl SvBook {
     pub(crate) fn lit_bound(&self, l: u32) -> Option<SvBound> {
         let at = (l / 2u32) as i64;
         if at >= self.atoms.len() as i64 { return None; }
-        let atom = (*nikaia_std::index::get(&self.atoms, nikaia_std::index::at(at))).clone();
+        let atom = (*unsafe { nikaia_std::proven::read(&self.atoms, (at) as usize) }).clone();
         sv_lit_bound(&atom, l, sv_row_real(&atom.row, &self.reals))
     }
     pub(crate) fn real(&self, row: &SvRow) -> bool { sv_row_real(row, &self.reals) }
