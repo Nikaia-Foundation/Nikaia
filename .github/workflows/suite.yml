@@ -16,7 +16,7 @@ name: Suite
 # show. Their lints and Miri run once, on x86 (`unsafe_crates` in nikaia.yml).
 #
 # What does not depend on the architecture runs on x86 only: the samples, the
-# page examples and the ledgers (`it-1`), and the sweep's allow-list check
+# page examples and the ledgers (shard `ledgers`), and the sweep's allow-list check
 # reads file names, once, for the x86 leg.
 on:
   workflow_call:
@@ -195,6 +195,7 @@ jobs:
           - compiler-2
           - compiler-3
           - compiler-4
+          - ledgers
         # **The one-thread lowering runs weekly and by hand only** (CI speed):
         # it is the whole tools package again on one core, the longest shard
         # of a push (7 min), and `heavy-sysroot-pair` lowers the same package
@@ -202,6 +203,9 @@ jobs:
         # different interleaving of files on threads each time.
         exclude:
           - shard: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'none' || 'heavy-sysroot-cores' }}
+          # The samples, the page examples and the ledgers do not depend on
+          # the architecture: x86 only.
+          - shard: ${{ inputs.arch == 'arm64' && 'ledgers' || 'none' }}
     env:
       SHARD: ${{ matrix.shard }}
       IT_SHARDS: 3
@@ -249,6 +253,7 @@ jobs:
       # Each one-file program a checker test accepts is written to the dump
       # this shard sweeps (#705).
       - name: Test
+        if: matrix.shard != 'ledgers'
         env:
           NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
         run: |
@@ -309,9 +314,11 @@ jobs:
           grep -E '^test .* FAILED|\.\.\. FAILED' "$RUNNER_TEMP/test.log" | sed 's/^/::error::/' | head -50 || true
           awk '/^failures:$/{f=1;next} /^test result/{f=0} f&&/^    /{print "::error::failed: "$1}' "$RUNNER_TEMP/test.log" | sort -u | head -50 || true
 
-      # What were the bootstrap job's last steps; they need the compiler only.
+      # What were the bootstrap job's last steps; they need the compiler only,
+      # so they are a shard of their own beside the tests (CI speed: on it-1
+      # they made it one of the longest shards).
       - name: The samples, the page examples and the ledgers
-        if: matrix.shard == 'it-1' && inputs.arch == 'x64'
+        if: matrix.shard == 'ledgers'
         env:
           NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
         run: |
