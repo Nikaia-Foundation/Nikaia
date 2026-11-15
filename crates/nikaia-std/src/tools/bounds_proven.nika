@@ -148,7 +148,17 @@ pub fn bounds_proven(
 				// **The invariants that carried a check through a loop** go
 				// into `nikaia.proofs` (ADR-361 D4, D10).
 				record(walked.loops)
+				// **The rules that hold, found once** (#1581): what a body
+				// found serves the bodies after it, until a derived
+				// precondition the walks start from is added.
+				for (of, holding) in walked.held {
+					context.around.held.insert(of.clone(), holding.clone())
+				}
+				let entries = context.around.derived.entry.len()
 				derived_note(context.around, walked)
+				if context.around.derived.entry.len() != entries {
+					context.around.held = collections::BTreeMap()
+				}
 				bp_add(out, walked)
 			},
 			else => {},
@@ -158,6 +168,9 @@ pub fn bounds_proven(
 	// **A grammar's actions, walked like a function's body** (ADR-314 D1),
 	// from what each binding matched.
 	let none: Vec[FnArg] = []
+	// What a grammar binding matched changes every walk: each finds the
+	// rules that hold itself.
+	context.around.held = collections::BTreeMap()
 	for item in program.items {
 		match item.node {
 			Item::Grammar(def) => {

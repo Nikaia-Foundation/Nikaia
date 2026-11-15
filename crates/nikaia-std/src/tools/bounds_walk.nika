@@ -172,6 +172,10 @@ pub struct BoundsProven {
 	/// **What `--bounds-trace` shows** (#1495): each goal of the asked line,
 	/// with the facts the walk held, on the last pass.
 	pub trace: Vec[String],
+	/// **The rules that hold of each type this walk found itself**
+	/// (`rules_settle`, #1581): kept by `bounds_proven` for the next bodies,
+	/// as long as nothing they depend on changed.
+	pub held: collections::BTreeMap[String, Vec[BoundsRule]],
 }
 
 /// What holds at one point of a body.
@@ -414,6 +418,7 @@ fn no_proofs() -> BoundsProven {
 		fields_lost: collections::BTreeSet(),
 		returned: null,
 		trace: [],
+		held: collections::BTreeMap(),
 	}
 }
 
@@ -464,7 +469,7 @@ fn bounds_rounds(
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> BoundsProven {
-	rules_settle(walk, args, body, context, program, words, ask)
+	let found_held = rules_settle(walk, args, body, context, program, words, ask)
 	let mut settled = false
 	if !walk.shape.roots.is_empty() {
 		walk.collecting = true
@@ -543,6 +548,7 @@ fn bounds_rounds(
 	if !walk.return_params.is_empty() {
 		walk.proven.returned = bounding_returns_found(walk, body, words)
 	}
+	walk.proven.held = found_held
 	return walk.proven.clone()
 }
 

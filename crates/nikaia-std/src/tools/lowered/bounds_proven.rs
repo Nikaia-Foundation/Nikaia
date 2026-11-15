@@ -46,7 +46,10 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
                 counted(body, &counters);
                 let walked = bounds_aggressive(args, body, bp_names(&counters, words), &context, program, words, &|arena, known, goal| { ask_in(&function, at, arena, known, goal) });
                 record(&walked.loops);
+                for (of, holding) in walked.held.iter() { context.around.held.insert(nikaia_std::block::Text::from(of.to_string()), holding.copy_owned()); }
+                let entries = context.around.derived.entry.len() as i64;
                 derived_note(&mut context.around, &walked);
+                if (context.around.derived.entry.len() as i64) != entries { context.around.held = collections::BTreeMap::new(); }
                 bp_add(&mut out, &walked);
             },
             _ => { },
@@ -54,6 +57,7 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
     }
     out.derived = derived_rows(&context.around);
     let none: Vec<FnArg> = vec![];
+    context.around.held = collections::BTreeMap::new();
     for item in program.items.iter() {
         match &item.node {
             Item::Grammar(def) => {

@@ -690,22 +690,31 @@ pub(crate) fn rules_built(expr: &Expr, owner: &str, lists: &collections::BTreeMa
     }
 }
 
-pub(crate) fn rules_settle(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
-    if context.around.rules.is_empty() { return; }
+pub(crate) fn rules_settle(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> collections::BTreeMap<String, Vec<BoundsRule>> {
+    let mut found: collections::BTreeMap<String, Vec<BoundsRule>> = collections::BTreeMap::new();
+    if context.around.rules.is_empty() { return found; }
     let owner = rules_owner_of(program, body, words);
     let roots = rules_roots(&owner, args, &walk.shape, &context.around.rules, words);
-    if roots.is_empty() { return; }
+    if roots.is_empty() { return found; }
     let mut owners: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (_, of) in roots.iter() { owners.insert(nikaia_std::block::Text::from(of.to_string())); }
     let mut held: Vec<BoundsRule> = vec![];
     for of in owners.iter() {
-        held.extend(nikaia_std::index::or(match context.around.held.get(of) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        }, || rules_holding(of, context, program, words, ask).into()));
+        let given = context.around.held.get(of);
+        if given.is_some() {
+            held.extend(nikaia_std::index::or(match given {
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+                None => None,
+            }, || vec![].into()));
+            continue;
+        }
+        let holding = rules_holding(of, context, program, words, ask);
+        found.insert(nikaia_std::block::Text::from(of.to_string()), holding.copy_owned());
+        held.extend(holding);
     }
     walk.rules = held;
     walk.rule_roots = roots;
+    found
 }
 
 pub(crate) fn rules_held_all(context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> collections::BTreeMap<String, Vec<BoundsRule>> {
