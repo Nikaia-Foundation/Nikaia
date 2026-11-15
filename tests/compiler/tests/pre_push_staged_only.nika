@@ -5,7 +5,8 @@
 // temp repository made of HEAD with this checkout's scripts, a tools file
 // grows by five thousand code lines, unstaged, and an unrelated file is staged:
 // every step stays green. Staged, the same growth turns `badges` and
-// `version` red.
+// `version` red. It runs `pre-push -- push`, where the badges are strict (a
+// builder's run only shows them; the driver redraws them).
 use std::fs
 use std::process
 
@@ -29,9 +30,10 @@ fn sh(dir: String, script: String) -> String throws {
     return out.stdout.trim().clone()
 }
 
-// The step lines of a pre-push run, without the output of a red one.
+// The step lines of a strict pre-push run (`-- push`), without the output of
+// a red one.
 fn steps(nikaia: String, work: String) -> String throws {
-    let out = process::run(nikaia, ["run", "scripts/pre-push.nika"]; dir: work)
+    let out = process::run(nikaia, ["run", "scripts/pre-push.nika", "--", "push"]; dir: work)
     let mut lines = String()
     for line in out.stdout.lines() {
         if line.ends_with(" green") || line.ends_with(" red") {
