@@ -89,6 +89,7 @@ pub fn bounds_proven(
 		std_receivers: facts.std_receivers.clone(),
 		simd_loads: facts.simd_loads.clone(),
 		shifts: facts.shifts.clone(),
+		divisions: facts.divisions.clone(),
 		arithmetic: facts.arithmetic.clone(),
 		nonnegative: nonnegative.clone(),
 		given: collections::BTreeMap(),

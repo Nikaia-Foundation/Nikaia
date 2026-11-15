@@ -1633,6 +1633,15 @@ fn check_core_stmt_add_sub_mul(op: ref BinaryOp?) -> bool sync {
     return o == BinaryOp::Add || o == BinaryOp::Sub || o == BinaryOp::Mul
 }
 
+/// `/` or `%`.
+fn check_core_stmt_divides(op: ref BinaryOp?) -> bool sync {
+    if op == null {
+        return false
+    }
+    let o: ref BinaryOp = op ?? return false
+    return o == BinaryOp::Div || o == BinaryOp::Rem
+}
+
 /// An arithmetic or bit operator a slot of numbers is read once for.
 fn check_core_stmt_a_slot_operator(op: ref BinaryOp?) -> bool sync {
     if op == null {
@@ -1888,6 +1897,16 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
         // **`x += 1` over an `f64` `x`** is an integer beside a float (#703).
         if !state.an_integer_beside_a_float(world, target, into, value, found, span) {
             state.a_compound_over_two_integer_types(world, o.clone(), target, into, value, found, span)
+        }
+    }
+    // **`x /= d` divides as `x / d`** (ADR-396 D7, #1578): a goal of the
+    // walk, by the statement's first byte, where `x` is a path of fields; a
+    // literal divisor is no check.
+    if check_core_stmt_divides(op) && check_core_stmt_a_name_or_field(target) {
+        let plain = check_core_stmt_plain_name(into.unseen()) ?? ""
+        let given = check_core_stmt_plain_name(value_of_a_copy(found.unseen())) ?? ""
+        if is_whole_number(plain) && given == plain {
+            state.facts.divisions.insert(span.start as i64, plain.clone())
         }
     }
     // **`x += d` is `x = x + d`, and may be proved as one** (#387), and so

@@ -218,6 +218,12 @@ pub struct CheckFacts {
     /// byte its operator starts at, with `x`'s whole-number type: its count is
     /// a goal of the bounds walk (ADR-306 D18).
     pub shifts: collections::BTreeMap[i64, String],
+    /// **Every `/` and `%` on one whole-number type**, by the byte its
+    /// operator starts at (the statement's first byte for `x /= d`), with
+    /// that type: `d != 0`, and on a signed type not the least value by
+    /// `-1`, is a goal of the bounds walk, which `--bounds` lists (ADR-396
+    /// D7, #1578). The check stays in the machine code (ADR-395 D3).
+    pub divisions: collections::BTreeMap[i64, String],
     /// **A method call on a type `std`'s ledger describes**, by the call's
     /// node, with that type's name as the ledger keys it (`Bytes`, `u64`):
     /// the bounds walk reads the entry's `ensures` and `ensures_each`
@@ -742,6 +748,7 @@ impl CheckFacts {
             char_codes: collections::BTreeSet(),
             arithmetic: collections::BTreeMap(),
             shifts: collections::BTreeMap(),
+            divisions: collections::BTreeMap(),
             std_receivers: collections::BTreeMap(),
             method_callees: collections::BTreeMap(),
             field_owners: collections::BTreeMap(),

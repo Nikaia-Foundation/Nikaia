@@ -141,6 +141,20 @@ pub(crate) fn check_core_ops_whole_name(side: &Expr, ty: &Ty) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_ops_division(lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty) -> String {
+    if check_core_ops_lit_int(rhs) || !check_core_ops_whole(lhs, left) || !check_core_ops_whole(rhs, right) { return String::from(""); }
+    let a = check_core_ops_whole_name(lhs, left);
+    let b = check_core_ops_whole_name(rhs, right);
+    if a == "" {
+        if !is_whole_number(&b) { return String::from(""); }
+        return b;
+    }
+    if b != "" && a != b || !is_whole_number(&a) { return String::from(""); }
+    a
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_ops_literal_beside(state: &mut CheckState, op: &BinaryOp, side: &Expr, other: &Ty, count: bool) {
     let value = value_of_a_copy(&other.unseen());
     if count && check_core_ops_shift(&op) { return; }
@@ -300,6 +314,10 @@ pub(crate) fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world
     }
     let (same, named) = check_core_ops_same(&state, &op, lhs, left, rhs, right, at);
     let found = if check_core_ops_arithmetic(&op) { unviewed_type(&same) } else { same };
+    if *op == BinaryOp::Div || *op == BinaryOp::Rem {
+        let divided = check_core_ops_division(lhs, left, rhs, right);
+        if divided != "" { state.facts.divisions.insert(at.start as i64, nikaia_std::block::Text::from(divided.to_string())); }
+    }
     if named != "" { state.facts.arithmetic.insert(at.start as i64, named); } else if check_core_ops_unchecked(&op) && check_core_ops_whole_or_open(&state, world, lhs, left) && check_core_ops_whole_or_open(&state, world, rhs, right) { state.open_number_site(world, &vec![lhs, rhs], at.start as i64); }
     found
 }

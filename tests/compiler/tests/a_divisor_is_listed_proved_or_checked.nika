@@ -1,0 +1,42 @@
+// `--bounds` lists each `/` and `%` whose divisor is not a literal, proved
+// or checked (ADR-396 D7, #1578); a literal divisor is no check.
+
+fn halves(n: i64, d: i64) -> i64 {
+    if d > 0 {
+        return n / d
+    }
+    return n % 7
+}
+
+fn signed_rest(n: i64, d: i64) -> i64 {
+    if d != 0 {
+        return n % d
+    }
+    return 0
+}
+
+fn guarded(n: i64, d: i64) -> i64 {
+    if d != 0 && d != -1 {
+        return n / d
+    }
+    return 0
+}
+
+fn unsigned_rest(n: u32, d: u32) -> u32 {
+    return n % d
+}
+
+fn compound(n: u64, d: u64) -> u64 {
+    let mut x = n
+    if d >= 2 {
+        x /= d
+    }
+    x %= d
+    return x
+}
+
+fn main() throws {
+    let words = ["a", "bb"]
+    let parts = words.len() as i64
+    println(f"{halves(10, 3)} {signed_rest(10, 3)} {guarded(9, 2)} {unsigned_rest(10, 3)} {compound(20, 2)} {100 / parts}")
+}
