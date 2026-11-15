@@ -187,7 +187,9 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     if rust_library && subcommand == "run" {
         throw ProjectDriveRefusal::Refused("This package is built as a library (`artifact = \"rust-library\"`), and a library has nothing to run: `nikaia build` writes it as a Rust crate, and a Rust program depends on it.")
     }
-    let crate_build = rust_library && subcommand == "build" && !host.tests_build()
+    // `check --rustc` of a rust-library checks that lib crate, not a program
+    // crate without `main` (#1657).
+    let crate_build = rust_library && (subcommand == "build" || subcommand == "check") && !host.tests_build()
     // **`[features]` is a library's** (ADR-393 D5): a program has no user
     // who chooses parts (`NK1346`), a C library is built whole and only its
     // binding is narrowed; a feature list, and `nikaia bind --features`, are
@@ -233,8 +235,9 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     // **A program has a `fn main`** (Part III 13.3, `NK1351`): refused here,
     // before anything is lowered, rather than by `rustc` as an internal
     // error. A library artifact and a test build have no `main` of their own.
+    // `check --rustc` compiles the same program crate, so it is refused too (#1657).
     let program = !rust_library && !host.is_library() && !host.tests_build()
-    if program && (subcommand == "build" || subcommand == "run") {
+    if program && (subcommand == "build" || subcommand == "run" || subcommand == "check") {
         match host.entry_without_main() {
             null => {},
             source => return (project_drive_no_main(host, entry, source), null),
@@ -335,7 +338,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     // **The crates, and no Cargo** (ADR-393 D1): a Rust crate that depends
     // on the library builds it.
     if crate_build {
-        return (project_drive_rust_library(host, members, rust), null)
+        return (project_drive_rust_library(host, members, rust, subcommand == "check"), null)
     }
 
     // **The generated Rust, before Cargo starts** (#280). The wrapper
@@ -721,7 +724,9 @@ pub fn project_drive_rust_crate(name: ref String) -> String {
 /// dependency tables (`nikaia-std` by path, a Rust crate as written, a Nikaia
 /// package as the crate beside it), made the lib crate by
 /// `project_drive_rust_manifest`. The next build overwrites each file.
-fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec[ProjectMembersMember], rust: ref Vec[String]) -> i32 sync throws {
+/// Under `check --rustc` (`checking`, #1657) Cargo's `check` runs on the
+/// entry's crate, what rustc said is reported, and no directory is printed.
+fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec[ProjectMembersMember], rust: ref Vec[String], checking: bool) -> i32 sync throws {
     let target = host.own_dir().parent() ?? throw ProjectDriveRefusal::Failed(f"{host.own_dir().display()} has no directory")
     let made = target.join("rust-library")
     let features = host.features()
@@ -753,19 +758,27 @@ fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec
         host.write_spliced(dir.join("src"), lowered)
     }
     let crate_dir = made.join(project_drive_rust_crate(members[0].name))
-    let applied = checked ?? {
-        println(f"rust-library: {crate_dir.display()}")
-        return 0
-    }
     // **Every feature alone, the core, and all together** (D6): what rustc
     // refuses is the feature's, reported on its root.
     // Cargo's own wrapper is left out: the crate is plain Rust now.
-    let check_dir = env::var("CARGO_TARGET_DIR") ?? target.join("rust-library-check").display()
-    let mut check_env: Vec[(String, String)] = []
-    check_env.push(("CARGO_TARGET_DIR", check_dir))
-    check_env.push(("RUSTC_WORKSPACE_WRAPPER", ""))
-    let unset: Vec[String] = []
-    host.make_cargo(crate_dir.join("Cargo.toml"), check_env, unset, false)
+    if checked != null || checking {
+        let check_dir = env::var("CARGO_TARGET_DIR") ?? target.join("rust-library-check").display()
+        let mut check_env: Vec[(String, String)] = []
+        check_env.push(("CARGO_TARGET_DIR", check_dir))
+        check_env.push(("RUSTC_WORKSPACE_WRAPPER", ""))
+        let unset: Vec[String] = []
+        host.make_cargo(crate_dir.join("Cargo.toml"), check_env, unset, false)
+    }
+    let applied = checked ?? {
+        if checking {
+            let args: Vec[String] = ["--quiet"]
+            let (code, said) = host.cargo_messages("check", args)
+            host.report(said)
+            return code
+        }
+        println(f"rust-library: {crate_dir.display()}")
+        return 0
+    }
     let mut runs: Vec[(String, Vec[String])] = [("", ["--no-default-features"])]
     for name in applied.names {
         runs.push((name.clone(), ["--no-default-features", "--features", name.clone()]))
@@ -790,7 +803,9 @@ fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec
         let refusal = FeaturesRefusal { code: "NK1345", feature: blamed.clone(), entry: entry, message: f"The crate does not build with {alone}. rustc says: {features_first_error(said)}", help: help }
         return project_drive_features_refused(host, refusal)
     }
-    println(f"rust-library: {crate_dir.display()}")
+    if !checking {
+        println(f"rust-library: {crate_dir.display()}")
+    }
     return 0
 }
 
