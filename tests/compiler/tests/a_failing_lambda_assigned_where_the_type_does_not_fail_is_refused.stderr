@@ -1,0 +1,9 @@
+error[NK1102]: This lambda can fail, but `fn()` says the code it names never fails.
+   --> tests/a_failing_lambda_assigned_where_the_type_does_not_fail_is_refused.nika:18:5
+    |
+ 18 |     g = fn { fails() }
+    |     ^^^^^^^^^^^^^^^^^^
+    |
+    = note: A function type without `throws` cannot fail, so a lambda that can is not of that type.
+    = help: Write `fn() throws` as the type, or handle the failure inside the lambda with `… catch { … }`.
+1 type error

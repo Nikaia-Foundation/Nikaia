@@ -1267,12 +1267,27 @@ pub fn check_core_ops_closure[H: CheckHost](mut state: CheckState, world: ref Ch
         let held: CheckPromises = promised?.clone() ?? CheckPromises { may_pause: true, may_fail: true }
         state.handed_over = CheckHanded { pauses: false, fails: false, caught: false, promised: held }
     }
+    // **Storing code that may fail calls nothing** (Part I 7.1, ADR-351 D2,
+    // #1627): under `fn() throws` the failure is the value's, met where it
+    // is called, so the function around neither says `throws` for it nor
+    // has a `catch` around the lambda handle it.
+    let stored_failing = promised?.may_fail ?? false
+    let was_caught = state.flow.caught
+    let enclosing: CheckGuarded? = state.flow.guarded?.clone()
+    if stored_failing {
+        state.flow.caught = true
+        state.flow.guarded = null
+    }
     let outer = check_core_lambda_enter(state)
     let walked = check_core_block(state, world, host, body)
     // **A map's read as its last value is copied out** (#997), as a lambda's
     // handed to a call is.
     state.a_map_read_handed_back(world, walked, body)
     let tail = check_core_lambda_leave(state, outer, walked, body)
+    if stored_failing {
+        state.flow.caught = was_caught
+        state.flow.guarded = enclosing
+    }
     if promised != null {
         let fails = state.handed_over?.fails ?? false
         state.handed_over = outer_handed

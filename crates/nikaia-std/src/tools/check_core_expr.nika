@@ -760,16 +760,24 @@ fn check_core_expr_throw[H: CheckHost](mut state: CheckState, world: ref CheckWo
     state.a_thrown_value_that_is_not_an_error(inner, thrown, span)
     state.a_thrown_type_with_no_error(world, thrown, span)
     // **A `throw` fails the lambda it is in** (ADR-277 D7, #1369), as a
-    // failing call there does.
+    // failing call there does; where the lambda's type says it never fails,
+    // that is the whole message (`NK2606`, `NK1102`).
+    let mut stops_at_the_lambda = false
     if state.handed_over != null {
         let held = state.handed_over?.clone() ?? return Ty::Unknown
         if !held.caught {
             let mut handed = held
             handed.fails = true
+            stops_at_the_lambda = !handed.promised.may_fail
             state.handed_over = handed
         }
     }
     state.a_way_out("throw", "", span)
+    // **And the function it is in** (Part I 7.1, #1627): one that does not
+    // say `throws` is refused, as for a failing call (`NK2605`).
+    if !stops_at_the_lambda {
+        state.a_throw_here(thrown, span)
+    }
     return Ty::Unknown
 }
 

@@ -1,0 +1,33 @@
+// Storing code that can fail calls nothing (Part I 7.1, ADR-351 D2, #1627):
+// a function that stores a `fn() throws` lambda needs no `throws`, and a
+// lambda that only throws fails with what it throws, kept in a `let` or a
+// field, so a `catch` at the call has it to handle.
+enum Bad { Oops }
+
+impl Error for Bad {
+    fn message(self) -> String {
+        return "oops"
+    }
+}
+
+struct Holder {
+    f: fn() throws,
+}
+
+fn fails() throws {
+    throw Bad::Oops
+}
+
+fn made() -> fn() throws {
+    let k: fn() throws = fn { fails() }
+    return k
+}
+
+fn main() throws {
+    let g: fn() throws = fn { throw Bad::Oops }
+    g() catch { println("caught a let") }
+    let h = Holder { f: fn { throw Bad::Oops } }
+    h.f() catch { println("caught a field") }
+    let m = made()
+    m() catch { println("caught a stored call") }
+}

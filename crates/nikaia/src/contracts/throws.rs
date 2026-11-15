@@ -82,6 +82,7 @@ pub fn infer(
             &code.resolved,
             code.unresolved,
             &code.free,
+            &code.thrown,
             ledger,
             library,
             &mut graph,

@@ -278,9 +278,7 @@ pub fn check_core_places_stored<H: CheckHost>(state: &mut CheckState, world: &Ch
         check_core_places_code_into(&state, world, host, v, &mut stored);
     }
     let mut entry: CheckStoredCode = nikaia_std::index::or(state.stored_code.remove(key), || CheckStoredCode::empty());
-    entry.resolved.extend(stored.resolved.iter().cloned());
-    entry.unresolved = entry.unresolved || stored.unresolved;
-    entry.free.extend(stored.free.iter().cloned());
+    entry.meet(&stored);
     state.stored_code.insert(nikaia_std::block::Text::from(key.to_string()), entry);
 }
 
@@ -294,9 +292,7 @@ pub fn check_core_places_stored_keys<H: CheckHost>(state: &mut CheckState, world
     }
     for key in keys.iter() {
         let mut entry: CheckStoredCode = nikaia_std::index::or(state.stored_code.remove(key), || CheckStoredCode::empty());
-        entry.resolved.extend(stored.resolved.iter().cloned());
-        entry.unresolved = entry.unresolved || stored.unresolved;
-        entry.free.extend(stored.free.iter().cloned());
+        entry.meet(&stored);
         state.stored_code.insert(nikaia_std::block::Text::from(key.to_string()), entry);
     }
 }
@@ -367,7 +363,11 @@ pub fn check_core_places_code_keys(state: &CheckState, world: &CheckWorld<'_, '_
 // this was written - see `contracts::sync`.
 pub fn check_core_places_code_into<H: CheckHost>(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, v: &Expr, stored: &mut CheckStoredCode) {
     match v {
-        Expr::Closure { body, .. } => { stored.free.extend(host.free_calls(body)); },
+        Expr::Closure { body, .. } => {
+            stored.free.extend(host.free_calls(body));
+            let thrown = thrown_by(body, world.words, &|literal| { host.literal_holes(literal) }, &|_| { Contribution { call: None, given: vec![], errors: vec![], fatal: vec![], result: None } });
+            stored.thrown.extend(thrown.direct.iter().cloned());
+        },
         Expr::Variable(named, _) => {
             let named = *named;
             let written: String = format!("{}", world.words.resolve(named));
@@ -382,9 +382,7 @@ pub fn check_core_places_code_into<H: CheckHost>(state: &CheckState, world: &Che
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     }, || CheckStoredCode::empty());
-                    stored.resolved.extend(entry.resolved.iter().cloned());
-                    stored.unresolved = stored.unresolved || entry.unresolved;
-                    stored.free.extend(entry.free.iter().cloned());
+                    stored.meet(&entry);
                 } else if check_core_call_a_param_of(world, &current, &written) { stored.free.insert(format!("@{}", key)); } else { stored.unresolved = true; }
             }
         },

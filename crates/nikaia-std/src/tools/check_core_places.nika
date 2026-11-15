@@ -389,9 +389,7 @@ pub fn check_core_places_stored[H: CheckHost](mut state: CheckState, world: ref 
         check_core_places_code_into(state, world, host, v, stored)
     }
     let mut entry: CheckStoredCode = state.stored_code.remove(key) ?? CheckStoredCode::empty()
-    entry.resolved.extend(stored.resolved.clone())
-    entry.unresolved = entry.unresolved || stored.unresolved
-    entry.free.extend(stored.free.clone())
+    entry.meet(stored)
     state.stored_code.insert(key.clone(), entry)
 }
 
@@ -408,9 +406,7 @@ pub fn check_core_places_stored_keys[H: CheckHost](mut state: CheckState, world:
     }
     for key in keys {
         let mut entry: CheckStoredCode = state.stored_code.remove(key) ?? CheckStoredCode::empty()
-        entry.resolved.extend(stored.resolved.clone())
-        entry.unresolved = entry.unresolved || stored.unresolved
-        entry.free.extend(stored.free.clone())
+        entry.meet(stored)
         state.stored_code.insert(key.clone(), entry)
     }
 }
@@ -483,6 +479,10 @@ pub fn check_core_places_code_into[H: CheckHost](state: ref CheckState, world: r
     match v {
         Expr::Closure { body, .. } => {
             stored.free.extend(host.free_calls(body))
+            // **And what its body throws itself** (Part I 7.1, #1627): a
+            // `throw` fails the code as a failing call does.
+            let thrown = thrown_by(body, world.words, fn(literal) { host.literal_holes(literal) }, fn(_) { Contribution { call: null, given: [], errors: [], fatal: [], result: null } })
+            stored.thrown.extend(thrown.direct.clone())
         },
         // A function of this program, named: it is what runs. A name of this
         // function that was given code passes on what it was given.
@@ -495,9 +495,7 @@ pub fn check_core_places_code_into[H: CheckHost](state: ref CheckState, world: r
                 let key = f"{current}::{written}"
                 if state.stored_code.contains_key(key) {
                     let entry: CheckStoredCode = state.stored_code[key]?.clone() ?? CheckStoredCode::empty()
-                    stored.resolved.extend(entry.resolved.clone())
-                    stored.unresolved = stored.unresolved || entry.unresolved
-                    stored.free.extend(entry.free.clone())
+                    stored.meet(entry)
                 } else if check_core_call_a_param_of(world, current, written) {
                     // **A parameter of code handed on is that parameter's
                     // place** (ADR-351 D4): `@F::p`, so `g(f)` chains `g`'s

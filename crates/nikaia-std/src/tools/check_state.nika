@@ -627,11 +627,22 @@ pub struct CheckStoredCode {
     pub resolved: collections::BTreeSet[String],
     pub unresolved: bool,
     pub free: collections::BTreeSet[String],
+    /// **What a stored lambda throws itself** (Part I 7.1, #1627): the types
+    /// its `throw`s name, `?` for one nobody can name.
+    pub thrown: collections::BTreeSet[String],
 }
 
 impl CheckStoredCode {
     pub fn empty() -> CheckStoredCode {
-        return CheckStoredCode { resolved: collections::BTreeSet(), unresolved: false, free: collections::BTreeSet() }
+        return CheckStoredCode { resolved: collections::BTreeSet(), unresolved: false, free: collections::BTreeSet(), thrown: collections::BTreeSet() }
+    }
+
+    /// Code given to a place meets what it holds (ADR-351 D3).
+    pub fn meet(ref mut self, given: ref CheckStoredCode) {
+        self.resolved.extend(given.resolved.clone())
+        self.unresolved = self.unresolved || given.unresolved
+        self.free.extend(given.free.clone())
+        self.thrown.extend(given.thrown.clone())
     }
 }
 

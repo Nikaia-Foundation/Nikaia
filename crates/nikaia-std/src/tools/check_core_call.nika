@@ -207,6 +207,14 @@ fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWor
                 check_core_args_code_said(state, current, !is_sync, false)
             } else {
                 check_core_args_code_said(state, current, !is_sync, fails)
+                // **Code no place records, such as a call's result, fails
+                // with what nobody can name** (Part I 7.1, #1627): its type
+                // says `throws`, so the call fails as a written one does.
+                if fails {
+                    let mut contract = FnContract::empty()
+                    contract.fails_with.push("?")
+                    state.may_fail_here(world, host, key, contract, span)
+                }
             }
         }
     }
@@ -328,6 +336,8 @@ fn check_core_call_from_given[H: CheckHost](state: ref CheckState, world: ref Ch
         for name in stored.resolved {
             check_core_call_set_into(world, name, set)
         }
+        // A lambda's own `throw`s are what it fails with too (#1627).
+        set.extend(stored.thrown.clone())
     }
     let mut errors: Vec[String] = []
     for error in set {
@@ -421,9 +431,7 @@ fn check_core_call_feed_params[H: CheckHost](mut state: CheckState, world: ref C
         check_core_places_code_into(state, world, host, args[i], stored)
         let place = f"{key}::{param}"
         let mut entry: CheckStoredCode = state.stored_code.remove(place) ?? CheckStoredCode::empty()
-        entry.resolved.extend(stored.resolved.clone())
-        entry.unresolved = entry.unresolved || stored.unresolved
-        entry.free.extend(stored.free.clone())
+        entry.meet(stored)
         state.stored_code.insert(place, entry)
     }
 }

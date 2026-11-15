@@ -151,9 +151,10 @@ fn methods_into(resolved: ref MethodsCalled?, own: ref Ledger, library: ref Ledg
 /// **A function field is a place in the graph** (ADR-351 D1, D3): it calls
 /// whatever was stored in it, and its set is the union of theirs. `free` are
 /// the functions named or called by the stored code, `resolved` its method
-/// calls; code this walk did not see makes it `?`.
-pub fn stored_throws(field: ref String, resolved: ref collections::BTreeSet[String], unresolved: bool, free: ref collections::BTreeSet[String], own: ref Ledger, library: ref Ledger, mut graph: ThrowsGraph) {
-    let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+/// calls, `thrown` what its lambdas' own `throw`s name (#1627); code this
+/// walk did not see makes it `?`.
+pub fn stored_throws(field: ref String, resolved: ref collections::BTreeSet[String], unresolved: bool, free: ref collections::BTreeSet[String], thrown: ref collections::BTreeSet[String], own: ref Ledger, library: ref Ledger, mut graph: ThrowsGraph) {
+    let mut named: collections::BTreeSet[String] = thrown.clone()
     let mut called: collections::BTreeSet[String] = collections::BTreeSet()
     if unresolved {
         named.insert(UNNAMED.clone())

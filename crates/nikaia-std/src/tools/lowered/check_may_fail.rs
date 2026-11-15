@@ -33,6 +33,22 @@ impl CheckState {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_throw_here(&mut self, thrown: &Ty, span: &Span) {
+        if self.flow.throwing || self.flow.caught || self.inside_an_action.is_some() { return; }
+        let function = match match self.current.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return };
+        let named: String = match thrown {
+            Ty::Unknown => String::from(""),
+            _ => format!(" `{}`", thrown.text()),
+        };
+        let mut help: String = format!("Add `throws` to `{}`, or handle the failure with `… catch {{ … }}` where it is called.", function);
+        if self.inside_a_drop && function.ends_with("::drop") { help = drop_help(&nikaia_std::block::Text::from(nikaia_std::index::or(function.strip_suffix("::drop"), || "").to_string())); }
+        self.findings.push(check_refusal("NK2605", span, format!("This function can fail, because it throws{}.", named), vec![String::from("A `throw` fails the function it stands in, as a call that can fail does.")], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn may_fail_here<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, contract: &FnContract, span: &Span) {
         if !contract.fails_with.is_empty() {
             let word = type_last_segment(key);

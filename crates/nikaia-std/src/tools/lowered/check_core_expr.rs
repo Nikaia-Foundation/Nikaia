@@ -587,6 +587,7 @@ pub(crate) fn check_core_expr_throw<H: CheckHost>(state: &mut CheckState, world:
     let thrown = check_core_expr(state, world, host, inner, span);
     state.a_thrown_value_that_is_not_an_error(inner, &thrown, span);
     state.a_thrown_type_with_no_error(world, &thrown, span);
+    let mut stops_at_the_lambda = false;
     if state.handed_over.is_some() {
         let held = match match state.handed_over.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -595,10 +596,12 @@ pub(crate) fn check_core_expr_throw<H: CheckHost>(state: &mut CheckState, world:
         if !held.caught {
             let mut handed = held;
             handed.fails = true;
+            stops_at_the_lambda = !handed.promised.may_fail;
             state.handed_over = Some(handed);
         }
     }
     state.a_way_out("throw", "", span);
+    if !stops_at_the_lambda { state.a_throw_here(&thrown, span); }
     Ty::Unknown
 }
 

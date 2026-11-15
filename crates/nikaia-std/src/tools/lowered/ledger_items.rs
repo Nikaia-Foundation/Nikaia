@@ -372,6 +372,7 @@ pub fn ledger_items_stored(codes: &mut Vec<collections::BTreeMap<String, CheckSt
             entry.resolved.extend(code.resolved);
             entry.unresolved |= code.unresolved;
             entry.free.extend(code.free);
+            entry.thrown.extend(code.thrown);
         }
     }
     all

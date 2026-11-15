@@ -1,0 +1,27 @@
+// A `throw` fails the function it stands in, as a failing call does (Part I
+// 7.1, #1627): one without `throws` is refused (NK2605), in its body and in a
+// `catch` handler, not handed to rustc.
+enum Bad { Oops }
+
+impl Error for Bad {
+    fn message(self) -> String {
+        return "oops"
+    }
+}
+
+fn fails() throws {
+    throw Bad::Oops
+}
+
+fn bare() {
+    throw Bad::Oops
+}
+
+fn in_a_handler() {
+    fails() catch { throw Bad::Oops }
+}
+
+fn main() {
+    bare()
+    in_a_handler()
+}
