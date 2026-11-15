@@ -37,7 +37,7 @@ fn main() throws {
 	fs::write(f"{p}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"once\"\nversion = \"0.1.0\"\n")
 	fs::write(f"{p}/src/main.nika", fs::Root::Anywhere, PROGRAM)
 	let log = f"{tmp}/cargo.log"
-	let env = [("RUST_BACKTRACE", "0"), ("NIKAIA_CACHE_DIR", f"{tmp}/cache"), ("CARGO", shim.clone()), ("REAL_CARGO", real), ("SHIM_LOG", log.clone()), ("PATH", f"{tmp}/bin:{path}")]
+	let env = [("RUST_BACKTRACE", "0"), ("CARGO_TERM_COLOR", "never"), ("NIKAIA_CACHE_DIR", f"{tmp}/cache"), ("CARGO", shim.clone()), ("REAL_CARGO", real), ("SHIM_LOG", log.clone()), ("PATH", f"{tmp}/bin:{path}")]
 	let built = process::run(nikaia, ["build"]; dir: p.clone(), env: env.clone())
 	println(f"build: {built.code}")
 	let ran = process::run(nikaia, ["run"]; dir: p, env: env)
