@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1394] — 2026-11-15
+
+**a remainder by a known divisor bounds what it multiplies**
+- The bounds walk's reading of `x % m` as a bound below `m` (also `1 - m ..= m - 1` where the sign of `x` is not known) is pinned by a test and named in ADR-306 D8 (#1643).
+
 ## [0.0.1393] — 2026-11-15
 
 **a field clamped after each shortening stays within its list**
