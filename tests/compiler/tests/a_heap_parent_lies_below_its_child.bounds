@@ -1,0 +1,9 @@
+bounds in tests/a_heap_parent_lies_below_its_child.nika: 6 indexes, 6 proved; 1 operations, 1 proved
+    10  i - 1         proved
+    11  heap[parent]  proved
+    11  heap[i]       proved
+    14  heap[parent]  proved
+    15  heap[parent]  proved
+    15  heap[i]       proved
+    16  heap[i]       proved
+  derived  up: 0 <= at, at <= heap.len(), at < heap.len(), proved at the calls on lines 23

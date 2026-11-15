@@ -136,7 +136,7 @@ pub(crate) fn emit_needs_line_at(starts: &[i64], offset: i64) -> i64 {
     let mut high = starts.len() as i64;
     while low < high {
         let middle = low + (high - low) / 2;
-        if *nikaia_std::index::get(&starts, nikaia_std::index::at(middle)) <= offset { low = middle + 1; } else { high = middle; }
+        if *nikaia_std::index::get(&starts, nikaia_std::index::at(middle)) <= offset { low = unsafe { nikaia_std::proven::add::<i64>(middle, 1) }; } else { high = middle; }
     }
     low
 }

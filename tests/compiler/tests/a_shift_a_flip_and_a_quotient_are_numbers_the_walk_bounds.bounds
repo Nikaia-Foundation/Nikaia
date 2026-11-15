@@ -1,0 +1,12 @@
+bounds in tests/a_shift_a_flip_and_a_quotient_are_numbers_the_walk_bounds.nika: 5 indexes, 4 proved; 4 operations, 3 proved
+    10  2 * half.len()                  proved
+    11  half[l >> 1]                    proved
+    12  pairs[l ^ 1]                    proved
+    13  half[var_of(l)]                 proved
+    14  half[l / 2]                     proved
+    26  xs[i + 3]                       checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    26  i + 3                           checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    34  x / 1073741824 + 1 + (x >> 63)  proved
+    34  x / 1073741824 + 1              proved
+  derived  halved: 0 <= l, proved at the calls on lines 43
+  derived  pick: 0 <= l, l <= pairs.len(), l < pairs.len(), proved at the calls on lines 41
