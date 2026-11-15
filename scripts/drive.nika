@@ -12,7 +12,8 @@
 // without one only in the output), a pending bump of each area's DIR while CI is green,
 // the next area, focus.txt written (not committed). CUT and RED stop for the supervisor as
 // in single-DIR mode (a report's `Found:` does not cut: it goes to DIR/found.txt,
-// `drive_found`); an area entered with an empty queue is skipped (`FOCUS
+// `drive_found`; a done or partial report with a green gate, `Needs: none` and
+// `Owner: none` does not cut either: batch.nika auto-accepts it, #1694); an area entered with an empty queue is skipped (`FOCUS
 // <area> empty, skipped`); every area empty escalates. Before each cycle the open
 // issues labelled `ready` and the area's name, without `wip`, are appended to
 // DIR/batch.txt as `#N` (`QUEUED #N <area>`, drive_queue; one a commit on
@@ -2068,6 +2069,9 @@ fn drive_wip_start(dry: bool, brief: String) throws {
 // the `#N` line stays in batch.txt, so drive_queue_add does not queue it again
 // here: the supervisor retries it with a `#N SUFFIX` line, or removes the
 // line and its report so the next queue picks it up again).
+// A partial report batch.nika auto-accepts (owner, 2026-11-15, #1694) is
+// listed by batch.nika in DIR/review.txt, and the supervisor writes the
+// follow-up.
 fn drive_wip_after(result: String, fixes: String, issue: String) -> String {
 	let word = drive_word(result)
 	if word == "done" {

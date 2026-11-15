@@ -62,6 +62,9 @@ fn main() throws {
     let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
     let repo = root()
     let nikaia = toolchain()
+    // `nikaia run` builds drive.nika with the `cargo` on PATH, so a cold cache
+    // (CI's) would build it with the stub below: one run with the real PATH first.
+    process::run(nikaia.clone(), ["run", f"{repo}/scripts/drive.nika", "--", "--wip-after", "done", "none", "none"])
     case(nikaia.clone(), repo.clone(), tmp.clone(), "uncommitted compiler source", false)
     case(nikaia, repo, tmp.clone(), "committed compiler source", true)
     process::run("rm", ["-rf", tmp])

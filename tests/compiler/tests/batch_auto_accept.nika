@@ -1,0 +1,81 @@
+// batch.nika: a done or partial report with a commit, `Gate: green`,
+// `Needs: none` and `Owner: none` is auto-accepted (owner, 2026-11-15,
+// #1694): the line is appended, a partial's name goes into review.txt and
+// status.nika counts its changelog line; blocked, Pushed none, a red or
+// missing gate, a Needs or an Owner that asks for something still stop.
+use std::fs
+use std::process
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/batch.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/batch.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn first(nikaia: String, repo: String, tmp: String) -> String throws {
+    let out = process::run(nikaia, ["run", "scripts/batch.nika", "--", tmp.clone()]; dir: repo)
+    return out.stdout.trim().split("\n").collect()[0].replace(tmp, "T")
+}
+
+// The toolchain that runs this test (CI builds target/release only); if the
+// test was started otherwise, the first built one in the checkout.
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn report(tmp: String, text: String) throws {
+    fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, text)
+    process::run("rm", ["-f", f"{tmp}/review.txt"])
+}
+
+fn read(path: String) -> String throws {
+    if !fs::exists(path.clone(), fs::Root::Anywhere) { return "(none)\n" }
+    return fs::read_to_string(path, fs::Root::Anywhere)
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    fs::write(f"{tmp}/batch.txt", fs::Root::Anywhere, "a.md\n")
+    fs::write(f"{tmp}/a.md", fs::Root::Anywhere, "body\n")
+    fs::write(f"{tmp}/released.txt", fs::Root::Anywhere, "")
+    let tail = "Needs: none\nOwner: none\nChangelog: Something.\n"
+    report(tmp.clone(), "Result: partial, rest in #2\nPushed: local abc\nGate: green\nDeviation: x\n" + tail)
+    println(f"partial: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
+    let text = read(f"{tmp}/a.report.md")
+    let lines = text.trim().split("\n").collect()
+    let last = lines[lines.len() - 1].clone()
+    let words = last.split(" ").collect()
+    println(f"appended: {words[0]} DATE {words[2]} {words[3]} {words[4]} {words[5]}")
+    print(f"review.txt: {read(f"{tmp}/review.txt")}")
+    let status = process::run(nikaia.clone(), ["run", "scripts/status.nika", "--", tmp.clone()]; dir: repo.clone())
+    println(f"status: {status.stdout.trim().split("\n").collect()[2]}")
+    println(f"again: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
+    println(f"lines after a second run: {read(f"{tmp}/a.report.md").trim().split("\n").collect().len()}")
+    report(tmp.clone(), "Result: done\nPushed: local abc\nGate: green\nDeviation: x\n" + tail)
+    println(f"done with a deviation: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
+    print(f"review.txt: {read(f"{tmp}/review.txt")}")
+    let names = ["blocked", "pushed none", "gate red", "no gate", "needs", "owner"]
+    let texts: Vec[String] = [
+        "Result: blocked\nPushed: none\nGate: green\nDeviation: none\n" + tail,
+        "Result: partial\nPushed: none\nGate: green\nDeviation: none\n" + tail,
+        "Result: partial\nPushed: local abc\nGate: red x\nDeviation: none\n" + tail,
+        "Result: partial\nPushed: local abc\nDeviation: none\n" + tail,
+        "Result: partial\nPushed: local abc\nGate: green\nDeviation: none\nNeeds: supervisor decision\nOwner: none\n",
+        "Result: partial\nPushed: local abc\nGate: green\nDeviation: none\nNeeds: none\nOwner: which way?\n",
+    ]
+    for i in 0..<names.len() {
+        report(tmp.clone(), texts[i].clone())
+        let got = first(nikaia.clone(), repo.clone(), tmp.clone())
+        let untouched = read(f"{tmp}/a.report.md") == texts[i]
+        println(f"{names[i]}: {got} (report untouched: {untouched})")
+    }
+    process::run("rm", ["-rf", tmp])
+}
