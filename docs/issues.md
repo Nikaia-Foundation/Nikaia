@@ -120,6 +120,14 @@ it, like the checks in `docs/supervisor.md`.
   The probe's stub types keep each field's visibility as the real type
   declares it, so a `pub` site is never stood for by a private stub that
   proves (#1693: #1652's probe had private fields, its site `pub` ones).
+  An item that asks for a rule over a list's elements ("every element of
+  `a` is below `b.len()`") lists every write to both fields and checks the
+  rule against each: a sentinel value written into an element (`-1` for
+  "none") and a write that shrinks the bounding list (`truncate`, `pop`)
+  each break it, and the item names the form that excludes them, or says
+  none exists yet (a `decision`, I6). Its probe holds those writes, since
+  without writes no field rule is found (#1719: #1668's step asked for an
+  element rule on `place`, which holds `-1`, against `heap`, which shrinks).
   A probe that stands for sites keeps, at each site, the expression that
   builds the indexed value (a loop that pushes, an `if` expression, a
   `.clone()`, a field read), and the issue quotes those lines of one real
