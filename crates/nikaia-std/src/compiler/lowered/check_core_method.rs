@@ -781,12 +781,12 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     let witness = check_core_method_witness(world, &name, config);
     let on_timeout = check_core_method_on_timeout(world, &name, config, witness);
     let driver = state.dsl_drivers.contains(&name);
-    let mut passed: Vec<(String, Ty, i64, bool)> = vec![];
+    let mut passed: Vec<(String, Ty, i64, bool, String)> = vec![];
     let mut at: i64 = 0;
     while at < config.len() as i64 {
         if at != witness && at != on_timeout {
             let ty = check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (at) as usize) }.value, span);
-            if !driver { passed.push((nikaia_std::block::Text::from(world.words.resolve(unsafe { nikaia_std::proven::read(&config, (at) as usize) }.name).to_string()), ty, id_of(&unsafe { nikaia_std::proven::read(&config, (at) as usize) }.value) as i64, a_text_literal_expr(&unsafe { nikaia_std::proven::read(&config, (at) as usize) }.value))); }
+            if !driver { passed.push((nikaia_std::block::Text::from(world.words.resolve(unsafe { nikaia_std::proven::read(&config, (at) as usize) }.name).to_string()), ty, id_of(&unsafe { nikaia_std::proven::read(&config, (at) as usize) }.value) as i64, a_text_literal_expr(&unsafe { nikaia_std::proven::read(&config, (at) as usize) }.value), check_walked_written(&unsafe { nikaia_std::proven::read(&config, (at) as usize) }.value, world.words))); }
         }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }

@@ -471,16 +471,22 @@ pub(crate) fn check_core_call_described<H: CheckHost>(state: &mut CheckState, wo
     }
     let mut options: Vec<i64> = vec![];
     let mut literals: Vec<bool> = vec![];
+    let mut texts: Vec<String> = vec![];
     for option in config.iter() {
         options.push(id_of(&option.value) as i64);
         literals.push(a_text_literal_expr(&option.value));
+        texts.push(check_walked_written(&option.value, world.words));
     }
     state.flow.option_values = options;
     state.flow.option_literals = literals;
+    state.flow.option_written = texts;
+    state.flow.call_written = nikaia_std::block::Text::from(name.to_string());
     let typed_options = check_core_call_option_texts(state, world, contract, config, passed);
     let result = check_crossings_arguments(state, world, host, key, name, contract, args, found, &typed_options, span);
     state.flow.option_values = vec![];
     state.flow.option_literals = vec![];
+    state.flow.option_written = vec![];
+    state.flow.call_written = String::from("");
     check_core_call_options_handed_over(state, world, contract, name, config, &typed_options, span);
     let bound = argument_bindings(contract, found);
     check_crossings_a_call_that_hands_its_number_back(state, world, contract, &bound, args);

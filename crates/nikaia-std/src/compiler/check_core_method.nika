@@ -1094,13 +1094,13 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     // The others are kept, typed, for the call to check against the entry
     // it resolves to (#1446).
     let driver = state.dsl_drivers.contains(name)
-    let mut passed: Vec[(String, Ty, i64, bool)] = []
+    let mut passed: Vec[(String, Ty, i64, bool, String)] = []
     let mut at = 0
     while at < config.len() as i64 {
         if at != witness && at != on_timeout {
             let ty = check_core_expr(state, world, host, config[at].value, span)
             if !driver {
-                passed.push((world.words.resolve(config[at].name).clone(), ty, id_of(config[at].value) as i64, a_text_literal_expr(config[at].value)))
+                passed.push((world.words.resolve(config[at].name).clone(), ty, id_of(config[at].value) as i64, a_text_literal_expr(config[at].value), check_walked_written(config[at].value, world.words)))
             }
         }
         at += 1
