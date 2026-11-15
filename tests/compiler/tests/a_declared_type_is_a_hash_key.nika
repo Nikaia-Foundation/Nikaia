@@ -1,0 +1,62 @@
+// #591, ADR-010 D11: a struct or an enum the program declares is a key of a
+// HashMap or a HashSet where every part hashes; its hash is derived from its
+// fields, so two equal values find one entry. The program reads nothing
+// from outside, so its maps take the fast fixed-seed hash (ADR-010 D2);
+// `a_declared_type_is_a_key_of_the_keyed_hash` is the other class.
+use std::collections
+
+struct P { x: i64, y: i64 }
+
+struct Key { op: u32, a: u32, b: u32 }
+
+enum Color { Red, Green, Blue }
+
+enum Shape {
+    Dot,
+    Line(i64),
+    Named { name: String, color: Color },
+}
+
+struct Tagged { name: String, color: Color, parts: Vec[i64], maybe: i64?, pair: (bool, scalar) }
+
+fn named(text: String) -> String {
+    let mut g = String()
+    g.push_str(text)
+    return g
+}
+
+fn main() throws {
+    let mut table: collections::HashMap[Key, u32] = collections::HashMap()
+    table.insert(Key { op: 1, a: 2, b: 3 }, 7)
+    table.insert(Key { op: 1, a: 2, b: 3 }, 8)
+    let got = table[Key { op: 1, a: 2, b: 3 }] ?? 99
+    println(f"{got} {table.len()}")
+
+    let mut colors: collections::HashSet[Color] = collections::HashSet()
+    colors.insert(Color::Red)
+    colors.insert(Color::Red)
+    colors.insert(Color::Blue)
+    println(f"{colors.len()} {colors.contains(Color::Red)} {colors.contains(Color::Green)}")
+
+    let mut shapes: collections::HashMap[Shape, i64] = collections::HashMap()
+    shapes.insert(Shape::Named { name: named("a"), color: Color::Green }, 1)
+    shapes.insert(Shape::Line(4), 2)
+    shapes.insert(Shape::Dot, 3)
+    let found = shapes.contains_key(Shape::Named { name: named("a"), color: Color::Green })
+    println(f"{shapes.len()} {found} {shapes.get(Shape::Line(4)) ?? 0}")
+
+    let mut tagged: collections::HashSet[Tagged] = collections::HashSet()
+    tagged.insert(Tagged { name: named("t"), color: Color::Red, parts: [1, 2], maybe: null, pair: (true, 'x') })
+    tagged.insert(Tagged { name: named("t"), color: Color::Red, parts: [1, 2], maybe: null, pair: (true, 'x') })
+    tagged.insert(Tagged { name: named("t"), color: Color::Red, parts: [1, 2], maybe: 5, pair: (true, 'x') })
+    println(f"{tagged.len()}")
+
+    let mut pairs: collections::HashMap[(Key, String), i64] = collections::HashMap()
+    pairs.insert((Key { op: 0, a: 0, b: 0 }, named("p")), 11)
+    println(f"{pairs[(Key { op: 0, a: 0, b: 0 }, named("p"))] ?? 0}")
+
+    let mut written: collections::HashMap[P, i64] = collections::HashMap()
+    written.insert(P { x: 3, y: 1 }, 5)
+    written.insert(P { x: 3, y: 1 }, 6)
+    println(f"{written.len()} {written[P { x: 3, y: 1 }] ?? 0}")
+}

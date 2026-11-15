@@ -795,7 +795,7 @@ pub(crate) fn carrying_function(function: Option<&str>) -> Option<String> {
     Some(nikaia_std::block::Text::from(f.to_string()))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProverWhere {
     pub function: Option<String>,
     pub params: collections::BTreeSet<String>,
@@ -816,14 +816,14 @@ impl ProverWhere {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GoalAtCall {
     pub goal: Option<i64>,
     pub given_by: collections::BTreeMap<String, i64>,
     pub read: collections::BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CallOutcome {
     pub reach: CallReach,
     pub findings: Vec<Finding>,
@@ -861,7 +861,7 @@ pub fn can_be(values: &collections::BTreeMap<String, i64>) -> String {
 
 pub(crate) fn rust_text(arena: &TermArena, id: i64, escape: &impl Fn(&str) -> String) -> String { rust_of(id, &|at| { arena.at(at) }, escape) }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AssertOutcome {
     pub held: ClaimHeld,
     pub findings: Vec<Finding>,

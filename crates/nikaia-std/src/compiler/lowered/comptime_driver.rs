@@ -82,7 +82,7 @@ fn main() {{
 ", memory, budget, value_fn, dump)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct CrRow {
     pub(crate) line: i64,
     pub(crate) unit: i64,

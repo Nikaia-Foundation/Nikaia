@@ -3315,6 +3315,7 @@ crosses = true
 compares = true
 equates = true
 orders = true
+hashes = true
 copies = true
 variants = ["Less", "Equal", "Greater"]
 
@@ -5109,6 +5110,7 @@ crosses = true
 compares = true
 equates = true
 orders = true
+hashes = true
 
 # What a program does with a name, it does on the name (ADR-319 D3): the
 # bytes are compared and kept as they are.
@@ -7632,6 +7634,7 @@ compares = true
 # Ordered by the number it is: the order of interning, not of the text.
 equates = true
 orders = true
+hashes = true
 copies = true
 
 # A copy of the handle, which is the handle (0.0.325).

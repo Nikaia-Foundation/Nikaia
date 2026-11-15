@@ -349,7 +349,7 @@ pub(crate) fn untrusted(library: &Ledger, name: &str) -> bool {
     provenance == Provenance::Untrusted
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProverOutside {
     pub results: collections::BTreeMap<String, String>,
     pub fields: collections::BTreeMap<String, String>,

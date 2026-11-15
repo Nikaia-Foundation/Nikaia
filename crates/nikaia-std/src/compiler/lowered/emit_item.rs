@@ -215,7 +215,7 @@ impl EmitState {
                 if seeded { emit_seeds_declare_type(&mut walk.place, 0); }
                 let mut derives = self.derives(world, name);
                 let by_hand = seeded && generics.is_empty() && !self.borrowing.contains(&text) && derives.contains("PartialEq");
-                if by_hand { derives = nikaia_std::block::Text::from(nikaia_std::block::Text::from(derives.replace(", PartialEq", "")).replace(", Eq", "")); }
+                if by_hand { derives = nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(derives.replace(", PartialEq", "")).replace(", Eq", "")).replace(", Hash", "")); }
                 out.push(test_gate);
                 out.push(&derives);
                 if is_extern { out.push("#[repr(C)]\n"); }

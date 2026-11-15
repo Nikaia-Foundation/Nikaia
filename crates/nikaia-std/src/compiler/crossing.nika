@@ -291,7 +291,7 @@ pub fn thread_lines(name: ref String, bound: ref Vec[String], way: Vec[String]?)
 
 /// **A crate type's entry**, from what its source shows: `crosses` from its
 /// fields - the one claim a Rust *signature* could never make (ADR-123 D2) -
-/// and `compares` and `copies` from what it derives (ADR-294 D9.3), each read
+/// and `compares`, `hashes` and `copies` from what it derives (ADR-294 D9.3), each read
 /// from the source and written for review. `fields` is empty for a type whose
 /// fields were not read, which is *nobody looked*.
 pub fn type_entry(fields: ref Vec[String], derives: ref collections::BTreeSet[String]) -> TypeContract {
@@ -301,6 +301,7 @@ pub fn type_entry(fields: ref Vec[String], derives: ref collections::BTreeSet[St
     entry.compares = derives.contains("PartialEq")
     entry.orders = derives.contains("Ord") && derives.contains("PartialOrd")
     entry.equates = derives.contains("Eq") && derives.contains("PartialEq")
+    entry.hashes = entry.equates && derives.contains("Hash")
     entry.copies = derives.contains("Copy")
     return entry
 }

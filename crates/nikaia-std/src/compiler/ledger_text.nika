@@ -364,6 +364,9 @@ fn type_text(contract: ref TypeContract) -> String {
     if contract.orders {
         out.push_str("orders = true\n")
     }
+    if contract.hashes {
+        out.push_str("hashes = true\n")
+    }
     if contract.copies {
         out.push_str("copies = true\n")
     }

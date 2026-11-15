@@ -545,7 +545,7 @@ pub const COMPTIME_NOT_CARRIED: &str = "A `comptime` declared beside it came to 
 
 pub const NOWHERE: &str = "This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ComptimeDriven {
     Program(String),
     NotLowered,
@@ -555,7 +555,7 @@ pub enum ComptimeDriven {
 
 pub const COMPTIME_STOPPED_AT: &str = "@";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ComptimeLowered {
     pub rust: String,
     pub rows: Vec<(i64, i64, i64)>,

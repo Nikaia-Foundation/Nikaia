@@ -605,6 +605,8 @@ pub struct CheckFacts {
     pub lent_returns: collections::BTreeSet[i64],
     pub compares: collections::BTreeSet[String],
     pub compares_totally: collections::BTreeSet[String],
+    /// The declared types whose `Hash` is derived from their fields (ADR-010 D11).
+    pub hashes: collections::BTreeSet[String],
     pub copies: collections::BTreeSet[String],
     pub viewed_numbers: collections::BTreeSet[(i64, String)],
     pub array_literals: collections::BTreeSet[i64],
@@ -912,6 +914,7 @@ impl CheckFacts {
             lent_returns: collections::BTreeSet(),
             compares: collections::BTreeSet(),
             compares_totally: collections::BTreeSet(),
+            hashes: collections::BTreeSet(),
             copies: collections::BTreeSet(),
             viewed_numbers: collections::BTreeSet(),
             array_literals: collections::BTreeSet(),

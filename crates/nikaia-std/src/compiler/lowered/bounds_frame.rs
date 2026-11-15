@@ -283,13 +283,13 @@ pub fn frame_writes(frame: &BoundsChanged, root: &str) -> bool { frame.values.it
 
 pub(crate) fn frame_from(entry: &str, root: &str) -> bool { path_root(&frame_list(entry)) == root }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FieldsSeen {
     pub keys: collections::BTreeSet<String>,
     pub writers: collections::BTreeSet<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct FieldsScan {
     pub(crate) live: collections::BTreeMap<String, bool>,
     pub(crate) walked: bool,
@@ -299,7 +299,7 @@ pub(crate) struct FieldsScan {
     pub(crate) lost: collections::BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BoundsBeside {
     pub names: collections::BTreeSet<String>,
     pub declared: collections::BTreeSet<String>,

@@ -84,14 +84,14 @@ pub(crate) fn any_moves(types: &[Ty]) -> bool {
     false
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Passed {
     pub parameter: String,
     pub callee: String,
     pub at: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Uses {
     pub kept: collections::BTreeSet<String>,
     pub passed: Vec<Passed>,

@@ -14,7 +14,7 @@ pub struct BtRan {
     pub wall: Option<CheckWall>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BtRead {
     pub text: Option<String>,
     pub denied: Option<Denied>,
@@ -30,7 +30,7 @@ pub trait BtHost {
     fn read(&self, path: &str) -> BtRead;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BtRefusal {
     Unevaluable,
     NotHere { what: String, why: String, way_out: String },
@@ -61,7 +61,7 @@ impl std::fmt::Display for BtRefusal {
 }
 impl std::error::Error for BtRefusal {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct BtState {
     pub(crate) unit: i64,
     pub(crate) resolving: Vec<String>,

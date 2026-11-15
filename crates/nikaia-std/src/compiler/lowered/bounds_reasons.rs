@@ -278,7 +278,7 @@ pub(crate) fn reason_bound_to_call(block: &Block, name: &str, words: &winnow_gra
 
 pub(crate) fn reason_a_walk(method: &str) -> bool { method == "iter" || method == "iter_mut" || method == "into_iter" || method == "rev" || method == "enumerate" || method == "copied" || method == "cloned" || method == "chars" || method == "bytes" }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct SiteReads {
     pub(crate) field: bool,
     pub(crate) call: bool,

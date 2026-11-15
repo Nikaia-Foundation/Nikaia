@@ -4,7 +4,7 @@
 // use json
 
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DiagnosticsRead {
     pub level: String,
     pub message: String,
@@ -18,7 +18,7 @@ pub struct DiagnosticsRead {
     pub children: Vec<DiagnosticsChild>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DiagnosticsChild {
     pub level: Option<String>,
     pub message: Option<String>,
@@ -52,7 +52,7 @@ pub fn diagnostics_libraries_in(messages: &str) -> Vec<fs::Path> {
 
 pub fn diagnostics_executable_in(messages: &str) -> Option<fs::Path> { cargo_json_lines(messages).iter().filter(|&value| { cargo_json_an_artifact(value) }).filter_map(|value| { cargo_json_text((cargo_json_member(Some(&value.clone()), "executable")).as_ref()) }).map(|file| { cargo_json_path(file) }).last() }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DiagnosticsPlaced {
     pub level: String,
     pub message: String,

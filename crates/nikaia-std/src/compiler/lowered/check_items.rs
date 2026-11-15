@@ -533,13 +533,13 @@ pub struct ItemGeneric<'a> {
     pub members: Vec<Type>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct ItemMember {
     pub(crate) member: String,
     pub(crate) ty: Type,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct ItemInline {
     pub(crate) member: String,
     pub(crate) inline: collections::BTreeSet<String>,

@@ -3,7 +3,7 @@
 
 pub(crate) fn emit_is_a_variable(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _)) }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EmitHeldFound {
     pub safe: Vec<bool>,
     pub called: bool,

@@ -7,14 +7,14 @@ pub(crate) const MULTI: [&str; 2] = ["access_all", "update_all"];
 
 pub(crate) const FIELD: &str = "field:";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BodyCalls {
     pub resolved: collections::BTreeSet<String>,
     pub unresolved: bool,
     pub fields_called: collections::BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Reaches {
     pub itself: Lock,
     pub callees: collections::BTreeSet<String>,
@@ -167,7 +167,7 @@ pub(crate) fn a_name_in(name: &str, table: &[&str]) -> bool {
     false
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Locking {
     pub functions: collections::BTreeMap<String, Lock>,
     pub fields: collections::BTreeMap<String, Lock>,

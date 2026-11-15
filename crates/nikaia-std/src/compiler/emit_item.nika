@@ -292,7 +292,7 @@ impl EmitState {
                 // comparison is written by hand for the fields, over any seed.
                 let by_hand = seeded && generics.is_empty() && !self.borrowing.contains(text) && derives.contains("PartialEq")
                 if by_hand {
-                    derives = derives.replace(", PartialEq", "").replace(", Eq", "")
+                    derives = derives.replace(", PartialEq", "").replace(", Eq", "").replace(", Hash", "")
                 }
                 out.push(test_gate)
                 out.push(derives)

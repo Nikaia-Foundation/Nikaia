@@ -82,7 +82,7 @@ pub(crate) fn language_trait(names: &winnow_grammar::InternerContext, own: &Ledg
     found
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Wanted {
     pub(crate) known: bool,
     pub(crate) receiver: Option<Receiver>,

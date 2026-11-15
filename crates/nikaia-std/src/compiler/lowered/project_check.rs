@@ -106,7 +106,7 @@ pub trait ProjectCheckHost {
     fn eprint(&self, text: &str);
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectCheckSaid {
     pub warnings: String,
     pub refused: Option<String>,
@@ -148,7 +148,7 @@ pub fn project_check_gained(committed: &Ledger, inferred: &Ledger) -> collection
     out
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectCheckKept {
     pub param: String,
     pub now: bool,

@@ -513,6 +513,8 @@ fn type_key(mut entry: TypeContract, key: ref String, value: ref String, n: i64)
         entry.equates = value.trim() == "true"
     } else if key == "orders" {
         entry.orders = value.trim() == "true"
+    } else if key == "hashes" {
+        entry.hashes = value.trim() == "true"
     } else if key == "copies" {
         entry.copies = value.trim() == "true"
     } else if key == "tethered" {

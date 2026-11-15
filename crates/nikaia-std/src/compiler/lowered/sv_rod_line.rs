@@ -2,7 +2,7 @@
 // Edit sv_rod_line.nika in the directory above, not this file.
 
 #[cfg(test)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct SvRun {
     pub(crate) answer: LgAnswer,
     pub(crate) work: i64,

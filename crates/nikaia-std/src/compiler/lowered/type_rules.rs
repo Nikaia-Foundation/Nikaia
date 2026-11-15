@@ -17,7 +17,7 @@ pub struct TrRuled {
     pub binding: winnow_grammar::Symbol,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TrRefusal {
     pub span: Span,
     pub head: String,
@@ -30,13 +30,13 @@ pub struct TrFound {
     pub refusal: Option<TrRefusal>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TrMethods {
     pub all: collections::BTreeSet<String>,
     pub changing: collections::BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TrDeclared {
     pub fields: collections::BTreeSet<String>,
     pub rules: Vec<String>,

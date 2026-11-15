@@ -33,7 +33,7 @@ pub fn answers_rust_text(written: &str, args: i64) -> bool {
     written == "replace" && args == 2 || written == "replacen" && args == 3
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EmitNeeds {
     pub uses_grammar: bool,
     pub driver: bool,

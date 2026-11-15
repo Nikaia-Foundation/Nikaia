@@ -3435,7 +3435,7 @@ pub mod check_collect {
 }
 pub mod check_compare {
     #[allow(unused_imports)]
-    pub use super::{CompareStrength, CheckComparable, compare_refusal, CompareDeclared, compare_declared, compare_standard_bounds, compare_keys_with_no_order, compare_language_impls};
+    pub use super::{CompareStrength, CheckComparable, compare_refusal, CompareDeclared, compare_declared, compare_standard_bounds, compare_keys_with_no_order, compare_keys_that_do_not_hash, compare_language_impls};
 }
 pub mod check_consts {
     #[allow(unused_imports)]

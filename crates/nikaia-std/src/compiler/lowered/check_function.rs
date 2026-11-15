@@ -102,6 +102,7 @@ impl CheckState {
         let found = check_function_compared(world, &world.parts_beside, &self.structs, &self.enums, &self.enum_payloads, &self.struct_parameters);
         self.facts.compares.extend(found.compares.iter().cloned());
         self.facts.compares_totally.extend(found.totally.iter().cloned());
+        self.facts.hashes.extend(found.hashes.iter().cloned());
     }
 }
 

@@ -11,7 +11,7 @@ pub const PROOFS_ANSWERED: i64 = 65536;
 
 pub const PROOFS_SOLVER: &str = "fourier-motzkin-1+sv-1";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProofsAsked {
     Proved,
     Refuted(LgModel),
@@ -19,7 +19,7 @@ pub enum ProofsAsked {
     Rejected(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProofsEntry {
     Proved(String),
     ProvedLog(String),
@@ -27,7 +27,7 @@ pub enum ProofsEntry {
     Unknown(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProofsBook {
     pub entries: collections::BTreeMap<String, ProofsEntry>,
     pub asked: collections::BTreeSet<String>,
@@ -40,20 +40,20 @@ pub struct ProofsBook {
 
 pub fn proofs_book_empty() -> ProofsBook { ProofsBook { entries: collections::BTreeMap::new(), asked: collections::BTreeSet::new(), searched: 0, searched_at: collections::BTreeSet::new(), invariants: collections::BTreeMap::new(), used: collections::BTreeSet::new(), root: None } }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProofsSoFar {
     pub asked: collections::BTreeSet<String>,
     pub used: collections::BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProofsKnown {
     pub key: String,
     pub entry: ProofsEntry,
     pub asked: ProofsAsked,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProofsWhere {
     pub file: Option<fs::Path>,
     pub source: String,
@@ -72,7 +72,7 @@ pub fn proofs_where(path: &std::path::Path, source: &str) -> ProofsWhere {
     ProofsWhere { file: Some(nikaia_std::fs::path::clone(&(path))), source: nikaia_std::block::Text::from(source.to_string()), breaks }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProofsThread {
     pub book: Option<ProofsBook>,
     pub known: collections::BTreeMap<String, ProofsKnown>,
@@ -356,7 +356,7 @@ pub(crate) fn proofs_dump(normal: &LgNormal, asked: &ProofsAsked) { nikaia_std::
     };
 }) }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProofsSearch {
     pub asked: ProofsAsked,
     pub entry: Option<ProofsEntry>,
