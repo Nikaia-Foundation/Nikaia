@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1387] — 2026-11-15
+
+**Builders' changes (#1609, #1627, #1632, #1635)**
+- A struct a list's get hands to a match arm compares with == against a new value, and `let o: P? = xs.get(i)` is refused with the ?.clone() to write (both were rustc refusals).
+- Checker: a throw where the function does not declare throws is NK2605; a stored fn() throws lambda fails where it is called, with its thrown types in its error set; assigning a failing lambda to a fn() local is NK1102.
+- Solver: a branch-and-bound split on a value at the bottom of i64 answers unknown (overflow) instead of stopping the program (#1632).
+- Checker and emitter: a throw in a catch's guarded half is an error source of that catch, as a failing call is: (if c { throw X } else { 1 }) catch { 2 } gives 2 when c holds, instead of NK1134.
+
 ## [0.0.1386] — 2026-11-15
 
 **Builders' changes (#1304, #1369)**
