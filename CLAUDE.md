@@ -76,6 +76,13 @@ The rules every session and agent needs. What only the main session does
   to keep it passing, or moved to Nikaia. What cannot yet be said in Nikaia is
   a finding: fix or file it.
 
+## Talking to the owner
+
+* **An issue number never stands alone** (owner, 2026-11-15): every message
+  to the owner names an issue by its title first, then the number, e.g.
+  "Hash for declared types (#591)", in every report, list and status line.
+  A bare `#N` makes the owner look it up.
+
 ## Who reads what else
 
 * **Every main session** (each is a supervisor of its own work, owner
