@@ -1,0 +1,10 @@
+partial: BATCH DONE | again: BATCH DONE | accept lines: 1 | a.report.md
+deviation: BATCH DONE | again: BATCH DONE | accept lines: 1 | a.report.md
+no owner line: BATCH DONE | again: BATCH DONE | accept lines: 1 | a.report.md
+clean: BATCH DONE | again: BATCH DONE | accept lines: 0 | no review.txt
+gate red: CUT a.md: Result: partial | again: CUT a.md: Result: partial | accept lines: 0 | no review.txt
+needs: CUT a.md: Result: partial | again: CUT a.md: Result: partial | accept lines: 0 | no review.txt
+no needs line: CUT a.md: Result: partial | again: CUT a.md: Result: partial | accept lines: 0 | no review.txt
+owner: OWNER a.md: which way? | again: OWNER a.md: which way? | accept lines: 0 | no review.txt
+blocked: CUT a.md: Result: blocked | again: CUT a.md: Result: blocked | accept lines: 0 | no review.txt
+not pushed: CUT a.md: Result: partial | again: CUT a.md: Result: partial | accept lines: 0 | no review.txt

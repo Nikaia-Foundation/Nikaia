@@ -20,7 +20,13 @@
 // in the report clears a cut on `Result:`, `Gate:` or `Deviation:` (the
 // builder's lines stay as written), never one on `Result: blocked` (it needs
 // the next brief) or on `Pushed:` (the commits are not on develop), and never
-// an `Owner:` question (supervisor, 2026-11-10); a `Found:` that is not `none` does not
+// an `Owner:` question (supervisor, 2026-11-10); a report with `Result:` `done` or
+// `partial`, `Pushed:` a commit, `Gate:` green and `Needs:` and `Owner:` that ask
+// for nothing (`none`, `nothing`; `Owner:` may be absent) is not a cut either: the
+// driver accepts it itself (owner, 2026-11-15, #1694), appends `Supervisor:
+// <date>: auto-accepted (Result/Deviation as written)` to the report (the
+// builder's lines stay) and its name to `DIR/review.txt` for the supervisor to
+// read later (batch_auto); a `Found:` that is not `none` does not
 // cut (supervisor, 2026-11-06): the driver collects it in `DIR/found.txt`
 // (drive.nika, `drive_found`); all done prints `BATCH DONE` and the count of
 // `Changelog:` lines that are not `none`. `--tokens` appends
@@ -63,12 +69,44 @@ fn batch_report_path(dir: String, brief: String) -> String throws {
     return ""
 }
 
-fn batch_cut(text: String) -> String {
+// A `Needs:` or `Owner:` value that asks for nothing.
+fn batch_none(value: String) -> bool {
+    let lower = value.to_lowercase()
+    return lower.starts_with("none") || lower.starts_with("nothing")
+}
+
+// A `Supervisor: <date>: accepted ...` or `... auto-accepted ...` line, any of them.
+fn batch_accepted(text: String) -> bool {
+    for line in text.split("\n") {
+        if line.starts_with("Supervisor:") && (line.contains(": accepted") || line.contains(": auto-accepted")) { return true }
+    }
+    return false
+}
+
+// Whether the driver accepts the report itself (owner, 2026-11-15, #1694):
+// `Result:` done or partial, `Pushed:` a commit, `Gate:` green, `Needs:` none
+// and `Owner:` none or absent.
+fn batch_auto(text: String) -> bool {
+    let result = batch_field(text.clone(), "Result:")
+    let pushed = batch_field(text.clone(), "Pushed:")
+    let gate = batch_field(text.clone(), "Gate:")
+    let needs = batch_field(text.clone(), "Needs:")
+    let owner = batch_field(text, "Owner:")
+    let word = result.split(" ").collect()[0].trim_end_matches(".").trim_end_matches(",").clone()
+    if word != "done" && word != "partial" { return false }
+    if pushed == "rejected" || pushed == "none" || pushed == "" { return false }
+    if !gate.starts_with("green") { return false }
+    return batch_none(needs) && (owner == "" || batch_none(owner))
+}
+
+// The cut as the supervisor's rule of 2026-11-10 has it, before the driver's
+// own accept (batch_cut).
+fn batch_cut_why(text: String) -> String {
     let result = batch_field(text.clone(), "Result:")
     let pushed = batch_field(text.clone(), "Pushed:")
     let deviation = batch_field(text.clone(), "Deviation:")
-    let gate = batch_field(text, "Gate:")
-    let accepted = batch_field(text.clone(), "Supervisor:").contains(": accepted")
+    let gate = batch_field(text.clone(), "Gate:")
+    let accepted = batch_accepted(text)
     let word = result.split(" ").collect()[0].trim_end_matches(".").clone()
     if word == "blocked" { return f"Result: {result}" }
     if word == "done" && (pushed == "rejected" || pushed == "none" || pushed == "") { return f"Pushed: {pushed}" }
@@ -77,6 +115,29 @@ fn batch_cut(text: String) -> String {
     if gate != "" && !gate.starts_with("green") { return f"Gate: {gate}" }
     if deviation != "none" { return f"Deviation: {deviation}" }
     return ""
+}
+
+// The cut line, "" for none: an auto-accepted report (batch_auto) is not one.
+fn batch_cut(text: String) -> String {
+    let why = batch_cut_why(text.clone())
+    if why != "" && batch_auto(text) { return "" }
+    return why
+}
+
+// Records the driver's accept of a report batch_cut_why cuts and batch_auto
+// clears: the `Supervisor:` line appended to the report, its name to
+// DIR/review.txt (created when missing).
+fn batch_auto_record(dir: String, path: String, text: String) throws {
+    let date = process::run("date", ["+%F"]).stdout.trim().clone()
+    let mut body = text
+    if body != "" && !body.ends_with("\n") { body = body + "\n" }
+    fs::write(path.clone(), fs::Root::Anywhere, body + f"Supervisor: {date}: auto-accepted (Result/Deviation as written)\n")
+    let list = f"{dir}/review.txt"
+    let mut old: String = ""
+    if fs::exists(list.clone(), fs::Root::Anywhere) { old = fs::read_to_string(list.clone(), fs::Root::Anywhere) }
+    if old != "" && !old.ends_with("\n") { old = old + "\n" }
+    let parts = path.split("/").collect()
+    fs::write(list, fs::Root::Anywhere, old + parts[parts.len() - 1].clone() + "\n")
 }
 
 // A batch line `#N [suffix]` names issue N: its brief is `issue-N[-suffix].md`
@@ -114,12 +175,13 @@ fn batch_run(dir: String) -> String throws {
             let path_abs = abs.stdout.trim().clone()
             return f"NEXT {path_abs} {batch_info(path_abs)}"
         }
-        let text = fs::read_to_string(path, fs::Root::Anywhere)
+        let text = fs::read_to_string(path.clone(), fs::Root::Anywhere)
         let question = batch_field(text.clone(), "Owner:")
         let lower = question.to_lowercase()
         if question != "" && !lower.starts_with("none") && !lower.starts_with("nothing") { return f"OWNER {brief}: {question}" }
         let why = batch_cut(text.clone())
         if why != "" { return f"CUT {brief}: {why}" }
+        if batch_cut_why(text.clone()) != "" { batch_auto_record(dir.clone(), path, text.clone()) }
         if batch_field(text, "Changelog:") != "none" { changelogs += 1 }
     }
     return f"BATCH DONE\nChangelog lines: {changelogs}"

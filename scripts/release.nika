@@ -6,7 +6,10 @@
 //
 // A report is `REPORTS_DIR/*.report.md` with the lines `Result:`, `Pushed:`
 // and `Changelog:` (`none` for no entry); the ones already released are named
-// in `REPORTS_DIR/released.txt`, one per line. Without that file nothing is
+// in `REPORTS_DIR/released.txt`, one per line. A `Result: partial` report with
+// a line `Supervisor: <date>: accepted ...` or `... auto-accepted ...` is
+// released like a done one (owner, 2026-11-15, #1694): its `Changelog:` line
+// goes into the entry, and the issues its commit names are not fixed by it. Without that file nothing is
 // guessed (#1111: an mtime guess lost a lane's entries): it prints `STOP
 // REPORTS_DIR/released.txt missing` and raises nothing; `cycle.nika` writes it
 // empty on a lane's first run. The architect's and QA's reports
@@ -39,6 +42,7 @@ struct ReleaseReport {
     pushed: String,
     deviation: String,
     changelog: String,
+    accepted: bool,
 }
 
 // A line of output is at most 160 characters.
@@ -66,6 +70,19 @@ fn release_field(text: String, key: String) -> String {
         }
     }
     return ""
+}
+
+// A `Supervisor: <date>: accepted ...` or `... auto-accepted ...` line, any of them.
+fn release_accepted(text: String) -> bool {
+    for line in text.split("\n") {
+        if line.starts_with("Supervisor:") && (line.contains(": accepted") || line.contains(": auto-accepted")) { return true }
+    }
+    return false
+}
+
+// The first word of a `Result:` value, without a trailing `.` or `,`.
+fn release_word(result: String) -> String {
+    return result.split(" ").collect()[0].trim_end_matches(".").trim_end_matches(",").clone()
 }
 
 fn release_git(args: Vec[String]) -> String throws {
@@ -167,7 +184,8 @@ fn release_reports(dir: String) -> Vec[ReleaseReport] throws {
             result: release_field(text.clone(), "Result:"),
             pushed: release_field(text.clone(), "Pushed:"),
             deviation: release_field(text.clone(), "Deviation:"),
-            changelog: release_field(text, "Changelog:"),
+            changelog: release_field(text.clone(), "Changelog:"),
+            accepted: release_accepted(text),
         })
     }
     return found
@@ -240,7 +258,8 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
         return lines
     }
     for r in release_reports(dir.clone()) {
-        if r.result != "done" || r.pushed == "rejected" || r.pushed == "none" || r.pushed == "" {
+        let partial = release_word(r.result.clone()) == "partial" && r.accepted
+        if (r.result != "done" && !partial) || r.pushed == "rejected" || r.pushed == "none" || r.pushed == "" {
             let mut why = f"Result: {r.result}"
             if r.result == "done" { why = f"Deviation: {r.deviation}" }
             if lines.len() < 4 { lines.push(release_cap(f"STOP {r.name}: {why}")) }
@@ -248,8 +267,10 @@ fn release_once(dir: String, dry: bool) -> Vec[String] throws {
         }
         if r.changelog == "none" || r.changelog == "" { continue }
         titles.push(release_title(r.pushed.clone()))
-        for w in release_fixes(r.pushed.clone()) {
-            if !fixes.contains(w.clone()) { fixes.push(w) }
+        if !partial {
+            for w in release_fixes(r.pushed.clone()) {
+                if !fixes.contains(w.clone()) { fixes.push(w) }
+            }
         }
         entries.push(r.changelog.clone())
         names.push(r.name.clone())

@@ -274,6 +274,19 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   cleared by a line `Supervisor: <date>: accepted ...` in the report, the
   builder's lines left as written (owner, 2026-11-10); `Result: blocked`,
   `Pushed:` and `Owner:` still stop.
+  The driver accepts a cut itself when the builder needs nothing (owner,
+  2026-11-15, #1694): a report with `Result: done` or `partial`, a commit in
+  `Pushed:`, `Gate: green`, `Needs: none` and `Owner: none` is no cut;
+  `batch.nika` appends `Supervisor: <date>: auto-accepted (Result/Deviation
+  as written)` and names the report in `DIR/review.txt`, which the supervisor
+  reads later and writes the follow-ups from. `release.nika` releases an
+  accepted or auto-accepted `partial` report like a done one (its
+  `Changelog:` line in the entry, its issue not fixed), and `drive.nika`
+  leaves such a report's issue `ready` instead of `wip` (not queued again).
+  `Result: blocked`, `Pushed: rejected` or `none`, a red gate, a `Needs:`
+  or an `Owner:` that asks for something still stop. The proof figure of
+  the prover lane is not measured by the driver: the supervisor adds it to
+  the entry (`lower-std --bounds --asserts`, `scripts/proved.nika`).
   The focus driver always runs (owner, 2026-11-01): when it ends, on
   `--max N agent runs reached` or a block's end, the main session starts it
   again at once; it stops only for an escalation that needs the supervisor or

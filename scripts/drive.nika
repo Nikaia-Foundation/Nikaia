@@ -12,13 +12,17 @@
 // without one only in the output), a pending bump of each area's DIR while CI is green,
 // the next area, focus.txt written (not committed). CUT and RED stop for the supervisor as
 // in single-DIR mode (a report's `Found:` does not cut: it goes to DIR/found.txt,
-// `drive_found`); an area entered with an empty queue is skipped (`FOCUS
+// `drive_found`; a `done` or `partial` report with a commit, `Gate: green`,
+// `Needs: none` and `Owner: none` is accepted by batch.nika itself and named in
+// DIR/review.txt, owner 2026-11-15, #1694); an area entered with an empty queue is skipped (`FOCUS
 // <area> empty, skipped`); every area empty escalates. Before each cycle the open
 // issues labelled `ready` and the area's name, without `wip`, are appended to
 // DIR/batch.txt as `#N` (`QUEUED #N <area>`, drive_queue). A run on issue N
 // sets `wip` on it first and, by its report, keeps it (done, `Fixes:` names
 // #N; promote closes the issue), swaps `ready` for `blocked` (blocked), or
-// removes it (anything else), drive_wip_after; an escalation mid-run leaves
+// removes it (anything else; a partial report the driver accepts itself,
+// drive_auto, also sets `ready`, and the issue is not queued again: its `#N`
+// line is in DIR/batch.txt already), drive_wip_after; an escalation mid-run leaves
 // `wip` for the supervisor to clear. At a block's end the debriefs'
 // `Fact:` lines go into the facts files (`facts-collect.nika -- --apply`,
 // committed as docs, `FACTS <n> entered`). Before a block, the first unrun
@@ -1952,24 +1956,44 @@ fn drive_wip_after(result: String, fixes: String, issue: String) -> String {
 	return "remove"
 }
 
-// After a run on issue N: its labels by drive_wip_after.
+// Whether batch.nika accepts the report itself (owner, 2026-11-15, #1694; the
+// same rule as its batch_auto): `Result:` done or partial, `Pushed:` a commit,
+// `Gate:` green, `Needs:` none and `Owner:` none or absent.
+fn drive_auto(body: String) -> bool {
+	let word = drive_word(drive_field(body.clone(), "Result")).trim_end_matches(",").clone()
+	let pushed = drive_field(body.clone(), "Pushed")
+	let needs = drive_field(body.clone(), "Needs").to_lowercase()
+	let owner = drive_field(body.clone(), "Owner").to_lowercase()
+	if word != "done" && word != "partial" { return false }
+	if pushed == "rejected" || pushed == "none" || pushed == "" { return false }
+	if !drive_field(body, "Gate").starts_with("green") { return false }
+	if !needs.starts_with("none") && !needs.starts_with("nothing") { return false }
+	return owner == "" || owner.starts_with("none") || owner.starts_with("nothing")
+}
+
+// After a run on issue N: its labels by drive_wip_after; a partial report the
+// driver accepts itself (drive_auto) sets `ready` too: the supervisor writes
+// the follow-up (#1694).
 fn drive_wip_end(dry: bool, brief: String) throws {
 	let issue = drive_issue(brief)
 	if issue == "" { return }
 	drive_say(
 		dry,
-		f"by the report's Result and Fixes: keep wip, or remove it (blocked: ready -> blocked) on #{issue}",
+		f"by the report's Result and Fixes: keep wip, or remove it (blocked: ready -> blocked; partial and auto-accepted: ready) on #{issue}",
 	)
 	if dry { return }
 	let report = drive_report_of(brief.clone())
 	let body = if report == "" { "" } else { drive_read(report) }
 	let what = drive_wip_after(
 		drive_field(body.clone(), "Result"),
-		drive_field(body, "Fixes"),
+		drive_field(body.clone(), "Fixes"),
 		issue.clone(),
 	)
 	if what == "keep" { return }
 	drive_label_remove(issue.clone(), "wip")
+	if drive_word(drive_field(body.clone(), "Result")).trim_end_matches(",") == "partial" && drive_auto(body) {
+		drive_label_add(issue.clone(), "ready")
+	}
 	if what == "block" {
 		drive_label_remove(issue.clone(), "ready")
 		drive_label_add(issue, "blocked")
@@ -2154,7 +2178,7 @@ fn drive_stop(exe: String, dry: bool, dir: String, stop: String) throws {
 	drive_unlock()
 	println(f"ESCALATE {stop}: the supervisor writes the next briefs")
 	if stop.starts_with("CUT") && !stop.ends_with("brief missing") && !stop.contains(": Pushed:") && !stop.contains(": Result: blocked") {
-		println("CLEAR with a line `Supervisor: YYYY-MM-DD: accepted ...` in the report (batch.nika); the builder's lines stay")
+		println("CLEAR with a line `Supervisor: YYYY-MM-DD: accepted ...` in the report (batch.nika); the builder's lines stay (a cut with Gate green, Needs none and Owner none is accepted by the driver itself, #1694)")
 	}
 	process::exit(2)
 }
