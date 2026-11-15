@@ -94,7 +94,7 @@ pub(crate) fn bm_bound(words: &winnow_grammar::InternerContext, rules: &collecti
                 top = top * 10;
                 times = unsafe { nikaia_std::proven::add::<i64>(times, 1) };
             }
-            found.given.insert(nikaia_std::block::Text::from(bound_name.to_string()), bm_range(0, top - 1));
+            found.given.insert(nikaia_std::block::Text::from(bound_name.to_string()), bm_range(0, unsafe { nikaia_std::proven::sub::<i64>(top, 1) }));
         },
         _ => { },
     }

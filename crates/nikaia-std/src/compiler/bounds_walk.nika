@@ -5568,6 +5568,18 @@ fn bounding_while(
 			head_facts.push(below ?? 0)
 		}
 	}
+	// **A name each turn scales, in a loop of at most `k` turns** (#1644):
+	// within constants, at each head and past the loop. A loop that only
+	// adds is asked only where its bound is a constant: D13 bounds it
+	// inside by its turns.
+	let scales = bounding_turn_scales(walk, body, outside, changed, facts, context, words)
+	if !scales.is_empty() {
+		let multiplies = scales.iter().any(fn(s) { s.1 > 1 })
+		let most = bounding_turns_most(walk, cond, steps, changed, facts, !multiplies, context, program, words, ask)
+		for fact in bounding_scaled_bounds(walk, facts, scales, most, ask) {
+			head_facts.push(fact)
+		}
+	}
 	if !step.is_empty() && !others.is_empty() {
 		let t = walk.arena.var(f"#turn{walk.entries}")
 		walk.entries += 1
@@ -6439,6 +6451,386 @@ fn bounding_pair_bounds(
 	return out
 }
 
+/// **The most turns a `while` takes, as a constant** (#1644, ADR-361 D13):
+/// of each part of its condition `&&` joins, `x < e` or `x <= e` with `x` a
+/// counter of `steps` each turn raises by at least `low` (`x > e`, `x >= e`
+/// for one each turn lowers), and `e` a term the loop leaves as it is. A turn
+/// starts only while `x` has not reached `e`, so no more turns start than
+/// the steps from `x` to `e` where the loop is reached; the most of those
+/// there bounds them all. Where `constant_only`, an `e` that is no constant
+/// is not asked. Nothing where no part gives a bound.
+fn bounding_turns_most(
+	mut walk: BoundsWalk,
+	cond: ref Expr,
+	steps: ref Vec[(String, i64, i64, i64?)],
+	changed: ref BoundsChanged,
+	facts: ref BoundsFacts,
+	constant_only: bool,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> i64? {
+	match cond {
+		Expr::Binary { op, lhs, rhs, .. } => {
+			if op == BinaryOp::And {
+				let left = bounding_turns_most(walk, lhs, steps, changed, facts, constant_only, context, program, words, ask)
+				let right = bounding_turns_most(walk, rhs, steps, changed, facts, constant_only, context, program, words, ask)
+				if left == null {
+					return right
+				}
+				if right == null {
+					return left
+				}
+				return (left ?? 0).min(right ?? 0)
+			}
+			let x = path_of(lhs, words) ?? return null
+			let rising = op == BinaryOp::Lt || op == BinaryOp::Le
+			let falling = op == BinaryOp::Gt || op == BinaryOp::Ge
+			let mut by = 0
+			for (name, low, high, floor) in steps {
+				if name == x && floor == null {
+					if rising && low >= 1 {
+						by = low
+					}
+					if falling && high <= -1 {
+						by = 0 - high
+					}
+				}
+			}
+			if by == 0 {
+				return null
+			}
+			let end = bounding_lin(walk, rhs, facts, context, program, words) ?? return null
+			if (constant_only && walk.arena.constant(end) == null) || !bounding_stable(walk, end, changed, x) {
+				return null
+			}
+			let now = walk.arena.var(x)
+			let mut gap = if rising { walk.arena.sub(end, now) } else { walk.arena.sub(now, end) }
+			if op == BinaryOp::Le || op == BinaryOp::Ge {
+				let one = walk.arena.int(1)
+				gap = walk.arena.add(gap, one)
+			}
+			let most = bounding_term(walk, gap, facts, ask).hi ?? return null
+			if most <= 0 {
+				return 0
+			}
+			return (most + by - 1) / by
+		},
+		else => return null,
+	}
+}
+
+/// **The most turns `for x in low..<high` takes, as a constant** (#1644):
+/// the most of its span where the loop is reached, where neither end reads
+/// what the body changes. Where `constant_only`, a span that is no constant
+/// is not asked.
+fn bounding_for_turns_most(
+	mut walk: BoundsWalk,
+	low: i64?,
+	high: i64?,
+	closed: bool,
+	changed: ref BoundsChanged,
+	name: ref String,
+	facts: ref BoundsFacts,
+	constant_only: bool,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> i64? {
+	let l = low ?? return null
+	let h = high ?? return null
+	if !bounding_stable(walk, l, changed, name) || !bounding_stable(walk, h, changed, name) {
+		return null
+	}
+	let mut span = walk.arena.sub(h, l)
+	if closed {
+		let one = walk.arena.int(1)
+		span = walk.arena.add(span, one)
+	}
+	if constant_only && walk.arena.constant(span) == null {
+		return null
+	}
+	let most = bounding_term(walk, span, facts, ask).hi ?? return null
+	return most.max(0)
+}
+
+/// What each name of `names` is, as `a * v + b` of `v` its value at the head
+/// of a turn, along the paths walked so far.
+struct BoundsScales {
+	names: Vec[String],
+	a: Vec[i64],
+	b: Vec[i64],
+}
+
+/// **The names a turn scales** (#1644): each whole-number name of `changed`
+/// the body changes only by `v = c * v + d`, `v *= c`, `v += d` and the like,
+/// `c >= 1` and `d >= 0` constants, as `(name, a, b)`: on any path of a turn
+/// it ends at most `a * v + b`, `v` its value at the head, and where `v >= 0`
+/// at no less than `v`. Paths join to the larger `a` and `b`, which bound
+/// each path's end where `v >= 0`, every such map lying at or above `v`; a
+/// path a `continue` or `break` cuts short ends below where it would. A name
+/// changed any other way, also in an `if`'s condition, an inner loop or by a
+/// call, or bound again in the body, is none; so is one the turn leaves as
+/// it is.
+fn bounding_turn_scales(
+	walk: ref BoundsWalk,
+	body: ref Block,
+	outside: ref collections::BTreeSet[String],
+	changed: ref BoundsChanged,
+	facts: ref BoundsFacts,
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+) -> Vec[(String, i64, i64)] {
+	let mut state = BoundsScales { names: [], a: [], b: [] }
+	for x in changed.values {
+		if walk.pinned.contains(path_root(x)) || outside.contains(x) || !facts.ints.contains(x) || x.contains(".") {
+			continue
+		}
+		state.names.push(x.clone())
+		state.a.push(1)
+		state.b.push(0)
+	}
+	if state.names.is_empty() {
+		return []
+	}
+	let mut bad: collections::BTreeSet[String] = collections::BTreeSet()
+	bounding_scales_block(body, state, bad, context, words)
+	let mut out: Vec[(String, i64, i64)] = []
+	for k in 0..<state.names.len() {
+		if !bad.contains(state.names[k]) && (state.a[k] > 1 || state.b[k] > 0) {
+			out.push((state.names[k].clone(), state.a[k], state.b[k]))
+		}
+	}
+	return out
+}
+
+fn bounding_scales_block(
+	block: ref Block,
+	mut state: BoundsScales,
+	mut bad: collections::BTreeSet[String],
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+) {
+	for each in block.stmts {
+		match each.node {
+			Stmt::Let { names, .. } => {
+				bounding_scales_other(each, state, bad, context, words)
+				for name in names {
+					bad.insert(words.resolve(name).clone())
+				}
+			},
+			Stmt::Comptime { name, .. } => {
+				bounding_scales_other(each, state, bad, context, words)
+				bad.insert(words.resolve(name).clone())
+			},
+			Stmt::Assign { target, op, value } => {
+				let place = path_of(target, words) ?? ""
+				let mut k = 0
+				while k < state.names.len() && state.names[k] != place {
+					k += 1
+				}
+				let map = bounding_scale_by(place, op, value, words)
+				if k < state.names.len() && map != null {
+					let (a, b) = map ?? (1, 0)
+					if state.a[k] > 1048576 || state.b[k] > 1048576 {
+						bad.insert(place.clone())
+					} else {
+						// This change after those before it on the path.
+						state.a[k] = a * state.a[k]
+						state.b[k] = a * state.b[k] + b
+					}
+				} else {
+					bounding_scales_other(each, state, bad, context, words)
+				}
+			},
+			Stmt::Expr(expr) => match expr {
+				Expr::If { cond, then_branch, else_branch, .. } => {
+					let changed = bounding_changed_in_expr(cond, context, words)
+					for name in state.names {
+						if bounding_changes_name(changed, name) {
+							bad.insert(name.clone())
+						}
+					}
+					for name in assigned_in_expr(cond, words) {
+						bad.insert(name.clone())
+					}
+					let mut other = BoundsScales { names: state.names.clone(), a: state.a.clone(), b: state.b.clone() }
+					bounding_scales_block(then_branch, state, bad, context, words)
+					if else_branch != null {
+						bounding_scales_maybe(else_branch, other, bad, context, words)
+					}
+					for k in 0..<state.names.len() {
+						state.a[k] = state.a[k].max(other.a[k])
+						state.b[k] = state.b[k].max(other.b[k])
+					}
+				},
+				else => bounding_scales_other(each, state, bad, context, words),
+			},
+			else => bounding_scales_other(each, state, bad, context, words),
+		}
+	}
+}
+
+fn bounding_scales_maybe(
+	block: ref Block?,
+	mut state: BoundsScales,
+	mut bad: collections::BTreeSet[String],
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+) {
+	let present = block ?? return
+	bounding_scales_block(present, state, bad, context, words)
+}
+
+/// Any other statement of a turn: a name it changes, at any depth, is scaled
+/// by no map the walk knows.
+fn bounding_scales_other(
+	each: ref Spanned[Stmt],
+	state: ref BoundsScales,
+	mut bad: collections::BTreeSet[String],
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+) {
+	let one = Block { stmts: [each.clone()] }
+	let changed = bounding_changed(one, context, words)
+	for name in state.names {
+		if bounding_changes_name(changed, name) {
+			bad.insert(name.clone())
+		}
+	}
+	for name in assigned_in_statement(each.node, words) {
+		bad.insert(name.clone())
+	}
+}
+
+/// What `name op= value` or `name = value` makes of `name`, as `(a, b)` of
+/// `a * name + b`, where both are constants, `a >= 1` and `b >= 0`.
+fn bounding_scale_by(
+	name: ref String,
+	op: ref BinaryOp?,
+	value: ref Expr,
+	words: ref winnow_grammar::InternerContext,
+) -> (i64, i64)? {
+	if name == "" {
+		return null
+	}
+	let mut map: (i64, i64)? = null
+	if op != null {
+		let c = bounding_step_literal(value) ?? return null
+		if bounding_is_op(op, BinaryOp::Add) {
+			map = (1, c)
+		}
+		if bounding_is_op(op, BinaryOp::Mul) {
+			map = (c, 0)
+		}
+	} else {
+		map = bounding_affine(value, name, words)
+	}
+	let (a, b) = map ?? return null
+	if a < 1 || b < 0 {
+		return null
+	}
+	return (a, b)
+}
+
+/// `expr` as `(a, b)` of `a * name + b`, of small constants, where it is one:
+/// `2 * size + 1` is `(2, 1)`.
+fn bounding_affine(expr: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> (i64, i64)? {
+	if (path_of(expr, words) ?? "") == name {
+		return (1, 0)
+	}
+	let c = bounding_step_literal(expr)
+	if c != null {
+		return (0, c ?? 0)
+	}
+	match expr {
+		Expr::Binary { op, lhs, rhs, .. } => {
+			let (la, lb) = bounding_affine(lhs, name, words) ?? return null
+			let (ra, rb) = bounding_affine(rhs, name, words) ?? return null
+			let mut a = 0
+			let mut b = 0
+			if op == BinaryOp::Add {
+				a = la + ra
+				b = lb + rb
+			} else if op == BinaryOp::Sub {
+				a = la - ra
+				b = lb - rb
+			} else if op == BinaryOp::Mul && la == 0 {
+				a = lb * ra
+				b = lb * rb
+			} else if op == BinaryOp::Mul && ra == 0 {
+				a = rb * la
+				b = rb * lb
+			} else {
+				return null
+			}
+			if a.abs() > 1048576 || b.abs() > 1048576 {
+				return null
+			}
+			return (a, b)
+		},
+		else => return null,
+	}
+}
+
+/// **What a turn's scaling leaves of each name** (#1644): of each of
+/// `scales` that lies in `[lo, hi]` where the loop is reached, `lo >= 0`,
+/// `v >= lo` at each head and past the loop, since no map lowers it; and
+/// where at most `turns` turns start, `v <= f^turns(hi)` too, `f` the map
+/// `a * v + b`, computed here as a constant, so that no product of two
+/// unknowns reaches the solver. A turn cut short ends below. One whose bound
+/// passes `solvable()` gets no upper fact; one that only grows by adding
+/// (`a` 1), whose turns D13 counts, none without `turns`.
+fn bounding_scaled_bounds(
+	mut walk: BoundsWalk,
+	facts: ref BoundsFacts,
+	scales: ref Vec[(String, i64, i64)],
+	turns: i64?,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> Vec[i64] {
+	let mut out: Vec[i64] = []
+	for (name, a, b) in scales {
+		if a == 1 && turns == null {
+			continue
+		}
+		let now = walk.arena.var(name)
+		let range = bounding_term(walk, now, facts, ask)
+		let lo = range.lo ?? continue
+		if lo < 0 {
+			continue
+		}
+		let least = walk.arena.int(lo)
+		out.push(walk.arena.ge(now, least))
+		let most_turns = turns ?? continue
+		let mut top = range.hi ?? continue
+		let mut fits = top <= solvable()
+		if fits && a == 1 {
+			if b > 0 && most_turns > (solvable() - top) / b {
+				fits = false
+			} else {
+				top += most_turns * b
+			}
+		} else if fits {
+			let mut k = 0
+			if top == 0 && b == 0 {
+				k = most_turns
+			}
+			while fits && k < most_turns {
+				if top > (solvable() - b) / a {
+					fits = false
+				} else {
+					top = a * top + b
+				}
+				k += 1
+			}
+		}
+		if fits {
+			let most = walk.arena.int(top)
+			out.push(walk.arena.le(now, most))
+		}
+	}
+	return out
+}
+
 /// `let names: ty = value`.
 fn bounding_let(
 	mut walk: BoundsWalk,
@@ -7010,6 +7402,18 @@ fn bounding_for(
 	// one the binding had, so it lies at or above the first and below the
 	// binding; past the loop, below the range's end.
 	let followers = bounding_followers(walk, body, name, counted, low, high, changed, facts, words, ask)
+	// **A name each turn scales, in a range of at most `k` turns** (#1644):
+	// within constants, at each head and past the loop.
+	let mut scaled: Vec[i64] = []
+	let scales = bounding_turn_scales(walk, body, outside, changed, facts, context, words)
+	if !scales.is_empty() {
+		let multiplies = scales.iter().any(fn(s) { s.1 > 1 })
+		let mut most: i64? = null
+		if counted {
+			most = bounding_for_turns_most(walk, low, high, closed, changed, name, facts, !multiplies, ask)
+		}
+		scaled = bounding_scaled_bounds(walk, facts, scales, most, ask)
+	}
 	let mut entered: Vec[(String, i64)] = []
 	for x in followers {
 		let e = bounding_rename(walk, inner, x)
@@ -7033,6 +7437,9 @@ fn bounding_for(
 		bounding_push(walk, inner, fact)
 	}
 	for fact in turn_facts {
+		bounding_push(walk, inner, fact)
+	}
+	for fact in scaled {
 		bounding_push(walk, inner, fact)
 	}
 	// `for d in x.chars()` over a text binding: `d` is in its class
@@ -7238,6 +7645,9 @@ fn bounding_for(
 		}
 	}
 	for fact in past {
+		bounding_push(walk, facts, fact)
+	}
+	for fact in scaled {
 		bounding_push(walk, facts, fact)
 	}
 	for list in filled {
@@ -7480,9 +7890,19 @@ fn bounding_assign(
 		if bounding_reads_own(walk, value_lin ?? 0) {
 			own_range = bounding_range(walk, value, facts, context, program, words, ask)
 		}
+		// **A value that reads the name it is given reads the old value**
+		// (#1644): `t = t * 5` states `t == 5 * t#k` over the value `t` had,
+		// renamed with what held of it; `t == 5 * t` said `t` is zero.
+		let mut given = value_lin ?? 0
+		if walk.arena.mentions(given, name) {
+			let old = bounding_rename(walk, facts, name)
+			let mut renamed: collections::BTreeMap[String, i64] = collections::BTreeMap()
+			renamed.insert(name.clone(), old)
+			given = walk.arena.substitute(given, renamed)
+		}
 		bounding_forget(walk, facts, name)
 		let n = walk.arena.var(name)
-		let fact = walk.arena.equal(n, value_lin ?? 0)
+		let fact = walk.arena.equal(n, given)
 		bounding_push(walk, facts, fact)
 		if own_range != null {
 			bounding_bounded(walk, facts, name, own_range ?? Range::open())
