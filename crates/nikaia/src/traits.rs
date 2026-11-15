@@ -8,7 +8,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // checker runs *before* `sync::infer` — that order is what keeps ADR-288 sound,
 // because the checker resolves method calls and the inference reads the result —
 // so a rule that needs the finished `sync` cannot live inside it. This runs
-// afterwards, from `check_program`, beside `tools::dsl::check` and `views::check` and
+// afterwards, from `check_program`, beside `compiler::dsl::check` and `views::check` and
 // for the same reason each of those is separate: it asks a question the type
 // walk does not have the answer to.
 //
@@ -29,7 +29,7 @@ use crate::parser::Parsed;
 /// compiler's own (`check::from_nikaia`), in the order of the source.
 pub fn check(parsed: &Parsed, own: &Ledger) -> Vec<Finding> {
     let mut found: Vec<Finding> =
-        nikaia_std::tools::traits::check_impls(&parsed.interner, &parsed.program.items, own)
+        nikaia_std::compiler::traits::check_impls(&parsed.interner, &parsed.program.items, own)
             .into_iter()
             .map(from_nikaia)
             .collect();
@@ -40,7 +40,7 @@ pub fn check(parsed: &Parsed, own: &Ledger) -> Vec<Finding> {
 /// **A finding a check written in Nikaia handed back**, as the compiler's own
 /// (`tools/findings.nika`, ADR-294). The one conversion there is: what the
 /// check said is what is reported.
-pub fn from_nikaia(found: nikaia_std::tools::findings::Finding) -> Finding {
+pub fn from_nikaia(found: nikaia_std::compiler::findings::Finding) -> Finding {
     Finding {
         severity: match found.warning {
             true => crate::check::Severity::Warning,

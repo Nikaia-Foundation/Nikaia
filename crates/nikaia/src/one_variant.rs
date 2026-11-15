@@ -72,7 +72,8 @@ impl Enums {
         if path.len() == 1 {
             return self.own.get(&path[0]);
         }
-        let joined = nikaia_std::tools::text_tiers::unaliased_in(&self.aliases, &path.join("::"));
+        let joined =
+            nikaia_std::compiler::text_tiers::unaliased_in(&self.aliases, &path.join("::"));
         let joined = joined.strip_prefix("std::").unwrap_or(&joined);
         self.library.get(joined)
     }

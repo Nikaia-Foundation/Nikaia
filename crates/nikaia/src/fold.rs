@@ -33,8 +33,8 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use winnow_grammar::Symbol;
 
 use crate::ast::Expr;
-use nikaia_std::tools::fold as nika;
-use nikaia_std::tools::integers::{Integer, integer};
+use nikaia_std::compiler::fold as nika;
+use nikaia_std::compiler::integers::{Integer, integer};
 
 /// What a constant integer expression came to, and the type an operand's
 /// declaration pinned.

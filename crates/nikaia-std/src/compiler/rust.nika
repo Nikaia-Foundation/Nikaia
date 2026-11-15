@@ -8,21 +8,21 @@
 // the way [ADR-290](../../../../docs/specification/adr/adr-290.md) D16 says such a
 // thing reaches Rust: lowered ahead of time by `nikaia lower-std`, committed as
 // the `rust.rs` beside this file, and `include!`d into
-// `nikaia_std::tools::rust`. The
+// `nikaia_std::compiler::rust`. The
 // call across is an ordinary Rust call with ordinary Rust types. There is no
 // process, no C ABI and no interface to design.
 //
 // **It is not part of `std`, and the directory is what says so.** A `.nika`
 // beside `lib.rs` is a module of `std` and `crates/nikaia/tests/contracts.rs`
 // requires `std.contracts` to carry every `pub` thing it declares; this one is
-// under `tools/` and must not be in that file. It lives in this crate at all
+// under `compiler/` and must not be in that file. It lives in this crate at all
 // because this crate is where the release step already looks for `.nika`
 // sources ([ADR-002](../../../../docs/specification/adr/adr-002.md) D4,
 // [ADR-290](../../../../docs/specification/adr/adr-290.md) D12), and for no
 // other reason.
 //
-// **And writing it is refused, in this language's words**: `use std::tools` is
-// `NK1186`, saying that `tools` is the toolchain's own and holds the grammar
+// **And writing it is refused, in this language's words**: `use std::compiler` is
+// `NK1186`, saying that `compiler` is the toolchain's own and holds the grammar
 // below, which `nikaia describe` calls and a program cannot reach. It used to
 // lower, with `rustc` complaining about a file nobody wrote - [Part III
 // C.1](../../../../docs/specification/30-nikaia-tooling.md)'s own class, and a

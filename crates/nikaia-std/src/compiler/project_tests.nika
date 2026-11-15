@@ -559,6 +559,31 @@ pub struct ProjectTestsRan {
     pub code: i64,
     pub stdout: Bytes,
     pub stderr: Bytes,
+    /// Whether it ran past the time limit it was given, and it and every
+    /// process it started were ended (#1672).
+    pub timed_out: bool,
+}
+
+/// **How long a test program may run** (#1672): `NIKAIA_TEST_TIME_LIMIT`
+/// seconds, 300 where it is not set. A program that runs longer is ended,
+/// with every process it started, and fails, so a program that never ends
+/// costs its run that limit and names itself, not the whole job's time. The
+/// limit is the machine's, not the package's, like `NIKAIA_CACHE_LIMIT`:
+/// a slow runner raises it, the package stays as it is. Zero or less, or a
+/// value that is no number, gives the default.
+pub fn project_tests_time_limit() -> i64 {
+    let given = text::parse_i64((env::var("NIKAIA_TEST_TIME_LIMIT") ?? "").trim()) ?? 0
+    return match given > 0 {
+        true => given,
+        false => 300,
+    }
+}
+
+/// **A test program that ran past its time limit** (#1672): it failed,
+/// whatever it printed, and says so first on standard error.
+pub fn project_tests_timed_out_outcome(limit: i64, stdout: Bytes, said: String) -> ProjectTestsOutcome {
+    let shown = f"timed out after {limit} s\n{said}"
+    return ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout: stdout, stderr: shown, files: [], bounds: [] }
 }
 
 /// What `project_tests_program_test` asks of the compiler (`project.rs`'s
@@ -572,8 +597,11 @@ pub trait ProjectTestsProgramHost {
     /// This compiler's `VERB --user-parallelism SETTING --project PROJECT`,
     /// run in `dir`, with `own` as the test's directory (where `fs::scratch`
     /// makes its directories) and `stdin` on its standard input (none where it
-    /// is empty); a `build` keeps Cargo quiet.
-    fn compiler(ref self, verb: ref String, setting: ref String, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes) -> ProjectTestsRan sync throws
+    /// is empty); a `build` keeps Cargo quiet. Where `within` is more than
+    /// zero, it and every process it started are ended after that many
+    /// seconds, and the run says it `timed_out` (#1672); so for the methods
+    /// below that take it.
+    fn compiler(ref self, verb: ref String, setting: ref String, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64) -> ProjectTestsRan sync throws
     /// This compiler's `check ARGS ENTRY` (`--bounds --optimization LEVEL`,
     /// `--asserts`): what it printed.
     fn explained(ref self, args: ref Vec[String], entry: ref fs::Path, own: ref fs::Path) -> Bytes sync throws
@@ -581,7 +609,7 @@ pub trait ProjectTestsProgramHost {
     /// puts it (`project_settings_own_copy`'s place, with no variant), in
     /// `dir`, with `own` as the test's directory; nothing where it is not
     /// there. `stdin` goes to its standard input, none where it is empty.
-    fn built(ref self, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes) -> ProjectTestsRan? sync throws
+    fn built(ref self, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64) -> ProjectTestsRan? sync throws
     /// **The batch build** (`project_batch.nika`): this compiler's `build
     /// --user-parallelism SETTING --project PROJECT` in `own`, with
     /// `project_batch_var()` naming `list`; the program it made, nothing where
@@ -589,7 +617,7 @@ pub trait ProjectTestsProgramHost {
     fn batched(ref self, setting: ref String, project: ref fs::Path, own: ref fs::Path, list: ref fs::Path) -> fs::Path? sync throws
     /// The batch's `binary NAME`, run in `dir`, with `own` as the test's
     /// directory and `stdin` on its standard input (none where it is empty).
-    fn ran_batched(ref self, binary: ref fs::Path, name: ref String, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes) -> ProjectTestsRan sync throws
+    fn ran_batched(ref self, binary: ref fs::Path, name: ref String, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64) -> ProjectTestsRan sync throws
 }
 
 /// **What a program of a batch is run from**: the batch's binary, and the
@@ -597,6 +625,66 @@ pub trait ProjectTestsProgramHost {
 pub struct ProjectTestsBatched {
     pub binary: fs::Path,
     pub entry: fs::Path,
+}
+
+/// **Where the run times of `root`'s test programs are kept** (#1600): a
+/// file per project under `cache`, named after its canonical path.
+pub fn project_tests_times_file(cache: ref fs::Path, root: ref fs::Path) -> fs::Path {
+    let shown = f"{project_members_canonical(root).display()}"
+    let name: String = shown.chars().map(fn(c) { if c.is_alphanumeric() { c } else { '-' } }).collect()
+    return cache.join("test-times").join(name)
+}
+
+/// The run times a times file holds, `name<TAB>milliseconds` a line; a line
+/// that is not one is left out, a missing file is none.
+fn project_tests_times_read(file: ref fs::Path) -> collections::BTreeMap[String, i64] {
+    let mut times: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let bytes = project_tests_written(file) ?? Bytes([])
+    for line in bytes.text_lossy().lines() {
+        match line.split_once("\t") {
+            null => {}
+            (name, ms) => match text::parse_i64(ms.trim()) {
+                null => {}
+                given => times.insert(name.clone(), given),
+            },
+        }
+    }
+    return times
+}
+
+/// **The order to start `programs` in, longest first** (#1600): the indexes
+/// of `programs`, those whose last run time `file` holds by it, the longest
+/// first; those it does not know before all, in their own order. The run ends
+/// when its last program does, so one long program started last is the run's
+/// tail while the other workers wait.
+pub fn project_tests_order(programs: ref Vec[ProgramTest], file: ref fs::Path) -> Vec[i64] {
+    let times = project_tests_times_read(file)
+    let mut keyed: Vec[(i64, i64)] = []
+    let mut k = 0
+    for program in programs {
+        let ms = times.get(program.name) ?? -1
+        keyed.push((if ms < 0 { i64::MIN } else { -ms }, k))
+        k += 1
+    }
+    keyed.sort()
+    return keyed.iter().map(fn(pair) { pair.1 }).collect()
+}
+
+/// **Keep the run times of this run** in `file` (#1600): `ran` replaces
+/// what the file held for those programs; the others' are kept, as a run
+/// with `--filter` runs a few. A file that cannot be written is no failure:
+/// the next run starts in the programs' own order.
+pub fn project_tests_remember(file: ref fs::Path, ran: ref Vec[(String, i64)]) {
+    let mut times = project_tests_times_read(file)
+    for (name, ms) in ran {
+        times.insert(name.clone(), ms)
+    }
+    let text: String = times.iter().map(fn(pair) { f"{pair.0}\t{pair.1}\n" }).collect().join("")
+    match file.parent() {
+        null => {}
+        parent => fs::create_dir(parent, fs::Root::Anywhere; recursive: true) catch { return },
+    }
+    fs::write(file, fs::Root::Anywhere, text) catch { return }
 }
 
 /// The fewest programs worth a batch: below it the extra build costs more than
@@ -801,6 +889,7 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     let project = own.join("project")
     let entry = project_tests_prepared(host, program, root, own)
     let written = f"tests/{program.name}.nika"
+    let limit = project_tests_time_limit()
     // **Run from the batch, where it is in one** (`project_tests_batches`):
     // a pass that wrote nothing on standard error is the verdict; anything
     // else is built and run alone. What a run writes there - a panic's place,
@@ -809,7 +898,12 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     match batched {
         null => {},
         batch => {
-            let out = host.ran_batched(batch.binary, program.name, root, own, program.stdin)
+            let out = host.ran_batched(batch.binary, program.name, root, own, program.stdin, limit)
+            // One that ran out of time is not run alone again, to run out
+            // of it twice.
+            if out.timed_out {
+                return project_tests_timed_out_outcome(limit, out.stdout, project_tests_relocated(out.stderr, batch.entry, written, root))
+            }
             let ran = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(out.stderr, batch.entry, written, root))
             let outcome = project_tests_bounds_outcome(program, ran, reports.bounds.clone(), reports.asserts.clone())
             if outcome.passed && out.stderr.len() == 0 {
@@ -820,7 +914,7 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     }
     let report = reports.bounds.clone()
     let asserts = reports.asserts.clone()
-    let built = host.compiler("build", setting, project, own, own, Bytes([]))
+    let built = host.compiler("build", setting, project, own, own, Bytes([]), 0)
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, project_tests_relocated(built.stderr, entry, written, root))
         return project_tests_bounds_outcome(program, refused, report, asserts)
@@ -829,9 +923,9 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     // as a `test` block does, so it reads the package's files by relative
     // name; what it writes goes under `fs::scratch()`, inside `own`. Where
     // the program is not where it is expected, `nikaia run` finds it.
-    let ran = match host.built(project, root, own, program.stdin) {
+    let ran = match host.built(project, root, own, program.stdin, limit) {
         null => {
-            let out = host.compiler("run", setting, project, root, own, program.stdin)
+            let out = host.compiler("run", setting, project, root, own, program.stdin, limit)
             let said = out.stderr.clone()
             (out, said)
         }
@@ -841,6 +935,9 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
         }
     }
     let (out, said) = ran
+    if out.timed_out {
+        return project_tests_timed_out_outcome(limit, out.stdout, project_tests_relocated(said, entry, written, root))
+    }
     let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(said, entry, written, root))
     return project_tests_bounds_outcome(program, outcome, report, asserts)
 }

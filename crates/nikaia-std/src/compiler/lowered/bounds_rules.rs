@@ -17,15 +17,23 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
     let mut whole: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut nested: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut defaults: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    let mut scalars: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for item in program.items.iter() {
         match &item.node {
             Item::Struct { name, generics, fields, is_extern, .. } => {
                 let is_extern = *is_extern; let name = *name;
                 if !generics.is_empty() || is_extern { continue; }
                 let owner = nikaia_std::block::Text::from(words.resolve(name).to_string());
-                let mut found: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut found: Vec<String> = vec![];
+                let mut numbers: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut found = found;
                 for field in fields.iter() {
                     let ty = words.resolve(field.ty.name);
+                    if !field.is_public && field.ty.generics.is_empty() && is_whole_number(ty) {
+                        let f = nikaia_std::block::Text::from(words.resolve(field.name).to_string());
+                        if field.default.is_some() { defaults.insert(format!("{}.{}", owner, f), rules_scalar_shape(field.default.as_ref().map(|__nikaia_it| &__nikaia_it.value))); }
+                        numbers.push(f);
+                        continue;
+                    }
                     if field.is_public || field.ty.generics.len() != 1 || ty != "Vec" && ty != "List" { continue; }
                     let f = nikaia_std::block::Text::from(words.resolve(field.name).to_string());
                     let element = unsafe { nikaia_std::proven::read(&field.ty.generics, (0) as usize) };
@@ -38,7 +46,10 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
                     }
                     found.push(f);
                 }
-                if !found.is_empty() { lists.insert(owner, found); }
+                if !found.is_empty() {
+                    if !numbers.is_empty() { scalars.insert(nikaia_std::block::Text::from(owner.to_string()), numbers); }
+                    lists.insert(owner, found);
+                }
             },
             _ => { },
         }
@@ -46,6 +57,15 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
     if lists.is_empty() { return vec![]; }
     let mut owners: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (owner, _) in lists.iter() { owners.insert(nikaia_std::block::Text::from(owner.to_string())); }
+    let mut every_field = lists.copy_owned();
+    for (owner, numbers) in scalars.iter() {
+        let mut all = nikaia_std::index::or(match every_field.get(owner) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into());
+        all.extend(numbers.iter().cloned());
+        every_field.insert(nikaia_std::block::Text::from(owner.to_string()), all);
+    }
     let mut quiet = frame_context(context.around.clone(), &context.std_receivers, &context.simd_loads);
     let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut results: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -83,7 +103,7 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
                     for p in changed.lengths.iter() { if path_root(p) != made.0 { kept.insert(nikaia_std::block::Text::from(p.to_string())); } }
                     changed.lengths = kept;
                 }
-                rules_outside(&changed, &rules_typed(args, body, "", &quiet, words), &lists, &mut dropped);
+                rules_outside(&changed, &rules_typed(args, body, "", &quiet, words), &every_field, &mut dropped);
             },
             Item::Impl { target, methods, .. } => {
                 let owner = nikaia_std::block::Text::from(words.resolve(target.name).to_string());
@@ -93,14 +113,14 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
                             let changed = bounding_changed(body, &quiet, words);
                             let types = rules_typed(args, body, &owner, &quiet, words);
                             if nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false) && lists.contains_key(&owner) {
-                                let lengths = rules_inside(&owner, &changed, &types, &lists, &mut dropped);
+                                let lengths = rules_inside(&owner, &changed, &types, &lists, &every_field, &mut dropped);
                                 let mut known = nikaia_std::index::or(match writers.get(&owner) {
                                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                                     None => None,
                                 }, || vec![].into());
                                 known.push(lengths);
                                 writers.insert(nikaia_std::block::Text::from(owner.to_string()), known);
-                            } else { rules_outside(&changed, &types, &lists, &mut dropped); }
+                            } else { rules_outside(&changed, &types, &every_field, &mut dropped); }
                         },
                         _ => { },
                     }
@@ -116,15 +136,15 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
                 let made = rules_builder(body, &owners, program, words);
                 for (at, stmt) in body.stmts.iter().enumerate().map(|(at, item)| (at as i64, item)) {
                     if made.0.is_empty() || at != made.2 {
-                        rules_built_stmt(stmt, "", &lists, &defaults, &mut built, &mut dropped, words);
+                        rules_built_stmt(stmt, "", &every_field, &defaults, &mut built, &mut dropped, words);
                         continue;
                     }
                     match &stmt.node {
                         Stmt::Let { value, .. } => { match value {
                             Expr::StructLit { name, fields, .. } => {
                                 let name = *name;
-                                rules_literal(words.resolve(name), fields, &lists, &defaults, &mut built, true, words);
-                                rules_built_fields(fields, "", &lists, &defaults, &mut built, &mut dropped, words);
+                                rules_literal(words.resolve(name), fields, &every_field, &defaults, &mut built, true, words);
+                                rules_built_fields(fields, "", &every_field, &defaults, &mut built, &mut dropped, words);
                             },
                             _ => { },
                         }; },
@@ -136,7 +156,7 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
                 let owner = words.resolve(target.name);
                 for method in methods.iter() {
                     match &method.node {
-                        Item::Fn { body, .. } => { rules_built_block(body, owner, &lists, &defaults, &mut built, &mut dropped, words); },
+                        Item::Fn { body, .. } => { rules_built_block(body, owner, &every_field, &defaults, &mut built, &mut dropped, words); },
                         _ => { },
                     }
                 }
@@ -151,6 +171,30 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || vec![].into());
+        let paired = rules_paired(program, owner, words);
+        let literals = nikaia_std::index::or(match built.get(&format!("{}#lit", owner)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into());
+        for a in nikaia_std::index::or(match scalars.get(owner) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into()) {
+            if dropped.contains(&format!("{}.{}", owner, a)) { continue; }
+            let values = rules_scalar_values(&literals, &a, &nikaia_std::index::or(match defaults.get(&format!("{}.{}", owner, a)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || "other".into()));
+            if values.iter().all(|v| { AsRef::<str>::as_ref(&(v)) == AsRef::<str>::as_ref(&("any")) || rules_shape_length(v) >= 0 }) { out.push(BoundsRule { owner: nikaia_std::block::Text::from(owner.to_string()), kind: String::from("floor"), a: nikaia_std::block::Text::from(a.to_string()), b: String::from(""), times: 1 }); }
+            for b in fields.iter() {
+                if dropped.contains(&format!("{}.{}", owner, b)) || !paired.contains(&format!("{}|{}", a, b)) { continue; }
+                let lengths = nikaia_std::index::or(match built.get(&format!("{}.{}#len", owner, b)) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || vec![].into());
+                if rules_built_within(&values, &lengths) { out.push(BoundsRule { owner: nikaia_std::block::Text::from(owner.to_string()), kind: String::from("cap"), a: nikaia_std::block::Text::from(a.to_string()), b: nikaia_std::block::Text::from(b.to_string()), times: 1 }); }
+            }
+        }
         for a in fields.iter() {
             if dropped.contains(&format!("{}.{}", owner, a)) { continue; }
             for b in fields.iter() {
@@ -234,6 +278,95 @@ pub(crate) fn rules_inner_shape(value: Option<&Expr>) -> String {
             return String::from("empty");
         },
         _ => return String::from("other"),
+    }
+}
+
+pub(crate) fn rules_scalar_shape(value: Option<&Expr>) -> String {
+    let given = match value { Some(__nikaia_value) => __nikaia_value, None => return String::from("other") };
+    match given {
+        Expr::LitInt { value: digits, negative, .. } => {
+            let digits = *digits; let negative = *negative;
+            let n = nikaia_std::index::or(integer_as_count(&integer(digits, negative)), || -1);
+            if n >= 0 { format!("n:{}", n) } else { String::from("other") }
+        },
+        _ => String::from("other"),
+    }
+}
+
+pub(crate) fn rules_scalar_values(literals: &[String], a: &str, default: &str) -> Vec<String> {
+    #[allow(unused_mut)] let mut out: Vec<String> = vec![];
+    let key = format!("{}=", a); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
+    for given in literals.iter() {
+        if given == "any" {
+            out.push(String::from("any"));
+            continue;
+        }
+        let mut shape = nikaia_std::block::Text::from(default.to_string());
+        for part in given.split(';') {
+            let value = match part.strip_prefix(&*key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            shape = nikaia_std::block::Text::from(value.to_string());
+        }
+        out.push(shape);
+    }
+    out
+}
+
+pub(crate) fn rules_built_within(values: &[String], lengths: &[String]) -> bool {
+    if (values.len() as i64) != lengths.len() as i64 { return false; }
+    for at in 0..values.len() as i64 {
+        if *unsafe { nikaia_std::proven::read(&values, (at) as usize) } == "any" && *unsafe { nikaia_std::proven::read(&lengths, (at) as usize) } == "any" { continue; }
+        let v = rules_shape_length(unsafe { nikaia_std::proven::read(&values, (at) as usize) });
+        let n = rules_shape_length(unsafe { nikaia_std::proven::read(&lengths, (at) as usize) });
+        if v < 0 || n < 0 || v > n { return false; }
+    }
+    true
+}
+
+pub(crate) fn rules_paired(program: &Program, owner: &str, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Impl { target, methods, .. } => {
+                if words.resolve(target.name) != owner { continue; }
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { body, .. } => { rules_paired_block(body, words, &mut out); },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub(crate) fn rules_paired_block(block: &Block, words: &winnow_grammar::InternerContext, out: &mut collections::BTreeSet<String>) {
+    for stmt in block.stmts.iter() {
+        let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for e in check_visit_stmt(&stmt.node) {
+            match e {
+                Expr::Field { base, name, .. } => {
+                    let base = nikaia_std::boxed::open(base); let name = *name;
+                    if rules_is_self(base, words) { named.insert(nikaia_std::block::Text::from(words.resolve(name).to_string())); }
+                },
+                _ => { },
+            }
+            for inner in check_visit_expr_blocks(e) { rules_paired_block(inner, words, out); }
+        }
+        match &stmt.node {
+            Stmt::For { body, .. } => { rules_paired_block(body, words, out); },
+            Stmt::While { body, .. } => { rules_paired_block(body, words, out); },
+            _ => { },
+        }
+        for a in named.iter() { for b in named.iter() { if a != b { out.insert(format!("{}|{}", a, b)); } } }
+    }
+}
+
+pub(crate) fn rules_is_self(expr: &Expr, words: &winnow_grammar::InternerContext) -> bool {
+    match expr {
+        Expr::Variable(name, _) => { let name = *name; words.resolve(name) == "self" },
+        _ => false,
     }
 }
 
@@ -448,7 +581,7 @@ pub(crate) fn rules_typed_lets(block: &Block, twice: &collections::BTreeSet<Stri
     }
 }
 
-pub(crate) fn rules_inside(owner: &str, changed: &BoundsChanged, types: &collections::BTreeMap<String, String>, lists: &collections::BTreeMap<String, Vec<String>>, dropped: &mut collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+pub(crate) fn rules_inside(owner: &str, changed: &BoundsChanged, types: &collections::BTreeMap<String, String>, lists: &collections::BTreeMap<String, Vec<String>>, every_field: &collections::BTreeMap<String, Vec<String>>, dropped: &mut collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut lengths: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut away = nothing_changed();
     for path in changed.values.iter() { if !rules_from_self(owner, path, 0, lists, dropped, &mut lengths) { away.values.insert(nikaia_std::block::Text::from(path.to_string())); } }
@@ -461,7 +594,7 @@ pub(crate) fn rules_inside(owner: &str, changed: &BoundsChanged, types: &collect
             if fields.len() == 1 { } else { rules_from_self(owner, &list, 0, lists, dropped, &mut lengths); }
         }
     }
-    rules_outside(&away, types, lists, dropped);
+    rules_outside(&away, types, every_field, dropped);
     lengths
 }
 
@@ -535,6 +668,15 @@ pub(crate) fn rules_built_fields(fields: &[FieldInit], owner: &str, lists: &coll
 
 pub(crate) fn rules_literal(name: &str, fields: &[FieldInit], lists: &collections::BTreeMap<String, Vec<String>>, defaults: &collections::BTreeMap<String, String>, built: &mut collections::BTreeMap<String, Vec<String>>, loose: bool, words: &winnow_grammar::InternerContext) {
     let own = match lists.get(name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut given = String::from("");
+    if loose { given = String::from("any"); } else { for field in fields.iter() { given = format!("{}{}={};", given, words.resolve(field.name), rules_scalar_shape((field.value).as_ref())); } }
+    let lit_key = format!("{}#lit", name);
+    let mut known_given = nikaia_std::index::or(match built.get(&lit_key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into());
+    known_given.push(given);
+    built.insert(lit_key, known_given);
     for f in own.iter() {
         let key = format!("{}.{}", name, f);
         let inner_key = format!("{}[]", key);
@@ -849,8 +991,14 @@ pub(crate) fn rules_give(walk: &mut BoundsWalk, facts: &mut BoundsFacts, root: &
     let mut floored: collections::BTreeSet<String> = collections::BTreeSet::new();
     for rule in walk.rules.copy_owned() {
         if rule.owner != owner { continue; }
-        if !every && !rules_writes(written, &format!("{}.{}", root, rule.a)) && !rules_writes(written, &format!("{}.{}", root, rule.b)) { continue; }
+        if !every && !rules_writes(written, &format!("{}.{}", root, rule.a)) && (rule.b.is_empty() || !rules_writes(written, &format!("{}.{}", root, rule.b))) { continue; }
         let zero = walk.arena.int(0);
+        if rule.kind == "floor" {
+            let a = walk.arena.var(&format!("{}.{}", root, rule.a));
+            let low = walk.arena.ge(a, zero);
+            bounding_push(&walk, facts, low);
+            continue;
+        }
         let b = walk.arena.var(&length_of(&format!("{}.{}", root, rule.b)));
         let b_floor = walk.arena.ge(b, zero);
         if rule.kind == "length" {
@@ -873,8 +1021,45 @@ pub(crate) fn rules_give(walk: &mut BoundsWalk, facts: &mut BoundsFacts, root: &
                 walk.rule_facts.push((name, high));
             }
             if floored.insert(nikaia_std::block::Text::from(rule.b.to_string())) { bounding_push(&walk, facts, b_floor); }
+        } else if rule.kind == "cap" {
+            let a = walk.arena.var(&format!("{}.{}", root, rule.a));
+            let capped = walk.arena.le(a, b);
+            bounding_push(&walk, facts, capped);
+            if floored.insert(nikaia_std::block::Text::from(rule.b.to_string())) { bounding_push(&walk, facts, b_floor); }
         } else if floored.insert(nikaia_std::block::Text::from(rule.b.to_string())) { bounding_push(&walk, facts, b_floor); }
     }
+}
+
+pub(crate) fn rules_of_a_field(kind: &str) -> bool { kind == "floor" || kind == "cap" }
+
+pub(crate) fn rules_field_holds(walk: &mut BoundsWalk, facts: &BoundsFacts, rule: &BoundsRule, root: &str, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {
+    let name = format!("{}.{}", root, rule.a);
+    let length = length_of(&format!("{}.{}", root, rule.b));
+    for fact in facts.facts.iter() {
+        let fact = nikaia_std::num::value(fact);
+        match walk.arena.at(fact) {
+            SolverTerm::Le(x, y) => { if rule.kind == "cap" && rules_term_is(&walk, x, 1, &name) && rules_term_is(&walk, y, 1, &length) { return true; } },
+            SolverTerm::Ge(x, y) => {
+                let at_zero = match walk.arena.at(y) {
+                    SolverTerm::Int(n) => n == 0,
+                    _ => false,
+                };
+                if rule.kind == "floor" && at_zero && rules_term_is(&walk, x, 1, &name) { return true; }
+            },
+            _ => { },
+        }
+    }
+    let a = walk.arena.var(&name);
+    let goal = if rule.kind == "cap" {
+        let b = walk.arena.var(&length);
+        walk.arena.le(a, b)
+    } else {
+        let zero = walk.arena.int(0);
+        walk.arena.ge(a, zero)
+    };
+    let proved = bounding_proves(&walk, facts, goal, ask);
+    bounding_traced(walk, facts, goal, proved);
+    proved
 }
 
 pub(crate) fn rules_times(walk: &mut BoundsWalk, times: i64, b: i64) -> i64 {
@@ -993,8 +1178,12 @@ pub(crate) fn rules_exit(walk: &mut BoundsWalk, facts: &BoundsFacts, returned: O
     bounding_returned(walk, facts, returned, throwing, context, program, words, ask);
     for built in walk.rule_built.copy_owned() { if walk.checking && rules_is_name(returned, &built, words) { rules_lengths_hold(walk, facts, &built, ask); } }
     if !walk.checking || !walk.rule_roots.contains_key("self") { return; }
+    let self_owner = nikaia_std::index::or(match walk.rule_roots.get("self") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || "".into());
     for (at, rule) in walk.rules.copy_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) {
-        if rule.kind == "length" { if !walk.rule_failed.contains(&at) && !rules_same_length(walk, facts, rule, "self", ask) { walk.rule_failed.insert(at); } } else if walk.checked_results.contains(&at) && !throwing {
+        if rule.kind == "length" { if !walk.rule_failed.contains(&at) && !rules_same_length(walk, facts, rule, "self", ask) { walk.rule_failed.insert(at); } } else if rules_of_a_field(&rule.kind) { if rule.owner == self_owner && !walk.rule_failed.contains(&at) && !rules_field_holds(walk, facts, rule, "self", ask) { walk.rule_failed.insert(at); } } else if walk.checked_results.contains(&at) && !throwing {
             if returned.is_none() {
                 walk.rule_failed.insert(at);
                 continue;
@@ -1009,7 +1198,10 @@ pub(crate) fn rules_lengths_hold(walk: &mut BoundsWalk, facts: &BoundsFacts, roo
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
-    for (at, rule) in walk.rules.copy_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) { if rule.kind == "length" && rule.owner == owner && !walk.rule_failed.contains(&at) && !rules_same_length(walk, facts, rule, root, ask) { walk.rule_failed.insert(at); } }
+    for (at, rule) in walk.rules.copy_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) {
+        if rule.kind == "length" && rule.owner == owner && !walk.rule_failed.contains(&at) && !rules_same_length(walk, facts, rule, root, ask) { walk.rule_failed.insert(at); }
+        if rules_of_a_field(&rule.kind) && rule.owner == owner && !walk.rule_failed.contains(&at) && !rules_field_holds(walk, facts, rule, root, ask) { walk.rule_failed.insert(at); }
+    }
 }
 
 pub(crate) fn rules_same_length(walk: &mut BoundsWalk, facts: &BoundsFacts, rule: &BoundsRule, root: &str, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {
@@ -1157,7 +1349,14 @@ pub(crate) fn rules_at_call(walk: &mut BoundsWalk, call: &Expr, receiver: Option
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || "".into()) {
-        for (at, rule) in walk.rules.copy_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) { if rule.kind == "length" && !walk.rule_failed.contains(&at) && !rules_same_length(walk, facts, rule, "self", ask) { walk.rule_failed.insert(at); } }
+        let self_owner = nikaia_std::index::or(match walk.rule_roots.get("self") {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into());
+        for (at, rule) in walk.rules.copy_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) {
+            if rule.kind == "length" && !walk.rule_failed.contains(&at) && !rules_same_length(walk, facts, rule, "self", ask) { walk.rule_failed.insert(at); }
+            if rules_of_a_field(&rule.kind) && rule.owner == self_owner && !walk.rule_failed.contains(&at) && !rules_field_holds(walk, facts, rule, "self", ask) { walk.rule_failed.insert(at); }
+        }
         return;
     }
     if !on.is_empty() && on != "self" && walk.rule_roots.contains_key(on) && typed == nikaia_std::index::or(match walk.rule_roots.get(on) {
@@ -1202,6 +1401,15 @@ pub(crate) fn rules_at_call(walk: &mut BoundsWalk, call: &Expr, receiver: Option
             }
             if rule.kind == "length" && (on == a || on == b) { continue; }
             if rule.kind == "result" { continue; }
+            if rules_of_a_field(&rule.kind) {
+                if root == "self" || walk.rule_built.contains(&root) { continue; }
+                if rule.kind == "cap" && on == b && !rules_adds(method) && !keeps_length(method) {
+                    walk.rule_failed.insert(at);
+                    continue;
+                }
+                if rules_writes(changed, &a) { walk.rule_failed.insert(at); }
+                continue;
+            }
             if rules_writes(changed, &a) || rules_writes(changed, &b) { walk.rule_failed.insert(at); }
         }
     }

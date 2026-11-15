@@ -33,7 +33,7 @@ use crate::refused;
 // here, behind the adapter (ADR-294): this module reads the file, hands the
 // document over as `ManifestItem`s of plain text, and keeps the readers'
 // signatures for the callers.
-use nikaia_std::tools::manifest as decide;
+use nikaia_std::compiler::manifest as decide;
 
 /// Where a `nikaia.toml` was found, and what it said: `tools/manifest.nika`'s
 /// `ManifestFile`, and the `Dependency` map derived from it once.
@@ -85,7 +85,7 @@ pub enum Dependency {
 }
 
 /// A refusal from `tools/manifest.nika`, in the words it gave.
-fn refusal(thrown: nikaia_std::error::Thrown<nikaia_std::tools::Refused>) -> anyhow::Error {
+fn refusal(thrown: nikaia_std::error::Thrown<nikaia_std::compiler::Refused>) -> anyhow::Error {
     refused!("{thrown}")
 }
 

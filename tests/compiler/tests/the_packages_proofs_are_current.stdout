@@ -1,3 +1,0 @@
-packages/json: ledger current: true
-packages/yaml: ledger current: true
-tests/page-examples: ledger current: true

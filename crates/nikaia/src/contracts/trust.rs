@@ -79,7 +79,7 @@ pub struct Root {
 
 /// Which of the two spellings D4 lists a root is, declared in Nikaia
 /// (`nikaia-std/src/compiler/trust.nika`).
-pub use nikaia_std::tools::trust::Wrote;
+pub use nikaia_std::compiler::trust::Wrote;
 
 /// What `--trust` names where a method call could not be resolved, so the
 /// program has no proof of who chose the bytes it read.
@@ -206,7 +206,7 @@ fn join(
     // walk is Nikaia (`tools/trust.nika`).
     for (file, unit) in package.iter().zip(checked) {
         let own_file = only.is_none_or(|only| std::ptr::eq(*file, only));
-        let calls = nikaia_std::tools::trust::source_calls(
+        let calls = nikaia_std::compiler::trust::source_calls(
             &file.program,
             &file.interner,
             library,
@@ -264,12 +264,11 @@ fn join(
     // **`main`'s parameters are words of the command line**
     // ([ADR-399](../../../docs/specification/adr/adr-399.md) D1): a source
     // with no call to see, and no marker (`tools/trust.nika`).
-    if package
-        .iter()
-        .any(|file| nikaia_std::tools::trust::takes_the_command_line(&file.program, &file.interner))
-    {
+    if package.iter().any(|file| {
+        nikaia_std::compiler::trust::takes_the_command_line(&file.program, &file.interner)
+    }) {
         reasons.push(Reason {
-            source: nikaia_std::tools::trust::main_parameters_source(),
+            source: nikaia_std::compiler::trust::main_parameters_source(),
             provenance: Provenance::Untrusted,
             marked: None,
         });
@@ -309,7 +308,7 @@ fn join(
 /// *the security review of a program's file access is that list* — which a list
 /// without line numbers is not.
 pub fn render(trust: &Trust, path: &str, source: &str) -> String {
-    use nikaia_std::tools::trust as nika;
+    use nikaia_std::compiler::trust as nika;
     let reasons: Vec<nika::Reason> = trust
         .reasons
         .iter()
@@ -359,7 +358,7 @@ pub fn render_with_escapes(
     path: &str,
     source: &str,
 ) -> String {
-    use nikaia_std::tools::trust as nika;
+    use nikaia_std::compiler::trust as nika;
     let mut out = render(trust, path, source);
     let plan = if trust.provenance == Provenance::Untrusted {
         nika::escaped_sinks(&parsed.program, &parsed.interner, library)
@@ -392,9 +391,9 @@ pub fn render_with_escapes(
 /// map that gets the keyed hash needlessly is slower; the opposite is an
 /// attack.
 pub fn trusted_maps(parsed: &Parsed, library: &Ledger) -> MapPlan {
-    nikaia_std::tools::trust::trusted_maps(&parsed.program, &parsed.interner, library)
+    nikaia_std::compiler::trust::trusted_maps(&parsed.program, &parsed.interner, library)
 }
 
 /// The `let`s, parameters and results that keep the fast hash
 /// (`nikaia-std/src/compiler/trust.nika`).
-pub use nikaia_std::tools::trust::MapPlan;
+pub use nikaia_std::compiler::trust::MapPlan;

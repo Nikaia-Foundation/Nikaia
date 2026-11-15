@@ -478,21 +478,89 @@ pub struct ProjectTestsRan {
     pub code: i64,
     pub stdout: Bytes,
     pub stderr: Bytes,
+    pub timed_out: bool,
+}
+
+pub fn project_tests_time_limit() -> i64 {
+    let given = nikaia_std::index::or(text::parse_i64(nikaia_std::index::or(env::var("NIKAIA_TEST_TIME_LIMIT"), || "".into()).trim()), || 0);
+    match given > 0 {
+        true => given,
+        false => 300,
+    }
+}
+
+pub fn project_tests_timed_out_outcome(limit: i64, stdout: Bytes, said: &str) -> ProjectTestsOutcome {
+    let shown = format!("timed out after {} s\n{}", limit, said);
+    ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout, stderr: shown, files: vec![], bounds: vec![] }
 }
 
 pub trait ProjectTestsProgramHost {
     fn package_name(&self, root: &std::path::Path) -> Result<Option<String>, Box<dyn std::error::Error>>;
-    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
+    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
     fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, Box<dyn std::error::Error>>;
-    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<Option<ProjectTestsRan>, Box<dyn std::error::Error>>;
+    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<Option<ProjectTestsRan>, Box<dyn std::error::Error>>;
     fn batched(&self, setting: &str, project: &std::path::Path, own: &std::path::Path, list: &std::path::Path) -> Result<Option<fs::Path>, Box<dyn std::error::Error>>;
-    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
+    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectTestsBatched {
     pub binary: fs::Path,
     pub entry: fs::Path,
+}
+
+pub fn project_tests_times_file(cache: &std::path::Path, root: &std::path::Path) -> fs::Path {
+    let shown = format!("{}", nikaia_std::fs::path::display(&(project_members_canonical(root))));
+    let name: String = shown.chars().map(|c| { if c.is_alphanumeric() { c } else { '-' } }).collect();
+    nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(cache), std::path::Path::new(&("test-times")))), std::path::Path::new(&(name)))
+}
+
+pub(crate) async fn project_tests_times_read(file: &std::path::Path) -> collections::BTreeMap<String, i64> {
+    let mut times: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    let bytes = nikaia_std::index::or(project_tests_written(file).await, || Bytes(vec![]).into());
+    for line in bytes.text_lossy().lines() {
+        match line.split_once("\t") {
+            None => { },
+            Some((name, ms)) => { match text::parse_i64(ms.trim()) {
+                None => { },
+                Some(given) => { times.insert(nikaia_std::block::Text::from(name.to_string()), given); },
+            }; },
+        }
+    }
+    times
+}
+
+pub async fn project_tests_order(programs: &[ProgramTest], file: &std::path::Path) -> Vec<i64> {
+    let times = project_tests_times_read(file).await;
+    let mut keyed: Vec<(i64, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut k = 0;
+    for program in programs.iter() {
+        let ms = nikaia_std::index::or(times.get(&program.name), || -1);
+        keyed.push((if ms < 0 { i64::MIN } else { unsafe { nikaia_std::proven::neg::<i64>(ms) } }, k));
+        k += 1;
+    }
+    keyed.sort();
+    keyed.iter().map(|pair| { pair.1 }).collect::<Vec<_>>()
+}
+
+pub async fn project_tests_remember(file: &std::path::Path, ran: &[(String, i64)]) {
+    let mut times = project_tests_times_read(file).await;
+    for (name, ms) in ran.iter() {
+        let ms = nikaia_std::num::value(ms);
+        times.insert(nikaia_std::block::Text::from(name.to_string()), ms);
+    }
+    let text: String = nikaia_std::block::Text::from(times.iter().map(|pair| { format!("{}\t{}\n", pair.0, pair.1) }).collect::<Vec<_>>().join(""));
+    match nikaia_std::fs::path::parent(&(file)) {
+        None => { },
+        Some(ref parent) => { match fs::create_dir(parent, &fs::Root::Anywhere, true) {
+            Ok(_) => {},
+            Err(_error) => { return; },
+        }; },
+    }
+    match fs::write(file, &fs::Root::Anywhere, text, false, true).await {
+        Ok(_) => {},
+        Err(_error) => { return; },
+    };
 }
 
 pub(crate) fn project_tests_batch_least() -> i64 { 8 }
@@ -643,10 +711,12 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     let project = nikaia_std::fs::path::join(&(own), std::path::Path::new(&("project")));
     let entry = project_tests_prepared(host, program, root, own).await?;
     let written = format!("tests/{}.nika", program.name);
+    let limit = project_tests_time_limit();
     match batched {
         None => { },
         Some(batch) => {
-            let out = host.ran_batched(&batch.binary, &program.name, root, own, &program.stdin)?;
+            let out = host.ran_batched(&batch.binary, &program.name, root, own, &program.stdin, limit)?;
+            if out.timed_out { return Ok(project_tests_timed_out_outcome(limit, out.stdout, &project_tests_relocated(&out.stderr, &batch.entry, &written, root))); }
             let ran = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&out.stderr, &batch.entry, &written, root));
             let outcome = project_tests_bounds_outcome(program, &ran, &nikaia_std::block::Text::from(reports.bounds.to_string()), &nikaia_std::block::Text::from(reports.asserts.to_string()));
             if outcome.passed && out.stderr.is_empty() { return Ok(outcome); }
@@ -655,14 +725,14 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     }
     let report = nikaia_std::block::Text::from(reports.bounds.to_string());
     let asserts = nikaia_std::block::Text::from(reports.asserts.to_string());
-    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]))?;
+    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]), 0)?;
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, &project_tests_relocated(&built.stderr, &entry, &written, root));
         return Ok(project_tests_bounds_outcome(program, &refused, &report, &asserts));
     }
-    let ran = match host.built(&project, root, own, &program.stdin)? {
+    let ran = match host.built(&project, root, own, &program.stdin, limit)? {
         None => {
-            let out = host.compiler("run", setting, &project, root, own, &program.stdin)?;
+            let out = host.compiler("run", setting, &project, root, own, &program.stdin, limit)?;
             let said = out.stderr.copy_of();
             (out, said)
         },
@@ -672,6 +742,7 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
         },
     };
     let (out, said) = ran;
+    if out.timed_out { return Ok(project_tests_timed_out_outcome(limit, out.stdout, &project_tests_relocated(&said, &entry, &written, root))); }
     let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&said, &entry, &written, root));
     Ok(project_tests_bounds_outcome(program, &outcome, &report, &asserts))
 }

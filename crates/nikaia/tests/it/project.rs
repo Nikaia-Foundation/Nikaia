@@ -196,7 +196,7 @@ fn a_program_another_compiler_lowered_is_lowered_again() {
 
     let switches = dir.join("target/nikaia/gen/switches");
     let written = std::fs::read_to_string(&switches).expect("the switches are written");
-    let identity = env!("NIKAIA_COMPILER");
+    let identity = nikaia::compiler_identity();
     assert!(written.ends_with(&*format!("{identity}\n")), "{written}");
     // As another compiler left it, and as old as the build it described.
     let modified = std::fs::metadata(&switches)

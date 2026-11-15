@@ -18,8 +18,8 @@ use super::Ledger;
 use crate::ast::Expr;
 use crate::check::{Checked, MethodCalls};
 use crate::parser::Parsed;
-use nikaia_std::tools::panics::{self as nika, PanicFacts, PanicsGraph};
-use nikaia_std::tools::throws::MethodsCalled;
+use nikaia_std::compiler::panics::{self as nika, PanicFacts, PanicsGraph};
+use nikaia_std::compiler::throws::MethodsCalled;
 
 /// **What a task's walk is handed** (D35): the unit's checks, each a site,
 /// nothing proved; the checker asks the same (`check_core_async_crash`).

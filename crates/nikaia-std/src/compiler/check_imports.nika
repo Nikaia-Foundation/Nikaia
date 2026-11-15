@@ -177,8 +177,8 @@ impl CheckState {
         let written = segments.join("::")
         let near = nearest_name(module, offered)
         let mut why: String = f"`{module}` is not one of the modules `std` offers."
-        if module == "tools" {
-            why = "`tools` is the toolchain's own, not `std`'s: it holds the compiler's Rust-signature grammar, which `nikaia describe` calls and a program cannot reach"
+        if module == "compiler" {
+            why = "`compiler` is the toolchain's own, not `std`'s: it holds the compiler's Rust-signature grammar, which `nikaia describe` calls and a program cannot reach"
         }
         let mut help: String = f"`std` offers: {offered.join(", ")}."
         if near != null {

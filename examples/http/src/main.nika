@@ -462,7 +462,29 @@ fn request(
 // Answers a request the server refuses, and the connection closes after it.
 // The text `http1` throws already starts with the status code, so it is
 // passed on as the body.
+//
+// **The close lingers**: a client still sending (a head or a body the server
+// stopped waiting for) has bytes on their way. Closing a socket with
+// received bytes unread resets the connection, and the reset can destroy the
+// answer before the client reads it. So the server reads and drops what
+// still comes until the client is quiet for `linger_quiet_millis` or
+// closes, and never longer than `linger_millis` in all.
 fn refuse(mut connection: net::Connection, status: i32, why: String) {
     let answered = Response { status: status, content_type: "text/plain", body: Body::Text(why.clone()) }
     send(connection, answered, true) catch { return }
+    let started = time::now()
+    while started.elapsed().in_millis() < linger_millis() {
+        let more = connection.read(within: linger_quiet_millis().millis()) catch { return }
+        if more.len() == 0 {
+            return
+        }
+    }
+}
+
+fn linger_millis() -> i64 {
+    return 2000
+}
+
+fn linger_quiet_millis() -> i64 {
+    return 200
 }

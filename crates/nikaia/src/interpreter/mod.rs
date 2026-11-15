@@ -21,7 +21,7 @@ impl Interpreter {
     }
 
     pub fn run(&self, parsed: &Parsed) {
-        let lines = nikaia_std::tools::interpreter::run(
+        let lines = nikaia_std::compiler::interpreter::run(
             &parsed.program.items,
             &self.interner,
             &|expr| format!("{expr:?}"),

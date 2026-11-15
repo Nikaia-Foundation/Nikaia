@@ -265,7 +265,7 @@ pub fn lost_sync_unplaced(message: ref String, help: ref String) -> String {
 // --- A program of several packages (ADR-286, ADR-100) ---
 
 /// The same rule for any set of files that is one package: a project's, and
-/// `std`'s toolchain package (`sysroot::lower_tools`), whose files were lowered
+/// `std`'s toolchain package (`sysroot::lower_compiler`), whose files were lowered
 /// into one namespace without it - two private `a_call`s in two files were
 /// read as one, and a call of the one met the other's parameters (found
 /// moving `trust`'s walk into Nikaia, #125). `declared` holds the names each

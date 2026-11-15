@@ -4,14 +4,14 @@
 //
 // The first piece of the compiler that moved from Rust to Nikaia (0.0.238), by
 // ADR-290's route: written here, lowered ahead of time by `nikaia lower-std`
-// to `spelling.rs` beside it, `include!`d as `nikaia_std::tools::spelling`,
+// to `spelling.rs` beside it, `include!`d as `nikaia_std::compiler::spelling`,
 // and called from the checker as an ordinary Rust function. The two functions
 // it replaced - `check::distance` and `dsl::one_edit_apart` - are gone from
 // the compiler; `tests/self_hosting.rs` and every refusal that names a near
 // miss are what hold the two versions to one behaviour.
 //
-// Under `tools/` and not beside `text.nika`, because this is the toolchain's
-// and not `std`'s: a program cannot reach it (`NK1186`'s note for `tools`).
+// Under `compiler/` and not beside `text.nika`, because this is the toolchain's
+// and not `std`'s: a program cannot reach it (`NK1186`'s note for `compiler`).
 
 /// How many edits turn one word into another, where an edit is a character
 /// put in, taken out or changed - and two neighbours that swapped places count

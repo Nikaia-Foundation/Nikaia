@@ -4,7 +4,7 @@
 //!
 //! `src/compiler/rust.nika` is the source; `src/compiler/rust.rs` beside it is what
 //! `nikaia lower-std` made of it and what this links against. There is no
-//! process here and no C ABI: `nikaia_std::tools::rust::file` is a function call, and
+//! process here and no C ABI: `nikaia_std::compiler::rust::file` is a function call, and
 //! what comes back is `Vec<Item>` with `&str` views into the text that was
 //! handed in.
 //!
@@ -13,7 +13,7 @@
 //! functions that do not exist on the fixture below, and this is where that
 //! stops being true.
 
-use nikaia_std::tools::rust::{RustItem, file};
+use nikaia_std::compiler::rust::{RustItem, file};
 
 /// A crate whose text contains items that are not items.
 ///

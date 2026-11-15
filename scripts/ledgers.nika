@@ -15,11 +15,10 @@
 // tracked and unignored files, with no `target/` and its own
 // `NIKAIA_CACHE_DIR`: a warm cache hides the questions a new bounds walk asks
 // (docs/builder-facts.md). `crates` there links to this checkout's, so a path
-// dependency on `../../crates/unsafe/...` resolves as it does here. A
-// directory whose sources declare no `fn main` and whose manifest names no
-// `artifact` is a library `build` refuses (NK1351, Part III 13.3); it is
-// checked with `check --rustc src/main.nika`, which compares its ledgers the
-// same way.
+// dependency on `../../crates/unsafe/...` resolves as it does here. Every
+// directory is built with `build`: a library names its `artifact` in the
+// manifest (Part III 13.3); one with neither `fn main` nor `artifact` is
+// refused by `build` (NK1351), as by `check --rustc`, and reported as failed.
 //
 // `--check` builds each `--locked`, prints `DIR: ledger current` or `DIR:
 // ledger stale` with the start of the difference, and exits 1 when one is
@@ -66,31 +65,11 @@ fn ledgers_dirs(tmp: String) -> Vec[String] throws {
     return dirs
 }
 
-// True when TMP/DIR builds with `build`: its sources declare a `fn main`, or
-// its manifest names a library `artifact` (Part III 13.3).
-fn ledgers_builds(tmp: String, dir: String) -> bool throws {
-    return process::run(
-        "sh",
-        [
-            "-c",
-            f"grep -rqE '^(pub )?fn main' '{tmp}/{dir}/src' || grep -qE '^artifact *=' '{tmp}/{dir}/nikaia.toml'",
-        ],
-    ).ok
-}
-
 // The command line of DIR, `--locked` when LOCKED.
-fn ledgers_command(tmp: String, dir: String, locked: bool) -> Vec[String] throws {
-    let mut args: Vec[String] = []
-    if ledgers_builds(tmp, dir.clone()) {
-        args.push("build")
-        for f in ledgers_flags(dir) { args.push(f) }
-        if locked { args.push("--locked") }
-    } else {
-        args.push("check")
-        args.push("--rustc")
-        if locked { args.push("--locked") }
-        args.push("src/main.nika")
-    }
+fn ledgers_command(dir: String, locked: bool) -> Vec[String] throws {
+    let mut args: Vec[String] = ["build"]
+    for f in ledgers_flags(dir) { args.push(f) }
+    if locked { args.push("--locked") }
     return args
 }
 
@@ -120,7 +99,12 @@ fn ledgers_copy(tree: String) -> String throws {
 }
 
 // Runs NIKAIA with ARGS in TMP/DIR; the output, and whether it succeeded.
-fn ledgers_build(nikaia: String, tmp: String, dir: String, args: Vec[String]) -> (String, bool) throws {
+fn ledgers_build(
+    nikaia: String,
+    tmp: String,
+    dir: String,
+    args: Vec[String],
+) -> (String, bool) throws {
     let mut line = f"cd '{tmp}/{dir}' && env -u CARGO_TARGET_DIR RUST_BACKTRACE=0 NIKAIA_CACHE_DIR='{tmp}/cache' '{nikaia}'"
     for a in args { line = line + f" '{a}'" }
     let out = process::run("sh", ["-c", line + " 2>&1"])
@@ -139,7 +123,12 @@ fn ledgers_head(body: String, n: i64) -> String {
 fn ledgers_check(nikaia: String, tmp: String) -> bool throws {
     let mut green = true
     for dir in ledgers_dirs(tmp.clone()) {
-        let (out, ok) = ledgers_build(nikaia.clone(), tmp.clone(), dir.clone(), ledgers_command(tmp.clone(), dir.clone(), true))
+        let (out, ok) = ledgers_build(
+            nikaia.clone(),
+            tmp.clone(),
+            dir.clone(),
+            ledgers_command(dir.clone(), true),
+        )
         if ok {
             println(f"{dir}: ledger current")
             continue
@@ -158,7 +147,12 @@ fn ledgers_check(nikaia: String, tmp: String) -> bool throws {
 fn ledgers_refresh(nikaia: String, tmp: String) -> bool throws {
     let mut green = true
     for dir in ledgers_dirs(tmp.clone()) {
-        let (out, ok) = ledgers_build(nikaia.clone(), tmp.clone(), dir.clone(), ledgers_command(tmp.clone(), dir.clone(), false))
+        let (out, ok) = ledgers_build(
+            nikaia.clone(),
+            tmp.clone(),
+            dir.clone(),
+            ledgers_command(dir.clone(), false),
+        )
         if !ok {
             green = false
             println(f"failed {dir}")
@@ -207,7 +201,7 @@ fn main() throws {
     let mut green = true
     if mode == "--list" {
         for dir in ledgers_dirs(tmp.clone()) {
-            let line = ledgers_command(tmp.clone(), dir.clone(), true).join(" ")
+            let line = ledgers_command(dir.clone(), true).join(" ")
             println(f"{dir}: nikaia {line}")
         }
     } else if mode == "--check" {

@@ -6,7 +6,7 @@
 //
 // The second module of the ring after the tree (ADR-294) moved from Rust
 // to Nikaia, by ADR-290's route: lowered by `nikaia lower-std` to `trust.rs`
-// beside it, `include!`d as `nikaia_std::tools::trust`, and called from the
+// beside it, `include!`d as `nikaia_std::compiler::trust`, and called from the
 // compiler's `contracts::trust`.
 //
 // **What moved is the module's decisions**: which written root is a way

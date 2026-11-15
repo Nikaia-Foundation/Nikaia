@@ -64,3 +64,8 @@ pub mod line_breaks {
     #[allow(unused_imports)]
     pub use super::{LineBreaks, line_breaks};
 }
+
+/// **The digest of this lowered set** (#1610): every file `lower-std` wrote
+/// beside this index, and the index above this line. Compiled into the same
+/// crate as the code it names, it is the compiler's identity for its caches.
+pub const LOWERED_DIGEST: &str = "a7bbc3a081949afbd8d997316f618ad6f3d6bad431cc2652f76df0fdc05e1319";

@@ -33,8 +33,8 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
+use nikaia_std::compiler::grammar_run::{GrammarRunHost, grammar_run_compile_and_run};
 use nikaia_std::rt::exec::block_on;
-use nikaia_std::tools::grammar_run::{GrammarRunHost, grammar_run_compile_and_run};
 
 use crate::ast::Item;
 use crate::contracts::ty::Ty;
@@ -43,7 +43,7 @@ use crate::parser::Parsed;
 /// Why a grammar could not be run, where the reason is this compiler's rather
 /// than the input's: declared in Nikaia (`tools/check_reports.nika`, ADR-294,
 /// #125), the checker's report reads it as it is.
-pub use nikaia_std::tools::check_reports::CheckWall as Wall;
+pub use nikaia_std::compiler::check_reports::CheckWall as Wall;
 
 /// One run: which grammar, which rule, and the bytes.
 pub struct Ask<'a> {
@@ -240,7 +240,7 @@ impl GrammarRunHost for Host<'_> {
 
 fn manifest(key: &str, program: &str) -> String {
     let dependencies = crate::project::runtime_dependencies_for(program);
-    nikaia_std::tools::grammar_decode::gr_manifest(key, &dependencies)
+    nikaia_std::compiler::grammar_decode::gr_manifest(key, &dependencies)
 }
 
 /// The whole sub-program, written by `tools/grammar_run.nika`'s
@@ -299,7 +299,7 @@ fn driver(parsed: &Parsed, ask: &Ask<'_>) -> Result<String, Wall> {
         others,
         ledger: std::cell::OnceCell::new(),
     };
-    nikaia_std::tools::grammar_run::grammar_run_driver(
+    nikaia_std::compiler::grammar_run::grammar_run_driver(
         &host,
         &parsed.interner,
         &parsed.aliases,
@@ -333,7 +333,7 @@ struct Driver<'a> {
     ledger: std::cell::OnceCell<crate::contracts::Ledger>,
 }
 
-impl nikaia_std::tools::grammar_run::GrammarDriverHost for Driver<'_> {
+impl nikaia_std::compiler::grammar_run::GrammarDriverHost for Driver<'_> {
     fn lowered_own(&self) -> Result<String, Box<dyn std::error::Error>> {
         // The bundle it links has the allocator already.
         let build = crate::emit::Build {
@@ -408,9 +408,9 @@ impl nikaia_std::tools::grammar_run::GrammarDriverHost for Driver<'_> {
 /// payload loop met an `O`. A separator between two words has to be skipped by
 /// whoever reads the second one.
 pub fn decode(text: &str) -> Result<crate::build_time::Value, Wall> {
-    match nikaia_std::tools::grammar_decode::gr_decode(text, &crate::build_time::char_of) {
-        nikaia_std::tools::grammar_decode::GrDecoded::Value(value) => Ok(value),
-        nikaia_std::tools::grammar_decode::GrDecoded::Unreadable(detail) => {
+    match nikaia_std::compiler::grammar_decode::gr_decode(text, &crate::build_time::char_of) {
+        nikaia_std::compiler::grammar_decode::GrDecoded::Value(value) => Ok(value),
+        nikaia_std::compiler::grammar_decode::GrDecoded::Unreadable(detail) => {
             Err(Wall::Unreadable { detail })
         }
     }

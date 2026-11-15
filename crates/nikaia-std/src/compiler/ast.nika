@@ -2,7 +2,7 @@
 //
 // **The compiler's syntax tree** (ADR-294 D6), declared in the language it
 // describes: lowered ahead of time by `nikaia lower-std` to `ast.rs` beside it,
-// `include!`d as `nikaia_std::tools::ast`, and re-exported by the compiler's
+// `include!`d as `nikaia_std::compiler::ast`, and re-exported by the compiler's
 // `crate::ast`, which adds what Nikaia cannot say - the `usize` doors of a
 // `Span`, and the grammar backend's `WithSpan`.
 //

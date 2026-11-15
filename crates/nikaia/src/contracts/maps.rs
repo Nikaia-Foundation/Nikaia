@@ -39,7 +39,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use super::Ledger;
 
-use nikaia_std::tools::maps::{MpFnMaps, MpHeld, mp_analyse};
+use nikaia_std::compiler::maps::{MpFnMaps, MpHeld, mp_analyse};
 
 /// What a `pub` function says of its map positions.
 #[derive(Debug, Clone)]

@@ -113,8 +113,8 @@ pub fn link_flags(package: &str, entries: &BTreeMap<String, String>) -> Result<V
 /// **D4's list**, over what `pkg-config` printed, is `tools/libraries.nika`'s
 /// (ADR-294, #125); a word outside it is `NK1225`.
 pub fn filtered(package: &str, found_by: &str, said: &str) -> Result<Vec<String>> {
-    use nikaia_std::tools::libraries::Flags;
-    match nikaia_std::tools::libraries::filtered(said, cfg!(target_os = "macos")) {
+    use nikaia_std::compiler::libraries::Flags;
+    match nikaia_std::compiler::libraries::filtered(said, cfg!(target_os = "macos")) {
         Flags::Taken { flags } => Ok(flags),
         Flags::Refused { word } => crate::refuse!(
             "error[NK1225]: `pkg-config --libs {found_by}` for package `{package}` says \
@@ -127,7 +127,7 @@ pub fn filtered(package: &str, found_by: &str, said: &str) -> Result<Vec<String>
 
 /// **The flags as `rustc` takes them**: `tools/libraries.nika` (ADR-294, #125).
 pub fn as_rustc_args(flags: &[String]) -> Vec<String> {
-    nikaia_std::tools::libraries::as_rustc_args(flags)
+    nikaia_std::compiler::libraries::as_rustc_args(flags)
 }
 
 #[cfg(test)]

@@ -1,0 +1,22 @@
+bounds in tests/prove_a_value_scaled_in_a_counted_loop.nika: 1 indexes, 1 proved; 16 operations, 15 proved
+    13  cap * 2     proved
+    14  tries += 1  proved
+    23  cap * 2     checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    24  tries += 1  proved
+    33  cap + 1000  proved
+    34  tries += 1  proved
+    36  cap + 5     proved
+    46  3 * cap     proved
+    47  tries += 1  proved
+    49  cap + 1     proved
+    55  cap *= 2    proved
+    57  cap - 1     proved
+    64  flags[0]    proved
+    65  2 * v + 1   proved
+    65  2 * v       proved
+    67  turns += 1  proved
+    69  v + 1       proved
+  derived  add_k: 0 <= requested, proved at the calls on lines 73
+  derived  grow: 0 <= requested, proved at the calls on lines 73
+  derived  grow_from: 0 <= start, proved at the calls on lines 73
+  derived  grow_n: 0 <= requested, 0 <= n, n <= requested, n < requested, proved at the calls on lines 73

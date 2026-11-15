@@ -34,11 +34,11 @@ use anyhow::{Context, Result};
 
 use crate::ast::{Item, Span};
 use crate::parser::{self, Parsed};
-use nikaia_std::error::Thrown;
-use nikaia_std::rt::exec::block_on;
-use nikaia_std::tools::modules::{
+use nikaia_std::compiler::modules::{
     self as collecting, ModulesHost, ModulesLedgerHost, ModulesRefusal, ModulesUnit,
 };
+use nikaia_std::error::Thrown;
+use nikaia_std::rt::exec::block_on;
 use std::cell::RefCell;
 
 /// One file of a package.
@@ -74,7 +74,7 @@ impl Unit {
 /// A package this program depends on: the name a `use` writes, and where it is
 /// ([ADR-286](../../../docs/specification/adr/adr-286.md) D15). Declared in
 /// `tools/project_members.nika`, which finds them (P4a).
-pub use nikaia_std::tools::project_members::ProjectMembersDependency as Dependency;
+pub use nikaia_std::compiler::project_members::ProjectMembersDependency as Dependency;
 
 /// **The files an editor has open** (#1347): a path, as shown, to the text
 /// the editor holds, read instead of the file. Every build but `nikaia lsp`'s
@@ -181,10 +181,10 @@ impl ModulesHost for Parsing {
         at: &Path,
         reachable: &BTreeSet<String>,
         alone: bool,
-    ) -> Option<nikaia_std::tools::findings::Finding> {
+    ) -> Option<nikaia_std::compiler::findings::Finding> {
         let parsed = self.kept(unit);
         let parsed = parsed.as_ref().expect(KEPT);
-        nikaia_std::tools::modules::a_use_refused(
+        nikaia_std::compiler::modules::a_use_refused(
             &parsed.interner,
             &parsed.program.items,
             reachable,
@@ -257,7 +257,7 @@ impl Parsing {
 }
 
 /// The same rule for any set of files that is one package: a project's, and
-/// `std`'s toolchain package (`sysroot::lower_tools`), whose files were lowered
+/// `std`'s toolchain package (`sysroot::lower_compiler`), whose files were lowered
 /// into one namespace without it - two private `a_call`s in two files were
 /// read as one, and a call of the one met the other's parameters (found
 /// moving `trust`'s walk into Nikaia, #125).
@@ -272,7 +272,7 @@ pub(crate) fn declared_once(files: &[(&Path, &Parsed, &str)]) -> Result<()> {
         .iter()
         .map(|(_, parsed, _)| declared_at(parsed))
         .collect();
-    match nikaia_std::tools::modules::declared_once(&paths, &declared) {
+    match nikaia_std::compiler::modules::declared_once(&paths, &declared) {
         Some((at, finding)) => Err(a_finding(
             &paths[at as usize],
             files[at as usize].2,
@@ -287,7 +287,7 @@ pub(crate) fn declared_once(files: &[(&Path, &Parsed, &str)]) -> Result<()> {
 fn a_finding(
     path: &str,
     source: &str,
-    finding: nikaia_std::tools::findings::Finding,
+    finding: nikaia_std::compiler::findings::Finding,
 ) -> anyhow::Error {
     let finding = crate::traits::from_nikaia(finding);
     crate::diagnostics::collect_finding(path, &finding);
@@ -301,7 +301,7 @@ fn a_finding(
 /// The names a file declares, each with its item: what one package's
 /// namespace counts (`declared_at`, `tools/modules.nika`).
 fn declared_at(parsed: &Parsed) -> Vec<(String, Span)> {
-    nikaia_std::tools::modules::declared_at(&parsed.interner, &parsed.program.items)
+    nikaia_std::compiler::modules::declared_at(&parsed.interner, &parsed.program.items)
 }
 
 /// The runs of units that belong to one package, in the order they were read.
@@ -309,7 +309,7 @@ fn declared_at(parsed: &Parsed) -> Vec<(String, Span)> {
 /// The units arrive grouped (`collect_with`), so this is a walk and not a sort.
 fn groups(units: &[Unit]) -> Vec<std::ops::Range<usize>> {
     // In Nikaia (`tools/modules.nika`).
-    nikaia_std::tools::modules::groups(&packages_of(units))
+    nikaia_std::compiler::modules::groups(&packages_of(units))
         .into_iter()
         .map(|(from, to)| from as usize..to as usize)
         .collect()
@@ -384,7 +384,7 @@ fn package_ledger_checked(
     let empty = crate::check::CheckFacts::empty();
     for (at, unit) in units.iter().enumerate() {
         let facts = checked.get(at).map_or(&empty, |c| &c.facts);
-        let calls = nikaia_std::tools::trust::source_calls(
+        let calls = nikaia_std::compiler::trust::source_calls(
             &unit.parsed.program,
             &unit.parsed.interner,
             library,
@@ -395,7 +395,7 @@ fn package_ledger_checked(
             || unit.path.display().to_text(),
             |name| name.to_string_lossy().to_text(),
         );
-        nikaia_std::tools::trust::mark_trusted(&mut own, &calls, &file, &unit.source);
+        nikaia_std::compiler::trust::mark_trusted(&mut own, &calls, &file, &unit.source);
     }
     (own, Some(checked), noted)
 }
@@ -723,14 +723,14 @@ impl Program {
             .iter()
             .map(|u| u.path.display().to_text())
             .collect();
-        nikaia_std::tools::modules::shown_paths(&paths, self.entry_shown_as.as_deref())
+        nikaia_std::compiler::modules::shown_paths(&paths, self.entry_shown_as.as_deref())
     }
 
     /// **[ADR-288](../../../docs/specification/adr/adr-288.md) D29's note**:
     /// the program's own `pub` functions that could promise more about pausing
     /// than they do (`tools/modules.nika`).
     pub fn could_promise(&self) -> String {
-        nikaia_std::tools::modules::could_promise(
+        nikaia_std::compiler::modules::could_promise(
             &self.contracts,
             &self.as_its_own,
             &self.paused_by_code,
@@ -741,7 +741,7 @@ impl Program {
     /// for every `pub` function of the program's own that could not pause in
     /// the committed ledger and now can (`tools/modules.nika`).
     pub fn lost_sync(&self, committed: &crate::contracts::Ledger) -> String {
-        nikaia_std::tools::modules::lost_sync(
+        nikaia_std::compiler::modules::lost_sync(
             &self.contracts,
             &self.as_its_own,
             &self.pauses,
@@ -762,18 +762,18 @@ impl Program {
     /// `tools/modules.nika`. [`Program::contracts`] stays the ledger the
     /// lowering reads and the one written beside the program.
     pub fn contracts_as_promised(&self) -> crate::contracts::Ledger {
-        nikaia_std::tools::modules::contracts_as_promised(&self.contracts, &self.as_its_own)
+        nikaia_std::compiler::modules::contracts_as_promised(&self.contracts, &self.as_its_own)
     }
 
     /// The **packages** this program reaches, by the name a `use` writes
     /// (`tools/modules.nika`).
     pub fn package_names(&self) -> std::collections::BTreeSet<String> {
-        nikaia_std::tools::modules::package_names(&packages_of(&self.units))
+        nikaia_std::compiler::modules::package_names(&packages_of(&self.units))
     }
 
     /// Whether this is one file, in which case nothing about the build changes.
     pub fn is_single_file(&self) -> bool {
-        nikaia_std::tools::modules::is_single_file(self.units.len() as i64)
+        nikaia_std::compiler::modules::is_single_file(self.units.len() as i64)
     }
 
     /// Every source that took part, in the order they are emitted - which is
@@ -1101,7 +1101,7 @@ impl collecting::ModulesEmitHost for EmitHost<'_> {
 /// (ADR-303 D4). A test's function `throws`, so a failure that leaves its body
 /// leaves `main` - which prints it and ends the process unsuccessfully.
 fn with_tests_as_functions(mut units: Vec<Unit>) -> Result<(Vec<Unit>, Vec<TestCase>)> {
-    use nikaia_std::tools::modules;
+    use nikaia_std::compiler::modules;
     let own: Vec<usize> = (0..units.len())
         .filter(|&at| units[at].package.is_none())
         .collect();
@@ -1172,7 +1172,7 @@ fn std_ledger() -> &'static crate::contracts::Ledger {
 fn names_in(files: &[&crate::parser::Parsed]) -> BTreeSet<String> {
     let mut names = BTreeSet::new();
     for parsed in files {
-        nikaia_std::tools::modules::modules_names_in(
+        nikaia_std::compiler::modules::modules_names_in(
             &parsed.interner,
             &parsed.program.items,
             &mut names,

@@ -1,0 +1,46 @@
+// The lowered set names itself (#1610): `lower-std` writes `LOWERED_DIGEST`
+// into the index it writes, `crates/nikaia-std/src/compiler/lowered.rs`, and
+// the compiler's cache identity takes it from there, compiled into the same
+// crate as the code, rather than from `build.rs` reading `lowered/` a second
+// time. This test computes the digest of the committed set again, as
+// `sysroot_package_digest` does: SHA-256 over the index above the line, then
+// each file under `lowered/` by path with its own SHA-256, sorted by path.
+use std::fs
+use std::hash
+use std::process
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+    let dir = f"{root()}/crates/nikaia-std/src/compiler"
+    let index = fs::read_to_string(f"{dir}/lowered.rs", fs::Root::Anywhere) catch { "" }
+    let marker = "\n/// **The digest of this lowered set**"
+    let at = index.find(marker) ?? index.len()
+    let line = "pub const LOWERED_DIGEST: &str = \""
+    let mut named: String = ""
+    for each in index.lines() {
+        if each.starts_with(line) {
+            named = each.trim_start_matches(line).trim_end_matches("\";").clone()
+        }
+    }
+    let mut all: String = ""
+    all.push_str(hash::sha256_hex(index[0..<at].bytes().collect()))
+    all.push_str("\n")
+    let listed = process::run("sh", ["-c", f"cd '{dir}' && find lowered -name '*.rs' | LC_ALL=C sort"]).stdout.clone()
+    for path in listed.lines() {
+        let text = fs::read_to_string(f"{dir}/{path}", fs::Root::Anywhere) catch { "" }
+        all.push_str(path)
+        all.push_str("\n")
+        all.push_str(hash::sha256_hex(text.bytes().collect()))
+        all.push_str("\n")
+    }
+    let digest = hash::sha256_hex(all.bytes().collect())
+    println(f"lowered.rs names a digest: {named.len() == 64}")
+    println(f"it is the committed set's: {named == digest}")
+}

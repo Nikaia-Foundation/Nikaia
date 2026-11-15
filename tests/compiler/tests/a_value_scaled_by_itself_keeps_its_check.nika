@@ -1,0 +1,31 @@
+// `total = total * 5` reads the value `total` had: what held of that old
+// value carries over, and nothing makes the new one zero (#1644). Before the
+// fix the walk stated `total == 5 * total`, so under `total >= 1` the
+// branch contradicted itself, the guess `total <= 1` survived each turn and
+// the products were written without their check.
+
+fn scaled(vars: ref Vec[i64]) -> i64 {
+	let mut total: i64 = 1
+	for _ in vars {
+		if total >= 1 {
+			total = total * 5
+		}
+	}
+	return total
+}
+
+fn doubled(n: i64) -> i64 {
+	let mut total: i64 = 1
+	let mut i: i64 = 0
+	while i < n {
+		if total >= 0 {
+			total = total + total
+		}
+		i = i + 1
+	}
+	return total
+}
+
+fn main() throws {
+	println(f"{scaled([1, 2, 3])} {doubled(4)}")
+}

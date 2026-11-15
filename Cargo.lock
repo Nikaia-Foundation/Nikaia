@@ -533,6 +533,7 @@ name = "nikaia"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "child-usage",
  "clap",
  "nikaia-std",
  "orchestrator",

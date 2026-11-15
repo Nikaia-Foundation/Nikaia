@@ -315,7 +315,7 @@ fn a_package_that_reads_only_files_keeps_the_fast_map_in_every_file() {
 }
 
 // ---------------------------------------------------------------------------
-// **The toolchain's own package** (`lower_tools_at`): each file is lowered with
+// **The toolchain's own package** (`lower_compiler_at`): each file is lowered with
 // the others beside it, and the trust is the package's, not the file's.
 // ---------------------------------------------------------------------------
 
@@ -324,7 +324,7 @@ fn tools_lowered(name: &str, files: &[(&str, &str)]) -> String {
     for (file, contents) in files {
         std::fs::write(dir.join(file), contents).expect("write the file");
     }
-    let rust = nikaia::sysroot::lower_tools_at(&dir, Default::default())
+    let rust = nikaia::sysroot::lower_compiler_at(&dir, Default::default())
         .expect("it lowers")
         .inlined();
     let _ = std::fs::remove_dir_all(&dir);
@@ -789,7 +789,7 @@ fn the_real_tools_package_lowers_the_same_read_backwards() {
     paths.sort();
     let forward = nikaia::sysroot::Package::committed(&dir).to_text();
     paths.reverse();
-    let backward = nikaia::sysroot::lower_tools_files(&paths, nikaia::sysroot::tools_build())
+    let backward = nikaia::sysroot::lower_compiler_files(&paths, nikaia::sysroot::tools_build())
         .expect("backward")
         .to_text();
     assert!(sections(&forward) == sections(&backward));
@@ -803,7 +803,7 @@ fn tools_lowered_in_order(name: &str, files: &[(&str, &str)]) -> String {
         std::fs::write(dir.join(file), contents).expect("write the file");
         paths.push(dir.join(file));
     }
-    let rust = nikaia::sysroot::lower_tools_files(&paths, Default::default())
+    let rust = nikaia::sysroot::lower_compiler_files(&paths, Default::default())
         .expect("it lowers")
         .inlined();
     let _ = std::fs::remove_dir_all(&dir);

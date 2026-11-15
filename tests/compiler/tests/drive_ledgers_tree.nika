@@ -1,0 +1,68 @@
+// scripts/drive.nika --ledgers BUILD (#1665): the ledger refresh before a
+// suite answers for the committed tree, not for the shared checkout. In a temp
+// repository, a stub `cargo` builds a stub compiler that writes the compiler
+// source it was built from into `examples/a/nikaia.proofs`. A change to that
+// source left uncommitted in the checkout (another lane's work) commits no
+// ledger and stays uncommitted, though BUILD (the driver's own build, the
+// stub too) puts a compiler of it in the checkout's `target/fast`; a
+// committed change refreshes the ledger and commits it.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn sh(dir: String, script: String) -> String throws {
+    let out = process::run("sh", ["-c", f"set -e; {script}"]; dir: dir)
+    if !out.ok { println(f"setup failed: {script}\n{out.stderr}") }
+    return out.stdout.trim().clone()
+}
+
+// The stub `cargo build`: a compiler in the target directory (the
+// worktree's, or `target/`) that knows the compiler source of the tree it was
+// built in, and on `run` rewrites the ledger when it differs.
+fn stub_cargo() -> String {
+    let compiler = "#!/bin/sh\\nf=examples/a/nikaia.proofs\\nif [ \"$(cat $f)\" != \"%s\" ]; then echo \"%s\" > $f; echo \"refreshed $f\"; fi\\n"
+    return "#!/bin/sh\nt=$CARGO_TARGET_DIR\n[ -n \"$t\" ] || t=target\nmkdir -p \"$t/fast\"\nb=$(cat crates/nikaia-std/src/compiler/bounds_a.nika)\nprintf '" + compiler + "' \"$b\" \"$b\" > \"$t/fast/nikaia\"\nchmod +x \"$t/fast/nikaia\"\n"
+}
+
+fn case(nikaia: String, repo: String, tmp: String, name: String, committed: bool) throws {
+    let work = f"{tmp}/{name.replace(" ", "-")}"
+    let id = "git config user.email t@t; git config user.name t; git config commit.gpgsign false"
+    let src = "crates/nikaia-std/src/compiler/bounds_a.nika"
+    sh(tmp.clone(), f"git init -q -b develop {work}")
+    sh(work.clone(), f"{id}; mkdir -p crates/nikaia-std/src/compiler examples/a scripts bin; echo walk-1 > {src}; echo walk-1 > examples/a/nikaia.proofs; echo stub > scripts/ledgers.nika; printf 'target/\\nbin/\\n' > .git/info/exclude; git add -A; git commit -q -m base")
+    fs::write(f"{work}/bin/cargo", fs::Root::Anywhere, stub_cargo())
+    sh(work.clone(), "chmod +x bin/cargo")
+    if committed {
+        sh(work.clone(), f"echo walk-2 > {src}; git commit -q -am 'the walk changes'")
+    } else {
+        sh(work.clone(), f"echo walk-2 > {src}")
+    }
+    let path = process::run("sh", ["-c", "echo $PATH"]).stdout.trim().clone()
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--ledgers", "cargo build -q --profile fast -p nikaia"]; dir: work.clone(), env: [("PATH", f"{work}/bin:{path}")])
+    println(f"== {name}")
+    println(out.stdout.trim())
+    println(f"exit ok: {out.ok}")
+    println(sh(work, "git log --format=%s -1; git status --porcelain --untracked-files=all; git show --format= --name-only HEAD; git show HEAD:examples/a/nikaia.proofs; cat examples/a/nikaia.proofs"))
+}
+
+fn main() throws {
+    let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "uncommitted compiler source", false)
+    case(nikaia, repo, tmp.clone(), "committed compiler source", true)
+    process::run("rm", ["-rf", tmp])
+}

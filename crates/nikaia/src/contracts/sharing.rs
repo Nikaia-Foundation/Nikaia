@@ -96,7 +96,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // write the contract down - ADR-292 D3's own closing argument, which is why
 // ADR-037 D8 has no keyword in it.
 
-pub use nikaia_std::tools::ty::{Class, Count};
+pub use nikaia_std::compiler::ty::{Class, Count};
 
 use crate::ast::Expr;
 use crate::parser::Parsed;
@@ -107,10 +107,10 @@ use crate::contracts::ty::TyOps;
 /// Every reason this analysis answers `atomic` **because nothing decided it**
 /// ([`Fallback`]), what it chose for one value ([`Decision`]) and for all of
 /// them ([`Sharing`]) are records of `tools/sharing.nika` (ADR-294, #125).
-pub use nikaia_std::tools::sharing::{
+pub use nikaia_std::compiler::sharing::{
     Decision, Fallback, Sharing, every_fallback, lock_name, rust_name,
 };
-use nikaia_std::tools::views::Asked;
+use nikaia_std::compiler::views::Asked;
 
 /// What stays Rust of a [`Class`] (ADR-294 step (b)): reading one back.
 pub trait ClassOps: Sized {
@@ -120,7 +120,7 @@ pub trait ClassOps: Sized {
 impl ClassOps for Class {
     /// Read one back from the ledger.
     fn parse(text: &str) -> Option<Self> {
-        nikaia_std::tools::ledger::class_of(text)
+        nikaia_std::compiler::ledger::class_of(text)
     }
 }
 
@@ -156,7 +156,7 @@ pub fn analyse_program(
         own,
         library,
     };
-    nikaia_std::tools::sharing::sharing_of(
+    nikaia_std::compiler::sharing::sharing_of(
         &parsed.program,
         &asked,
         &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
@@ -165,8 +165,8 @@ pub fn analyse_program(
         // Which handovers duplicate a handle is the checker's (ADR-312 D2,
         // #1502); without a check every one counts, as before.
         match facts {
-            Some(facts) => nikaia_std::tools::sharing::sharing_moves_of(facts),
-            None => nikaia_std::tools::sharing::sharing_moves_unknown(),
+            Some(facts) => nikaia_std::compiler::sharing::sharing_moves_of(facts),
+            None => nikaia_std::compiler::sharing::sharing_moves_unknown(),
         },
     )
 }
@@ -211,7 +211,7 @@ pub fn report(
     crossings_are_possible: bool,
     facts: Option<&crate::check::CheckFacts>,
 ) -> String {
-    nikaia_std::tools::sharing::sharing_report(&analyse_program(
+    nikaia_std::compiler::sharing::sharing_report(&analyse_program(
         parsed,
         own,
         library,

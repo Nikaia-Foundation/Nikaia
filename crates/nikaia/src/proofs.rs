@@ -15,11 +15,11 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use nikaia_std::compiler::proofs_answers::{self as answers, ProofsBook, ProofsThread};
+use nikaia_std::compiler::prover_arena::TermArena;
 use nikaia_std::rt::exec::block_on;
-use nikaia_std::tools::proofs_answers::{self as answers, ProofsBook, ProofsThread};
-use nikaia_std::tools::prover_arena::TermArena;
 
-pub use nikaia_std::tools::proofs_answers::{
+pub use nikaia_std::compiler::proofs_answers::{
     PROOFS_FILE as FILE, ProofsAsked as Asked, ProofsSoFar as AskedSoFar,
 };
 

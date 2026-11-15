@@ -296,7 +296,7 @@ pub fn translate_units(json: &str, map: &SourceMap, sources: &[&str]) -> Vec<Dia
     // **Read and placed in Nikaia** (`tools/diagnostics.nika`, ADR-294,
     // #125, #1163): this side only asks the emitter's map where the primary
     // byte came from.
-    let mut read = nikaia_std::tools::diagnostics::diagnostics_read_json(json);
+    let mut read = nikaia_std::compiler::diagnostics::diagnostics_read_json(json);
     for one in &mut read {
         if let Some((unit, span)) = one
             .byte_start
@@ -307,7 +307,7 @@ pub fn translate_units(json: &str, map: &SourceMap, sources: &[&str]) -> Vec<Dia
             one.span = span;
         }
     }
-    nikaia_std::tools::diagnostics::diagnostics_placed(&read, sources)
+    nikaia_std::compiler::diagnostics::diagnostics_placed(&read, sources)
         .into_iter()
         .map(|placed| Diagnostic {
             level: placed.level,
@@ -331,7 +331,7 @@ pub fn translate_units(json: &str, map: &SourceMap, sources: &[&str]) -> Vec<Dia
 /// ([ADR-290](../../../../docs/specification/adr/adr-290.md) D21): a package
 /// this program depends on, or a Rust crate it describes, by the word a call
 /// writes in front of `::`.
-pub use nikaia_std::tools::boundaries::Boundary;
+pub use nikaia_std::compiler::boundaries::Boundary;
 
 /// **A boundary mismatch the backend reports is said as a stale ledger**
 /// ([ADR-100](../../../../docs/specification/adr/adr-100.md) D6,
@@ -344,7 +344,7 @@ pub fn a_stale_boundary(
     source: &str,
     boundaries: &[Boundary],
 ) -> bool {
-    let reported = nikaia_std::tools::boundaries::Reported {
+    let reported = nikaia_std::compiler::boundaries::Reported {
         level: diagnostic.level.clone(),
         message: diagnostic.message.clone(),
         label: diagnostic.label.clone(),
@@ -355,7 +355,7 @@ pub fn a_stale_boundary(
         .as_ref()
         .and_then(|at| source.get(at.span.bytes()))
         .map(str::to_text);
-    let Some(restated) = nikaia_std::tools::boundaries::restated(
+    let Some(restated) = nikaia_std::compiler::boundaries::restated(
         &reported,
         on_the_line.as_deref(),
         source,
@@ -421,8 +421,8 @@ pub fn render(diagnostic: &Diagnostic, path: &str, source: &str, generated_path:
         ),
         None => (false, Span::from(0..0), String::new()),
     };
-    nikaia_std::tools::render::relayed(
-        &nikaia_std::tools::render::Relayed {
+    nikaia_std::compiler::render::relayed(
+        &nikaia_std::compiler::render::Relayed {
             level: diagnostic.level.clone(),
             message: diagnostic.message.clone(),
             internal: diagnostic.internal.clone(),
@@ -449,7 +449,7 @@ pub fn render_sync_violation(
     path: &str,
     source: &str,
 ) -> String {
-    let pause = nikaia_std::tools::render::Pause {
+    let pause = nikaia_std::compiler::render::Pause {
         span: violation.span,
         caller: violation.caller.clone(),
         promise: violation.promise.clone(),
@@ -458,11 +458,11 @@ pub fn render_sync_violation(
         unpromised: violation.unpromised,
         construct: violation.construct,
     };
-    let shown = nikaia_std::tools::render::paused(&pause);
+    let shown = nikaia_std::compiler::render::paused(&pause);
     if is_collecting() {
         collect(path, shown.clone());
     }
-    nikaia_std::tools::render::rendered(&shown, path, source)
+    nikaia_std::compiler::render::rendered(&shown, path, source)
 }
 
 /// One of the type checker's findings, on the `.nika` line it is about.
@@ -475,18 +475,18 @@ pub fn render_sync_violation(
 /// whole (`^` where the error is, `-` where something explains it), the notes
 /// and the help.
 pub fn render_finding(finding: &crate::check::Finding, path: &str, source: &str) -> String {
-    nikaia_std::tools::render::rendered(&shown(finding), path, source)
+    nikaia_std::compiler::render::rendered(&shown(finding), path, source)
 }
 
 /// [`render_finding`] over a source already split into its lines, for a caller that renders every finding of one file (#727).
 pub fn render_finding_in(finding: &crate::check::Finding, path: &str, lines: &[&str]) -> String {
     collect_finding(path, finding);
-    nikaia_std::tools::render::rendered_in(&shown(finding), path, lines)
+    nikaia_std::compiler::render::rendered_in(&shown(finding), path, lines)
 }
 
 thread_local! {
     /// Where [`collecting`] keeps the findings, `None` outside it.
-    static COLLECTED: std::cell::RefCell<Option<Vec<(String, nikaia_std::tools::render::Shown)>>> =
+    static COLLECTED: std::cell::RefCell<Option<Vec<(String, nikaia_std::compiler::render::Shown)>>> =
         const { std::cell::RefCell::new(None) };
 }
 
@@ -496,7 +496,7 @@ thread_local! {
 /// what `nikaia check` prints is untouched outside it.
 pub fn collecting<R>(
     run: impl FnOnce() -> R,
-) -> (R, Vec<(String, nikaia_std::tools::render::Shown)>) {
+) -> (R, Vec<(String, nikaia_std::compiler::render::Shown)>) {
     let outer = COLLECTED.with(|kept| kept.borrow_mut().replace(Vec::new()));
     let out = run();
     let found = COLLECTED.with(|kept| std::mem::replace(&mut *kept.borrow_mut(), outer));
@@ -509,7 +509,7 @@ pub fn is_collecting() -> bool {
 }
 
 /// A finding about the file at `path`, kept where [`collecting`] runs.
-pub fn collect(path: &str, shown: nikaia_std::tools::render::Shown) {
+pub fn collect(path: &str, shown: nikaia_std::compiler::render::Shown) {
     COLLECTED.with(|kept| {
         if let Some(kept) = kept.borrow_mut().as_mut() {
             kept.push((path.to_text(), shown));
@@ -533,8 +533,8 @@ pub fn collect_refusal(path: &str, message: &str, at: usize) {
 }
 
 /// A refusal with no code, at byte `at`, as a finding.
-pub fn refusal_shown(message: &str, at: usize) -> nikaia_std::tools::render::Shown {
-    nikaia_std::tools::render::Shown {
+pub fn refusal_shown(message: &str, at: usize) -> nikaia_std::compiler::render::Shown {
+    nikaia_std::compiler::render::Shown {
         warning: false,
         code: String::new(),
         message: message.to_text(),
@@ -545,8 +545,8 @@ pub fn refusal_shown(message: &str, at: usize) -> nikaia_std::tools::render::Sho
     }
 }
 
-fn shown(finding: &crate::check::Finding) -> nikaia_std::tools::render::Shown {
-    use nikaia_std::tools::render::{Marked, Shown};
+fn shown(finding: &crate::check::Finding) -> nikaia_std::compiler::render::Shown {
+    use nikaia_std::compiler::render::{Marked, Shown};
     Shown {
         warning: matches!(finding.severity, crate::check::Severity::Warning),
         code: finding.code.to_text(),
@@ -572,7 +572,7 @@ fn shown(finding: &crate::check::Finding) -> nikaia_std::tools::render::Shown {
 /// here, once, so that a message built from pieces reads like one written
 /// whole, whichever piece came first.
 pub fn said(text: &str) -> String {
-    nikaia_std::tools::rustc_words::said(text)
+    nikaia_std::compiler::rustc_words::said(text)
 }
 
 #[cfg(test)]

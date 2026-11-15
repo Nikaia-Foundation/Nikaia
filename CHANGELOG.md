@@ -8,6 +8,33 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1396] — 2026-11-15
+
+**a value scaled each turn of a counted loop is proved**
+- Loops: a value multiplied by or added to a constant on each turn of a loop with a constant bound is proved (#1644); fixed a wrong proof of `t = t * c` in loops, which made `t` read as zero. Proof figure: 3093/4416 indexes (70.0 %), 1616/2764 operations (58.5 %).
+
+## [0.0.1395] — 2026-11-15
+
+**a test program past its time limit fails instead of hanging the run**
+- nikaia test: a test program that runs past its time limit (NIKAIA_TEST_TIME_LIMIT, 300 s by default) is killed with every process it started and fails with "timed out after N s"; the run goes on with the next test (#1672).
+- Test batches lower as modules on every core, and a dependency is checked once per batch (#1582); a failed test batch leaves out the programs rustc names instead of splitting in halves (#1582).
+- Compiler identity follows the compiled lowered code: lower-std writes LOWERED_DIGEST into lowered.rs, and the compiler's identity names the lowered set it was compiled from (#1610).
+- The batch memo of dependency checks moves into project_lower.nika (#1639).
+- check --rustc refuses a program without fn main with NK1351 and checks a rust-library as its lib crate (#1657).
+- The compiler's Rust module is nikaia_std::compiler, like its directory; `use std::compiler` gets NK1186's toolchain note (#1659).
+- Stale ledgers caught: the driver rebuilds every committed ledger with the compiler of the tree under test (`drive.nika --ledgers BUILD`), and CI fails a stale one under --locked (#1665, #1591).
+- CI: the samples, page examples and ledgers run as a shard of their own.
+
+## [0.0.1394] — 2026-11-15
+
+**a remainder by a known divisor bounds what it multiplies**
+- The bounds walk's reading of `x % m` as a bound below `m` (also `1 - m ..= m - 1` where the sign of `x` is not known) is pinned by a test and named in ADR-306 D8 (#1643).
+
+## [0.0.1393] — 2026-11-15
+
+**a field clamped after each shortening stays within its list**
+- Bounds: a whole-number field clamped after each shortening of its list is proved within it — `self.text[self.cursor - 1]` after `pop` and a clamp needs no check.
+
 ## [0.0.1392] — 2026-11-15
 
 **a counter proved through a second counter**

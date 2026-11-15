@@ -143,6 +143,24 @@ panics = false
 touches = []
 signature = "(body: Body) -> i64"
 
+[fn."linger_millis"]
+sync = "inferred"
+panics = false
+touches = []
+ensures = ["result == 2000"]
+inferred = ["result == 2000"]
+from = ["return"]
+signature = "() -> i64"
+
+[fn."linger_quiet_millis"]
+sync = "inferred"
+panics = false
+touches = []
+ensures = ["result == 200"]
+inferred = ["result == 200"]
+from = ["return"]
+signature = "() -> i64"
+
 [fn."listen"]
 pub = true
 throws = ["io::IoError"]

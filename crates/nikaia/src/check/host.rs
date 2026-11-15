@@ -6,9 +6,9 @@
 use super::*;
 #[allow(unused_imports)]
 use nikaia_std::block::names::{String, ToText, Vec, format, vec};
-use nikaia_std::tools::build_eval::BtRead;
-use nikaia_std::tools::check_host::{CheckBuilt, CheckComputed, CheckHost};
-use nikaia_std::tools::check_walked::{CheckWalkedPasses, CheckWalkedProved};
+use nikaia_std::compiler::build_eval::BtRead;
+use nikaia_std::compiler::check_host::{CheckBuilt, CheckComputed, CheckHost};
+use nikaia_std::compiler::check_walked::{CheckWalkedPasses, CheckWalkedProved};
 
 pub(super) struct Host<'a> {
     pub(super) parsed: &'a Parsed,
@@ -58,7 +58,7 @@ impl Host<'_> {
         comptimes: &BTreeMap<String, i64>,
     ) -> crate::prove::ClaimRun {
         use crate::prove::ClaimRun;
-        use nikaia_std::tools::integers::{integer_as_count, integer_of_count};
+        use nikaia_std::compiler::integers::{integer_as_count, integer_of_count};
         let not_run = |why: &str| ClaimRun::NotRun(why.to_text());
         if !self.somewhere() {
             return not_run("This build has no place to compile build-time code in.");
@@ -195,7 +195,7 @@ impl CheckHost for Host<'_> {
     }
 
     fn literal_holes(&self, literal: &Expr) -> Vec<Expr> {
-        nikaia_std::tools::emit_holes::emit_holes_literal(
+        nikaia_std::compiler::emit_holes::emit_holes_literal(
             self.parsed,
             &self.parsed.interner,
             literal,
@@ -328,7 +328,7 @@ impl CheckHost for Host<'_> {
     }
 
     fn holes_read(&self, literal: &Expr) -> Vec<(Expr, Vec<(String, String)>)> {
-        nikaia_std::tools::emit_holes::emit_holes_literal_bound(
+        nikaia_std::compiler::emit_holes::emit_holes_literal_bound(
             self.parsed,
             &self.parsed.interner,
             literal,
@@ -397,7 +397,7 @@ impl CheckHost for Host<'_> {
     fn an_escape_nothing_names(
         &self,
         text: &str,
-    ) -> Option<nikaia_std::tools::escapes::NotAnEscape> {
+    ) -> Option<nikaia_std::compiler::escapes::NotAnEscape> {
         crate::build_time::an_escape_nothing_names(text)
     }
 }
@@ -407,7 +407,7 @@ impl CheckHost for Host<'_> {
 /// holds.
 impl CheckWalkedPasses for Host<'_> {
     fn dsl_findings(&self) -> Vec<Finding> {
-        nikaia_std::tools::dsl::check(&self.parsed.interner, &self.parsed.program.items)
+        nikaia_std::compiler::dsl::check(&self.parsed.interner, &self.parsed.program.items)
             .into_iter()
             .map(crate::traits::from_nikaia)
             .collect()
@@ -498,7 +498,7 @@ impl CheckWalkedPasses for Host<'_> {
     fn tethered(
         &self,
     ) -> (
-        Option<Vec<nikaia_std::tools::buffers::BufferPlan>>,
+        Option<Vec<nikaia_std::compiler::buffers::BufferPlan>>,
         Vec<Finding>,
     ) {
         let plans = crate::contracts::keep::buffer_plans(

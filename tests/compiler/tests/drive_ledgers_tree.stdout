@@ -1,0 +1,17 @@
+== uncommitted compiler source
+
+exit ok: true
+base
+ M crates/nikaia-std/src/compiler/bounds_a.nika
+crates/nikaia-std/src/compiler/bounds_a.nika
+examples/a/nikaia.proofs
+scripts/ledgers.nika
+walk-1
+walk-1
+== committed compiler source
+LEDGERS regenerated and committed: examples/a/nikaia.proofs
+exit ok: true
+ledgers: regenerate for the tree under test
+examples/a/nikaia.proofs
+walk-2
+walk-2

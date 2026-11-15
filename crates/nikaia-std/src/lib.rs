@@ -189,7 +189,7 @@ pub mod runtime {
 /// module (ADR-290 D16). That is the whole interface: a call.
 ///
 /// **What none of it is, is *refused***, and that is a defect rather than a
-/// decision: `use std::tools` in a Nikaia program lowers, and `rustc` is what
+/// decision: `use std::compiler` in a Nikaia program lowers, and `rustc` is what
 /// complains, about a file nobody wrote. issue #146 carries it, and it
 /// is older than this module - `use std::<anything>` has always been accepted.
 ///
@@ -273,7 +273,7 @@ pub mod runtime {
 /// (`sv_sat.nika`, `sv_check.nika`, #1285).
 ///
 /// **And `no_effect`, `eq_op` and `collapsible_if`**: `packages/json`, lowered
-/// into `tools::json` (#1163), keeps a `()` statement and its finite test
+/// into `compiler::json` (#1163), keeps a `()` statement and its finite test
 /// `x - x != 0.0`; an `if` whose whole body is an `if` lowers as written
 /// (`bounds_rules.nika`'s `rules_exit`, #1330).
 ///
@@ -351,11 +351,11 @@ pub mod runtime {
 /// **The compiler's Nikaia** (ADR-294), behind the `compiler` feature (#723):
 /// only `crates/nikaia` turns it on, so a program's `std` does not compile it.
 #[cfg(feature = "compiler")]
-pub mod tools {
+pub mod compiler {
     // **One package** ([ADR-294](../../../docs/specification/adr/adr-294.md)):
     // every `.nika` in `src/compiler` shares one namespace, as the files of a
     // package do, and `nikaia lower-std` lowers them into `package.rs`. At its
-    // end stands one module per file - `tools::ty`, `tools::ledger` - naming
+    // end stands one module per file - `compiler::ty`, `compiler::ledger` - naming
     // what that file offers, so a Rust caller still says which file a name is
     // in. What follows the `include!` is the Rust that Nikaia cannot say, by
     // the file it serves; `sysroot::HAND_WRITTEN` puts its names in that

@@ -1,0 +1,5 @@
+bounds in tests/a_value_scaled_by_itself_keeps_its_check.nika: 0 indexes, 0 proved; 3 operations, 1 proved
+    11  total * 5      checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    22  total + total  checked: a counter the loop on line 20 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+    24  i + 1          proved
+  derived  doubled: 0 <= n, proved at the calls on lines 30

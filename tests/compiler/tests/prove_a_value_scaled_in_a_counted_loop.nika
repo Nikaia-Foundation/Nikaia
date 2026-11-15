@@ -1,0 +1,74 @@
+// #1644 (ADR-361 D13): a value each turn multiplies by a constant, in a
+// loop of at most `k` turns, lies below its start times the factor to the
+// `k`, a constant the walk computes, so no product of two unknowns reaches
+// the solver. `grow`: `tries < 40` bounds the turns, so `cap <= 16 * 2^40`
+// and `cap * 2` is proved. `grow_n`: `tries < n` bounds no constant number
+// of turns, so `cap * 2` stays checked. `add_k`: a constant added each turn
+// is bounded past the loop too. `grow_from`: the start is an interval,
+// `0..=255`. `grow_for`: a range's span counts the turns. `affine`: `2 * v + 1`.
+fn grow(requested: i64) -> i64 {
+	let mut cap: i64 = 16
+	let mut tries: i64 = 0
+	while cap < requested && tries < 40 {
+		cap = cap * 2
+		tries += 1
+	}
+	return cap
+}
+
+fn grow_n(requested: i64, n: i64) -> i64 {
+	let mut cap: i64 = 16
+	let mut tries: i64 = 0
+	while cap < requested && tries < n {
+		cap = cap * 2
+		tries += 1
+	}
+	return cap
+}
+
+fn add_k(requested: i64) -> i64 {
+	let mut cap: i64 = 16
+	let mut tries: i64 = 0
+	while cap < requested && tries < 40 {
+		cap = cap + 1000
+		tries += 1
+	}
+	return cap + 5
+}
+
+fn grow_from(start: i64) -> i64 {
+	if start < 0 || start > 255 {
+		return 0
+	}
+	let mut cap: i64 = start
+	let mut tries: i64 = 0
+	while tries < 30 {
+		cap = 3 * cap
+		tries += 1
+	}
+	return cap + 1
+}
+
+fn grow_for() -> i64 {
+	let mut cap: i64 = 1
+	for _ in 0..<50 {
+		cap *= 2
+	}
+	return cap - 1
+}
+
+fn affine(flags: ref Vec[bool]) -> i64 {
+	let mut v: i64 = 0
+	let mut turns: i64 = 0
+	while turns < 20 {
+		if flags.len() > 0 && flags[0] {
+			v = 2 * v + 1
+		}
+		turns += 1
+	}
+	return v + 1
+}
+
+fn main() throws {
+	println(f"{grow(1000)} {grow_n(1000, 5)} {add_k(1000)} {grow_from(3)} {grow_for()} {affine([true])}")
+}

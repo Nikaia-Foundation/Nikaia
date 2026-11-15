@@ -105,8 +105,9 @@ fn runtime_dependencies() {
     }
 }
 
-/// SHA256 over everything that decides what the compiler emits: its own
-/// sources, the prover's logic layer - whether a claim is proved decides
+/// SHA256 over everything that decides what the compiler emits but the
+/// lowered set (`crate::compiler_identity` adds its `LOWERED_DIGEST`): its own
+/// sources and the orchestrator's, the prover's logic layer - whether a claim is proved decides
 /// whether its check is emitted (ADR-269 D4, ADR-270) - the compiler's half
 /// written in Nikaia, `std`'s `tools` (ADR-294, #447), and the `std` ledger
 /// `contracts::STD` bakes in with `include_str!`.
@@ -119,7 +120,19 @@ fn compiler_fingerprint() -> String {
     let mut inputs = Vec::new();
     collect(&manifest.join("src"), &mut inputs);
     collect(&manifest.join("../nikaia-logic/src"), &mut inputs);
-    collect(&manifest.join("../nikaia-std/src/compiler"), &mut inputs);
+    // The compiler's other Rust crate: the project driver and the cache.
+    collect(&manifest.join("../orchestrator/src"), &mut inputs);
+    // The `.nika` of the compiler's half, not what `lower-std` wrote from it:
+    // the lowered set names itself by `LOWERED_DIGEST`, compiled into the
+    // same crate as its code (#1610). Read here, it could be rewritten by a
+    // `lower-std` in the same checkout between this script and nikaia-std's
+    // compile, and the binary would be named after code it does not hold.
+    let compiler = manifest.join("../nikaia-std/src/compiler");
+    let mut tools = Vec::new();
+    collect(&compiler, &mut tools);
+    inputs.extend(tools.into_iter().filter(|path| {
+        !path.starts_with(compiler.join("lowered")) && *path != compiler.join("lowered.rs")
+    }));
     inputs.push(manifest.join("../nikaia-std/std.contracts"));
     inputs.push(manifest.join("../../Cargo.lock"));
     inputs.sort();

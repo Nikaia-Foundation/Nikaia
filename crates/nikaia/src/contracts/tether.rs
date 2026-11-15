@@ -61,9 +61,9 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // and the refusal, both of which read the keep plan.
 
 use crate::contracts::LedgerOps;
-pub use nikaia_std::tools::tether::Buffer;
-pub use nikaia_std::tools::tether::PackageTypes as Declared;
-pub use nikaia_std::tools::ty::{Held, State};
+pub use nikaia_std::compiler::tether::Buffer;
+pub use nikaia_std::compiler::tether::PackageTypes as Declared;
+pub use nikaia_std::compiler::ty::{Held, State};
 use std::collections::BTreeMap;
 
 use crate::ast::{Item, Type};
@@ -84,7 +84,7 @@ pub trait HeldOps: Sized {
 
 impl HeldOps for Held {
     fn parse(text: &str) -> Option<Held> {
-        nikaia_std::tools::ledger::held_of(text)
+        nikaia_std::compiler::ledger::held_of(text)
     }
 }
 
@@ -114,7 +114,7 @@ pub fn infer(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
             match &item.node {
                 Item::Fn { name, .. } => {
                     let key = function_key(parsed, *name, None);
-                    let held = nikaia_std::tools::tether::function_views(
+                    let held = nikaia_std::compiler::tether::function_views(
                         &item.node,
                         None,
                         &parsed.interner,
@@ -132,7 +132,7 @@ pub fn infer(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
                             continue;
                         };
                         let key = function_key(parsed, *name, Some(&target));
-                        let held = nikaia_std::tools::tether::function_views(
+                        let held = nikaia_std::compiler::tether::function_views(
                             &method.node,
                             Some(&target),
                             &parsed.interner,
@@ -263,9 +263,9 @@ pub(crate) fn makes_a_buffer(
     own: &Ledger,
     library: &Ledger,
 ) -> Buffer {
-    nikaia_std::tools::tether::makes_a_buffer(
+    nikaia_std::compiler::tether::makes_a_buffer(
         expr,
-        &nikaia_std::tools::views::Asked {
+        &nikaia_std::compiler::views::Asked {
             names: &parsed.interner,
             own,
             library,
@@ -279,7 +279,7 @@ pub(crate) fn makes_a_buffer(
 pub(super) fn declared_in(units: &[&Parsed]) -> Declared {
     let mut package = Declared::empty();
     for parsed in units.iter().copied() {
-        nikaia_std::tools::tether::declare_unit(
+        nikaia_std::compiler::tether::declare_unit(
             &parsed.interner,
             &parsed.program.items,
             &mut package,
@@ -291,7 +291,7 @@ pub(super) fn declared_in(units: &[&Parsed]) -> Declared {
 /// Whether a grammar entry's result **may point into the text it parsed**
 /// (`tools/tether.nika`); `keeps` asks it too.
 pub(super) fn a_parse_that_views(parsed: &Parsed, ret: Option<&Type>, package: &Declared) -> bool {
-    nikaia_std::tools::tether::a_parse_that_views(&parsed.interner, ret, package)
+    nikaia_std::compiler::tether::a_parse_that_views(&parsed.interner, ret, package)
 }
 
 /// `--tethers`: what the analysis solved, per function
@@ -312,7 +312,7 @@ pub fn report(parsed: &Parsed, ledger: &Ledger) -> String {
         Ledger::infer(parsed).functions.keys().cloned().collect();
     let library = crate::contracts::std_ledger();
     let plans = super::keep::buffer_plans(parsed, None, ledger, library);
-    nikaia_std::tools::tether::tethers_report(&parsed.text_tiers, ledger, &here, &plans, library)
+    nikaia_std::compiler::tether::tethers_report(&parsed.text_tiers, ledger, &here, &plans, library)
 }
 
 // ---------------------------------------------------------------------------
@@ -347,7 +347,7 @@ pub fn check(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<crate::chec
 
 /// [`check`]'s refusals, of plans already made.
 pub fn refusals_of(
-    plans: Vec<nikaia_std::tools::buffers::BufferPlan>,
+    plans: Vec<nikaia_std::compiler::buffers::BufferPlan>,
 ) -> Vec<crate::check::Finding> {
     plans
         .into_iter()

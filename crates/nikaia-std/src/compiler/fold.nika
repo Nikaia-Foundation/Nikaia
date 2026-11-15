@@ -5,7 +5,7 @@
 //
 // The first module of the ring after the tree (ADR-294) moved from Rust to
 // Nikaia, by ADR-290's route: lowered ahead of time by `nikaia lower-std` to
-// `fold.rs` beside it, `include!`d as `nikaia_std::tools::fold`, and called
+// `fold.rs` beside it, `include!`d as `nikaia_std::compiler::fold`, and called
 // from the compiler's `fold`, which turns its answer into the `i128` the Rust
 // that remains keeps a constant in.
 //
