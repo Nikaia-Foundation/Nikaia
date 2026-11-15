@@ -239,4 +239,10 @@ together with the specification section and an example test.
 * Moving `crates/nikaia-std/src/compiler/` means editing `SYSROOT_TOOLS` in `sysroot_cache.nika` and in its lowered `.rs` by hand before the first build, because the old binary cannot lower from the new path. (issue-1600)
 * The `__nikaia_tupleN` names in lowered files are byte offsets, so any change to a `.nika` comment's length renumbers them in the lowered output; that is not a behaviour change. (issue-1600)
 * Test programs that `git archive HEAD` (`drive_badges_head`) see only committed files, so they fail on a tree whose fix is not yet committed; rerun them after the commit. (issue-1600)
+* A batch of test programs is driven by hand with `NIKAIA_TEST_BATCH=LIST nikaia build --project CARRIER` (LIST holds `NAME<TAB>ENTRY` lines, each program with its own `nikaia.toml`); `LIST.included` names what lowered, and `NIKAIA_LOWER_THREADS=1` makes it run in a fixed order. (issue-1639)
+* Under `nikaia test`, a refusal in the tested package never reaches a batch: the batch's own package depends on the tested package, refuses first, and every program is then built alone. (issue-1639)
+* `pre-push` `adr-refs` is red on develop from `docs/builder-facts.md:237` (ADR-268); it is not caused by your change. (issue-1639)
+* `nikaia test --filter` matches plain text, not a regex: pass one `--filter NAME` per test to run several. (issue-1657)
+* `lowered.rs` changes on every `lower-std` after a `.nika` edit (`LOWERED_DIGEST`): commit it with your lowered file, and check stability by comparing it before and after the second build. (issue-1657)
+* `artifact = "rust-library"` has its own path in `project_drive_drive_to` (`crate_build`): a subcommand added there needs both the program case and the library case probed. (issue-1657)
 
