@@ -64,7 +64,17 @@ together with the specification section and an example test.
   run can make (a9, v6, v7). Put a `&` on one command, never on a chain (P4b).
 * **Probes live in the scratchpad**, outside any project: `nikaia check FILE`
   inside `tests/compiler/tests/` reads the sibling files (prover lane).
-* **Never commit `nikaia.lock`**; it is git-ignored and changes with each build.
+* **Never commit a `nikaia.lock` you did not mean to change**: it changes with each build. Most are
+  git-ignored, but `packages/*/nikaia.lock` and `nikaia.proofs` are tracked; a
+  change to them in the tree that is not yours comes from the driver's
+  `drive_ledgers` or another run's `ledgers.nika --refresh`, which commits it.
+  Leave it unstaged; `nikaia run scripts/ledgers.nika -- --check` says whether
+  your change made them stale (issue-1691).
+* **A defect fix and a step in the same file are two commits**, but
+  `commit.nika` stages whole files: commit the fix (the `.nika` and its
+  lowered `.rs`) before starting the step in that file. Met late, put HEAD's
+  version plus the fix hunks in place, commit, then restore the step
+  (issue-1470, issue-1691).
 * **Never run `nikaia fmt` on `crates/nikaia-std/src/compiler/*.nika`**: it
   reindents the whole file (b1012b). Format by hand there.
 * **`pre-push` fails with *out of date: self-hosted.svg*** when a `.nika`

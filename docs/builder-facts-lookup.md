@@ -130,8 +130,6 @@ goes into the section of its topic, in one line, with the run that paid for it.
 
 ### Lowering and lower-std
 
-* `commit.nika` stages whole files: a defect fix that shares a file with a step is split by putting HEAD's version plus the fix hunks (in the `.nika` and its lowered `.rs`) in place, committing, then restoring the step. Plan the fix as its own commit before starting the step in that file. (issue-1470)
-
 * **Check lowered tools code with `cargo check --profile fast -p nikaia-std
   --features compiler --message-format short`** right after the first
   `lower-std`; without the feature the check is a false green (k3a2).
