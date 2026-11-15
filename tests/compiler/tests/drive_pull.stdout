@@ -1,0 +1,39 @@
+== nothing new
+
+exit ok: true
+base
+0
+no merge open
+ M notes.txt
+base
+base
+== no local commits, a script
+MERGE SHA pulled 1 commits
+scripts brought: scripts/batch.nika
+exit ok: true
+theirs
+1
+no merge open
+ M notes.txt
+theirs
+base
+== local commits, a script and a note
+MERGE SHA pulled 1 commits
+scripts brought: scripts/batch.nika
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+2
+no merge open
+ M notes.txt
+theirs
+base
+== conflict
+ESCALATE drive: merging origin/develop, merge conflicted in shared.txt, merge aborted
+WAKE ESCALATE drive: merging origin/develop, merge conflicted in shared.txt, merge aborted
+exit ok: false
+ours
+1
+no merge open
+ M notes.txt
+base
+ours

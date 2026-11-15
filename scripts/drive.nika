@@ -176,6 +176,16 @@
 // once (the next batch starts only on green). At most 2 QA
 // rounds: a third red prints `ESCALATE drive: suite red after 2 QA rounds:
 // <steps>` and leaves the commits local. Nothing else pushes.
+// Before each issue (the builder's run) and before each suite, the driver
+// also fetches `origin/develop` and merges it into HEAD (#1717, drive_pull):
+// a lane that does not push would otherwise keep running the scripts it
+// started with. No local commits: a fast-forward; else the merge, its
+// regeneration and its conflict handling of a rejected push (above, the
+// escalation saying `merging origin/develop before ...` instead of `push
+// rejected`). Nothing new prints nothing; else `MERGE <sha8> pulled <n>
+// commits`; a merge that brought `scripts/*.nika` ends with `RESTART drive:
+// the merge brought <paths>` and the run with the merged scripts
+// (drive_restart). `--pull LOWER BUILD BADGES` runs that merge alone (for tests).
 // `--no-bump` leaves the version raise to another driver: a second lane in the
 // same session (`docs/briefs/bugs`) runs with it, so only the main lane's
 // driver raises the version and two raises never meet in `CHANGELOG.md`.
@@ -242,11 +252,12 @@ fn drive_escalate(why: String) throws {
 	process::exit(2)
 }
 
-// After a change to scripts/drive.nika: compiles and runs the new script with
+// After a change to scripts/drive.nika (or a merge that brought scripts,
+// drive_pull_or_restart): prints LINE, compiles and runs the new script with
 // the same arguments, its output inherited, and ends with its exit code. The lock is released first,
 // or the new run would wait on this one. Exit 3 where it cannot be started.
-fn drive_restart(exe: String) throws {
-	println("RESTART drive: scripts/drive.nika changed")
+fn drive_restart(exe: String, line: String) throws {
+	println(line)
 	drive_unlock()
 	let mut args: Vec[String] = []
 	for a in cli::args() { args.push(a) }
@@ -512,6 +523,7 @@ fn drive_push(sha: String) -> String throws {
 		// them left develop red (`lowered/sv_smtlib.rs`, `self-hosted.svg`).
 		let exe = process::run("realpath", [drive_exe()]).stdout.trim().clone()
 		drive_merge_fetched(
+			"push rejected",
 			f"'{exe}' lower-std",
 			"cargo build -q --profile fast -p nikaia",
 			"python3 scripts/badges.py",
@@ -574,6 +586,69 @@ fn drive_merge_check(base: String, merge: String) -> String throws {
 	return out.stdout + out.stderr
 }
 
+// Before each issue and each suite (#1717): `origin/develop` fetched and
+// merged into HEAD, so a lane that has not pushed for a while still runs the
+// scripts and the compiler other sessions pushed. Nothing new prints nothing.
+// HEAD an ancestor of it (no local commits): a fast-forward, which leaves no
+// merge commit for the suite to test; else drive_merge_fetched with LOWER,
+// BUILD and BADGES, as for a rejected push (regenerated, a conflict only in
+// the lowered files re-lowered, any other aborted and escalated with CAUSE).
+// Then `MERGE <sha8> pulled <n> commits`. A failed fetch prints `MERGE
+// skipped: git fetch origin develop failed` and merges nothing. Returns the
+// `scripts/*.nika` the merge brought, space-separated, "" for none.
+fn drive_pull(cause: String, lower: String, build: String, badges: String) -> String throws {
+	let fetched = process::run("git", ["fetch", "-q", "origin", "develop"])
+	if !fetched.ok {
+		println("MERGE skipped: git fetch origin develop failed")
+		return ""
+	}
+	let count = process::run(
+		"git",
+		["rev-list", "--count", "HEAD..FETCH_HEAD"],
+	).stdout.trim().clone()
+	if count == "0" || count == "" { return "" }
+	let mut scripts: Vec[String] = []
+	let diff = process::run(
+		"git",
+		["diff", "--name-only", "HEAD...FETCH_HEAD", "--", "scripts/"],
+	).stdout
+	for line in diff.split("\n") {
+		let p = line.trim().clone()
+		if p.ends_with(".nika") { scripts.push(p) }
+	}
+	let behind = process::run("git", ["merge-base", "--is-ancestor", "HEAD", "FETCH_HEAD"]).ok
+	if behind {
+		let forward = process::run("git", ["merge", "-q", "--ff-only", "--autostash", "FETCH_HEAD"])
+		if !forward.ok {
+			let why = (forward.stderr + forward.stdout).trim().split("\n").collect()[0].clone()
+			drive_escalate(f"{cause}, the fast-forward failed ({why})")
+		}
+	} else {
+		drive_merge_fetched(cause, lower, build, badges)
+	}
+	let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+	println(f"MERGE {drive_short(head)} pulled {count} commits")
+	return scripts.join(" ")
+}
+
+// drive_pull in the shared checkout, with the commands of a rejected push's
+// merge; when it brought `scripts/*.nika`, the driver goes on with them: a
+// suite still running is handled (drive_settle, in the lane holding the
+// lock), then drive_restart. WHEN says where (`before the next issue`).
+fn drive_pull_or_restart(exe: String, when: String) throws {
+	let real = process::run("realpath", [exe.clone()]).stdout.trim().clone()
+	let scripts = drive_pull(
+		f"merging origin/develop {when}",
+		f"'{real}' lower-std",
+		"cargo build -q --profile fast -p nikaia",
+		"python3 scripts/badges.py",
+	)
+	if scripts == "" { return }
+	let lane = drive_lock_lane()
+	if lane != "" && drive_testing() != "" { drive_settle(exe.clone(), lane) }
+	drive_restart(exe, f"RESTART drive: the merge brought {scripts}")
+}
+
 // True when this driver's background suite has finished (its exit file is
 // there): drive_settle then handles it without waiting.
 fn drive_suite_done() -> bool throws {
@@ -590,7 +665,7 @@ fn drive_suite_done() -> bool throws {
 // BUILD and BADGES (#1333); a conflict only in the generated lowered files is
 // resolved by drive_merge_relower; any other conflict, or a failed
 // resolution, aborts and escalates.
-fn drive_merge_fetched(lower: String, build: String, badges: String) throws {
+fn drive_merge_fetched(cause: String, lower: String, build: String, badges: String) throws {
 	let merged = process::run(
 		"git",
 		["merge", "-q", "--no-ff", "--no-commit", "--no-edit", "--autostash", "FETCH_HEAD"],
@@ -599,18 +674,18 @@ fn drive_merge_fetched(lower: String, build: String, badges: String) throws {
 		let git_dir = process::run("git", ["rev-parse", "--git-dir"]).stdout.trim().clone()
 		// Already up to date: nothing was merged.
 		if !fs::exists(f"{git_dir}/MERGE_HEAD", fs::Root::Anywhere) { return }
-		drive_merge_regenerate("", lower, build, badges)
+		drive_merge_regenerate(cause, "", lower, build, badges)
 		return
 	}
 	let unmerged = process::run(
 		"git",
 		["diff", "--name-only", "--diff-filter=U"],
 	).stdout.trim().split("\n").collect().join(" ")
-	if unmerged == "" { drive_merge_abort() }
+	if unmerged == "" { drive_merge_abort(cause) }
 	for p in unmerged.split(" ") {
-		if !p.starts_with(drive_lowered_dir() + "/") { drive_merge_abort() }
+		if !p.starts_with(drive_lowered_dir() + "/") { drive_merge_abort(cause) }
 	}
-	drive_merge_relower(unmerged, lower, build, badges)
+	drive_merge_relower(cause, unmerged, lower, build, badges)
 }
 
 // True when a merge that brought PATHS must be regenerated (#1333): a change
@@ -657,12 +732,12 @@ fn drive_lowered_print() -> String throws {
 // lowers, regenerates the badges and commits. Prints `MERGE <sha8> re-lowered
 // <paths>`. Any failure aborts the merge and escalates
 // (drive_merge_abort_paths): a partly resolved merge is never left behind.
-fn drive_merge_relower(unmerged: String, lower: String, build: String, badges: String) throws {
+fn drive_merge_relower(cause: String, unmerged: String, lower: String, build: String, badges: String) throws {
 	for p in unmerged.split(" ") {
 		let took = process::run("git", ["checkout", "--theirs", "--", p.clone()])
-		if !took.ok { drive_merge_abort_paths(unmerged, f"re-lowering failed (git checkout --theirs {p})") }
+		if !took.ok { drive_merge_abort_paths(cause, unmerged, f"re-lowering failed (git checkout --theirs {p})") }
 	}
-	drive_merge_regenerate(unmerged, lower, build, badges)
+	drive_merge_regenerate(cause, unmerged, lower, build, badges)
 }
 
 // Finishes a merge left uncommitted (#1333; UNMERGED the lowered paths that
@@ -685,14 +760,14 @@ fn drive_merge_relower(unmerged: String, lower: String, build: String, badges: S
 // regenerated <paths>` (or `nothing changed`) for a clean merge; a merge of
 // documentation only is committed as it is. Any failure aborts the merge and
 // escalates.
-fn drive_merge_regenerate(unmerged: String, lower: String, build: String, badges: String) throws {
+fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build: String, badges: String) throws {
 	if unmerged == "" {
 		let mut brought: Vec[String] = []
 		let diff = process::run("git", ["diff", "--cached", "--name-only", "HEAD"]).stdout
 		for line in diff.split("\n") { brought.push(line.trim().clone()) }
 		if !drive_merge_generates(brought) {
 			let done = process::run("git", ["commit", "-q", "--no-edit"])
-			if !done.ok { drive_merge_abort_paths("", "the merge commit failed") }
+			if !done.ok { drive_merge_abort_paths(cause, "", "the merge commit failed") }
 			return
 		}
 	}
@@ -757,9 +832,9 @@ fn drive_merge_regenerate(unmerged: String, lower: String, build: String, badges
 	}
 	let added = process::run("git", add)
 	if failed == "" && !added.ok { failed = "git add of the lowered files" }
-	if failed != "" { drive_merge_abort_paths(unmerged, f"re-lowering failed ({failed})") }
+	if failed != "" { drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({failed})") }
 	let tree = process::run("git", ["write-tree"])
-	if !tree.ok { drive_merge_abort_paths(unmerged, "git write-tree of the merge failed") }
+	if !tree.ok { drive_merge_abort_paths(cause, unmerged, "git write-tree of the merge failed") }
 	let copy = process::run("mktemp", ["-d"]).stdout.trim().clone()
 	let sha = tree.stdout.trim().clone()
 	let made = process::run(
@@ -770,13 +845,13 @@ fn drive_merge_regenerate(unmerged: String, lower: String, build: String, badges
 		process::run("sh", ["-c", f"cp '{copy}'/assets/badges/*.svg assets/badges/"])
 	}
 	process::run("rm", ["-rf", copy])
-	if !made.ok { drive_merge_abort_paths(unmerged, "the badges failed") }
+	if !made.ok { drive_merge_abort_paths(cause, unmerged, "the badges failed") }
 	let svgs = process::run("git", ["diff", "--name-only", "--", "assets/badges/"]).stdout
 	for line in svgs.split("\n") {
 		if line.trim() != "" { changed.push(line.trim().clone()) }
 	}
 	let staged = process::run("git", ["add", "--", "assets/badges/"])
-	if !staged.ok { drive_merge_abort_paths(unmerged, "git add of the badges failed") }
+	if !staged.ok { drive_merge_abort_paths(cause, unmerged, "git add of the badges failed") }
 	// The ledgers of the merged tree, with the compiler built from it (#1591).
 	let tree_now = process::run("git", ["write-tree"]).stdout.trim().clone()
 	let ledgers = drive_ledgers_refresh(tree_now)
@@ -787,10 +862,10 @@ fn drive_merge_regenerate(unmerged: String, lower: String, build: String, badges
 			changed.push(p.clone())
 		}
 		let added_ledgers = process::run("git", add_ledgers)
-		if !added_ledgers.ok { drive_merge_abort_paths(unmerged, "git add of the ledgers failed") }
+		if !added_ledgers.ok { drive_merge_abort_paths(cause, unmerged, "git add of the ledgers failed") }
 	}
 	let done = process::run("git", ["commit", "-q", "--no-edit"])
-	if !done.ok { drive_merge_abort_paths(unmerged, "the merge commit failed") }
+	if !done.ok { drive_merge_abort_paths(cause, unmerged, "the merge commit failed") }
 	let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 	if unmerged != "" {
 		println(f"MERGE {drive_short(merge)} re-lowered {unmerged}")
@@ -804,19 +879,19 @@ fn drive_merge_regenerate(unmerged: String, lower: String, build: String, badges
 // paths are noted, `git merge --abort` restores HEAD and applies the autostash
 // back, and the check that no merge is left open and no path is unmerged
 // precedes the escalation. Always escalates.
-fn drive_merge_abort() throws {
+fn drive_merge_abort(cause: String) throws {
 	let unmerged = process::run(
 		"git",
 		["diff", "--name-only", "--diff-filter=U"],
 	).stdout.trim().split("\n").collect().join(" ")
 	let paths = if unmerged == "" { "no unmerged path" } else { unmerged }
-	drive_merge_abort_paths(paths, "")
+	drive_merge_abort_paths(cause, paths, "")
 }
 
 // drive_merge_abort for PATHS noted before ("" for a clean merge whose
 // regeneration failed, #1333); WHY, when not "", says what failed after the
 // merge (a re-lowering, #1430).
-fn drive_merge_abort_paths(paths: String, why_failed: String) throws {
+fn drive_merge_abort_paths(cause: String, paths: String, why_failed: String) throws {
 	let failed = if why_failed == "" { "" } else { f", {why_failed}" }
 	let merged = if paths == "" { "merge clean" } else { f"merge conflicted in {paths}" }
 	let git_dir = process::run("git", ["rev-parse", "--git-dir"]).stdout.trim().clone()
@@ -830,9 +905,9 @@ fn drive_merge_abort_paths(paths: String, why_failed: String) throws {
 	let open = fs::exists(f"{git_dir}/MERGE_HEAD", fs::Root::Anywhere)
 	let left = process::run("git", ["diff", "--name-only", "--diff-filter=U"]).stdout.trim().clone()
 	if !aborted || open || left != "" {
-		drive_escalate(f"merge left open: push rejected, {merged}{failed}, and git merge --abort did not finish ({why}); the shared checkout needs a hand now")
+		drive_escalate(f"merge left open: {cause}, {merged}{failed}, and git merge --abort did not finish ({why}); the shared checkout needs a hand now")
 	}
-	drive_escalate(f"push rejected, {merged}{failed}, merge aborted")
+	drive_escalate(f"{cause}, {merged}{failed}, merge aborted")
 }
 
 fn drive_short(sha: String) -> String throws {
@@ -1552,8 +1627,13 @@ fn drive_suite(exe: String, dry: bool, dir: String) throws {
 		dry,
 		f"red: write {dir}/qa-input.txt, mkdir -p {dir}/qa, copy {drive_qa_template()} to {qa} (its report path made {qa}.report.md), rm -f {qa}.report.md, {exe} run scripts/agent.nika -- {qa} --dir {dir}, its report and run files stay untracked, the suite again and waited for (at most 2 QA rounds)",
 	)
+	drive_say(
+		dry,
+		"git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)",
+	)
 	if dry { return }
-	drive_settle(exe, dir)
+	drive_settle(exe.clone(), dir)
+	drive_pull_or_restart(exe.clone(), "before the suite")
 	process::run("git", ["fetch", "--quiet", "origin", "develop"])
 	let count = process::run(
 		"git",
@@ -1930,6 +2010,11 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 		"a batch's suite that has finished (target/suite.lock/exit-<sha>): handle it (drive_settle) first; one still running: go on, CI runs it",
 	)
 	if !dry && drive_time_up() { drive_time_stop() }
+	drive_say(
+		dry,
+		"git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)",
+	)
+	if !dry { drive_pull_or_restart(exe.clone(), "before the next issue") }
 	drive_disk(exe.clone(), dry)
 	drive_post_brief(dry, brief)
 	drive_wip_start(dry, brief)
@@ -2804,7 +2889,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 		if dir == "" { drive_escalate(f"focus: {path} names no area {area}") }
 		if !dry && drive_read("scripts/drive.nika") != own {
 			drive_settle(exe, dir)
-			drive_restart(exe.clone())
+			drive_restart(exe.clone(), "RESTART drive: scripts/drive.nika changed")
 		}
 		let block = drive_focus_block(file)
 		let count = drive_focus_count(file)
@@ -2980,8 +3065,15 @@ fn main() throws {
 	// The merge of a rejected push, without its checks and push (#1430,
 	// #1333): run in a repository with FETCH_HEAD fetched, LOWER, BUILD and
 	// BADGES the commands.
+	// The merge before an issue or a suite, alone (#1717): run in a
+	// repository with an `origin`; prints the `scripts/*.nika` it brought.
+	if args.len() == 5 && args[1] == "--pull" {
+		let scripts = drive_pull("merging origin/develop", args[2], args[3], args[4])
+		if scripts != "" { println(f"scripts brought: {scripts}") }
+		return
+	}
 	if args.len() == 5 && args[1] == "--merge-fetched" {
-		drive_merge_fetched(args[2], args[3], args[4])
+		drive_merge_fetched("push rejected", args[2], args[3], args[4])
 		return
 	}
 	// The ledger refresh before a suite, alone (#1665): BUILD the command
@@ -3133,7 +3225,7 @@ fn main() throws {
 	while runs <= max {
 		if !dry && drive_read("scripts/drive.nika") != own {
 			drive_settle(exe.clone(), dir)
-			drive_restart(exe.clone())
+			drive_restart(exe.clone(), "RESTART drive: scripts/drive.nika changed")
 		}
 		// The lane's ready issues are queued here too, the area being DIR's
 		// last name (docs/briefs/yaml: yaml), as in --focus.
