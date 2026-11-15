@@ -1,0 +1,33 @@
+// A fake in-memory connection implements `db::Connection`; a `raw` statement
+// is executed on it with the connection as its subject (ADR-299 D5, D7, D8),
+// and the rows it hands back are printed.
+use db
+use std::collections
+
+struct Fake {
+    ran: Vec[String],
+}
+
+impl db::Connection for Fake {
+    fn run(mut self, keep text: String, keep parameters: collections::HashMap[String, db::Value]) -> Vec[db::Row] throws {
+        self.ran.push(text)
+        let min = parameters.get("min_age")?.clone() ?? db::Value::Null
+        return [
+            db::Row { columns: ["name", "age"], values: [db::Value::Text("Ada"), db::Value::Int(36)] },
+            db::Row { columns: ["name", "age"], values: [db::Value::Text("Grace"), min] },
+        ]
+    }
+}
+
+fn main() throws {
+    let mut conn = Fake { ran: [] }
+    let mut parameters: collections::HashMap[String, db::Value] = collections::HashMap()
+    parameters.insert("min_age", db::Value::Int(18))
+    let rows = db::raw("SELECT name, age FROM users WHERE age >= :min_age").execute(conn; parameters: parameters)
+    for row in rows {
+        println(row.text())
+    }
+    let none = db::raw("SELECT 1").execute(conn)
+    println(f"{none.len()} rows, {conn.ran.len()} statements run")
+    println(conn.ran[0])
+}

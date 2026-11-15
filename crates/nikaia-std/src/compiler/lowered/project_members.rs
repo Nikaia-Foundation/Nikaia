@@ -85,7 +85,7 @@ pub trait ProjectMembersHost {
     fn shipped(&self) -> fs::Path;
 }
 
-pub fn project_members_official() -> Vec<(String, String)> { vec![(String::from("json"), String::from("0.1.0"))] }
+pub fn project_members_official() -> Vec<(String, String)> { vec![(String::from("db"), String::from("0.1.0")), (String::from("json"), String::from("0.1.0"))] }
 
 pub(crate) async fn project_members_taken_in<H: ProjectMembersHost>(manifest: &ProjectMembersManifest, root: &std::path::Path, host: &H) -> Vec<(String, fs::Path)> {
     let src = nikaia_std::fs::path::join(&(root), std::path::Path::new(&("src")));
