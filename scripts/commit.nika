@@ -15,6 +15,12 @@
 // `Pushed: <sha>` (or `rejected`) and prints `committed <sha8> pushed|rejected`;
 // a rejected push prints `PUSH REJECTED <sha>` first. `--dry-run` prints the
 // message only.
+//
+// `Partial: <paths>` names files of which only the agent's own hunks go in,
+// because another agent edits the same file (#1704): the agent stages its
+// hunks first (`git diff F > p.diff`, drop the others' hunks, `git apply
+// --cached p.diff`); the script commits what is staged of them and never
+// `git add`s them. It refuses a `Partial:` file with nothing staged.
 
 use std::cli
 use std::fs
@@ -68,12 +74,16 @@ fn commit_git(args: Vec[String]) -> String throws {
 }
 
 // "" when fine, else the refusal.
-fn commit_check(files: Vec[String]) -> String throws {
+fn commit_check(files: Vec[String], partial: Vec[String]) -> String throws {
     for f in files.clone() {
         if commit_git(["status", "--porcelain", "--", f.clone()]) == "" { return f"REFUSED: {f} is unchanged" }
     }
+    for f in partial.clone() {
+        if files.contains(f.clone()) { return f"REFUSED: {f} is under both Files: and Partial:" }
+        if commit_git(["diff", "--cached", "--name-only", "--", f.clone()]) == "" { return f"REFUSED: {f} is listed under Partial: but nothing of it is staged" }
+    }
     for staged in commit_git(["diff", "--cached", "--name-only"]).split("\n") {
-        if staged != "" && !files.contains(staged.clone()) { return f"REFUSED: {staged} is staged but not listed" }
+        if staged != "" && !files.contains(staged.clone()) && !partial.contains(staged.clone()) { return f"REFUSED: {staged} is staged but not listed" }
     }
     return ""
 }
@@ -117,24 +127,29 @@ fn main() throws {
     for f in commit_field(report.clone(), "Files:").split(" ") {
         if f != "" { files.push(f.clone()) }
     }
-    if files.len() == 0 || commit_field(report.clone(), "Commit:") == "" {
+    let mut partial: Vec[String] = []
+    for f in commit_field(report.clone(), "Partial:").split(" ") {
+        if f != "" && f != "none" { partial.push(f.clone()) }
+    }
+    if (files.len() == 0 && partial.len() == 0) || commit_field(report.clone(), "Commit:") == "" {
         println("REFUSED: the report has no Files: or Commit:")
         process::exit(1)
     }
-    let why = commit_check(files.clone())
+    let why = commit_check(files.clone(), partial.clone())
     if why != "" {
         println(why)
         process::exit(1)
     }
     let msg = commit_message(report.clone())
     if dry {
-        println(f"git add {files.join(" ")}")
+        if files.len() > 0 { println(f"git add {files.join(" ")}") }
+        if partial.len() > 0 { println(f"staged hunks of {partial.join(" ")}") }
         println(msg)
         return
     }
     let mut add: Vec[String] = ["add", "--"]
-    for f in files { add.push(f.clone()) }
-    if !process::run("git", add).ok {
+    for f in files.clone() { add.push(f.clone()) }
+    if files.len() > 0 && !process::run("git", add).ok {
         println("REFUSED: git add failed")
         process::exit(1)
     }

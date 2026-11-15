@@ -158,6 +158,11 @@ it, like the checks in `docs/supervisor.md`.
   An issue that changes which facts the bounds walk asks with shows a
   `--bounds-trace` of its probe on the binary of the day (#1500: the
   trace showed the shared turn variable the rule had missed).
+  The files and the *To build* items cover the whole scope *Done when*
+  names: a *Done when* over "the compiler" or "every site" lists the sites
+  found (count per file, the search that found them), and each kind of
+  site the change touches (a set's `clear` beside its `insert`) is named
+  (#1704: #1674 named 3 files, its *Done when* reached 73 sites in 21).
 * **I12. What was ruled out**: approaches tried and dropped, and why, so the
   builder does not try them again. Empty when nothing was tried.
 

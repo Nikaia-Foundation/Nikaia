@@ -70,8 +70,12 @@ together with the specification section and an example test.
   `drive_ledgers` or another run's `ledgers.nika --refresh`, which commits it.
   Leave it unstaged; `nikaia run scripts/ledgers.nika -- --check` says whether
   your change made them stale (issue-1691).
+* **A file another agent also edits** goes under the report's `Partial:`,
+  not `Files:`: stage only your hunks (`git apply --cached`), and
+  `commit.nika` commits what is staged of it without `git add` (#1704).
 * **A defect fix and a step in the same file are two commits**, but
-  `commit.nika` stages whole files: commit the fix (the `.nika` and its
+  `commit.nika` stages whole `Files:` (or list it under `Partial:` with only
+  the fix hunks staged): commit the fix (the `.nika` and its
   lowered `.rs`) before starting the step in that file. Met late, put HEAD's
   version plus the fix hunks in place, commit, then restore the step
   (issue-1470, issue-1691).
