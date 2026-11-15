@@ -94,6 +94,19 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_failing_lambda_where_the_type_does_not_fail(&mut self, place: &Ty, span: &Span) {
+        let shown = place.text();
+        let wanted: String = match place {
+            Ty::Fn { params, result, is_sync, .. } => { let result = nikaia_std::boxed::open(result); let is_sync = *is_sync; Ty::Fn { params: params.copy_owned(), result: Box::new(match result {
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+                None => None,
+            }), is_sync, can_throw: true }.text() },
+            _ => format!("{} throws", shown),
+        };
+        self.findings.push(check_refusal("NK1102", span, format!("This lambda can fail, but `{}` says the code it names never fails.", shown), vec![String::from("A function type without `throws` cannot fail, so a lambda that can is not of that type.")], Some(format!("Write `{}` as the type, or handle the failure inside the lambda with `… catch {{ … }}`.", wanted))));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_copy_under_another_name(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], span: &Span) {
         let written = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
         if !args.is_empty() || written != "to_owned" || !ledger_candidates(world.own, world.own_methods, &written).is_empty() { return; }

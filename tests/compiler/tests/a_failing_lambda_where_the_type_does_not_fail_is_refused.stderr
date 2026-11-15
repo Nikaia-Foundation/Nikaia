@@ -1,0 +1,33 @@
+error[NK1102]: This lambda can fail, but `fn()` says the code it names never fails.
+   --> tests/a_failing_lambda_where_the_type_does_not_fail_is_refused.nika:22:5
+    |
+ 22 |     let g: fn() = fn { throw Bad::Oops }
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A function type without `throws` cannot fail, so a lambda that can is not of that type.
+    = help: Write `fn() throws` as the type, or handle the failure inside the lambda with `… catch { … }`.
+error[NK1102]: This lambda can fail, but `fn()` says the code it names never fails.
+   --> tests/a_failing_lambda_where_the_type_does_not_fail_is_refused.nika:24:5
+    |
+ 24 |     let h: fn() = fn { fails() }
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A function type without `throws` cannot fail, so a lambda that can is not of that type.
+    = help: Write `fn() throws` as the type, or handle the failure inside the lambda with `… catch { … }`.
+error[NK2606]: This lambda can fail, but the parameter it's passed to doesn't say `throws`.
+   --> tests/a_failing_lambda_where_the_type_does_not_fail_is_refused.nika:26:5
+    |
+ 26 |     run(fn { throw Bad::Oops })
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A failure passes straight through a call, and here it has nowhere to go: the parameter's type says the lambda never fails.
+    = help: Handle it inside the lambda with `… catch { … }`, or add `throws` to the parameter's type.
+error[NK2606]: This lambda can fail, but the parameter it's passed to doesn't say `throws`.
+   --> tests/a_failing_lambda_where_the_type_does_not_fail_is_refused.nika:27:5
+    |
+ 27 |     run(fn {
+    |     ^^^^^^^^
+    |
+    = note: A failure passes straight through a call, and here it has nowhere to go: the parameter's type says the lambda never fails.
+    = help: Handle it inside the lambda with `… catch { … }`, or add `throws` to the parameter's type.
+2 type errors, 2 other errors

@@ -1,0 +1,31 @@
+// A lambda that can fail does not fit a function type without `throws`
+// (Part I 7.1, #1369): the checker refuses it, where rustc used to (E0271).
+// A `throw` fails a lambda handed to a parameter as a failing call does
+// (NK2606), also after a lambda written inside it.
+enum Bad { Oops }
+
+impl Error for Bad {
+    fn message(self) -> String {
+        return "oops"
+    }
+}
+
+fn fails() throws {
+    throw Bad::Oops
+}
+
+fn run(f: fn()) {
+    f()
+}
+
+fn main() {
+    let g: fn() = fn { throw Bad::Oops }
+    g()
+    let h: fn() = fn { fails() }
+    h()
+    run(fn { throw Bad::Oops })
+    run(fn {
+        run(fn {})
+        fails()
+    })
+}

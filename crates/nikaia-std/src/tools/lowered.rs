@@ -3819,7 +3819,10 @@ pub mod emit_function {
     #[allow(unused_imports)]
     pub use super::{EmitSeedsBegin, EmitSeedsEnd, EmitSplit, EmitSig};
 }
-pub mod emit_function_body {}
+pub mod emit_function_body {
+    #[allow(unused_imports)]
+    pub use super::{emit_a_body_that_leaves};
+}
 pub mod emit_grammar {
     #[allow(unused_imports)]
     pub use super::{emit_stream_walk_name};

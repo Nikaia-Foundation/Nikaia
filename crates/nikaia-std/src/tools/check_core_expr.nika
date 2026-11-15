@@ -759,6 +759,16 @@ fn check_core_expr_throw[H: CheckHost](mut state: CheckState, world: ref CheckWo
     let thrown = check_core_expr(state, world, host, inner, span)
     state.a_thrown_value_that_is_not_an_error(inner, thrown, span)
     state.a_thrown_type_with_no_error(world, thrown, span)
+    // **A `throw` fails the lambda it is in** (ADR-277 D7, #1369), as a
+    // failing call there does.
+    if state.handed_over != null {
+        let held = state.handed_over?.clone() ?? return Ty::Unknown
+        if !held.caught {
+            let mut handed = held
+            handed.fails = true
+            state.handed_over = handed
+        }
+    }
     state.a_way_out("throw", "", span)
     return Ty::Unknown
 }

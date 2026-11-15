@@ -801,6 +801,16 @@ pub(crate) fn check_core_ops_a_fn(declared: Option<&Ty>) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_ops_promised(declared: Option<&Ty>) -> Option<CheckPromises> {
+    let ty: &Ty = match declared { Some(__nikaia_value) => __nikaia_value, None => return None };
+    match ty {
+        Ty::Fn { is_sync, can_throw, .. } => { let can_throw = *can_throw; let is_sync = *is_sync; Some(CheckPromises { may_pause: !is_sync, may_fail: can_throw }) },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
     let declared: Option<Ty> = match state.flow.lambda_expected.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -828,10 +838,33 @@ pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &Chec
     state.repeats.push(CheckRepeats::a_lambda(depth));
     state.scope.push(frame);
     let saved = state.enter_boundary("lambda");
+    let outer_handed: Option<CheckHanded> = match state.handed_over.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    let promised: Option<CheckPromises> = check_core_ops_promised((declared).as_ref());
+    if promised.is_some() {
+        let held: CheckPromises = nikaia_std::index::or(match promised.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || CheckPromises { may_pause: true, may_fail: true });
+        state.handed_over = Some(CheckHanded { pauses: false, fails: false, caught: false, promised: held });
+    }
     let outer = check_core_lambda_enter(state);
     let walked = check_core_block(state, world, host, body);
     state.a_map_read_handed_back(world, &walked, body);
     let tail = check_core_lambda_leave(state, (outer).as_ref(), &walked, body);
+    if promised.is_some() {
+        let fails = nikaia_std::index::or(state.handed_over.as_ref().map(|__nikaia_it| __nikaia_it.fails), || false);
+        state.handed_over = outer_handed;
+        if fails && !nikaia_std::index::or(promised.as_ref().map(|__nikaia_it| __nikaia_it.may_fail), || true) {
+            let place: Ty = nikaia_std::index::or(match declared.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || Ty::Unknown);
+            state.a_failing_lambda_where_the_type_does_not_fail(&place, span);
+        }
+    }
     check_core_ops_lambda_tail_wrapped(state, world, host, (declared).as_ref(), &tail, body);
     let place: Ty = nikaia_std::index::or(match declared.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
