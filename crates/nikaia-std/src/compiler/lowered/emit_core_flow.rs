@@ -1026,7 +1026,7 @@ impl EmitState {
                 out.push(&format!("; Ok::<_, {}>(__nikaia_value) }}).await?", scope.channel));
             } else { out.append(&inner); }
             out.push(&format!("; Ok::<_, {}>(__nikaia_task) }}", scope.channel));
-            out.push(&format!(", |e: &{}| {{ use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})", scope.channel));
+            out.push(&format!(", |e: &{}| {{ #[allow(unused_imports)] use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})", scope.channel));
         } else {
             let inside = EmitFlow { statement: flow.statement, ..EmitFlow::plain() };
             let inside_scope = EmitScope::plain();
