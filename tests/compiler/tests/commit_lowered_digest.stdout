@@ -1,0 +1,16 @@
+REFUSED: the staged change touches crates/nikaia-std/src/compiler/lowered/ but crates/nikaia-std/src/compiler/lowered.rs is not listed (its LOWERED_DIGEST names the set)
+REFUSED: the staged crates/nikaia-std/src/compiler/lowered.rs includes lowered/b.rs, which the commit does not hold: list it under Partial: and stage only your lines
+staged LOWERED_DIGEST DIGEST in crates/nikaia-std/src/compiler/lowered.rs, the digest of the set as committed
+committed SHA8 local
+committed:
+include!("lowered/a.rs");
+
+/// **The digest of this lowered set** (#1610): every file `lower-std` wrote
+/// beside this index, and the index above this line. Compiled into the same
+/// crate as the code it names, it is the compiler's identity for its caches.
+pub const LOWERED_DIGEST: &str = "DIGEST";
+left in the tree:
+M crates/nikaia-std/src/compiler/lowered.rs
+?? X.md.report.md
+?? crates/nikaia-std/src/compiler/lowered/b.rs
+?? p.diff

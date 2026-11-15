@@ -21,9 +21,21 @@
 // hunks first (`git diff F > p.diff`, drop the others' hunks, `git apply
 // --cached p.diff`); the script commits what is staged of them and never
 // `git add`s them. It refuses a `Partial:` file with nothing staged.
+//
+// **The lowered index as committed** (#1709): `lowered.rs` of
+// `crates/nikaia-std/src/compiler` and `.../runtime` is shared by every
+// agent's `lower-std` (its `include!` lines and its `LOWERED_DIGEST`), so the
+// working tree's copy names other agents' uncommitted lowered files. When the
+// staged change touches a lowered set, the script refuses a staged
+// `lowered.rs` that includes a lowered file the commit would not hold (list it
+// under `Partial:` and stage only your lines), refuses a staged lowered set
+// whose `lowered.rs` is not listed, and writes into the staged `lowered.rs`
+// the digest of the set as staged (`sysroot_package_digest`), which is what
+// `lower-std` writes on the committed tree; the working tree keeps its own.
 
 use std::cli
 use std::fs
+use std::hash
 use std::process
 
 fn commit_field(text: String, key: String) -> String {
@@ -84,6 +96,62 @@ fn commit_check(files: Vec[String], partial: Vec[String]) -> String throws {
     }
     for staged in commit_git(["diff", "--cached", "--name-only"]).split("\n") {
         if staged != "" && !files.contains(staged.clone()) && !partial.contains(staged.clone()) { return f"REFUSED: {staged} is staged but not listed" }
+    }
+    return ""
+}
+
+fn commit_sha(text: String) -> String {
+    let mut data: Vec[u8] = []
+    for b in text.bytes() { data.push(b) }
+    return hash::sha256_hex(data)
+}
+
+// The digest `lower-std` writes into `DIR/lowered.rs` (#1610,
+// `sysroot_package_digest`), of the set as staged: the index above the digest
+// block, then each file under `DIR/lowered/` by its path from DIR, sorted.
+fn commit_staged_digest(dir: String, index: String) -> String throws {
+    let mut all: String = ""
+    all.push_str(commit_sha(index))
+    all.push_str("\n")
+    let mut paths: Vec[String] = []
+    for line in process::run("git", ["ls-files", "--", f"{dir}/lowered/"]).stdout.split("\n") {
+        if line.trim() != "" { paths.push(line.trim().clone()) }
+    }
+    paths.sort()
+    for p in paths {
+        all.push_str(p.strip_prefix(f"{dir}/") ?? p)
+        all.push_str("\n")
+        all.push_str(commit_sha(process::run("git", ["show", f":{p}"]).stdout))
+        all.push_str("\n")
+    }
+    return commit_sha(all)
+}
+
+// "" when the staged lowered sets are whole, else the refusal; a stale
+// staged digest is rewritten in the index and said on stdout (#1709).
+fn commit_lowered(listed: Vec[String]) -> String throws {
+    let marker = "\n/// **The digest of this lowered set**"
+    for dir in ["crates/nikaia-std/src/compiler", "crates/nikaia-std/src/runtime"] {
+        let index_path = f"{dir}/lowered.rs"
+        if commit_git(["diff", "--cached", "--name-only", "--", index_path.clone(), f"{dir}/lowered/"]) == "" { continue }
+        if !listed.contains(index_path.clone()) { return f"REFUSED: the staged change touches {dir}/lowered/ but {index_path} is not listed (its LOWERED_DIGEST names the set)" }
+        let text = process::run("git", ["show", f":{index_path}"]).stdout
+        for line in text.split("\n") {
+            let (_, rest) = line.split_once("include!(\"lowered/") ?? continue
+            let (file, _) = rest.split_once("\"") ?? continue
+            if !process::run("git", ["cat-file", "-e", f":{dir}/lowered/{file}"]).ok { return f"REFUSED: the staged {index_path} includes lowered/{file}, which the commit does not hold: list it under Partial: and stage only your lines" }
+        }
+        let (index, block) = text.split_once(marker) ?? return f"REFUSED: the staged {index_path} has no LOWERED_DIGEST"
+        let (_, after) = block.split_once("LOWERED_DIGEST: &str = \"") ?? return f"REFUSED: the staged {index_path} has no LOWERED_DIGEST"
+        let (old, _) = after.split_once("\"") ?? return f"REFUSED: the staged {index_path} has no LOWERED_DIGEST"
+        let digest = commit_staged_digest(dir, index)
+        if old == digest { continue }
+        let tmp = process::run("mktemp", []).stdout.trim().clone()
+        fs::write(tmp.clone(), fs::Root::Anywhere, index + marker + block.replace(f"LOWERED_DIGEST: &str = \"{old}\"", f"LOWERED_DIGEST: &str = \"{digest}\""))
+        let blob = commit_git(["hash-object", "-w", tmp.clone()])
+        process::run("rm", ["-f", tmp])
+        if blob == "" || !process::run("git", ["update-index", "--cacheinfo", f"100644,{blob},{index_path}"]).ok { return f"REFUSED: could not stage the digest of {index_path}" }
+        println(f"staged LOWERED_DIGEST {digest} in {index_path}, the digest of the set as committed")
     }
     return ""
 }
@@ -151,6 +219,13 @@ fn main() throws {
     for f in files { add.push(f.clone()) }
     if files.len() > 0 && !process::run("git", add).ok {
         println("REFUSED: git add failed")
+        process::exit(1)
+    }
+    let mut listed = files
+    listed.extend(partial)
+    let lowered = commit_lowered(listed)
+    if lowered != "" {
+        println(lowered)
         process::exit(1)
     }
     if !process::run("git", ["commit", "-m", msg]).ok {
