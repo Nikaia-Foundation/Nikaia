@@ -653,9 +653,13 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut read_off_a_loan = false;
     if lending { found = view_of_type(&found); } else if value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
-        if state.a_get_off_a_lent_parameter(world, given) { found = view_of_type(&found); } else if state.a_from_call_of_a_parameter(world, given) {
+        if state.a_get_off_a_lent_parameter(world, given) {
+            found = view_of_type(&found);
+            read_off_a_loan = true;
+        } else if state.a_from_call_of_a_parameter(world, given) {
             let owned = viewed_from_type(&found);
             if owned.len() == 1 { found = (*unsafe { nikaia_std::proven::read(&owned, (0) as usize) }).clone(); }
         }
@@ -676,7 +680,7 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
                 state.facts.wrapped.insert(id_of(given) as i64, wrap);
             }
         } else {
-            state.a_map_read_kept(world, &found, &expected, given, span);
+            if !read_off_a_loan { state.a_map_read_kept(world, &found, &expected, given, span); }
             let how = check_widened_slot(state, world, host, &found, &expected, std::convert::identity(value), span);
             if how.is_some() {
                 let wrap = match how { Some(__nikaia_value) => __nikaia_value, None => return };
