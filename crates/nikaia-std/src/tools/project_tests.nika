@@ -17,6 +17,7 @@
 use std::env
 use std::fs
 use std::collections
+use std::text
 
 /// **What one test did, at one setting** ([ADR-269](../../../docs/specification/adr/adr-269.md) D1).
 pub struct ProjectTestsOutcome {
@@ -1072,7 +1073,11 @@ pub fn project_tests_report_failures(failed: ref Vec[ProjectTestsFailed]) throws
                 }
                 output => project_tests_explain_output(output, outcome),
             }
-            eprint(outcome.stderr)
+            // The child's stderr is several lines and untrusted (ADR-398): escape
+            // each line by hand, so the lines stay lines.
+            for line in outcome.stderr.lines() {
+                eprintln(text::escape_control(line.clone()))
+            }
         }
     }
 }
