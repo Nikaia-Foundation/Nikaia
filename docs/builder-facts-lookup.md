@@ -21,10 +21,11 @@ goes into the section of its topic, in one line, with the run that paid for it.
   (several `--filter`s allowed, #1238). Without `--filter` it runs everything:
   write the output to a file and grep it, never `| tail` (b933).
 * **`--bless` creates a missing `.stdout`**, never a `.stderr`; `--bless-stderr`
-  does both. Exception: a program the compiler refuses (a refusal test) is
-  blessed by plain `--bless` into its `.stderr` only, no `.stdout`; so a test
-  meant to run that `--bless` turns into a `.stderr` is a refusal to fix, not
-  a missing flag (`project_tests_bless_program`, #1238; issue-1431). With `--filter` it blesses only that test. A new test is run
+  does both. A program the compiler refuses is blessed into its `.stderr`
+  only (no `.stdout`) when that `.stderr` exists or `--bless-stderr` is given;
+  with neither, plain `--bless` fails it and writes nothing, so a test meant to
+  run that fails so is a refusal to fix, not a missing flag
+  (`project_tests_bless_program`, #1238, #1236; issue-1431). With `--filter` it blesses only that test. A new test is run
   through `nikaia test`, not only `nikaia run`: `print` writes no newline and
   the `.stdout` holds the bytes exactly (7c1643d).
 * **`tests/compiler` runs `target/fast/nikaia`**: never run the `it` binary
