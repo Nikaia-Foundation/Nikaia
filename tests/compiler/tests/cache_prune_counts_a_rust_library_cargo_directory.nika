@@ -1,0 +1,42 @@
+// The rust-library tests' Cargo directories are cache entries (#1469, #1521):
+// `rust-library-user/<toolchain key>` and `rust-library-splice/<toolchain
+// key>` carry the `.nikaia-used` stamp, so `nikaia cache prune` counts them
+// against NIKAIA_CACHE_LIMIT and removes the one used longest ago, Cargo's
+// layout and all, while the newer entries stay.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+// An entry as a rust-library test leaves it: a Cargo target directory, its
+// lock not held, 4 KiB of build output, stamped as used `ago`.
+fn cargo_entry(cache: String, kind: String, key: String, ago: String) throws {
+    let entry = f"{cache}/{kind}/{key}"
+    process::run("mkdir", ["-p", f"{entry}/debug/deps"])
+    fs::write(f"{entry}/debug/.cargo-lock", fs::Root::Anywhere, "")
+    process::run("dd", ["if=/dev/zero", f"of={entry}/debug/deps/libnikaia_demo.rlib", "bs=4096", "count=1"])
+    process::run("touch", ["-d", ago, f"{entry}/.nikaia-used"])
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let cache = f"{tmp}/cache"
+    cargo_entry(cache.clone(), "rust-library-user", "older", "3 days ago")
+    cargo_entry(cache.clone(), "rust-library-splice", "newer", "2 days ago")
+    cargo_entry(cache.clone(), "rust-library-user", "newest", "1 day ago")
+    let mut env: Vec[(String, String)] = []
+    env.push(("NIKAIA_CACHE_DIR", cache.clone()))
+    env.push(("NIKAIA_CACHE_LIMIT", "9K"))
+    let pruned = process::run(nikaia, ["cache", "prune"]; env: env)
+    println(f"exit {pruned.code}")
+    println(pruned.stdout.trim().replace(tmp, "TMP"))
+    for entry in ["rust-library-user/older", "rust-library-splice/newer", "rust-library-user/newest"] {
+        println(f"{entry}: {fs::exists(f"{cache}/{entry}", fs::Root::Anywhere)}")
+    }
+    process::run("rm", ["-rf", tmp])
+}
