@@ -3770,7 +3770,33 @@ fn handed_kinds(value: ref Expr, kinds: ref Kinds, ask: ref TierAsk, mut walk: T
     if result_nullable_text(ask, walk) && lent_nullable_element(value, ask, walk) {
         return view_kinds()
     }
+    // So is such a read with static text or a jump behind its `??`, for a
+    // `String` result (#1720): `return m[k] ?? ""`, as `-> ref String` says.
+    if result_plain_text(ask, walk) && lent_read_with_fallback(value, ask, walk) {
+        return view_kinds()
+    }
     return kinds.clone()
+}
+
+/// **A `??` whose value is read off a lent list or map and whose fallback is
+/// a literal, a jump or another such `??`** (ADR-282 D13, D29; #1720): each
+/// side is a view of the parameter or of static text, so the whole is a
+/// view. Not `xs.first()` or `xs.last()`: the text an iterator finds is made
+/// text of its own before a literal (`emit_core_flow.nika`).
+fn lent_read_with_fallback(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    return match value {
+        Expr::Coalesce { value: first, fallback, .. } => {
+            let an_end = match first {
+                Expr::MethodCall { method, .. } => ask.names.resolve(method) != "get",
+                else => false,
+            }
+            if an_end || !lent_nullable_element(first, ask, walk) {
+                return false
+            }
+            a_literal_text(fallback) || tier_a_jump(fallback) || lent_read_with_fallback(fallback, ask, walk)
+        },
+        else => false,
+    }
 }
 
 /// The function the walk is in hands back `String?`: not a view already,

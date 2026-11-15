@@ -51,6 +51,10 @@ pub(crate) fn check_core_ops_lit_str(value: &Expr) -> bool { matches!(value, Exp
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_ops_a_coalesce(value: &Expr) -> bool { matches!(value, Expr::Coalesce { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_ops_empty_list(value: &Expr) -> bool {
     match value {
         Expr::ListLit { items, .. } => items.is_empty(),
@@ -682,6 +686,10 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
         return inner;
     }
     if nullable && inner == check_core_ops_named("String") && from_a_map && other.is_a_view() && check_core_ops_place(fallback) && check_core_ops_text_base(&other) {
+        state.facts.view_coalesces.insert(id_of(expr) as i64);
+        return check_core_ops_view("str");
+    }
+    if nullable && inner == check_core_ops_named("String") && from_a_map && check_core_ops_a_coalesce(fallback) && other == check_core_ops_view("str") {
         state.facts.view_coalesces.insert(id_of(expr) as i64);
         return check_core_ops_view("str");
     }

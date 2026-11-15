@@ -2660,7 +2660,23 @@ pub(crate) fn handed_kinds(value: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_
     if same_kinds(kinds, &owned_kinds()) && lent_field(value, ask, walk) { return view_kinds(); }
     if same_kinds(kinds, &owned_kinds()) && result_plain_text(ask, &walk) && made_element(value, ask, walk) { return view_kinds(); }
     if result_nullable_text(ask, &walk) && lent_nullable_element(value, ask, walk) { return view_kinds(); }
+    if result_plain_text(ask, &walk) && lent_read_with_fallback(value, ask, walk) { return view_kinds(); }
     kinds.clone()
+}
+
+pub(crate) fn lent_read_with_fallback(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
+    match value {
+        Expr::Coalesce { value: first, fallback, .. } => {
+            let first = nikaia_std::boxed::open(first); let fallback = nikaia_std::boxed::open(fallback);
+            let an_end = match first {
+                Expr::MethodCall { method, .. } => { let method = *method; ask.names.resolve(method) != "get" },
+                _ => false,
+            };
+            if an_end || !lent_nullable_element(first, ask, walk) { return false; }
+            a_literal_text(fallback) || tier_a_jump(fallback) || lent_read_with_fallback(fallback, ask, walk)
+        },
+        _ => false,
+    }
 }
 
 pub(crate) fn result_nullable_text(ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &TierWalk) -> bool {
