@@ -14,6 +14,7 @@ a.nika b.nika
 local
 == also a nika
 ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs crates/src/a.nika, merge aborted
+WAKE ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs crates/src/a.nika, merge aborted
 exit ok: false
 ours
 1
@@ -27,6 +28,7 @@ old
 local
 == lowering fails
 ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs, re-lowering failed (lower-std), merge aborted
+WAKE ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs, re-lowering failed (lower-std), merge aborted
 exit ok: false
 ours
 1
@@ -65,6 +67,7 @@ old
 local
 == clean, lowering fails
 ESCALATE drive: push rejected, merge clean, re-lowering failed (lower-std), merge aborted
+WAKE ESCALATE drive: push rejected, merge clean, re-lowering failed (lower-std), merge aborted
 exit ok: false
 ours
 1

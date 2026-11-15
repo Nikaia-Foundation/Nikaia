@@ -280,6 +280,12 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   the owner, and starts again once that is handled. A watcher in the
   background wakes the main session when the driver ends, and the hourly
   check-in restarts a driver it finds stopped.
+* **Woken only for what matters** (owner, 2026-11-15). The driver prints
+  every `ESCALATE`, `STOP` and `PUSHED` line a second time as `WAKE <line>`
+  (`drive_wake`). A watcher the main session puts on the driver's log greps
+  `^WAKE ` and nothing else; builder runs, `FOUND`, `FILED`, `IMPROVE` and
+  `SUITE` lines wake nobody and are read when the driver ends (its background
+  task's end wakes the session in any case).
 * **The cycle of one DIR.** `nikaia run scripts/drive.nika -- DIR` with
   `run_in_background` (`--max N` agent runs, default 8; `--dry-run` shows the
   next step; the bug lane with `--no-bump`). It loops on `cycle.nika`: runs

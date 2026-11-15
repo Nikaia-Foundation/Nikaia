@@ -66,5 +66,7 @@ would run: target/fast/nikaia run scripts/cycle.nika -- T --apply
 DRY-RUN BUMP
 == owner (exit 2)
 ESCALATE OWNER b0: which model?
+WAKE ESCALATE OWNER b0: which model?
 == unknown (exit 2)
 ESCALATE no action for: BATCH none (no batch.txt)
+WAKE ESCALATE no action for: BATCH none (no batch.txt)

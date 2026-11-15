@@ -212,6 +212,15 @@ fn drive_exe() -> String throws {
 
 // Ends the run with exit 2; a suite still running is waited for and handled
 // first (drive_settle), with one line naming the escalation it delays.
+// A line the main session must act on (owner, 2026-11-15: woken only for
+// what matters): the line itself, then `WAKE <line>`. The session's watcher
+// on the log greps `^WAKE ` and nothing else; the end of the background task
+// wakes it anyway. Only ESCALATE, STOP and PUSHED go through here.
+fn drive_wake(line: String) throws {
+	println(line)
+	println(f"WAKE {line}")
+}
+
 fn drive_escalate(why: String) throws {
 	let lane = drive_lock_lane()
 	if lane != "" && drive_testing() != "" {
@@ -220,7 +229,7 @@ fn drive_escalate(why: String) throws {
 		drive_settle(exe, lane)
 	}
 	drive_unlock()
-	println(f"ESCALATE drive: {why}")
+	drive_wake(f"ESCALATE drive: {why}")
 	process::exit(2)
 }
 
@@ -278,10 +287,10 @@ fn drive_time_stop() throws {
 	if testing != "" {
 		fs::write(drive_lock_dir() + "/handover", fs::Root::Anywhere, testing + "\n")
 		let sha = testing.split(" ").collect()[0].clone()
-		println(f"STOP drive: time limit after {minutes} min, suite {drive_short(sha)} left to the next run")
+		drive_wake(f"STOP drive: time limit after {minutes} min, suite {drive_short(sha)} left to the next run")
 	} else {
 		drive_unlock()
-		println(f"STOP drive: time limit after {minutes} min")
+		drive_wake(f"STOP drive: time limit after {minutes} min")
 	}
 	process::exit(4)
 }
@@ -494,7 +503,7 @@ fn drive_push(sha: String) -> String throws {
 		let now = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 		head = if now == merge { "head" } else { "sha" }
 	}
-	println(f"PUSHED {drive_short(pushed)}")
+	drive_wake(f"PUSHED {drive_short(pushed)}")
 	return head
 }
 
@@ -2087,7 +2096,7 @@ fn drive_stop(exe: String, dry: bool, dir: String, stop: String) throws {
 	}
 	drive_settle(exe, dir)
 	drive_unlock()
-	println(f"ESCALATE {stop}: the supervisor writes the next briefs")
+	drive_wake(f"ESCALATE {stop}: the supervisor writes the next briefs")
 	if stop.starts_with("CUT") && !stop.ends_with("brief missing") && !stop.contains(": Pushed:") && !stop.contains(": Result: blocked") {
 		println("CLEAR with a line `Supervisor: YYYY-MM-DD: accepted ...` in the report (batch.nika); the builder's lines stay")
 	}
@@ -2588,7 +2597,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 		if action.starts_with("ESCALATE ") {
 			drive_settle(exe, dir)
 			drive_unlock()
-			println(action)
+			drive_wake(action)
 			process::exit(2)
 		}
 		// Builders go on while CI runs the suite (owner, 2026-11-06); a
@@ -2637,7 +2646,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 		if next == "" {
 			drive_settle(exe, dir)
 			drive_unlock()
-			println("ESCALATE focus: every area empty")
+			drive_wake("ESCALATE focus: every area empty")
 			process::exit(2)
 		}
 		fs::write(path, fs::Root::Anywhere, drive_focus_set(file, next, 0))
@@ -2863,7 +2872,7 @@ fn main() throws {
 		if action.starts_with("ESCALATE ") {
 			drive_settle(exe.clone(), dir)
 			drive_unlock()
-			println(action)
+			drive_wake(action)
 			process::exit(2)
 		}
 		// A builder of the next batch and a bump wait for the batch's suite, and the cycle is read again (QA may
