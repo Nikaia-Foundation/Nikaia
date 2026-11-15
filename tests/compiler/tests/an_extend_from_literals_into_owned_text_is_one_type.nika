@@ -1,0 +1,26 @@
+use std::collections
+
+fn word(s: String) -> String {
+    let mut w = String()
+    w.push_str(s)
+    return w
+}
+
+fn main() throws {
+    let mut a: collections::BTreeSet[String] = collections::BTreeSet()
+    a.insert(word("x"))
+    let mut b: collections::BTreeSet[String] = collections::BTreeSet()
+    b.insert("k")
+    a.extend(b)
+    println(f"{a.len()}")
+    let mut h: collections::HashSet[String] = collections::HashSet()
+    h.insert(word("x"))
+    let mut g: collections::HashSet[String] = collections::HashSet()
+    g.insert("k")
+    h.extend(g.drain())
+    println(f"{h.len()}")
+    let mut v: Vec[String] = [word("x")]
+    let w: Vec[String] = ["k", "l"]
+    v.extend(w.clone())
+    println(f"{v.len()} {w.len()}")
+}

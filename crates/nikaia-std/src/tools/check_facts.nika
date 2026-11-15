@@ -391,6 +391,10 @@ pub struct CheckFacts {
     /// D4): as the argument of `extend` it is written `xs.iter().cloned()`,
     /// no list in between.
     pub collection_clones: collections::BTreeSet[i64],
+    /// **`m.clone()` of a map**, by the call's id (ADR-collections-1 D6, D4):
+    /// as the argument of `extend` it is written
+    /// `m.iter().map(|(k, v)| (k.clone(), v.clone()))`, no map in between.
+    pub map_clones: collections::BTreeSet[i64],
     /// **A `comptime` array of text handed to `extend` of a container of owned
     /// `String`** (#966), by the argument: the constant is `[&str; N]` below, so
     /// each item is made a `String` as it goes in.
@@ -782,6 +786,7 @@ impl CheckFacts {
             let_kept_lambdas: collections::BTreeSet(),
             owned_entry_keys: collections::BTreeSet(),
             collection_clones: collections::BTreeSet(),
+            map_clones: collections::BTreeSet(),
             text_extends: collections::BTreeSet(),
             kept_lambdas: collections::BTreeMap(),
             kept_results: collections::BTreeMap(),

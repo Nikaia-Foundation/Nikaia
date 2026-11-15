@@ -832,6 +832,20 @@ impl EmitState {
                 _ => { },
             }
         }
+        if name == "extend" && args.len() == 1 && receiver.is_some() && self.facts.map_clones.contains(&node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) })) {
+            let target = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
+                Expr::MethodCall { receiver: source, .. } => {
+                    let source = nikaia_std::boxed::open(source);
+                    self.emit_core_postfix_base(world, walk, out, host, target, depth, flow, scope)?;
+                    out.push(".extend(");
+                    self.emit_core_postfix_base(world, walk, out, host, source, depth, flow, scope)?;
+                    out.push(".iter().map(|(key, value)| (key.clone(), value.clone())))");
+                    return Ok(());
+                },
+                _ => { },
+            }
+        }
         if name == "extend" && args.len() == 1 && receiver.is_some() && self.facts.text_extends.contains(&node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) })) {
             let target = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             self.emit_core_postfix_base(world, walk, out, host, target, depth, flow, scope)?;
@@ -1249,8 +1263,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple93272| {
-        let (i, word) = __nikaia_tuple93272;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple94101| {
+        let (i, word) = __nikaia_tuple94101;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

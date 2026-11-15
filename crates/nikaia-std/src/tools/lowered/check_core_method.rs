@@ -428,6 +428,11 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
         _ => false,
     };
     if collection && name == "clone" && args.is_empty() { state.facts.collection_clones.insert(id_of(expr) as i64); }
+    let map = match on {
+        Ty::Named { ref name, ref args, .. } => args.len() == 2 && (name == "HashMap" || name == "BTreeMap" || name == "Map" || name == "collections::HashMap" || name == "collections::BTreeMap"),
+        _ => false,
+    };
+    if map && name == "clone" && args.is_empty() { state.facts.map_clones.insert(id_of(expr) as i64); }
     if collection && name == "extend" && args.len() == 1 { check_core_method_text_extend(state, world, &on, unsafe { nikaia_std::proven::read(&args, (0) as usize) }); }
     let bytes = match on {
         Ty::Named { ref name, ref args, .. } => args.is_empty() && (name == "Bytes" || name == "Mapped" || name == "fs::Mapped"),

@@ -588,6 +588,15 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     if collection && name == "clone" && args.len() == 0 {
         state.facts.collection_clones.insert(id_of(expr) as i64)
     }
+    // **And of a map** (ADR-collections-1 D6): `extend` takes its pairs one
+    // by one.
+    let map = match on {
+        Ty::Named { name, args, .. } => args.len() == 2 && (name == "HashMap" || name == "BTreeMap" || name == "Map" || name == "collections::HashMap" || name == "collections::BTreeMap"),
+        else => false,
+    }
+    if map && name == "clone" && args.len() == 0 {
+        state.facts.map_clones.insert(id_of(expr) as i64)
+    }
     // **A `comptime` array of text, extended into owned text** (#966): the
     // constant's items are `&str` below.
     if collection && name == "extend" && args.len() == 1 {

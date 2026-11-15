@@ -2601,6 +2601,19 @@ signature = "[K, V](self: ref collections::HashMap[K, V], key: ?) -> V?"
 # D1): `m[k] = v` is this language's form, and this is the same write under the
 # name the language below gives it, for a program that wants the value it
 # replaced. The map keeps both, so both are handed over (ADR-293 D29).
+# Put every pair of another map, a list of `(K, V)` or a sequence of owned pairs
+# in the map, as `insert` would one by one (ADR-collections-1 D6, D3): a later
+# pair with a key already there replaces its value.
+#
+# The map keeps them, so `pairs` is given away rather than lent.
+[fn."collections::HashMap::extend"]
+pub = true
+panics = false
+sync = true
+touches = []
+keeps = ["pairs"]
+signature = "[K, V](mut self: ref collections::HashMap[K, V], pairs: ?)"
+
 # Put a value in the map under this key, and hand back the one it replaced, or
 # nothing where the key was not there.
 #
@@ -2827,6 +2840,19 @@ panics = false
 sync = true
 touches = []
 signature = "() -> collections::BTreeMap[?, ?]"
+
+# Put every pair of another map, a list of `(K, V)` or a sequence of owned pairs
+# in the map, as `insert` would one by one (ADR-collections-1 D6, D3): a later
+# pair with a key already there replaces its value.
+#
+# The map keeps them, so `pairs` is given away rather than lent.
+[fn."collections::BTreeMap::extend"]
+pub = true
+panics = false
+sync = true
+touches = []
+keeps = ["pairs"]
+signature = "[K, V](mut self: ref collections::BTreeMap[K, V], pairs: ?)"
 
 # Put a value in the map under this key, and hand back the one it replaced, or
 # nothing where the key was not there.

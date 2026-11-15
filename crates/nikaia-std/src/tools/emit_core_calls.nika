@@ -1214,6 +1214,21 @@ impl EmitState {
                 else => {}
             }
         }
+        // **`m.extend(other.clone())` of a map** (ADR-collections-1 D6, D4):
+        // each pair is the copy, and no map is built in between.
+        if name == "extend" && args.len() == 1 && receiver != null && self.facts.map_clones.contains(node_key(args[0])) {
+            let target = receiver ?? return
+            match args[0] {
+                Expr::MethodCall { receiver: source, .. } => {
+                    self.emit_core_postfix_base(world, walk, out, host, target, depth, flow, scope)
+                    out.push(".extend(")
+                    self.emit_core_postfix_base(world, walk, out, host, source, depth, flow, scope)
+                    out.push(".iter().map(|(key, value)| (key.clone(), value.clone())))")
+                    return
+                },
+                else => {}
+            }
+        }
         // **`s.extend(NAMES)` of a `comptime` array of text into owned text**
         // (#966): the constant is `[&str; N]`, each item becomes a `String`.
         if name == "extend" && args.len() == 1 && receiver != null && self.facts.text_extends.contains(node_key(args[0])) {
