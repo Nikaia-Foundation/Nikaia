@@ -1,5 +1,5 @@
 // A type parameter used as a `HashSet` element or a `HashMap` key is
-// compared, so it needs `[T: Eq]` as `==` does (#1559).
+// hashed and compared, so it needs `[T: Hash]` (#1559, #1562).
 use std::collections
 
 fn put[T](mut s: ref collections::HashSet[T], x: T) {

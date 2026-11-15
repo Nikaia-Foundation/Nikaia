@@ -289,6 +289,19 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             }
         }
     }
+    // **What the other arguments bind each type variable to** (#1562): a
+    // text literal handed to a `T` another argument binds to `String` is a
+    // `String` of its own, as one handed to a `String` is (ADR-282 D4).
+    let mut bound_by_others: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+    for argument in expanded {
+        let literal = match argument.given {
+            null => true,
+            value => a_text_literal_expr(value),
+        }
+        if !literal && argument.at < wanted.len() {
+            bind(wanted[argument.at].1, argument.found, bound_by_others)
+        }
+    }
     for argument in expanded {
         let at = argument.at
         let given_here: ref Expr? = argument.given
@@ -372,6 +385,17 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         let mut literal_wants = want.clone()
         if kept && state.decided_by_this_argument(signature, wanted, at) {
             literal_wants = Ty::Named { name: "String", args: [], view: false }
+        }
+        let literal_var = check_arguments_var_name(declared)
+        if kept && literal_var != null && !declared.is_a_view() {
+            match bound_by_others.get(literal_var ?? "") {
+                null => {},
+                other => {
+                    if other == string_ty() {
+                        literal_wants = string_ty()
+                    }
+                },
+            }
         }
         // A `ref T` parameter, a parameter handed back among them (D12), is
         // lent so too (#1498).

@@ -1085,7 +1085,29 @@ fn check_core_call_filled[H: CheckHost](mut state: CheckState, world: ref CheckW
         }
         at += 1
     }
-    return check_core_call_named_call(state, world, host, base, name, args, config, span, true)
+    let got: Ty = check_core_call_named_call(state, world, host, base, name, args, config, span, true)
+    // **The brackets bind what no argument does** (#1562):
+    // `channel::bounded[String](4)` is a `(Sender[String], Receiver[String])`,
+    // not a pair over an unknown item, so a literal handed on beside the
+    // sender is the `String` it is sent as.
+    if !pathed || !needed {
+        return got
+    }
+    // No value parameter names the type parameter (`needed`), so no
+    // argument bound it: the brackets alone say it.
+    let declared: Ty = signature.result?.clone() ?? return got
+    let mut by_brackets: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+    at = 0
+    for parameter in parameters {
+        if at < filled.len() as i64 && !filled[at].is_unknown() && !check_core_call_param_names(signature, parameter) {
+            by_brackets.insert(parameter.clone(), filled[at].clone())
+        }
+        at += 1
+    }
+    if by_brackets.len() == 0 {
+        return got
+    }
+    return substitute(declared, by_brackets)
 }
 
 /// The type parameters of the function `name` this file declares, in the
