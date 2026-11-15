@@ -624,9 +624,10 @@ fn drive_merge_relower(unmerged: String, lower: String, build: String, badges: S
 // generated again before the merge is committed, since neither side lowered
 // or measured the combination (develop red on 2026-11-07, 576d862e). When the
 // merge conflicted or brought a change under `crates/` or `tools/`
-// (drive_merge_generates), runs LOWER (the driver's binary from before the
-// merge first: when it cannot lower the merged sources, BUILD and LOWER
-// again), then BUILD and LOWER until the lowered files stop changing (the old
+// (drive_merge_generates), runs BUILD on the merged files first (only when
+// that build fails, LOWER with the driver's binary from before the merge: on
+// 2026-11-15 that binary lowered a clean merge into code that did not
+// compile), then BUILD and LOWER until the lowered files stop changing (the old
 // binary emits with the old emitter, 2026-11-08: one round reverted unrelated
 // files), stages the changed lowered paths and nothing else, and runs BADGES
 // on an export of the staged tree (as drive_badges does on HEAD, #1348),
@@ -653,12 +654,12 @@ fn drive_merge_regenerate(unmerged: String, lower: String, build: String, badges
 		if line.starts_with("?? ") { before.push(line.trim().clone()) }
 	}
 	let mut failed: String = ""
-	let first = process::run("sh", ["-c", f"{lower} 2>&1"])
+	let first = process::run("sh", ["-c", f"{build} 2>&1"])
 	if !first.ok {
-		let built = process::run("sh", ["-c", f"{build} 2>&1"])
-		if !built.ok { failed = "the build before lowering" } else {
-			let again = process::run("sh", ["-c", f"{lower} 2>&1"])
-			if !again.ok { failed = "lower-std" }
+		let old_lowered = process::run("sh", ["-c", f"{lower} 2>&1"])
+		if !old_lowered.ok {
+			failed = "lower-std before the build"
+			println(drive_tail(first.stdout + old_lowered.stdout, 30))
 		}
 	}
 	let mut rounds = 0
@@ -672,12 +673,14 @@ fn drive_merge_regenerate(unmerged: String, lower: String, build: String, badges
 		let built = process::run("sh", ["-c", f"{build} 2>&1"])
 		if !built.ok {
 			failed = "the build of the re-lowered files"
+			println(drive_tail(built.stdout, 30))
 			break
 		}
 		let old = drive_lowered_print()
 		let lowered = process::run("sh", ["-c", f"{lower} 2>&1"])
 		if !lowered.ok {
 			failed = "lower-std"
+			println(drive_tail(lowered.stdout, 30))
 			break
 		}
 		settled = drive_lowered_print() == old
