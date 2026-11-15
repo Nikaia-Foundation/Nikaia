@@ -5,17 +5,25 @@ Merge branch 'develop' of ../origin into develop
 2
 no merge open
  M notes.txt
+assets/badges/self-hosted.svg
+crates/nikaia-std/src/tools/lowered/a.rs
+crates/nikaia-std/src/tools/lowered/new.rs
 base
 theirs-side
+a.nika b.nika 
 local
 == also a nika
-ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/tools/lowered/a.rs src/a.nika, merge aborted
+ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/tools/lowered/a.rs crates/src/a.nika, merge aborted
 exit ok: false
 ours
 1
 no merge open
  M notes.txt
+crates/nikaia-std/src/tools/lowered/a.rs
+crates/src/a.nika
 ours
+old
+
 local
 == lowering fails
 ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/tools/lowered/a.rs, re-lowering failed (lower-std), merge aborted
@@ -24,5 +32,46 @@ ours
 1
 no merge open
  M notes.txt
+crates/nikaia-std/src/tools/lowered/a.rs
+ours.txt
 ours
+old
+
+local
+== clean, a source
+MERGE SHA regenerated crates/nikaia-std/src/tools/lowered/a.rs crates/nikaia-std/src/tools/lowered/new.rs assets/badges/self-hosted.svg
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+2
+no merge open
+ M notes.txt
+assets/badges/self-hosted.svg
+crates/nikaia-std/src/tools/lowered/a.rs
+crates/nikaia-std/src/tools/lowered/new.rs
+base
+theirs-side
+a.nika b.nika 
+local
+== clean, docs only
+
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+2
+no merge open
+ M notes.txt
+base
+old
+
+local
+== clean, lowering fails
+ESCALATE drive: push rejected, merge clean, re-lowering failed (lower-std), merge aborted
+exit ok: false
+ours
+1
+no merge open
+ M notes.txt
+ours.txt
+base
+old
+
 local
