@@ -478,15 +478,29 @@ pub struct ProjectTestsRan {
     pub code: i64,
     pub stdout: Bytes,
     pub stderr: Bytes,
+    pub timed_out: bool,
+}
+
+pub fn project_tests_time_limit() -> i64 {
+    let given = nikaia_std::index::or(text::parse_i64(nikaia_std::index::or(env::var("NIKAIA_TEST_TIME_LIMIT"), || "".into()).trim()), || 0);
+    match given > 0 {
+        true => given,
+        false => 300,
+    }
+}
+
+pub fn project_tests_timed_out_outcome(limit: i64, stdout: Bytes, said: &str) -> ProjectTestsOutcome {
+    let shown = format!("timed out after {} s\n{}", limit, said);
+    ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout, stderr: shown, files: vec![], bounds: vec![] }
 }
 
 pub trait ProjectTestsProgramHost {
     fn package_name(&self, root: &std::path::Path) -> Result<Option<String>, Box<dyn std::error::Error>>;
-    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
+    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
     fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, Box<dyn std::error::Error>>;
-    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<Option<ProjectTestsRan>, Box<dyn std::error::Error>>;
+    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<Option<ProjectTestsRan>, Box<dyn std::error::Error>>;
     fn batched(&self, setting: &str, project: &std::path::Path, own: &std::path::Path, list: &std::path::Path) -> Result<Option<fs::Path>, Box<dyn std::error::Error>>;
-    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
+    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -643,10 +657,12 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     let project = nikaia_std::fs::path::join(&(own), std::path::Path::new(&("project")));
     let entry = project_tests_prepared(host, program, root, own).await?;
     let written = format!("tests/{}.nika", program.name);
+    let limit = project_tests_time_limit();
     match batched {
         None => { },
         Some(batch) => {
-            let out = host.ran_batched(&batch.binary, &program.name, root, own, &program.stdin)?;
+            let out = host.ran_batched(&batch.binary, &program.name, root, own, &program.stdin, limit)?;
+            if out.timed_out { return Ok(project_tests_timed_out_outcome(limit, out.stdout, &project_tests_relocated(&out.stderr, &batch.entry, &written, root))); }
             let ran = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&out.stderr, &batch.entry, &written, root));
             let outcome = project_tests_bounds_outcome(program, &ran, &nikaia_std::block::Text::from(reports.bounds.to_string()), &nikaia_std::block::Text::from(reports.asserts.to_string()));
             if outcome.passed && out.stderr.is_empty() { return Ok(outcome); }
@@ -655,14 +671,14 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     }
     let report = nikaia_std::block::Text::from(reports.bounds.to_string());
     let asserts = nikaia_std::block::Text::from(reports.asserts.to_string());
-    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]))?;
+    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]), 0)?;
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, &project_tests_relocated(&built.stderr, &entry, &written, root));
         return Ok(project_tests_bounds_outcome(program, &refused, &report, &asserts));
     }
-    let ran = match host.built(&project, root, own, &program.stdin)? {
+    let ran = match host.built(&project, root, own, &program.stdin, limit)? {
         None => {
-            let out = host.compiler("run", setting, &project, root, own, &program.stdin)?;
+            let out = host.compiler("run", setting, &project, root, own, &program.stdin, limit)?;
             let said = out.stderr.copy_of();
             (out, said)
         },
@@ -672,6 +688,7 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
         },
     };
     let (out, said) = ran;
+    if out.timed_out { return Ok(project_tests_timed_out_outcome(limit, out.stdout, &project_tests_relocated(&said, &entry, &written, root))); }
     let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&said, &entry, &written, root));
     Ok(project_tests_bounds_outcome(program, &outcome, &report, &asserts))
 }

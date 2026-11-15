@@ -41,6 +41,10 @@ orchestrator = { workspace = true }
 # **`compiler` turns `nikaia_std::compiler` on**, and only this crate does (#723):
 # a program's `std` is built without the compiler's Nikaia.
 nikaia-std = { workspace = true, features = ["compiler"] }
+# Ends a test program that ran past its time limit with every process it
+# started (`nikaia test`, #1672): the `kill` of a process group, which is
+# `unsafe` and lives there.
+child-usage = { path = "../unsafe/child-usage" }
 winnow = { workspace = true }
 winnow-grammar = { workspace = true }
 # `nikaia.toml`'s build switches (ADR-037 D5).

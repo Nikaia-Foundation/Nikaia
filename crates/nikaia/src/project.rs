@@ -3141,44 +3141,78 @@ impl ProgramHost {
 
     /// `program` run in `dir` with `stdin` on its standard input (none where
     /// it is empty) and no `CARGO_TARGET_DIR`, as `command` has it set up.
+    /// Where `within` is more than zero, it runs in a process group of its
+    /// own, and after that many seconds the whole group is killed - the
+    /// program and every process it started, which would otherwise hold its
+    /// pipes open - and the run says it timed out (#1672).
     fn ran(
         &self,
         program: &Path,
         mut command: std::process::Command,
         dir: &Path,
         stdin: &[u8],
+        within: i64,
     ) -> Result<project_tests::ProjectTestsRan> {
         use std::io::Write;
-        command.current_dir(dir).env_remove("CARGO_TARGET_DIR");
-        let out = if stdin.is_empty() {
-            command.stdin(std::process::Stdio::null()).output()
-        } else {
-            command
-                .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .spawn()
-                .and_then(|mut child| {
-                    // Written beside the wait, so a program that prints before
-                    // it reads does not fill its pipe and stop; one that stops
-                    // reading early closes the pipe, which is its business.
-                    let mut input = child.stdin.take();
-                    let given = stdin.to_vec();
-                    let writing = std::thread::spawn(move || {
-                        if let Some(input) = input.as_mut() {
-                            let _ = input.write_all(&given);
+        use std::sync::atomic::{AtomicBool, Ordering};
+        command
+            .current_dir(dir)
+            .env_remove("CARGO_TARGET_DIR")
+            .stdin(if stdin.is_empty() {
+                std::process::Stdio::null()
+            } else {
+                std::process::Stdio::piped()
+            })
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        #[cfg(unix)]
+        if within > 0 {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
+        let expired = std::sync::Arc::new(AtomicBool::new(false));
+        let out = command
+            .spawn()
+            .and_then(|mut child| {
+                // Written beside the wait, so a program that prints before
+                // it reads does not fill its pipe and stop; one that stops
+                // reading early closes the pipe, which is its business.
+                let mut input = child.stdin.take();
+                let given = stdin.to_vec();
+                let writing = std::thread::spawn(move || {
+                    if let Some(input) = input.as_mut() {
+                        let _ = input.write_all(&given);
+                    }
+                });
+                let watchdog = (within > 0).then(|| {
+                    let (done, wake) = std::sync::mpsc::channel::<()>();
+                    let pid = child.id();
+                    let expired = expired.clone();
+                    let limit = std::time::Duration::from_secs(within.unsigned_abs());
+                    let thread = std::thread::spawn(move || {
+                        if let Err(std::sync::mpsc::RecvTimeoutError::Timeout) =
+                            wake.recv_timeout(limit)
+                        {
+                            expired.store(true, Ordering::SeqCst);
+                            child_usage::kill_group(pid);
                         }
                     });
-                    let out = child.wait_with_output();
-                    let _ = writing.join();
-                    out
-                })
-        }
-        .with_context(|| format!("running {}", program.display()))?;
+                    (done, thread)
+                });
+                let out = child.wait_with_output();
+                if let Some((done, thread)) = watchdog {
+                    drop(done);
+                    let _ = thread.join();
+                }
+                let _ = writing.join();
+                out
+            })
+            .with_context(|| format!("running {}", program.display()))?;
         Ok(project_tests::ProjectTestsRan {
             code: exit_code(&out.status),
             stdout: out.stdout.into(),
             stderr: out.stderr.into(),
+            timed_out: expired.load(Ordering::SeqCst),
         })
     }
 }
@@ -3199,6 +3233,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         dir: &Path,
         own: &Path,
         stdin: &[u8],
+        within: i64,
     ) -> HostResult<project_tests::ProjectTestsRan> {
         let mut command = std::process::Command::new(&self.exe);
         command
@@ -3208,7 +3243,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         if verb == "build" {
             command.env("CARGO_TERM_QUIET", "true");
         }
-        self.held(self.ran(&self.exe, command, dir, stdin))
+        self.held(self.ran(&self.exe, command, dir, stdin, within))
     }
 
     fn explained(
@@ -3219,7 +3254,10 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
     ) -> HostResult<nikaia_std::bytes::Bytes> {
         let mut command = std::process::Command::new(&self.exe);
         command.arg("check").args(args).arg(entry);
-        self.held(self.ran(&self.exe, command, own, &[]).map(|out| out.stdout))
+        self.held(
+            self.ran(&self.exe, command, own, &[], 0)
+                .map(|out| out.stdout),
+        )
     }
 
     fn built(
@@ -3228,6 +3266,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         dir: &Path,
         own: &Path,
         stdin: &[u8],
+        within: i64,
     ) -> HostResult<Option<project_tests::ProjectTestsRan>> {
         let binary = project
             .join("target")
@@ -3239,7 +3278,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         }
         let mut command = std::process::Command::new(&binary);
         command.env(nikaia_std::fs::TEST_DIR_VAR, own);
-        self.held(self.ran(&binary, command, dir, stdin).map(Some))
+        self.held(self.ran(&binary, command, dir, stdin, within).map(Some))
     }
 
     fn batched(
@@ -3256,7 +3295,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
             .env(nikaia_std::fs::TEST_DIR_VAR, own)
             .env(project_batch::project_batch_var(), list)
             .env("CARGO_TERM_QUIET", "true");
-        let built = self.held(self.ran(&self.exe, command, own, &[]))?;
+        let built = self.held(self.ran(&self.exe, command, own, &[], 0))?;
         let binary = project
             .join("target")
             .join("nikaia")
@@ -3272,10 +3311,11 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         dir: &Path,
         own: &Path,
         stdin: &[u8],
+        within: i64,
     ) -> HostResult<project_tests::ProjectTestsRan> {
         let mut command = std::process::Command::new(binary);
         command.arg(name).env(nikaia_std::fs::TEST_DIR_VAR, own);
-        self.held(self.ran(binary, command, dir, stdin))
+        self.held(self.ran(binary, command, dir, stdin, within))
     }
 }
 
