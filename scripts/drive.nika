@@ -115,7 +115,12 @@
 // changed scripts run here (owner, 2026-11-06; drive_named_filters,
 // `LOCAL tests ...`): red writes `Gate: red local-tests` and their output to
 // the suite log and goes to QA without a CI round; `--named-filters FILE`
-// prints the filters for the paths in FILE (for tests). Else the driver
+// prints the filters for the paths in FILE (for tests). They run with the
+// driver's own copy of the compiler (drive_tests_run, #1722), and a run that
+// loses its compiler to another lane's rebuild prints `SUITE <sha8> local
+// tests interrupted (compiler rebuilt)` and runs once more instead of going
+// red; `--local-tests FILE` runs them for the paths in FILE and prints `LOCAL
+// green` or `LOCAL red` and the output (for tests). Else the driver
 // takes the checkout's suite lock, `mkdir target/suite.lock` with
 // `<pid> <DIR>` in target/suite.lock/owner: two drivers (the main lane and the
 // bug lane) share this checkout, so one waits in 60 s steps while the owner's
@@ -575,16 +580,10 @@ fn drive_merge_check(base: String, merge: String) -> String throws {
 		if name != "" && !names.contains(name.clone()) { names.push(name) }
 	}
 	if names.len() == 0 { return "" }
-	let exe = process::run("realpath", [drive_exe()]).stdout.trim().clone()
 	let mut args: String = ""
 	for n in names { args = args + f" --filter '{n}'" }
 	println(f"LOCAL tests {names.join(" ")}")
-	let out = process::run(
-		"sh",
-		["-c", f"cd tests/compiler && NIKAIA_CACHE_LIMIT=2G '{exe}' test{args} 2>&1"],
-	)
-	if out.ok { return "" }
-	return out.stdout + out.stderr
+	return drive_tests_run(args)
 }
 
 // Before each issue and each suite (#1717): `origin/develop` fetched and
@@ -1562,17 +1561,53 @@ fn drive_named_filters(paths: Vec[String]) -> Vec[String] throws {
 fn drive_local_tests(paths: Vec[String]) -> String throws {
 	let filters = drive_named_filters(paths)
 	if filters.len() == 0 { return "" }
-	let bin = drive_exe()
-	let exe = process::run("realpath", [bin]).stdout.trim().clone()
 	let mut args: String = ""
 	for f in filters { args = args + f" --filter '{f}'" }
 	println(f"LOCAL tests {filters.join(" ")}")
+	return drive_tests_run(args)
+}
+
+// `nikaia test ARGS` in tests/compiler, with a copy of the compiler this
+// driver owns (`target/drive-<pid>/nikaia`, removed after), so another lane's
+// rebuild of `target/fast/nikaia` cannot remove it under the tests (#1722).
+// A run that still loses its compiler (`running ... (deleted)`, or `No such
+// file or directory` on running it) is no red suite: `SUITE <sha8> local tests
+// interrupted (compiler rebuilt)`, and the tests once more on a fresh copy.
+// Red: the output, else "".
+fn drive_tests_run(args: String) -> String throws {
+	let own = f"target/drive-{drive_pid()}"
+	let mut out = drive_tests_once(own.clone(), args.clone())
+	if drive_compiler_lost(out.clone()) {
+		let sha = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+		println(f"SUITE {drive_short(sha)} local tests interrupted (compiler rebuilt)")
+		out = drive_tests_once(own.clone(), args)
+	}
+	process::run("rm", ["-rf", own])
+	return out
+}
+
+// One run of drive_tests_run: copies the compiler to OWN/nikaia (the script
+// tests find their toolchain by that basename) and runs the tests with it.
+fn drive_tests_once(own: String, args: String) -> String throws {
+	let bin = drive_exe()
+	process::run("mkdir", ["-p", own.clone()])
+	let copied = process::run("cp", [bin.clone(), own.clone() + "/nikaia.tmp"])
+	if !copied.ok { return f"Error: running {bin}: copy failed\nNo such file or directory\n{copied.stderr}" }
+	process::run("mv", [own.clone() + "/nikaia.tmp", own.clone() + "/nikaia"])
+	let exe = process::run("realpath", [own + "/nikaia"]).stdout.trim().clone()
 	let out = process::run(
 		"sh",
 		["-c", f"cd tests/compiler && NIKAIA_CACHE_LIMIT=2G '{exe}' test{args} 2>&1"],
 	)
 	if out.ok { return "" }
 	return out.stdout + out.stderr
+}
+
+// True when a test run's output says the compiler itself was gone (another
+// lane rebuilt it), not that a test failed.
+fn drive_compiler_lost(out: String) -> bool {
+	if out.contains("nikaia (deleted)") { return true }
+	return out.contains("Error: running ") && out.contains("No such file or directory")
 }
 
 // After the lock and before each suite: another lane may have pushed these
@@ -3199,6 +3234,15 @@ fn main() throws {
 			paths.push(p)
 		}
 		if drive_docs_only(paths) { println("docs-only") } else { println("suite") }
+		return
+	}
+	if args.len() == 3 && args[1] == "--local-tests" {
+		let mut paths: Vec[String] = []
+		for line in drive_read(args[2]).split("\n") {
+			if line.trim() != "" { paths.push(line.trim().clone()) }
+		}
+		let failed = drive_local_tests(paths)
+		if failed == "" { println("LOCAL green") } else { println("LOCAL red\n" + failed.trim()) }
 		return
 	}
 	if args.len() == 3 && args[1] == "--named-filters" {
