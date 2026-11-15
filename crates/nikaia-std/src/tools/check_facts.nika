@@ -89,6 +89,10 @@ pub struct CheckAsyncWait {
 }
 
 pub struct CheckFacts {
+    /// **A call of a `std` helper** (`pub = false` in `std`'s ledger, #1606),
+    /// by the start of the call's span: refused (`NK1110`) in a program, and
+    /// let through by `check_access_inside_std` where the file is `std`'s own.
+    pub std_helpers_reached: collections::BTreeSet[i64],
     /// What a task binds and still holds at a pause (ADR-055 D6): seen by the tests.
     pub held_across_a_pause: collections::BTreeSet[(i64, String)],
     pub comptime_values: collections::BTreeMap[i64, (String, String)],
@@ -668,6 +672,7 @@ pub struct CheckFacts {
 impl CheckFacts {
     pub fn empty() -> CheckFacts {
         return CheckFacts {
+            std_helpers_reached: collections::BTreeSet(),
             held_across_a_pause: collections::BTreeSet(),
             comptime_values: collections::BTreeMap(),
             turn_comptime_values: collections::BTreeMap(),

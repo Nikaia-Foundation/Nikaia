@@ -3385,7 +3385,7 @@ pub mod cexport_python {
 }
 pub mod check_access {
     #[allow(unused_imports)]
-    pub use super::{names_the_argument, dotted_path, variants_named};
+    pub use super::{names_the_argument, dotted_path, variants_named, check_access_inside_std};
 }
 pub mod check_arguments {
     #[allow(unused_imports)]
