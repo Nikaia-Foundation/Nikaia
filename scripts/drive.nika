@@ -968,11 +968,13 @@ fn drive_badges_once() throws {
 // The committed ledgers of the examples and packages (`nikaia.contracts`,
 // `nikaia.derived`, `nikaia.proofs`; ADR-270 D4) follow the
 // sources and the compiler as the badges do (#1591): before each suite they
-// are built again on a clean target from HEAD (`scripts/ledgers.nika --
-// --refresh --tree HEAD`, with the compiler of HEAD, drive_tree_exe) and
-// only the ledger files that changed are committed. BUILD still builds this
-// checkout's compiler, the driver's own. A build that fails is
-// printed and left to CI's `--check`, which is red on it too.
+// are built again from HEAD (`scripts/ledgers.nika -- --refresh --tree
+// HEAD`) with the compiler of HEAD, built in a worktree and target directory
+// of its own (drive_tree_exe), never with this checkout's, which holds the
+// other lanes' uncommitted compiler sources (#1665); only the ledger files
+// that changed are committed. BUILD still builds this checkout's compiler,
+// the driver's own. A build that fails is printed and left to CI's
+// `--check`, which is red on it too.
 fn drive_ledgers(build: String) throws {
 	let built = process::run("sh", ["-c", f"{build} 2>&1"])
 	if !built.ok {
@@ -2787,6 +2789,12 @@ fn main() throws {
 	// BADGES the commands.
 	if args.len() == 5 && args[1] == "--merge-fetched" {
 		drive_merge_fetched(args[2], args[3], args[4])
+		return
+	}
+	// The ledger refresh before a suite, alone (#1665): BUILD the command
+	// that builds this checkout's compiler.
+	if args.len() == 3 && args[1] == "--ledgers" {
+		drive_ledgers(args[2])
 		return
 	}
 	if args.len() == 4 && args[1] == "--found" {
