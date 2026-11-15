@@ -221,7 +221,7 @@ signature = "(c: scalar) -> bool"
 
 [fn."block"]
 sync = true
-panics = false
+panics = true
 places = true
 touches = []
 views = ["raw: borrowed"]
@@ -244,7 +244,7 @@ signature = "(header: u32, from: u32, s: ref String) -> u32"
 
 [fn."block_text"]
 sync = true
-panics = false
+panics = true
 places = true
 touches = []
 views = ["raw: borrowed"]
@@ -361,7 +361,7 @@ signature = "(e: ref Event) -> String"
 pub = true
 sync = true
 returns = "ref(docs)"
-panics = false
+panics = true
 places = true
 touches = []
 views = ["docs: borrowed", "<result>: borrowed"]
@@ -834,7 +834,7 @@ signature = "(k: TagKind) -> bool"
 
 [fn."scalar_text"]
 sync = true
-panics = false
+panics = true
 places = true
 touches = []
 views = ["n: borrowed"]
@@ -934,7 +934,7 @@ signature = "(input: ref Bytes, ds: ref Vec[Dir], n: ref Node)"
 [fn."text"]
 pub = true
 sync = true
-panics = false
+panics = true
 places = true
 touches = []
 views = ["s: borrowed"]
@@ -957,7 +957,7 @@ signature = "(t: String) -> String"
 [fn."walk"]
 sync = true
 keeps = ["n"]
-panics = false
+panics = true
 places = true
 touches = []
 views = ["n: borrowed", "ds: borrowed", "out: borrowed"]
