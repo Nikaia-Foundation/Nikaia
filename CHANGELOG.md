@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1385] — 2026-11-15
+
+**Builders' changes (#1333, #1469)**
+- drive: after a rejected push, the merge with origin/develop is re-lowered and its badges regenerated before the short checks and the push (#1333)
+- none (test only; the counting is #1521's CHANGELOG entry)
+
 ## [0.0.1384] — 2026-11-15
 
 **Builders' changes (#1562)**
