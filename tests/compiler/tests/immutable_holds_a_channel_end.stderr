@@ -1,4 +1,4 @@
-error[NK1331]: `t` is `immutable`, but its value can change: `t: channel::Sender[?]` is changeable through another owner.
+error[NK1331]: `t` is `immutable`, but its value can change: `t: channel::Sender[i64]` is changeable through another owner.
   --> tests/immutable_holds_a_channel_end.nika:7:16
    |
  7 | 	immutable t = tx

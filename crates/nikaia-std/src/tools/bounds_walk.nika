@@ -93,6 +93,9 @@ pub struct BoundsContext {
 	/// #1431), by node: a read of one stops the program outside, so past it
 	/// the position is inside, whatever bound the base.
 	pub list_indices: collections::BTreeSet[i64],
+	/// **The reads `s.bytes` of a text `s`** (ADR-320 D11), by node:
+	/// `s.bytes.len()` is the length `s.len()` names (#1556).
+	pub text_bytes: collections::BTreeSet[i64],
 	/// **What each function of the file is found to return** (ADR-306 D23),
 	/// by name: never published, like a frame (ADR-391 D4).
 	pub returns: collections::BTreeMap[String, BoundsReturns],
@@ -2739,7 +2742,9 @@ fn bounding_lin(
 			}
 			// **`a.min(b)` is at most each of the two, `a.max(b)` at least
 			// each** (#1516), of whole numbers: `let mut i = at.min(n)`
-			// starts a counter below `n`.
+			// starts a counter below `n`. And either is one of the two
+			// (#1514): `0 <= at` and `0 <= n` give `0 <= at.min(n)`, so
+			// `s.bytes[0..<at.min(s.bytes.len())]` is inside.
 			let picked = words.resolve(method)
 			if args.len() == 1 && (picked == "min" || picked == "max") {
 				let whole = context.std_receivers[node_key(expr)] ?? return null
@@ -2759,6 +2764,9 @@ fn bounding_lin(
 					held.push(walk.arena.ge(result, a))
 					held.push(walk.arena.ge(result, b))
 				}
+				let is_a = walk.arena.equal(result, a)
+				let is_b = walk.arena.equal(result, b)
+				held.push(walk.arena.or([is_a, is_b]))
 				walk.axioms.insert(name, held)
 				return result
 			}
@@ -3540,7 +3548,20 @@ fn bounding_length(
 	if !context.lengths.contains(node_key(receiver)) {
 		return null
 	}
-	return bounding_length_named(walk, name, context.sized.contains(node_key(receiver)))
+	let counted = bounding_counted_list(name, node_key(receiver), context)
+	return bounding_length_named(walk, counted, context.sized.contains(node_key(receiver)))
+}
+
+/// **The list whose length `list.len()` is, read at `node`**: the text `s`
+/// for its bytes `s.bytes`, `list` itself for any other. `s.bytes.len()`
+/// counts the text's bytes (ADR-320 D4), and so does the `s.len()` the
+/// compiler still takes where D3 removes it, so a fact on one holds of the
+/// other (#1556).
+fn bounding_counted_list(list: ref String, node: i64, context: ref BoundsContext) -> String {
+	if context.text_bytes.contains(node) {
+		return list.strip_suffix(".bytes")?.clone() ?? list.clone()
+	}
+	return list.clone()
 }
 
 /// `name.len()` as a number of the walk: not negative, an `i64` (ADR-385
@@ -4037,7 +4058,7 @@ fn bounding_list_length(
 	if fixed != null {
 		return walk.arena.int(fixed ?? 0)
 	}
-	return walk.arena.var(length_of(list))
+	return walk.arena.var(length_of(bounding_counted_list(list, node, context)))
 }
 
 /// A block; whether control never goes past its end.
@@ -5204,8 +5225,18 @@ fn bounding_while(
 	let mut turn_facts: Vec[i64] = []
 	let mut step: Vec[(String, i64, i64, i64?)] = []
 	let mut others: Vec[(String, i64, i64, i64?)] = []
+	// Of the counters that grow by exactly one, the one the condition
+	// compares counts the turns, so that it is bounded by the condition's
+	// end (#1391: `while j < hi { i = i + 1; j = j + 1 }`).
+	let compared = bounding_compared(cond, words)
+	let mut counter = String()
 	for (name, low, high, floor) in steps {
-		if step.is_empty() && low == 1 && high == 1 && floor == null {
+		if low == 1 && high == 1 && floor == null && (counter.is_empty() || name == compared) {
+			counter = name.clone()
+		}
+	}
+	for (name, low, high, floor) in steps {
+		if step.is_empty() && name == counter {
 			step.push((name.clone(), low, high, floor))
 		} else {
 			others.push((name.clone(), low, high, floor))
@@ -5254,6 +5285,19 @@ fn bounding_while(
 		for fact in turn_facts {
 			bounding_push(walk, facts, fact)
 		}
+	}
+}
+
+/// The name `while x < e` compares, or nothing.
+fn bounding_compared(cond: ref Expr, words: ref winnow_grammar::InternerContext) -> String {
+	match cond {
+		Expr::Binary { op, lhs, .. } => {
+			if op == BinaryOp::Lt {
+				return path_of(lhs, words) ?? ""
+			}
+			return ""
+		},
+		else => return "",
 	}
 }
 
@@ -7192,6 +7236,7 @@ fn bounding_if_leaves(
 		let mut changed = bounding_changed(then_branch, context, words)
 		bounding_extend_maybe(changed, else_branch, context, words)
 		bounding_after_change(walk, facts, changed)
+		bounding_if_join(walk, facts, changed, then_facts, else_facts, ask)
 	}
 	return false
 }
@@ -7504,6 +7549,61 @@ fn bounding_else(
 	bounding_assume_not(walk, else_facts, cond, context, program, words)
 	bounding_block(walk, block, else_facts, context, program, words, ask)
 	bounding_extend(changed, bounding_changed(block, context, words))
+}
+
+/// **What holds past an `if` both of whose branches go on, of what they
+/// changed** (#1391): a fact of one branch's end that reads a changed name
+/// holds past the `if` where the other branch's end holds it too, or
+/// proves it. So `if c { i = i + 1 }` keeps `i - i@ <= t + 1` of the
+/// turn's `i - i@ <= t`, where it was forgotten.
+fn bounding_if_join(
+	mut walk: BoundsWalk,
+	mut facts: BoundsFacts,
+	changed: ref BoundsChanged,
+	then_facts: ref BoundsFacts,
+	else_facts: ref BoundsFacts,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) {
+	if changed.values.is_empty() {
+		return
+	}
+	let mut kept: Vec[i64] = []
+	for fact in bounding_join_candidates(walk, facts, changed, then_facts) {
+		if else_facts.facts.contains(fact) || bounding_proves(walk, else_facts, fact, ask) {
+			kept.push(fact)
+		}
+	}
+	for fact in bounding_join_candidates(walk, facts, changed, else_facts) {
+		if !kept.contains(fact) && bounding_proves(walk, then_facts, fact, ask) {
+			kept.push(fact)
+		}
+	}
+	for fact in kept {
+		bounding_push(walk, facts, fact)
+	}
+}
+
+/// The facts of a branch's end that read a name the `if` changed and do
+/// not hold past it already.
+fn bounding_join_candidates(
+	walk: ref BoundsWalk,
+	facts: ref BoundsFacts,
+	changed: ref BoundsChanged,
+	branch: ref BoundsFacts,
+) -> Vec[i64] {
+	let mut out: Vec[i64] = []
+	for fact in branch.facts {
+		if facts.facts.contains(fact) || out.contains(fact) {
+			continue
+		}
+		for name in changed.values {
+			if bounding_touches(walk, fact, name) {
+				out.push(fact)
+				break
+			}
+		}
+	}
+	return out
 }
 
 /// A block inside an expression: walked with what holds here, and what it

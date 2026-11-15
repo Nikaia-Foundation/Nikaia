@@ -28,6 +28,8 @@ pub enum CompareStrength {
     Totally,
     /// ...and the values have an order: Rust's `Ord`.
     Orders,
+    /// ...or equal values hash alike: Rust's `Hash + Eq` (ADR-010 D13).
+    Hashes,
 }
 
 /// **What the question is asked against**: the types another file declares,
@@ -63,6 +65,15 @@ impl CheckComparable {
     pub fn orders(ref self, ty: ref Ty) -> bool {
         let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
         return self.asking(ty, CompareStrength::Orders, seen)
+    }
+
+    /// **Whether it hashes (`Hash`)** (ADR-010 D13): an `Eq` type of the
+    /// language's own that the language below hashes. A declared type does
+    /// not yet, until its hash is derived (#591); a float, an unordered map
+    /// or set and a type only a ledger describes do not.
+    pub fn hashes(ref self, ty: ref Ty) -> bool {
+        let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+        return self.asking(ty, CompareStrength::Hashes, seen)
     }
 
     /// **Whether its values copy (`Clone`)** (Part I 4.7, #1245): what
@@ -192,7 +203,7 @@ impl CheckComparable {
     }
 
     fn named(ref self, name: ref String, args: ref Vec[Ty], how: CompareStrength, mut seen: collections::BTreeSet[String]) -> bool {
-        if how == CompareStrength::Orders && COMPARE_UNORDERED.contains(name) {
+        if (how == CompareStrength::Orders || how == CompareStrength::Hashes) && COMPARE_UNORDERED.contains(name) {
             return false
         }
         if name == "f32" || name == "f64" {
@@ -220,6 +231,9 @@ impl CheckComparable {
         seen.insert(key)
         let declared = self.structs.contains_key(name) || self.enums.contains_key(name) || self.beside.contains_key(name)
         if declared {
+            if how == CompareStrength::Hashes {
+                return false
+            }
             if how == CompareStrength::Orders {
                 return self.implements("Ord", name)
             }
@@ -278,6 +292,7 @@ impl CheckComparable {
                 CompareStrength::Compares => contract.compares,
                 CompareStrength::Orders => contract.orders,
                 CompareStrength::Totally => contract.equates,
+                CompareStrength::Hashes => false,
             }
             if claimed {
                 return true
@@ -515,7 +530,31 @@ pub fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref coll
     for (parameter, traits) in wanted {
         let held = bound.get(parameter) ?? continue
         for wanted_trait in traits {
-            if (wanted_trait != "Eq" && wanted_trait != "Ord" && wanted_trait != "Clone") || asking.own.traits.contains_key(wanted_trait) {
+            if (wanted_trait != "Eq" && wanted_trait != "Ord" && wanted_trait != "Hash" && wanted_trait != "Clone") || asking.own.traits.contains_key(wanted_trait) {
+                continue
+            }
+            // **`[T: Hash]` is met by a type the language hashes, or by a
+            // type parameter bounded so** (ADR-010 D13); a parameter bounded
+            // by `Eq` alone is the `NK1248` of a hashed position.
+            if wanted_trait == "Hash" {
+                let own_bounds = compare_parameter_bounds(held, parameters)
+                let shown = held.text()
+                if own_bounds.len() == 1 && own_bounds[0] == "?" {
+                    if asking.hashes(held) {
+                        continue
+                    }
+                    refused.push(check_refusal("NK1164", span, f"`{key}` needs a `Hash` here, but `{shown}` isn't one.", [f"`{key}` declares `[{parameter}: Hash]`, so the type passed has to hash, and `{shown}` doesn't: a float has no equality to hash by, and a type you declare does not hash yet."], "Pass a type that hashes: a number, `String`, `bool`, `scalar`, or a tuple, list or option of those."))
+                    continue
+                }
+                if own_bounds.contains("Hash") {
+                    continue
+                }
+                // A lent parameter is named as declared, without its view.
+                let shown = match held {
+                    Ty::Named { name, .. } => name.clone(),
+                    else => shown,
+                }
+                refused.push(check_refusal("NK1248", span, f"`{key}` needs `{shown}: Hash`: its `{parameter}` is declared `[{parameter}: Hash]`.", [f"`{shown}` can be any type the caller picks, and `Eq` does not make it hash: a type with its own `impl Eq` may have no hash."], f"Write `[{shown}: Hash]`."))
                 continue
             }
             if wanted_trait == "Clone" {
@@ -537,7 +576,7 @@ pub fn compare_standard_bounds(asking: ref CheckComparable, parameters: ref coll
                 }
             } else {
                 for own in own_bounds {
-                    if own == "Ord" || (!ordered && own == "Eq") {
+                    if own == "Ord" || (!ordered && (own == "Eq" || own == "Hash")) {
                         met = true
                     }
                 }

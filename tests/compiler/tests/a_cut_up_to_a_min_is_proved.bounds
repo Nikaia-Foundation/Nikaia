@@ -1,0 +1,5 @@
+bounds in tests/a_cut_up_to_a_min_is_proved.nika: 2 indexes, 2 proved; 1 operations, 0 proved
+     9  source.bytes[0..<end].iter().filter(…).count() + 1  checked: a call's result, which the walk knows nothing of (#382)
+     9  source.bytes[0..<end]                     proved
+    18  xs[a.max(b)]                              proved
+  derived  later: 0 <= a, 0 <= b, b <= a, b < a, proved at the calls on lines 25

@@ -209,6 +209,14 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             if literal || is_a_view_of_a_string(&argument.found) || argument.found == text_view { viewed_vars.insert(var); }
         }
     }
+    let mut bound_by_others: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+    for argument in expanded.iter() {
+        let literal = match argument.given {
+            None => true,
+            Some(value) => a_text_literal_expr(value),
+        };
+        if !literal && argument.at < wanted.len() as i64 { bind(&nikaia_std::index::get(&wanted, nikaia_std::index::at(argument.at)).1, &argument.found, &mut bound_by_others); }
+    }
     for argument in expanded.iter() {
         let at = argument.at;
         let given_here: Option<&Expr> = argument.given;
@@ -258,6 +266,13 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         }
         let mut literal_wants = want.clone();
         if kept && state.decided_by_this_argument(signature, &wanted, at) { literal_wants = Ty::Named { name: String::from("String"), args: vec![], view: false }; }
+        let literal_var = check_arguments_var_name(&declared);
+        if kept && literal_var.is_some() && !declared.is_a_view() {
+            match bound_by_others.get(&nikaia_std::index::or(literal_var, || "".into())) {
+                None => { },
+                Some(other) => { if *other == string_ty() { literal_wants = string_ty(); } },
+            }
+        }
         let a_lent_variable = own && check_arguments_a_var(&declared) && (lent || declared.is_a_view());
         if given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };

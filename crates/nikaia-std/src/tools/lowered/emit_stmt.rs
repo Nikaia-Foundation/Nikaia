@@ -242,7 +242,7 @@ impl EmitState {
             self.emit_view_list_drops(out, unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span.start as i64);
             self.emit_view_list_rebinds(out, unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.span.start as i64);
             out.push("\n");
-            pos += 1;
+            pos = unsafe { nikaia_std::proven::add::<i64>(pos, 1) };
         }
         walk.async_keeps = keeps;
         let finished = emit_stmt_finish_rests(walk, rests, &inner_pad);

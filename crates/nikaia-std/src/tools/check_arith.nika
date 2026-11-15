@@ -157,7 +157,7 @@ impl CheckState {
             let bounds = self.type_parameters.get(name) ?? continue
             let mut allowed = false
             for bound in bounds {
-                if !world.own.traits.contains_key(bound) && (bound == "Ord" || (!ordering && bound == "Eq")) {
+                if !world.own.traits.contains_key(bound) && (bound == "Ord" || (!ordering && (bound == "Eq" || bound == "Hash"))) {
                     allowed = true
                 }
             }

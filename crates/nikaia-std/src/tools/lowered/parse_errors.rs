@@ -54,7 +54,7 @@ pub(crate) fn last_line_of(c: &[scalar], to: i64) -> Option<String> {
         if end > 0 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::sub::<i64>(end, 1)) as usize) } == '\r' { end = unsafe { nikaia_std::proven::sub::<i64>(end, 1) }; }
     }
     let mut from = end;
-    while from > 0 && *nikaia_std::index::get(&c, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(from, 1) })) != '\n' { from = unsafe { nikaia_std::proven::sub::<i64>(from, 1) }; }
+    while from > 0 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::sub::<i64>(from, 1)) as usize) } != '\n' { from = unsafe { nikaia_std::proven::sub::<i64>(from, 1) }; }
     Some(slice(c, from, end))
 }
 

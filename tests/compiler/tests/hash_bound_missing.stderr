@@ -1,0 +1,25 @@
+error[NK1248]: `insert` needs `T: Hash`: `T` is a key of a `HashMap`.
+  --> tests/hash_bound_missing.nika:8:2
+   |
+ 8 | 	m.insert(x, 1)
+   |  ^^^^^^^^^^^^^^
+   |
+   = note: `T` can be any type the caller picks, and what a hash map or set keys by is hashed and compared, so it needs the bound that says how; `Eq` alone does not make a type hash.
+   = help: Write `[T: Hash]`.
+error[NK1248]: `insert` needs `T: Hash`: `T` is an element of a `HashSet`.
+   --> tests/hash_bound_missing.nika:14:2
+    |
+ 14 | 	s.insert(x)
+    |  ^^^^^^^^^^^
+    |
+    = note: `T` can be any type the caller picks, and what a hash map or set keys by is hashed and compared, so it needs the bound that says how; `Eq` alone does not make a type hash.
+    = help: Write `[T: Hash]`.
+error[NK1248]: `needs` needs `T: Hash`: its `T` is declared `[T: Hash]`.
+   --> tests/hash_bound_missing.nika:23:2
+    |
+ 23 | 	return needs(x)
+    |  ^^^^^^^^^^^^^^^
+    |
+    = note: `T` can be any type the caller picks, and `Eq` does not make it hash: a type with its own `impl Eq` may have no hash.
+    = help: Write `[T: Hash]`.
+3 type errors

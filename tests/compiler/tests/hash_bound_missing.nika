@@ -1,0 +1,28 @@
+// A type parameter in a hashed position needs `[T: Hash]` (ADR-010 D13,
+// #1562): a hash map key, a hash set element, and an argument to a
+// parameter bounded by `Hash`. `[T: Eq]` alone is `NK1248`.
+use std::collections
+
+fn keyed[T: Eq](x: T) -> i64 {
+	let mut m: collections::HashMap[T, i64] = collections::HashMap()
+	m.insert(x, 1)
+	return m.len()
+}
+
+fn held[T: Eq](x: T) -> i64 {
+	let mut s: collections::HashSet[T] = collections::HashSet()
+	s.insert(x)
+	return s.len()
+}
+
+fn needs[T: Hash](x: T) -> bool {
+	return true
+}
+
+fn handed[T: Eq](x: T) -> bool {
+	return needs(x)
+}
+
+fn main() throws {
+	println(f"{keyed(1)} {held(1)} {handed(1)}")
+}

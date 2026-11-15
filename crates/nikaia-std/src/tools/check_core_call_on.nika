@@ -251,7 +251,7 @@ fn check_core_call_on_comparable(state: ref CheckState, world: ref CheckWorld, o
             if args.len() == 0 && state.type_parameters.contains_key(name) {
                 let bounds: Vec[String] = state.type_parameters[name]?.clone() ?? []
                 for bound in bounds {
-                    if !world.own.traits.contains_key(bound) && (bound == "Ord" || (!wants_order && bound == "Eq")) {
+                    if !world.own.traits.contains_key(bound) && (bound == "Ord" || (!wants_order && (bound == "Eq" || bound == "Hash"))) {
                         return true
                     }
                 }
@@ -1762,9 +1762,9 @@ fn check_core_call_on_keyless(entry: ref String) -> bool {
     return entry == "len" || entry == "is_empty" || entry == "iter" || entry == "iter_mut" || entry == "keys" || entry == "values" || entry == "values_mut" || entry == "into_keys" || entry == "into_values" || entry == "clear" || entry == "drain" || entry == "retain" || entry == "clone" || entry == "capacity"
 }
 
-/// **`NK1248`: a type parameter as a hashed key with no bound that compares
-/// it** (Part II, beside `Hash`, #1559): a key is compared, so it needs
-/// `[T: Eq]` (or `Ord`) as `==` does.
+/// **`NK1248`: a type parameter as a hashed key without `[T: Hash]`**
+/// (ADR-010 D13, #1562): a key is hashed and compared, and `Eq` does not
+/// make a type hash, so neither `Eq` nor `Ord` answers it.
 fn check_core_call_on_hashed_key(mut state: CheckState, world: ref CheckWorld, on: ref Ty, entry: ref String, span: ref Span) sync {
     let (base, args) = match on.unseen() {
         Ty::Named { name, args, .. } => (type_last_segment(name), args.clone()),
@@ -1777,7 +1777,7 @@ fn check_core_call_on_hashed_key(mut state: CheckState, world: ref CheckWorld, o
         let bounds = state.type_parameters.get(name) ?? continue
         let mut allowed = false
         for bound in bounds {
-            if !world.own.traits.contains_key(bound) && (bound == "Eq" || bound == "Ord") {
+            if !world.own.traits.contains_key(bound) && bound == "Hash" {
                 allowed = true
             }
         }
@@ -1785,6 +1785,6 @@ fn check_core_call_on_hashed_key(mut state: CheckState, world: ref CheckWorld, o
             continue
         }
         let what = if base == "HashSet" { "an element of a `HashSet`" } else { "a key of a `HashMap`" }
-        state.findings.push(check_refusal("NK1248", span, f"`{entry}` needs `{name}: Eq`: `{name}` is {what}.", [f"`{name}` can be any type the caller picks, and a key is compared and hashed, so it needs a bound that says how."], f"Write `[{name}: Eq]`."))
+        state.findings.push(check_refusal("NK1248", span, f"`{entry}` needs `{name}: Hash`: `{name}` is {what}.", [f"`{name}` can be any type the caller picks, and what a hash map or set keys by is hashed and compared, so it needs the bound that says how; `Eq` alone does not make a type hash."], f"Write `[{name}: Hash]`."))
     }
 }

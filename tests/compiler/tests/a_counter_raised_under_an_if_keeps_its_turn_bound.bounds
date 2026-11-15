@@ -1,0 +1,12 @@
+bounds in tests/a_counter_raised_under_an_if_keeps_its_turn_bound.nika: 4 indexes, 4 proved; 5 operations, 4 proved
+    15  a[j]      proved
+    16  i + 1     proved
+    18  a[i]      proved
+    19  j + 1     proved
+    21  s - a[i]  checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+    21  a[i]      proved
+    31  i + 1     proved
+    32  j + 1     proved
+    34  a[i]      proved
+  derived  count: 0 <= lo, lo <= a.len(), lo < a.len(), lo <= hi, lo < hi, 0 <= hi, hi <= a.len(), hi < a.len(), proved at the calls on lines 39
+  derived  pair: 0 <= lo, lo <= a.len(), lo < a.len(), lo <= hi, lo < hi, 0 <= hi, hi <= a.len(), hi < a.len(), proved at the calls on lines 40

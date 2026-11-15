@@ -1,0 +1,44 @@
+/// A text's `s.len()` and `s.bytes.len()` count the same bytes (ADR-320
+/// D4), so the bounds walk names them as one length (#1556): a read
+/// through `s.bytes` guarded by `s.len()` is proved, as one guarded by
+/// `s.bytes.len()` is, and a guard on another text proves nothing.
+fn first_space(s: String) -> i64 sync {
+	let mut at = 0
+	while at < s.len() {
+		if s.bytes[at] == 32 {
+			return at
+		}
+		at += 1
+	}
+	return -1
+}
+
+fn first_space_by_bytes(s: String) -> i64 sync {
+	let mut at = 0
+	while at < s.bytes.len() {
+		if s.bytes[at] == 32 {
+			return at
+		}
+		at += 1
+	}
+	return -1
+}
+
+fn last_byte(s: String) -> i64 sync {
+	if s.bytes.len() > 0 {
+		return s.bytes[s.len() - 1] as i64
+	}
+	return -1
+}
+
+fn across(s: String, t: String) -> i64 sync {
+	if t.len() > 0 {
+		return s.bytes[0] as i64
+	}
+	return -1
+}
+
+fn main() throws {
+	let s = "ab cd"
+	println(f"{first_space(s)} {first_space_by_bytes(s)} {last_byte(s)} {across(s, s)}")
+}

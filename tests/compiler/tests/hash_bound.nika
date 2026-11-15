@@ -1,0 +1,30 @@
+// `Hash` is a standard bound (ADR-010 D13, #1562): `[T: Hash]` builds a hash
+// map over a `T` and gives the body `==`; the language answers it for a
+// number and for `String`.
+use std::collections
+
+fn count[T: Hash](mut xs: Vec[T]) -> collections::HashMap[T, i64] {
+	let mut m: collections::HashMap[T, i64] = collections::HashMap()
+	while true {
+		let x = xs.pop() ?? break
+		let n = m.get(x) ?? 0
+		m.insert(x, n + 1)
+	}
+	return m
+}
+
+fn same[T: Hash](a: T, b: T) -> bool {
+	return a == b
+}
+
+fn main() throws {
+	let m = count([1, 2, 2])
+	println(f"{m.len()} {m.get(2) ?? 0}")
+	let mut a = String()
+	a.push_str("x")
+	let mut b = String()
+	b.push_str("x")
+	let s = count([a, b])
+	println(f"{s.len()}")
+	println(f"{same(1, 1)} {same(1, 2)}")
+}

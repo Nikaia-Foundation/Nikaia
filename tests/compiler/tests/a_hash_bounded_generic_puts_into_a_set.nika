@@ -1,0 +1,24 @@
+// A type parameter bounded by `Hash` is a set's element: `put` inserts into a
+// set it is lent, for a number and for an owned `String` (#1559, ADR-010 D13).
+use std::collections
+
+fn put[T: Hash](mut s: ref collections::HashSet[T], x: T) {
+	s.insert(x)
+}
+
+fn word(w: String) -> String {
+	let mut s = String()
+	s.push_str(w)
+	return s
+}
+
+fn main() throws {
+	let mut n: collections::HashSet[i64] = collections::HashSet()
+	put(n, 3)
+	put(n, 3)
+	put(n, 4)
+	let mut t: collections::HashSet[String] = collections::HashSet()
+	put(t, word("a"))
+	put(t, word("a"))
+	println(f"{n.len()} {t.len()}")
+}

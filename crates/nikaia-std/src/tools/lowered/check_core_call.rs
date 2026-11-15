@@ -837,7 +837,20 @@ pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world
         if *parameter == walked && at < filled.len() as i64 && !(*unsafe { nikaia_std::proven::read(&filled, (at) as usize) }).is_unknown() { check_core_instantiate(state, world, &name, id_of(base) as i64, unsafe { nikaia_std::proven::read(&filled, (at) as usize) }, false); }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
-    Some(check_core_call_named_call(state, world, host, base, &name, args, config, span, true))
+    let got: Ty = check_core_call_named_call(state, world, host, base, &name, args, config, span, true);
+    if !pathed || !needed { return Some(got); }
+    let declared: Ty = match match signature.result.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return Some(got) };
+    let mut by_brackets: collections::BTreeMap<String, Ty> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
+    at = 0;
+    for parameter in parameters.iter() {
+        if at < filled.len() as i64 && !(*unsafe { nikaia_std::proven::read(&filled, (at) as usize) }).is_unknown() && !check_core_call_param_names(&signature, parameter) { by_brackets.insert(nikaia_std::block::Text::from(parameter.to_string()), (*unsafe { nikaia_std::proven::read(&filled, (at) as usize) }).clone()); }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+    }
+    if by_brackets.is_empty() { return Some(got); }
+    Some(substitute(&declared, &by_brackets))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

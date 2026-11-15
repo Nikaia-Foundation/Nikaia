@@ -1096,6 +1096,7 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
             if an_option && !state.facts.copied_bindings.contains(&(id_of(&arm.body) as i64, nikaia_std::block::Text::from(local.name.to_string()))) { state.narrowing.option_refs.insert(local.id); }
         }
     }
+    if state.flow.std_gets.contains(&(id_of(value) as i64)) && !typed.is_a_view() && !lent_parts { for local in frame.iter() { if state.takes_away(world, &local.ty) && !check_owned_text(&local.ty) && !state.facts.copied_bindings.contains(&(id_of(&arm.body) as i64, nikaia_std::block::Text::from(local.name.to_string()))) { state.narrowing.got_refs.insert(local.id); } } }
     let mut in_place: collections::BTreeSet<i64> = collections::BTreeSet::new();
     for local in frame.iter() {
         if !state.copied(world, &local.ty) {

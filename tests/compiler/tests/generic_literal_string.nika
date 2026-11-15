@@ -1,0 +1,25 @@
+// A literal handed to a generic parameter that another argument binds to
+// `String` is an owned `String` (ADR-282 D4, #1562).
+use std::channel
+
+fn forward[T](tx: channel::Sender[T], x: T) {
+	tx.send(x)
+}
+
+fn relay[T](tx: channel::Sender[T], x: T) {
+	forward(tx, x)
+}
+
+fn pick[T](_a: T, b: T) -> T {
+	return b
+}
+
+fn main() throws {
+	let (tx, rx) = channel::bounded[String](4)
+	relay(tx, "eight")
+	let got: String? = rx.recv()
+	println(got ?? "none")
+	let mut g = String()
+	g.push_str("one")
+	println(pick(g, "two"))
+}

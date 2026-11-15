@@ -327,13 +327,27 @@ pub fn emit_is_a_shape_bound(world: &EmitWorld<'_, '_, '_, '_>, bound: &str) -> 
     true
 }
 
+pub(crate) fn emit_is_the_hash_bound(world: &EmitWorld<'_, '_, '_, '_>, bound: &str) -> bool {
+    if bound != "Hash" { return false; }
+    for item in world.items.iter() {
+        match &item.node {
+            Item::Trait { name, .. } => {
+                let name = *name;
+                if escaped_name(world.words.resolve(name)) == bound { return false; }
+            },
+            _ => { },
+        }
+    }
+    true
+}
+
 pub fn emit_bounded(world: &EmitWorld<'_, '_, '_, '_>, param: &GenericParam) -> String {
     let name = escaped_name(world.words.resolve(param.name));
     let mut bounds: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for bound in param.bounds.iter() {
         let bound = *bound;
         let written = escaped_name(world.words.resolve(bound));
-        if !emit_is_a_shape_bound(world, &written) { bounds.push(written); }
+        if emit_is_the_hash_bound(world, &written) { bounds.push(String::from("::core::hash::Hash + Eq")); } else if !emit_is_a_shape_bound(world, &written) { bounds.push(written); }
     }
     if bounds.is_empty() { return name; }
     let joined = nikaia_std::block::Text::from(bounds.join(" + "));

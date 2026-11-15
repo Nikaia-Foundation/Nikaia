@@ -212,7 +212,7 @@ pub fn lsp_uri_path(uri: &str) -> Option<String> {
             }
         }
         decoded.push(b);
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     let bytes = Bytes(decoded);
     let path = match bytes.text() {
