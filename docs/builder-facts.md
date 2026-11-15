@@ -128,7 +128,7 @@ together with the specification section and an example test.
 * A change to the `check --asserts` header breaks `it` tests `assert::asserts_reports_every_claim` and `assume::asserts_lists_every_assume`, which match it exactly. (issue-1350)
 * A move probe needs a callee that keeps its argument (`all.push(x)` into a list declared outside the loop), or the checker lends the parameter and no move happens. (issue-1366)
 * Nikaia's `a..b` includes `b`; use `0..<n` for n turns. (issue-1366)
-* After an interrupted build, `cargo test --test it` can fail at link time with "undefined hidden symbol"; delete only `target/fast/deps/it-*` and `target/fast/incremental/it-*`, then rebuild. (issue-1366)
+* After an interrupted build, `cargo test --test it` can fail at link time with "undefined hidden symbol"; delete only `target/fast/deps/it-*` and `target/fast/incremental/it-*`, then rebuild. The same error linking `nikaia` itself: `cargo clean --profile fast -p nikaia-std -p nikaia` cured it (a 7.3 GiB rebuild); deleting only `target/fast/incremental/nikaia-*` and `nikaia_std-*` first is cheaper and untried. (issue-1366, #1671)
 * NK2105 for loops is decided in `hands_over_path_of` and `CheckRepeats` (`check_takes.nika`, `check_state.nika`); `revived` there also drives narrowing (ADR-382), so a new exemption needs its own set. (issue-1366)
 * `a..b` is inclusive in Nikaia (lowered `0..=b`); write `a..<b` in probes for a half-open slice. (issue-1276)
 * The prover (`prover_*.nika`) reads only the syntax tree; a checker fact reaches it only by adding a field to `ProveComptimes`, filled in `comptimes_of` (`prove.rs`, called from `check/host.rs`) and copied into `ProverState` by `prove_state`. (issue-1358)

@@ -85,6 +85,8 @@ it, like the checks in `docs/supervisor.md`.
   commit on its own, and names its test: a `.nika` with `.stdout` / `.stderr`
   in `tests/compiler/tests/` (or the package's tests), and the rows it must show
   (#1470: an issue that said `tests/compiler/` sent the builder to the wrong place).
+  Never a Rust test file or a `#[test]` (CLAUDE.md); a builder reads one an
+  older issue still names as that program, and does not report it (#1671).
   The order is the order to build in; an item resting on another says so.
   A change to a default or a lowering level names where that level is set
   (`sysroot::tools_build` for `lower-std`, not `Build::default`), the ADRs that
