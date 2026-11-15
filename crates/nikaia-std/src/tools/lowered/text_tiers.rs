@@ -2328,7 +2328,7 @@ pub(crate) fn lendable_parameter(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>
     let mut owner: Option<TextOwner> = None;
     let declared = &local.declared;
     if declared.is_some() {
-        let found = match declared { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let found = match declared.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         owner = Some(found.owner.clone());
     } else {
         let from = match local.from { Some(__nikaia_value) => __nikaia_value, None => return None };

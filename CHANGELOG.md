@@ -8,6 +8,19 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1379] — 2026-11-15
+
+**check: a name proved not null is still bound outside the loop around the proof (NK2105) (#1574)**
+- A name an `if` proved not `null` and then handed over inside a loop it was declared outside of is NK2105 now, through `??` or plainly, instead of a rustc error (NK1343).
+
+**fix: a build and lower-std say every refused file, not only the first (#1508)**
+- A build and `lower-std` say the refusals of every file of a package, not only the first refused file's: a `sync` caller's NK2202 no longer hides the callee's NK1171 it follows from.
+
+## [0.0.1378] — 2026-11-15
+
+**Re-record the stale ledgers of packages/yaml, packages/json, page-examples and crate-ledger, and guard the packages' with build --locked (#1604)**
+- Ledgers: re-recorded the stale books and contracts of packages/yaml, packages/json, tests/page-examples and examples/crate-ledger; a test now builds the packages and page-examples `--locked`, so a prover or inference change that leaves them stale fails the suite.
+
 ## [0.0.1377] — 2026-11-14
 
 **Compare an indexed element of text against a list of text by its text (#1603)**

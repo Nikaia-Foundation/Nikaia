@@ -923,12 +923,29 @@ fn lower_package(
     let results = in_parallel(&order, threads, lower_one);
     timer.lap("files");
 
+    // **Every refused file is said, in file order** (#1508): each was checked
+    // on its own, and a refusal in one may be what another's follows from (an
+    // `NK1171` in a callee makes it read as pausing, and a `sync` caller's
+    // `NK2202` in an earlier file was all `lower-std` said).
     let mut texts: Vec<String> = Vec::new();
+    let mut refused: Vec<String> = Vec::new();
     for ((path, _), (lowered, checking, emitting)) in paths.iter().zip(&parsed).zip(results) {
         timer.file(path, checking, emitting);
-        let (lowered, was_cached) = lowered?;
-        *reused += usize::from(was_cached);
-        texts.push(lowered);
+        match lowered {
+            Ok((lowered, was_cached)) => {
+                *reused += usize::from(was_cached);
+                texts.push(lowered);
+            }
+            Err(e) => refused.push(format!("{e}")),
+        }
+    }
+    match refused.len() {
+        0 => {}
+        1 => return Err(anyhow::anyhow!("{}", refused[0])),
+        _ => {
+            let each: Vec<&str> = refused.iter().map(|said| said.trim_end()).collect();
+            return Err(anyhow::anyhow!("{}", each.join("\n")));
+        }
     }
     let names: Vec<String> = paths
         .iter()

@@ -68,7 +68,7 @@ signature = "(mut r: Reader, word: String, path: String)"
 [fn."fail"]
 sync = "inferred"
 keeps = ["message", "path"]
-panics = true
+panics = false
 touches = []
 signature = "(r: Reader, message: String, path: String) -> Error"
 
@@ -137,6 +137,7 @@ signature = "(mut r: Reader, path: String) -> String"
 pub = true
 sync = "inferred"
 panics = true
+places = true
 touches = []
 views = ["v: borrowed"]
 signature = "(v: ref Value) -> String"
@@ -152,6 +153,7 @@ signature = "(mut r: Reader, path: String, depth: i64) -> Value"
 [fn."write_string"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
 views = ["s: borrowed"]
 signature = "(s: String, mut out: String)"
@@ -159,6 +161,7 @@ signature = "(s: String, mut out: String)"
 [fn."write_value"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
 views = ["v: borrowed"]
 signature = "(v: ref Value, mut out: String)"

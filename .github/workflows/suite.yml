@@ -57,15 +57,23 @@ jobs:
       - name: Install the toolchain the repository names
         run: rustup show
 
-      - name: Cache cargo registry and build
-        uses: actions/cache@v4
+      # **Nothing built twice, across runs either.** The build is
+      # incremental and its state is cached per commit: the next run restores
+      # the newest one and rustc recompiles only what changed (measured on 4
+      # cores: a whole test build 278 s, after a fresh checkout with a change
+      # in `std` 48-51 s). A cache keyed on `Cargo.lock` alone hit exactly
+      # and was never saved again, so our own crates were rebuilt every time.
+      - name: Restore the build of an earlier commit
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-stable-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-stable-
+          key: ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-incr-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-incr-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}-
+            ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-incr-
 
       # Every test binary and the directory cargo would run it in (its
       # package's), one per line: what the shards run. The tests are built
@@ -73,8 +81,11 @@ jobs:
       # integration tests start, so rustc compiles `std`'s test harness
       # beside its library instead of after the whole workspace.
       - name: Build the tests
+        env:
+          CARGO_INCREMENTAL: 1
         run: |
           set -o pipefail
+          mkdir -p target/release
           cargo test --workspace --release --no-run --message-format=json |
             jq -r 'select(.reason == "compiler-artifact" and .profile.test == true and .executable != null)
                    | "\(.executable)\t\(.manifest_path | sub("/Cargo.toml$"; ""))"' |
@@ -83,6 +94,8 @@ jobs:
 
       # What the test run did not need (the bench binaries): only links.
       - name: Build the rest of the workspace
+        env:
+          CARGO_INCREMENTAL: 1
         run: cargo build --workspace --release
 
       # The compiler, `std`'s rlibs (the tests hand emitted programs to rustc
@@ -98,6 +111,27 @@ jobs:
           path: ${{ runner.temp }}/release.tar.zst
           retention-days: 1
           compression-level: 0
+
+      # After the artifact, so the shards do not wait for it. Only the newest
+      # incremental session of each crate is kept; rustc would otherwise
+      # carry every earlier one along.
+      - name: Keep the newest incremental session
+        run: |
+          for d in target/release/incremental/*/; do
+            ls -dt "$d"s-*/ 2>/dev/null | tail -n +2 | while read -r old; do
+              rm -rf "$old" "${old%/}.lock"
+            done
+          done
+          du -sh target ~/.cargo/registry || true
+
+      - name: Save the build for the next commit
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ inputs.arch == 'arm64' && 'ARM64-' || '' }}cargo-incr-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
 
   # The `unsafe` crates' own tests on ARM, natively, beside the build (the
   # memory-model check; lints and Miri run on x86 in nikaia.yml).

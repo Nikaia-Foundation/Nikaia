@@ -1,0 +1,36 @@
+// #1522: a `let` without a type bound to a list of tuples of text literals,
+// handed whole to a `Vec[(String, String)]` position, takes that position's
+// type, as a lone literal does: no NK1102 for `Vec[(ref String, ref String)]`,
+// nor for a tuple mixing built text with a literal.
+struct Held {
+    xs: Vec[(String, String)],
+}
+
+fn show(xs: Vec[(String, String)]) throws {
+    for (a, b) in xs {
+        println(a + b)
+    }
+}
+
+fn pair(x: (String, String)) throws {
+    println(x.0 + x.1)
+}
+
+fn made() -> Vec[(String, String)] {
+    let pairs = [("e", "f")]
+    return pairs
+}
+
+fn main() throws {
+    let pairs = [("a", "b"), ("c", "d")]
+    show(pairs)
+    let dir = "x"
+    let more = [(dir + "/a", "b"), ("c", "d")]
+    show(more)
+    let field = [("g", "h")]
+    let h = Held { xs: field }
+    println(h.xs.len())
+    show(made())
+    let t = ("i", "j")
+    pair(t)
+}
