@@ -1,0 +1,41 @@
+// #1391 (ADR-361 D13): a `while` counter raised under an `if` keeps its
+// bound by the loop's turns past the `if`. `count`'s `a[i]` in the loop
+// and after it are proved: the turn's `i - i@ <= t` is `i - i@ <= t + 1`
+// past `if a[j] < 3 { i = i + 1 }`, which both branches hold. `pair`'s
+// `a[i]` after the loop is proved by the counter the condition compares
+// (`j <= hi`), though `i` also grows by one each turn.
+fn count(a: ref Vec[i64], lo: i64, hi: i64) -> i64 {
+    assert(0 <= lo)
+    assert(lo <= hi)
+    assert(hi < a.len())
+    let mut i = lo
+    let mut j = lo
+    let mut s = 0
+    while j < hi {
+        if a[j] < 3 {
+            i = i + 1
+        }
+        s = a[i]
+        j = j + 1
+    }
+    return s - a[i]
+}
+
+fn pair(a: ref Vec[i64], lo: i64, hi: i64) -> i64 {
+    assert(0 <= lo)
+    assert(lo <= hi)
+    assert(hi < a.len())
+    let mut i = lo
+    let mut j = lo
+    while j < hi {
+        i = i + 1
+        j = j + 1
+    }
+    return a[i]
+}
+
+fn main() throws {
+    let v: Vec[i64] = [5, 1, 9, 2, 4]
+    println(f"{count(v, 0, 4)}")
+    println(f"{pair(v, 1, 3)}")
+}

@@ -196,18 +196,18 @@ pub(crate) fn sysroot_package_raw_string(text: &str, at: i64) -> Option<i64> {
     let n = text.as_bytes().len() as i64;
     let mut i = at;
     if *nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(i)) == 98 { i = unsafe { nikaia_std::proven::add::<i64>(i, 1) }; }
-    if i >= n || *nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(i)) != 114 { return None; }
+    if i >= n || *unsafe { nikaia_std::proven::read(&text.as_bytes(), (i) as usize) } != 114 { return None; }
     i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     let mut close: String = String::from("\"");
-    while i < n && *nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(i)) == 35 {
+    while i < n && *unsafe { nikaia_std::proven::read(&text.as_bytes(), (i) as usize) } == 35 {
         close.push_str("#");
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
-    if i >= n || *nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(i)) != 34 { return None; }
+    if i >= n || *unsafe { nikaia_std::proven::read(&text.as_bytes(), (i) as usize) } != 34 { return None; }
     let width = close.as_bytes().len() as i64;
     let mut j = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     while j + width <= n {
-        if sysroot_package_at(text, j, &close) { return Some(j + width - 1); }
+        if sysroot_package_at(text, j, &close) { return Some(unsafe { nikaia_std::proven::sub::<i64>(nikaia_std::proven::add::<i64>(j, width), 1) }); }
         j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
     }
     None

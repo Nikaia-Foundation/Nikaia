@@ -1906,7 +1906,7 @@ pub(crate) fn check_core_view_lists_end(state: &mut CheckState, world: &CheckWor
                         later = last + 1;
                         while later < count {
                             let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
-                            names_in_statement(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(later)).node, world.words, &mut read);
+                            names_in_statement(&unsafe { nikaia_std::proven::read(&block.stmts, (later) as usize) }.node, world.words, &mut read);
                             for source in sources.iter() { if read.contains(source) { needed = true; } }
                             later = unsafe { nikaia_std::proven::add::<i64>(later, 1) };
                         }

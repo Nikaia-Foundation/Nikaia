@@ -5225,8 +5225,18 @@ fn bounding_while(
 	let mut turn_facts: Vec[i64] = []
 	let mut step: Vec[(String, i64, i64, i64?)] = []
 	let mut others: Vec[(String, i64, i64, i64?)] = []
+	// Of the counters that grow by exactly one, the one the condition
+	// compares counts the turns, so that it is bounded by the condition's
+	// end (#1391: `while j < hi { i = i + 1; j = j + 1 }`).
+	let compared = bounding_compared(cond, words)
+	let mut counter = String()
 	for (name, low, high, floor) in steps {
-		if step.is_empty() && low == 1 && high == 1 && floor == null {
+		if low == 1 && high == 1 && floor == null && (counter.is_empty() || name == compared) {
+			counter = name.clone()
+		}
+	}
+	for (name, low, high, floor) in steps {
+		if step.is_empty() && name == counter {
 			step.push((name.clone(), low, high, floor))
 		} else {
 			others.push((name.clone(), low, high, floor))
@@ -5275,6 +5285,19 @@ fn bounding_while(
 		for fact in turn_facts {
 			bounding_push(walk, facts, fact)
 		}
+	}
+}
+
+/// The name `while x < e` compares, or nothing.
+fn bounding_compared(cond: ref Expr, words: ref winnow_grammar::InternerContext) -> String {
+	match cond {
+		Expr::Binary { op, lhs, .. } => {
+			if op == BinaryOp::Lt {
+				return path_of(lhs, words) ?? ""
+			}
+			return ""
+		},
+		else => return "",
 	}
 }
 
@@ -7213,6 +7236,7 @@ fn bounding_if_leaves(
 		let mut changed = bounding_changed(then_branch, context, words)
 		bounding_extend_maybe(changed, else_branch, context, words)
 		bounding_after_change(walk, facts, changed)
+		bounding_if_join(walk, facts, changed, then_facts, else_facts, ask)
 	}
 	return false
 }
@@ -7525,6 +7549,61 @@ fn bounding_else(
 	bounding_assume_not(walk, else_facts, cond, context, program, words)
 	bounding_block(walk, block, else_facts, context, program, words, ask)
 	bounding_extend(changed, bounding_changed(block, context, words))
+}
+
+/// **What holds past an `if` both of whose branches go on, of what they
+/// changed** (#1391): a fact of one branch's end that reads a changed name
+/// holds past the `if` where the other branch's end holds it too, or
+/// proves it. So `if c { i = i + 1 }` keeps `i - i@ <= t + 1` of the
+/// turn's `i - i@ <= t`, where it was forgotten.
+fn bounding_if_join(
+	mut walk: BoundsWalk,
+	mut facts: BoundsFacts,
+	changed: ref BoundsChanged,
+	then_facts: ref BoundsFacts,
+	else_facts: ref BoundsFacts,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) {
+	if changed.values.is_empty() {
+		return
+	}
+	let mut kept: Vec[i64] = []
+	for fact in bounding_join_candidates(walk, facts, changed, then_facts) {
+		if else_facts.facts.contains(fact) || bounding_proves(walk, else_facts, fact, ask) {
+			kept.push(fact)
+		}
+	}
+	for fact in bounding_join_candidates(walk, facts, changed, else_facts) {
+		if !kept.contains(fact) && bounding_proves(walk, then_facts, fact, ask) {
+			kept.push(fact)
+		}
+	}
+	for fact in kept {
+		bounding_push(walk, facts, fact)
+	}
+}
+
+/// The facts of a branch's end that read a name the `if` changed and do
+/// not hold past it already.
+fn bounding_join_candidates(
+	walk: ref BoundsWalk,
+	facts: ref BoundsFacts,
+	changed: ref BoundsChanged,
+	branch: ref BoundsFacts,
+) -> Vec[i64] {
+	let mut out: Vec[i64] = []
+	for fact in branch.facts {
+		if facts.facts.contains(fact) || out.contains(fact) {
+			continue
+		}
+		for name in changed.values {
+			if bounding_touches(walk, fact, name) {
+				out.push(fact)
+				break
+			}
+		}
+	}
+	return out
 }
 
 /// A block inside an expression: walked with what holds here, and what it

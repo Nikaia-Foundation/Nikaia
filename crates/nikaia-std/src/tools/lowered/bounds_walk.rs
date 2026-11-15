@@ -2946,9 +2946,15 @@ pub(crate) fn bounding_while(walk: &mut BoundsWalk, cond: &Expr, body: &Block, c
     let mut turn_facts: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut step: Vec<(String, i64, i64, Option<i64>)> = vec![];
     let mut others: Vec<(String, i64, i64, Option<i64>)> = vec![];
+    let compared = bounding_compared(cond, words);
+    let mut counter = String::new();
     for (name, low, high, floor) in steps.iter() {
         let low = nikaia_std::num::value(low);let high = nikaia_std::num::value(high);let floor = *floor;
-        if step.is_empty() && low == 1 && high == 1 && floor.is_none() { step.push((nikaia_std::block::Text::from(name.to_string()), low, high, floor)); } else { others.push((nikaia_std::block::Text::from(name.to_string()), low, high, floor)); }
+        if low == 1 && high == 1 && floor.is_none() && (counter.is_empty() || *name == compared) { counter = nikaia_std::block::Text::from(name.to_string()); }
+    }
+    for (name, low, high, floor) in steps.iter() {
+        let low = nikaia_std::num::value(low);let high = nikaia_std::num::value(high);let floor = *floor;
+        if step.is_empty() && *name == counter { step.push((nikaia_std::block::Text::from(name.to_string()), low, high, floor)); } else { others.push((nikaia_std::block::Text::from(name.to_string()), low, high, floor)); }
     }
     let mut head_facts: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if !step.is_empty() {
@@ -2986,6 +2992,17 @@ pub(crate) fn bounding_while(walk: &mut BoundsWalk, cond: &Expr, body: &Block, c
             let fact = nikaia_std::num::value(fact);
             bounding_push(&walk, facts, fact);
         }
+    }
+}
+
+pub(crate) fn bounding_compared(cond: &Expr, words: &winnow_grammar::InternerContext) -> String {
+    match cond {
+        Expr::Binary { op, lhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs);
+            if *op == BinaryOp::Lt { return nikaia_std::index::or(path_of(lhs, words), || "".into()); }
+            return String::from("");
+        },
+        _ => return String::from(""),
     }
 }
 
@@ -4132,6 +4149,7 @@ pub(crate) fn bounding_if_leaves(walk: &mut BoundsWalk, cond: &Expr, then_branch
         let mut changed = bounding_changed(then_branch, context, words);
         bounding_extend_maybe(&mut changed, else_branch, context, words);
         bounding_after_change(walk, facts, &changed);
+        bounding_if_join(walk, facts, &changed, &then_facts, &else_facts, &ask);
     }
     false
 }
@@ -4255,6 +4273,32 @@ pub(crate) fn bounding_else(walk: &mut BoundsWalk, else_branch: Option<&Block>, 
     bounding_assume_not(walk, &mut else_facts, cond, context, program, words);
     bounding_block(walk, block, &mut else_facts, context, program, words, &ask);
     bounding_extend(changed, &bounding_changed(block, context, words));
+}
+
+pub(crate) fn bounding_if_join(walk: &mut BoundsWalk, facts: &mut BoundsFacts, changed: &BoundsChanged, then_facts: &BoundsFacts, else_facts: &BoundsFacts, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+    if changed.values.is_empty() { return; }
+    let mut kept: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for fact in bounding_join_candidates(&walk, &facts, changed, then_facts) { if else_facts.facts.contains(&fact) || bounding_proves(&walk, else_facts, fact, ask) { kept.push(fact); } }
+    for fact in bounding_join_candidates(&walk, &facts, changed, else_facts) { if !kept.contains(&fact) && bounding_proves(&walk, then_facts, fact, ask) { kept.push(fact); } }
+    for fact in kept.iter() {
+        let fact = nikaia_std::num::value(fact);
+        bounding_push(&walk, facts, fact);
+    }
+}
+
+pub(crate) fn bounding_join_candidates(walk: &BoundsWalk, facts: &BoundsFacts, changed: &BoundsChanged, branch: &BoundsFacts) -> Vec<i64> {
+    let mut out: Vec<i64> = vec![];
+    for fact in branch.facts.iter() {
+        let fact = nikaia_std::num::value(fact);
+        if facts.facts.contains(&fact) || out.contains(&fact) { continue; }
+        for name in changed.values.iter() {
+            if bounding_touches(walk, fact, name) {
+                out.push(fact);
+                break;
+            }
+        }
+    }
+    out
 }
 
 pub(crate) fn bounding_inner_block(walk: &mut BoundsWalk, block: &Block, facts: &mut BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &dyn Fn(&TermArena, &[i64], i64) -> bool) {
