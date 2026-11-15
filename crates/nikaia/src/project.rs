@@ -3545,6 +3545,16 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         })
     }
 
+    fn entry_without_main(&self) -> Option<String> {
+        let source = std::fs::read_to_string(self.project.entry()).ok()?;
+        let parsed = crate::parser::parse_unrefined(&source).ok()?;
+        let has_main = parsed.program.items.iter().any(|item| {
+            matches!(&item.node, crate::ast::Item::Fn { name: Some(name), .. }
+                if parsed.text(*name) == "main")
+        });
+        (!has_main).then(|| String::from(source))
+    }
+
     fn allowlist(&self) -> HostResult<Option<PathBuf>> {
         let Some(list) = self.allowlist else {
             return Ok(None);

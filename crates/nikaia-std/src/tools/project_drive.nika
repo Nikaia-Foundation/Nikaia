@@ -112,6 +112,10 @@ pub trait ProjectDriveHost {
     fn root_tag(ref self) -> String sync
     /// The entry and the name it is shown as, where a loose file was given.
     fn shown_as(ref self) -> (String, String)? sync
+    /// The entry's text where it declares no `fn main` (Part III 13.3);
+    /// null where it does, or where it cannot be read or parsed, which the
+    /// lowering then reports.
+    fn entry_without_main(ref self) -> String? sync
     /// The allowlist this build reads under, absolute; null where none.
     fn allowlist(ref self) -> fs::Path? sync throws
     /// The `--cpu` flags for `rustc`, null where none.
@@ -224,6 +228,16 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
         let meta = fs::metadata(entry, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Refused(not_there) }
         if !meta.is_file() {
             throw ProjectDriveRefusal::Refused(not_there)
+        }
+    }
+    // **A program has a `fn main`** (Part III 13.3, `NK1351`): refused here,
+    // before anything is lowered, rather than by `rustc` as an internal
+    // error. A library artifact and a test build have no `main` of their own.
+    let program = !rust_library && !host.is_library() && !host.tests_build()
+    if program && (subcommand == "build" || subcommand == "run") {
+        match host.entry_without_main() {
+            null => {},
+            source => return (project_drive_no_main(host, entry, source), null),
         }
     }
 
@@ -871,6 +885,20 @@ fn project_drive_written(path: ref fs::Path, text: ref String) throws {
     if was != text {
         fs::write(path, fs::Root::Anywhere, text) catch { throw ProjectDriveRefusal::Failed(f"writing {path.display()}: {error}") }
     }
+}
+
+/// **A program without `fn main`** (`NK1351`, Part III 13.3), shown at the
+/// start of the entry under the name it was given as; the exit code.
+fn project_drive_no_main[H: ProjectDriveHost](host: ref H, entry: ref fs::Path, source: ref String) -> i32 sync {
+    let path = match host.shown_as() {
+        null => entry.display(),
+        (_, written) => written,
+    }
+    let message = f"A program starts at its `fn main`, and `{path}` declares none."
+    let help: String = "Add `fn main()` to it, or, for a package that is built as a library, name the library under `[build]`: `artifact = \"rust-library\"` or `artifact = \"c-library\"`."
+    let shown = Shown { warning: false, code: "NK1351", message: message, notes: [], help: help, span: Span { start: 0, end: 0 }, labels: [] }
+    host.eprint(rendered(shown, path, source))
+    return 1
 }
 
 /// **A refusal of `[features]`** (`NK1344`-`NK1347`) shown on its entry in
