@@ -1,7 +1,9 @@
 // scripts/drive.nika --wip-after and --found-issue (owner, 2026-11-06): what
 // a run's end does to its issue's `wip` label by the report's Result and
 // Fixes (keep, block, remove), and the title, labels and body of an issue the
-// driver files from a report's `Found:`.
+// driver files from a report's `Found:`; --improve-issue (owner, 2026-11-15):
+// the issue it files for the improvement lane from a report's `Issue:`,
+// `Deviation:`, `Needs:` and `Friction:`, and `none` for a clean report.
 use std::fs
 use std::process
 
@@ -38,4 +40,11 @@ fn main() throws {
     drive(repo.clone(), nikaia.clone(), ["--wip-after", "", "", "1267"])
     drive(repo.clone(), nikaia.clone(), ["--found-issue", "issue-1267", "1267", "a Bytes field filled from a[1..] fails at rustc (Into &[u8] -> Bytes), not covered by the issue", "none"])
     drive(repo.clone(), nikaia.clone(), ["--found-issue", "v45-x", "", "a short gap", "supervisor decision"])
+    let bad = process::run("mktemp", []).stdout.trim().clone()
+    fs::write(bad.clone(), fs::Root::Anywhere, "Result: done\nIssue: wrong I8: item 3 was built already\nDeviation: none\nNeeds: none\nFriction: pre-push red on a badge that was not mine\n")
+    drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1624", "1624", bad.clone()])
+    let good = process::run("mktemp", []).stdout.trim().clone()
+    fs::write(good.clone(), fs::Root::Anywhere, "Result: done\nIssue: complete\nDeviation: none\nNeeds: none\nFriction: none\n")
+    drive(repo, nikaia, ["--improve-issue", "issue-1625", "1625", good.clone()])
+    process::run("rm", ["-f", bad, good])
 }

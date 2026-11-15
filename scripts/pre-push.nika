@@ -9,6 +9,12 @@
 // line per check, `<check> green` or `<check> red` with its output, and exits 1
 // when one is red (`index` red: the copy could not be written).
 //
+// The badges are the driver's (owner, 2026-11-15): it regenerates and checks
+// them before each suite and push, so a builder's commit never touches them.
+// Without arguments a red badge prints `badges stale (the driver's)` and does
+// not fail; `nikaia run scripts/pre-push.nika -- push` (the session that
+// pushes) makes it fail like the others.
+//
 // All four run on a copy of the index (`git checkout-index` into
 // target/pre-push-*), not on the working tree: the shared tree holds other
 // agents' unfinished files, and the self-hosted badge counted them, so the
@@ -17,6 +23,7 @@
 // `bump.py check` runs there too: it read the working tree, so another agent's
 // unstaged `.nika` move turned `version` red for every committer (#1187).
 
+use std::cli
 use std::process
 
 fn check(name: String, cmd: String, args: Vec[String], dir: String) -> bool throws {
@@ -38,7 +45,15 @@ fn main() throws {
     if ok {
         ok = check("fmt", "cargo", ["fmt", "--all", "--", "--check"], copy.clone())
         ok = check("adr-refs", "python3", ["scripts/check-adr-refs.py"], copy.clone()) && ok
-        ok = check("badges", "python3", ["scripts/badges.py", "--check"], copy.clone()) && ok
+        let mut strict = false
+        for a in cli::args() { if a == "push" { strict = true } }
+        if strict {
+            ok = check("badges", "python3", ["scripts/badges.py", "--check"], copy.clone()) && ok
+        } else if process::run("python3", ["scripts/badges.py", "--check"]; dir: copy.clone()).code == 0 {
+            println("badges green")
+        } else {
+            println("badges stale (the driver's)")
+        }
         ok = check("version", "python3", ["scripts/bump.py", "check"], copy.clone()) && ok
     }
     process::run("rm", ["-rf", copy])

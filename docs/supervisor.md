@@ -132,7 +132,10 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
 * **Builders commit, the driver tests and pushes** (owner, 2026-10-31). A
   builder or QA agent started by `scripts/drive.nika` commits locally after
   cheap checks (build, touched tests, fmt, clippy, `scripts/pre-push.nika`) and
-  never pushes. The driver runs the complete suite once per batch: when the
+  never pushes. The badges are the driver's (owner, 2026-11-15): before each
+  suite it regenerates them on HEAD and checks them with `badges.py --check`,
+  up to three times; `pre-push.nika` only shows them, and fails on them only
+  as `pre-push.nika -- push`, for a session that pushes by hand. The driver runs the complete suite once per batch: when the
   batch ends it starts it on HEAD in the background, the next builders go on meanwhile (owner, 2026-11-06), and it handles the result once the suite has finished (one at a time per
   checkout, on CI: the tested commit pushed to `ci/<lane>` runs the whole
   workflow, `drive.nika --ci-wait` follows it with `gh api`); green, it pushes the
@@ -456,6 +459,16 @@ own driver run:
 * **Bug lane, `docs/briefs/bugs/`**: `ready` defects (kind 3 of `CLAUDE.md`,
   *A missing form stops the work*). A brief with a `Blocks:` line goes before
   the lane's own picks. Its own `NK` block, no version raise (`--no-bump`).
+* **Improvement lane, `docs/briefs/improve/`** (owner, 2026-11-15): the
+  issues labelled `improve`, which the driver files from the reports'
+  `Issue:`, `Deviation:`, `Needs:` and `Friction:` (*The report*). The lane
+  judges each: a general fix (a rule in `docs/`, a script, the driver, a
+  brief template, a check that turns builders red for nothing) it builds; noise
+  (one run's slip, already fixed, a wish against an ADR) it closes with a
+  one-line reason. An issue that is a compiler defect it relabels `bugs`.
+* **At least one active session runs the improvement lane and at least one the
+  bug lane** (owner, 2026-11-15). A session that starts while neither runs takes
+  one of them first.
 * **Other lanes** claim their issues with `wip` (the `yaml` lane,
   `docs/briefs/yaml/`, #928). An issue labelled `wip` is another lane's.
 
@@ -641,6 +654,7 @@ The builder writes exactly `<full brief path>.report.md`, these fields only:
     Needs: none | <NK code, supervisor decision, owner decision>
     Changelog: none | <one sentence for the version heading>
     Owner: none | <one question for the owner, never a role>   (batch.nika: `OWNER <brief>: <text>`; cycle.nika writes the first to DIR/QUESTION, a second while it exists prints `OWNER second: ...`)
+    Friction: none | <one sentence: what cost turns or tokens needlessly (a tool, a rule, noise such as a red check that was not the run's)>
     Cache: none | <large entries newly created, MB>
     Disk freed: <GB>
     Measure: <builds=.. clippy_with_tests=.. ...>   (never under Found)
@@ -652,8 +666,13 @@ is one line: `done <sha>, report <path>`, `BLOCKED: <reason>, report <path>`
 or `PUSH REJECTED <sha>, report <path>`, plus `NEEDS: <short>` when `Needs`
 is not `none`.
 
-The supervisor reads the reports' fields before the next batch. It files or updates issues
-from `Found`, comments on or reopens an issue a `Deviation` leaves open, lists
+The driver files issues from the report itself (owner, 2026-11-15): each
+`Found:` as an issue labelled `bugs` for the bug lane, and, once per report, an
+`Issue:` that is not `complete`, a `Deviation:`, `Needs:` or `Friction:` other
+than `none` as one issue labelled `improve` for the improvement lane (*Lanes*).
+Nobody has to ask a builder what went badly. The supervisor reads the reports'
+fields before the next batch, writes the `Supervisor:` line, comments on or
+reopens an issue a `Deviation` leaves open, lists
 what the change decided for the supervisor's version heading, and picks the
 next batch.
 
