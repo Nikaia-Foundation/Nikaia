@@ -113,7 +113,7 @@ They are deliberately different shapes.
 
 **One grammar that was here is not any more, and where it went is the point.**
 `rust-signatures.nika` read a Rust file's public surface, and in 0.0.157 it moved to
-`crates/nikaia-std/src/tools/rust.nika` - the reading half of `nikaia describe`
+`crates/nikaia-std/src/compiler/rust.nika` - the reading half of `nikaia describe`
 ([ADR-290](../docs/specification/adr/adr-290.md) D13), lowered ahead of time and reached by the
 compiler as an ordinary Rust module ([ADR-290](../docs/specification/adr/adr-290.md) D16). It is
 not an example any more because it is a tool, and a copy of it here would be a second grammar to

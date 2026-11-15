@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_compare.nika
+// crates/nikaia-std/src/compiler/check_compare.nika
 //
 // **Whether two values of a type may be compared** (ADR-204 D1, ADR-341):
 // `==`, `Eq` and `Ord`, asked of the language's own types, of a declared type

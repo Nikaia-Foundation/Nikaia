@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_kinds.nika
+// crates/nikaia-std/src/compiler/emit_kinds.nika
 //
 // **The small kinds the emitter passes around**, declared in Nikaia
 // (ADR-294, #125, #558, step E6) so that the code that uses them can move:

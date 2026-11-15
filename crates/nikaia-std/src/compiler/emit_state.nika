@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_state.nika
+// crates/nikaia-std/src/compiler/emit_state.nika
 //
 // **What the emitter knows and keeps while it writes** (ADR-294, #125, #558,
 // the coordinator's design): three structs, apart so that none of them holds a

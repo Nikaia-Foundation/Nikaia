@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_doors.nika
+// crates/nikaia-std/src/compiler/check_doors.nika
 //
 // **Refusals about a lock held, a read that waits and a name shared by cores**
 // (ADR-005 §1 Group B, `NK22xx`, `NK2107`), moved from the compiler's checker

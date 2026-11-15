@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sv_fast.nika
+// crates/nikaia-std/src/compiler/sv_fast.nika
 //
 // **The fast paths** (ADR-270 D12, #1283 item 4): a query with no Boolean
 // choice - every clause one literal of a theory atom - is decided before the

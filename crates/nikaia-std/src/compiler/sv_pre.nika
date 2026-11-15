@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sv_pre.nika
+// crates/nikaia-std/src/compiler/sv_pre.nika
 //
 // **Preprocessing** (ADR-270 D12, #1283 item 5), run once before the CDCL
 // loop over what holds at level zero, every rewrite a step of the log:

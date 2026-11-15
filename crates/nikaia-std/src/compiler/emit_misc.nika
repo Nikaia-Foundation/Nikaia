@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_misc.nika
+// crates/nikaia-std/src/compiler/emit_misc.nika
 //
 // **Small questions the emitter asks of the contracts and the checker's
 // facts**, moved from `emit/mod.rs` (ADR-294, #125, #558, step E4): whether a

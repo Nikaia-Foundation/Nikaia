@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/project_features.nika
+// crates/nikaia-std/src/compiler/project_features.nika
 //
 // **The features of a rust-library** (ADR-393 D2-D3, D6, #1393): the roots of
 // `[features]` resolved against the package's lowered items, what each root

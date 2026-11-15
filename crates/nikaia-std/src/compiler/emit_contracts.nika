@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_contracts.nika
+// crates/nikaia-std/src/compiler/emit_contracts.nika
 //
 // **What the emitter works out before it writes a line** (ADR-294, #125, M7),
 // moved from `Emitter::with_contracts` in `emit/mod.rs`: the check's facts,

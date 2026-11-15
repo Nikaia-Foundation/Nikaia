@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_core_call_on.nika
+// crates/nikaia-std/src/compiler/check_core_call_on.nika
 //
 // **A method call once its receiver's type is known** (ADR-294, #125, #558,
 // C-6, U-c5): `call_on`, which `x.m(…)` and `x?.m(…)` share, and

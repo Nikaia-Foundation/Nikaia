@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_arm_leaves.nika
+// crates/nikaia-std/src/compiler/check_arm_leaves.nika
 //
 // **The leaves of a choice and the types its arms came to** (#562, #596),
 // moved from the compiler's checker (ADR-294, #125, #558, C-5g).

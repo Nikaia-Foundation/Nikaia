@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/contract_changes.nika
+// crates/nikaia-std/src/compiler/contract_changes.nika
 //
 // **A contract that changed in the breaking direction** (ADR-269 D19,
 // `NK1208`), moved from the compiler's `prove` (ADR-294, #436 step 2): a

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_sums.nika
+// crates/nikaia-std/src/compiler/emit_sums.nika
 //
 // **The errors a function can fail with, as the emitter names them**, moved
 // from `emit/mod.rs` (ADR-294, #125, #558, step E4): which error names the

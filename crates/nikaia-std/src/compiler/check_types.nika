@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_types.nika
+// crates/nikaia-std/src/compiler/check_types.nika
 //
 // **What the checker asks of one type by itself** - whether handing it out
 // takes it away or copies it, what a view of it is and what a view is of, what

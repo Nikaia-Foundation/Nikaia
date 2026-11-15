@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/logic_search.nika
+// crates/nikaia-std/src/compiler/logic_search.nika
 //
 // **The search, and the checker that trusts nothing of it** (ADR-270 D5):
 // `logic_lia.nika`'s bounds, searched with a split on demand, and a

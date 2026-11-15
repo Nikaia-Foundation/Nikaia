@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_names.nika
+// crates/nikaia-std/src/compiler/check_names.nika
 //
 // **Refusals about a name and the words around it** - a reserved word used
 // as a name, a module used without its line, a bit operator on something that

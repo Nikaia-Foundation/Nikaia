@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/calls.nika
+// crates/nikaia-std/src/compiler/calls.nika
 //
 // **What a call resolves to, by one rule for every analysis** - the compiler's
 // `contracts::sync::reached`, moved from Rust (ADR-294, #125). `sync`,

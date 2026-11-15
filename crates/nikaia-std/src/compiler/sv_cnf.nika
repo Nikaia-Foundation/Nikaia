@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sv_cnf.nika
+// crates/nikaia-std/src/compiler/sv_cnf.nika
 //
 // **Tseitin input** (ADR-270 D12, #1283 item 2): the Boolean structure of a
 // `TermArena` query - its facts hold, its goal does not - put into clauses

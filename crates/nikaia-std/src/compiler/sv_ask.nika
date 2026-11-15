@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sv_ask.nika
+// crates/nikaia-std/src/compiler/sv_ask.nika
 //
 // **The compiler's questions to the solvers** (ADR-270 D8, #1285 item 2):
 // every question the prover and the bounds walk ask (`proofs_search`) comes

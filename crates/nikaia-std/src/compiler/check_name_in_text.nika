@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_name_in_text.nika
+// crates/nikaia-std/src/compiler/check_name_in_text.nika
 //
 // **A file's name in an `f"…"` used as text** (`NK1201`, ADR-319 D4), and the
 // question of whether a path was made from text, moved from the compiler's

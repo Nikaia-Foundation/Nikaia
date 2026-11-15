@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/grammar_decode.nika
+// crates/nikaia-std/src/compiler/grammar_decode.nika
 //
 // **A grammar run at build time, the text on both sides of the sub-program**
 // (issue #178, ADR-311 D1): the fixed Rust the sub-program is made of - the

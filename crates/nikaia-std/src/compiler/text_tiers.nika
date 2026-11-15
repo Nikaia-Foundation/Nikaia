@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/text_tiers.nika
+// crates/nikaia-std/src/compiler/text_tiers.nika
 //
 // **What a declared `String` is below, decided by what flows into it**
 // (ADR-282) - the walk the compiler's `text_tiers` runs over a whole program

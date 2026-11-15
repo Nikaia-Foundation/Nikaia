@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/build_values.nika
+// crates/nikaia-std/src/compiler/build_values.nika
 //
 // **What a build-time expression comes to** (ADR-287) - a number, a truth
 // value, text, a list, a pair, a variant or a struct of the program's own -

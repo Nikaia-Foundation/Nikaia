@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_core_leaves.nika
+// crates/nikaia-std/src/compiler/check_core_leaves.nika
 //
 // **The leaves of the checker's core** (ADR-294, #125, #558, C-6, U-c1):
 // `a_field_of_a_borrowed_subject`, `a_field_of_a_lent_place_handed_back`,

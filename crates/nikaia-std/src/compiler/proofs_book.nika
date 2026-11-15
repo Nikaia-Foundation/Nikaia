@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/proofs_book.nika
+// crates/nikaia-std/src/compiler/proofs_book.nika
 //
 // **`nikaia.proofs`, the file** (ADR-270 D4, D19-D21, #448): the text a book of
 // the prover's answers is written as and read back from - one line per key a

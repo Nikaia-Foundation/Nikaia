@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_lambdas.nika
+// crates/nikaia-std/src/compiler/check_lambdas.nika
 //
 // **What a lambda that is kept captures** (ADR-230 D4, ADR-312 D5, ADR-328 D7,
 // Part I 8.3), moved from the compiler's checker (ADR-294, #125, #558, C-5c): the

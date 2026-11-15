@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_claims.nika
+// crates/nikaia-std/src/compiler/check_claims.nika
 //
 // **The refusals of claims the checker kept** (ADR-294, #125, C-7 rest,
 // C7-r1): an `assert` or a precondition not proved (`NK1300`, ADR-380 D1) and

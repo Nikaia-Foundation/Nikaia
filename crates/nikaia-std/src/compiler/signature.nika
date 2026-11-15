@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/signature.nika
+// crates/nikaia-std/src/compiler/signature.nika
 //
 // **A Rust signature in the ledger's words** (ADR-290 D3, D4; ADR-290 D9): one
 // type at a time, whether a value of it is kept, what a `Result` throws, and

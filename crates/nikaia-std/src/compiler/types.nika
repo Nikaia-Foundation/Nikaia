@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/types.nika
+// crates/nikaia-std/src/compiler/types.nika
 //
 // Part I 2.2 and Part III C.1: **a type nothing declares is refused here
 // rather than lowered** (ADR-096), and the names a file declares are declared

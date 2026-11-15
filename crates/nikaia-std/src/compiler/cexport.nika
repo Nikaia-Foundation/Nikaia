@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/cexport.nika
+// crates/nikaia-std/src/compiler/cexport.nika
 //
 // **A package as a library C calls** (ADR-284): the wrapper the language below
 // needs around each entry point, and the header a C program includes, both from

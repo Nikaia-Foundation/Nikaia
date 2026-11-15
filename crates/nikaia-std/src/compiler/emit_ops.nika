@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_ops.nika
+// crates/nikaia-std/src/compiler/emit_ops.nika
 //
 // **The small questions the emitter asks of a tree and of an operator**,
 // moved from `emit/mod.rs` (ADR-294, #125, #558): Rust's binding strength and

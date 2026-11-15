@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_imports.nika
+// crates/nikaia-std/src/compiler/check_imports.nika
 //
 // **What a `use` may name, and what a grammar or a `sync(f)` may mention** -
 // the refusals about names the program writes at its top level, moved from the

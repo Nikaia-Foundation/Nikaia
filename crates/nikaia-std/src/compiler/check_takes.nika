@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_takes.nika
+// crates/nikaia-std/src/compiler/check_takes.nika
 //
 // **What was taken, what was read after, and what a loop or a lambda takes
 // again** (ADR-293, ADR-094 D7; `NK2101`, `NK2105`, `NK2108`, `NK2702`), moved

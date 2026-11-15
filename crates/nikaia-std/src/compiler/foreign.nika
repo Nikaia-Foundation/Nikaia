@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/foreign.nika
+// crates/nikaia-std/src/compiler/foreign.nika
 //
 // **Every qualified name a unit writes, and every call it makes by name**
 // (ADR-290 D1, D2; ADR-010 D7, ADR-108 D4), for the compiler's

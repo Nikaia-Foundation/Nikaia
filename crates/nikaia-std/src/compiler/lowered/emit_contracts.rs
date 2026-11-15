@@ -65,23 +65,23 @@ pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, pa
     let fold_callees = emit_holes_fold_callees(parsed, words, &tables.grammars);
     let keep_plans: collections::BTreeMap<String, BufferPlan> = nikaia_std::index::or(checked_plans, || host.buffer_plans(&own_contracts).into()).into_iter().map(|plan| { (nikaia_std::block::Text::from(plan.key.to_string()), plan) }).collect();
     let proven_indices: collections::BTreeSet<i64> = propagation.list_indices.iter().copied().filter(|&node| { build.bounds_removed && proven.indices.contains(&node) }).collect();
-    let proven_arithmetic: collections::BTreeMap<i64, String> = propagation.arithmetic.iter().chain(propagation.shifts.iter()).filter(|&__nikaia_tuple8596| {
-        let (at, _) = __nikaia_tuple8596; let at = nikaia_std::num::value(at);
+    let proven_arithmetic: collections::BTreeMap<i64, String> = propagation.arithmetic.iter().chain(propagation.shifts.iter()).filter(|&__nikaia_tuple8599| {
+        let (at, _) = __nikaia_tuple8599; let at = nikaia_std::num::value(at);
         build.overflow_removed && proven.arithmetic.contains(&at)
-    }).map(|__nikaia_tuple8674| {
-        let (at, ty) = __nikaia_tuple8674; let at = nikaia_std::num::value(at);
+    }).map(|__nikaia_tuple8677| {
+        let (at, ty) = __nikaia_tuple8677; let at = nikaia_std::num::value(at);
         (at, nikaia_std::block::Text::from(ty.to_string()))
     }).collect();
-    let proven_negations: collections::BTreeMap<i64, String> = propagation.negations.iter().filter(|&__nikaia_tuple8818| {
-        let (at, _) = __nikaia_tuple8818; let at = nikaia_std::num::value(at);
+    let proven_negations: collections::BTreeMap<i64, String> = propagation.negations.iter().filter(|&__nikaia_tuple8821| {
+        let (at, _) = __nikaia_tuple8821; let at = nikaia_std::num::value(at);
         build.overflow_removed && proven.negations.contains(&at)
-    }).map(|__nikaia_tuple8895| {
-        let (at, ty) = __nikaia_tuple8895; let at = nikaia_std::num::value(at);
+    }).map(|__nikaia_tuple8898| {
+        let (at, ty) = __nikaia_tuple8898; let at = nikaia_std::num::value(at);
         (at, nikaia_std::block::Text::from(ty.to_string()))
     }).collect();
     let believed_arithmetic: collections::BTreeMap<i64, String> = if unchecked { propagation.arithmetic.copy_owned() } else { collections::BTreeMap::new() };
-    let mut state = EmitState { described: described.clone(), view_slots: emit_tables_read_view_slots(&own_contracts).into_iter().filter(|__nikaia_tuple9648| {
-        let (name, _) = __nikaia_tuple9648;
+    let mut state = EmitState { described: described.clone(), view_slots: emit_tables_read_view_slots(&own_contracts).into_iter().filter(|__nikaia_tuple9651| {
+        let (name, _) = __nikaia_tuple9651;
         name.contains("::")
     }).chain(units.iter().flat_map(|unit| { emit_tables_view_slots(unit.words, unit.items, &package_wide) })).chain(emit_tables_read_view_slots(described).into_iter()).collect(), borrowing: emit_tables_borrowing_structs_beside(words, items, &package_wide).iter().map(|s| { nikaia_std::block::Text::from(words.resolve(*s).to_string()) }).chain(package_wide.iter().cloned()).collect(), tethered: emit_tables_tethered(&own_contracts, beside), declared_errors: emit_tables_declared_errors(units), carries_input: host.carries_input(&own_contracts), fold_callees, by_name: tables.by_name, grammars: tables.grammars, methods: tables.methods, keep_plans, structs: tables.structs, structs_beside: emit_tables_structs_beside(beside), template_holes: collections::BTreeMap::new(), template_errors: collections::BTreeMap::new(), hole_wraps: host.hole_wraps(), kept_calls: collections::BTreeMap::new(), uses_std: tables.uses_std, is_std: false, package_grammar: units.iter().any(|unit| { unit.items.iter().any(|item| { matches!(item.node, Item::Grammar(_)) }) }), crate_root: nikaia_std::block::Text::from(build.crate_root.to_string()), offered_to_rust: build.offered_to_rust, fails: tables.fails, trusted_input: build.trusted, unchecked_assumes: unchecked, believed_arithmetic, escaped_holes: escapes.holes, escaped_wholes: escapes.wholes, trusted_lets: plan.lets, escaped_lets: plan.escaped, fast_slots: plan.slots, seeded_calls: host.seeded_calls(), seeds: host.seeds(), proven_indices, proven_arithmetic, proven_negations, proven_calls: proven.calls, facts: propagation, cleaned_types: nikaia_std::index::or(match own_contracts.implementations.get("Cleanup") {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),

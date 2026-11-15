@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/paths.nika
+// crates/nikaia-std/src/compiler/paths.nika
 //
 // **How `nikaia describe` spells a Rust crate's names** (ADR-290 D14, ADR-290
 // D4): the module a file is, a path joined from its parts, and what one

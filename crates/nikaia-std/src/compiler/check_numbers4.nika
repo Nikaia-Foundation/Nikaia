@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_numbers4.nika
+// crates/nikaia-std/src/compiler/check_numbers4.nika
 //
 // **The open numbers a value is made of** (ADR-285 D1, D9, D23, D34), moved from
 // the compiler's checker (ADR-294, #125, #558, C-5c): the numbers a name, an

@@ -130,9 +130,9 @@ elif git diff "$BASE" HEAD -- crates/nikaia/src/emit/mod.rs | grep -q '^[+-]pub 
 else
     echo "floor=false" >>"$out"
 fi
-# The compiler's own Nikaia (`crates/nikaia-std/src/tools/`) is lowering and
+# The compiler's own Nikaia (`crates/nikaia-std/src/compiler/`) is lowering and
 # checking, the same on every architecture: it does not start the job.
-if echo "$changed" | grep -v '^crates/nikaia-std/src/tools/' |
+if echo "$changed" | grep -v '^crates/nikaia-std/src/compiler/' |
     grep -q '^crates/nikaia-std/\|^crates/unsafe/\|Cargo\.toml$\|^Cargo\.lock$\|^rust-toolchain\.toml$'; then
     echo "arm64=true" >>"$out"
 else

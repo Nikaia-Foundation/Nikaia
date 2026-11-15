@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_parts.nika
+// crates/nikaia-std/src/compiler/check_parts.nika
 //
 // **Four small questions about a part of a value** - moved from the compiler's
 // checker (ADR-294, #125, #558, C-5b): a read extended by a field (ADR-293

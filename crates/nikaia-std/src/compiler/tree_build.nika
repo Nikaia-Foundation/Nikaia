@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/tree_build.nika
+// crates/nikaia-std/src/compiler/tree_build.nika
 //
 // **What the grammar's actions build the tree with** - the pieces a PEG has no
 // precedence table for: a head and a list of tails folded into the nesting

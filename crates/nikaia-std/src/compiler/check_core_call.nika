@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_core_call.nika
+// crates/nikaia-std/src/compiler/check_core_call.nika
 //
 // **A free call, a tuple and a list literal** (ADR-294, #125, #558, C-6,
 // U-c4): `call` and the arms `Call`, `ListLit` and `Tuple` of `value_of`. The

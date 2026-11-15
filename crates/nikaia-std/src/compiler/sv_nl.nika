@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sv_nl.nika
+// crates/nikaia-std/src/compiler/sv_nl.nika
 //
 // **The non-linear loop** (ADR-270 D28, #1339): the solver's part. The
 // reader turned each non-linear term into a variable (`SvNl`); this loop runs

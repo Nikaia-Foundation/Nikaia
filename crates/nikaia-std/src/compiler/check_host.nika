@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_host.nika
+// crates/nikaia-std/src/compiler/check_host.nika
 //
 // **What the checker asks of the compiler while it walks** (ADR-294, #125,
 // #558, C-4): the services that stay Rust because they are the parser's, the

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/leaves.nika
+// crates/nikaia-std/src/compiler/leaves.nika
 //
 // **What leaves a block** (ADR-269), moved from the compiler's `prove`
 // (ADR-294, #436 step 3): whether a statement, a block or an expression can

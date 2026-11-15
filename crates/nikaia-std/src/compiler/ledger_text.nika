@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/ledger_text.nika
+// crates/nikaia-std/src/compiler/ledger_text.nika
 //
 // **A ledger as it is written out** (Part III 13.5) - `nikaia.contracts`,
 // the record beside it of what it was derived from (ADR-251 D1), and a

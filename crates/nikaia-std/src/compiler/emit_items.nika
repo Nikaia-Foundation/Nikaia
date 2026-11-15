@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_items.nika
+// crates/nikaia-std/src/compiler/emit_items.nika
 //
 // **What the emitter reads off a unit's items before it writes any**, moved
 // from `emit/mod.rs` (ADR-294, #125, #558): the parameters, results and

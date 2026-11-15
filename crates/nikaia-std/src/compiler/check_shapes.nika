@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_shapes.nika
+// crates/nikaia-std/src/compiler/check_shapes.nika
 //
 // **Questions the checker asks of the shape of an expression, a pattern or a
 // type** - where a place roots, whether a pattern catches everything, what a

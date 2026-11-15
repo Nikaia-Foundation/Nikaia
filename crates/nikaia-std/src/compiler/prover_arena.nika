@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/prover_arena.nika
+// crates/nikaia-std/src/compiler/prover_arena.nika
 //
 // **The prover's terms, held in Nikaia** (ADR-270 D2, ADR-294, #436 step 4):
 // an arena of `SolverTerm` nodes, each child named by its place, with the

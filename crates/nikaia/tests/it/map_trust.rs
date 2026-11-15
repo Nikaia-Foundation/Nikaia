@@ -780,7 +780,7 @@ fn the_tools_package_lowers_the_same_whatever_the_file_order() {
 /// (a whole lowering of the tools is minutes).
 #[test]
 fn the_real_tools_package_lowers_the_same_read_backwards() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../nikaia-std/src/tools");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../nikaia-std/src/compiler");
     let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir)
         .expect("the tools")
         .filter_map(|entry| entry.ok().map(|entry| entry.path()))

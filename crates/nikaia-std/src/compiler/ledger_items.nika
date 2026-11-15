@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/ledger_items.nika
+// crates/nikaia-std/src/compiler/ledger_items.nika
 //
 // **What the ledger's item loop reads off a declaration**, moved from the
 // compiler's `contracts` module (ADR-294, #125): the types a file declares,

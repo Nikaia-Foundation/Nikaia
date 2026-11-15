@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/bounds_frame.nika
+// crates/nikaia-std/src/compiler/bounds_frame.nika
 //
 // **What each function of the program may write** (ADR-391 D2, #1328): its
 // frame, the paths it may change through `mut self` and through each `mut`

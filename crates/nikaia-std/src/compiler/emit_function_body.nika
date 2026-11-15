@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_function_body.nika
+// crates/nikaia-std/src/compiler/emit_function_body.nika
 //
 // **The body of a function**, moved from `emit/mod.rs` (ADR-294, #125, #558,
 // E10-3): it differs from any other block in one way, a `throws` function has

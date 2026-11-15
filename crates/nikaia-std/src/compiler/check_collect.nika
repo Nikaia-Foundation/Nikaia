@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_collect.nika
+// crates/nikaia-std/src/compiler/check_collect.nika
 //
 // **What the program's types are made of, collected before the walk**
 // (Part I 5, ADR-286 D1, ADR-294 D9), moved from the compiler's checker

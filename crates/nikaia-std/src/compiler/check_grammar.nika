@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_grammar.nika
+// crates/nikaia-std/src/compiler/check_grammar.nika
 //
 // **What a grammar's pattern gives its action** (Part II 10.1, #500, #558,
 // #125), moved from the compiler's checker: the type a pattern's result has

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/node_numbers.nika
+// crates/nikaia-std/src/compiler/node_numbers.nika
 //
 // **The numbering pass** ([ADR-383](../../../docs/specification/adr/adr-383.md)):
 // the grammar builds every node with a parsed, unnumbered id

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/rust.nika
+// crates/nikaia-std/src/compiler/rust.nika
 //
 // A Rust file's public surface, read by a Nikaia grammar.
 //

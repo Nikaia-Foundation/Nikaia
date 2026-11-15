@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/cexport_mirror.nika
+// crates/nikaia-std/src/compiler/cexport_mirror.nika
 //
 // **A `pub extern struct` and a `pub extern enum` as C lays them out**
 // (ADR-284 D14, D15, D32): the mirror the wrapper takes and hands back, and its

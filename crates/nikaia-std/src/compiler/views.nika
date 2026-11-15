@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/views.nika
+// crates/nikaia-std/src/compiler/views.nika
 //
 // Where a naked view parameter's view ends up - `NK2302`. Moved from the
 // compiler's `views` (ADR-294, #125); the reasoning below is that module's.

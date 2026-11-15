@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_core_below.nika
+// crates/nikaia-std/src/compiler/emit_core_below.nika
 //
 // **What the emitter's core asks of the tree before it writes** (ADR-294,
 // #125, #558, E9 unit U1b): the small questions below `expr` that had real

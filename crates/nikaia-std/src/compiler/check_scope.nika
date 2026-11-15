@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_scope.nika
+// crates/nikaia-std/src/compiler/check_scope.nika
 //
 // **The names in scope and the functions a call may mean**, moved from the
 // compiler's checker (ADR-294, #125, #558): the innermost binding of a name,

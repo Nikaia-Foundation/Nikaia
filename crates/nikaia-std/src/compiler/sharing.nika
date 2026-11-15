@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sharing.nika
+// crates/nikaia-std/src/compiler/sharing.nika
 //
 // **Which reference count a particular `Shared` value gets** (ADR-037 D7):
 // the records, the `--sharing` report and the leaf questions of the

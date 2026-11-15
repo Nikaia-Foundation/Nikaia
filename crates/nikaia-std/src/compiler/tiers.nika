@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/tiers.nika
+// crates/nikaia-std/src/compiler/tiers.nika
 //
 // What a declared `String` is below, decided by what flows into it (ADR-282,
 // ADR-282) - the questions the compiler's `text_tiers` asks of a method's name

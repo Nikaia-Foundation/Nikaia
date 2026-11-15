@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_visit.nika
+// crates/nikaia-std/src/compiler/check_visit.nika
 //
 // **The walk the checker asks of a tree, outside the blocks it holds**
 // (`contracts::sync::visit_expr` and its neighbours), moved from Rust

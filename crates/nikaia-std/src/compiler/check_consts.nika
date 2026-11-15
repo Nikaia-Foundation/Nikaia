@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_consts.nika
+// crates/nikaia-std/src/compiler/check_consts.nika
 //
 // **A value the build computed, as the program holds it** (ADR-311, ADR-152 D4,
 // ADR-318 D5), moved from the compiler's checker (ADR-294, #125, #558): the

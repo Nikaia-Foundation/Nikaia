@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_core_places.nika
+// crates/nikaia-std/src/compiler/emit_core_places.nika
 //
 // **The places and the values built of parts of the emitter's core** (ADR-294,
 // #125, #558, E9 unit U7): the arms of `expr_as_written` for `SafeMethod` (the

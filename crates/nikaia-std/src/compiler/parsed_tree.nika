@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/parsed_tree.nika
+// crates/nikaia-std/src/compiler/parsed_tree.nika
 //
 // **What the compiler asks of a parsed file's items**, beside the grammar that
 // read it: the aliases its `use` items declare (ADR-286 D12), and the file

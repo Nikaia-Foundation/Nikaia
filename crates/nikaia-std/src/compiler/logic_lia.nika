@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/logic_lia.nika
+// crates/nikaia-std/src/compiler/logic_lia.nika
 //
 // **The reference solver: linear integer arithmetic** (ADR-270 D1, ADR-269 D10)
 // and **the checker** (D5), moved from `nikaia-logic`'s `lia` and `certificate`

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_result_from.nika
+// crates/nikaia-std/src/compiler/check_result_from.nika
 //
 // **A result's written source held against the body** (ADR-views-3 D8, D10,
 // #1213 step 4). `-> String from a | b` names the parameters the result's

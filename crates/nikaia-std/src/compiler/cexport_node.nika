@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/cexport_node.nika
+// crates/nikaia-std/src/compiler/cexport_node.nika
 //
 // **`nikaia bind node`** (ADR-284 D26, D28, D29): an N-API module in C over the
 // library, written from the same reading of the package as the header and the

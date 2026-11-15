@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_fallible.nika
+// crates/nikaia-std/src/compiler/check_fallible.nika
 //
 // **What a method call or a loop may do to the function around it, and what a
 // type does when it dies** - moved from the compiler's checker (ADR-294, #125,

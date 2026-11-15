@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_calls.nika
+// crates/nikaia-std/src/compiler/check_calls.nika
 //
 // **What the checker reads off a callee's signature** - the arguments a call
 // passes, what the receiver's and the arguments' types bind the signature's

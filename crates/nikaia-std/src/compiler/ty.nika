@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/ty.nika
+// crates/nikaia-std/src/compiler/ty.nika
 //
 // **The type language the checker reasons in, and the one the ledger records**
 // (ADR-294 D12): declared in Nikaia, lowered by `nikaia lower-std` to `ty.rs`

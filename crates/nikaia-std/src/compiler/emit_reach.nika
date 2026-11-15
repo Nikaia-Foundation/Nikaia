@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_reach.nika
+// crates/nikaia-std/src/compiler/emit_reach.nika
 //
 // **Which pausing functions reach which**, moved from `emit/mod.rs`
 // (ADR-294, #125, #558): the edges of the call graph of a unit's functions and

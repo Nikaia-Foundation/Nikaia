@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/solver_terms.nika
+// crates/nikaia-std/src/compiler/solver_terms.nika
 //
 // **A `nikaia-logic` term, one node at a time** (ADR-294, #435, #436): what
 // the tools written in Nikaia read of the prover's terms. The terms stay in

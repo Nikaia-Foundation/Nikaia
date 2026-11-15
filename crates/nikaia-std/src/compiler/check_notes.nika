@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_notes.nika
+// crates/nikaia-std/src/compiler/check_notes.nika
 //
 // **Small refusals and warnings that call nothing else the checker has not
 // moved** (ADR-293 D17, ADR-297 D12, ADR-308 D3, ADR-094 D3), moved from the

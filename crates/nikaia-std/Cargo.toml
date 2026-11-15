@@ -19,9 +19,9 @@ reentrancy-check = []
 # declares is a warning about a generated file, which Part III C.1 makes a
 # defect.
 trace = ["winnow-grammar/trace"]
-# **The compiler's Nikaia** (`src/tools`, ADR-294) is compiled only where this is
+# **The compiler's Nikaia** (`src/compiler`, ADR-294) is compiled only where this is
 # on, and only `crates/nikaia` turns it on (#723): a program's `std` is built
-# without it, so it neither compiles the 3.5 MB of `tools/lowered/` nor is
+# without it, so it neither compiles the 3.5 MB of `compiler/lowered/` nor is
 # rebuilt when a `tools/*.nika` changes. What `std` itself runs is in
 # `src/runtime` and always compiled.
 compiler = []
@@ -89,7 +89,7 @@ child-usage = { path = "../unsafe/child-usage" }
 # metadata rather than guessing among the copies in the deps directory.
 winnow-grammar = { workspace = true }
 # Named directly because a `grammar` **in this crate** expands to code that
-# writes `winnow::…` (`src/tools/rust.nika`, ADR-290 D16). A generated program declares
+# writes `winnow::…` (`src/compiler/rust.nika`, ADR-290 D16). A generated program declares
 # it for the same reason; until `std` held a grammar of its own, this crate
 # reached it only through `winnow-grammar` and never by name.
 winnow = { workspace = true }

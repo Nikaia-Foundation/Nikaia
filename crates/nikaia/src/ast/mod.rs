@@ -3,7 +3,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/ast/mod.rs
 //
 // **The syntax tree is declared in Nikaia** (ADR-294 D6):
-// `nikaia-std/src/tools/ast.nika`, lowered to `ast.rs` beside it. This module
+// `nikaia-std/src/compiler/ast.nika`, lowered to `ast.rs` beside it. This module
 // re-exports it, so every reader keeps writing `crate::ast::Expr`, and adds
 // what the compiler needs that the language does not say - the literal
 // doors below.

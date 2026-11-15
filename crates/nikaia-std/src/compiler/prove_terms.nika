@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/prove_terms.nika
+// crates/nikaia-std/src/compiler/prove_terms.nika
 //
 // **An expression as a term of the proof** (ADR-269 D7, ADR-270), moved from
 // the compiler's `prove` (ADR-294, #436 step 4): a whole number as a linear

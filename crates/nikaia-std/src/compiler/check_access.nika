@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_access.nika
+// crates/nikaia-std/src/compiler/check_access.nika
 //
 // **Refusals about what a name reaches** - a private field, an option nobody
 // declared, a struct literal written like a call, a pattern whose alternatives

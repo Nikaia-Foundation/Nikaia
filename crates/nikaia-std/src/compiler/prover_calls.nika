@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/prover_calls.nika
+// crates/nikaia-std/src/compiler/prover_calls.nika
 //
 // **What the prover reads of a call's callee** (ADR-269), moved from the
 // compiler's `prove` (ADR-294, #436 step 4): a free function of this

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/touch.nika
+// crates/nikaia-std/src/compiler/touch.nika
 //
 // **What an operation reaches, and whether it changes it** (ADR-292, ADR-288
 // D2) - the decisions of the compiler's `contracts::touch`, moved from Rust

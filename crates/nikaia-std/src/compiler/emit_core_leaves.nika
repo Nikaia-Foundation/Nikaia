@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_core_leaves.nika
+// crates/nikaia-std/src/compiler/emit_core_leaves.nika
 //
 // **The leaves of the emitter's core** (ADR-294, #125, #558, E9 unit U2): the
 // methods that write a few tokens around one or two sub-expressions and call

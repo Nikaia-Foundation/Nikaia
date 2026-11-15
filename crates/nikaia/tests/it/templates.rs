@@ -260,7 +260,7 @@ fn only_the_keyword_and_a_blank_make_a_directive() {
 /// characters to recognise `<!--` and `</script`, and the Rust it replaced kept
 /// nine *bytes* - which cut a character outside ASCII in two and aborted on
 /// `byte index is not a char boundary`. The splitter is Nikaia now
-/// (`nikaia-std/src/tools/template.nika`), and walks characters.
+/// (`nikaia-std/src/compiler/template.nika`), and walks characters.
 #[test]
 fn text_outside_ascii_is_scanned_by_character() {
     let segments =

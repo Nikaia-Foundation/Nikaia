@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_copies.nika
+// crates/nikaia-std/src/compiler/check_copies.nika
 //
 // **Which declared types derive `Copy`, and what the types beside are made
 // of** (ADR-294 D9.1, ADR-286 D1, ADR-297 D1), moved from the compiler's

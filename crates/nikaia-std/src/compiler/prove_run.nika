@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/prove_run.nika
+// crates/nikaia-std/src/compiler/prove_run.nika
 //
 // **Every `assert` outside a `test` block, proved while the program is built**
 // ([ADR-269](../../../../docs/specification/adr/adr-269.md)). Moved from

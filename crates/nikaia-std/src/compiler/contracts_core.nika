@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/contracts_core.nika
+// crates/nikaia-std/src/compiler/contracts_core.nika
 //
 // **What the compiler's `contracts` module still did itself** - a ledger with
 // its header, a contract read back with the record beside it, the arguments

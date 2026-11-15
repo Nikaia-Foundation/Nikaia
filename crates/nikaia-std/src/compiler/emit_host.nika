@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_host.nika
+// crates/nikaia-std/src/compiler/emit_host.nika
 //
 // **The host of the emitter's core** (ADR-294, #125, #558, E9, units U0b..U10):
 // what the part of the lowering that has moved to Nikaia asks of the part that

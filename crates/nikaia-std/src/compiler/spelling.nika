@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/spelling.nika
+// crates/nikaia-std/src/compiler/spelling.nika
 //
 // **How close one word is to another**, for the compiler's *did you mean*.
 //

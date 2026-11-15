@@ -49,9 +49,9 @@ The rules every session and agent needs. What only the main session does
 ## Written in Nikaia only (owner, 2026-10-25 and 2026-10-31)
 
 * **New features: no new Rust.** A feature of the compiler, `std` or the tools
-  is written as `.nika` (`crates/nikaia-std/src/tools/*.nika`, a package, a
+  is written as `.nika` (`crates/nikaia-std/src/compiler/*.nika`, a package, a
   `tools/*.nika`); the `.rs` the lowering writes from it
-  (`crates/nikaia-std/src/tools/lowered/`) is output. A step that cannot be
+  (`crates/nikaia-std/src/compiler/lowered/`) is output. A step that cannot be
   done without writing Rust stops before the first line: `Result: blocked`,
   `Found:` the gap in Nikaia, `Needs: supervisor decision`. Briefs that still
   order Rust are read with this rule over them. A defect in existing Rust is

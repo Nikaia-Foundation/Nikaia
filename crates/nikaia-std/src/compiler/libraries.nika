@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/libraries.nika
+// crates/nikaia-std/src/compiler/libraries.nika
 //
 // The system libraries a package links (Part III 13.4, ADR-324) - what the
 // compiler's `libraries` decides about the words `pkg-config --libs` printed

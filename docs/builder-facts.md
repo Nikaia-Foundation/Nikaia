@@ -13,10 +13,10 @@ together with the specification section and an example test.
 
 | What | Where |
 | :--- | :--- |
-| Checker, moved parts | `crates/nikaia-std/src/tools/check_*.nika`; Rust adapter in `crates/nikaia/src/check/` |
+| Checker, moved parts | `crates/nikaia-std/src/compiler/check_*.nika`; Rust adapter in `crates/nikaia/src/check/` |
 | Emitter | `crates/nikaia/src/emit/mod.rs`, `emit/host.rs`; moved parts `tools/emit_*.nika` |
 | `std` methods by receiver | `std_receivers` in `tools/check_core_method.nika` |
-| Generated Rust of a tools file | `tools/lowered/<file>.rs`, index `tools/lowered.rs` (never edit, `lower-std` writes them) |
+| Generated Rust of a tools file | `compiler/lowered/<file>.rs`, index `compiler/lowered.rs` (never edit, `lower-std` writes them) |
 | Program tests (new tests) | `tests/compiler/tests/NAME.nika` + `.stdout` / `.stderr` |
 | Rust tests by NK code | `grep -rln NK1234 crates/nikaia/tests/it/` |
 | Specification | `docs/specification/10-nikaia-light.md`, `20-nikaia-advance.md`, `30-nikaia-tooling.md` (code table) |
@@ -32,7 +32,7 @@ together with the specification section and an example test.
 * `/usr/bin/time` does not exist here; time a command with the bash `time` keyword or `date +%s.%N` before and after. (issue-1470)
 * `cargo fmt -- FILE` fails here; run `cargo fmt` at the repository root or `rustfmt --edition 2024 FILE`. (issue-1473)
 * A whole `lower-std` under callgrind takes hours; an A/B of it is user time with the bash `time` keyword, two interleaved rounds, twin binaries built from the same source. Uncached: set `NIKAIA_LOWER_CACHE_SALT` and pass `--sysroot` a copy laid out as `X/crates` with `X/packages` beside it. (issue-1473)
-* A wip branch whose single commit sits on an ancestor of HEAD is applied with `git diff HEAD...wip/X | git apply`, after `git diff --stat BASE HEAD` shows HEAD has not touched its files; after `lower-std`, an empty `git diff --stat wip/X -- crates/nikaia-std/src/tools/lowered` shows its lowered files are current. (issue-1470)
+* A wip branch whose single commit sits on an ancestor of HEAD is applied with `git diff HEAD...wip/X | git apply`, after `git diff --stat BASE HEAD` shows HEAD has not touched its files; after `lower-std`, an empty `git diff --stat wip/X -- crates/nikaia-std/src/compiler/lowered` shows its lowered files are current. (issue-1470)
 * A fix in our tool sources (not the compiler) has no fails-before run of the compiler; show instead the same test program written the old way reported checked. (issue-1496)
 * `lower-std --bounds` prints only verdicts; a site's goal and facts come from `lower-std --bounds --bounds-trace tools/FILE.nika:LINE`, which is cheaper than re-running the whole walk to re-measure one site. (issue-1496)
 * A test parameter written `ref String` draws NK1261 (`ref` is redundant); write `String`. (issue-1496)
@@ -65,7 +65,7 @@ together with the specification section and an example test.
 * **Probes live in the scratchpad**, outside any project: `nikaia check FILE`
   inside `tests/compiler/tests/` reads the sibling files (prover lane).
 * **Never commit `nikaia.lock`**; it is git-ignored and changes with each build.
-* **Never run `nikaia fmt` on `crates/nikaia-std/src/tools/*.nika`**: it
+* **Never run `nikaia fmt` on `crates/nikaia-std/src/compiler/*.nika`**: it
   reindents the whole file (b1012b). Format by hand there.
 * **`pre-push` fails with *out of date: self-hosted.svg*** when a `.nika`
   changed the self-hosting share: regenerate it from what you commit, `git
@@ -93,7 +93,7 @@ together with the specification section and an example test.
 * A rustc "temporary dropped while borrowed" or "mismatched types" on text usually comes from the text-tier pass (`text_tiers.nika`, ADR-282), not the keep code: lower the probe and check whether a `Vec[String]` became `Vec<&str>`. (issue-1287)
 * `.to_string()` of text is emitted as the bare receiver (`text_as_is`, ADR-282 D8); copying text out of a view is `.clone()`, and a kept view of a temporary is NK1102 by design. (issue-1287)
 * `nikaia test --filter X` prints no `test result` line when nothing matches, so a wait loop that counts result lines never ends. (issue-1287)
-* `nikaia check` on a single `crates/nikaia-std/src/tools/*.nika` fails with NK1135 for imported types (`Span`); only the `lower-std` cycle checks a tool file. (issue-1289)
+* `nikaia check` on a single `crates/nikaia-std/src/compiler/*.nika` fails with NK1135 for imported types (`Span`); only the `lower-std` cycle checks a tool file. (issue-1289)
 * `nikaia lower F.nika` in the scratchpad writes `F.rs` beside it; read `__nikaia_main` there before guessing at an emitter cause. (issue-1289)
 * `scripts/pre-push.nika` checks only what is staged, so run it after `git add` of your files, or it is green on nothing. (issue-1290)
 * `cargo test -p nikaia-std --lib emit_core_args::` matches no test, because lowered modules have no unit tests; skip it for a `tools/*.nika` change. (issue-1290)
@@ -184,7 +184,7 @@ together with the specification section and an example test.
 * New test programs go in `tests/compiler/tests/NAME.nika` (with `.stdout` and an empty `.bounds` before `--bless`), not in `tests/compiler/`. (issue-1470)
 * A copy of `target/fast/nikaia` is no "before" binary: other sessions rebuild it from other trees, so build the fails-before binary from HEAD's `.nika`. (issue-1483)
 * A wip branch with a single commit on an ancestor of HEAD is applied with `git diff HEAD...wip/X | git apply`. Check with `git diff --stat BASE HEAD` that HEAD has not touched its files since. (issue-1470)
-* The fixpoint check after applying a wip is `git diff --stat wip/X -- crates/nikaia-std/src/tools/lowered` after `lower-std`: empty means the lowered files committed on the wip are current. (issue-1470)
+* The fixpoint check after applying a wip is `git diff --stat wip/X -- crates/nikaia-std/src/compiler/lowered` after `lower-std`: empty means the lowered files committed on the wip are current. (issue-1470)
 * `lower-std --sysroot` takes the `crates` directory of the copy (`X/crates`); given `X` it fails at once with "reading X/nikaia-std/src". (issue-1473)
 * When a wip draft was built before your run, `target/fast/nikaia` already holds it; build the before binary by checking out HEAD's version of only your own files, building, then `git apply` your saved patch. (issue-1473)
 * The `lower-std` cache key includes the `Build` settings, so an A/B of two settings needs a warm-up run for each binary; the first run with a fresh salt is the cold figure. (issue-1473)

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_walks.nika
+// crates/nikaia-std/src/compiler/check_walks.nika
 //
 // **What the checker asks of a block or an expression it walks again**, moved
 // from the compiler's checker (ADR-294, #125, #558, C-5f): the branches of an

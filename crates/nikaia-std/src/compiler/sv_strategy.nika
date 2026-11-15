@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sv_strategy.nika
+// crates/nikaia-std/src/compiler/sv_strategy.nika
 //
 // **The strategy layer** (ADR-270 D14, #1284 item 4): which pipeline a
 // query gets, under which parameters, and what crosses from one engine to

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/ledger_defaults.nika
+// crates/nikaia-std/src/compiler/ledger_defaults.nika
 //
 // **What the ledger writes beyond an item's signature**, moved from the
 // compiler's `contracts` module (ADR-294, #125, R-5): the value of one

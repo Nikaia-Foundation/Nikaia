@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_kinds.nika
+// crates/nikaia-std/src/compiler/check_kinds.nika
 //
 // **Refusals about what a written form is made of** (ADR-321 D11, ADR-285 D1,
 // ADR-281 D10, ADR-024, issue #180), moved from the compiler's checker

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_numbers2.nika
+// crates/nikaia-std/src/compiler/check_numbers2.nika
 //
 // **Two number types in one operation, a list literal that is an array, and a
 // `collect` that builds what its position asks** (Part I 2.2, ADR-285 D32,

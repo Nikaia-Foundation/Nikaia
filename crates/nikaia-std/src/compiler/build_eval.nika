@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/build_eval.nika
+// crates/nikaia-std/src/compiler/build_eval.nika
 //
 // **What a build-time initialiser of literals comes to** (ADR-287, ADR-311,
 // ADR-318, ADR-321 D1): the folder for what no run is needed for - a literal,

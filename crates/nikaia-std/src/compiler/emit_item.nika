@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_item.nika
+// crates/nikaia-std/src/compiler/emit_item.nika
 //
 // **One item of a unit**, moved from `emit/mod.rs` (ADR-294, #125, #558,
 // E11-1): an enum, a struct, a function, an `impl` with its bridges (`Error`,

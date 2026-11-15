@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/findings.nika
+// crates/nikaia-std/src/compiler/findings.nika
 //
 // **What a check written in Nikaia hands back** (ADR-294, ADR-294): one
 // finding, in the shape Part III C.2 gives every diagnostic - a code, the

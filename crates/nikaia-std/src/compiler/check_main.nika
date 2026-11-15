@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_main.nika
+// crates/nikaia-std/src/compiler/check_main.nika
 //
 // **`main`'s parameters are the command line** (Part I 5.5, ADR-360 D1, D2):
 // what a word can be, and the names the words use. A parameter no word can

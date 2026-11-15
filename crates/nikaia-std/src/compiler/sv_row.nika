@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sv_row.nika
+// crates/nikaia-std/src/compiler/sv_row.nika
 //
 // **Sparse rows over `u32` variables** (ADR-270 D10, #1282 item 3). A row is
 // `Σ ks[i]·x[cols[i]] + constant`: two parallel arrays, the columns

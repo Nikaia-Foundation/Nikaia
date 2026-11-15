@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_pauses.nika
+// crates/nikaia-std/src/compiler/check_pauses.nika
 //
 // **Refusals about a call that may pause where nothing may** - inside a lock,
 // in a lambda that runs on every core, in a grammar's action, in a `sync`

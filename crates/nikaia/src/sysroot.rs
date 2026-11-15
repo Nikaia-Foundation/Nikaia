@@ -44,7 +44,7 @@ use orchestrator::cache::{self, Key, Layout};
 pub const SYSROOT_VAR: &str = "NIKAIA_SYSROOT";
 
 /// **The toolchain's Nikaia is one package** (ADR-294): every `.nika` in
-/// `src/tools` shares one namespace, as the files of a package do (Part I 9.1,
+/// `src/compiler` shares one namespace, as the files of a package do (Part I 9.1,
 /// ADR-286 D1), and is lowered into this one file beside them. A name declared
 /// in any of them is written as it is in any other, and a helper exists once.
 const TOOLS_PACKAGE: &str = "lowered.rs";
@@ -61,7 +61,7 @@ const TOOLS_FILES: &str = "lowered";
 const TOOLS_DEPENDENCIES: &str = "dependencies.toml";
 
 /// What the Rust a tool module reads says it does (ADR-294 D9.3).
-const TOOLS_DESCRIBED: &str = include_str!("../../nikaia-std/src/tools/described.contracts");
+const TOOLS_DESCRIBED: &str = include_str!("../../nikaia-std/src/compiler/described.contracts");
 
 /// A sysroot: a directory with `nikaia-std/` in it.
 #[derive(Debug, Clone, PartialEq, Eq)]

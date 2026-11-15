@@ -64,7 +64,7 @@ fn main() throws {
 	]
 	for (file, name) in cases {
 		let text = fs::read_to_string(
-			f"{repo}/crates/nikaia-std/src/tools/lowered/{file}.rs",
+			f"{repo}/crates/nikaia-std/src/compiler/lowered/{file}.rs",
 			fs::Root::Anywhere,
 		)
 		show(file, text, name)

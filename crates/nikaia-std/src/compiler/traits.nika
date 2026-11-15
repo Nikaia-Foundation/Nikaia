@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/traits.nika
+// crates/nikaia-std/src/compiler/traits.nika
 //
 // Kap 4.7: **what an `impl` owes the `trait` it names** - moved from the
 // compiler's `traits.rs` (ADR-294, #125): the first check written in Nikaia,

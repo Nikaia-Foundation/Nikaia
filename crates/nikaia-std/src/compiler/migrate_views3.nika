@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/migrate_views3.nika
+// crates/nikaia-std/src/compiler/migrate_views3.nika
 //
 // **`nikaia migrate views-3`** (ADR-views-3 D4, D2; #1213 step 6): the one-off
 // rewrite that takes `ref` out of a program and writes `keep` where the keep

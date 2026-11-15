@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/type_rules.nika
+// crates/nikaia-std/src/compiler/type_rules.nika
 //
 // **A type's rule, an `assert` after a struct's fields**
 // ([ADR-369](../../../docs/specification/adr/adr-369.md)), written out right

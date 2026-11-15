@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/bounds_proven.nika
+// crates/nikaia-std/src/compiler/bounds_proven.nika
 //
 // **Which index checks a proof shows are not needed** (ADR-306), moved from
 // the compiler's `bounds::proven` (ADR-294, #125, #1431).

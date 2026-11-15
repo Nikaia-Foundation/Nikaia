@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_fields.nika
+// crates/nikaia-std/src/compiler/check_fields.nika
 //
 // **What a field read or a `?.` / `??` over a plain value leaves for the
 // emitter, and says** (ADR-293, ADR-279 D13, #558, #125), moved from the

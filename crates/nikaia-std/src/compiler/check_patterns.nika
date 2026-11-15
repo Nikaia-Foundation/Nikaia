@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_patterns.nika
+// crates/nikaia-std/src/compiler/check_patterns.nika
 //
 // **What a `match` arm's pattern binds, and to what type** - moved from the
 // compiler's checker (ADR-294, #125, #558). The state holds the program's

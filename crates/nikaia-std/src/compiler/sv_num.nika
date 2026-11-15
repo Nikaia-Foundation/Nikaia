@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sv_num.nika
+// crates/nikaia-std/src/compiler/sv_num.nika
 //
 // **The solver's numbers** (ADR-270 D11, #1282 items 1-2): `i64` only, kept
 // small by construction, never wrapped. Every sum and product goes through

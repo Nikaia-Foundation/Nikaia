@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_pattern.nika
+// crates/nikaia-std/src/compiler/emit_pattern.nika
 //
 // **A grammar pattern, as the backend's grammar syntax**, moved from
 // `emit/mod.rs` (ADR-294, #125, #583, E11-2): sequences, choices, captures,

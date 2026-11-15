@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_walked.nika
+// crates/nikaia-std/src/compiler/check_walked.nika
 //
 // **What the checker does once the walk is over** (ADR-294, #125, #558, C-7,
 // U-d6): the findings put in their final form, the method sets the emitter

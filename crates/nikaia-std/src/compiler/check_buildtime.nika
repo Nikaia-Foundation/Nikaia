@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_buildtime.nika
+// crates/nikaia-std/src/compiler/check_buildtime.nika
 //
 // **Refusals about a value built while the program is built, about a list, a
 // constructor and the members a reflected field or variant has** - moved from

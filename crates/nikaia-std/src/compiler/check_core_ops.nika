@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_core_ops.nika
+// crates/nikaia-std/src/compiler/check_core_ops.nika
 //
 // **The operators, the lambda and the task** (ADR-294, #125, #558, C-6,
 // U-c10): `Binary`, `Coalesce`, `Closure` and `Spawn` of the checker's walk.

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/throws.nika
+// crates/nikaia-std/src/compiler/throws.nika
 //
 // Kap 7.1: **which errors can leave a function** - the lattice of the
 // compiler's `contracts::throws`, moved from Rust (ADR-294, #125).

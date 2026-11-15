@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_places.nika
+// crates/nikaia-std/src/compiler/check_places.nika
 //
 // **Small questions about a place, a jump and a lock's door** - moved from the
 // compiler's checker (ADR-294, #125, #558, C-5a): a `break` with no loop

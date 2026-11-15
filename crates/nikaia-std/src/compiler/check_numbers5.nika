@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_numbers5.nika
+// crates/nikaia-std/src/compiler/check_numbers5.nika
 //
 // **What a constant integer expression comes to, and where a number must fit**
 // (ADR-285 D22, D25, D26, ADR-287 D21), moved from the compiler's checker

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/template.nika
+// crates/nikaia-std/src/compiler/template.nika
 //
 // **The `html` template DSL (ADR-017), split where the template is written.**
 //

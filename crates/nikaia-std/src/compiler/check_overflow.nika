@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_overflow.nika
+// crates/nikaia-std/src/compiler/check_overflow.nika
 //
 // **An operation on constants that overflows, and how a value goes into a
 // slot of another type** (ADR-285 D25, D32, ADR-319 D2), moved from the

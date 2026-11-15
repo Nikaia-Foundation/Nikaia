@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_boundary.nika
+// crates/nikaia-std/src/compiler/check_boundary.nika
 //
 // **What a type is called below, what a field of a `const` may be, where a
 // place is rooted and when a `??` lends** - questions about a type or a place

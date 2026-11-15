@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/bounds_derived.nika
+// crates/nikaia-std/src/compiler/bounds_derived.nika
 //
 // **A private function's preconditions, derived from its callers**
 // (ADR-391 D1, D3, D4, #1331): what every call site in the package proves

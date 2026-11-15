@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/surface.nika
+// crates/nikaia-std/src/compiler/surface.nika
 //
 // **What a Rust crate offers a caller** (ADR-290 D2-D4, ADR-290 D8-D10): every
 // `fn` by the path it is defined at, which modules are `pub`, what a `pub use`

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/project_check.nika
+// crates/nikaia-std/src/compiler/project_check.nika
 //
 // **What `check` says at its end**, for the compiler's `project`: the switches
 // that turn a finding into a warning, the tally of a refused program, and the

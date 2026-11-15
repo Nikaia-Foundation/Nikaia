@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_types.nika
+// crates/nikaia-std/src/compiler/emit_types.nika
 //
 // **What the emitter asks of a type and of a callee's contract**, moved from
 // `emit/mod.rs` (ADR-294, #125, #558, step E4): which members of a variant are

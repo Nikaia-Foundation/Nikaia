@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_send.nika
+// crates/nikaia-std/src/compiler/check_send.nika
 //
 // **What a task, or a call nothing describes, is handed** (ADR-312, ADR-303 D7,
 // ADR-281 D32; Part II 11.2), moved from the compiler's checker (ADR-294, #125,

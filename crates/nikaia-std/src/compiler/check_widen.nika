@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_widen.nika
+// crates/nikaia-std/src/compiler/check_widen.nika
 //
 // **Which integer type holds both, where a value is widened, and where text
 // stands for a file's name** (Part I 2.2, ADR-285 D32, ADR-319 D2/D3), and the

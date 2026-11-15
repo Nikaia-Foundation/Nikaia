@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_keeps.nika
+// crates/nikaia-std/src/compiler/emit_keeps.nika
 //
 // **What the emitter writes and asks for a function's keeps and tethers**,
 // moved from `emit/mod.rs` (ADR-294, #125, #558, step E7): where a keep is

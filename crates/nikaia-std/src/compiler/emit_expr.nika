@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_expr.nika
+// crates/nikaia-std/src/compiler/emit_expr.nika
 //
 // **The expression family of the emitter's core** (ADR-294, #125, #583, E11-4a):
 // `expr`, the wrap an arm in a mixed position or beside a `null` takes, the copy

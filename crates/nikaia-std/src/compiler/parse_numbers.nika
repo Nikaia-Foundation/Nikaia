@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/parse_numbers.nika
+// crates/nikaia-std/src/compiler/parse_numbers.nika
 //
 // **A number as the parser reads it** (Part I 2.2, ADR-285 D16, ADR-322): the
 // four spellings, the separator, the scale `K M G T P` and `Ki Mi Gi Ti Pi`,

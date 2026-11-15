@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_core_args.nika
+// crates/nikaia-std/src/compiler/check_core_args.nika
 //
 // **A call's arguments, a door over several locks, a list literal and a call
 // of a field that holds a function** (ADR-294, #125, #558, C-6, U-c3):

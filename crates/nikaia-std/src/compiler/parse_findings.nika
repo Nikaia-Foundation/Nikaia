@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/parse_findings.nika
+// crates/nikaia-std/src/compiler/parse_findings.nika
 //
 // **What the parser refuses, as a finding** (Part III C.2): a reading of
 // `parse_errors.nika` put at the byte the compiler's spans count in, the

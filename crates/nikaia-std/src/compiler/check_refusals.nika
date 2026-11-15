@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_refusals.nika
+// crates/nikaia-std/src/compiler/check_refusals.nika
 //
 // **Refusals that need a name, a type or two and nothing else of the walk** -
 // the sentence a mistake is told in and the way out it is shown - moved from

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_walk.nika
+// crates/nikaia-std/src/compiler/check_walk.nika
 //
 // **How the checker walks a tree it does not read in full**: the expressions an
 // expression holds directly, and the blocks an expression or a statement holds,

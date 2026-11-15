@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_boxes.nika
+// crates/nikaia-std/src/compiler/check_boxes.nika
 //
 // **What a pattern asks of a part the compiler boxed, and the `match` that
 // misses a case** - moved from the compiler's checker (ADR-294, #125, #558,

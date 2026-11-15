@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/manifest.nika
+// crates/nikaia-std/src/compiler/manifest.nika
 //
 // **What `nikaia.toml` may say, and what each key does** (ADR-037 D5,
 // ADR-002 D1, ADR-286 D15, Part III 13.3).

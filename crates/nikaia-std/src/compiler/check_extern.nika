@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_extern.nika
+// crates/nikaia-std/src/compiler/check_extern.nika
 //
 // **What crosses to C** (ADR-284 D4, D5, D14, D15, D32; Part III 15.1),
 // moved from the compiler's checker (ADR-294, #125, #558, C-5e): an `extern`

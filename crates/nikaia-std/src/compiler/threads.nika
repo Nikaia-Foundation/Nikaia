@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/threads.nika
+// crates/nikaia-std/src/compiler/threads.nika
 //
 // Whether a value may cross a thread (ADR-005 §1 Group B, `NK25xx`). Moved
 // from the compiler's `contracts::send` (ADR-294, #125); the reasoning for

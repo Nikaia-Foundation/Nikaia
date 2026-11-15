@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/prover_results.nika
+// crates/nikaia-std/src/compiler/prover_results.nika
 //
 // **What the prover hands the rest of the compiler** (ADR-269), moved from
 // the compiler's `prove` (ADR-294, #436 step 4): how each `assert` is held,

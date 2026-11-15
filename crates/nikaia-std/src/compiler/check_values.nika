@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_values.nika
+// crates/nikaia-std/src/compiler/check_values.nika
 //
 // **Whether a value is taken away or copied, and the refusals about a value
 // handed where the callee says what it keeps** - moved from the compiler's

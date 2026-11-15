@@ -7,7 +7,7 @@
 //
 // It prints the line of indexes and operations proved, the line of claims
 // (the `asserts in` headers summed), the `panic(` calls in the tools sources
-// (`crates/nikaia-std/src/tools`, read from the checkout's root), and `left at run time`: every check still made when
+// (`crates/nikaia-std/src/compiler`, read from the checkout's root), and `left at run time`: every check still made when
 // the program runs, the lane's target figure (0 is claim (b)). Then the
 // unproved sites by reason (count, reason, most first), then the 15 files
 // with the most unproved sites. A site the walk has no reason for is counted
@@ -140,7 +140,7 @@ fn main() throws {
         println("claims: not counted (run lower-std with --asserts)")
     }
     // Run from the checkout's root, as the report's paths are.
-    let tools = "crates/nikaia-std/src/tools"
+    let tools = "crates/nikaia-std/src/compiler"
     let mut panics = 0
     let mut panic_files = 0
     for entry in fs::read_dir(tools, fs::Root::Anywhere) {

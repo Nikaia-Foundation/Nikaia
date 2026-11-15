@@ -5,7 +5,7 @@ pub(crate) const SYSROOT_STD_DIR: &str = "nikaia-std";
 
 pub(crate) const SYSROOT_NIKA: &str = "nika";
 
-pub(crate) const SYSROOT_TOOLS: &str = "tools";
+pub(crate) const SYSROOT_TOOLS: &str = "compiler";
 
 pub(crate) const SYSROOT_RUNTIME: &str = "runtime";
 

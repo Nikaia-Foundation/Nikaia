@@ -45,7 +45,7 @@ fn the_committed_rust_is_what_this_compiler_lowers() {
             .tool_modules()
             .expect("the toolchain's Nikaia modules")
             .is_empty(),
-        "`src/tools` holds the reading half of `nikaia describe` (ADR-290 D13)"
+        "`src/compiler` holds the reading half of `nikaia describe` (ADR-290 D13)"
     );
     // **And `std`'s run-time package** (#723), lowered the same way into a
     // file of its own: the half every program compiles.
@@ -210,7 +210,7 @@ fn the_override_names_a_sysroot() {
 /// **A sysroot module is checked before it is lowered**, which it was not.
 ///
 /// [Part III C.1](../../../docs/specification/30-nikaia-tooling.md) is what
-/// that cost, and it was paid: `crates/nikaia-std/src/tools/rust.nika` had a
+/// that cost, and it was paid: `crates/nikaia-std/src/compiler/rust.nika` had a
 /// grammar action calling a function that could pause — which `NK2209` exists
 /// to refuse, in one sentence, on the `.nika` line — and because
 /// `lower_std_module` went straight from the parser to the emitter, what a
@@ -218,7 +218,7 @@ fn the_override_names_a_sysroot() {
 ///
 /// ```text
 /// error[E0728]: `await` is only allowed inside `async` functions and blocks
-///    --> crates/nikaia-std/src/tools/rust.rs:193:33
+///    --> crates/nikaia-std/src/compiler/rust.rs:193:33
 /// ```
 ///
 /// A module of `std` is written by the same people who write the compiler,
@@ -488,7 +488,7 @@ fn the_first_refused_file_is_the_one_reported_on_every_core() {
 fn lower_std_caches_each_file_of_a_package() {
     let root = std::env::temp_dir().join(format!("nikaia-lower-files-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    let tools = root.join("nikaia-std").join("src").join("tools");
+    let tools = root.join("nikaia-std").join("src").join("compiler");
     std::fs::create_dir_all(&tools).expect("a sysroot to lower");
     let write = |name: &str, text: &str| std::fs::write(tools.join(name), text).expect(name);
     write("one.nika", "pub fn one() -> i64 { return 1 }\n");

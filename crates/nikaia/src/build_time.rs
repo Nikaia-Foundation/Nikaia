@@ -230,7 +230,7 @@ impl Host<'_> {
 /// ([ADR-188](../../docs/specification/adr/adr-188.md) D2): [`decoded`] turns a
 /// literal into a value at build time, and `Checker::an_escape_nothing_names`
 /// refuses a literal the set does not cover. Both read
-/// `crates/nikaia-std/src/tools/escapes.nika`, where the table is Nikaia
+/// `crates/nikaia-std/src/compiler/escapes.nika`, where the table is Nikaia
 /// ([ADR-294](../../docs/specification/adr/adr-294.md), #125).
 pub use nikaia_std::tools::escapes::NotAnEscape as Refused;
 

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_keep_marks.nika
+// crates/nikaia-std/src/compiler/check_keep_marks.nika
 //
 // **The written `keep` held against the inferred keeps** (ADR-views-3 D2,
 // #1213 step 2). The keep inference (`keeps.nika`) has already written into

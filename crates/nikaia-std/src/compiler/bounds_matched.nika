@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/bounds_matched.nika
+// crates/nikaia-std/src/compiler/bounds_matched.nika
 //
 // **What a pattern's bindings matched** (ADR-314 D1), through sequences and
 // groups, for the bounds walk of a grammar's actions: `x:dec[T](digit{m,n})` (or

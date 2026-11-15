@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/lends.nika
+// crates/nikaia-std/src/compiler/lends.nika
 //
 // Whether a callee **lends** a parameter, so that the compiler writes the
 // reference and the caller does not (ADR-094 D1, D2) - the rule the

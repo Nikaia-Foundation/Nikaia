@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/ast.nika
+// crates/nikaia-std/src/compiler/ast.nika
 //
 // **The compiler's syntax tree** (ADR-294 D6), declared in the language it
 // describes: lowered ahead of time by `nikaia lower-std` to `ast.rs` beside it,

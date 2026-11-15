@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_flow.nika
+// crates/nikaia-std/src/compiler/check_flow.nika
 //
 // **What the checker keeps while it walks one body** (ADR-294, #125, #558, C-3):
 // the flags and tables that say where the walk stands - inside a `catch`, in a

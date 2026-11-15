@@ -37,7 +37,7 @@ pub struct Table {
 
 /// The same hash `nikaia_std::fixed` computes, over the same bytes.
 ///
-/// **Written in Nikaia** (0.0.250): `nikaia-std/src/tools/fixed.nika`, the
+/// **Written in Nikaia** (0.0.250): `nikaia-std/src/compiler/fixed.nika`, the
 /// program [ADR-285](../../../docs/specification/adr/adr-285.md) was decided
 /// for. It is still two implementations of one function - that one and the
 /// lookup `nikaia_std::fixed` runs - and what holds them together is not care
@@ -49,7 +49,7 @@ pub fn fnv(key: &str, seed: u64) -> u64 {
 
 /// Build the table for these keys, in the order they were written - CHD from
 /// twelve keys, the keys as written under that
-/// (`nikaia-std/src/tools/fixed.nika`, which says how).
+/// (`nikaia-std/src/compiler/fixed.nika`, which says how).
 ///
 /// `None` where no seed worked, which is reported rather than looped on.
 pub fn build(keys: &[String]) -> Option<Table> {

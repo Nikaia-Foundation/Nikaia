@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_declared.nika
+// crates/nikaia-std/src/compiler/check_declared.nika
 //
 // **Where a name is declared** (#1396, "go to definition" in `nikaia lsp`,
 // #103). While it resolves a name, the checker notes what the use names

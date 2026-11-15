@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_locals.nika
+// crates/nikaia-std/src/compiler/emit_locals.nika
 //
 // **The locals of a body that are never negative**, moved from `emit/mod.rs`
 // (ADR-294, #125, #558): a `let` of a literal that is not negative or a `for`

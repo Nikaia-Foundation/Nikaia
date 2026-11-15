@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_core_stmt.nika
+// crates/nikaia-std/src/compiler/check_core_stmt.nika
 //
 // **A statement, and a block of them** (ADR-294, #125, #558, C-6, U-c7):
 // `stmt`, one function per `Stmt` variant, and `block`, which stops being a

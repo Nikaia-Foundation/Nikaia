@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/fold.nika
+// crates/nikaia-std/src/compiler/fold.nika
 //
 // **What a constant integer expression comes to** (ADR-285, ADR-294 D11), for
 // the checker's `NK1116` and the emitter's widening.

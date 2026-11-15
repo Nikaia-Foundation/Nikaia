@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_core_pilot.nika
+// crates/nikaia-std/src/compiler/check_core_pilot.nika
 //
 // **The first four functions of the checker's core that moved** (ADR-294, #125,
 // #558, C-6, U-c0): `grammar_call`, `a_compound_write_to_a_map_slot`,

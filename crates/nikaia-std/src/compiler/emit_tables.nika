@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_tables.nika
+// crates/nikaia-std/src/compiler/emit_tables.nika
 //
 // **The tables of views** (ADR-294, #125, #855, E11-5): which structs and enums
 // of a file hold a view into the input (Part II, 10.6), and the view-holding

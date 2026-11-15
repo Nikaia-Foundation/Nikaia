@@ -164,8 +164,8 @@ pub(crate) fn comptime_bundle_read_record(text: &str, fingerprint: &str) -> Opti
     let dylib: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (1) as usize) });
     let deps: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (2) as usize) });
     let libdir: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (3) as usize) });
-    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(4).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple10904| {
-        let (name, rlib) = __nikaia_tuple10904;
+    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(4).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple10907| {
+        let (name, rlib) = __nikaia_tuple10907;
         (nikaia_std::block::Text::from(name.to_string()), comptime_bundle_path(nikaia_std::either_text::either(rlib)))
     }).collect::<Vec<_>>();
     if (rlibs.len() as i64) != COMPTIME_BUNDLE_NAMED.len() as i64 { return None; }

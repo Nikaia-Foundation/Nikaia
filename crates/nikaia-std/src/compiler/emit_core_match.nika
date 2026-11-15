@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_core_match.nika
+// crates/nikaia-std/src/compiler/emit_core_match.nika
 //
 // **The `match` of the emitter's core** (ADR-294, #125, #558, E9 unit U4): the
 // `Expr::Match` arm of `expr_as_written` and everything only it calls - a

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/prover_scope.nika
+// crates/nikaia-std/src/compiler/prover_scope.nika
 //
 // **What a body may know at one point** (ADR-269), moved from the compiler's
 // `prove` (ADR-294, #436 step 4): the names that are variables of the proof,

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/prover_claims.nika
+// crates/nikaia-std/src/compiler/prover_claims.nika
 //
 // **The claims the prover carries between functions** (ADR-269 D15, D17,
 // D18), moved from the compiler's `prove` (ADR-294, #436 step 4): a

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/names.nika
+// crates/nikaia-std/src/compiler/names.nika
 //
 // **Every name an expression mentions** (ADR-292 D2), for the compiler's
 // `contracts::order` - whether two statements may change places - and for

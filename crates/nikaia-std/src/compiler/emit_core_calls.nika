@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_core_calls.nika
+// crates/nikaia-std/src/compiler/emit_core_calls.nika
 //
 // **The calls of the emitter's core** (ADR-294, #125, #558, E9 unit U6): `call`
 // (the anonymous constructor, the attributes of a walked type, the precondition

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_entry.nika
+// crates/nikaia-std/src/compiler/emit_entry.nika
 //
 // **The text the emitter writes around the program rather than for a statement
 // of it**, moved from `emit/mod.rs` (ADR-294, #125, #558, step E8): the `main`

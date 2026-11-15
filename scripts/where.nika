@@ -7,7 +7,7 @@
 //     calls <n> in <k> files: f1 f2 f3          (at most five files named)
 //
 // `fn`, `struct`, `enum` and `type` NAME in `crates/*/src/**/*.rs` and
-// `crates/nikaia-std/src/tools/*.nika` (not `tools/lowered/`). For an `NK1234`
+// `crates/nikaia-std/src/compiler/*.nika` (not `compiler/lowered/`). For an `NK1234`
 // NAME instead `tests <file>` (crates/nikaia/tests/it/, tests/compiler/tests/)
 // and `spec <file>:<line>` (docs/specification/30-nikaia-tooling.md).
 // `--outline FILE` (a `.rs` or `.nika`) prints one line per `fn`, `struct`,
@@ -55,7 +55,7 @@ fn where_load(dir: String, keep: fn(String) -> bool sync) -> Vec[WhereFile] thro
 fn where_rust_or_tool(path: String) -> bool {
     if path.contains("/lowered/") || path.contains("/target/") { return false }
     if path.ends_with(".rs") { return path.contains("/src/") }
-    if path.ends_with(".nika") { return path.starts_with("crates/nikaia-std/src/tools/") }
+    if path.ends_with(".nika") { return path.starts_with("crates/nikaia-std/src/compiler/") }
     return false
 }
 

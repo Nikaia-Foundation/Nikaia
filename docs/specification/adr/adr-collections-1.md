@@ -1,5 +1,7 @@
 # ADR-collections-1: The Ordered Collections Offer What the Hashed Ones Offer, Apart from Hashing: Every Map Has `entry`, Every List and Set Has `extend`
 
+> **Note (#1600, 2026-11-15):** `crates/nikaia-std/src/tools/` has moved to `crates/nikaia-std/src/compiler/` (its generated Rust to `compiler/lowered/`). The text below keeps the old path; the Rust module is still `nikaia_std::tools`.
+
 **Status:** Accepted
 **Date:** October 29, 2026 (owner's decision, option 1 "full parity"; #950)
 **Answers:** whether `BTreeMap` and `BTreeSet` get `entry` and `extend`, which

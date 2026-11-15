@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_state.nika
+// crates/nikaia-std/src/compiler/check_state.nika
 //
 // **What the checker keeps while it walks a body**, declared in Nikaia
 // (ADR-294, #125; the owner's direction on #558: the `Checker`'s state is a

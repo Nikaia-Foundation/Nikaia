@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_out.nika
+// crates/nikaia-std/src/compiler/emit_out.nika
 //
 // **The text the emitter writes and where each part of it came from**, moved
 // from `emit/mod.rs` (ADR-294, #125, #558): the buffer, and one entry for every

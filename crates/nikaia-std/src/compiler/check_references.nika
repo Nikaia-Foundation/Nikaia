@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_references.nika
+// crates/nikaia-std/src/compiler/check_references.nika
 //
 // **Who writes the reference at a call** (ADR-094 D1, ADR-279 D5, ADR-293 D29),
 // moved from the compiler's checker (ADR-294, #125, #558, C-5f): the compiler

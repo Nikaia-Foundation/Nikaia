@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sv_theory.nika
+// crates/nikaia-std/src/compiler/sv_theory.nika
 //
 // **The theory interface** (ADR-270 D12, #1282 item 5): every theory sits
 // behind the same calls - `assert(lit)`, `propagate()`, `check(final,

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/render.nika
+// crates/nikaia-std/src/compiler/render.nika
 //
 // **A finding on the `.nika` line it is about** (ADR-300, Part III C.2): the
 // headline, the file and the place, the lines with each named place

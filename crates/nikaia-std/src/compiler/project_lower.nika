@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/project_lower.nika
+// crates/nikaia-std/src/compiler/project_lower.nika
 //
 // **The steps of one lowering**, for the compiler's `project::lower_reading`:
 // their order, the cache hit's replay of the check's warnings, the contract the

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_defaults.nika
+// crates/nikaia-std/src/compiler/check_defaults.nika
 //
 // **What is computed where it is declared** (ADR-294, #125, #558, C-7, U-d3):
 // an option's default (ADR-318), a field's (ADR-331 D5), an attribute's

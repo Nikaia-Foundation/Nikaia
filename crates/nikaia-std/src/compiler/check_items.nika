@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_items.nika
+// crates/nikaia-std/src/compiler/check_items.nika
 //
 // **What the checker asks of the items a file declares**, moved from the
 // compiler's checker (ADR-294, #125, #558, C-2): is a name declared, is it an

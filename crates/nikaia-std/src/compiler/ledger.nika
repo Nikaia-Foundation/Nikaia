@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/ledger.nika
+// crates/nikaia-std/src/compiler/ledger.nika
 //
 // **How a ledger is written down, read back** (Part III 13.5, ADR-251).
 //

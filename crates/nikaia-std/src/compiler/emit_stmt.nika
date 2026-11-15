@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_stmt.nika
+// crates/nikaia-std/src/compiler/emit_stmt.nika
 //
 // **Statements and blocks of the emitter's core** (ADR-294, #125, #583, E11-4b):
 // a block with the settle point a value with a cleanup takes (ADR-297 D2), a

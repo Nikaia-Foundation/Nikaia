@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_fold.nika
+// crates/nikaia-std/src/compiler/emit_fold.nika
 //
 // **The `fold` and `par_fold` of a grammar pattern**, moved from
 // `emit/mod.rs` (ADR-294, #125, #558, E10-2): the call, the step adapted where

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/comptime_bundle.nika
+// crates/nikaia-std/src/compiler/comptime_bundle.nika
 //
 // **The bundle build-time code links against, and the run of one build-time
 // program** (ADR-321 D3, D4, D10; ADR-294, #125, K3b), moved from

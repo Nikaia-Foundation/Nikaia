@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/assets.nika
+// crates/nikaia-std/src/compiler/assets.nika
 //
 // The files a build may read while it builds (ADR-310, ADR-310 D3) - what the
 // compiler's `assets` decides about a list and a path without touching a

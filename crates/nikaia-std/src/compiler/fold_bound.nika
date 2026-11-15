@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/fold_bound.nika
+// crates/nikaia-std/src/compiler/fold_bound.nika
 //
 // **A fold over a grammar's input takes no more steps than the input has room
 // for; its counters are proved from that** (ADR-367), moved from the

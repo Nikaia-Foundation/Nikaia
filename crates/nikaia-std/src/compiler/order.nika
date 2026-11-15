@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/order.nika
+// crates/nikaia-std/src/compiler/order.nika
 //
 // **Whether two statements have to keep the order they were written in**
 // (ADR-292, Part I 8.1.1): the verdict half of the compiler's

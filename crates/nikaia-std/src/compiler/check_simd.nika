@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_simd.nika
+// crates/nikaia-std/src/compiler/check_simd.nika
 //
 // **Vectors a program holds** ([ADR-377](../../../../docs/specification/adr/adr-377.md)):
 // what the checker knows of `std::simd`'s `Lanes[T]`, `Fixed[T, N]` and

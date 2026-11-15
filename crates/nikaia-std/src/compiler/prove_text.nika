@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/prove_text.nika
+// crates/nikaia-std/src/compiler/prove_text.nika
 //
 // **How the prover writes a term and a value** (ADR-269 D7, D18), moved from
 // the compiler's `prove` (ADR-294, #436 step 1): a term as the language below

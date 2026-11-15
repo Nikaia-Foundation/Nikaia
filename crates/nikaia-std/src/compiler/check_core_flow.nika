@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_core_flow.nika
+// crates/nikaia-std/src/compiler/check_core_flow.nika
 //
 // **The arms that choose and the blocks with a rule of their own** (ADR-294,
 // #125, #558, C-6, U-c8): `Match`, `If`, `Select`, `Overlap`, `TryCatch` and

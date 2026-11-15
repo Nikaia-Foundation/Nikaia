@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sv_simplex.nika
+// crates/nikaia-std/src/compiler/sv_simplex.nika
 //
 // **The simplex theory** (ADR-270 D12, D11, #1283 item 3): the general
 // simplex of Dutertre and de Moura behind the theory interface of

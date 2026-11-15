@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_core_places.nika
+// crates/nikaia-std/src/compiler/check_core_places.nika
 //
 // **Places and the values built from fields** (ADR-294, #125, #558, C-6,
 // U-c9): the arms `Field | SafeField`, `StructLit`, `With`, `Index`, `Cast`

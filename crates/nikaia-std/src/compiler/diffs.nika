@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/diffs.nika
+// crates/nikaia-std/src/compiler/diffs.nika
 //
 // **What changed, said line by line**, for the compiler's `project`: the
 // lines of a ledger a `--locked` build or a stale check found different from

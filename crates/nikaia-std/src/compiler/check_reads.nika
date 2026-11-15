@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_reads.nika
+// crates/nikaia-std/src/compiler/check_reads.nika
 //
 // **Views, reads and casts the emitter has to be told about** - moved from the
 // compiler's checker (ADR-294, #125, #558, C-5a): a view compared with a value

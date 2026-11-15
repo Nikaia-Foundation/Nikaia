@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_may_fail.nika
+// crates/nikaia-std/src/compiler/check_may_fail.nika
 //
 // **A written call to something that can fail** (`NK2605`, ADR-025 D1), moved
 // from the compiler's checker (ADR-294, #125, #558, C-5f). What the committed

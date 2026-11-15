@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_decls.nika
+// crates/nikaia-std/src/compiler/check_decls.nika
 //
 // **What the checker asks of what the program declares** - its structs, its
 // enums, the bounds of its type parameters, the grammars it names - and the

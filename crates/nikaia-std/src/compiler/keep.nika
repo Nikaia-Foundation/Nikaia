@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/keep.nika
+// crates/nikaia-std/src/compiler/keep.nika
 //
 // Where a buffer lives once views of it outlive the scope that made it
 // (ADR-283, Part I 6.6) - the questions the compiler's `contracts::keep` asks

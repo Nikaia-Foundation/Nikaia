@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/proofs_answers.nika
+// crates/nikaia-std/src/compiler/proofs_answers.nika
 //
 // **`nikaia.proofs`: what a build uses is the recorded answer**
 // ([ADR-270](../../../../docs/specification/adr/adr-270.md) D4, D19-D21, #448).

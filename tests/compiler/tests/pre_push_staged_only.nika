@@ -49,7 +49,7 @@ fn main() throws {
     let id = "git config user.email t@t; git config user.name t; git config commit.gpgsign false"
     sh(tmp.clone(), f"mkdir work; git -C {repo} archive HEAD | tar -x -C work")
     sh(work.clone(), f"cp {repo}/scripts/pre-push.nika {repo}/scripts/bump.py {repo}/scripts/badges.py {repo}/scripts/self_hosting.py scripts/; git init -q -b develop; {id}; git add -A; git commit -q -m base")
-    let tool = "crates/nikaia-std/src/tools/fmt.nika"
+    let tool = "crates/nikaia-std/src/compiler/fmt.nika"
     sh(work.clone(), f"for i in $(seq 5000); do echo \"fn grown_$i() -> i64 {{ $i }}\"; done >> {tool}; echo note >> README.md; git add README.md")
     println("unstaged tools move, a docs file staged:")
     println(steps(nikaia.clone(), work.clone()))

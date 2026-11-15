@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_lookups.nika
+// crates/nikaia-std/src/compiler/check_lookups.nika
 //
 // **What a name in an expression stands for** - a binding, a function, a
 // grammar, a driver - and how the checker learns what the program and `std`

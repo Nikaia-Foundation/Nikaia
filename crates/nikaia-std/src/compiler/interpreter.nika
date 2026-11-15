@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/interpreter.nika
+// crates/nikaia-std/src/compiler/interpreter.nika
 //
 // **The Stage 0 interpreter**: `nikaia run` walks `main` and says what it
 // finds - a binding, a call to `println` or `log`, a loop walked once. Nothing

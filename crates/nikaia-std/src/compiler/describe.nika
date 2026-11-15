@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/describe.nika
+// crates/nikaia-std/src/compiler/describe.nika
 //
 // What `nikaia describe` drafts from a crate's surface (ADR-290) - the entries,
 // the types they name and what the describer saw and did not claim - moved

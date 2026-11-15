@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/logic_horn.nika
+// crates/nikaia-std/src/compiler/logic_horn.nika
 //
 // **A loop as constrained Horn clauses** (ADR-361 D1, D4): the problem every
 // method of finding an invariant solves, stated without the syntax of any

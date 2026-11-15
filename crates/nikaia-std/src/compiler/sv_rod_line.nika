@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sv_rod_line.nika
+// crates/nikaia-std/src/compiler/sv_rod_line.nika
 //
 // **The measuring rod's per-file line** (ADR-270 D17, #1281): each SMT-LIB 2
 // file is answered by the engine, every *proved* is replayed by `lg_verify`,

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_program.nika
+// crates/nikaia-std/src/compiler/check_program.nika
 //
 // **The checker's walk over a program's items** (ADR-294, #125, #558, C-7,
 // U-d5): every item of the file in turn, then the other files' calls of its

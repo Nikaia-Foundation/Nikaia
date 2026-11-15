@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_exprs.nika
+// crates/nikaia-std/src/compiler/check_exprs.nika
 //
 // **Reports about one expression, said with the expression's own words**,
 // moved from the compiler's checker (ADR-294, #125, #558): a bit operation

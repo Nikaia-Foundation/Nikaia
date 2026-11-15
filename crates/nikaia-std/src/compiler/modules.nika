@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/modules.nika
+// crates/nikaia-std/src/compiler/modules.nika
 //
 // What a file of a package declares, and whether its `use` lines name what
 // the package may reach - the two questions the compiler's `modules` asks of

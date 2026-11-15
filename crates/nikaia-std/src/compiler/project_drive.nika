@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/project_drive.nika
+// crates/nikaia-std/src/compiler/project_drive.nika
 //
 // **A project's build, step by step**, for the compiler's `Project::drive_to`:
 // the entry refusal, the members lowered dependencies first, the libraries of

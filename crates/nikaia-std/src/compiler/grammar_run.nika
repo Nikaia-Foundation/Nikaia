@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/grammar_run.nika
+// crates/nikaia-std/src/compiler/grammar_run.nika
 //
 // **A grammar run's parser, built and run** (issue #178, ADR-294, #125, GR):
 // the sub-project a `comptime` grammar run compiles is written, built with

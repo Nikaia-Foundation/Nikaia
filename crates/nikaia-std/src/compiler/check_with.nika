@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_with.nika
+// crates/nikaia-std/src/compiler/check_with.nika
 //
 // **Refusals about `asset`, `with`, a field that is not there, a `catch` over
 // nothing and a statement after a jump** - moved from the compiler's checker

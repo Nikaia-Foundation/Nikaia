@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/claim_names.nika
+// crates/nikaia-std/src/compiler/claim_names.nika
 //
 // **Every name a claim reads** (ADR-269), moved from the compiler's `prove`
 // (ADR-294, #436 step 4): the variables of an expression, read as

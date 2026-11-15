@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/declared.nika
+// crates/nikaia-std/src/compiler/declared.nika
 //
 // **What a declaration says, before any body is read** - the type a `.nika`
 // declaration names, and the ledger entry a function's declaration makes -

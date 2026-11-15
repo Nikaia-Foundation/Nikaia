@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/cargo_json.nika
+// crates/nikaia-std/src/compiler/cargo_json.nika
 //
 // **Cargo's and `rustc`'s JSON, read with `packages/json`** (#1163): the
 // members a `--message-format=json` line is read by, where the compiler read

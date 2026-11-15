@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_expect.nika
+// crates/nikaia-std/src/compiler/check_expect.nika
 //
 // **Where a found type meets the one a position wants** - moved from the
 // compiler's checker (ADR-294, #125, #558, C-5g): `expect` (`NK1102` to

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/parser_grammar.nika
+// crates/nikaia-std/src/compiler/parser_grammar.nika
 //
 // **The compiler's grammar, in Nikaia** (#557 step 4c). The `grammar!` block
 // of `crates/nikaia/src/parser/mod.rs` moves here a chunk at a time; this

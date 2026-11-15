@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/maps.nika
+// crates/nikaia-std/src/compiler/maps.nika
 //
 // **The ledger key `maps`** (ADR-010 D9, Part III 13.5, #581 step 6), moved from
 // the compiler's `contracts::maps` (ADR-294, #125): for a `pub` function with a

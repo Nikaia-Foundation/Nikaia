@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/cexport_node_text.nika
+// crates/nikaia-std/src/compiler/cexport_node_text.nika
 //
 // **The fixed C of `nikaia bind node`'s module** (ADR-284 D28): the N-API helpers
 // every module has, and the shape of what is written per `extern` struct, per

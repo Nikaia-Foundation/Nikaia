@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/buffers.nika
+// crates/nikaia-std/src/compiler/buffers.nika
 //
 // **Where each buffer a body reads lives** (ADR-283) - the walk the compiler's
 // `contracts::keep` runs over a function's body and the plan it decides,

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_texts.nika
+// crates/nikaia-std/src/compiler/check_texts.nika
 //
 // **Text built where a typed position asks for it** (ADR-282 D4, ADR-152, #558,
 // #125), moved from the compiler's checker: a text literal standing where

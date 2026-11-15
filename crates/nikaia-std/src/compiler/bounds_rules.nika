@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/bounds_rules.nika
+// crates/nikaia-std/src/compiler/bounds_rules.nika
 //
 // **Rules the walk finds between a struct's private list fields** (ADR-369
 // D4, #1330): two lists pushed together are as long as each other, and a list

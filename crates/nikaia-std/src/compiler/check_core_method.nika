@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_core_method.nika
+// crates/nikaia-std/src/compiler/check_core_method.nika
 //
 // **A method call, `x.m(…)` and `x?.m(…)`** (ADR-294, #125, #558, C-6,
 // U-c6): the arm `MethodCall | SafeMethod` of the checker's walk. The form is

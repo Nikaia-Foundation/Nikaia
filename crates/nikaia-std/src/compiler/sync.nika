@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sync.nika
+// crates/nikaia-std/src/compiler/sync.nika
 //
 // Which functions of a package keep their claim to be `sync` (ADR-288 D1) -
 // the fixpoint the compiler's `contracts::sync` runs over the calls it

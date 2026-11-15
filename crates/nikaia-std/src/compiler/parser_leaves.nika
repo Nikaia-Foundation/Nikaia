@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/parser_leaves.nika
+// crates/nikaia-std/src/compiler/parser_leaves.nika
 //
 // **What the whitespace skip has seen** (ADR-135 D3, ADR-307 D4, ADR-337 D2),
 // moved from the compiler's `parser::Trivia` (ADR-294, #125, R-4): where the

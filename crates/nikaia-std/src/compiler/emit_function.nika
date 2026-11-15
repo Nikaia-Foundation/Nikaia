@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_function.nika
+// crates/nikaia-std/src/compiler/emit_function.nika
 //
 // **A function or a method**, moved from `emit/mod.rs` (ADR-294, #125, #558,
 // E10-4): its signature - the lifetimes of every parameter and of the result,

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/prover_solver.nika
+// crates/nikaia-std/src/compiler/prover_solver.nika
 //
 // **What the prover asks the solver** (ADR-269 D8, ADR-270 D3-D5), moved
 // from the compiler's `prove` (ADR-294, #436 step 4). The solver itself is

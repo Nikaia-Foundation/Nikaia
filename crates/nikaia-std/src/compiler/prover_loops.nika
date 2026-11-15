@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/prover_loops.nika
+// crates/nikaia-std/src/compiler/prover_loops.nika
 //
 // **A loop, read by the prover through its invariant** (ADR-361 D1-D5,
 // D7): the frontend's half. A `while` whose turn changes whole numbers the

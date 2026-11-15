@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_numbers.nika
+// crates/nikaia-std/src/compiler/check_numbers.nika
 //
 // **A number and the type it has to fit** (ADR-285, Part III C.3's `NK1116`),
 // moved from the checker (ADR-294, #125). The number is `integers.nika`'s

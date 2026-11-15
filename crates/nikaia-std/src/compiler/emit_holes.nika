@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_holes.nika
+// crates/nikaia-std/src/compiler/emit_holes.nika
 //
 // **The holes of a literal, and what the walks over them find** (ADR-294,
 // #125, E12-2), moved from `emit/mod.rs` and `emit/host.rs`. A hole is an

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/bounds_reasons.nika
+// crates/nikaia-std/src/compiler/bounds_reasons.nika
 //
 // **Why a check stayed** (#389), moved from the compiler's `bounds_report`
 // (ADR-294, #435): the shape that stopped the walk, read off the site - a

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_glue.nika
+// crates/nikaia-std/src/compiler/check_glue.nika
 //
 // **What `check/mod.rs` decided itself** (ADR-294, #125, M17): the pieces of
 // the checker's entry module that are logic rather than glue over the Rust

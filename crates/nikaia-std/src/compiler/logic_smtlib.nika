@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/logic_smtlib.nika
+// crates/nikaia-std/src/compiler/logic_smtlib.nika
 //
 // **SMT-LIB 2 at the edge** (ADR-270 D6): a query written so that another
 // solver can be asked the same question, and the part of SMT-LIB 2 this

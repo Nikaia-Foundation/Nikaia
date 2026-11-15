@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/prover_walk.nika
+// crates/nikaia-std/src/compiler/prover_walk.nika
 //
 // **The prover's walk over a program's bodies** (ADR-269), moved from the
 // compiler's `prove` (ADR-294, #436 step 4): every function, statement and

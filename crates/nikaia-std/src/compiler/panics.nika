@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/panics.nika
+// crates/nikaia-std/src/compiler/panics.nika
 //
 // **Whether a function can panic** (ADR-async-5 D35, #1355): the ledger's
 // `panics` column, inferred as the throw set is (Part I 7.1). A panic site is

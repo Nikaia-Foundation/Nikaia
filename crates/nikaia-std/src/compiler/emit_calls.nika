@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_calls.nika
+// crates/nikaia-std/src/compiler/emit_calls.nika
 //
 // **What the contracts say about a call the emitter is writing**, moved from
 // `emit/mod.rs` (ADR-294, #125, #558): whether the callee pauses (so the call

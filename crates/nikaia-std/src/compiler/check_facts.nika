@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_facts.nika
+// crates/nikaia-std/src/compiler/check_facts.nika
 //
 // **What the checker found out about the program and the emitter reads**
 // (ADR-294, #125, #558; the coordinator's design): one struct, `CheckFacts`,

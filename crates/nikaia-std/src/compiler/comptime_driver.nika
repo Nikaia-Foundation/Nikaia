@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/comptime_driver.nika
+// crates/nikaia-std/src/compiler/comptime_driver.nika
 //
 // **A `comptime` that calls a function is compiled and run** (ADR-321 D1): the
 // text of the sub-program's `main`, of the bundle it is linked against, and the

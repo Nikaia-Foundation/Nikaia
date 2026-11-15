@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/cexport_python.nika
+// crates/nikaia-std/src/compiler/cexport_python.nika
 //
 // **`nikaia bind python`** (ADR-284 D26, D27): a `ctypes` module over the
 // library, written from the same reading of the package as the header, so that

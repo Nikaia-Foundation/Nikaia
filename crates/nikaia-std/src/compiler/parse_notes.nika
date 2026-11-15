@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/parse_notes.nika
+// crates/nikaia-std/src/compiler/parse_notes.nika
 //
 // **A parse error in the reader's words** (Part III C.2, rule 5;
 // `docs/error-corpus.md`), the text half: what a refusal's caret looks back

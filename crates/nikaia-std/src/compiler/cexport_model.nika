@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/cexport_model.nika
+// crates/nikaia-std/src/compiler/cexport_model.nika
 //
 // **A package as a library C calls, what is read of it** (ADR-284, ADR-324 D6):
 // the entry points of the entry file, the types that cross the boundary and the

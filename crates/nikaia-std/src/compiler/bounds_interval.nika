@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/bounds_interval.nika
+// crates/nikaia-std/src/compiler/bounds_interval.nika
 //
 // **Intervals, and the bounds the facts imply** (ADR-306 D4, D7), moved from
 // the compiler's `bounds` (ADR-294, #125, #435 step 2): a closed interval of

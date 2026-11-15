@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/crossing.nika
+// crates/nikaia-std/src/compiler/crossing.nika
 //
 // **What `nikaia describe` says about threads** (ADR-290 D8-D10, ADR-123 D2):
 // whether a type's fields let it cross, whether a bound names `Send`, and the

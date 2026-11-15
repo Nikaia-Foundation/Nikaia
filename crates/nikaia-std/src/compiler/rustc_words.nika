@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/rustc_words.nika
+// crates/nikaia-std/src/compiler/rustc_words.nika
 //
 // **A `rustc` message in the words the program wrote** (Part III C.1,
 // ADR-056), for the compiler's `diagnostics`: a message the language below

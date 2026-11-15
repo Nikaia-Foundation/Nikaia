@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_arms.nika
+// crates/nikaia-std/src/compiler/check_arms.nika
 //
 // **Arms that meet at `T?`, and a lambda that ends in text** (ADR-282 D4,
 // ADR-279, ADR-285, #312, #435), moved from the compiler's checker (ADR-294,

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_below.nika
+// crates/nikaia-std/src/compiler/emit_below.nika
 //
 // **The questions the emitter's walk asks that read nothing but the file's
 // names, its items and the tables of `EmitState`**, moved from `emit/mod.rs`

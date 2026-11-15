@@ -352,14 +352,14 @@ pub mod runtime {
 #[cfg(feature = "compiler")]
 pub mod tools {
     // **One package** ([ADR-294](../../../docs/specification/adr/adr-294.md)):
-    // every `.nika` in `src/tools` shares one namespace, as the files of a
+    // every `.nika` in `src/compiler` shares one namespace, as the files of a
     // package do, and `nikaia lower-std` lowers them into `package.rs`. At its
     // end stands one module per file - `tools::ty`, `tools::ledger` - naming
     // what that file offers, so a Rust caller still says which file a name is
     // in. What follows the `include!` is the Rust that Nikaia cannot say, by
     // the file it serves; `sysroot::HAND_WRITTEN` puts its names in that
     // file's module.
-    include!("tools/lowered.rs");
+    include!("compiler/lowered.rs");
 
     /// The text tiers' conversions, which a lowered `String` local reassigned
     /// from a view calls (`rest = rest.strip_prefix(..).into_either()`), and a

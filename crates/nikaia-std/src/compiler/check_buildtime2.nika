@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_buildtime2.nika
+// crates/nikaia-std/src/compiler/check_buildtime2.nika
 //
 // **Refusals about a `comptime` that the build may not, or could not, run**
 // (`NK1127`, `NK1152`, `NK1168`) - moved from the compiler's checker

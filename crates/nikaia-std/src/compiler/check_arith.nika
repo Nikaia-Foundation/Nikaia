@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_arith.nika
+// crates/nikaia-std/src/compiler/check_arith.nika
 //
 // **Arithmetic on something that has none, and a value of no known type**
 // (Part I 2.3, `NK1191`, `NK1245`), moved from the compiler's checker (ADR-294,

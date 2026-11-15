@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/migrate_print_throws.nika
+// crates/nikaia-std/src/compiler/migrate_print_throws.nika
 //
 // **`nikaia migrate print-throws`** (ADR-392, #1360): the one-off rewrite
 // that writes `throws` on every function that can now fail because it

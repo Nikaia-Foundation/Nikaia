@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/trust.nika
+// crates/nikaia-std/src/compiler/trust.nika
 //
 // **What `--trust` says about a program** (ADR-010 D7, ADR-108 D4): which
 // sources it reads and who chose their bytes, and every file access whose

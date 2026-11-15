@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/lsp.nika
+// crates/nikaia-std/src/compiler/lsp.nika
 //
 // **`nikaia lsp`: the language server** (#1347, the first slice of #103). An
 // editor starts it and talks LSP's JSON-RPC on its standard input and output:

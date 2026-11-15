@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/bounds_report.nika
+// crates/nikaia-std/src/compiler/bounds_report.nika
 //
 // **The `--bounds` report's walk** (ADR-306, #389), moved from the compiler's
 // `bounds_report` (ADR-294, #125): every index into a list and every `+`, `-`

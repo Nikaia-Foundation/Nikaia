@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sv_lemma.nika
+// crates/nikaia-std/src/compiler/sv_lemma.nika
 //
 // **The refinement lemmas of non-linear terms** (ADR-270 D28, #1339): the
 // checker's part. The reader abstracts each non-linear term to a variable

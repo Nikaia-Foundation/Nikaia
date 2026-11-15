@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_exprs.nika
+// crates/nikaia-std/src/compiler/emit_exprs.nika
 //
 // **What the emitter asks of an expression and of the contracts around it**,
 // moved from `emit/mod.rs` (ADR-294, #125, #558, step E4): whether an argument

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_program.nika
+// crates/nikaia-std/src/compiler/emit_program.nika
 //
 // **A unit's text**, moved from `emit/mod.rs` (ADR-294, #125, #583, E11-3):
 // the preamble of a whole program, the shadow types of its `dsl` statements,

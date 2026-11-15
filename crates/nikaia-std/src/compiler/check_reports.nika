@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_reports.nika
+// crates/nikaia-std/src/compiler/check_reports.nika
 //
 // **Reports the checker makes from what it was told and what it holds**, moved
 // from the compiler's checker (ADR-294, #125, #558): a bound an argument's type

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_needs.nika
+// crates/nikaia-std/src/compiler/emit_needs.nika
 //
 // **What a program's preamble has to say, and the table of its lines**
 // (ADR-294, #125, E12-1): `EmitNeeds`, read off each file's items and joined

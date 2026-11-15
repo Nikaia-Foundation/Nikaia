@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_text.nika
+// crates/nikaia-std/src/compiler/emit_text.nika
 //
 // **The text the emitter writes Rust with**, moved from `emit/mod.rs`
 // (ADR-294, #125, #558): a string literal as Rust spells it, a format string's

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_numbers3.nika
+// crates/nikaia-std/src/compiler/check_numbers3.nika
 //
 // **The numbers no annotation typed, decided once the body is walked** (ADR-285
 // D2, D3, D4, D23-D25, D27, D34), moved from the compiler's checker (ADR-294,

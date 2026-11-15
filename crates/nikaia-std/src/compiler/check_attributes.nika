@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_attributes.nika
+// crates/nikaia-std/src/compiler/check_attributes.nika
 //
 // **Attributes** (ADR-294, #125, C-7, U-d2; ADR-331 D1-D4, Part II 10.3):
 // `@json::Name("createdAt")` before a declaration is a value of the struct the

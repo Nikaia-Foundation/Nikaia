@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_arguments.nika
+// crates/nikaia-std/src/compiler/check_arguments.nika
 //
 // **The count and the types of what a call passes, against what it takes**,
 // moved from the compiler's checker (ADR-294, #125, #558, C-5h): the arity,

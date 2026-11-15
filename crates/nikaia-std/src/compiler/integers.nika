@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/integers.nika
+// crates/nikaia-std/src/compiler/integers.nika
 //
 // **An integer while the program is built** - a magnitude and a sign, the
 // shape the tree gives a literal and the fold counts in (ADR-294 D11) - and

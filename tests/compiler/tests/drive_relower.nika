@@ -40,7 +40,7 @@ fn sh(dir: String, script: String) -> String throws {
 // ours another file; "docs": theirs only a note in `docs/`.
 fn setup(tmp: String, name: String, kind: String) -> String throws {
     let base = f"{tmp}/{name}"
-    let low = "crates/nikaia-std/src/tools/lowered"
+    let low = "crates/nikaia-std/src/compiler/lowered"
     let id = "git config user.email t@t; git config user.name t; git config commit.gpgsign false"
     sh(tmp.clone(), f"mkdir -p {name}; cd {name}; git init -q --bare origin.git; git init -q -b develop work")
     let work = f"{base}/work"
@@ -75,7 +75,7 @@ fn case(nikaia: String, repo: String, tmp: String, name: String, kind: String, l
     println(f"== {name}")
     println(out.stdout.trim().replace(head, "SHA"))
     println(f"exit ok: {out.ok}")
-    let state = sh(work, "git log --format=%s -1; git log --format=%p -1 | wc -w; test -f .git/MERGE_HEAD && echo merge open || echo no merge open; git status --porcelain --untracked-files=all; git show --format= --name-only HEAD | sort; cat crates/nikaia-std/src/tools/lowered/a.rs; cat assets/badges/self-hosted.svg; echo; cat notes.txt; cat examples/a/nikaia.contracts 2>/dev/null || true")
+    let state = sh(work, "git log --format=%s -1; git log --format=%p -1 | wc -w; test -f .git/MERGE_HEAD && echo merge open || echo no merge open; git status --porcelain --untracked-files=all; git show --format= --name-only HEAD | sort; cat crates/nikaia-std/src/compiler/lowered/a.rs; cat assets/badges/self-hosted.svg; echo; cat notes.txt; cat examples/a/nikaia.contracts 2>/dev/null || true")
     println(state)
 }
 
@@ -83,7 +83,7 @@ fn main() throws {
     let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
     let repo = root()
     let nikaia = toolchain()
-    let low = "crates/nikaia-std/src/tools/lowered"
+    let low = "crates/nikaia-std/src/compiler/lowered"
     // The stub lowering: the lowered file from the sources, and a new file.
     let lower = f"cat crates/src/*.nika > {low}/a.rs; echo new > {low}/new.rs"
     case(nikaia.clone(), repo.clone(), tmp.clone(), "lowered only", "lowered", lower.clone())

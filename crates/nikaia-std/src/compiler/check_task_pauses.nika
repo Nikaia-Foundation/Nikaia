@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_task_pauses.nika
+// crates/nikaia-std/src/compiler/check_task_pauses.nika
 //
 // **What a task keeps across a pause** (ADR-055 §2 D6, ADR-312), moved from the
 // compiler's checker (ADR-294, #125, #558, C-5f): where a task's body pauses,

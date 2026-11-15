@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_core_flow.nika
+// crates/nikaia-std/src/compiler/emit_core_flow.nika
 //
 // **The values that compute and the jumps of the emitter's core** (ADR-294,
 // #125, #558, E9 unit U8): the arms of `expr_as_written` for `Closure`,

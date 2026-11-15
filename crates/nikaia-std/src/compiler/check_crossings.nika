@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_crossings.nika
+// crates/nikaia-std/src/compiler/check_crossings.nika
 //
 // **What the checker's core crossed back into Rust for** (ADR-294, #125,
 // #558, C-7, U-d1): a bound task handle that has to be used up (`NK2109`), a

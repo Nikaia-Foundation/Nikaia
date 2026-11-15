@@ -3,7 +3,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/interpreter/mod.rs
 //
 // **The Stage 0 interpreter is Nikaia** (ADR-294, #125):
-// `nikaia-std/src/tools/interpreter.nika` walks `main` and hands back what it
+// `nikaia-std/src/compiler/interpreter.nika` walks `main` and hands back what it
 // would say. What stays here is the printing, and the two texts a Nikaia module
 // cannot write - a node's `Debug` and an `f"…"`'s format string.
 use crate::parser::Parsed;

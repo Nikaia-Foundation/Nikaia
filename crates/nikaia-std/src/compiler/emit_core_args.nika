@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_core_args.nika
+// crates/nikaia-std/src/compiler/emit_core_args.nika
 //
 // **The arguments and the call of the emitter's core** (ADR-294, #125, #558, E9
 // unit U5): `args`, which writes each argument of a call with what the checker

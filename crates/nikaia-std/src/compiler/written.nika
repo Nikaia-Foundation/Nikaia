@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/written.nika
+// crates/nikaia-std/src/compiler/written.nika
 //
 // **An expression written back the way the source wrote it** - the parser
 // keeps no text, and an `assert`'s failure names its condition (ADR-269 D2),

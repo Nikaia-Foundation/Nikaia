@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_function.nika
+// crates/nikaia-std/src/compiler/check_function.nika
 //
 // **What is read off the declarations before a function's body is walked**
 // (ADR-294, #125, #558, C-7, U-d4): which functions walk a type's fields

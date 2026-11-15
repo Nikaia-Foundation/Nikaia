@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_binds.nika
+// crates/nikaia-std/src/compiler/check_binds.nika
 //
 // **Putting a name into scope, and a boundary the walk crosses** (ADR-285 D29,
 // ADR-277 D2, D7, #465, Part I 8.3), moved from the compiler's checker

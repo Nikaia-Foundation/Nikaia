@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/prover_passes.nika
+// crates/nikaia-std/src/compiler/prover_passes.nika
 //
 // **The prover's passes over a program** (ADR-269 D5, D15-D20), moved from
 // the compiler's `prove` (ADR-294, #436 step 4): the walk

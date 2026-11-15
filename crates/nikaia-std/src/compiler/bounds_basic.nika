@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/bounds_basic.nika
+// crates/nikaia-std/src/compiler/bounds_basic.nika
 //
 // **The index checks a loop over a list's own length makes unneeded**
 // (ADR-306 D3, `--optimization=remove-bounds-checks:basic`), moved from the

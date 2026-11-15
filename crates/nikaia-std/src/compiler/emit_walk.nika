@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_walk.nika
+// crates/nikaia-std/src/compiler/emit_walk.nika
 //
 // **The walk the emitter asks of a tree**: every expression inside a block or
 // an expression, in the order the walk meets them, moved from `emit/mod.rs`

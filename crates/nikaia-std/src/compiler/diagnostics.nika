@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/diagnostics.nika
+// crates/nikaia-std/src/compiler/diagnostics.nika
 //
 // **Where an error is reported** (ADR-296 D18, ADR-300): `rustc` reports
 // byte offsets into the emitted Rust, the emitter's map trades them for the

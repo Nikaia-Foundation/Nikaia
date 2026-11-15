@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/ledger_ops.nika
+// crates/nikaia-std/src/compiler/ledger_ops.nika
 //
 // **What a build does with a package's ledger as a whole** - the entries it
 // publishes, whether it may be believed against the sources it was derived

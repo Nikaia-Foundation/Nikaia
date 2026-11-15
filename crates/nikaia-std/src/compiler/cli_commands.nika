@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/cli_commands.nika
+// crates/nikaia-std/src/compiler/cli_commands.nika
 //
 // **The commands of `nikaia`'s command line**, for the compiler's
 // `main.rs`: `nikaia test`'s builds, one per setting and kind, and the run of

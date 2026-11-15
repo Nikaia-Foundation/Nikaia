@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/keeps.nika
+// crates/nikaia-std/src/compiler/keeps.nika
 //
 // **What a body does with each of its parameters** (ADR-094 D2) - the walk the
 // compiler's `contracts::keeps` runs before its fixpoint (`tools/lends.nika`),

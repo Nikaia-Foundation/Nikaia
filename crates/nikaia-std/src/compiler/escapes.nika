@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/escapes.nika
+// crates/nikaia-std/src/compiler/escapes.nika
 //
 // What the `\` in a written string literal means (ADR-188) - the table the
 // compiler's `build_time` reads a literal through, moved from Rust (ADR-294,

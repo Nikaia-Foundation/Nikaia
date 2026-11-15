@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/dump.nika
+// crates/nikaia-std/src/compiler/dump.nika
 //
 // The encoder a grammar run at build time prints its result with (issue #178,
 // ADR-311 D1) - the statements `grammar_run` writes into the sub-program,

@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_members.nika
+// crates/nikaia-std/src/compiler/check_members.nika
 //
 // **`NK1171`: a member nothing writes down** (Part I 4.4, ADR-282 D18, ADR-295,
 // ADR-304), moved from the compiler's checker (ADR-294, #125, #558, C-5e): `X::y`

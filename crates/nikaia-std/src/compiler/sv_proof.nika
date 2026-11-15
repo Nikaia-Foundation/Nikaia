@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sv_proof.nika
+// crates/nikaia-std/src/compiler/sv_proof.nika
 //
 // **The proof log** (ADR-270 D5, #1282 item 4): one append-only log every
 // engine, strategy and theory writes into, replayed by `sv_check.nika`

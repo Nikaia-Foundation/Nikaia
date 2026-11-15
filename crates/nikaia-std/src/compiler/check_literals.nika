@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_literals.nika
+// crates/nikaia-std/src/compiler/check_literals.nika
 //
 // **Refusals about a table, an index computed at build time, a thrown value
 // and a C handle** - moved from the compiler's checker (ADR-294, #125, #558).

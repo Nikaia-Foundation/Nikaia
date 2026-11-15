@@ -48,7 +48,7 @@ fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
     let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    let tools = f"{repo}/crates/nikaia-std/src/tools"
+    let tools = f"{repo}/crates/nikaia-std/src/compiler"
     let rules = fs::read_to_string(f"{tools}/parser_grammar.nika", fs::Root::Anywhere)
     let numbers = fs::read_to_string(f"{tools}/parse_numbers.nika", fs::Root::Anywhere)
     let slice = slice_fn(fs::read_to_string(f"{tools}/ledger.nika", fs::Root::Anywhere))

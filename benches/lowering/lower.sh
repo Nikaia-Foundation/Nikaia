@@ -22,7 +22,7 @@ if [ "$what" = all ] || [ "$what" = std ]; then
     rm -rf "$work/cache" && mkdir -p "$work/cache"
     echo "== (a) cold lower-std, phases"
     NIKAIA_CACHE_DIR="$work/cache" NIKAIA_LOWER_TIMES=1 "$nikaia" lower-std
-    git -C "$root" diff --exit-code --stat crates/nikaia-std/src/tools/lowered.rs crates/nikaia-std/src/tools/lowered \
+    git -C "$root" diff --exit-code --stat crates/nikaia-std/src/compiler/lowered.rs crates/nikaia-std/src/compiler/lowered \
         && echo "lowered: identical"
 fi
 

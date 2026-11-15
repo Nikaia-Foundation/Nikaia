@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/project_write.nika
+// crates/nikaia-std/src/compiler/project_write.nika
 //
 // **The ledger and the proofs written, or under `--locked` compared**, for
 // the compiler's `project::write_ledger` and `project::write_proofs`. Moved

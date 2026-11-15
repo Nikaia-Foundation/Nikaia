@@ -146,7 +146,7 @@
 // autostash restored), and `ESCALATE drive: push rejected, merge conflicted in
 // <paths>, merge aborted`; an abort that fails, or leaves a merge or an
 // unmerged path, escalates with `merge left open: ...`. A conflict only in the
-// generated `crates/nikaia-std/src/tools/lowered/*.rs` is resolved by
+// generated `crates/nikaia-std/src/compiler/lowered/*.rs` is resolved by
 // re-lowering instead (#1430, drive_merge_relower: their side, `lower-std` and
 // the build until the lowered files settle, `MERGE <sha8> re-lowered <paths>`),
 // then the short checks as for a clean merge. Then it prints
@@ -582,7 +582,7 @@ fn drive_merge_generates(paths: Vec[String]) -> bool {
 }
 
 fn drive_lowered_dir() -> String {
-	return "crates/nikaia-std/src/tools/lowered"
+	return "crates/nikaia-std/src/compiler/lowered"
 }
 
 // The lowered files the lowering writes: the directory and its index.

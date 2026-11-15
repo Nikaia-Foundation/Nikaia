@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/parse_errors.nika
+// crates/nikaia-std/src/compiler/parse_errors.nika
 //
 // **A parse error in the words every other message uses** (Part III C.2,
 // rule 5; `docs/error-corpus.md`): what was expected, what was there, what to

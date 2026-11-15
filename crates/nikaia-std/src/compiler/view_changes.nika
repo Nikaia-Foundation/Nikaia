@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/view_changes.nika
+// crates/nikaia-std/src/compiler/view_changes.nika
 //
 // **What happens to data while a view of it is still used**
 // ([ADR-views-3](../../../../docs/specification/adr/adr-views-3.md) D9; Part I 6.6),

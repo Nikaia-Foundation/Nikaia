@@ -5,7 +5,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // **A type's rule, an `assert` after a struct's fields**
 // ([ADR-369](../../../docs/specification/adr/adr-369.md)), written out right
 // after parsing as the `assert`s it means. The rewrite is Nikaia
-// (`crates/nikaia-std/src/tools/type_rules.nika`, ADR-294, #125, R-3): every
+// (`crates/nikaia-std/src/compiler/type_rules.nika`, ADR-294, #125, R-3): every
 // literal of the type checked where it is built (D2), a method that changes
 // its receiver checking the rule where it leaves (D2), and the rule given at
 // each function's entry (D3). This module is the adapter: it hands the parsed

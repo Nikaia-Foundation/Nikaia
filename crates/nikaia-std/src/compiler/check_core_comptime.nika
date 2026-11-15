@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_core_comptime.nika
+// crates/nikaia-std/src/compiler/check_core_comptime.nika
 //
 // **A `comptime`, wherever it stands, and a `dsl` block over a grammar of this
 // program** (ADR-294, #125, #558, C-6, U-c2): `comptime_binding` and

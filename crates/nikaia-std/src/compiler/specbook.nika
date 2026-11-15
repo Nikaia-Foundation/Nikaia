@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/specbook.nika
+// crates/nikaia-std/src/compiler/specbook.nika
 //
 // **Every `nika` block in the specification, and the readings it can have**,
 // for the compiler's `specbook` (`tests/specification.rs` and its baseline).

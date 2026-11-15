@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/logic_normal.nika
+// crates/nikaia-std/src/compiler/logic_normal.nika
 //
 // **A query in normal form, and an answer as text** (ADR-270 D19): what a
 // `nikaia.proofs` entry is keyed by and what it holds. Moved from

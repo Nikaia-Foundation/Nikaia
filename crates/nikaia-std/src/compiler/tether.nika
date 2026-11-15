@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/tether.nika
+// crates/nikaia-std/src/compiler/tether.nika
 //
 // Which of Part I 6.6's states each view in a signature is in (ADR-283 D2,
 // D7), and whether a body makes a buffer of its own - the analysis half of

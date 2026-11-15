@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/prover_state.nika
+// crates/nikaia-std/src/compiler/prover_state.nika
 //
 // **What the prover's walk keeps from one function to the next** (ADR-269
 // D15-D18), moved from the compiler's `prove` (ADR-294, #436 step 4): the

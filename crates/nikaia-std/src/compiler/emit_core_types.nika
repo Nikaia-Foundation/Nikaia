@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_core_types.nika
+// crates/nikaia-std/src/compiler/emit_core_types.nika
 //
 // **How the emitter writes a type** (ADR-294, #125, #558, E9 unit U1a): the
 // type group of `emit/mod.rs` - `ty`, `ty_counted`, the tethered wrapper, the

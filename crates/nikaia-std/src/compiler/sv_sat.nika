@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sv_sat.nika
+// crates/nikaia-std/src/compiler/sv_sat.nika
 //
 // **The SAT core** (ADR-270 D12, D16, #1283 item 1): conflict-driven clause
 // learning over the literals of `sv_proof.nika` (`2a` atom `a`, `2a + 1` its

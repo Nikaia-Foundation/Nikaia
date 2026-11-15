@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/sysroot_package.nika
+// crates/nikaia-std/src/compiler/sysroot_package.nika
 //
 // **The toolchain's Nikaia assembled as the one package it is** (S1, #125):
 // what `crates/nikaia/src/sysroot.rs` did with the lowered texts - the

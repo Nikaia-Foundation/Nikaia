@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/emit_grammar.nika
+// crates/nikaia-std/src/compiler/emit_grammar.nika
 //
 // **The grammars the emitter writes**, moved from `emit/mod.rs` (ADR-294,
 // #125, #558, E10-1): `grammar! { .. }` for a grammar and, after it, its copy

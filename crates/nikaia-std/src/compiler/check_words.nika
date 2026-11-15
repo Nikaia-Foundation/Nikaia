@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/check_words.nika
+// crates/nikaia-std/src/compiler/check_words.nika
 //
 // **The words the checker's refusals are made of** - an article, a count, a
 // list of names, the nearest spelling, the note on a word another language

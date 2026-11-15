@@ -26,7 +26,7 @@ comptime SYSROOT_NIKA: ref String = "nika"
 /// A directory rather than a naming convention, because what separates the two
 /// is not what the files are like but what `std` promises about them
 /// (`sysroot_tool_modules`).
-comptime SYSROOT_TOOLS: ref String = "tools"
+comptime SYSROOT_TOOLS: ref String = "compiler"
 
 /// **Where `std`'s own unpublished Nikaia lives** (#723), under `std`'s `src`:
 /// what a *program* runs - the HTTP/1 head's grammar - as opposed to what only
@@ -99,7 +99,7 @@ pub fn sysroot_std_modules(root: ref fs::Path) -> Vec[fs::Path] sync throws {
     return sysroot_nika_in(sysroot_std_dir(root).join("src"))
 }
 
-/// **Nikaia the toolchain uses and `std` does not publish**, in `src/tools`;
+/// **Nikaia the toolchain uses and `std` does not publish**, in `src/compiler`;
 /// none where the sysroot has no such directory.
 pub fn sysroot_tool_modules(root: ref fs::Path) -> Vec[fs::Path] sync throws {
     let dir = sysroot_tools_dir(root)

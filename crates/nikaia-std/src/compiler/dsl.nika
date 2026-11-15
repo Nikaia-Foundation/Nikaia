@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/tools/dsl.nika
+// crates/nikaia-std/src/compiler/dsl.nika
 //
 // **The holes of a `dsl` block's body**, for the compiler's deferred
 // parameters (ADR-296 D4).
