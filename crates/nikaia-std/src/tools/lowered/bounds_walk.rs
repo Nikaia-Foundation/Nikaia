@@ -29,6 +29,7 @@ pub struct BoundsContext {
     pub trace: Vec<i64>,
     pub decided: collections::BTreeMap<String, bool>,
     pub list_indices: collections::BTreeSet<i64>,
+    pub text_bytes: collections::BTreeSet<i64>,
     pub returns: collections::BTreeMap<String, BoundsReturns>,
 }
 
@@ -2025,7 +2026,18 @@ pub(crate) fn bounding_length(walk: &mut BoundsWalk, receiver: &Expr, name: &str
     let fixed = context.array_lengths.get(&node_key(receiver));
     if fixed.is_some() { return Some(walk.arena.int(nikaia_std::index::or(fixed, || 0))); }
     if !context.lengths.contains(&node_key(receiver)) { return None; }
-    Some(bounding_length_named(walk, name, context.sized.contains(&node_key(receiver))))
+    let counted = bounding_counted_list(name, node_key(receiver), context);
+    Some(bounding_length_named(walk, &counted, context.sized.contains(&node_key(receiver))))
+}
+
+pub(crate) fn bounding_counted_list(list: &str, node: i64, context: &BoundsContext) -> String {
+    if context.text_bytes.contains(&node) {
+        return nikaia_std::index::or(match list.strip_suffix(".bytes") {
+            Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
+            None => None,
+        }, || nikaia_std::block::Text::from(list.to_string()).into());
+    }
+    nikaia_std::block::Text::from(list.to_string())
 }
 
 pub(crate) fn bounding_length_named(walk: &mut BoundsWalk, name: &str, sized: bool) -> i64 {
@@ -2335,7 +2347,7 @@ pub(crate) fn bounding_index(walk: &mut BoundsWalk, base: &Expr, index: &Expr, f
 pub(crate) fn bounding_list_length(walk: &mut BoundsWalk, list: &str, node: i64, context: &BoundsContext) -> i64 {
     let fixed = context.array_lengths.get(&node);
     if fixed.is_some() { return walk.arena.int(nikaia_std::index::or(fixed, || 0)); }
-    walk.arena.var(&length_of(list))
+    walk.arena.var(&length_of(&bounding_counted_list(list, node, context)))
 }
 
 pub(crate) fn bounding_block(walk: &mut BoundsWalk, block: &Block, facts: &mut BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &dyn Fn(&TermArena, &[i64], i64) -> bool) -> bool {

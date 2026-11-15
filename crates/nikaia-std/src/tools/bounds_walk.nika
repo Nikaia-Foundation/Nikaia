@@ -93,6 +93,9 @@ pub struct BoundsContext {
 	/// #1431), by node: a read of one stops the program outside, so past it
 	/// the position is inside, whatever bound the base.
 	pub list_indices: collections::BTreeSet[i64],
+	/// **The reads `s.bytes` of a text `s`** (ADR-320 D11), by node:
+	/// `s.bytes.len()` is the length `s.len()` names (#1556).
+	pub text_bytes: collections::BTreeSet[i64],
 	/// **What each function of the file is found to return** (ADR-306 D23),
 	/// by name: never published, like a frame (ADR-391 D4).
 	pub returns: collections::BTreeMap[String, BoundsReturns],
@@ -3540,7 +3543,20 @@ fn bounding_length(
 	if !context.lengths.contains(node_key(receiver)) {
 		return null
 	}
-	return bounding_length_named(walk, name, context.sized.contains(node_key(receiver)))
+	let counted = bounding_counted_list(name, node_key(receiver), context)
+	return bounding_length_named(walk, counted, context.sized.contains(node_key(receiver)))
+}
+
+/// **The list whose length `list.len()` is, read at `node`**: the text `s`
+/// for its bytes `s.bytes`, `list` itself for any other. `s.bytes.len()`
+/// counts the text's bytes (ADR-320 D4), and so does the `s.len()` the
+/// compiler still takes where D3 removes it, so a fact on one holds of the
+/// other (#1556).
+fn bounding_counted_list(list: ref String, node: i64, context: ref BoundsContext) -> String {
+	if context.text_bytes.contains(node) {
+		return list.strip_suffix(".bytes")?.clone() ?? list.clone()
+	}
+	return list.clone()
 }
 
 /// `name.len()` as a number of the walk: not negative, an `i64` (ADR-385
@@ -4037,7 +4053,7 @@ fn bounding_list_length(
 	if fixed != null {
 		return walk.arena.int(fixed ?? 0)
 	}
-	return walk.arena.var(length_of(list))
+	return walk.arena.var(length_of(bounding_counted_list(list, node, context)))
 }
 
 /// A block; whether control never goes past its end.
