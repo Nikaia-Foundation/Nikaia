@@ -1950,8 +1950,11 @@ pub(crate) fn bounding_derived_call(walk: &mut BoundsWalk, expr: &Expr, name: &s
         for k in 0..callee.claims.len() as i64 {
             let claim = (*unsafe { nikaia_std::proven::read(&callee.claims, (k) as usize) }).clone();
             let mut given: Vec<i64> = vec![];
-            let left = match bounding_derived_side(walk, &callee.params, &claim.left, false, claim.each, args, on, facts, &mut given, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let right = if claim.fixed.is_some() { walk.arena.int(nikaia_std::index::or(claim.fixed, || 0)) } else { match bounding_derived_side(walk, &callee.params, &claim.right, claim.length, claim.each, args, on, facts, &mut given, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue } };
+            let mut left_reads: collections::BTreeSet<String> = collections::BTreeSet::new();
+            let mut right_reads: collections::BTreeSet<String> = collections::BTreeSet::new();
+            let left = match bounding_derived_side(walk, &callee.params, &claim.left, false, claim.each, args, on, facts, &mut given, &mut left_reads, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let right = if claim.fixed.is_some() { walk.arena.int(nikaia_std::index::or(claim.fixed, || 0)) } else { match bounding_derived_side(walk, &callee.params, &claim.right, claim.length, claim.each, args, on, facts, &mut given, &mut right_reads, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue } };
+            if left_reads.iter().any(|name| { right_reads.contains(name) }) { continue; }
             let side = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
             let goal = bounding_each_guarded(walk, side);
             if given.is_empty() { if bounding_proves(&walk, facts, goal, ask) { proved.insert(k); } } else {
@@ -1980,7 +1983,7 @@ pub(crate) fn bounding_derived_call(walk: &mut BoundsWalk, expr: &Expr, name: &s
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn bounding_derived_side(walk: &mut BoundsWalk, params: &[String], param: &str, length: bool, each: bool, args: &[Expr], on: Option<&str>, facts: &BoundsFacts, given: &mut Vec<i64>, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
+pub(crate) fn bounding_derived_side(walk: &mut BoundsWalk, params: &[String], param: &str, length: bool, each: bool, args: &[Expr], on: Option<&str>, facts: &BoundsFacts, given: &mut Vec<i64>, reads: &mut collections::BTreeSet<String>, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
     if param == "" { return Some(walk.arena.int(0)); }
     if each && !length { return bounding_derived_each(walk, params, param, args, given, words); }
     let field = param.strip_prefix("self.");
@@ -1992,7 +1995,14 @@ pub(crate) fn bounding_derived_side(walk: &mut BoundsWalk, params: &[String], pa
     }
     for k in 0..params.len() as i64 {
         if *unsafe { nikaia_std::proven::read(&params, (k) as usize) } != param { continue; }
-        if !length { return bounding_lin(walk, nikaia_std::index::get(&args, (k) as usize), facts, context, program, words); }
+        if !length {
+            let element = rules_element_read(walk, nikaia_std::index::get(&args, (k) as usize), facts, words);
+            if element.is_some() {
+                walk.arena.variables(nikaia_std::index::or(element, || 0), reads);
+                return std::convert::identity(element);
+            }
+            return bounding_lin(walk, unsafe { nikaia_std::proven::read(&args, (k) as usize) }, facts, context, program, words);
+        }
         let path = match path_of(nikaia_std::index::get(&args, (k) as usize), words) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if walk.pinned.contains(&path_root(&path)) { return None; }
         return Some(bounding_length_named(walk, &path, true));

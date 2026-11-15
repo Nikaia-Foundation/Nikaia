@@ -3377,6 +3377,10 @@ fn bounding_derived_call(
 			// What holds of every value of a list handed for a side over
 			// its values (ADR-306 D21).
 			let mut given: Vec[i64] = []
+			// The elements an argument read out of a list stands for, of
+			// each side (#1668).
+			let mut left_reads: collections::BTreeSet[String] = collections::BTreeSet()
+			let mut right_reads: collections::BTreeSet[String] = collections::BTreeSet()
 			let left = bounding_derived_side(
 				walk,
 				callee.params,
@@ -3387,6 +3391,7 @@ fn bounding_derived_call(
 				on,
 				facts,
 				given,
+				left_reads,
 				context,
 				program,
 				words,
@@ -3404,11 +3409,18 @@ fn bounding_derived_call(
 					on,
 					facts,
 					given,
+					right_reads,
 					context,
 					program,
 					words,
 				)
 					?? continue
+			}
+			// Two reads out of one list stand for every element both: the
+			// goal would compare an element with itself, not `xs[i]` with
+			// `xs[j]`.
+			if left_reads.iter().any(fn(name) { right_reads.contains(name) }) {
+				continue
 			}
 			let side = if claim.strict { walk.arena.lt(left, right) } else {
 				walk.arena.le(left, right)
@@ -3450,7 +3462,10 @@ fn bounding_derived_call(
 /// `self` is the receiver's field, where the receiver is a path. Where
 /// `each` and not `length`, `param` is a list or a path of fields from one,
 /// and the side is every value the list handed holds: what the walk knows
-/// of those goes into `given`.
+/// of those goes into `given`. An argument read out of a list whose every
+/// element facts bound (`self.place[v]`) is every element of it, as an
+/// index read out of one is (`rules_element_inside`, ADR-306 D22), and its
+/// element goes into `reads` (#1668).
 fn bounding_derived_side(
 	mut walk: BoundsWalk,
 	params: ref Vec[String],
@@ -3461,6 +3476,7 @@ fn bounding_derived_side(
 	on: ref String?,
 	facts: ref BoundsFacts,
 	mut given: Vec[i64],
+	mut reads: collections::BTreeSet[String],
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
@@ -3487,6 +3503,11 @@ fn bounding_derived_side(
 			continue
 		}
 		if !length {
+			let element = rules_element_read(walk, args[k], facts, words)
+			if element != null {
+				walk.arena.variables(element ?? 0, reads)
+				return element
+			}
 			return bounding_lin(walk, args[k], facts, context, program, words)
 		}
 		let path = path_of(args[k], words) ?? return null

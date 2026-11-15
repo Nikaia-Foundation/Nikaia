@@ -1,0 +1,44 @@
+/// An argument read out of a list of positions proves a callee's derived
+/// precondition (ADR-306 D22, D34, ADR-391 D1, #1668): the walk finds that
+/// every element of `place` is a position of `heap`, so `self.place[v]`
+/// handed to `set` is below `self.heap.len()`, as it is where it indexes
+/// `heap` directly. Two such reads handed to `between` stand for two
+/// elements, not one, so `self.place[a] <= self.place[b]` stays unproved
+/// and the cut keeps its check.
+struct Heap { heap: Vec[i64], place: Vec[i64] }
+
+impl Heap {
+	fn set(mut self, i: i64, x: i64) sync {
+		self.heap[i] = x
+	}
+
+	fn between(ref self, from: i64, to: i64) -> i64 sync {
+		return self.heap[from..<to].len()
+	}
+
+	fn add(mut self, x: i64) sync {
+		self.heap.push(x)
+		self.place.push(self.heap.len() - 1)
+	}
+
+	fn touch(mut self, v: i64, x: i64) sync {
+		if v >= 0 && v < self.place.len() {
+			self.set(self.place[v], x)
+		}
+	}
+
+	fn span(ref self, a: i64, b: i64) -> i64 sync {
+		if a >= 0 && a < self.place.len() && b >= 0 && b < self.place.len() {
+			return self.between(self.place[a], self.place[b])
+		}
+		return 0
+	}
+}
+
+fn main() throws {
+	let mut h = Heap { heap: [], place: [] }
+	h.add(3)
+	h.add(5)
+	h.touch(1, 7)
+	println(f"{h.heap.len()} {h.span(0, 1)}")
+}
