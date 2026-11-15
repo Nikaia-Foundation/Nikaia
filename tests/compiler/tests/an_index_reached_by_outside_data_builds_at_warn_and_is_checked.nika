@@ -1,6 +1,7 @@
 // #1572 (ADR-396 D3): at `unproved-claims = "warn"` an index reached by data
 // from outside, not proved, builds with NK1302 as a warning, and the index is
-// checked when the program runs: a month read as 12 stops it there.
+// checked when the program runs: a month read as 12 stops it there; and
+// `--bounds` lists the index as checked because of the switch (D5).
 use std::fs
 use std::process
 
@@ -43,5 +44,12 @@ fn main() throws {
 		println(shown(tmp, f"{out.stdout}{out.stderr}"))
 		println(f"exit {out.code}")
 	}
+	// `--bounds` lists the index as checked because of the switch
+	// (ADR-396 D5).
+	let report = process::run(
+		"sh",
+		["-c", "\"$0\" check --bounds --unproved-claims=warn month.nika", toolchain()]; dir: tmp,
+	)
+	println(shown(tmp, report.stdout))
 	process::run("rm", ["-rf", tmp])
 }

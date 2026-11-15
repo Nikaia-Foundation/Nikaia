@@ -210,8 +210,9 @@ pub fn check_walked_declared(state: &mut CheckState, world: &CheckWorld<'_, '_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_walked_proved(state: &mut CheckState, entries: collections::BTreeMap<String, Vec<PreconditionCheck>>, reaches: collections::BTreeMap<(String, String), CallReach>, published: collections::BTreeMap<String, Published>, std_claims: &collections::BTreeMap<(i64, i64), String>, held: &collections::BTreeMap<(i64, i64), ClaimHeld>) {
+pub fn check_walked_proved(state: &mut CheckState, entries: collections::BTreeMap<String, Vec<PreconditionCheck>>, reaches: collections::BTreeMap<(String, String), CallReach>, published: collections::BTreeMap<String, Published>, std_claims: &collections::BTreeMap<(i64, i64), String>, held: &collections::BTreeMap<(i64, i64), ClaimHeld>, outside: collections::BTreeMap<(i64, String), OutsideIndex>) {
     state.facts.entries = entries;
+    state.facts.outside_indices = outside;
     state.facts.reaches = reaches;
     state.facts.published = published;
     for (key, written) in std_claims.iter() { state.facts.claims.insert(key.clone(), FactClaim { held: None, written: nikaia_std::block::Text::from(written.to_string()), left: None, right: None, assumed: false }); }
@@ -229,6 +230,7 @@ pub struct CheckWalkedProved {
     pub reaches: collections::BTreeMap<(String, String), CallReach>,
     pub published: collections::BTreeMap<String, Published>,
     pub std_claims: collections::BTreeMap<(i64, i64), String>,
+    pub outside: collections::BTreeMap<(i64, String), OutsideIndex>,
 }
 
 pub trait CheckWalkedPasses {
@@ -263,7 +265,7 @@ pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckSt
     if computes {
         let proved = passes.proved(&state.facts);
         state.findings.extend(proved.findings);
-        check_walked_proved(state, proved.entries, proved.reaches, proved.published, &proved.std_claims, &proved.held);
+        check_walked_proved(state, proved.entries, proved.reaches, proved.published, &proved.std_claims, &proved.held, proved.outside);
         state.findings.extend(passes.view_findings());
         let coalesced = vc_coalesced(&state.facts);
         let mut_viewed = vc_mut_viewed(&state.facts);

@@ -671,6 +671,8 @@ pub fn bounds_tools(
                 bounds,
                 overflow,
                 through_loops,
+                // The tools refuse an unproved claim (ADR-380 D1).
+                false,
             ));
         }
         if asserts_report {

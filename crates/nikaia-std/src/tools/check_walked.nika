@@ -333,8 +333,9 @@ pub fn check_walked_declared(mut state: CheckState, world: ref CheckWorld, ty: r
 /// publishes; a `std` precondition at a call becomes a claim of the program
 /// (#1003), held, refused (`NK1300`) and listed as an `assert` is; and each
 /// claim the prover reached is told how it is held.
-pub fn check_walked_proved(mut state: CheckState, entries: collections::BTreeMap[String, Vec[PreconditionCheck]], reaches: collections::BTreeMap[(String, String), CallReach], published: collections::BTreeMap[String, Published], std_claims: ref collections::BTreeMap[(i64, i64), String], held: ref collections::BTreeMap[(i64, i64), ClaimHeld]) sync {
+pub fn check_walked_proved(mut state: CheckState, entries: collections::BTreeMap[String, Vec[PreconditionCheck]], reaches: collections::BTreeMap[(String, String), CallReach], published: collections::BTreeMap[String, Published], std_claims: ref collections::BTreeMap[(i64, i64), String], held: ref collections::BTreeMap[(i64, i64), ClaimHeld], outside: collections::BTreeMap[(i64, String), OutsideIndex]) sync {
     state.facts.entries = entries
+    state.facts.outside_indices = outside
     state.facts.reaches = reaches
     state.facts.published = published
     for (key, written) in std_claims {
@@ -357,6 +358,9 @@ pub struct CheckWalkedProved {
     pub reaches: collections::BTreeMap[(String, String), CallReach],
     pub published: collections::BTreeMap[String, Published],
     pub std_claims: collections::BTreeMap[(i64, i64), String],
+    /// Each index data from outside reaches, and what became of it
+    /// (ADR-396 D5).
+    pub outside: collections::BTreeMap[(i64, String), OutsideIndex],
 }
 
 /// **The passes of the compiler the walk runs once it is over** (ADR-294,
@@ -431,7 +435,7 @@ pub fn check_walked_walk[H: CheckHost, P: CheckWalkedPasses](mut state: CheckSta
         // which calls are the prelude's.
         let proved = passes.proved(state.facts)
         state.findings.extend(proved.findings)
-        check_walked_proved(state, proved.entries, proved.reaches, proved.published, proved.std_claims, proved.held)
+        check_walked_proved(state, proved.entries, proved.reaches, proved.published, proved.std_claims, proved.held, proved.outside)
         // Where a value goes, not what a type is (`NK2302`).
         state.findings.extend(passes.view_findings())
         // Where a view points and when it is used (`NK2305`).

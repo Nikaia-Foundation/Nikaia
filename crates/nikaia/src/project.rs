@@ -2078,6 +2078,7 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                 settings.build.bounds,
                 settings.build.overflow,
                 settings.build.prove_through_loops,
+                settings.words.unproved_claims == "warn",
             ),
             "trust" => crate::contracts::trust::render_with_escapes(
                 &crate::contracts::trust::analyse_in(

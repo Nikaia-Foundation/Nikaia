@@ -806,29 +806,29 @@ impl ProverState {
     /// at a call, but for a refutation only (ADR-269 D8) - every time, or for
     /// a state that reaches the call. Nothing on *unknown*, and no check moves:
     /// the callee keeps its own.
-    pub fn unwritten_call(ref self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], checks: ref Vec[UnwrittenCheck], args: ref Vec[Expr], span: Span, scope: ref ProverScope, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> Vec[Finding] {
+    pub fn unwritten_call(ref self, mut arena: TermArena, words: ref winnow_grammar::InternerContext, callee: ref String, params: ref Vec[String], checks: ref Vec[UnwrittenCheck], args: ref Vec[Expr], span: Span, scope: ref ProverScope, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, mut outside: collections::BTreeMap[(i64, String), OutsideIndex]) -> Vec[Finding] {
         let mut findings: Vec[Finding] = []
         for check in checks {
             let at_call = self.goal_at_call(arena, words, params, check.term, args, scope)
             let goal = at_call.goal ?? continue
             let mut names: collections::BTreeSet[String] = collections::BTreeSet()
             arena.variables(goal, names)
-            let mut outside = false
+            let mut tainted = false
             for name in names {
                 if scope.tainted.contains(name) {
-                    outside = true
+                    tainted = true
                 }
             }
             // **Data from outside reaches the check** (ADR-396 D1): proved
             // at this call, or refused, `NK1302`.
-            if outside && check.index {
-                let found = self.outside_call(arena, callee, check, goal, at_call, span, scope, ask, model)
+            if tainted && check.index {
+                let found = self.outside_call(arena, callee, check, goal, at_call, span, scope, ask, model, outside)
                 if found != null {
                     findings.push(found ?? continue)
                 }
                 continue
             }
-            if outside {
+            if tainted {
                 continue
             }
             // **A check carried here through a call** (#1568) is asked as the
@@ -860,13 +860,7 @@ impl ProverState {
     /// with the case the walk could not exclude, as the callee's parameters
     /// have it. A caller of the callee's caller is not asked: data from
     /// outside is not carried back (ADR-269 D6).
-    fn outside_call(ref self, mut arena: TermArena, callee: ref String, check: ref UnwrittenCheck, goal: i64, at_call: ref GoalAtCall, span: Span, scope: ref ProverScope, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> Finding? {
-        if is_proved(ask(arena, scope.facts, goal)) {
-            return null
-        }
-        if scope.history_reads(arena, goal) && is_proved(ask(arena, scope.with_history(), goal)) {
-            return null
-        }
+    fn outside_call(ref self, mut arena: TermArena, callee: ref String, check: ref UnwrittenCheck, goal: i64, at_call: ref GoalAtCall, span: Span, scope: ref ProverScope, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, mut outside: collections::BTreeMap[(i64, String), OutsideIndex]) -> Finding? {
         let mut names: collections::BTreeSet[String] = collections::BTreeSet()
         arena.variables(goal, names)
         let mut first: String = ""
@@ -877,6 +871,27 @@ impl ProverState {
             }
         }
         let source = scope.sources[first]?.clone()
+        // **What became of it, for `--bounds`** (ADR-396 D5), by the call
+        // and the index as this call reaches it.
+        let mut written = f"`{check.written}` in `{callee}`"
+        if check.within != "" {
+            written = f"`{check.written}` in `{check.within}`, reached through `{callee}`"
+        }
+        let at = span.start as i64
+        let mut record = OutsideIndex { at: at, written: written.clone(), name: first.clone(), source: source?.clone() ?? "", proved: true, guard_at: -1, guard: "" }
+        if is_proved(ask(arena, scope.facts, goal)) || (scope.history_reads(arena, goal) && is_proved(ask(arena, scope.with_history(), goal))) {
+            match scope.guard_of(arena, goal) {
+                null => {},
+                found => {
+                    record.guard_at = found.0
+                    record.guard = found.1.clone()
+                },
+            }
+            outside.insert((at, written), record)
+            return null
+        }
+        record.proved = false
+        outside.insert((at, written), record)
         let mut notes: Vec[String] = [outside_note(first, source)]
         let found = model(arena, scope.facts, goal)
         if found != null {

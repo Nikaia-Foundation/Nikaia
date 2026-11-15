@@ -553,6 +553,10 @@ pub struct CheckFacts {
     pub entries: collections::BTreeMap[String, Vec[PreconditionCheck]],
     pub reaches: collections::BTreeMap[(String, String), CallReach],
     pub published: collections::BTreeMap[String, Published],
+    /// **Each index data from outside reaches, and what became of it**
+    /// (ADR-396 D5), by where it stands and how it is written, as the
+    /// prover's last walk left it: `--bounds` lists them.
+    pub outside_indices: collections::BTreeMap[(i64, String), OutsideIndex],
     pub mut_args: collections::BTreeSet[i64],
     /// **The receivers of methods written `ref mut self`** (#787), by the
     /// receiver's node: a call there lends its root as a `mut` argument does.
@@ -875,6 +879,7 @@ impl CheckFacts {
             entries: collections::BTreeMap(),
             reaches: collections::BTreeMap(),
             published: collections::BTreeMap(),
+            outside_indices: collections::BTreeMap(),
             mut_args: collections::BTreeSet(),
             mut_receivers: collections::BTreeSet(),
             mut_arg_bindings: collections::BTreeMap(),

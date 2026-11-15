@@ -417,21 +417,21 @@ impl ProverState {
         GoalAtCall { goal, given_by, read }
     }
     #[allow(clippy::too_many_arguments)]
-    pub fn unwritten_call(&self, arena: &mut TermArena, words: &winnow_grammar::InternerContext, callee: &str, params: &[String], checks: &[UnwrittenCheck], args: &[Expr], span: Span, scope: &ProverScope, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Vec<Finding> {
+    pub fn unwritten_call(&self, arena: &mut TermArena, words: &winnow_grammar::InternerContext, callee: &str, params: &[String], checks: &[UnwrittenCheck], args: &[Expr], span: Span, scope: &ProverScope, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, outside: &mut collections::BTreeMap<(i64, String), OutsideIndex>) -> Vec<Finding> {
         let mut findings: Vec<Finding> = vec![];
         for check in checks.iter() {
             let at_call = self.goal_at_call(arena, words, params, check.term, args, scope);
             let goal = match at_call.goal { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
             arena.variables(goal, &mut names);
-            let mut outside = false;
-            for name in names.iter() { if scope.tainted.contains(name) { outside = true; } }
-            if outside && check.index {
-                let found = self.outside_call(arena, callee, check, goal, &at_call, span, scope, ask, model);
+            let mut tainted = false;
+            for name in names.iter() { if scope.tainted.contains(name) { tainted = true; } }
+            if tainted && check.index {
+                let found = self.outside_call(arena, callee, check, goal, &at_call, span, scope, ask, model, outside);
                 if found.is_some() { findings.push(match found { Some(__nikaia_value) => __nikaia_value, None => continue }); }
                 continue;
             }
-            if outside { continue; }
+            if tainted { continue; }
             let mut stands = format!("`{}` in `{}`", check.written, callee);
             let mut holds = nikaia_std::block::Text::from(check.holds.to_string());
             if check.within != "" {
@@ -452,9 +452,7 @@ impl ProverState {
         findings
     }
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn outside_call(&self, arena: &mut TermArena, callee: &str, check: &UnwrittenCheck, goal: i64, at_call: &GoalAtCall, span: Span, scope: &ProverScope, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Option<Finding> {
-        if is_proved(&ask(&arena, &scope.facts, goal)) { return None; }
-        if scope.history_reads(&arena, goal) && is_proved(&ask(&arena, &scope.with_history(), goal)) { return None; }
+    pub(crate) fn outside_call(&self, arena: &mut TermArena, callee: &str, check: &UnwrittenCheck, goal: i64, at_call: &GoalAtCall, span: Span, scope: &ProverScope, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, outside: &mut collections::BTreeMap<(i64, String), OutsideIndex>) -> Option<Finding> {
         let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
         arena.variables(goal, &mut names);
         let mut first: String = String::from("");
@@ -468,6 +466,26 @@ impl ProverState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         };
+        let mut written = format!("`{}` in `{}`", check.written, callee);
+        if check.within != "" { written = format!("`{}` in `{}`, reached through `{}`", check.written, check.within, callee); }
+        let at = span.start as i64;
+        let mut record = OutsideIndex { at, written: nikaia_std::block::Text::from(written.to_string()), name: nikaia_std::block::Text::from(first.to_string()), source: nikaia_std::index::or(match source.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into()), proved: true, guard_at: -1, guard: String::from("") };
+        if is_proved(&ask(&arena, &scope.facts, goal)) || scope.history_reads(&arena, goal) && is_proved(&ask(&arena, &scope.with_history(), goal)) {
+            match scope.guard_of(&arena, goal) {
+                None => { },
+                Some(ref found) => {
+                    record.guard_at = found.0;
+                    record.guard = nikaia_std::block::Text::from(found.1.to_string());
+                },
+            }
+            outside.insert((at, written), record);
+            return None;
+        }
+        record.proved = false;
+        outside.insert((at, written), record);
         #[allow(unused_mut)] let mut notes: Vec<String> = vec![outside_note(&first, (source).as_deref())];
         let found = model(&arena, &scope.facts, goal); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
         if found.is_some() {

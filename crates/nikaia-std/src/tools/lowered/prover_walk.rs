@@ -10,6 +10,7 @@ pub struct ProverWalk {
     pub findings: Vec<Finding>,
     pub claims: collections::BTreeSet<(i64, i64)>,
     pub std_claims: collections::BTreeMap<(i64, i64), String>,
+    pub outside: collections::BTreeMap<(i64, String), OutsideIndex>,
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -1210,7 +1211,10 @@ pub(crate) fn prover_if(walk: &mut ProverWalk, cond: &Expr, then_branch: &Block,
     let mut fails: Option<i64> = None;
     if holds.is_some() { fails = Some(walk.arena.not(nikaia_std::index::or(holds, || 0))); }
     let mut then_scope = scope.clone();
-    if holds.is_some() { then_scope.facts.push(nikaia_std::index::or(holds, || 0)); }
+    if holds.is_some() {
+        then_scope.facts.push(nikaia_std::index::or(holds, || 0));
+        then_scope.guards.insert(nikaia_std::index::or(holds, || 0), (span.start as i64, written_of(cond)));
+    }
     then_scope.exact = then_scope.exact && holds.is_some();
     let cond_leaves = leaves_expr(cond, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, true);
     then_scope.on_the_path(&mut walk.arena, holds);
@@ -1220,11 +1224,17 @@ pub(crate) fn prover_if(walk: &mut ProverWalk, cond: &Expr, then_branch: &Block,
     if !(then_leaves && else_leaves) { prover_join(walk, scope, &then_scope, then_leaves, then_branch, &else_scope, else_leaves, else_branch, &span, words); }
     if then_leaves && else_leaves { return true; }
     if then_leaves {
-        if fails.is_some() { scope.facts.push(nikaia_std::index::or(fails, || 0)); }
+        if fails.is_some() {
+            scope.facts.push(nikaia_std::index::or(fails, || 0));
+            scope.guards.insert(nikaia_std::index::or(fails, || 0), (span.start as i64, written_of(cond)));
+        }
         scope.on_the_path(&mut walk.arena, fails);
         scope.exact = scope.exact && fails.is_some() && !prover_else_leaves(else_branch, at, program, words, own, library, &holes_of, &unaliased);
     } else if else_leaves {
-        if holds.is_some() { scope.facts.push(nikaia_std::index::or(holds, || 0)); }
+        if holds.is_some() {
+            scope.facts.push(nikaia_std::index::or(holds, || 0));
+            scope.guards.insert(nikaia_std::index::or(holds, || 0), (span.start as i64, written_of(cond)));
+        }
         scope.on_the_path(&mut walk.arena, holds);
         scope.exact = scope.exact && holds.is_some() && !leaves_block(then_branch, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, true);
     } else if leaves_block(then_branch, &|e| { prover_throws(e, at, program, words, own, library, &unaliased) }, &holes_of, true) || prover_else_leaves(else_branch, at, program, words, own, library, &holes_of, &unaliased) { scope.exact = false; }
@@ -1761,9 +1771,13 @@ pub(crate) fn prover_outside_index(walk: &mut ProverWalk, expr: &Expr, base: &Ex
             }
         },
     }
-    if goal.is_some() && prover_proves_here(walk, nikaia_std::index::or(goal, || 0), scope, ask) { return; }
     let first = prover_outside_name(&walk, goal, index, scope, words, written_of);
     let source = outside_source(index, &scope.tainted, &scope.sources, words, library, &walk.state, holes_of);
+    if goal.is_some() && prover_proves_here(walk, nikaia_std::index::or(goal, || 0), scope, ask) {
+        ({ let __nikaia_arg2 = format!("`{}`", written_of(expr)); let __nikaia_arg5 = scope.guard_of(&walk.arena, nikaia_std::index::or(goal, || 0)); prover_outside_record(walk, &span, __nikaia_arg2, &first, (source).as_deref(), __nikaia_arg5, true) });
+        return;
+    }
+    prover_outside_record(walk, &span, format!("`{}`", written_of(expr)), &first, (source).as_deref(), None, false);
     let mut notes: Vec<String> = vec![outside_note(&first, (source).as_deref())];
     if goal.is_some() {
         let found = model(&walk.arena, &scope.facts, nikaia_std::index::or(goal, || 0));
@@ -1780,6 +1794,23 @@ pub(crate) fn prover_outside_index(walk: &mut ProverWalk, expr: &Expr, base: &Ex
         }
     } else { notes.push(format!("The prover cannot state `{}` here: a part of it is not a whole number it reads.", holds)); }
     walk.findings.push(Finding { code: String::from("NK1302"), span, message: format!("`{}` is not proved in bounds, and `{}` comes from outside the program.", written_of(expr), first), notes, help: Some(outside_help(&first, &guard)), warning: false, labels: vec![] });
+}
+
+pub fn prover_outside_record(walk: &mut ProverWalk, span: &Span, written: String, name: &str, source: Option<&str>, guard: Option<(i64, String)>, proved: bool) {
+    let mut guard_at: i64 = -1;
+    let mut condition: String = String::from("");
+    match guard {
+        None => { },
+        Some(ref found) => {
+            guard_at = found.0;
+            condition = nikaia_std::block::Text::from(found.1.to_string());
+        },
+    }
+    let at = span.start as i64;
+    walk.outside.insert((at, nikaia_std::block::Text::from(written.to_string())), OutsideIndex { at, written, name: nikaia_std::block::Text::from(name.to_string()), source: nikaia_std::index::or(match source {
+        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
+        None => None,
+    }, || "".into()), proved, guard_at, guard: condition });
 }
 
 pub(crate) fn prover_proves_here(walk: &mut ProverWalk, goal: i64, scope: &ProverScope, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer) -> bool {
@@ -2017,7 +2048,7 @@ pub(crate) fn prover_unwritten_call(walk: &mut ProverWalk, callee: &str, params:
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
-    let found = walk.state.unwritten_call(&mut walk.arena, words, callee, params, &checks, args, span, scope, ask, model);
+    let found = walk.state.unwritten_call(&mut walk.arena, words, callee, params, &checks, args, span, scope, ask, model, &mut walk.outside);
     walk.findings.extend(found);
 }
 

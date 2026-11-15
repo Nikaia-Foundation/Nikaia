@@ -122,7 +122,7 @@ pub(crate) fn prove_state(pinned: &collections::BTreeMap<String, i64>, comptimes
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prove_walked(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, claims: &collections::BTreeSet<(i64, i64)>, state: ProverState, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> ProveWalked {
-    let mut walk = ProverWalk { state, arena: TermArena::empty(), held: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), findings: vec![], claims: claims.copy_owned(), std_claims: collections::BTreeMap::new() };
+    let mut walk = ProverWalk { state, arena: TermArena::empty(), held: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), findings: vec![], claims: claims.copy_owned(), std_claims: collections::BTreeMap::new(), outside: collections::BTreeMap::new() };
     let answers = prover_passes(&mut walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
     ProveWalked { walk, answers }
 }

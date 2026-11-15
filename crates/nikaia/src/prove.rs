@@ -60,6 +60,9 @@ pub struct Proved {
     /// no `assert` states, keyed as `held` is, each written
     /// `callee: condition`.
     pub std_claims: BTreeMap<(i64, i64), String>,
+    /// **Each index data from outside reaches, and what became of it**
+    /// (ADR-396 D5), for `--bounds`.
+    pub outside: BTreeMap<(i64, String), nikaia_std::tools::prover_claims::OutsideIndex>,
 }
 
 /// Read off the checker's `comptime_values` (the type below and the literal,
@@ -260,6 +263,7 @@ fn finished(walked: prove_run::ProveWalked) -> Proved {
         reaches: walk.reaches,
         published: answers.published,
         std_claims: walk.std_claims,
+        outside: walk.outside,
     }
 }
 

@@ -12,6 +12,17 @@ pub struct UnwrittenCheck {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OutsideIndex {
+    pub at: i64,
+    pub written: String,
+    pub name: String,
+    pub source: String,
+    pub proved: bool,
+    pub guard_at: i64,
+    pub guard: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreClaim {
     pub term: i64,
     pub written: String,

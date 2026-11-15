@@ -34,6 +34,10 @@ pub struct ProverWalk {
     /// #1003), keyed as `held` is, by statement and the call's id: each is a
     /// claim the program makes there, written `callee: condition`.
     pub std_claims: collections::BTreeMap[(i64, i64), String],
+    /// **Each index data from outside reaches, and what became of it**
+    /// (ADR-396 D5), by where it stands and how it is written: the last
+    /// walk's, for `--bounds`.
+    pub outside: collections::BTreeMap[(i64, String), OutsideIndex],
 }
 
 /// **Every body of the program, walked once**: each function and method,
@@ -1611,6 +1615,7 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
     let mut then_scope = scope.clone()
     if holds != null {
         then_scope.facts.push(holds ?? 0)
+        then_scope.guards.insert(holds ?? 0, (span.start as i64, written_of(cond)))
     }
     // A branch on a condition the prover cannot read is reached by some
     // states and not others, and no fact says which.
@@ -1631,12 +1636,14 @@ fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_
     if then_leaves {
         if fails != null {
             scope.facts.push(fails ?? 0)
+            scope.guards.insert(fails ?? 0, (span.start as i64, written_of(cond)))
         }
         scope.on_the_path(walk.arena, fails)
         scope.exact = scope.exact && fails != null && !prover_else_leaves(else_branch, at, program, words, own, library, holes_of, unaliased)
     } else if else_leaves {
         if holds != null {
             scope.facts.push(holds ?? 0)
+            scope.guards.insert(holds ?? 0, (span.start as i64, written_of(cond)))
         }
         scope.on_the_path(walk.arena, holds)
         scope.exact = scope.exact && holds != null && !leaves_block(then_branch, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, true)
@@ -2373,11 +2380,13 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
             }
         },
     }
-    if goal != null && prover_proves_here(walk, goal ?? 0, scope, ask) {
-        return
-    }
     let first = prover_outside_name(walk, goal, index, scope, words, written_of)
     let source = outside_source(index, scope.tainted, scope.sources, words, library, walk.state, holes_of)
+    if goal != null && prover_proves_here(walk, goal ?? 0, scope, ask) {
+        prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, scope.guard_of(walk.arena, goal ?? 0), true)
+        return
+    }
+    prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, null, false)
     let mut notes: Vec[String] = [outside_note(first, source)]
     if goal != null {
         let found = model(walk.arena, scope.facts, goal ?? 0)
@@ -2398,6 +2407,23 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
         notes.push(f"The prover cannot state `{holds}` here: a part of it is not a whole number it reads.")
     }
     walk.findings.push(Finding { code: "NK1302", span: span, message: f"`{written_of(expr)}` is not proved in bounds, and `{first}` comes from outside the program.", notes: notes, help: outside_help(first, guard), warning: false, labels: [] })
+}
+
+/// **An index data from outside reaches, recorded for `--bounds`**
+/// (ADR-396 D5): where it stands, the name and its source, and whether it
+/// is proved, by the guard `guard` where one proves it.
+pub fn prover_outside_record(mut walk: ProverWalk, span: Span, written: String, name: ref String, source: ref String?, guard: (i64, String)?, proved: bool) {
+    let mut guard_at: i64 = -1
+    let mut condition: String = ""
+    match guard {
+        null => {},
+        found => {
+            guard_at = found.0
+            condition = found.1.clone()
+        },
+    }
+    let at = span.start as i64
+    walk.outside.insert((at, written.clone()), OutsideIndex { at: at, written: written, name: name.clone(), source: source?.clone() ?? "", proved: proved, guard_at: guard_at, guard: condition })
 }
 
 /// Whether `goal` holds of what is known here, or of that with what the
@@ -2731,7 +2757,7 @@ fn prover_a_method_call(mut walk: ProverWalk, receiver: ref Expr, method: winnow
 /// call.
 fn prover_unwritten_call(mut walk: ProverWalk, callee: ref String, params: ref Vec[String], args: ref Vec[Expr], span: Span, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) {
     let checks = walk.state.unwritten[callee]?.clone() ?? return
-    let found = walk.state.unwritten_call(walk.arena, words, callee, params, checks, args, span, scope, ask, model)
+    let found = walk.state.unwritten_call(walk.arena, words, callee, params, checks, args, span, scope, ask, model, walk.outside)
     walk.findings.extend(found)
 }
 

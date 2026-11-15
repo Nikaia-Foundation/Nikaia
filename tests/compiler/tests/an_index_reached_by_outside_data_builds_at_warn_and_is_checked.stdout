@@ -22,3 +22,8 @@ warning[NK1302]: At this call, `names[month]` in `month_name` is not proved in b
     = help: Check it where it arrives, with a guard the program handles: `throw BadInput(month) if !(0 <= month && month < 12)`, or the early `return` that rejects it. After that line, the index is proved.
 month.nika:6: the program stopped: index out of bounds: the len is 12 but the index is 12
 exit 101
+bounds in month.nika: 1 indexes, 0 proved; 0 operations, 0 proved - written without their check: indexes on, operations on
+     6  names[month]  checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+  outside  12  `names[month]` in `month_name`, `month` from `io::read_to_string`: checked (unproved-claims = warn)
+  derived  month_name: 0 <= month, month <= 12, proved at the calls on lines 12
+Checked month.nika
