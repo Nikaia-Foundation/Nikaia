@@ -55,14 +55,16 @@ fn status_batch(dir: String) -> String throws {
     return "BATCH unknown (no target/fast/nikaia)"
 }
 
-// Done reports with a Changelog line that released.txt does not name.
+// Done reports with a Changelog line that released.txt does not name; the
+// architect's and QA's reports are not counted, as in release.nika. Without
+// released.txt, `BUMP blocked: DIR/released.txt missing` (#1111).
 fn status_bump(dir: String) -> String throws {
-    let mut released: String = ""
-    if fs::exists(f"{dir}/released.txt", fs::Root::Anywhere) { released = fs::read_to_string(f"{dir}/released.txt", fs::Root::Anywhere) }
+    if !fs::exists(f"{dir}/released.txt", fs::Root::Anywhere) { return f"BUMP blocked: {dir}/released.txt missing" }
+    let released = fs::read_to_string(f"{dir}/released.txt", fs::Root::Anywhere)
     let listed = process::run("ls", [dir.clone()])
     let mut pending = 0
     for name in listed.stdout.split("\n") {
-        if !name.ends_with(".report.md") { continue }
+        if !name.ends_with(".report.md") || name.starts_with("architect-") || name.starts_with("qa-") { continue }
         if released.contains(name.clone()) { continue }
         let text = fs::read_to_string(f"{dir}/{name}", fs::Root::Anywhere)
         let changelog = status_field(text.clone(), "Changelog:")

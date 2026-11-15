@@ -6,6 +6,8 @@
 //     NEXT <abs brief> <agent> <model> <turns> <budget> <effort> | CUT <brief>: <line> -> SUPERVISOR | BATCH DONE
 //     RED <sha8> <jobs> -> SUPERVISOR          (only when the tip is red)
 //     BUMP pending <n> changelog lines | BUMP <version> pushed | NO BUMP: <why>
+//                                              (NO BUMP: DIR/released.txt missing:
+//                                              write it by hand, #1111)
 //     OWNER <n> open: <first line>            (DIR/owner.txt, one per line)
 //     OWNER <brief>: <question>               (a report's `Owner:`; first one
 //                                              is written to DIR/QUESTION)
@@ -52,9 +54,22 @@ fn cycle_red(line: String) -> String {
 }
 
 fn cycle_bump(line: String) -> String {
+    if line.starts_with("BUMP blocked: ") { return "NO BUMP: " + (line.strip_prefix("BUMP blocked: ") ?? "") }
     let n = (line.strip_prefix("BUMP pending: ") ?? "").split(" ").collect()[0].clone()
     if !line.starts_with("BUMP pending") { return "" }
     return f"BUMP pending {n} changelog lines"
+}
+
+// A lane's first run (#1111): with no report yet, nothing is released, so an
+// empty `released.txt` is written; with reports and no file, it stays missing
+// and `release.nika` stops on it rather than guess.
+fn cycle_released(dir: String) throws {
+    let list = f"{dir}/released.txt"
+    if fs::exists(list.clone(), fs::Root::Anywhere) || !fs::exists(dir.clone(), fs::Root::Anywhere) { return }
+    for entry in fs::read_dir(dir.clone(), fs::Root::Anywhere) {
+        if entry.to_text().ends_with(".report.md") { return }
+    }
+    fs::write(list, fs::Root::Anywhere, "")
 }
 
 fn cycle_owner(dir: String) -> String throws {
@@ -105,6 +120,7 @@ fn main() throws {
         process::exit(2)
     }
     if done > 0 { cycle_done(dir.clone(), done) }
+    cycle_released(dir.clone())
     let exe = cycle_exe()
     if exe == "" {
         println("BUILD cargo build --profile fast -p nikaia (first build about 3 min, run it in the background)")
@@ -131,7 +147,7 @@ fn main() throws {
     }
     if batch.starts_with("CUT") { println(cycle_cap(batch.clone() + " -> SUPERVISOR")) } else { println(cycle_cap(batch.clone())) }
     let mut bump = cycle_bump(lines[2].clone())
-    if apply && ci.ends_with("green") && !batch.starts_with("NEXT") && bump != "" {
+    if apply && ci.ends_with("green") && !batch.starts_with("NEXT") && bump.starts_with("BUMP pending") {
         let rel = process::run(exe, ["run", "scripts/release.nika", "--", dir.clone()])
         bump = "NO BUMP: release.nika printed nothing"
         for l in rel.stdout.trim().split("\n") {
