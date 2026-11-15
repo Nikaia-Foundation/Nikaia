@@ -422,6 +422,7 @@ pub struct CheckState {
     pub drained: collections::BTreeSet<i64>,
     pub said_mut: collections::BTreeSet<i64>,
     pub facts: CheckFacts,
+    pub handed_follow: Option<collections::BTreeMap<String, String>>,
     pub rule_results: collections::BTreeMap<String, Ty>,
     pub next_binding: i64,
     pub current: Option<String>,

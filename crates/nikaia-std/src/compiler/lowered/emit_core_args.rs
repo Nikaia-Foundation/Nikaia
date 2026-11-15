@@ -25,26 +25,135 @@ pub(crate) fn emit_arg_opening_inside(inner: &Ty) -> String {
     }
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn emit_rust_owner(ty: &Ty) -> String {
+    if emit_rust_crossing(ty, true, 0).is_none() { return String::from(""); }
+    emit_rust_owner_word(ty)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn emit_rust_owner_word(ty: &Ty) -> String {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; if view { String::from("") } else if name == "String" && args.is_empty() { String::from("String") } else if name == "Vec" && args.len() == 1 && !emit_ty_holds_text(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { String::from("Vec") } else { String::from("") } },
+        Ty::Named { name, args, .. } => if name == "String" && args.is_empty() { String::from("String") } else if name == "Vec" { String::from("Vec") } else { String::from("") },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); emit_rust_owner_word(inner) },
+        Ty::Tuple(parts) => {
+            for part in parts.iter() {
+                let word = emit_rust_owner_word(part);
+                if word != "" { return word; }
+            }
+            return String::from("");
+        },
         _ => String::from(""),
     }
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn emit_ty_holds_text(ty: &Ty) -> bool {
     match ty {
-        Ty::Named { name, args, .. } => name == "String" || args.iter().any(|a| { emit_ty_holds_text(a) }),
+        Ty::Named { name, args, .. } => name == "String" || name == "Vec" || args.iter().any(|a| { emit_ty_holds_text(a) }),
         Ty::Tuple(parts) => parts.iter().any(|a| { emit_ty_holds_text(a) }),
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); emit_ty_holds_text(inner) },
         _ => true,
     }
 }
 
-pub fn emit_rust_owner_param(described: &Ledger, callee: &str, i: i64) -> String {
-    let contract = match described.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-    if i >= signature.params.len() as i64 { return String::from(""); }
-    emit_rust_owner(&nikaia_std::index::get(&signature.params, nikaia_std::index::at(i)).1)
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn emit_rust_crossing(ty: &Ty, toward: bool, depth: i64) -> Option<(String, String)> {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; emit_rust_crossing_named(name, args, view, toward, depth) },
+        Ty::Nullable(inner) => {
+            let inner = nikaia_std::boxed::open(inner);
+            let (open, close) = match emit_rust_crossing(inner, toward, depth + 1) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let each = format!("x{}", depth);
+            return Some((String::from("("), format!(").map(|{}| {}{}{})", each, open, each, close)));
+        },
+        Ty::Tuple(parts) => emit_rust_crossing_tuple(parts, toward, depth),
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn emit_rust_crossing_named(name: &str, args: &[Ty], view: bool, toward: bool, depth: i64) -> Option<(String, String)> {
+    if view { return None; }
+    if name == "String" && args.is_empty() {
+        let open: String = if toward { String::from("nikaia_std::block::handed_text(") } else { String::from("nikaia_std::block::Text::from(") };
+        let close: String = String::from(")");
+        return Some((open, close));
+    }
+    if name == "Vec" && args.len() == 1 { return emit_rust_crossing_list(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, toward, depth); }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn emit_rust_crossing_list(item: &Ty, toward: bool, depth: i64) -> Option<(String, String)> {
+    let whole: String = if toward { String::from("nikaia_std::block::handed_list(") } else { String::from("nikaia_std::block::List::from(") };
+    let inner = emit_rust_crossing(item, toward, depth + 1);
+    if inner.is_none() {
+        if emit_ty_holds_text(item) { return None; }
+        let close: String = String::from(")");
+        return Some((whole, close));
+    }
+    let (open, close) = match inner { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let each = format!("x{}", depth);
+    let mapped = format!(".into_iter().map(|{}| {}{}{}).collect::<::std::vec::Vec<_>>()", each, open, each, close);
+    if toward { return Some((whole, format!("){}", mapped))); }
+    Some((format!("{}(", whole), format!("){})", mapped)))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn emit_rust_crossing_tuple(parts: &[Ty], toward: bool, depth: i64) -> Option<(String, String)> {
+    #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    #[allow(unused_mut)] let mut made: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+    let mut any = false;
+    let mut k = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names; #[allow(unused_mut, clippy::redundant_locals)] let mut made = made;
+    for part in parts.iter() {
+        let name = format!("t{}_{}", depth, k);
+        k = k + 1;
+        let crossing = emit_rust_crossing(part, toward, depth + 1);
+        if crossing.is_none() {
+            if emit_ty_holds_text(part) { return None; }
+            made.push(nikaia_std::block::Text::from(name.to_string()));
+        } else {
+            let (open, close) = match crossing { Some(__nikaia_value) => __nikaia_value, None => return None };
+            made.push(format!("{}{}{}", open, name, close));
+            any = true;
+        }
+        names.push(name);
+    }
+    if !any { return None; }
+    let mut open = String::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names; #[allow(unused_mut, clippy::redundant_locals)] let mut made = made;
+    open.push_str("{ let (");
+    open.push_str(&nikaia_std::block::Text::from(names.join(", ")));
+    open.push_str(") = ");
+    let mut close = String::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut made = made;
+    close.push_str("; (");
+    close.push_str(&nikaia_std::block::Text::from(made.join(", ")));
+    close.push_str(") }");
+    Some((open, close))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn emit_rust_owner_param(described: &Ledger, callee: &str, i: i64, inside: bool) -> Option<(String, String)> {
+    let contract = match described.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let params = call_arguments(signature);
+    if i >= params.len() as i64 { return None; }
+    let ty = nikaia_std::index::get(&params, nikaia_std::index::at(i)).1.clone();
+    if inside {
+        return match ty {
+            Ty::Nullable(ref item) => { let item = nikaia_std::boxed::open(item); emit_rust_crossing(item, true, 0) },
+            _ => emit_rust_crossing(&ty, true, 0),
+        };
+    }
+    emit_rust_crossing(&ty, true, 0)
 }
 
 pub(crate) fn emit_arg_lends_own(contract: &FnContract, at: i64, library: &Ledger, described: &Ledger) -> bool { lends_in_own(contract, at, &vec![library, described]) }
@@ -348,8 +457,19 @@ impl EmitState {
         let copy_in = lent_option && emit_arg_names_a_place(arg) && !self.facts.kept_functions.contains_key(&node_key(arg));
         if lent_option || lent_path { out.push("&"); }
         out.push(&before);
-        let rust_owner = if method_callee.is_none() && !lend && !change && !self.own_contracts.functions.contains_key(callee) { emit_rust_owner_param(&self.described, callee, i) } else { String::from("") };
-        if rust_owner == "Vec" { out.push("nikaia_std::block::handed_list("); } else if rust_owner == "String" { out.push("nikaia_std::block::handed_text("); }
+        let owner_key = nikaia_std::index::or(match method_callee {
+            Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
+            None => None,
+        }, || nikaia_std::block::Text::from(callee.to_string()).into());
+        let rust_owner = if !lend && !change && !emit_arg_is_null(arg) && !self.own_contracts.functions.contains_key(&owner_key) { emit_rust_owner_param(&self.described, &owner_key, i, before == "Some(") } else { None };
+        let mut owner_open: String = String::new();
+        let mut owner_close: String = String::new();
+        if rust_owner.is_some() {
+            let (open, close) = match rust_owner { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            owner_open = open;
+            owner_close = close;
+        }
+        out.push(&owner_open);
         if either { out.push("nikaia_std::either_text::either("); }
         let keeps_bytes = self.emit_arg_keeps_bytes(world, callee, method_callee, i);
         if keeps_bytes { out.push("&*nikaia_std::bytes::kept("); }
@@ -417,7 +537,7 @@ impl EmitState {
         if keeps_bytes { out.push(")"); }
         if either { out.push(")"); }
         if copy_in { out.push(".clone()"); }
-        if rust_owner != "" { out.push(")"); }
+        out.push(&owner_close);
         out.push(&after);
         let copied = copies && !lend && !change && !self.facts.kept_args.contains(&node);
         if duplicate || copied { out.push(".clone()"); }

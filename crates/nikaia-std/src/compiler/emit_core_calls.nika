@@ -544,12 +544,15 @@ impl EmitState {
         // `Result`.
         let rust_result = self.emit_call_rust_owner_result(world, func)
         let fails_here = flow.can_throw && !flow.caught
-        let wraps_result = rust_result != "" && (fails_here || !call_can_fail(world.words, self.own_contracts, world.library, self.described, func))
-        if wraps_result && rust_result == "Vec" {
-            out.push("nikaia_std::block::List::from(")
-        } else if wraps_result {
-            out.push("nikaia_std::block::Text::from(")
+        let wraps_result = rust_result != null && (fails_here || !call_can_fail(world.words, self.own_contracts, world.library, self.described, func))
+        let mut result_open: String = String()
+        let mut result_close: String = String()
+        if wraps_result {
+            let (open, close) = rust_result ?? return
+            result_open = open
+            result_close = close
         }
+        out.push(result_open)
         if settled {
             out.push("nikaia_std::rt::exec::settled(")
         }
@@ -600,22 +603,21 @@ impl EmitState {
             }
             out.push("?")
         }
-        if wraps_result {
-            out.push(")")
-        }
+        out.push(result_close)
     }
 
-    /// The Rust owner (`Vec`, `String`) the described crate's function `func`
-    /// names hands back; empty for any other call (ADR-327 D8, #1541).
-    fn emit_call_rust_owner_result(ref self, world: ref EmitWorld, func: ref Expr) -> String {
-        let name = call_written_name(world.words, func) ?? return ""
+    /// How what the described crate's function `func` hands back crosses
+    /// from its Rust owner (`emit_rust_crossing`); `null` for any other call
+    /// (ADR-327 D8, #1541, #1547).
+    fn emit_call_rust_owner_result(ref self, world: ref EmitWorld, func: ref Expr) -> (String, String)? sync {
+        let name = call_written_name(world.words, func) ?? return null
         if self.own_contracts.functions.contains_key(name) {
-            return ""
+            return null
         }
-        let contract = self.described.functions.get(name) ?? return ""
-        let signature = contract.signature ?? return ""
-        let result = signature.result ?? return ""
-        return emit_rust_owner(result)
+        let contract = self.described.functions.get(name) ?? return null
+        let signature = contract.signature ?? return null
+        let result = signature.result ?? return null
+        return emit_rust_crossing(result, false, 0)
     }
 
     fn emit_call_awaits_a_parameter(ref self, func: ref Expr, scope: ref EmitScope) -> bool {
