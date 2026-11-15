@@ -184,6 +184,8 @@ pub(crate) fn emit_arg_plain_option(ty: &Ty) -> bool {
     }
 }
 
+pub(crate) fn emit_arg_nullable_option(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
+
 pub(crate) fn emit_arg_opening_plain(ty: &Ty) -> String {
     match ty {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
@@ -939,10 +941,14 @@ impl EmitState {
     pub(crate) fn emit_call_option<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, option: &ConfigContract, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         for passed in config.iter() {
             if emit_text(world, passed.name) == option.name {
-                if self.facts.lent_options.contains(&node_key(&passed.value)) { out.push("&"); }
                 let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(&passed.value))?;
+                let lent = self.facts.lent_options.contains(&node_key(&passed.value));
+                let opened = lent && before == "" && emit_arg_nullable_option(&option.ty);
                 out.push(&before);
+                if lent && !opened { out.push("&"); }
+                if opened { out.push("("); }
                 self.emit_expr(world, walk, out, host, &passed.value, depth, flow, scope)?;
+                if opened { out.push(").as_deref()"); }
                 out.push(&after);
                 return Ok(());
             }

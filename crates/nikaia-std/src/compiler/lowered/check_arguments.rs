@@ -32,6 +32,15 @@ pub(crate) fn check_arguments_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nulla
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_arguments_a_plain_string_option(ty: &Ty) -> bool {
+    match ty {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); a_plain_string(inner) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_arguments_a_path(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, .. } => name == "fs::Path",
@@ -169,6 +178,22 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         for option in lowered_options(contract) {
             if option.name != *name || known { continue; }
             known = true;
+            if at < state.flow.option_values.len() as i64 && check_arguments_nullable(&option.ty) && option.ty.is_a_view() && !found_option.is_a_view() {
+                let value = *unsafe { nikaia_std::proven::read(&state.flow.option_values, (at) as usize) };
+                let wanted_inner = match option.ty {
+                    Ty::Nullable(ref held) => { let held = nikaia_std::boxed::open(held); held.owned() },
+                    _ => option.ty.owned(),
+                };
+                let found_inner = match found_option {
+                    Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held.clone() },
+                    _ => found_option.clone(),
+                };
+                if !found_inner.is_unknown() && found_inner.fits(&wanted_inner) {
+                    state.facts.lent_options.insert(value);
+                    if !check_arguments_nullable(found_option) { state.facts.nullable_args.insert(value, FactWrap::Constructor); }
+                    continue;
+                }
+            }
             if at < state.flow.option_values.len() as i64 && check_arguments_nullable(&option.ty) && !check_arguments_nullable(found_option) {
                 let inner = match option.ty {
                     Ty::Nullable(ref held) => { let held = nikaia_std::boxed::open(held); held.clone() },
@@ -182,6 +207,11 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             if found_option.fits(&option.ty) { continue; }
             if at < state.flow.option_literals.len() as i64 && *unsafe { nikaia_std::proven::read(&state.flow.option_literals, (at) as usize) } && a_plain_string(&option.ty) {
                 state.facts.owned_texts.insert(*nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at)));
+                continue;
+            }
+            if at < state.flow.option_literals.len() as i64 && *unsafe { nikaia_std::proven::read(&state.flow.option_literals, (at) as usize) } && check_arguments_a_plain_string_option(&option.ty) {
+                state.facts.owned_texts.insert(*nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at)));
+                state.facts.nullable_args.insert(*unsafe { nikaia_std::proven::read(&state.flow.option_values, (at) as usize) }, FactWrap::Constructor);
                 continue;
             }
             if at < state.flow.option_values.len() as i64 && option.ty.is_a_view() && !found_option.is_a_view() && found_option.fits(&option.ty.owned()) {

@@ -1,0 +1,55 @@
+// A `String?` option the body only reads is lent, as a `T?` parameter is
+// (#1256): a let-bound literal, a literal, text of its own (lent inside the
+// option) and a `String?` of its own (opened) all fit it, and what was
+// handed is still the caller's after the call (#1729). A literal handed to a
+// `String?` option the body keeps is text of its own there.
+fn opt(a: i64; s: String? = null) -> i64 {
+    match s {
+        null => a
+        v => a + v.len() as i64
+    }
+}
+
+fn keep_it(mut all: Vec[String]; s: String? = null) {
+    match s {
+        null => {}
+        v => all.push(v)
+    }
+}
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("own")
+    return g
+}
+
+fn maybe(b: bool) -> String? {
+    if b {
+        return make()
+    }
+    return null
+}
+
+fn forward(t: String?) -> i64 {
+    return opt(10; s: t)
+}
+
+fn main() throws {
+    let s = "lit"
+    println(opt(1; s: s))
+    println(opt(2; s: "lit"))
+    let o = make()
+    println(opt(3; s: o))
+    let m = maybe(true)
+    println(opt(4; s: m))
+    println(opt(5; s: maybe(false)))
+    println(opt(6))
+    println(opt(7; s: null))
+    println(forward(m))
+    println(f"{o} {m ?? "none"}")
+    let mut all: Vec[String] = []
+    keep_it(all; s: "lit")
+    keep_it(all; s: make())
+    keep_it(all)
+    println(all.join(","))
+}

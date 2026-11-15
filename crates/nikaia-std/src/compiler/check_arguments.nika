@@ -45,6 +45,14 @@ fn check_arguments_nullable(ty: ref Ty) -> bool sync {
     }
 }
 
+/// A `String?` written plain.
+fn check_arguments_a_plain_string_option(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Nullable(inner) => a_plain_string(inner),
+        else => false,
+    }
+}
+
 fn check_arguments_a_path(ty: ref Ty) -> bool sync {
     return match ty {
         Ty::Named { name, .. } => name == "fs::Path",
@@ -232,6 +240,28 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 continue
             }
             known = true
+            // **Text of its own handed to a lent `String?` option is lent
+            // inside it** (#1729), as at a `T?` parameter the body only reads
+            // (#1256): `Some(&name)`, and a `String?` of its own opened,
+            // `name.as_deref()`.
+            if at < state.flow.option_values.len() && check_arguments_nullable(option.ty) && option.ty.is_a_view() && !found_option.is_a_view() {
+                let value = state.flow.option_values[at]
+                let wanted_inner = match option.ty {
+                    Ty::Nullable(held) => held.owned(),
+                    else => option.ty.owned(),
+                }
+                let found_inner = match found_option {
+                    Ty::Nullable(held) => held.clone(),
+                    else => found_option.clone(),
+                }
+                if !found_inner.is_unknown() && found_inner.fits(wanted_inner) {
+                    state.facts.lent_options.insert(value)
+                    if !check_arguments_nullable(found_option) {
+                        state.facts.nullable_args.insert(value, FactWrap::Constructor)
+                    }
+                    continue
+                }
+            }
             // **A plain value handed to a nullable option goes inside it**
             // (Part I 2.3), as at a parameter: `Some(value)`.
             if at < state.flow.option_values.len() && check_arguments_nullable(option.ty) && !check_arguments_nullable(found_option) {
@@ -251,6 +281,12 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             // D4), as it is at a parameter: it is constructed there.
             if at < state.flow.option_literals.len() && state.flow.option_literals[at] && a_plain_string(option.ty) {
                 state.facts.owned_texts.insert(state.flow.option_values[at])
+                continue
+            }
+            // ...and inside a kept `String?` option, `Some(…)` of one (#1729).
+            if at < state.flow.option_literals.len() && state.flow.option_literals[at] && check_arguments_a_plain_string_option(option.ty) {
+                state.facts.owned_texts.insert(state.flow.option_values[at])
+                state.facts.nullable_args.insert(state.flow.option_values[at], FactWrap::Constructor)
                 continue
             }
             // **An option of a `ref` type lends what it is passed** (#455),
