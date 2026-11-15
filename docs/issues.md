@@ -98,6 +98,9 @@ it, like the checks in `docs/supervisor.md`.
   or `pub`, and a `pub` one counts only under an item that makes it private
   first (#1653: `SvRow`'s list fields are `pub`, so its `sv_*` sites could
   not move; #1629 made `SvSimplex`'s fields private for that reason).
+  The probe's stub types keep each field's visibility as the real type
+  declares it, so a `pub` site is never stood for by a private stub that
+  proves (#1693: #1652's probe had private fields, its site `pub` ones).
   Each group's probe is shown still checked on the binary of the day (its
   `--bounds` row in the issue); a probe that already proves counts nothing,
   and the issue names the real site instead (#1634: its probe was proved by
