@@ -2556,6 +2556,19 @@ decided per value, as the owner count is. A message, a printed type and a
 ledger entry say the name the program wrote. **`Shared[Locked[T]]` is
 refused** with `NK1123`, and the message names `SharedMut[T]`.
 
+**No cycle of handles is built** ([ADR-cycles-1](adr/adr-cycles-1.md)). A
+cycle is closed only by a write after construction: a handle stored, through a
+door of `SharedMut[T]` or into a `Locked[T]` field, into a value its target
+already reaches. A type that reaches no `SharedMut` and no `Locked` is
+therefore free of cycles, and so is every `immutable` value; only a type that
+reaches itself through them can form one. A store that can close such a cycle
+is refused with `NK1352`; the message names the line, the cycle and the index
+form. Where the compiler proves that a field points back to the value's owner,
+a parent link or the back link of a doubly linked list, the store is accepted
+and the field is not counted; the program writes the ordinary field. A graph
+in which no node owns another is built with indices into a list. Nothing
+detects cycles at run time.
+
 ### 6.3. Changing Shared Data: The Four Doors
 A value behind a lock is not changed by assignment. The lock is opened first,
 and the shape of the change decides which door opens it:
