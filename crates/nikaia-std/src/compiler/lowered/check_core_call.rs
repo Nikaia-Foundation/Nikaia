@@ -406,47 +406,48 @@ pub(crate) fn check_core_call_unresolved<H: CheckHost>(state: &mut CheckState, w
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_rust_owner(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, contract: &FnContract, args: &[Expr], span: &Span) {
+pub fn check_core_call_rust_owner(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, contract: &FnContract, args: &[Expr], span: &Span) {
     if !contract.described { return; }
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let current = match match state.current.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
-    let own = match world.own.functions.get(&current) { Some(__nikaia_value) => __nikaia_value, None => return };
-    if !own.public { return; }
+    let params = call_arguments(signature);
     let mut i: i64 = 0;
-    while i < args.len() as i64 && i < signature.params.len() as i64 {
+    while i < args.len() as i64 && i < params.len() as i64 {
         let at: i64 = i;
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
-        let (param, ty) = (*unsafe { nikaia_std::proven::read(&signature.params, (at) as usize) }).clone();
+        let (param, ty) = (*unsafe { nikaia_std::proven::read(&params, (at) as usize) }).clone();
         let owner = emit_rust_owner(&ty);
         if owner == "" { continue; }
+        if state.handed_follow.is_none() { state.handed_follow = Some(check_handed_follow(world)); }
+        let held = match match state.handed_follow.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => continue };
         let arg = unsafe { nikaia_std::proven::read(&args, (at) as usize) };
-        let written = match check_core_call_place_text(world, &arg) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let origin = match check_handed_carries(world, &world.here, &current, &arg, &held) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let written = match check_handed_written(world, &current, &arg, &held) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let root: String = nikaia_std::block::Text::from(nikaia_std::index::or(written.split('.').next(), || "").to_string());
-        let local = match state.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if !local.changing {
-            let held = match local.without_mut { Some(__nikaia_value) => __nikaia_value, None => continue };
-            if held.kind != CheckKind::Parameter { continue; }
-        }
         let what = if owner == "Vec" { "list" } else { "text" };
-        let notes: Vec<String> = vec![format!("`{}` takes its `{}` as Rust's `{}`, and a {} crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.", name, param, owner, what), format!("`{}` is a parameter of `pub fn {}`, so it was built by a caller the compiler does not see.", root, current)];
+        let mut whence = format!("`{}` holds what `{}` was handed, so it was built by a caller the compiler does not see.", root, origin);
+        if origin == format!("pub fn {}", current) {
+            let mut parameter = false;
+            let local = state.binding(&root);
+            if local.is_some() {
+                let bound = match local { Some(__nikaia_value) => __nikaia_value, None => return };
+                parameter = bound.changing;
+                let held_by = &bound.without_mut;
+                if held_by.is_some() {
+                    let kind = match held_by.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+                    parameter = parameter || kind.kind == CheckKind::Parameter;
+                }
+            }
+            if parameter { whence = format!("`{}` is a parameter of `pub fn {}`, so it was built by a caller the compiler does not see.", root, current); }
+        }
+        let notes: Vec<String> = vec![format!("`{}` takes its `{}` as Rust's `{}`, and a {} crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.", name, param, owner, what), whence];
         state.findings.push(check_refusal("NK2506", &check_span_at(world, &arg, span), format!("`{}` takes `{}` as its own, but the compiler can't follow it back to where it was built.", name, written), notes, Some(format!("Write `{}.clone()` to hand `{}` a copy.", written, name))));
-    }
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_place_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr) -> Option<String> {
-    match arg {
-        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string())) },
-        Expr::Field { base, name, .. } => {
-            let base = nikaia_std::boxed::open(base); let name = *name;
-            let inner = match check_core_call_place_text(world, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            return Some(format!("{}.{}", inner, world.words.resolve(name)));
-        },
-        _ => None,
     }
 }
 

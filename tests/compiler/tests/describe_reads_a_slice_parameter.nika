@@ -1,0 +1,29 @@
+// `nikaia describe` writes a Rust `&[T]` parameter as `ref Array[T]`, the
+// list Part III 15.2 says crosses to `&[T]` for free, not `?` (#1545), and
+// every function the program calls gets its entry, `String` by value too.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/rs/src", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/rs/Cargo.toml", fs::Root::Anywhere, "[package]\nname = \"keeper\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\n\n[workspace]\n")
+    fs::write(f"{tmp}/rs/src/lib.rs", fs::Root::Anywhere, "pub fn lends_list(items: &[u8]) -> u64 {\n    items.len() as u64\n}\n\npub fn lends_words(words: &[String]) -> u64 {\n    words.len() as u64\n}\n\npub fn fixed(items: &[u8; 4]) -> u64 {\n    items.len() as u64\n}\n\npub fn owns_text(text: String) -> u64 {\n    text.len() as u64\n}\n")
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nkeeper = { type = \"rust\", path = \"../rs\" }\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use keeper\n\nfn main() throws {\n\tlet items: Vec[u8] = [1, 2, 3]\n\tprintln(f\"{keeper::lends_list(items)} {keeper::lends_words([])} {keeper::fixed(items)} {keeper::owns_text(\"b\")}\")\n}\n")
+    let out = process::run(toolchain(), ["describe", "keeper"]; dir: f"{tmp}/app")
+    println(f"exit {out.code}")
+    let text = process::run("cat", [f"{tmp}/app/contracts/keeper.contracts"]).stdout
+    for line in text.lines() {
+        if line.starts_with("[fn.") || line.starts_with("signature") {
+            println(line)
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}

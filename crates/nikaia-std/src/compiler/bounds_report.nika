@@ -322,7 +322,7 @@ pub fn bounds_report_trace_rows(asked: ref String, rows: ref Vec[String]) -> Str
 }
 
 /// The line of a byte offset, counted from 1.
-fn bounds_report_line(source: ref String, at: i64) -> i64 {
+pub fn bounds_report_line(source: ref String, at: i64) -> i64 {
 	let end = at.min(source.bytes.len())
 	return source.bytes[0..<end].iter().filter(fn(b) { b == 10 }).count() + 1
 }
@@ -403,6 +403,7 @@ fn bounds_report_stmt(
 						args,
 						body,
 						words,
+						source,
 						walk.callers,
 					)
 				}
@@ -489,7 +490,7 @@ fn bounds_report_site(
 				let proved = facts.proven_indices.contains(key)
 				let mut blocked: String? = null
 				if !proved {
-					blocked = blocked_index(base, index, args, body, words, walk.callers)
+					blocked = blocked_index(base, index, args, body, words, source, walk.callers)
 				}
 				walk.sites.push(BoundsReportSite {
 					line: line,
@@ -509,7 +510,7 @@ fn bounds_report_site(
 				let proved = facts.proven_indices.contains(key)
 				let mut blocked: String? = null
 				if !proved {
-					blocked = blocked_index(receiver, given[0], args, body, words, walk.callers)
+					blocked = blocked_index(receiver, given[0], args, body, words, source, walk.callers)
 				}
 				walk.sites.push(BoundsReportSite {
 					line: line,
@@ -526,7 +527,7 @@ fn bounds_report_site(
 				let proved = facts.proven_arithmetic.contains(at)
 				let mut blocked: String? = null
 				if !proved {
-					blocked = blocked_operation(op, lhs, rhs, args, body, words, walk.callers)
+					blocked = blocked_operation(op, lhs, rhs, args, body, words, source, walk.callers)
 				}
 				walk.sites.push(BoundsReportSite {
 					line: bounds_report_line(source, at),

@@ -121,6 +121,7 @@ pub(super) fn hollow() -> Box<CheckState> {
         drained: BTreeSet::new(),
         said_mut: BTreeSet::new(),
         facts: CheckFacts::empty(),
+        handed_follow: None,
         methods: BTreeMap::new(),
         stored_code: BTreeMap::new(),
         stored_frames: Vec::new(),

@@ -3,9 +3,9 @@ bounds in tests/prove_a_found_result_bounds_a_read.nika: 8 indexes, 5 proved; 3 
     20  parent[ra]    proved
     20  parent[rb]    proved
     26  xs[k]         proved
-    36  sum += xs[k]  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    36  sum += xs[k]  checked: a counter the loop on line 35 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
     36  xs[k]         proved
-    40  sum += xs[k]  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    40  sum += xs[k]  checked: a counter the loop on line 35 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
     40  xs[k]         proved
     48  parent[r]     checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
     57  xs[r - 1]     checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

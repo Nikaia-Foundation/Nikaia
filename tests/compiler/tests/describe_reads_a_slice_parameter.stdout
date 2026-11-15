@@ -1,0 +1,9 @@
+exit 0
+[fn."keeper::fixed"]
+signature = "(items: ?) -> u64"
+[fn."keeper::lends_list"]
+signature = "(items: ref Array[u8]) -> u64"
+[fn."keeper::lends_words"]
+signature = "(words: ref Array[String]) -> u64"
+[fn."keeper::owns_text"]
+signature = "(text: String) -> u64"

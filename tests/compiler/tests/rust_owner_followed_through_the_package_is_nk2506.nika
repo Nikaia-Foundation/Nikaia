@@ -1,0 +1,48 @@
+// A list or text handed to a Rust owner that a `pub` function was handed is
+// NK2506 however it gets there (ADR-327 D8, #1547): through a private
+// function, two of them, a field of a value passed on, a local, and to a
+// method of a described type, in an option, a tuple, a list of texts and a
+// list of lists. Before #1547 only the last was refused, the others left a
+// rustc error or crossed unseen.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+/// The crate `keeper`, whose functions own a list, a text, a list of texts,
+/// an option, a tuple and a list of lists, and a program beside it,
+/// described by hand (`nikaia describe` writes a tuple parameter as `?`).
+fn project(tmp: ref String) throws {
+    process::run("mkdir", ["-p", f"{tmp}/rs/src", f"{tmp}/app/src", f"{tmp}/app/contracts"])
+    fs::write(f"{tmp}/rs/Cargo.toml", fs::Root::Anywhere, "[package]\nname = \"keeper\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\n\n[workspace]\n")
+    fs::write(f"{tmp}/rs/src/lib.rs", fs::Root::Anywhere, "pub fn owns_list(items: Vec<u8>) -> u64 { items.len() as u64 }\npub fn owns_text(text: String) -> u64 { text.len() as u64 }\npub fn owns_names(names: Vec<String>) -> u64 { names.len() as u64 }\npub fn owns_maybe(items: Option<Vec<u8>>) -> u64 { items.map(|v| v.len() as u64).unwrap_or(9) }\npub fn owns_pair(pair: (Vec<u8>, u64)) -> u64 { pair.0.len() as u64 + pair.1 }\npub struct Sink { pub n: u64 }\nimpl Sink {\n    pub fn opened() -> Sink { Sink { n: 0 } }\n    pub fn take(&mut self, items: Vec<u8>) -> u64 { self.n += items.len() as u64; self.n }\n}\npub fn owns_rows(rows: Vec<Vec<u8>>) -> u64 { rows.len() as u64 }\npub fn names() -> Vec<String> { vec![\"a\".to_string(), \"b\".to_string()] }\npub fn maybe() -> Option<Vec<u8>> { Some(vec![1, 2]) }\n")
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nkeeper = { type = \"rust\", path = \"../rs\" }\n")
+    fs::write(f"{tmp}/app/contracts/keeper.contracts", fs::Root::Anywhere, "version = 4\n\n[fn.\"keeper::owns_list\"]\npub = true\nsync = true\nkeeps = [\"items\"]\nsignature = \"(items: Vec[u8]) -> u64\"\n\n[fn.\"keeper::owns_maybe\"]\npub = true\nsync = true\nkeeps = [\"items\"]\nsignature = \"(items: Vec[u8]?) -> u64\"\n\n[fn.\"keeper::owns_names\"]\npub = true\nsync = true\nkeeps = [\"names\"]\nsignature = \"(names: Vec[String]) -> u64\"\n\n[fn.\"keeper::owns_pair\"]\npub = true\nsync = true\nkeeps = [\"pair\"]\nsignature = \"(pair: (Vec[u8], u64)) -> u64\"\n\n[fn.\"keeper::owns_text\"]\npub = true\nsync = true\nkeeps = [\"text\"]\nsignature = \"(text: String) -> u64\"\n\n[type.\"keeper::Sink\"]\npub = true\nfields = [\"n: u64\"]\n\n[fn.\"keeper::Sink::opened\"]\npub = true\nsync = true\nsignature = \"() -> Sink\"\n\n[fn.\"keeper::Sink::take\"]\npub = true\nsync = true\nkeeps = [\"items\"]\nsignature = \"(mut self, items: Vec[u8]) -> u64\"\n\n[fn.\"keeper::owns_rows\"]\npub = true\nsync = true\nkeeps = [\"rows\"]\nsignature = \"(rows: Vec[Vec[u8]]) -> u64\"\n\n[fn.\"keeper::names\"]\npub = true\nsync = true\nsignature = \"() -> Vec[String]\"\n\n[fn.\"keeper::maybe\"]\npub = true\nsync = true\nsignature = \"() -> Vec[u8]?\"\n")
+    let hash = process::run("sh", ["-c", f"sha256sum {tmp}/rs/src/lib.rs | cut -d' ' -f1"]).stdout.trim().clone()
+    fs::write(f"{tmp}/app/contracts/keeper.derived", fs::Root::Anywhere, "version = 3\ntoolchain = \"nikaia 0.1.0\"\ninference = \"described-from-signatures\"\n\n[sources]\n\"src/lib.rs\" = \"" + hash + "\"\n")
+}
+
+fn shown(tmp: ref String, command: String, main: String) throws {
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, main)
+    let out = process::run(toolchain(), [command, "src/main.nika"]; dir: f"{tmp}/app")
+    let mut lines: Vec[String] = []
+    for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+        let t = line.trim()
+        if !t.starts_with("Compiling") && !t.starts_with("Finished") && !t.starts_with("Running") && !t.starts_with("Locking") && !t.starts_with("Adding") {
+            lines.push(line.clone())
+        }
+    }
+    println(lines.join("\n"))
+    println(f"exit {out.code}")
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    project(tmp)
+    shown(tmp, "check", "use keeper\n\nstruct Bag {\n\titems: Vec[u8],\n}\n\nfn give(items: Vec[u8]) -> u64 sync {\n\treturn keeper::owns_list(items)\n}\n\nfn give_on(items: Vec[u8]) -> u64 sync {\n\treturn give(items)\n}\n\nfn give_bag(bag: Bag) -> u64 sync {\n\treturn keeper::owns_list(bag.items)\n}\n\npub fn through(items: Vec[u8]) -> u64 sync {\n\treturn give(items)\n}\n\npub fn through_two(items: Vec[u8]) -> u64 sync {\n\treturn give_on(items)\n}\n\npub fn through_field(bag: Bag) -> u64 sync {\n\treturn give_bag(bag)\n}\n\npub fn aliased(items: Vec[u8]) -> u64 sync {\n\tlet x = items\n\treturn keeper::owns_list(x)\n}\n\npub fn method(items: Vec[u8]) -> u64 sync {\n\tlet mut s = keeper::Sink::opened()\n\treturn s.take(items)\n}\n\npub fn maybe(items: Vec[u8]?) -> u64 sync {\n\treturn keeper::owns_maybe(items)\n}\n\npub fn pair(items: Vec[u8]) -> u64 sync {\n\treturn keeper::owns_pair((items, 1))\n}\n\npub fn named(names: Vec[String]) -> u64 sync {\n\treturn keeper::owns_names(names)\n}\n\npub fn rows(rows: Vec[Vec[u8]]) -> u64 sync {\n\treturn keeper::owns_rows(rows)\n}\n\nfn main() throws {\n\tprintln(f\"{through([1])} {through_two([1])} {through_field(Bag { items: [1] })} {aliased([1])} {method([1])} {maybe(null)} {pair([1])} {named([])} {rows([])}\")\n}\n")
+    process::run("rm", ["-rf", tmp])
+}

@@ -22,6 +22,13 @@ pub fn translate(written: &str, crate_word: &str, parameters: &[String], types: 
         let inner = translate(&rest, crate_word, parameters, types, mentioned);
         return Translated { ty: view_of(inner.ty), kept: false };
     }
+    if text.starts_with('[') && text.ends_with(']') {
+        let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+        let element = slice(&c, 1, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 1) });
+        if element.contains(';') { return Translated { ty: Ty::Unknown, kept: true }; }
+        let inner = translate(&element, crate_word, parameters, types, mentioned);
+        return Translated { ty: Ty::Named { name: String::from("Array"), args: vec![inner.ty], view: false }, kept: true };
+    }
     let optional = generic_of(text, "Option");
     if optional.is_some() {
         let inner = translate(nikaia_std::index::or(optional.as_deref(), || ""), crate_word, parameters, types, mentioned);

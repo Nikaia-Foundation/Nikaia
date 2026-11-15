@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1393] — 2026-11-15
+
+**a field clamped after each shortening stays within its list**
+- Bounds: a whole-number field clamped after each shortening of its list is proved within it — `self.text[self.cursor - 1]` after `pop` and a clamp needs no check.
+
+## [0.0.1392] — 2026-11-15
+
+**a counter proved through a second counter**
+- Prover: a counter is proved through a second counter. A loop that raises a counter no more often than another bounded counter now proves its overflow check; the report of an unbounded counter names its loop's line.
+
 ## [0.0.1391] — 2026-11-15
 
 **bounds walk: `/` by a constant, `>>` by a constant and `^ 1` are linear terms with a fresh number**

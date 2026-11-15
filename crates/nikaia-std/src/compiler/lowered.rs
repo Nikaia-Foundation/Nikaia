@@ -808,6 +808,17 @@ mod check_grammar_lowered {
 pub use check_grammar_lowered::*;
 
 #[allow(unsafe_code)]
+mod check_handed_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/check_handed.rs");
+}
+#[allow(unused_imports)]
+pub use check_handed_lowered::*;
+
+#[allow(unsafe_code)]
 mod check_host_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -3328,7 +3339,7 @@ pub mod bounds_reasons {
 }
 pub mod bounds_report {
     #[allow(unused_imports)]
-    pub use super::{BoundsReportFacts, bounds_report_checked, bounds_report_derived, bounds_report_trace, bounds_report_trace_rows};
+    pub use super::{BoundsReportFacts, bounds_report_checked, bounds_report_derived, bounds_report_trace, bounds_report_trace_rows, bounds_report_line};
 }
 pub mod bounds_rules {
     #[allow(unused_imports)]
@@ -3451,7 +3462,7 @@ pub mod check_core_args {
 }
 pub mod check_core_call {
     #[allow(unused_imports)]
-    pub use super::{check_core_call_lent, check_core_call_moving_options, check_core_free_call, signature_type_variables, check_core_call, check_core_tuple};
+    pub use super::{check_core_call_lent, check_core_call_rust_owner, check_core_call_moving_options, check_core_free_call, signature_type_variables, check_core_call, check_core_tuple};
 }
 pub mod check_core_call_on {
     #[allow(unused_imports)]
@@ -3546,6 +3557,10 @@ pub mod check_glue {
 pub mod check_grammar {
     #[allow(unused_imports)]
     pub use super::{grammar_stream_refused, grammar_positions_over_text};
+}
+pub mod check_handed {
+    #[allow(unused_imports)]
+    pub use super::{check_handed_follow, check_handed_carries, check_handed_written};
 }
 pub mod check_host {
     #[allow(unused_imports)]
@@ -3786,7 +3801,7 @@ pub mod emit_contracts {
 }
 pub mod emit_core_args {
     #[allow(unused_imports)]
-    pub use super::{emit_rust_owner, emit_rust_owner_param, emit_call_on_the_pool, emit_async_line, emit_async_pause, emit_async_during};
+    pub use super::{emit_rust_owner, emit_rust_crossing, emit_rust_owner_param, emit_call_on_the_pool, emit_async_line, emit_async_pause, emit_async_during};
 }
 pub mod emit_core_below {
     #[allow(unused_imports)]

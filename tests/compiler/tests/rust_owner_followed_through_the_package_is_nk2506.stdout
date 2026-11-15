@@ -1,0 +1,74 @@
+error[NK2506]: `keeper::owns_list` takes `items` as its own, but the compiler can't follow it back to where it was built.
+  --> src/main.nika:8:27
+   |
+ 8 | 	return keeper::owns_list(items)
+   |                           ^^^^^
+   |
+   = note: `keeper::owns_list` takes its `items` as Rust's `Vec`, and a list crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.
+   = note: `items` holds what `pub fn through` was handed, so it was built by a caller the compiler does not see.
+   = help: Write `items.clone()` to hand `keeper::owns_list` a copy.
+error[NK2506]: `keeper::owns_list` takes `bag.items` as its own, but the compiler can't follow it back to where it was built.
+   --> src/main.nika:16:27
+    |
+ 16 | 	return keeper::owns_list(bag.items)
+    |                           ^^^^^^^^^
+    |
+    = note: `keeper::owns_list` takes its `items` as Rust's `Vec`, and a list crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.
+    = note: `bag` holds what `pub fn through_field` was handed, so it was built by a caller the compiler does not see.
+    = help: Write `bag.items.clone()` to hand `keeper::owns_list` a copy.
+error[NK2506]: `keeper::owns_list` takes `x` as its own, but the compiler can't follow it back to where it was built.
+   --> src/main.nika:33:27
+    |
+ 33 | 	return keeper::owns_list(x)
+    |                           ^
+    |
+    = note: `keeper::owns_list` takes its `items` as Rust's `Vec`, and a list crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.
+    = note: `x` holds what `pub fn aliased` was handed, so it was built by a caller the compiler does not see.
+    = help: Write `x.clone()` to hand `keeper::owns_list` a copy.
+error[NK2506]: `keeper::Sink::take` takes `items` as its own, but the compiler can't follow it back to where it was built.
+   --> src/main.nika:38:16
+    |
+ 38 | 	return s.take(items)
+    |                ^^^^^
+    |
+    = note: `keeper::Sink::take` takes its `items` as Rust's `Vec`, and a list crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.
+    = note: `items` is a parameter of `pub fn method`, so it was built by a caller the compiler does not see.
+    = help: Write `items.clone()` to hand `keeper::Sink::take` a copy.
+error[NK2506]: `keeper::owns_maybe` takes `items` as its own, but the compiler can't follow it back to where it was built.
+   --> src/main.nika:42:28
+    |
+ 42 | 	return keeper::owns_maybe(items)
+    |                            ^^^^^
+    |
+    = note: `keeper::owns_maybe` takes its `items` as Rust's `Vec`, and a list crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.
+    = note: `items` is a parameter of `pub fn maybe`, so it was built by a caller the compiler does not see.
+    = help: Write `items.clone()` to hand `keeper::owns_maybe` a copy.
+error[NK2506]: `keeper::owns_pair` takes `items` as its own, but the compiler can't follow it back to where it was built.
+   --> src/main.nika:46:27
+    |
+ 46 | 	return keeper::owns_pair((items, 1))
+    |                           ^^^^^^^^^^
+    |
+    = note: `keeper::owns_pair` takes its `pair` as Rust's `Vec`, and a list crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.
+    = note: `items` is a parameter of `pub fn pair`, so it was built by a caller the compiler does not see.
+    = help: Write `items.clone()` to hand `keeper::owns_pair` a copy.
+error[NK2506]: `keeper::owns_names` takes `names` as its own, but the compiler can't follow it back to where it was built.
+   --> src/main.nika:50:28
+    |
+ 50 | 	return keeper::owns_names(names)
+    |                            ^^^^^
+    |
+    = note: `keeper::owns_names` takes its `names` as Rust's `Vec`, and a list crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.
+    = note: `names` is a parameter of `pub fn named`, so it was built by a caller the compiler does not see.
+    = help: Write `names.clone()` to hand `keeper::owns_names` a copy.
+error[NK2506]: `keeper::owns_rows` takes `rows` as its own, but the compiler can't follow it back to where it was built.
+   --> src/main.nika:54:27
+    |
+ 54 | 	return keeper::owns_rows(rows)
+    |                           ^^^^
+    |
+    = note: `keeper::owns_rows` takes its `rows` as Rust's `Vec`, and a list crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.
+    = note: `rows` is a parameter of `pub fn rows`, so it was built by a caller the compiler does not see.
+    = help: Write `rows.clone()` to hand `keeper::owns_rows` a copy.
+8 values handed to Rust that the compiler can't follow back
+exit 1

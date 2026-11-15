@@ -1,0 +1,14 @@
+bounds in tests/prove_a_counter_bounded_through_a_second_counter.nika: 1 indexes, 1 proved; 9 operations, 8 proved
+    12  steps += 1   proved
+    13  xs[0]        proved
+    14  hits += 1    proved
+    25  a += 1       proved
+    26  b += 1       proved
+    37  a += 1       proved
+    39  a += 2       checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+    40  b += 1       proved
+    55  t.done += 1  proved
+    56  t.seen += 1  proved
+  derived  apart: 0 <= cap, proved at the calls on lines 65
+  derived  fields: 0 <= cap, proved at the calls on lines 64
+  derived  together: 0 <= cap, proved at the calls on lines 65

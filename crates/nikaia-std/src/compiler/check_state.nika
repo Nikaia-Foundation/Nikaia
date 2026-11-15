@@ -982,6 +982,10 @@ pub struct CheckState {
     pub said_mut: collections::BTreeSet[i64],
     /// What the emitter reads (`check_facts.nika`).
     pub facts: CheckFacts,
+    /// **The names that may hold what an open function was handed**
+    /// (`check_handed_follow`, ADR-327 D8, #1547), followed once for the file
+    /// at the first call that hands a list or text to a Rust owner.
+    pub handed_follow: collections::BTreeMap[String, String]?,
     /// Each rule of the grammar being walked, with the type it declares (#500).
     pub rule_results: collections::BTreeMap[String, Ty],
     /// The id the next binding made here gets (above every id the host gives).

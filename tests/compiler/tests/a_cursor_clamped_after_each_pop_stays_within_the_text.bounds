@@ -1,0 +1,4 @@
+bounds in tests/a_cursor_clamped_after_each_pop_stays_within_the_text.nika: 1 indexes, 1 proved; 2 operations, 2 proved
+    22  self.cursor -= 1            proved
+    27  self.text[self.cursor - 1]  proved
+    27  self.cursor - 1             proved
