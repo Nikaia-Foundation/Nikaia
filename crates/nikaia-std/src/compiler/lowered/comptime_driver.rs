@@ -110,8 +110,8 @@ pub fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &str, dump
         let mut low: i64 = 0;
         let mut high = starts.len() as i64;
         while low < high {
-            let middle = (low + high) / 2;
-            if *nikaia_std::index::get(&starts, nikaia_std::index::at(middle)) <= generated { low = middle + 1; } else { high = middle; }
+            let middle = (unsafe { nikaia_std::proven::add::<i64>(low, high) }) / 2;
+            if *unsafe { nikaia_std::proven::read(&starts, (middle) as usize) } <= generated { low = unsafe { nikaia_std::proven::add::<i64>(middle, 1) }; } else { high = middle; }
         }
         let mut line: i64 = low;
         if generated >= end { line = line + moved; }

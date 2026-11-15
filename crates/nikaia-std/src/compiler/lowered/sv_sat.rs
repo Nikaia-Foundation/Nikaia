@@ -669,9 +669,9 @@ impl SvSat {
         let v = *nikaia_std::index::get(&self.heap, nikaia_std::index::at(i));
         while i > 0 {
             let parent = (unsafe { nikaia_std::proven::sub::<i64>(i, 1) }) / 2;
-            let u = *nikaia_std::index::get(&self.heap, nikaia_std::index::at(parent));
+            let u = *unsafe { nikaia_std::proven::read(&self.heap, (parent) as usize) };
             if !self.above(v, u) { break; }
-            { let __nikaia_stored = u; nikaia_std::index::set(&mut self.heap, nikaia_std::index::at(i), __nikaia_stored); }
+            { let __nikaia_stored = u; unsafe { nikaia_std::proven::write(&mut self.heap, (i) as usize, __nikaia_stored) }; }
             { let __nikaia_stored = i; nikaia_std::index::set(&mut self.place, nikaia_std::index::at(u as i64), __nikaia_stored); }
             i = parent;
         }
