@@ -2,7 +2,7 @@
 //
 // **The type language the checker reasons in, and the one the ledger records**
 // (ADR-294 D12): declared in Nikaia, lowered by `nikaia lower-std` to `ty.rs`
-// beside it, `include!`d as `nikaia_std::tools::ty`, and re-exported by the
+// beside it, `include!`d as `nikaia_std::compiler::ty`, and re-exported by the
 // compiler's `contracts::ty`, which keeps the algorithms over it until
 // ADR-294's step (d) moves them.
 //

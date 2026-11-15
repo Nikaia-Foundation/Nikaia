@@ -35,11 +35,11 @@ use crate::contracts::ty::Ty;
 use crate::grammar_run::Wall;
 use crate::parser::Parsed;
 
-use nikaia_std::tools::comptime_tree as tree;
+use nikaia_std::compiler::comptime_tree as tree;
 /// The name the sub-program hands the value back under. **The sub-program's
 /// tree work is Nikaia's** (`tools/comptime_tree.nika`, K1 and K2); what
 /// stays here holds the `Parsed` files and hands their items over.
-pub(crate) use nikaia_std::tools::comptime_tree::VALUE_FN;
+pub(crate) use nikaia_std::compiler::comptime_tree::VALUE_FN;
 
 /// **The sub-program for one initialiser** (`comptime_sub_program`), or
 /// nothing where this stage does not build one: a type with no written form,
@@ -269,11 +269,11 @@ pub(crate) fn by_package(units: &[&Parsed]) -> BTreeMap<String, crate::contracts
 
 /// **What a compiled build-time run came to**: the checker's own
 /// `CheckComputed` (`tools/check_host.nika`).
-pub(crate) use nikaia_std::tools::check_host::CheckComputed as Computed;
+pub(crate) use nikaia_std::compiler::check_host::CheckComputed as Computed;
 
 /// A default's type as its run builds it: Nikaia's
 /// (`tools/comptime_tree.nika`).
-pub(crate) use nikaia_std::tools::comptime_tree::comptime_as_built as as_built;
+pub(crate) use nikaia_std::compiler::comptime_tree::comptime_as_built as as_built;
 
 /// **Compile and run an initialiser** (ADR-321 D1): `value`, standing in
 /// `files[here]`, of type `ty`, with every file of the program around it and
@@ -509,7 +509,7 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
     fn dump(&self, unit: i64, ty: &Ty, out: &mut String) -> Option<Wall> {
         let held = self.units.borrow();
         let unit = &held[unit as usize];
-        nikaia_std::tools::grammar_run::grammar_run_dump(
+        nikaia_std::compiler::grammar_run::grammar_run_dump(
             &unit.interner,
             &unit.aliases,
             &unit.program,
@@ -665,7 +665,7 @@ fn defaults_known_from<R>(outer: Option<&crate::contracts::Ledger>, read: impl F
 pub(crate) fn known_default(package: Option<&str>, key: &str, at: usize) -> Option<String> {
     KNOWN.with(|held| {
         held.borrow().as_ref().and_then(|ledger| {
-            nikaia_std::tools::build_eval::bt_known_default(ledger, package, key, at as i64)
+            nikaia_std::compiler::build_eval::bt_known_default(ledger, package, key, at as i64)
         })
     })
 }
@@ -703,10 +703,10 @@ impl Default for Bounds {
 // toolchain's answers), Cargo's JSON, and the child's spawn with its progress
 // note; each `pub(crate)` function is a forward.
 
-use nikaia_std::rt::exec::block_on;
-use nikaia_std::tools::comptime_bundle::{
+use nikaia_std::compiler::comptime_bundle::{
     self as moved, ComptimeBundle, ComptimeBundleHost, ComptimeBundleRan,
 };
+use nikaia_std::rt::exec::block_on;
 
 /// **The dynamic library build-time code links against** (D3): one crate that
 /// names `std` and the grammar runtime a program's `grammar` lowers to, built
@@ -779,7 +779,7 @@ impl ComptimeBundleHost for BundleHost {
     }
 
     fn compiler(&self) -> String {
-        env!("NIKAIA_COMPILER").to_text()
+        crate::compiler_identity().to_text()
     }
 
     fn rustc_version(&self) -> String {

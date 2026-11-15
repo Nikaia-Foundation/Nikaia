@@ -9,11 +9,11 @@ use winnow_grammar::error::ParseError;
 use winnow_grammar::{InternerContext, ParseContext, ParseInput, StateOf, Symbol, grammar};
 
 /// **The words this language keeps for itself** (ADR-298): `tools/parse_errors.nika`'s.
-pub use nikaia_std::tools::parse_errors::RESERVED_WORDS;
+pub use nikaia_std::compiler::parse_errors::RESERVED_WORDS;
 
 /// What the grammar's actions build the tree with - the postfix steps and the folds of
 /// a head and its tails - is `tools/tree_build.nika`'s (ADR-294, #125).
-pub use nikaia_std::tools::tree_build::{
+pub use nikaia_std::compiler::tree_build::{
     Postfix, counted_pattern, flat_shape, fold_binary, fold_postfix, grouped, guarded, lambda,
     params_of, split_mut, unpacked,
 };
@@ -41,7 +41,7 @@ type LambdaParam = (bool, Symbol, Option<((Vec<Symbol>, Vec<i64>), ast::Span)>);
 #[derive(Clone, Debug)]
 pub struct Trivia {
     /// Runs, doc lines and comments (Nikaia).
-    core: nikaia_std::tools::parser_leaves::PrTrivia,
+    core: nikaia_std::compiler::parser_leaves::PrTrivia,
     /// The byte after the last `;` a statement read.
     semi_end: usize,
     /// Where a `mut` stood in front of one name of a tuple pattern
@@ -59,7 +59,7 @@ pub struct Trivia {
 impl Default for Trivia {
     fn default() -> Self {
         Trivia {
-            core: nikaia_std::tools::parser_leaves::pr_trivia(),
+            core: nikaia_std::compiler::parser_leaves::pr_trivia(),
             semi_end: 0,
             mut_name: None,
             misplaced_async: None,
@@ -209,7 +209,7 @@ where
     S: Clone + std::fmt::Debug,
 {
     let text = number_prefix(winnow::stream::AsBStr::as_bstr(i));
-    match nikaia_std::tools::parse_numbers::float_end(&text) {
+    match nikaia_std::compiler::parse_numbers::float_end(&text) {
         Some(message) => Err(ParseError::from_input(i)
             .with_message(message)
             .with_priority(winnow_grammar::error::PRIO_STRUCTURAL)),
@@ -268,9 +268,9 @@ fn number_at<'a, S>(i: &mut ParseInput<'a, S>, signed: bool) -> Result<(u64, boo
 where
     S: Clone + std::fmt::Debug,
 {
-    use nikaia_std::tools::parse_numbers::Number;
+    use nikaia_std::compiler::parse_numbers::Number;
     let text = number_prefix(winnow::stream::AsBStr::as_bstr(i));
-    match nikaia_std::tools::parse_numbers::number_at(&text, signed) {
+    match nikaia_std::compiler::parse_numbers::number_at(&text, signed) {
         Number::Not => Err(ParseError::from_input(i).add_expected("digits")),
         Number::Taken {
             magnitude,
@@ -351,7 +351,8 @@ pub struct Parsed {
     /// its own while a view of them is still used**, by their nodes
     /// ([ADR-views-3](../../../docs/specification/adr/adr-views-3.md) D9):
     /// [`crate::view_changes`] refuses each (`NK2305`).
-    pub refused_moves: std::collections::BTreeMap<i64, nikaia_std::tools::text_tiers::TierRefusal>,
+    pub refused_moves:
+        std::collections::BTreeMap<i64, nikaia_std::compiler::text_tiers::TierRefusal>,
     /// **Every hole this file's readers parsed, by its text**: what
     /// [`Parsed::hole`] answered before. Each analysis walks every literal and
     /// parses its holes again, which was a fifth of lowering a program with a
@@ -368,7 +369,7 @@ pub struct Parsed {
     /// **What this file says to the bounds walks of the package's other
     /// files** (`bounds_beside`, #1581): read at the first walk that has it
     /// beside, once the tree is final, and not again for each other file.
-    bounds_beside: std::sync::OnceLock<nikaia_std::tools::bounds_frame::BoundsBeside>,
+    bounds_beside: std::sync::OnceLock<nikaia_std::compiler::bounds_frame::BoundsBeside>,
     /// **The next id this file has not given**
     /// ([ADR-340](../../../docs/specification/adr/adr-340.md) D1): where the
     /// parse of the file stopped counting, and where a hole parsed later
@@ -396,15 +397,15 @@ pub struct Parsed {
 impl Parsed {
     /// What this file says to the bounds walk of another file of its package
     /// (`tools/bounds_frame.nika`'s `bounds_beside`), read once.
-    pub fn bounds_beside(&self) -> &nikaia_std::tools::bounds_frame::BoundsBeside {
+    pub fn bounds_beside(&self) -> &nikaia_std::compiler::bounds_frame::BoundsBeside {
         self.bounds_beside.get_or_init(|| {
-            nikaia_std::tools::bounds_frame::bounds_beside(&self.program, &self.interner)
+            nikaia_std::compiler::bounds_frame::bounds_beside(&self.program, &self.interner)
         })
     }
 
     /// Where the expression `id` was written, if the parser made it.
     pub fn span_of(&self, id: u32) -> Option<ast::Span> {
-        nikaia_std::tools::parsed_tree::parsed_span_of(&self.expr_spans, id)
+        nikaia_std::compiler::parsed_tree::parsed_span_of(&self.expr_spans, id)
     }
 
     /// One hole of a template, parsed into this file's interner
@@ -469,7 +470,7 @@ impl Parsed {
         built
             .entry(key)
             .or_insert_with(|| {
-                nikaia_std::tools::check_walked::check_walked_kept_call(
+                nikaia_std::compiler::check_walked::check_walked_kept_call(
                     func,
                     arity as i64,
                     receiver,
@@ -482,7 +483,7 @@ impl Parsed {
     /// **What a kept function's call is cached by**: the name, or the path
     /// joined with `::` ([`Parsed::kept_function_call`]).
     pub fn kept_function_text(&self, func: &ast::Expr) -> String {
-        nikaia_std::tools::parsed_tree::parsed_kept_function_text(func, &self.interner)
+        nikaia_std::compiler::parsed_tree::parsed_kept_function_text(func, &self.interner)
     }
 
     /// Every hole parsed so far, by the site and the text: what the emitter is
@@ -514,7 +515,7 @@ impl Parsed {
     /// the program's `fn main`.
     pub fn keeping(&self, keep: impl Fn(&ast::Item) -> bool) -> Parsed {
         // The choosing is `tools/parsed_tree.nika`'s.
-        self.with_items(nikaia_std::tools::parsed_tree::parsed_kept_items(
+        self.with_items(nikaia_std::compiler::parsed_tree::parsed_kept_items(
             &self.program.items,
             &keep,
         ))
@@ -565,7 +566,7 @@ impl Parsed {
     pub fn growing(&self) -> Parsed {
         // The rewriting of the types is `tools/parsed_tree.nika`'s.
         let vec = self.interner.intern_string("Vec");
-        self.with_items(nikaia_std::tools::parsed_tree::grown_items(
+        self.with_items(nikaia_std::compiler::parsed_tree::grown_items(
             &self.program.items,
             vec,
         ))
@@ -586,7 +587,7 @@ impl Parsed {
     pub fn unaliased(&self, name: &str) -> String {
         // In Nikaia (`tools/text_tiers.nika`, #125), which the tier pass
         // reads the dictionary with as well.
-        nikaia_std::tools::text_tiers::unaliased_in(&self.aliases, name)
+        nikaia_std::compiler::text_tiers::unaliased_in(&self.aliases, name)
     }
 }
 
@@ -628,7 +629,7 @@ pub fn parse_expression_from(
         // A hole has no line of its own to show, so its way out is said beside
         // the headline, where the lowering's message about the hole carries it.
         .map_err(|e| {
-            let finding = nikaia_std::tools::parse_findings::parse_findings_parse_error(
+            let finding = nikaia_std::compiler::parse_findings::parse_findings_parse_error(
                 &failure_of(&e, input),
                 input,
                 &stops_at_char,
@@ -650,7 +651,7 @@ pub fn parse_expression_from(
 
     // ADR-383 D2: the hole's nodes take their numbers from `first`, under the
     // lock the caller holds; its spans are its own text's, so none is kept.
-    let numbered = nikaia_std::tools::node_numbers::node_numbers_expr(expr, first);
+    let numbered = nikaia_std::compiler::node_numbers::node_numbers_expr(expr, first);
     Ok((numbered.expr, numbered.next))
 }
 
@@ -662,7 +663,7 @@ pub fn parse_expression_from(
 /// that is generated can be split by what generated it.
 pub fn fits(length: usize) -> Result<()> {
     let at_most = |n: usize| i64::try_from(n).unwrap_or(i64::MAX);
-    match nikaia_std::tools::parse_findings::parse_findings_too_long(
+    match nikaia_std::compiler::parse_findings::parse_findings_too_long(
         at_most(length),
         at_most(ast::LONGEST_SOURCE),
     ) {
@@ -701,7 +702,7 @@ fn stops_at(input: &str) -> Option<usize> {
 /// The character index a byte offset of `source` stands at - what the parse
 /// errors in Nikaia (`tools/parse_errors.nika`) count in.
 fn char_of(source: &str, byte: usize) -> i64 {
-    nikaia_std::tools::parse_findings::parse_findings_char_of(source, byte as i64)
+    nikaia_std::compiler::parse_findings::parse_findings_char_of(source, byte as i64)
 }
 
 /// Where a parse of `input` stops, as a character index, or -1 where it goes
@@ -712,8 +713,8 @@ fn stops_at_char(input: &str) -> i64 {
 }
 
 /// What the generated parser reported, for the parse errors in Nikaia.
-fn failure_of(error: &ParseError, source: &str) -> nikaia_std::tools::parse_errors::Failure {
-    nikaia_std::tools::parse_errors::Failure {
+fn failure_of(error: &ParseError, source: &str) -> nikaia_std::compiler::parse_errors::Failure {
+    nikaia_std::compiler::parse_errors::Failure {
         offset: char_of(source, error.offset),
         expected: error.expected.iter().map(String::from).collect(),
         also: error.also.iter().map(String::from).collect(),
@@ -762,7 +763,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
             // the end of the file, which is the one place a parse error's
             // position is the reader's to be told rather than the parser's
             // ([ADR-307](../../../../docs/specification/adr/adr-307.md) D2).
-            let finding = nikaia_std::tools::parse_findings::parse_findings_failure(
+            let finding = nikaia_std::compiler::parse_findings::parse_findings_failure(
                 &failure_of(&e, input),
                 input,
                 &stops_at_char,
@@ -773,7 +774,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
     // **`mut` in front of one name of a tuple pattern** (`NK1307`, ADR-views-2 D1).
     if let Some(at) = stream.state.user_state.mut_name {
         let finding =
-            nikaia_std::tools::parse_findings::parse_findings_mut_name_in_a_tuple(at as i64);
+            nikaia_std::compiler::parse_findings::parse_findings_mut_name_in_a_tuple(at as i64);
         return Err(refuse_parsing(finding, input));
     }
 
@@ -781,13 +782,14 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
     // (`NK2115`, ADR-async-5 D5).
     if let Some((at, word)) = stream.state.user_state.misplaced_async {
         let finding =
-            nikaia_std::tools::parse_findings::parse_findings_misplaced_async(at as i64, word);
+            nikaia_std::compiler::parse_findings::parse_findings_misplaced_async(at as i64, word);
         return Err(refuse_parsing(finding, input));
     }
 
     // **`limit:` on a form that starts one task** (`NK2112`, ADR-async-5 D15).
     if let Some(at) = stream.state.user_state.one_task_limit {
-        let finding = nikaia_std::tools::parse_findings::parse_findings_one_task_limit(at as i64);
+        let finding =
+            nikaia_std::compiler::parse_findings::parse_findings_one_task_limit(at as i64);
         return Err(refuse_parsing(finding, input));
     }
 
@@ -795,7 +797,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
     // backstop so a partial parse can never be reported as a success.
     if !stream.input.is_empty() {
         let at = input.len() - stream.input.len();
-        let finding = nikaia_std::tools::parse_findings::parse_findings_at(
+        let finding = nikaia_std::compiler::parse_findings::parse_findings_at(
             at as i64,
             String::new(),
             "The parser stopped here, before the end of the file.".to_text(),
@@ -808,7 +810,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
     // ADR-383 D2: the numbering pass, right after the grammar and before
     // the first rewrite; the spans the rules put on the ids move into the
     // table, by number (D4).
-    let numbered = nikaia_std::tools::node_numbers::node_numbers_items(program.items, 0);
+    let numbered = nikaia_std::compiler::node_numbers::node_numbers_items(program.items, 0);
     let program = ast::Program {
         items: numbered.items,
     };
@@ -826,7 +828,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
         .zip(&core.ends)
         .map(|(&start, &end)| ast::Span::from(start as usize..end as usize))
         .collect();
-    let aliases = nikaia_std::tools::parsed_tree::aliases_of(&program.items, &interner);
+    let aliases = nikaia_std::compiler::parsed_tree::aliases_of(&program.items, &interner);
     let mut parsed = Parsed {
         program,
         interner,
@@ -867,7 +869,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
 fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
     let interner = parsed.interner.clone();
     let items = std::mem::take(&mut parsed.program.items);
-    let expanded = nikaia_std::tools::grammar_types::grammar_types_whole(
+    let expanded = nikaia_std::compiler::grammar_types::grammar_types_whole(
         items,
         &parsed.expr_spans,
         &interner,
@@ -882,22 +884,20 @@ fn expand_grammar_types(parsed: &mut Parsed) -> anyhow::Result<()> {
 
 /// A refusal of the copying (`tools/grammar_types.nika`), as the compiler's.
 fn a_types_refusal(
-    refusal: nikaia_std::tools::grammar_types::GrammarTypesRefusal,
+    refusal: nikaia_std::compiler::grammar_types::GrammarTypesRefusal,
 ) -> anyhow::Error {
-    refused(nikaia_std::tools::parse_findings::parse_findings_types_refusal(refusal))
+    refused(nikaia_std::compiler::parse_findings::parse_findings_types_refusal(refusal))
 }
 
 /// The refusal a parse error travels as: the finding for whoever has the path
 /// to render it at, and a line with its position for whoever does not
 /// (`tools/parse_findings.nika`).
-fn refuse_parsing(finding: nikaia_std::tools::findings::Finding, source: &str) -> anyhow::Error {
-    refused(nikaia_std::tools::parse_findings::parse_findings_refusal(
-        finding, source,
-    ))
+fn refuse_parsing(finding: nikaia_std::compiler::findings::Finding, source: &str) -> anyhow::Error {
+    refused(nikaia_std::compiler::parse_findings::parse_findings_refusal(finding, source))
 }
 
 /// A refusal `tools/parse_findings.nika` made, as the compiler's.
-fn refused(refusal: nikaia_std::tools::parse_findings::ParseFindingsRefusal) -> anyhow::Error {
+fn refused(refusal: nikaia_std::compiler::parse_findings::ParseFindingsRefusal) -> anyhow::Error {
     crate::diagnostics::refuse_finding(crate::traits::from_nikaia(refusal.finding), refusal.line)
 }
 

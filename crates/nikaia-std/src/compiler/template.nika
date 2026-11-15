@@ -5,7 +5,7 @@
 // The fifth piece of the compiler moved from Rust to Nikaia (0.0.252), by
 // ADR-290's route and on ADR-294's road: lowered ahead of time by
 // `nikaia lower-std` to `template.rs` beside it, `include!`d as
-// `nikaia_std::tools::template`, and called from the compiler's
+// `nikaia_std::compiler::template`, and called from the compiler's
 // `emit::template`, which is left holding the conversion to its own error type.
 //
 // A template is not parsed at run time: the body is known when the program is

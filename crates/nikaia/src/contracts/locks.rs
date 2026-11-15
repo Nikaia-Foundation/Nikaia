@@ -71,7 +71,7 @@ use crate::ast::{Block, Expr};
 use crate::parser::Parsed;
 
 use super::Ledger;
-use nikaia_std::tools::locks::{self as nika, BodyCalls, Reaches};
+use nikaia_std::compiler::locks::{self as nika, BodyCalls, Reaches};
 
 /// The free calls a lambda's body makes, for the checker to remember with the
 /// function field it is stored in (ADR-230 D1).

@@ -1,0 +1,9 @@
+exit 1
+program "fine" (tests/fine.nika) ... ok
+program "spins" (tests/spins.nika) ... FAILED
+program "waits_on_a_child" (tests/waits_on_a_child.nika) ... FAILED
+--- program "spins" (tests/spins.nika)
+--- program "waits_on_a_child" (tests/waits_on_a_child.nika)
+test result: FAILED. 1 passed; 2 failed
+timed out after 2 s
+timed out after 2 s

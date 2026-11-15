@@ -42,7 +42,7 @@ use crate::refused;
 /// `tools/emit_build.nika`. The default target is the machine the compiler
 /// runs on, [`host_target`], a value of the compiler's own build, so it stays
 /// here ([`default_target`]).
-pub use nikaia_std::tools::emit_build::Target;
+pub use nikaia_std::compiler::emit_build::Target;
 
 /// **The machine this compiler is running on.** The compiler is a native
 /// program, so the triple it was built for (`build.rs`) is the machine it
@@ -63,7 +63,7 @@ pub fn default_target() -> Target {
 
 /// Whether the user's code may run concurrently, and whether the program
 /// carries the re-entrancy check: `tools/emit_build.nika`.
-pub use nikaia_std::tools::emit_build::{ReentrancyCheck, UserParallelism};
+pub use nikaia_std::compiler::emit_build::{ReentrancyCheck, UserParallelism};
 
 /// The build switches together (ADR-037, [ADR-281](../../docs/specification/adr/adr-281.md) D36).
 ///
@@ -147,7 +147,7 @@ impl Default for Build {
 }
 
 /// A build switch's refusal from `tools/emit_build.nika`, in the words it gave.
-fn switch(thrown: nikaia_std::error::Thrown<nikaia_std::tools::Refused>) -> anyhow::Error {
+fn switch(thrown: nikaia_std::error::Thrown<nikaia_std::compiler::Refused>) -> anyhow::Error {
     refused!("{thrown}")
 }
 
@@ -233,7 +233,7 @@ impl Build {
 
 /// How a view's lifetime is spelled here. The source never says either way
 /// (ADR-283); the position does.
-use nikaia_std::tools::emit_kinds::EmitLifetimes as Lifetimes;
+use nikaia_std::compiler::emit_kinds::EmitLifetimes as Lifetimes;
 
 // --- The output, and the way back ---
 
@@ -257,14 +257,14 @@ pub struct SourceMap {
     /// Innermost first (`tools/emit_out.nika`): a lookup returns the first
     /// range that contains the offset. A single-file program has one unit,
     /// and it is 0.
-    entries: Vec<nikaia_std::tools::emit_out::EmitMapEntry>,
+    entries: Vec<nikaia_std::compiler::emit_out::EmitMapEntry>,
 }
 
 impl SourceMap {
     /// The narrowest source span whose emitted text covers `offset`, and the
     /// file it is in.
     pub fn locate(&self, offset: usize) -> Option<(usize, Span)> {
-        nikaia_std::tools::emit_out::emit_out_locate(&self.entries, offset as i64)
+        nikaia_std::compiler::emit_out::emit_out_locate(&self.entries, offset as i64)
             .map(|e| (e.unit as usize, e.source))
     }
 
@@ -281,7 +281,7 @@ impl SourceMap {
     /// into a larger file - and tagged with which file it came from
     /// (`emit_out_placed`).
     pub fn placed(mut self, by: usize, unit: usize) -> SourceMap {
-        nikaia_std::tools::emit_out::emit_out_placed(&mut self.entries, by as i64, unit as i64);
+        nikaia_std::compiler::emit_out::emit_out_placed(&mut self.entries, by as i64, unit as i64);
         self
     }
 
@@ -304,7 +304,7 @@ impl SourceMap {
 
 /// The emitted text under construction, and the map being built with it
 /// (`tools/emit_out.nika`).
-type Out = nikaia_std::tools::emit_out::EmitOut;
+type Out = nikaia_std::compiler::emit_out::EmitOut;
 
 pub fn emit_program(parsed: &Parsed, build: Build) -> Result<Lowered> {
     let trust = crate::contracts::trust::analyse(parsed, std_ledger());
@@ -397,7 +397,7 @@ pub fn emit_std_items_against_at(
     checked: Option<crate::check::CheckFacts>,
     // **The package's call graphs**, worked out once for all its files
     // (`emit_contracts_package_graphs`, #1279). `None` works them out here.
-    graphs: Option<nikaia_std::tools::emit_contracts::EmitReachGraphs>,
+    graphs: Option<nikaia_std::compiler::emit_contracts::EmitReachGraphs>,
 ) -> Result<Lowered> {
     Emitter::with_contracts(
         parsed,
@@ -467,14 +467,14 @@ pub fn barrier_names(
 ) -> std::collections::BTreeSet<String> {
     seeds::Seeds::read_with(
         units,
-        &nikaia_std::tools::emit_tables::emit_tables_described_maps(described),
+        &nikaia_std::compiler::emit_tables::emit_tables_described_maps(described),
     )
     .barrier_names()
 }
 
 /// What a program's preamble has to say, over all of its files
 /// (`tools/emit_needs.nika`).
-pub use nikaia_std::tools::emit_needs::EmitNeeds as Needs;
+pub use nikaia_std::compiler::emit_needs::EmitNeeds as Needs;
 
 /// What one file needs, read off its items with no emitter built (#727).
 pub fn needs_of(parsed: &Parsed) -> Needs {
@@ -546,13 +546,13 @@ fn std_ledger() -> &'static crate::contracts::Ledger {
 /// Borrowed where nothing changes, which is every name in every program written
 /// today.
 pub fn escaped(name: &str) -> std::borrow::Cow<'_, str> {
-    match nikaia_std::tools::emit_misc::is_reserved(name) {
+    match nikaia_std::compiler::emit_misc::is_reserved(name) {
         true => std::borrow::Cow::Owned(std::format!("r#{name}")),
         false => std::borrow::Cow::Borrowed(name),
     }
 }
 
-use nikaia_std::tools::emit_state::{EmitState, EmitWalk, EmitWorld};
+use nikaia_std::compiler::emit_state::{EmitState, EmitWalk, EmitWorld};
 
 struct Emitter<'p> {
     parsed: &'p Parsed,
@@ -585,7 +585,7 @@ struct Emitter<'p> {
     nonnegative_bodies: HashMap<usize, HashSet<Symbol>>,
     /// **Which checks there are and which are proved**, for the order a
     /// block's statements are written in (ADR-379).
-    order_proofs: nikaia_std::tools::emit_order::EmitOrderProofs,
+    order_proofs: nikaia_std::compiler::emit_order::EmitOrderProofs,
     /// **The program's `main`'s parameters as its definition wrote them**,
     /// `name: type`, for the entry that reads the words into them
     /// ([ADR-360](../../docs/specification/adr/adr-360.md) D1).
@@ -661,7 +661,7 @@ impl<'p> Emitter<'p> {
         // it (`emit_std_items_against_at`).
         checked: Option<crate::check::CheckFacts>,
         // The package's call graphs, where they were worked out once.
-        graphs: Option<nikaia_std::tools::emit_contracts::EmitReachGraphs>,
+        graphs: Option<nikaia_std::compiler::emit_contracts::EmitReachGraphs>,
     ) -> Self {
         let seeds_of = {
             let mut all: Vec<&Parsed> = Vec::from(beside);
@@ -670,7 +670,7 @@ impl<'p> Emitter<'p> {
             }
             seeds::Seeds::read_with(
                 &all,
-                &nikaia_std::tools::emit_tables::emit_tables_described_maps(described),
+                &nikaia_std::compiler::emit_tables::emit_tables_described_maps(described),
             )
         };
         // The check's keep plans, where it made them as this does (#727).
@@ -699,7 +699,7 @@ impl<'p> Emitter<'p> {
             seeds: &seeds_of,
             nonnegative_locals: std::cell::RefCell::new(HashMap::new()),
         };
-        let made = nikaia_std::tools::emit_contracts::emit_contracts_state(
+        let made = nikaia_std::compiler::emit_contracts::emit_contracts_state(
             &host,
             parsed,
             &unit_views,
@@ -711,7 +711,7 @@ impl<'p> Emitter<'p> {
             checked,
             checked_plans,
             &parsed.refused_moves,
-            &nikaia_std::tools::emit_contracts::EmitContractsBuild {
+            &nikaia_std::compiler::emit_contracts::EmitContractsBuild {
                 leaves_values: build.leaves_values,
                 bounds_removed: build.bounds == crate::bounds::BoundsChecks::Removed,
                 overflow_removed: build.overflow == crate::bounds::OverflowChecks::Removed,
@@ -821,7 +821,7 @@ impl<'p> Emitter<'p> {
         let walk = held
             .as_mut()
             .expect("a type is filled only inside a hosted call");
-        nikaia_std::tools::emit_seeds::emit_seeds_seeded(
+        nikaia_std::compiler::emit_seeds::emit_seeds_seeded(
             &self.s.seeds,
             walk,
             self.s.trusted_input,
@@ -865,7 +865,7 @@ struct ContractsHost<'a> {
     nonnegative_locals: std::cell::RefCell<HashMap<usize, HashSet<Symbol>>>,
 }
 
-impl nikaia_std::tools::emit_contracts::EmitContractsHost for ContractsHost<'_> {
+impl nikaia_std::compiler::emit_contracts::EmitContractsHost for ContractsHost<'_> {
     fn propagation_leaving_values(
         &self,
         own: &crate::contracts::Ledger,
@@ -887,7 +887,7 @@ impl nikaia_std::tools::emit_contracts::EmitContractsHost for ContractsHost<'_> 
         &self,
         facts: &crate::check::CheckFacts,
         published: &crate::contracts::Ledger,
-    ) -> nikaia_std::tools::emit_contracts::EmitContractsProven {
+    ) -> nikaia_std::compiler::emit_contracts::EmitContractsProven {
         let proven = crate::bounds::proven(
             self.parsed,
             self.beside,
@@ -897,7 +897,7 @@ impl nikaia_std::tools::emit_contracts::EmitContractsHost for ContractsHost<'_> 
             self.build.prove_through_loops,
         );
         *self.nonnegative_locals.borrow_mut() = proven.nonnegative_locals;
-        nikaia_std::tools::emit_contracts::EmitContractsProven {
+        nikaia_std::compiler::emit_contracts::EmitContractsProven {
             indices: proven.indices.into_iter().collect(),
             arithmetic: proven.arithmetic.into_iter().collect(),
             negations: proven.negations.into_iter().collect(),
@@ -908,7 +908,7 @@ impl nikaia_std::tools::emit_contracts::EmitContractsHost for ContractsHost<'_> 
     fn shared(
         &self,
         own: &crate::contracts::Ledger,
-    ) -> std::collections::BTreeMap<String, nikaia_std::tools::ty::Count> {
+    ) -> std::collections::BTreeMap<String, nikaia_std::compiler::ty::Count> {
         crate::contracts::sharing::analyse_program(
             self.parsed,
             own,
@@ -927,7 +927,7 @@ impl nikaia_std::tools::emit_contracts::EmitContractsHost for ContractsHost<'_> 
         self.seeds.calls().clone()
     }
 
-    fn seeds(&self) -> nikaia_std::tools::emit_seeds::EmitSeedsTables {
+    fn seeds(&self) -> nikaia_std::compiler::emit_seeds::EmitSeedsTables {
         self.seeds.tables().clone()
     }
 
@@ -952,7 +952,7 @@ impl nikaia_std::tools::emit_contracts::EmitContractsHost for ContractsHost<'_> 
     fn buffer_plans(
         &self,
         own: &crate::contracts::Ledger,
-    ) -> Vec<nikaia_std::tools::buffers::BufferPlan> {
+    ) -> Vec<nikaia_std::compiler::buffers::BufferPlan> {
         crate::contracts::keep::buffer_plans(
             self.parsed,
             Some(&crate::contracts::keep::beside(self.units)),
@@ -985,7 +985,7 @@ pub(crate) fn borrowing_structs_beside(
     parsed: &Parsed,
     outside: &std::collections::BTreeSet<String>,
 ) -> HashSet<Symbol> {
-    nikaia_std::tools::emit_tables::emit_tables_borrowing_structs_beside(
+    nikaia_std::compiler::emit_tables::emit_tables_borrowing_structs_beside(
         &parsed.interner,
         &parsed.program.items,
         outside,
@@ -1003,7 +1003,7 @@ pub(crate) fn package_borrowing(units: &[&Parsed]) -> std::collections::BTreeSet
         .iter()
         .map(|p| crate::check::parsed_view_of(p))
         .collect();
-    nikaia_std::tools::emit_tables::emit_tables_package_borrowing(&views)
+    nikaia_std::compiler::emit_tables::emit_tables_package_borrowing(&views)
 }
 
 /// **Which branches an `overlap` starts first**, for `--overlaps`
@@ -1037,7 +1037,7 @@ pub fn branch_starts_first<'p>(
 }
 
 pub(crate) fn visit_block<'a>(block: &'a Block, f: &mut impl FnMut(&'a Expr)) {
-    for expr in nikaia_std::tools::emit_walk::visited_in_block(block) {
+    for expr in nikaia_std::compiler::emit_walk::visited_in_block(block) {
         f(expr);
     }
 }
@@ -1047,7 +1047,7 @@ pub(crate) fn visit_block<'a>(block: &'a Block, f: &mut impl FnMut(&'a Expr)) {
 /// as written - an escape and a doubled brace mean there what they mean here
 /// - and each hole as `{}`, or `{:spec}` where a format follows its `:`.
 pub(crate) fn format_of(parts: &[crate::ast::FPart]) -> String {
-    nikaia_std::tools::emit_text::format_of(parts)
+    nikaia_std::compiler::emit_text::format_of(parts)
 }
 
 /// Every expression a literal holds - the holes of an interpolated string, and
@@ -1055,17 +1055,17 @@ pub(crate) fn format_of(parts: &[crate::ast::FPart]) -> String {
 /// parse yields nothing here. The Rust analyses that still take it as a closure
 /// call this until they move.
 pub(crate) fn literal_expressions(parsed: &Parsed, expr: &Expr) -> Vec<Expr> {
-    nikaia_std::tools::emit_holes::emit_holes_literal(parsed, &parsed.interner, expr)
+    nikaia_std::compiler::emit_holes::emit_holes_literal(parsed, &parsed.interner, expr)
 }
 
 /// **The parsed file is what the walks over holes ask**
 /// (`tools/emit_holes.nika`): a template's hole parsed once per text at one
 /// site, and an `f"…"`'s hole with what the tier pass hands over inside it.
-impl nikaia_std::tools::emit_holes::EmitHolesHost for Parsed {
-    fn hole(&self, site: u32, text: &str) -> nikaia_std::tools::emit_holes::EmitHole {
+impl nikaia_std::compiler::emit_holes::EmitHolesHost for Parsed {
+    fn hole(&self, site: u32, text: &str) -> nikaia_std::compiler::emit_holes::EmitHole {
         match Parsed::hole(self, site, text) {
-            Ok(expr) => nikaia_std::tools::emit_holes::EmitHole::Parsed(expr),
-            Err(error) => nikaia_std::tools::emit_holes::EmitHole::Refused(error.to_text()),
+            Ok(expr) => nikaia_std::compiler::emit_holes::EmitHole::Parsed(expr),
+            Err(error) => nikaia_std::compiler::emit_holes::EmitHole::Refused(error.to_text()),
         }
     }
 
@@ -1085,14 +1085,14 @@ impl nikaia_std::tools::emit_holes::EmitHolesHost for Parsed {
 
     fn cached_kept_calls(
         &self,
-    ) -> std::collections::BTreeMap<(String, i64), nikaia_std::tools::emit_state::EmitKeptCall>
+    ) -> std::collections::BTreeMap<(String, i64), nikaia_std::compiler::emit_state::EmitKeptCall>
     {
         self.cached_kept_calls()
             .into_iter()
             .map(|((name, arity), (names, call))| {
                 (
                     (name, arity as i64),
-                    nikaia_std::tools::emit_state::EmitKeptCall { names, call },
+                    nikaia_std::compiler::emit_state::EmitKeptCall { names, call },
                 )
             })
             .collect()

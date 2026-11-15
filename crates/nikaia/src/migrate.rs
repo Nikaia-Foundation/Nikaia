@@ -34,17 +34,17 @@ pub fn run(named: &[PathBuf]) -> Result<i32> {
         let source = std::fs::read_to_string(file)
             .with_context(|| format!("cannot read {}", file.display()))?;
         let migrated = if file.extension().is_some_and(|e| e == "md") {
-            nikaia_std::tools::migrate_views3::migrate_views3_markdown(&source, &keeps_alone)
+            nikaia_std::compiler::migrate_views3::migrate_views3_markdown(&source, &keeps_alone)
         } else {
             match keeps_in_package(file)? {
                 Package::None => {
-                    nikaia_std::tools::migrate_views3::migrate_views3_nika(&source, &keeps_alone)
+                    nikaia_std::compiler::migrate_views3::migrate_views3_nika(&source, &keeps_alone)
                 }
                 Package::Keeps(dropped, keep_at) => {
                     let by_value =
-                        nikaia_std::tools::migrate_views3::migrate_views3_selves(&source);
-                    let lent = nikaia_std::tools::migrate_views3::migrate_views3_lent(&source);
-                    nikaia_std::tools::migrate_views3::migrate_views3_code(
+                        nikaia_std::compiler::migrate_views3::migrate_views3_selves(&source);
+                    let lent = nikaia_std::compiler::migrate_views3::migrate_views3_lent(&source);
+                    nikaia_std::compiler::migrate_views3::migrate_views3_code(
                         &dropped, &keep_at, &by_value, &lent,
                     )
                 }
@@ -64,9 +64,9 @@ pub fn run(named: &[PathBuf]) -> Result<i32> {
         // keeps its `ref`, and the choices are named (ADR-views-3 D14).
         // A Markdown file is asked block by block, its lines counted in the file.
         let unwritten = if file.extension().is_some_and(|e| e == "md") {
-            nikaia_std::tools::migrate_views3::migrate_views3_markdown_unwritten(&source)
+            nikaia_std::compiler::migrate_views3::migrate_views3_markdown_unwritten(&source)
         } else {
-            nikaia_std::tools::migrate_views3::migrate_views3_unwritten(&source)
+            nikaia_std::compiler::migrate_views3::migrate_views3_unwritten(&source)
         };
         for unwritten in unwritten {
             eprintln!("{}:{unwritten}", file.display());
@@ -86,7 +86,7 @@ pub fn run(named: &[PathBuf]) -> Result<i32> {
 /// files named are read together: a failing `pub` function of one fails its
 /// callers in the others, to the fixpoint. A Markdown block is read alone.
 pub fn print_throws(named: &[PathBuf]) -> Result<i32> {
-    use nikaia_std::tools::migrate_print_throws as tool;
+    use nikaia_std::compiler::migrate_print_throws as tool;
     let mut files = Vec::new();
     for path in named {
         match path.is_dir() {
@@ -180,7 +180,8 @@ fn keeps_in_package(file: &Path) -> Result<Package> {
     for path in &paths {
         let written = std::fs::read_to_string(path)
             .with_context(|| format!("cannot read {}", path.display()))?;
-        let text = nikaia_std::tools::migrate_views3::migrate_views3_code(&written, &[], &[], &[]);
+        let text =
+            nikaia_std::compiler::migrate_views3::migrate_views3_code(&written, &[], &[], &[]);
         match parse_unrefined(&text) {
             Ok(parsed) => units.push(parsed),
             Err(_) => return Ok(Package::None),
@@ -198,7 +199,8 @@ fn keeps_in_package(file: &Path) -> Result<Package> {
         };
         let written = std::fs::read_to_string(file)
             .with_context(|| format!("cannot read {}", file.display()))?;
-        let text = nikaia_std::tools::migrate_views3::migrate_views3_code(&written, &[], &[], &[]);
+        let text =
+            nikaia_std::compiler::migrate_views3::migrate_views3_code(&written, &[], &[], &[]);
         let Ok(parsed) = parse_to_ast(&text) else {
             return Ok(Package::None);
         };
@@ -237,13 +239,13 @@ fn keeps_of(
     library: &Ledger,
     checked: &crate::check::Checked,
 ) -> Vec<i64> {
-    let own_methods = nikaia_std::tools::ty::method_index(own);
-    let library_methods = nikaia_std::tools::ty::method_index(library);
-    nikaia_std::tools::migrate_views3::migrate_views3_keeps(
+    let own_methods = nikaia_std::compiler::ty::method_index(own);
+    let library_methods = nikaia_std::compiler::ty::method_index(library);
+    nikaia_std::compiler::migrate_views3::migrate_views3_keeps(
         &parsed_view_of(parsed),
         own,
         library,
-        &nikaia_std::tools::keeps::KeepsIndexes {
+        &nikaia_std::compiler::keeps::KeepsIndexes {
             own: &own_methods,
             library: &library_methods,
         },

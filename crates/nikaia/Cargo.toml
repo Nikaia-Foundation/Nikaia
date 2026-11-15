@@ -33,14 +33,18 @@ toml = "0.9"
 orchestrator = { workspace = true }
 # **`nikaia describe`'s parser is written in Nikaia** (ADR-290 D13), lowered
 # ahead of time and reached from here as an ordinary Rust module
-# (ADR-290 D16, D18): `nikaia_std::tools::rust`. There is no cycle — `nikaia-std`
+# (ADR-290 D16, D18): `nikaia_std::compiler::rust`. There is no cycle — `nikaia-std`
 # may not depend on the compiler (ADR-002 D4), and its own manifest says so.
 # Measured before the edge was drawn: four packages the compiler did not
 # already resolve (`nikaia-std`, `memmap2`, `polling`, `io-uring`; `rayon` and
 # `libc` were already in the tree), and it was a dev-dependency here already.
-# **`compiler` turns `nikaia_std::tools` on**, and only this crate does (#723):
+# **`compiler` turns `nikaia_std::compiler` on**, and only this crate does (#723):
 # a program's `std` is built without the compiler's Nikaia.
 nikaia-std = { workspace = true, features = ["compiler"] }
+# Ends a test program that ran past its time limit with every process it
+# started (`nikaia test`, #1672): the `kill` of a process group, which is
+# `unsafe` and lives there.
+child-usage = { path = "../unsafe/child-usage" }
 winnow = { workspace = true }
 winnow-grammar = { workspace = true }
 # `nikaia.toml`'s build switches (ADR-037 D5).

@@ -1,8 +1,8 @@
 // scripts/ledgers.nika (#1591): which directories have a committed ledger,
 // how each is built, and a stale one found under `--check`. In a temp
 // repository: `examples/app` (a program with a committed contracts file that
-// does not match what it derives), `packages/lib` (a library with a committed
-// `nikaia.derived`, checked with `check --rustc`), `examples/plain` (no
+// does not match what it derives), `packages/lib` (a rust-library with a committed
+// `nikaia.derived`, built like any artifact), `examples/plain` (no
 // ledger) and `examples/ignored` (a ledger on disk that git ignores). Only the
 // first two are ledger directories, and `--check` reports the stale one and
 // exits 1 before any Rust is built.
@@ -45,7 +45,7 @@ fn main() throws {
     let manifest = "printf '[package]\\nname = \"%s\"\\nversion = \"0.1.0\"\\n'"
     sh(tmp.clone(), "mkdir -p work/examples/app/src work/packages/lib/src work/examples/plain/src work/examples/ignored/src")
     sh(work.clone(), f"{manifest} app > examples/app/nikaia.toml; printf 'fn main() {{\\n}}\\n' > examples/app/src/main.nika; echo '# stale' > examples/app/nikaia.contracts")
-    sh(work.clone(), f"{manifest} lib > packages/lib/nikaia.toml; printf 'pub fn one() -> i64 {{\\n    return 1\\n}}\\n' > packages/lib/src/main.nika; echo '# stale' > packages/lib/nikaia.derived")
+    sh(work.clone(), f"{manifest} lib > packages/lib/nikaia.toml; printf '[build]\\nartifact = \"rust-library\"\\n' >> packages/lib/nikaia.toml; printf 'pub fn one() -> i64 {{\\n    return 1\\n}}\\n' > packages/lib/src/main.nika; echo '# stale' > packages/lib/nikaia.derived")
     sh(work.clone(), f"{manifest} plain > examples/plain/nikaia.toml; printf 'fn main() {{\\n}}\\n' > examples/plain/src/main.nika")
     sh(work.clone(), f"{manifest} ignored > examples/ignored/nikaia.toml; printf 'fn main() {{\\n}}\\n' > examples/ignored/src/main.nika; echo nikaia.contracts > examples/ignored/.gitignore; echo '# local' > examples/ignored/nikaia.contracts")
     sh(work.clone(), "git init -q -b develop; git config user.email t@t; git config user.name t; git config commit.gpgsign false; git add -A; git commit -q -m base")

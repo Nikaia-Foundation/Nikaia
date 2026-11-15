@@ -70,7 +70,7 @@ impl CheckState {
         let written = nikaia_std::block::Text::from(segments.join("::"));
         let near = nearest_name(module, &offered);
         let mut why: String = format!("`{}` is not one of the modules `std` offers.", module);
-        if module == "tools" { why = String::from("`tools` is the toolchain's own, not `std`'s: it holds the compiler's Rust-signature grammar, which `nikaia describe` calls and a program cannot reach"); }
+        if module == "compiler" { why = String::from("`compiler` is the toolchain's own, not `std`'s: it holds the compiler's Rust-signature grammar, which `nikaia describe` calls and a program cannot reach"); }
         let mut help: String = format!("`std` offers: {}.", nikaia_std::block::Text::from(offered.join(", ")));
         if near.is_some() { help = format!("Did you mean `use std::{}`?", nikaia_std::index::or(near.as_deref(), || "")); }
         self.findings.push(check_refusal("NK1186", span, format!("`std` has no module called `{}`.", written), vec![why], Some(help)));

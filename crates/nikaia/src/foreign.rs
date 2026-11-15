@@ -37,7 +37,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::ast::{Expr, Span};
 use crate::check::{Finding, Severity};
 use crate::parser::Parsed;
-pub(crate) use nikaia_std::tools::foreign::Seen;
+pub(crate) use nikaia_std::compiler::foreign::Seen;
 
 /// The crate word in front of a qualified name: `hyper_shim` of
 /// `hyper_shim::serve_once`, and the whole of a name with no `::` in it.
@@ -181,7 +181,7 @@ fn written(parsed: &Parsed) -> Vec<(String, Span)> {
 /// What the walk meets, paths and calls: `root_at` says where a callee's
 /// `root` parameter stands, for `--trust`, and `-1` where nobody asks.
 pub(crate) fn seen(parsed: &Parsed, root_at: &impl Fn(&str) -> i64) -> Vec<Seen> {
-    nikaia_std::tools::foreign::written_in(
+    nikaia_std::compiler::foreign::written_in(
         &parsed.program,
         &parsed.interner,
         &|name: &str| parsed.unaliased(name),

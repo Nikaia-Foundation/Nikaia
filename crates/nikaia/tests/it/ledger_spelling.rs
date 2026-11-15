@@ -163,7 +163,7 @@ fn a_list_entry_holding_a_comma_reads_back_whole() {
 /// trailing comma leave nothing, and what is not a list says so.
 #[test]
 fn the_list_reader_splits_outside_quotes_only() {
-    use nikaia_std::tools::ledger::list;
+    use nikaia_std::compiler::ledger::list;
     assert_eq!(
         list(r#"["Pair(i64, i64)", "say \"a, b\"", "c",]"#).expect("a list"),
         ["Pair(i64, i64)", "say \"a, b\"", "c"]

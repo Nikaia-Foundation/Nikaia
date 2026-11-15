@@ -120,7 +120,7 @@ use super::{Ledger, ty::Ty};
 /// going (`Going`, here `Destination`), and the walk through the ledgers that
 /// answers it - plain data, containers, the lock family whose answer is the
 /// destination's, and a described type's own word or fields.
-pub use nikaia_std::tools::threads::{Crossing, Going as Destination, Refusal};
+pub use nikaia_std::compiler::threads::{Crossing, Going as Destination, Refusal};
 
 /// The refused part and the field it was found in, where the answer is a
 /// refusal - the two halves `tools/threads.nika` answers one at a time,
@@ -157,7 +157,7 @@ pub fn names_used(parsed: &Parsed, body: &Expr) -> BTreeSet<String> {
 /// in the answer, and a caller that looks a name up finds nothing for them.
 pub fn names_used_in_stmt(parsed: &Parsed, stmt: &crate::ast::Stmt) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
-    nikaia_std::tools::names::names_in_statement(stmt, &parsed.interner, &mut out);
+    nikaia_std::compiler::names::names_in_statement(stmt, &parsed.interner, &mut out);
     out
 }
 
@@ -179,7 +179,7 @@ pub fn held_across_a_pause(
         .iter()
         .map(|(name, at)| (name.clone(), *at as i64))
         .collect();
-    nikaia_std::tools::threads::held_across_a_pause(&bound, &pauses, &named)
+    nikaia_std::compiler::threads::held_across_a_pause(&bound, &pauses, &named)
 }
 
 /// Whether a value of `ty` may go to `into`.
@@ -189,9 +189,9 @@ pub fn held_across_a_pause(
 /// makes this **structural and transitive** as Group B requires - a struct with
 /// one lock field is no more crossable than the lock itself.
 pub fn crossing(ty: &Ty, own: &Ledger, library: &Ledger, into: Destination) -> Crossing {
-    nikaia_std::tools::threads::crossing(
+    nikaia_std::compiler::threads::crossing(
         ty,
-        &nikaia_std::tools::threads::Walking { own, library, into },
+        &nikaia_std::compiler::threads::Walking { own, library, into },
     )
 }
 

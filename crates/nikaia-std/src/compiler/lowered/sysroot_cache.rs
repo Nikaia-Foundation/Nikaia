@@ -5,13 +5,13 @@ pub(crate) const SYSROOT_STD_DIR: &str = "nikaia-std";
 
 pub(crate) const SYSROOT_NIKA: &str = "nika";
 
-pub(crate) const SYSROOT_TOOLS: &str = "compiler";
+pub(crate) const SYSROOT_COMPILER: &str = "compiler";
 
 pub(crate) const SYSROOT_RUNTIME: &str = "runtime";
 
-pub(crate) const SYSROOT_TOOLS_PACKAGE: &str = "lowered.rs";
+pub(crate) const SYSROOT_COMPILER_PACKAGE: &str = "lowered.rs";
 
-pub(crate) const SYSROOT_TOOLS_FILES: &str = "lowered";
+pub(crate) const SYSROOT_COMPILER_FILES: &str = "lowered";
 
 pub(crate) const SYSROOT_PACKED: &str = "//@@ file ";
 
@@ -29,7 +29,7 @@ pub fn sysroot_std_dir(root: &std::path::Path) -> fs::Path { nikaia_std::fs::pat
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn sysroot_tools_dir(root: &std::path::Path) -> fs::Path { nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(sysroot_std_dir(root)), std::path::Path::new(&("src")))), std::path::Path::new(&(SYSROOT_TOOLS))) }
+pub fn sysroot_tools_dir(root: &std::path::Path) -> fs::Path { nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(sysroot_std_dir(root)), std::path::Path::new(&("src")))), std::path::Path::new(&(SYSROOT_COMPILER))) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -139,7 +139,7 @@ pub fn sysroot_file_key<H: SysrootHost>(interface: &str, name: &str, text: &str,
 }
 
 pub async fn sysroot_committed(dir: &std::path::Path) -> Vec<(String, String)> {
-    #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(SYSROOT_TOOLS_PACKAGE.to_string())], nikaia_std::block::Place::Block);
+    #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(SYSROOT_COMPILER_PACKAGE.to_string())], nikaia_std::block::Place::Block);
     names.extend(sysroot_stale(dir, &vec![]));
     let mut files: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     for name in names.iter() {
@@ -196,12 +196,12 @@ pub fn sysroot_stale(dir: &std::path::Path, kept: &[String]) -> Vec<String> {
 // this was written - see `contracts::sync`.
 pub(crate) fn sysroot_generated(dir: &std::path::Path) -> Vec<String> {
     let mut names: Vec<String> = vec![];
-    let listed = match fs::read_dir(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(SYSROOT_TOOLS_FILES))), &fs::Root::Anywhere) {
+    let listed = match fs::read_dir(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(SYSROOT_COMPILER_FILES))), &fs::Root::Anywhere) {
         Ok(value) => value,
         Err(_error) => { vec![] },
     };
     for entry in listed.iter() {
-        let name = format!("{}/{}", SYSROOT_TOOLS_FILES, nikaia_std::fs::path::text_of(&(entry)));
+        let name = format!("{}/{}", SYSROOT_COMPILER_FILES, nikaia_std::fs::path::text_of(&(entry)));
         let meta = match fs::metadata(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name))), &fs::Root::Anywhere) {
             Ok(value) => value,
             Err(_error) => { continue; },
@@ -210,12 +210,12 @@ pub(crate) fn sysroot_generated(dir: &std::path::Path) -> Vec<String> {
             names.push(name);
             continue;
         }
-        names.push(format!("{}/{}", name, SYSROOT_TOOLS_PACKAGE));
-        let theirs = match fs::read_dir(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name)))), std::path::Path::new(&(SYSROOT_TOOLS_FILES))), &fs::Root::Anywhere) {
+        names.push(format!("{}/{}", name, SYSROOT_COMPILER_PACKAGE));
+        let theirs = match fs::read_dir(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name)))), std::path::Path::new(&(SYSROOT_COMPILER_FILES))), &fs::Root::Anywhere) {
             Ok(value) => value,
             Err(_error) => { vec![] },
         };
-        for file in theirs.iter() { names.push(format!("{}/{}/{}", name, SYSROOT_TOOLS_FILES, nikaia_std::fs::path::text_of(&(file)))); }
+        for file in theirs.iter() { names.push(format!("{}/{}/{}", name, SYSROOT_COMPILER_FILES, nikaia_std::fs::path::text_of(&(file)))); }
     }
     names
 }

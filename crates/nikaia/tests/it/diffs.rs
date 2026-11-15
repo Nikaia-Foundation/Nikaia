@@ -4,7 +4,7 @@
 
 #[allow(unused_imports)]
 use nikaia_std::block::names::{String, ToText, Vec, format, vec};
-use nikaia_std::tools::diffs::{changed_lines, differing_lines};
+use nikaia_std::compiler::diffs::{changed_lines, differing_lines};
 
 /// A changed line is named under its entry, once; a new entry names itself.
 #[test]

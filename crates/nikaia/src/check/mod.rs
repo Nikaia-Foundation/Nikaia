@@ -39,15 +39,15 @@ use crate::contracts::ty::TyOps;
 use crate::contracts::{FieldContract, Ledger, ty::Ty};
 use crate::fold::Constant;
 use crate::parser::Parsed;
-use nikaia_std::tools::check_flow::{CheckConstant, CheckFlow};
-use nikaia_std::tools::check_items;
-pub use nikaia_std::tools::check_state::{
+use nikaia_std::compiler::check_flow::{CheckConstant, CheckFlow};
+use nikaia_std::compiler::check_items;
+pub use nikaia_std::compiler::check_state::{
     CheckFinding as Finding, CheckLabel as Label, CheckSeverity as Severity,
 };
-use nikaia_std::tools::check_state::{CheckState, CheckWorld};
-use nikaia_std::tools::check_walked;
-use nikaia_std::tools::check_widen::{self};
-use nikaia_std::tools::parsed_view::ParsedView;
+use nikaia_std::compiler::check_state::{CheckState, CheckWorld};
+use nikaia_std::compiler::check_walked;
+use nikaia_std::compiler::check_widen::{self};
+use nikaia_std::compiler::parsed_view::ParsedView;
 
 /// A finding's code as the `&'static str` the compiler's tables and its tests
 /// compare: each code is kept once for the life of the process.
@@ -96,11 +96,11 @@ impl Default for Checked {
     }
 }
 
-pub use nikaia_std::tools::check_facts::{
+pub use nikaia_std::compiler::check_facts::{
     CheckFacts, FactClaim as Claim, FactKeyForm as KeyForm, FactNarrowing as Narrowing,
     FactPausing as PausingEntry, FactViewed as Viewed, FactWrap as Wrap,
 };
-pub use nikaia_std::tools::check_state::{
+pub use nikaia_std::compiler::check_state::{
     CheckCallsInATask as CallsInATask, CheckMethodCalls as MethodCalls,
     CheckStoredCode as StoredCode,
 };
@@ -255,7 +255,7 @@ fn dump_accepted(parsed: &Parsed, checked: &Checked) {
         .and_then(|exe| exe.file_stem().map(|s| s.to_string_lossy().to_text()))
         .unwrap_or_default();
     // The name, cargo's hash trimmed, or none (`tools/check_glue.nika`).
-    let Some(name) = nikaia_std::tools::check_glue::check_accepted_dump_name(
+    let Some(name) = nikaia_std::compiler::check_glue::check_accepted_dump_name(
         binary,
         source,
         parsed.package.is_some(),
@@ -346,8 +346,8 @@ fn walked<'a>(
         .iter()
         .position(|other| std::ptr::eq(*other, parsed))
         .map_or(-1, |at| at as i64);
-    let own_methods = nikaia_std::tools::ty::method_index(own);
-    let library_methods = nikaia_std::tools::ty::method_index(library);
+    let own_methods = nikaia_std::compiler::ty::method_index(own);
+    let library_methods = nikaia_std::compiler::ty::method_index(library);
     let world = CheckWorld {
         words: &parsed.interner,
         own,
@@ -355,7 +355,7 @@ fn walked<'a>(
         own_methods: &own_methods,
         library_methods: &library_methods,
         here: parsed_view_of(parsed),
-        parts_beside: nikaia_std::tools::check_copies::check_parts_beside(&views, here_at),
+        parts_beside: nikaia_std::compiler::check_copies::check_parts_beside(&views, here_at),
         beside: views,
         here_at,
         fields_by_base: check_items::fields_by_base(own, library),
@@ -665,14 +665,14 @@ pub const HULLS: [&str; 3] = [SHARED, SHARED_MUT, LOCKED];
 
 /// The two doors that take **several** locks at once (ADR-281):
 /// `tools/check_walked.nika`.
-pub use nikaia_std::tools::check_walked::CheckMultiLock as MultiLock;
+pub use nikaia_std::compiler::check_walked::CheckMultiLock as MultiLock;
 
 /// **A `'…'` as the language below writes it** (ADR-320 D8): as written
 /// where it is one scalar, and the one scalar NFC composes it to, as
 /// `'\u{…}'`, where it is several - the checker has said `NK1213` there, and
 /// refused (`NK1212`) every literal of several that composes to more than one.
 pub fn char_literal(written: &str) -> String {
-    nikaia_std::tools::check_glue::check_char_literal(written, &crate::build_time::char_of)
+    nikaia_std::compiler::check_glue::check_char_literal(written, &crate::build_time::char_of)
 }
 
 pub fn value_node(expr: &Expr) -> i64 {
@@ -727,7 +727,7 @@ pub fn claims_report(
         library,
         through_loops,
     );
-    nikaia_std::tools::check_facts::check_claims_report(
+    nikaia_std::compiler::check_facts::check_claims_report(
         &checked.facts.claims,
         source,
         path,
@@ -741,7 +741,7 @@ pub fn claims_report(
 /// **A claim the compiler did not prove is refused** (`NK1300`, ADR-380 D1):
 /// `tools/check_claims.nika`.
 pub fn refuse_unproved_claims(checked: &mut Checked) {
-    let unproved = nikaia_std::tools::check_claims::check_claims_unproved(
+    let unproved = nikaia_std::compiler::check_claims::check_claims_unproved(
         &checked.findings,
         &checked.facts.claims,
     );
@@ -760,14 +760,14 @@ pub fn check_keep_marks(
 ) {
     let view = parsed_view_of(parsed);
     let others: Vec<_> = beside.iter().map(|other| parsed_view_of(other)).collect();
-    let own_methods = nikaia_std::tools::ty::method_index(own);
-    let library_methods = nikaia_std::tools::ty::method_index(library);
-    let found = nikaia_std::tools::check_keep_marks::keep_marks_check(
+    let own_methods = nikaia_std::compiler::ty::method_index(own);
+    let library_methods = nikaia_std::compiler::ty::method_index(library);
+    let found = nikaia_std::compiler::check_keep_marks::keep_marks_check(
         &view,
         &others,
         own,
         library,
-        &nikaia_std::tools::keeps::KeepsIndexes {
+        &nikaia_std::compiler::keeps::KeepsIndexes {
             own: &own_methods,
             library: &library_methods,
         },
@@ -783,21 +783,21 @@ pub fn check_keep_marks(
 pub fn check_result_from(parsed: &Parsed, own: &Ledger, library: &Ledger, checked: &mut Checked) {
     let view = parsed_view_of(parsed);
     let inferred = crate::views::result_sources_inferred(parsed, own, library);
-    let found = nikaia_std::tools::check_result_from::result_from_check(&view, &inferred);
+    let found = nikaia_std::compiler::check_result_from::result_from_check(&view, &inferred);
     checked.findings.extend(found);
 }
 
 /// **`std` assumes nothing** (`NK1295`, ADR-376 D3): `tools/check_claims.nika`.
 pub fn refuse_assumes_in_std(checked: &mut Checked) {
     let refused =
-        nikaia_std::tools::check_claims::check_claims_assumes_in_std(&checked.facts.claims);
+        nikaia_std::compiler::check_claims::check_claims_assumes_in_std(&checked.facts.claims);
     checked.findings.extend(refused);
 }
 
 /// **`std` reaches its own helpers** (`NK1110`, #1606):
 /// `tools/check_access.nika`.
 pub fn allow_std_helpers_in_std(checked: &mut Checked) {
-    checked.findings = nikaia_std::tools::check_access::check_access_inside_std(
+    checked.findings = nikaia_std::compiler::check_access::check_access_inside_std(
         &checked.findings,
         &checked.facts.std_helpers_reached,
     );
@@ -805,5 +805,5 @@ pub fn allow_std_helpers_in_std(checked: &mut Checked) {
 
 /// In Nikaia (`tools/written.nika`, ADR-294, #125).
 pub fn written(parsed: &Parsed, expr: &Expr) -> String {
-    nikaia_std::tools::written::written_expression(&parsed.interner, expr)
+    nikaia_std::compiler::written::written_expression(&parsed.interner, expr)
 }

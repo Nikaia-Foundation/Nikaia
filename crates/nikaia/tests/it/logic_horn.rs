@@ -5,10 +5,10 @@
 
 #[allow(unused_imports)]
 use nikaia_std::block::names::{String, ToText, Vec, format, vec};
-use nikaia_std::tools::logic_horn::{
+use nikaia_std::compiler::logic_horn::{
     LgExit, LgLoop, lg_horn_write, lg_loop_check, lg_primed, lg_proved,
 };
-use nikaia_std::tools::prover_arena::TermArena;
+use nikaia_std::compiler::prover_arena::TermArena;
 
 /// ADR-361 §1's loop: `while i < a { i = i + 1; total = total + 10 }` from
 /// `i == 0`, `total == 0`, with `a > 0` and `a <= 10` holding throughout, and

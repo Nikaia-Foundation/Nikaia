@@ -50,7 +50,7 @@ fn the_committed_rust_is_what_this_compiler_lowers() {
     // **And `std`'s run-time package** (#723), lowered the same way into a
     // file of its own: the half every program compiles.
     for package in [tools, sysroot.runtime_dir()] {
-        let expected = sysroot::lower_tools(&package).expect("the toolchain's Nikaia lowers");
+        let expected = sysroot::lower_compiler(&package).expect("the toolchain's Nikaia lowers");
         let at = sysroot::tools_lowered_path(&package);
         let drifted = expected.drift(&package);
         assert!(
@@ -99,7 +99,7 @@ fn the_committed_rust_is_what_this_compiler_lowers() {
 /// links it, only the compiler runs it, and it is lowered at `yes`, which is
 /// correct at one thread too. That the committed files of it and of `std`'s
 /// run-time package (#723) are the package lowered at `yes` is
-/// `the_committed_rust_is_what_this_compiler_lowers`'s check (`lower_tools`
+/// `the_committed_rust_is_what_this_compiler_lowers`'s check (`lower_compiler`
 /// is `tools_build()`, at `yes`); it is not lowered a second time here (CI
 /// speed, 2026-11-14: a whole lowering of the tools is minutes).
 #[test]
@@ -327,7 +327,7 @@ fn a_tool_reads_the_names_of_the_tree_as_described() {
         std::fs::write(&module, source).expect("write the module");
         match dir {
             // **The tools are lowered as their package** (ADR-294).
-            "tools" => sysroot::lower_tools(&at).map(|package| package.to_text()),
+            "tools" => sysroot::lower_compiler(&at).map(|package| package.to_text()),
             _ => sysroot::lower_std_module(&module),
         }
     };
@@ -373,7 +373,7 @@ fn two_tools_that_declare_one_name_are_refused() {
         "fn helper(x: i64) -> i64 { return x }\n",
     )
     .expect("write b");
-    let refused = sysroot::lower_tools(&dir).expect_err("one name, two files");
+    let refused = sysroot::lower_compiler(&dir).expect_err("one name, two files");
     let said = format!("{refused:#}");
     assert!(
         said.contains("`helper` is declared twice in this package"),
@@ -405,7 +405,7 @@ fn a_constant_another_tool_declares_is_read() {
          }\n",
     )
     .expect("write b");
-    let lowered = sysroot::lower_tools(&dir).expect("one namespace, constants too");
+    let lowered = sysroot::lower_compiler(&dir).expect("one namespace, constants too");
     assert!(lowered.contains("out.push_str(WORD)"), "{lowered}");
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -422,7 +422,7 @@ fn a_tools_file_with_two_refusals_reports_both_in_file_order() {
         "fn first_one() -> i64 { return \"text\" }\n\nfn second_one() -> String { return 7 }\n",
     )
     .expect("write the file");
-    let refused = sysroot::lower_tools(&dir).expect_err("two refusals");
+    let refused = sysroot::lower_compiler(&dir).expect_err("two refusals");
     let said = format!("{refused:#}");
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(said.matches("NK1104").count(), 2, "{said}");
@@ -443,7 +443,7 @@ fn the_tools_lower_the_same_on_one_thread_as_on_every_core() {
     let paths = sysroot
         .tool_modules()
         .expect("the toolchain's Nikaia modules");
-    let one = sysroot::lower_tools_files_on(&paths, sysroot::tools_build(), Some(1))
+    let one = sysroot::lower_compiler_files_on(&paths, sysroot::tools_build(), Some(1))
         .expect("the toolchain's Nikaia lowers on one thread");
     let drifted = one.drift(&sysroot.tools_dir());
     assert!(
@@ -465,7 +465,7 @@ fn the_first_refused_file_is_the_one_reported_on_every_core() {
             .expect("write a file");
         paths.push(path);
     }
-    let refused = sysroot::lower_tools_files_on(&paths, sysroot::tools_build(), Some(4))
+    let refused = sysroot::lower_compiler_files_on(&paths, sysroot::tools_build(), Some(4))
         .expect_err("every file is refused");
     let said = format!("{refused:#}");
     let _ = std::fs::remove_dir_all(&dir);
@@ -564,7 +564,7 @@ fn tools_panic_resolves_to_the_abort_entry() {
         "pub fn p805_fail() -> i64 {\n    panic(\"x\")\n}\n",
     )
     .expect("write");
-    let rust = sysroot::lower_tools_at(&dir, Default::default())
+    let rust = sysroot::lower_compiler_at(&dir, Default::default())
         .expect("it lowers")
         .inlined();
     let _ = std::fs::remove_dir_all(&dir);

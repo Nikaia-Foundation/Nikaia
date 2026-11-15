@@ -15,8 +15,8 @@ use nikaia::manifest::Manifest;
 use nikaia::project::{self, Project, Settings};
 use nikaia::sysroot::{self, Sysroot};
 use nikaia::{diagnostics, interpreter, parser, refuse};
-use nikaia_std::tools::cli_commands::{self, CliCommandsRefusal};
-use nikaia_std::tools::project_tests;
+use nikaia_std::compiler::cli_commands::{self, CliCommandsRefusal};
+use nikaia_std::compiler::project_tests;
 
 /// The Nikaia compiler: `nikaia build` for a project, `nikaia lower` for one
 /// file.
@@ -1187,7 +1187,7 @@ fn run() -> Result<()> {
         Command::Check { file, rustc } => single_file(&args, file, Verb::Check { rustc: *rustc }),
         Command::Lsp => {
             let code =
-                nikaia_std::rt::exec::block_on(nikaia_std::tools::lsp::lsp_serve(&project::Lsp))
+                nikaia_std::rt::exec::block_on(nikaia_std::compiler::lsp::lsp_serve(&project::Lsp))
                     .map_err(|error| anyhow::anyhow!("{error}"))?;
             std::process::exit(code as i32);
         }

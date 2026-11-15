@@ -108,7 +108,7 @@ pub fn blocks(dir: &Path) -> Vec<Block> {
             .to_text();
         let text = std::fs::read_to_string(&page).expect("read a page");
         // **The scan is Nikaia** (`tools/specbook.nika`, #125).
-        for block in nikaia_std::tools::specbook::blocks_in(&text) {
+        for block in nikaia_std::compiler::specbook::blocks_in(&text) {
             found.push(Block {
                 file: name.clone(),
                 line: block.line as usize,
@@ -125,7 +125,7 @@ pub fn blocks(dir: &Path) -> Vec<Block> {
 /// tried and the furthest wins, because a block that parses as written may still
 /// be a body that would check if it had a function around it.
 pub fn readings(code: &str) -> Vec<(&'static str, String)> {
-    nikaia_std::tools::specbook::readings(code)
+    nikaia_std::compiler::specbook::readings(code)
         .into_iter()
         .map(|reading| (reading_name(&reading.name), reading.source))
         .collect()
@@ -161,7 +161,7 @@ pub fn verdicts(dir: &Path, workshop: &Path) -> Vec<Verdict> {
     blocks(dir)
         .into_iter()
         .map(|block| {
-            let best = nikaia_std::tools::specbook::specbook_furthest(&block.code, &host);
+            let best = nikaia_std::compiler::specbook::specbook_furthest(&block.code, &host);
             Verdict {
                 stage: match best.stage {
                     0 => Stage::Fragment,
@@ -181,10 +181,10 @@ struct Host<'a> {
     reads: &'a crate::assets::Reads,
 }
 
-impl nikaia_std::tools::specbook::SpecHost for Host<'_> {
-    fn reach(&self, source: &str) -> nikaia_std::tools::specbook::SpecReached {
+impl nikaia_std::compiler::specbook::SpecHost for Host<'_> {
+    fn reach(&self, source: &str) -> nikaia_std::compiler::specbook::SpecReached {
         let (stage, codes) = reach(source, self.reads);
-        nikaia_std::tools::specbook::SpecReached {
+        nikaia_std::compiler::specbook::SpecReached {
             stage: match stage {
                 Stage::Fragment => 0,
                 Stage::Refused => 1,
@@ -247,9 +247,9 @@ fn reach(source: &str, reads: &crate::assets::Reads) -> (Stage, BTreeSet<String>
 /// (`specbook_report`, #125), which says why a block is not addressed by its
 /// line.
 pub fn report(dir: &Path, workshop: &Path) -> String {
-    let lines: Vec<nikaia_std::tools::specbook::SpecLine> = verdicts(dir, workshop)
+    let lines: Vec<nikaia_std::compiler::specbook::SpecLine> = verdicts(dir, workshop)
         .into_iter()
-        .map(|v| nikaia_std::tools::specbook::SpecLine {
+        .map(|v| nikaia_std::compiler::specbook::SpecLine {
             file: v.block.file,
             stage: v.stage.word().to_text(),
             reading: v.reading.to_text(),
@@ -259,12 +259,12 @@ pub fn report(dir: &Path, workshop: &Path) -> String {
             code: v.block.code,
         })
         .collect();
-    nikaia_std::tools::specbook::specbook_report(&lines)
+    nikaia_std::compiler::specbook::specbook_report(&lines)
 }
 
 #[cfg(test)]
 mod tests {
-    use nikaia_std::tools::specbook::{discusses_a_refusal, is_a_sketch};
+    use nikaia_std::compiler::specbook::{discusses_a_refusal, is_a_sketch};
 
     /// **A diagnostic's name is a mark** (#125): the text is lowered before
     /// it is asked, and the Rust asked it for `error[NK` in capitals, so the

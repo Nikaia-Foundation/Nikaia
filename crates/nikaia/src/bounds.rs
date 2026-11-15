@@ -41,7 +41,7 @@ use crate::parser::Parsed;
 
 /// What happens to an index or overflow check the walk proved (ADR-306
 /// D14): `tools/emit_build.nika`. The default of both is `Kept`.
-pub use nikaia_std::tools::emit_build::{BoundsChecks, OverflowChecks};
+pub use nikaia_std::compiler::emit_build::{BoundsChecks, OverflowChecks};
 
 /// What the walk proved: index nodes ([`crate::check::value_node`] of the
 /// indexed `base`) and arithmetic operators (by the byte their operator
@@ -107,7 +107,7 @@ pub fn proven_traced(
     trace: &[i64],
 ) -> Proven {
     let counters = std::cell::RefCell::new(HashMap::new());
-    let all = nikaia_std::tools::bounds_proven::bounds_proven(
+    let all = nikaia_std::compiler::bounds_proven::bounds_proven(
         &parsed.program,
         &parsed.interner,
         &beside.iter().map(|p| p.bounds_beside()).collect::<Vec<_>>(),

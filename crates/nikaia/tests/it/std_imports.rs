@@ -197,7 +197,7 @@ fn a_near_miss_is_named() {
 /// that down* would be false and would send the reader looking for a typo.
 #[test]
 fn the_toolchains_own_module_says_why_it_is_not_reachable() {
-    let found = refused("use std::tools\n\nfn main() { }\n");
+    let found = refused("use std::compiler\n\nfn main() { }\n");
     assert_eq!(found.len(), 1, "{found:#?}");
     let note = found[0].notes.join(" ");
     assert!(note.contains("toolchain's own"), "{note}");

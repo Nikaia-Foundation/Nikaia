@@ -32,6 +32,19 @@ pub struct ProjectLowerOut {
     pub notes: String,
 }
 
+/// **One unit of the program to check**: its path as shown, and whether it
+/// is a dependency's (`unit.package`) rather than the program's own.
+pub struct CheckUnit {
+    pub path: String,
+    pub dependency: bool,
+}
+
+/// **What the check of one unit said**: its warnings, or its refusal.
+pub enum UnitSaid {
+    Warned(String),
+    Refused(String),
+}
+
 /// What `project_lower_reading` asks of the compiler (`project.rs`'s
 /// `LowerHost`): it holds the program, the cache and the build's choices; a
 /// refusal of a `throws` method is kept there and handed back unchanged.
@@ -71,11 +84,30 @@ pub trait ProjectLowerHost {
     fn in_the_wrapper(ref self) -> bool sync
     /// Writes `text` to stderr as it is, without a newline added.
     fn eprint(ref self, text: ref String) sync
-    /// **Checks every unit** against the program's contracts (ADR-286), the
-    /// boundary (ADR-290 D1), the contracts that moved (ADR-308 D11) and the
-    /// recorded proofs (ADR-270 D4): the warnings it said; the host keeps the
-    /// book and the check's facts for the emitter.
-    fn check_units(ref self) -> String sync throws
+    /// **Opens the check of the program's units**: reads, once for the whole
+    /// program, the boundary (ADR-290 D1), the contracts that moved (ADR-308
+    /// D11) and the recorded proofs (ADR-270 D4), and names the units in the
+    /// program's order.
+    fn check_open(ref self) -> Vec[CheckUnit] sync
+    /// The source of unit `at`, as it was read.
+    fn unit_source(ref self, at: i64) -> String sync
+    /// **Checks unit `at`** against the program's contracts (ADR-286), or a
+    /// dependency's against its own package's (issue #159): its warnings, or
+    /// its refusal. Any other failure is thrown, and kept by the host.
+    fn check_unit(ref self, at: i64) -> UnitSaid sync throws
+    /// **Closes the check**: the host keeps the book and the check's facts for
+    /// the emitter. `refused` joined is the refusal of the whole program.
+    fn check_close(ref self, refused: ref Vec[String]) sync throws
+    /// Whether this lowering is one program of a batch (#1582) whose
+    /// dependencies' checks are shared with the others: not under `nikaia
+    /// lsp`, which keeps every unit's facts.
+    fn in_a_batch(ref self) -> bool sync
+    /// The digest of `text` (the build cache's).
+    fn digest(ref self, text: ref String) -> String sync
+    /// What the batch remembers a dependency's file said, by `key`.
+    fn batch_said(ref self, key: ref String) -> UnitSaid? sync
+    /// Remembers for the batch what a dependency's file said, by `key`.
+    fn batch_remember(ref self, key: ref String, said: ref UnitSaid) sync
     /// **Lowers the program** with the described crates' boundary (ADR-290
     /// D20) and the check's facts: the Rust. The host keeps what the prover
     /// published, the program and, in a project, the proofs.
@@ -169,7 +201,7 @@ pub fn project_lower_reading[H: ProjectLowerHost](host: ref H, in_project: bool)
 /// the published contracts merged, the allowlist's unused entries warned
 /// about, and the result recorded.
 fn project_lower_made[H: ProjectLowerHost](host: ref H) -> ProjectLowerArtifacts throws {
-    let mut warnings = host.check_units()
+    let mut warnings = project_lower_check(host)
     let rust = host.emit()
     // **The contract the `assert`s make** (ADR-269 D18): the prover decided
     // it while the program was checked, and the ledger publishes it.
@@ -200,6 +232,61 @@ fn project_lower_made[H: ProjectLowerHost](host: ref H) -> ProjectLowerArtifacts
         host.record(made)
     }
     return made
+}
+
+/// **Checks every unit** of the program (ADR-286): the warnings they said.
+/// **A refused unit does not stop the others** (#1508): the file next door
+/// may hold the refusal this one's follows from (an `NK1171` in a callee
+/// makes it read as pausing, and the `sync` caller's `NK2202` was all a
+/// build said), so every unit says its findings and the refusals are joined.
+///
+/// **In a batch, a dependency's file is checked once** (#1582) for all the
+/// batch's programs: by the file and the digest of every dependency file's
+/// path and source, which is all a dependency's ledger is inferred from
+/// (ADR-100 D5: the dependencies first, the program's own package last).
+/// What it said, warnings or refusal, is said again for each program.
+pub fn project_lower_check[H: ProjectLowerHost](host: ref H) -> String throws {
+    let units = host.check_open()
+    let mut digest = String()
+    let batch = host.in_a_batch()
+    if batch {
+        let mut all = ""
+        for (at, unit) in units.iter().enumerate() {
+            if unit.dependency {
+                let source = host.unit_source(at as i64)
+                all = f"{all}{unit.path}\n{source}\n// --- unit ---\n"
+            }
+        }
+        digest = host.digest(all)
+    }
+    let mut warnings = ""
+    let mut refused: Vec[String] = []
+    for (at, unit) in units.iter().enumerate() {
+        let shared = batch && unit.dependency
+        let key = f"{unit.path}\n{digest}"
+        let mut said: UnitSaid? = null
+        if shared {
+            said = host.batch_said(key)
+        }
+        if said == null {
+            let checked = host.check_unit(at as i64)
+            if shared {
+                host.batch_remember(key, checked)
+            }
+            said = checked
+        }
+        match said {
+            null => {},
+            UnitSaid::Warned(text) => {
+                warnings = f"{warnings}{text}"
+            },
+            UnitSaid::Refused(text) => {
+                refused.push(text)
+            },
+        }
+    }
+    host.check_close(refused)
+    return warnings
 }
 
 /// **`ledger` with what the prover `published`** (ADR-269 D18): each

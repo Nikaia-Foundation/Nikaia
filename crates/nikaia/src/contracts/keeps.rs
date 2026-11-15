@@ -76,18 +76,18 @@ pub fn lends(contract: &super::FnContract, at: usize) -> bool {
 ///
 /// The rule is `tools/lends.nika`'s (ADR-294, #125), with the three below.
 pub fn lends_in(contract: &super::FnContract, at: usize, copying: &[&super::Ledger]) -> bool {
-    nikaia_std::tools::lends::lends_in(contract, at as i64, copying)
+    nikaia_std::compiler::lends::lends_in(contract, at as i64, copying)
 }
 
 /// [`lends_in`] for a contract of this program's own: a method's function
 /// value is lent too.
 pub fn lends_in_own(contract: &super::FnContract, at: usize, copying: &[&super::Ledger]) -> bool {
-    nikaia_std::tools::lends::lends_in_own(contract, at as i64, copying)
+    nikaia_std::compiler::lends::lends_in_own(contract, at as i64, copying)
 }
 
 /// Whether a ledger says values of `ty` are copies.
 pub fn a_ledger_copies(ty: &super::ty::Ty, copying: &[&super::Ledger]) -> bool {
-    nikaia_std::tools::lends::a_ledger_copies(ty, copying)
+    nikaia_std::compiler::lends::a_ledger_copies(ty, copying)
 }
 
 /// Whether a value of this type is **moved** when it is handed on, rather than
@@ -97,11 +97,11 @@ pub fn a_ledger_copies(ty: &super::ty::Ty, copying: &[&super::Ledger]) -> bool {
 /// ([ADR-312](../../../docs/specification/adr/adr-312.md) D1, ADR-302 D6,
 /// ADR-150 D1, ADR-152 D2, ADR-277 D6).
 pub fn moves(ty: &super::ty::Ty) -> bool {
-    nikaia_std::tools::lends::moves(ty)
+    nikaia_std::compiler::lends::moves(ty)
 }
 
-pub use nikaia_std::tools::keeps::{KeepsColumn as Column, KeepsKeeper as Keeper};
-use nikaia_std::tools::keeps::{KeepsHost, KeepsIndexes};
+pub use nikaia_std::compiler::keeps::{KeepsColumn as Column, KeepsKeeper as Keeper};
+use nikaia_std::compiler::keeps::{KeepsHost, KeepsIndexes};
 
 /// Give every function in the ledger the `keeps` its body earns: the walk, the
 /// trait edges and the least fixpoint are Nikaia (`tools/keeps.nika`,
@@ -116,15 +116,15 @@ pub fn infer(
         .iter()
         .map(|parsed| crate::check::parsed_view_of(parsed))
         .collect();
-    let own_methods = nikaia_std::tools::ty::method_index(ledger);
-    let library_methods = nikaia_std::tools::ty::method_index(library);
+    let own_methods = nikaia_std::compiler::ty::method_index(ledger);
+    let library_methods = nikaia_std::compiler::ty::method_index(library);
     let host = Host {
         units,
         own_methods: &own_methods,
         library_methods: &library_methods,
         resolved,
     };
-    nikaia_std::tools::keeps::keeps_infer(
+    nikaia_std::compiler::keeps::keeps_infer(
         ledger,
         &views,
         library,
@@ -141,8 +141,8 @@ pub fn infer(
 /// statement that keeps a parameter, which needs the unit's own tokens.
 struct Host<'a> {
     units: &'a [&'a Parsed],
-    own_methods: &'a nikaia_std::tools::ty::MethodIndex,
-    library_methods: &'a nikaia_std::tools::ty::MethodIndex,
+    own_methods: &'a nikaia_std::compiler::ty::MethodIndex,
+    library_methods: &'a nikaia_std::compiler::ty::MethodIndex,
     resolved: &'a BTreeMap<String, crate::check::MethodCalls>,
 }
 
@@ -186,8 +186,8 @@ fn keeping_statement(
     own_kept: &BTreeMap<String, BTreeSet<String>>,
     (ledger, library): (&Ledger, &Ledger),
     (own_methods, library_methods): (
-        &nikaia_std::tools::ty::MethodIndex,
-        &nikaia_std::tools::ty::MethodIndex,
+        &nikaia_std::compiler::ty::MethodIndex,
+        &nikaia_std::compiler::ty::MethodIndex,
     ),
     resolved: &BTreeMap<String, crate::check::MethodCalls>,
 ) -> crate::ast::Span {
@@ -200,7 +200,7 @@ fn keeping_statement(
         if let Item::Fn { body, .. } = &mut prefix {
             body.stmts.truncate(end);
         }
-        let Some(found) = nikaia_std::tools::keeps::keeps_uses_of(
+        let Some(found) = nikaia_std::compiler::keeps::keeps_uses_of(
             &view,
             &prefix,
             Some(target),
@@ -219,7 +219,7 @@ fn keeping_statement(
         if uses.kept.contains(parameter)
             || uses.passed.iter().any(|passed| {
                 passed.parameter == parameter
-                    && nikaia_std::tools::lends::keeps_its(
+                    && nikaia_std::compiler::lends::keeps_its(
                         &passed.callee,
                         passed.at,
                         own_kept,

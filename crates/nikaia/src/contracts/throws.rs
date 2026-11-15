@@ -34,7 +34,7 @@ use super::{Ledger, UNNAMED_ERROR};
 use crate::ast::Expr;
 use crate::check::MethodCalls;
 use crate::parser::Parsed;
-use nikaia_std::tools::throws::{self as nika, MethodsCalled, ThrowsGraph};
+use nikaia_std::compiler::throws::{self as nika, MethodsCalled, ThrowsGraph};
 
 /// Give every `throws` function of this package its `fails_with`.
 ///
@@ -138,11 +138,11 @@ pub fn infer(
 fn crashed(
     parsed: &Parsed,
     task: &Expr,
-    facts: &nikaia_std::tools::panics::PanicFacts,
+    facts: &nikaia_std::compiler::panics::PanicFacts,
     own: &Ledger,
     library: &Ledger,
-) -> nikaia_std::tools::throws::Contribution {
-    let can = nikaia_std::tools::panics::panics_of_task(
+) -> nikaia_std::compiler::throws::Contribution {
+    let can = nikaia_std::compiler::panics::panics_of_task(
         task,
         &parsed.program.items,
         &parsed.interner,
@@ -152,7 +152,7 @@ fn crashed(
         library,
     );
     // **A task with a site in its block can run over it** (ADR-327 D13).
-    let places = nikaia_std::tools::panics::places_of_task(
+    let places = nikaia_std::compiler::panics::places_of_task(
         task,
         &parsed.program.items,
         &parsed.interner,
@@ -168,7 +168,7 @@ fn crashed(
     if places {
         errors.push("task::OverBudget".to_text());
     }
-    nikaia_std::tools::throws::Contribution {
+    nikaia_std::compiler::throws::Contribution {
         call: None,
         given: Vec::new(),
         errors,
@@ -195,7 +195,7 @@ fn contribution(
     own: &Ledger,
     library: &Ledger,
     fatal: &BTreeSet<String>,
-) -> nikaia_std::tools::throws::Contribution {
+) -> nikaia_std::compiler::throws::Contribution {
     let mut given = Vec::new();
     let reach = reached(parsed, expr, own, library);
     let callee = match &reach {
@@ -228,7 +228,7 @@ fn contribution(
         .filter(|e| fatal.contains(*e))
         .cloned()
         .collect();
-    nikaia_std::tools::throws::Contribution {
+    nikaia_std::compiler::throws::Contribution {
         call,
         given,
         errors,
@@ -244,7 +244,7 @@ fn contribution(
 fn from_given(
     parsed: &Parsed,
     expr: &Expr,
-    contract: &nikaia_std::tools::ty::FnContract,
+    contract: &nikaia_std::compiler::ty::FnContract,
     own: &Ledger,
     library: &Ledger,
     given: &mut Vec<String>,
@@ -298,5 +298,5 @@ pub fn fatal_types(own: &Ledger, library: &Ledger) -> BTreeSet<String> {
 
 /// The type a `throw` raises: `tools/throws.nika` answers it (#125).
 pub(crate) fn error_type(parsed: &Parsed, thrown: &Expr) -> Option<String> {
-    nikaia_std::tools::throws::error_type(&parsed.interner, thrown)
+    nikaia_std::compiler::throws::error_type(&parsed.interner, thrown)
 }

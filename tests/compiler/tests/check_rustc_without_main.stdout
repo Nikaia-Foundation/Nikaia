@@ -1,0 +1,20 @@
+error[NK1351]: A program starts at its `fn main`, and `one.nika` declares none.
+  --> one.nika:1:1
+   |
+ 1 | pub fn f() -> i64 { return 1 }
+   | ^
+   |
+   = help: Add `fn main()` to it, or, for a package that is built as a library, name the library under `[build]`: `artifact = "rust-library"` or `artifact = "c-library"`.
+exit 1
+Checked one.nika
+exit 0
+error[NK1351]: A program starts at its `fn main`, and `TMP/program/src/main.nika` declares none.
+  --> TMP/program/src/main.nika:1:1
+   |
+ 1 | pub fn f() -> i64 { return 1 }
+   | ^
+   |
+   = help: Add `fn main()` to it, or, for a package that is built as a library, name the library under `[build]`: `artifact = "rust-library"` or `artifact = "c-library"`.
+exit 1
+Checked src/main.nika
+exit 0

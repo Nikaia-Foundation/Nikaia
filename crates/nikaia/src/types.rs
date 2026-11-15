@@ -12,7 +12,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // nobody wrote. Part III C.1's rule held for one half of this language's names
 // and not the other.
 //
-// **A walk of its own**, beside `tools::dsl::check`, `views::check` and
+// **A walk of its own**, beside `compiler::dsl::check`, `views::check` and
 // `traits::check`, and for the reason each of those is separate: it asks a
 // question about a *written name* rather than about a value's type, so it needs
 // the item tree and neither the scope stack nor the inference.
@@ -40,7 +40,7 @@ pub fn check(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<Finding> {
             _ => Vec::new(),
         })
         .collect();
-    nikaia_std::tools::types::types_checked(
+    nikaia_std::compiler::types::types_checked(
         &parsed.interner,
         &parsed.program.items,
         own,

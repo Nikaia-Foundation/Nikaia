@@ -14,12 +14,12 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use nikaia_std::tools::prove_run;
-use nikaia_std::tools::prove_terms;
-use nikaia_std::tools::prover_arena::TermArena;
-use nikaia_std::tools::prover_solver::SolverAnswer;
-use nikaia_std::tools::prover_state::ProverState;
-use nikaia_std::tools::solver_terms::SolverTerm;
+use nikaia_std::compiler::prove_run;
+use nikaia_std::compiler::prove_terms;
+use nikaia_std::compiler::prover_arena::TermArena;
+use nikaia_std::compiler::prover_solver::SolverAnswer;
+use nikaia_std::compiler::prover_state::ProverState;
+use nikaia_std::compiler::solver_terms::SolverTerm;
 
 use crate::ast::{Expr, Item, Stmt};
 use crate::check::Finding;
@@ -28,16 +28,16 @@ use crate::parser::Parsed;
 
 // **What the prover hands the rest of the compiler** is
 // `tools/prover_results.nika` (ADR-294, #436).
-pub use nikaia_std::tools::prover_results::{
+pub use nikaia_std::compiler::prover_results::{
     CallReach as Reach, ClaimHeld as Held, PreconditionCheck as Check, Published, joined_reach,
 };
 
 /// What running a call for a claim came to, and the integer `comptime`s
 /// (ADR-359 D7, D11, D12): `tools/prove_run.nika`.
-pub use nikaia_std::tools::prove_run::{ProveClaimRun as ClaimRun, ProveComptimes as Comptimes};
+pub use nikaia_std::compiler::prove_run::{ProveClaimRun as ClaimRun, ProveComptimes as Comptimes};
 
 /// What carries outside data in a package (#1573): `tools/prover_calls.nika`.
-pub use nikaia_std::tools::prover_calls::ProverOutside;
+pub use nikaia_std::compiler::prover_calls::ProverOutside;
 
 /// How each call the prover saw reaches its callee, by callee and arguments
 /// as written. A call it did not see is not here, and reaches the checked
@@ -62,7 +62,7 @@ pub struct Proved {
     pub std_claims: BTreeMap<(i64, i64), String>,
     /// **Each index data from outside reaches, and what became of it**
     /// (ADR-396 D5), for `--bounds`.
-    pub outside: BTreeMap<(i64, String), nikaia_std::tools::prover_claims::OutsideIndex>,
+    pub outside: BTreeMap<(i64, String), nikaia_std::compiler::prover_claims::OutsideIndex>,
 }
 
 /// Read off the checker's `comptime_values` (the type below and the literal,
@@ -280,7 +280,7 @@ pub fn changed_contracts(
     keepers: &BTreeMap<String, BTreeMap<String, Vec<String>>>,
     mine: impl Fn(&str) -> bool,
 ) -> String {
-    nikaia_std::tools::contract_changes::changed_contracts(
+    nikaia_std::compiler::contract_changes::changed_contracts(
         now,
         committed,
         keepers,

@@ -133,7 +133,7 @@ fn the_maps_are_stds_own() {
 /// no crate, no hasher.
 #[test]
 fn rustcs_words_for_the_table_are_the_programs() {
-    use nikaia_std::tools::rustc_words::in_this_language;
+    use nikaia_std::compiler::rustc_words::in_this_language;
     assert_eq!(
         in_this_language(
             "expected `hashbrown::map::HashMap<String, i64, BuildHasherDefault<FxHasher>>`, found `hashbrown::HashMap<String, i64, RandomState>`"

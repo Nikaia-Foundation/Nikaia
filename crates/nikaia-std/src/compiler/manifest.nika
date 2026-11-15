@@ -5,7 +5,7 @@
 //
 // The seventh piece of the compiler moved from Rust to Nikaia, by ADR-290's
 // route and on ADR-294's road: lowered ahead of time by `nikaia lower-std` to
-// `manifest.rs` beside it, `include!`d as `nikaia_std::tools::manifest`, and
+// `manifest.rs` beside it, `include!`d as `nikaia_std::compiler::manifest`, and
 // called from the compiler's `Manifest::parse`.
 //
 // **The `toml` crate stays behind the adapter** (ADR-294): the compiler

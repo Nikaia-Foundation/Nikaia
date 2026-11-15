@@ -51,7 +51,7 @@ pub const ASSET: &str = "asset";
 
 /// Why a read was refused, the list's own syntax, whether a path leaves the
 /// root and the entries nothing read: `tools/assets.nika` (ADR-294, #125).
-pub use nikaia_std::tools::assets::Denied;
+pub use nikaia_std::compiler::assets::Denied;
 
 /// The list itself: a file that names files.
 #[derive(Debug, Clone)]
@@ -80,7 +80,7 @@ impl Allowlist {
     /// The same, from the text — which is what the tests read and what keeps
     /// the parsing one function rather than two.
     pub fn entries(text: &str) -> BTreeSet<String> {
-        nikaia_std::tools::assets::allowlist_entries(text)
+        nikaia_std::compiler::assets::allowlist_entries(text)
     }
 }
 
@@ -206,7 +206,7 @@ impl Reads {
     /// opposite of that. A `..` and an absolute path are the two shapes that
     /// leave, and both are visible in the literal.
     fn under_the_root(&self, path: &str) -> Option<PathBuf> {
-        match nikaia_std::tools::assets::leaves_the_root(path) || Path::new(path).is_absolute() {
+        match nikaia_std::compiler::assets::leaves_the_root(path) || Path::new(path).is_absolute() {
             true => None,
             false => Some(self.root.join(path)),
         }
@@ -235,7 +235,7 @@ impl Reads {
         let Some(list) = &self.list else {
             return Vec::new();
         };
-        nikaia_std::tools::assets::unused_entries(&list.allowed, &self.taken())
+        nikaia_std::compiler::assets::unused_entries(&list.allowed, &self.taken())
     }
 }
 

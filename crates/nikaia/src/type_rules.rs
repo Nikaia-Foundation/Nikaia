@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{Expr, NodeId, Span};
 use crate::parser::Parsed;
-use nikaia_std::tools::type_rules::{self as tr, TrDeclared, TrRuled};
+use nikaia_std::compiler::type_rules::{self as tr, TrDeclared, TrRuled};
 
 type Ruled = TrRuled;
 

@@ -8,8 +8,8 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // what the compiler needs that the language does not say - the literal
 // doors below.
 
+pub use nikaia_std::compiler::ast::*;
 pub use nikaia_std::node_id::{FIRST_BUILT, NodeId};
-pub use nikaia_std::tools::ast::*;
 
 /// The literal that says `-value` where `negative`, else `value`. The parser
 /// reads only numbers ADR-285 D19 allows, from `-9223372036854775808` to

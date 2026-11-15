@@ -28,19 +28,19 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use nikaia_std::rt::exec::block_on;
-use nikaia_std::tools::project_batch;
-use nikaia_std::tools::project_check;
-use nikaia_std::tools::project_drive::{self, ProjectDriveRefusal};
-use nikaia_std::tools::project_lower;
-use nikaia_std::tools::project_members::{
+use nikaia_std::compiler::project_batch;
+use nikaia_std::compiler::project_check;
+use nikaia_std::compiler::project_drive::{self, ProjectDriveRefusal};
+use nikaia_std::compiler::project_lower;
+use nikaia_std::compiler::project_members::{
     self, ProjectMembersForeignHost, ProjectMembersHost, ProjectMembersManifest,
     ProjectMembersMember, ProjectMembersRefusal, project_members_canonical as canonical,
 };
-use nikaia_std::tools::project_settings::{self, ProjectSettingsRefusal, ProjectWords};
-use nikaia_std::tools::project_tests::{self, ProjectTestsOutcome as Outcome};
-pub use nikaia_std::tools::project_tests::{OutputTest, ProgramTest};
-use nikaia_std::tools::project_write::{self, ProjectWriteRefusal};
+use nikaia_std::compiler::project_settings::{self, ProjectSettingsRefusal, ProjectWords};
+use nikaia_std::compiler::project_tests::{self, ProjectTestsOutcome as Outcome};
+pub use nikaia_std::compiler::project_tests::{OutputTest, ProgramTest};
+use nikaia_std::compiler::project_write::{self, ProjectWriteRefusal};
+use nikaia_std::rt::exec::block_on;
 
 use anyhow::{Context, Result, anyhow};
 use orchestrator::cache::{Artifacts, Cache, Choices, Layout, Lockfile};
@@ -477,9 +477,9 @@ impl Manifests {
     /// write of its note is the `io::IoError` it threw (ADR-392).
     fn error(
         &self,
-        thrown: nikaia_std::tools::__NikaiaThrows_ProjectMembersRefusal__io_IoError,
+        thrown: nikaia_std::compiler::__NikaiaThrows_ProjectMembersRefusal__io_IoError,
     ) -> anyhow::Error {
-        use nikaia_std::tools::__NikaiaThrows_ProjectMembersRefusal__io_IoError as Thrown;
+        use nikaia_std::compiler::__NikaiaThrows_ProjectMembersRefusal__io_IoError as Thrown;
         let thrown = match thrown {
             Thrown::ProjectMembersRefusal(thrown) => thrown,
             Thrown::io_IoError(thrown) => return anyhow!("{}", thrown.split().0),
@@ -861,7 +861,7 @@ pub fn diagnose(
     input: &Path,
     open: &modules::Open,
     alone: bool,
-) -> Vec<(String, nikaia_std::tools::render::Shown)> {
+) -> Vec<(String, nikaia_std::compiler::render::Shown)> {
     let (checked, mut found) = diagnostics::collecting(|| -> Result<()> {
         let (manifest, packages) = match alone {
             true => (Manifest::default(), Vec::new()),
@@ -879,7 +879,7 @@ pub fn diagnose(
             |host, _| {
                 use project_lower::ProjectLowerHost;
                 host.read_program()
-                    .and_then(|()| host.check_units().map(|_| ()))
+                    .and_then(|()| project_lower::project_lower_check(host).map(|_| ()))
                     .map_err(|error| host.failed.take().unwrap_or_else(|| anyhow!("{error}")))
             },
         )?
@@ -926,7 +926,7 @@ pub fn definition(
                     use project_lower::ProjectLowerHost;
                     host.read_program().ok()?;
                     // A refusal still leaves the facts of what was checked.
-                    let _ = host.check_units();
+                    let _ = project_lower::project_lower_check(host);
                     let program = host.program.borrow();
                     let program = program.as_ref()?;
                     let at = program.units.iter().position(|unit| unit.path == input)?;
@@ -937,7 +937,7 @@ pub fn definition(
                         .iter()
                         .map(|unit| crate::check::parsed_view_of(&unit.parsed))
                         .collect();
-                    let (file, span, name) = nikaia_std::tools::check_declared::declared_site(
+                    let (file, span, name) = nikaia_std::compiler::check_declared::declared_site(
                         &views, at as i64, facts, offset,
                     )?;
                     Some((
@@ -955,13 +955,13 @@ pub fn definition(
 /// [`diagnose`] and [`definition`].
 pub struct Lsp;
 
-impl nikaia_std::tools::lsp::LspHost for Lsp {
+impl nikaia_std::compiler::lsp::LspHost for Lsp {
     fn diagnose(
         &self,
         entry: &str,
         open: &BTreeMap<String, String>,
         alone: bool,
-    ) -> Vec<(String, nikaia_std::tools::render::Shown)> {
+    ) -> Vec<(String, nikaia_std::compiler::render::Shown)> {
         diagnose(Path::new(entry), open, alone)
     }
 
@@ -1048,6 +1048,7 @@ fn with_lower_host<R>(
         exported: RefCell::new(None),
         foreign: RefCell::new(None),
         book: RefCell::new(None),
+        checking: RefCell::new(None),
         checked_facts: RefCell::new(BTreeMap::new()),
         unit_facts: RefCell::new(BTreeMap::new()),
         published: RefCell::new(BTreeMap::new()),
@@ -1084,6 +1085,8 @@ struct LowerHost<'a> {
     foreign: RefCell<Option<Foreign>>,
     /// The prover's book between the check and the emitter.
     book: RefCell<Option<crate::proofs::Book>>,
+    /// What the check of the units reads once for all of them, while it runs.
+    checking: RefCell<Option<Checking>>,
     checked_facts: RefCell<BTreeMap<usize, check::CheckFacts>>,
     /// Each unit's facts, by its place in the program, for `nikaia lsp`'s
     /// [`definition`] (#1396): empty for every other build.
@@ -1092,6 +1095,16 @@ struct LowerHost<'a> {
     /// The book as the lowering left it, in a project.
     proofs: RefCell<Option<crate::proofs::Book>>,
     failed: RefCell<Option<anyhow::Error>>,
+}
+
+/// **What the check of a program's units reads once** (`check_open`), for
+/// each unit's check after: the package names, the contracts that moved, the
+/// dependencies' promises and whether the facts are the emitter's.
+struct Checking {
+    modules: BTreeSet<String>,
+    newly: check::Newly,
+    promised: Ledger,
+    facts_reusable: bool,
 }
 
 type HostResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -1117,7 +1130,7 @@ impl LowerHost<'_> {
             .package_name()
             .map(str::to_text)
             .unwrap_or_else(|| settings.words.symbol_prefix.clone());
-        let kept = nikaia_std::tools::project_features::features_kept(
+        let kept = nikaia_std::compiler::project_features::features_kept(
             rust,
             features,
             &package,
@@ -1228,7 +1241,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             &self.layout.lock,
             &self.layout.store,
             env!("NIKAIA_RUSTC_VERSION"),
-            env!("NIKAIA_COMPILER"),
+            crate::compiler_identity(),
         ) {
             Ok(cache) => *self.cache.borrow_mut() = Some(cache),
             Err(error) => eprintln!("warning: the build cache is unavailable: {error:#}"),
@@ -1349,8 +1362,8 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         }
     }
 
-    fn check_units(&self) -> HostResult<String> {
-        let (layout, settings) = (self.layout, self.settings);
+    fn check_open(&self) -> Vec<project_lower::CheckUnit> {
+        let layout = self.layout;
         let program = self.program();
         // Every unit is checked against the *program's* contracts, not its
         // own: `utils::double` is a name `main.nika` may write, and the
@@ -1372,14 +1385,58 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         // package.
         let mut newly = newly(&layout.root, &program.contracts);
         newly.keepers = program.keepers.clone();
-        // Collected once for the whole package, because every unit is
-        // checked against the same program (`ADR-286`) and a `comptime` in
-        // any of them may call into any other.
+        // **And the program's own files against what each dependency
+        // promised** (ADR-288 D28), not what its body happens to be: an
+        // `"inferred"` `sync` reads as *may pause* across the boundary.
+        let promised = program.contracts_as_promised();
+        // **The check's facts are the emitter's** where the check asked
+        // exactly what `check::propagation_against` asks: the unit's own
+        // ledger the emitter's, no module and no contract that moved
+        // (#727).
+        let facts_reusable = foreign.packages(&modules).is_empty()
+            && newly.throws.is_empty()
+            && newly.keeps.is_empty()
+            && promised == program.contracts;
+        let units = program
+            .units
+            .iter()
+            .map(|unit| project_lower::CheckUnit {
+                path: unit.path.display().to_text(),
+                dependency: unit.package.is_some(),
+            })
+            .collect();
+        *self.checking.borrow_mut() = Some(Checking {
+            modules,
+            newly,
+            promised,
+            facts_reusable,
+        });
+        *self.checked_facts.borrow_mut() = BTreeMap::new();
+        *self.foreign.borrow_mut() = Some(foreign);
+        units
+    }
+
+    fn unit_source(&self, at: i64) -> String {
+        self.program().units[at as usize].source.clone()
+    }
+
+    fn check_unit(&self, at: i64) -> HostResult<project_lower::UnitSaid> {
+        let settings = self.settings;
+        let program = self.program();
+        let at = at as usize;
+        let unit = &program.units[at];
+        let checking = self.checking.borrow();
+        let checking = checking.as_ref().expect("the check is open");
+        let foreign = self.foreign.borrow();
+        let foreign = foreign.as_ref().expect("the check is open");
+        // Collected for every unit, because every unit is checked against
+        // the same program (`ADR-286`) and a `comptime` in any of them may
+        // call into any other.
         let beside: Vec<&crate::parser::Parsed> =
             program.units.iter().map(|unit| &unit.parsed).collect();
         let around = Around {
-            foreign: &foreign,
-            newly: &newly,
+            foreign,
+            newly: &checking.newly,
             beside: &beside,
             reads: self.reads,
         };
@@ -1390,11 +1447,16 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         // types inside them*, and the package's file writes the bare word.
         // `Program::as_its_own` is the ledger that package was inferred
         // with, kept rather than reconstructed.
-        //
-        // **And the program's own files against what each dependency
-        // promised** (ADR-288 D28), not what its body happens to be: an
-        // `"inferred"` `sync` reads as *may pause* across the boundary.
-        let promised = program.contracts_as_promised();
+        let contracts = match &unit.package {
+            Some(package) => program
+                .as_its_own
+                .get(package)
+                .unwrap_or(&program.contracts),
+            None => &checking.promised,
+        };
+        let lsp = diagnostics::is_collecting();
+        let mut facts = None;
+        let keep = checking.facts_reusable && unit.package.is_none();
         // **The prover's recorded answers** ([ADR-270](../../docs/specification/adr/adr-270.md)
         // D4, D21, #448): open since the program was read, while it is
         // checked and lowered, and written back beside `nikaia.contracts`
@@ -1404,131 +1466,74 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             .borrow_mut()
             .take()
             .expect("the program is read first");
-        let mut warnings = String::new();
-        // **The check's facts are the emitter's** where the check asked
-        // exactly what `check::propagation_against` asks: the unit's own
-        // ledger the emitter's, no module and no contract that moved
-        // (#727).
-        let facts_reusable = foreign.packages(&modules).is_empty()
-            && newly.throws.is_empty()
-            && newly.keeps.is_empty()
-            && promised == program.contracts;
-        let mut checked_facts = BTreeMap::new();
-        let mut refused: Vec<String> = Vec::new();
-        // **In a batch, a dependency's file is checked once** (#1582): the
-        // key names every dependency file and its source.
-        let lsp = diagnostics::is_collecting();
-        let batch_digest = (BATCH.load(std::sync::atomic::Ordering::Relaxed) && !lsp).then(|| {
-            let mut all = String::new();
-            for unit in program.units.iter().filter(|unit| unit.package.is_some()) {
-                all += &format!(
-                    "{}\n{}\n// --- unit ---\n",
-                    unit.path.display(),
-                    unit.source
-                );
-            }
-            assets::digest(all.as_bytes())
-        });
-        let (checked, book) = crate::proofs::with_book(book, || -> Result<()> {
-            for (at, unit) in program.units.iter().enumerate() {
-                let batch_key = match (&batch_digest, &unit.package) {
-                    (Some(digest), Some(_)) => Some((unit.path.clone(), digest.clone())),
-                    _ => None,
-                };
-                let remembered = batch_key.as_ref().and_then(|key| {
-                    BATCH_CHECKED
-                        .lock()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner())
-                        .get(key)
-                        .cloned()
-                });
-                match remembered {
-                    Some(Ok(said)) => {
-                        warnings += &said;
-                        continue;
-                    }
-                    Some(Err(said)) => {
-                        refused.push(said);
-                        continue;
-                    }
-                    None => {}
-                }
-                let contracts = match &unit.package {
-                    Some(package) => program
-                        .as_its_own
-                        .get(package)
-                        .unwrap_or(&program.contracts),
-                    None => &promised,
-                };
-                let mut facts = None;
-                let keep = facts_reusable && unit.package.is_none();
-                // **`nikaia lsp` asks where a name is declared** (#1396): every
-                // unit's facts, a refused unit's too, kept apart from the
-                // emitter's (`lsp`, above).
-                let checked = crate::proofs::for_unit(
+        // **`nikaia lsp` asks where a name is declared** (#1396): every
+        // unit's facts, a refused unit's too, kept apart from the emitter's.
+        let (checked, book) = crate::proofs::with_book(book, || {
+            crate::proofs::for_unit(&unit.path, &unit.source, unit.package.is_some(), || {
+                check(
+                    &unit.parsed,
+                    contracts,
+                    &checking.modules,
+                    around,
                     &unit.path,
                     &unit.source,
-                    unit.package.is_some(),
-                    || {
-                        check(
-                            &unit.parsed,
-                            contracts,
-                            &modules,
-                            around,
-                            &unit.path,
-                            &unit.source,
-                            &settings.words.user_parallelism,
-                            &settings.words.refuted_claims,
-                            &settings.words.unproved_claims,
-                            settings.library(),
-                            (keep || lsp).then_some(&mut facts),
-                        )
-                    },
-                );
-                if lsp && let Some(facts) = &facts {
-                    self.unit_facts.borrow_mut().insert(at, facts.clone());
-                }
-                // **A refused unit does not stop the others** (#1508): the
-                // file next door may hold the refusal this one's follows from
-                // (an `NK1171` in a callee makes it read as pausing, and the
-                // `sync` caller's `NK2202` was all a build said), so every
-                // unit says its findings and the tallies are joined.
-                let remember = |said: Result<String, String>| {
-                    if let Some(key) = &batch_key {
-                        BATCH_CHECKED
-                            .lock()
-                            .unwrap_or_else(|poisoned| poisoned.into_inner())
-                            .insert(key.clone(), said);
-                    }
-                };
-                match checked {
-                    Ok(said) => {
-                        remember(Ok(said.clone()));
-                        warnings += &said
-                    }
-                    Err(e) => match e.downcast_ref::<diagnostics::Refused>() {
-                        Some(tally) if tally.at.is_none() && tally.finding.is_none() => {
-                            remember(Err(tally.message.clone()));
-                            refused.push(tally.message.clone());
-                            continue;
-                        }
-                        _ => return Err(e),
-                    },
-                }
-                if keep && let Some(facts) = facts {
-                    checked_facts.insert(at, facts);
-                }
-            }
-            if !refused.is_empty() {
-                return Err(diagnostics::refuse(refused.join(", ")));
-            }
-            Ok(())
+                    &settings.words.user_parallelism,
+                    &settings.words.refuted_claims,
+                    &settings.words.unproved_claims,
+                    settings.library(),
+                    (keep || lsp).then_some(&mut facts),
+                )
+            })
         });
-        self.held(checked)?;
         *self.book.borrow_mut() = Some(book);
-        *self.checked_facts.borrow_mut() = checked_facts;
-        *self.foreign.borrow_mut() = Some(foreign);
-        Ok(warnings)
+        if lsp && let Some(facts) = &facts {
+            self.unit_facts.borrow_mut().insert(at, facts.clone());
+        }
+        match checked {
+            Ok(said) => {
+                if keep && let Some(facts) = facts {
+                    self.checked_facts.borrow_mut().insert(at, facts);
+                }
+                Ok(project_lower::UnitSaid::Warned(said))
+            }
+            Err(e) => match e.downcast_ref::<diagnostics::Refused>() {
+                Some(tally) if tally.at.is_none() && tally.finding.is_none() => {
+                    Ok(project_lower::UnitSaid::Refused(tally.message.clone()))
+                }
+                _ => self.held(Err(e)),
+            },
+        }
+    }
+
+    fn check_close(&self, refused: &[String]) -> HostResult<()> {
+        *self.checking.borrow_mut() = None;
+        if !refused.is_empty() {
+            return self.held(Err(diagnostics::refuse(refused.join(", "))));
+        }
+        Ok(())
+    }
+
+    fn in_a_batch(&self) -> bool {
+        BATCH.load(std::sync::atomic::Ordering::Relaxed) && !diagnostics::is_collecting()
+    }
+
+    fn digest(&self, text: &str) -> String {
+        assets::digest(text.as_bytes())
+    }
+
+    fn batch_said(&self, key: &str) -> Option<project_lower::UnitSaid> {
+        BATCH_CHECKED
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(key)
+            .cloned()
+    }
+
+    fn batch_remember(&self, key: &str, said: &project_lower::UnitSaid) {
+        BATCH_CHECKED
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(key.to_text(), said.clone());
     }
 
     fn emit(&self) -> HostResult<String> {
@@ -1609,7 +1614,7 @@ pub const WARNINGS: &str = "warnings";
 /// ([ADR-290](../../docs/specification/adr/adr-290.md) D1): the struct, how a
 /// build reads it and what it gives a program's packages are
 /// `ProjectMembersForeign` in `tools/project_members.nika` (P4b).
-pub use nikaia_std::tools::project_members::ProjectMembersForeign as Foreign;
+pub use nikaia_std::compiler::project_members::ProjectMembersForeign as Foreign;
 
 /// What a build of `root` is at its boundary
 /// (`project_members_foreign_of`, P4b).
@@ -1949,7 +1954,7 @@ pub fn write_ledger(path: &Path, ledger: &str, locked: bool) -> Result<()> {
 /// and leaves you to find out what. 13.5 asks this diff to narrate a cause; it
 /// cannot do that without saying whose contract moved.
 pub fn changed_lines(ledger: &str, committed: &str) -> Vec<String> {
-    nikaia_std::tools::diffs::changed_lines(ledger, committed)
+    nikaia_std::compiler::diffs::changed_lines(ledger, committed)
 }
 
 /// Which of the three explanations a run was asked for
@@ -2705,7 +2710,7 @@ impl Project {
         let mut lock = Lockfile::load(
             &lock_path,
             env!("NIKAIA_RUSTC_VERSION"),
-            env!("NIKAIA_COMPILER"),
+            crate::compiler_identity(),
         )?;
         if lock.dependencies == resolved {
             return Ok(());
@@ -3136,44 +3141,78 @@ impl ProgramHost {
 
     /// `program` run in `dir` with `stdin` on its standard input (none where
     /// it is empty) and no `CARGO_TARGET_DIR`, as `command` has it set up.
+    /// Where `within` is more than zero, it runs in a process group of its
+    /// own, and after that many seconds the whole group is killed - the
+    /// program and every process it started, which would otherwise hold its
+    /// pipes open - and the run says it timed out (#1672).
     fn ran(
         &self,
         program: &Path,
         mut command: std::process::Command,
         dir: &Path,
         stdin: &[u8],
+        within: i64,
     ) -> Result<project_tests::ProjectTestsRan> {
         use std::io::Write;
-        command.current_dir(dir).env_remove("CARGO_TARGET_DIR");
-        let out = if stdin.is_empty() {
-            command.stdin(std::process::Stdio::null()).output()
-        } else {
-            command
-                .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .spawn()
-                .and_then(|mut child| {
-                    // Written beside the wait, so a program that prints before
-                    // it reads does not fill its pipe and stop; one that stops
-                    // reading early closes the pipe, which is its business.
-                    let mut input = child.stdin.take();
-                    let given = stdin.to_vec();
-                    let writing = std::thread::spawn(move || {
-                        if let Some(input) = input.as_mut() {
-                            let _ = input.write_all(&given);
+        use std::sync::atomic::{AtomicBool, Ordering};
+        command
+            .current_dir(dir)
+            .env_remove("CARGO_TARGET_DIR")
+            .stdin(if stdin.is_empty() {
+                std::process::Stdio::null()
+            } else {
+                std::process::Stdio::piped()
+            })
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        #[cfg(unix)]
+        if within > 0 {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
+        let expired = std::sync::Arc::new(AtomicBool::new(false));
+        let out = command
+            .spawn()
+            .and_then(|mut child| {
+                // Written beside the wait, so a program that prints before
+                // it reads does not fill its pipe and stop; one that stops
+                // reading early closes the pipe, which is its business.
+                let mut input = child.stdin.take();
+                let given = stdin.to_vec();
+                let writing = std::thread::spawn(move || {
+                    if let Some(input) = input.as_mut() {
+                        let _ = input.write_all(&given);
+                    }
+                });
+                let watchdog = (within > 0).then(|| {
+                    let (done, wake) = std::sync::mpsc::channel::<()>();
+                    let pid = child.id();
+                    let expired = expired.clone();
+                    let limit = std::time::Duration::from_secs(within.unsigned_abs());
+                    let thread = std::thread::spawn(move || {
+                        if let Err(std::sync::mpsc::RecvTimeoutError::Timeout) =
+                            wake.recv_timeout(limit)
+                        {
+                            expired.store(true, Ordering::SeqCst);
+                            child_usage::kill_group(pid);
                         }
                     });
-                    let out = child.wait_with_output();
-                    let _ = writing.join();
-                    out
-                })
-        }
-        .with_context(|| format!("running {}", program.display()))?;
+                    (done, thread)
+                });
+                let out = child.wait_with_output();
+                if let Some((done, thread)) = watchdog {
+                    drop(done);
+                    let _ = thread.join();
+                }
+                let _ = writing.join();
+                out
+            })
+            .with_context(|| format!("running {}", program.display()))?;
         Ok(project_tests::ProjectTestsRan {
             code: exit_code(&out.status),
             stdout: out.stdout.into(),
             stderr: out.stderr.into(),
+            timed_out: expired.load(Ordering::SeqCst),
         })
     }
 }
@@ -3194,6 +3233,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         dir: &Path,
         own: &Path,
         stdin: &[u8],
+        within: i64,
     ) -> HostResult<project_tests::ProjectTestsRan> {
         let mut command = std::process::Command::new(&self.exe);
         command
@@ -3203,7 +3243,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         if verb == "build" {
             command.env("CARGO_TERM_QUIET", "true");
         }
-        self.held(self.ran(&self.exe, command, dir, stdin))
+        self.held(self.ran(&self.exe, command, dir, stdin, within))
     }
 
     fn explained(
@@ -3214,7 +3254,10 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
     ) -> HostResult<nikaia_std::bytes::Bytes> {
         let mut command = std::process::Command::new(&self.exe);
         command.arg("check").args(args).arg(entry);
-        self.held(self.ran(&self.exe, command, own, &[]).map(|out| out.stdout))
+        self.held(
+            self.ran(&self.exe, command, own, &[], 0)
+                .map(|out| out.stdout),
+        )
     }
 
     fn built(
@@ -3223,6 +3266,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         dir: &Path,
         own: &Path,
         stdin: &[u8],
+        within: i64,
     ) -> HostResult<Option<project_tests::ProjectTestsRan>> {
         let binary = project
             .join("target")
@@ -3234,7 +3278,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         }
         let mut command = std::process::Command::new(&binary);
         command.env(nikaia_std::fs::TEST_DIR_VAR, own);
-        self.held(self.ran(&binary, command, dir, stdin).map(Some))
+        self.held(self.ran(&binary, command, dir, stdin, within).map(Some))
     }
 
     fn batched(
@@ -3251,7 +3295,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
             .env(nikaia_std::fs::TEST_DIR_VAR, own)
             .env(project_batch::project_batch_var(), list)
             .env("CARGO_TERM_QUIET", "true");
-        let built = self.held(self.ran(&self.exe, command, own, &[]))?;
+        let built = self.held(self.ran(&self.exe, command, own, &[], 0))?;
         let binary = project
             .join("target")
             .join("nikaia")
@@ -3267,10 +3311,11 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         dir: &Path,
         own: &Path,
         stdin: &[u8],
+        within: i64,
     ) -> HostResult<project_tests::ProjectTestsRan> {
         let mut command = std::process::Command::new(binary);
         command.arg(name).env(nikaia_std::fs::TEST_DIR_VAR, own);
-        self.held(self.ran(binary, command, dir, stdin))
+        self.held(self.ran(binary, command, dir, stdin, within))
     }
 }
 
@@ -3510,7 +3555,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn compiler(&self) -> String {
-        env!("NIKAIA_COMPILER").to_text()
+        crate::compiler_identity().to_text()
     }
 
     fn toolchain_is_new_enough(&self) -> Option<String> {
@@ -3550,11 +3595,11 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         )
     }
 
-    fn features(&self) -> Vec<nikaia_std::tools::manifest::ManifestFeature> {
+    fn features(&self) -> Vec<nikaia_std::compiler::manifest::ManifestFeature> {
         self.project.manifest.file().features.clone()
     }
 
-    fn rust_library(&self) -> Option<nikaia_std::tools::manifest::ManifestRustLibrary> {
+    fn rust_library(&self) -> Option<nikaia_std::compiler::manifest::ManifestRustLibrary> {
         self.project.manifest.file().rust_library.clone()
     }
 
@@ -3914,14 +3959,12 @@ fn wrapper_lower(
 
 /// **Set in a wrapper that lowers a batch of test programs** (#1582): its
 /// programs share their dependencies, so a dependency's file is checked once
-/// for all of them ([`BATCH_CHECKED`]), not once per program.
+/// for all of them (`project_lower_check`), not once per program.
 static BATCH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// What the check of a dependency's file said, in a batch ([`BATCH`]): by
-/// the file and the digest of every dependency file's source, which is all a
-/// dependency's ledger is inferred from (ADR-100 D5: the dependencies first,
-/// the program's own package last). `Ok` its warnings, `Err` its refusal.
-static BATCH_CHECKED: std::sync::Mutex<BTreeMap<(PathBuf, String), Result<String, String>>> =
+/// The batch's shared memo of what a dependency's file said
+/// (`project_lower_check`, which builds the key and replays it).
+static BATCH_CHECKED: std::sync::Mutex<BTreeMap<String, project_lower::UnitSaid>> =
     std::sync::Mutex::new(BTreeMap::new());
 
 impl project_drive::ProjectDriveWrapperHost for WrapperHost {
@@ -3969,7 +4012,7 @@ impl project_drive::ProjectDriveWrapperHost for WrapperHost {
 
     /// **A batch's programs lowered on every core** (#1582): each as the
     /// module `roots[k]` names, its dependencies' files checked once for the
-    /// whole batch ([`BATCH_CHECKED`]). A program that does not lower is
+    /// whole batch (`project_lower_check`). A program that does not lower is
     /// nothing; the batch leaves it out, and it is built alone.
     fn lower_batch(
         &self,
@@ -4024,7 +4067,7 @@ mod tests {
     #[test]
     fn cpu_comes_after_the_users_rustflags() {
         let e = |encoded: Option<&str>, plain: Option<&str>, cpu: &str| {
-            nikaia_std::tools::project_settings::encoded_with_cpu(encoded, plain, cpu)
+            nikaia_std::compiler::project_settings::encoded_with_cpu(encoded, plain, cpu)
         };
         assert_eq!(e(None, None, "x86-64-v3"), None);
         assert_eq!(

@@ -16,7 +16,7 @@ use crate::parser::Parsed;
 /// What the lowering does at a give-up: an assignment written as a binding of
 /// its own, the `let`s that no longer need `mut`, and the `let`s whose buffer
 /// lives in the frame's keep (`tools/view_changes.nika`).
-pub type GiveUps = nikaia_std::tools::view_changes::VcGiveUps;
+pub type GiveUps = nikaia_std::compiler::view_changes::VcGiveUps;
 
 /// The refusals (`NK2305`) and the give-ups of one unit.
 pub fn analyse(
@@ -28,7 +28,7 @@ pub fn analyse(
     mut_viewed: &BTreeSet<i64>,
     receiver_views: &BTreeSet<i64>,
 ) -> (Vec<Finding>, GiveUps) {
-    use nikaia_std::tools::view_changes::{VcAsk, vc_analyse};
+    use nikaia_std::compiler::view_changes::{VcAsk, vc_analyse};
     let ask = VcAsk {
         names: &parsed.interner,
         items: &parsed.program.items,

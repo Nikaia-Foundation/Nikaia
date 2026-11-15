@@ -33,8 +33,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use nikaia_std::compiler::sysroot_cache;
 use nikaia_std::rt::exec::block_on;
-use nikaia_std::tools::sysroot_cache;
 use orchestrator::cache::{self, Key, Layout};
 
 /// The development override, named for what it is.
@@ -245,7 +245,7 @@ impl Codegen {
     /// One line per key, in key order, so the same table renders the same way
     /// however it was read.
     fn render(&self) -> String {
-        nikaia_std::tools::sysroot_package::sysroot_package_render(&self.table)
+        nikaia_std::compiler::sysroot_package::sysroot_package_render(&self.table)
     }
 }
 
@@ -338,7 +338,7 @@ pub fn lower_std_module(path: &Path) -> Result<String> {
 /// can be a rebuild.
 fn every_refusal(path: &Path, source: &str, refusals: &[&crate::check::Finding]) -> String {
     struct Render;
-    impl nikaia_std::tools::sysroot_package::SysrootPackageHost for Render {
+    impl nikaia_std::compiler::sysroot_package::SysrootPackageHost for Render {
         fn render_finding(
             &self,
             finding: &crate::check::Finding,
@@ -348,7 +348,7 @@ fn every_refusal(path: &Path, source: &str, refusals: &[&crate::check::Finding])
             crate::diagnostics::render_finding(finding, path, source)
         }
     }
-    nikaia_std::tools::sysroot_package::sysroot_package_every_refusal(
+    nikaia_std::compiler::sysroot_package::sysroot_package_every_refusal(
         &path.display().to_text(),
         source,
         refusals,
@@ -376,7 +376,7 @@ fn sync_refusals(
 /// `std`'s ledger and the tools' described one (ADR-294 D9.3), as the files of
 /// a program's package are, and lowered into one Rust file: one preamble, then
 /// each file's items, then one module per file that names what that file
-/// offers - `tools::ty::Ty`, `tools::ledger::read` - so a Rust caller still
+/// offers - `compiler::ty::Ty`, `compiler::ledger::read` - so a Rust caller still
 /// says which file a name is in, and the name is one name underneath.
 ///
 /// **At `user_parallelism = yes`, whatever this binary's default**
@@ -384,8 +384,8 @@ fn sync_refusals(
 /// compiler runs this code, and the compiler may be concurrent (Part I 1.2).
 /// Code lowered at `yes` is correct where one thread runs it; code lowered at
 /// `no` is not correct where several do.
-pub fn lower_tools(dir: &Path) -> Result<Package> {
-    lower_tools_at(dir, tools_build())
+pub fn lower_compiler(dir: &Path) -> Result<Package> {
+    lower_compiler_at(dir, tools_build())
 }
 
 /// The build the toolchain's package is lowered at (ADR-363 D1).
@@ -402,7 +402,7 @@ pub fn tools_build() -> crate::emit::Build {
 
 /// The same at a given build, for a test that lowers the package at another
 /// setting than [`tools_build`].
-pub fn lower_tools_at(dir: &Path, build: crate::emit::Build) -> Result<Package> {
+pub fn lower_compiler_at(dir: &Path, build: crate::emit::Build) -> Result<Package> {
     lower_package(
         &tools_sources(dir)?,
         &tools_dependencies(dir)?,
@@ -481,13 +481,13 @@ fn tools_sources(dir: &Path) -> Result<Vec<PathBuf>> {
 /// **The tools package from these files, in this order** (#581 step 9): what
 /// a file lowers to depends on the package, never on where the file stands in
 /// the list; only the order of the sections follows it.
-pub fn lower_tools_files(paths: &[PathBuf], build: crate::emit::Build) -> Result<Package> {
-    lower_tools_files_on(paths, build, None)
+pub fn lower_compiler_files(paths: &[PathBuf], build: crate::emit::Build) -> Result<Package> {
+    lower_compiler_files_on(paths, build, None)
 }
 
 /// The same on `threads` threads, or as [`in_parallel`] decides for `None`:
 /// the bytes are the same at every count (#667).
-pub fn lower_tools_files_on(
+pub fn lower_compiler_files_on(
     paths: &[PathBuf],
     build: crate::emit::Build,
     threads: Option<usize>,
@@ -513,7 +513,7 @@ pub fn lower_tools_files_on(
 /// The ranges are the statements' extent, so a comment between two statements
 /// goes with them and a comment outside a body stays.
 fn without_bodies(source: &str, parsed: &crate::parser::Parsed) -> String {
-    nikaia_std::tools::sysroot_package::sysroot_package_without_bodies(
+    nikaia_std::compiler::sysroot_package::sysroot_package_without_bodies(
         source,
         &parsed.program.items,
     )
@@ -685,7 +685,7 @@ pub fn bounds_tools(
                 &library,
                 through_loops,
             );
-            out.push_str(&nikaia_std::tools::check_facts::check_claims_report(
+            out.push_str(&nikaia_std::compiler::check_facts::check_claims_report(
                 &checked.facts.claims,
                 &texts[at],
                 &path,
@@ -807,21 +807,21 @@ fn lower_package(
             .iter()
             .zip(&texts)
             .map(|(unit, text)| {
-                nikaia_std::tools::modules::modules_reach_of(
+                nikaia_std::compiler::modules::modules_reach_of(
                     &unit.program.items,
                     &unit.interner,
                     text,
                 )
             })
             .collect();
-        nikaia_std::tools::modules::modules_only_tests_package(&parts)
+        nikaia_std::compiler::modules::modules_only_tests_package(&parts)
     };
 
     // **The package's call graphs, worked out once** (#1279): they are the
     // same for every file, read over all of them against `own`.
     let graphs = {
         let views: Vec<_> = parsed.iter().map(crate::check::parsed_view_of).collect();
-        nikaia_std::tools::emit_contracts::emit_contracts_package_graphs(&views, &own)
+        nikaia_std::compiler::emit_contracts::emit_contracts_package_graphs(&views, &own)
     };
     timer.lap("graphs");
 
@@ -837,7 +837,7 @@ fn lower_package(
     ) {
         let started = std::time::Instant::now();
         let (path, unit) = (&paths[at], &parsed[at]);
-        let has_tests = nikaia_std::tools::modules::modules_test_count(&unit.program.items) > 0;
+        let has_tests = nikaia_std::compiler::modules::modules_test_count(&unit.program.items) > 0;
         let only_tests = &only_tests_of[at];
         let key = file_key(at, only_tests);
         if let Some(rust) = cache.get(key.as_deref()) {
@@ -965,9 +965,9 @@ fn lower_package(
         .map(|unit| crate::check::parsed_view_of(unit))
         .collect();
     let files =
-        nikaia_std::tools::sysroot_package::sysroot_package_assemble(&names, &texts, &views);
+        nikaia_std::compiler::sysroot_package::sysroot_package_assemble(&names, &texts, &views);
     let files =
-        nikaia_std::tools::sysroot_package::sysroot_package_with_dependencies(&files, &theirs);
+        nikaia_std::compiler::sysroot_package::sysroot_package_with_dependencies(&files, &theirs);
     timer.lap("assemble");
     timer.report();
     Ok((Package { files }, inferred))
@@ -988,13 +988,13 @@ fn with_tests_as_functions(
     let beside = crate::text_tiers::beside_fields(&read);
     crate::text_tiers::refine_with(&mut again, &beside);
     let interner = &again.interner;
-    let found = nikaia_std::tools::modules::modules_tests_as_functions(
+    let found = nikaia_std::compiler::modules::modules_tests_as_functions(
         &mut again.program.items,
         &source,
         0,
         &|text| interner.intern_string(text),
     );
-    nikaia_std::tools::modules::modules_mark_test_only(
+    nikaia_std::compiler::modules::modules_mark_test_only(
         &mut again.program.items,
         only_tests,
         found.len() as i64,
@@ -1006,7 +1006,7 @@ fn with_tests_as_functions(
     let wrappers = if titles.is_empty() {
         String::new()
     } else {
-        nikaia_std::tools::modules::modules_test_wrappers(&titles, 0)
+        nikaia_std::compiler::modules::modules_test_wrappers(&titles, 0)
     };
     Ok((again, wrappers))
 }
@@ -1207,7 +1207,7 @@ pub fn lowered_path(nika: &Path) -> PathBuf {
     nika.with_extension("rs")
 }
 
-/// Where [`lower_tools`]'s result is committed: in the directory, beside the
+/// Where [`lower_compiler`]'s result is committed: in the directory, beside the
 /// sources it is lowered from.
 pub fn tools_lowered_path(dir: &Path) -> PathBuf {
     dir.join(TOOLS_PACKAGE)
@@ -1319,13 +1319,6 @@ struct LoweredBefore {
     compiler: Option<String>,
 }
 
-/// **Which compiler wrote an entry** (#667, #801): the fingerprint of the
-/// compiler's sources, `.nika` files, `std` ledgers, rustc and `Cargo.lock`
-/// (`build.rs`), not the binary's bytes. A rebuild of the same sources, in any
-/// checkout, keeps every entry; a change to the lowering misses once. `NIKAIA_LOWER_CACHE_SALT` in the environment
-/// separates entries by hand while a lowering is being worked on.
-const COMPILER_IDENTITY: &str = env!("NIKAIA_COMPILER");
-
 impl LoweredBefore {
     /// No cache: nothing is read and nothing is written.
     fn none() -> LoweredBefore {
@@ -1335,9 +1328,16 @@ impl LoweredBefore {
         }
     }
 
+    /// **Which compiler wrote an entry** (#667, #801, #1610): the fingerprint of
+    /// the compiler's sources, `.nika` files, `std` ledgers, rustc and `Cargo.lock`
+    /// (`build.rs`) with the digest of the lowered set compiled in
+    /// ([`crate::compiler_identity`]), not the binary's bytes. A rebuild of the same sources, in any
+    /// checkout, keeps every entry; a change to the lowering misses once. `NIKAIA_LOWER_CACHE_SALT` in the environment
+    /// separates entries by hand while a lowering is being worked on.
     fn open() -> LoweredBefore {
         LoweredBefore::with_compiler(&format!(
-            "{COMPILER_IDENTITY}{}",
+            "{}{}",
+            crate::compiler_identity(),
             std::env::var("NIKAIA_LOWER_CACHE_SALT").unwrap_or_default()
         ))
     }
@@ -1438,7 +1438,7 @@ mod tests {
             LoweredBefore::open().compiler,
             LoweredBefore::open().compiler
         );
-        assert!(!COMPILER_IDENTITY.contains('/'));
+        assert!(!crate::compiler_identity().contains('/'));
     }
 
     /// #801: what a file's cache entry follows in a two-file package.
