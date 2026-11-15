@@ -191,11 +191,11 @@ touches = []
 signature = "(response: Response) -> String"
 
 [fn."request"]
-keeps = ["handler"]
+keeps = ["handler", "idle_timeout"]
 locks = true
 panics = true
 provenance = "untrusted"
-signature = "(mut connection: net::Connection, mut buffer: http1::Buffer, handler: fn(Request) -> Response, head_timeout: time::Duration; body_cap: i64 = 1048576, head_cap: i64 = 16384, body_bytes_per_second: i64 = 500) -> bool"
+signature = "(mut connection: net::Connection, mut buffer: http1::Buffer, handler: fn(Request) -> Response, head_timeout: time::Duration, idle_timeout: time::Duration; body_cap: i64 = 1048576, head_cap: i64 = 16384, body_bytes_per_second: i64 = 500) -> bool"
 
 [fn."send"]
 throws = ["io::IoError"]

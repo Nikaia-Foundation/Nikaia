@@ -272,8 +272,8 @@ fn body_start_millis() -> i64 {
 //
 // * `head_timeout`, the time from a request's first byte to the end of its
 //   head;
-// * `body_bytes_per_second`, the rate a body arrives at, measured once two
-//   seconds have passed (`0` takes the body at any rate);
+// * `body_bytes_per_second`, the rate a body arrives at since its first byte,
+//   measured once two seconds have passed (`0` takes the body at any rate);
 // * `idle_timeout`, the time between one answer and the next request's first
 //   byte.
 //
@@ -328,7 +328,7 @@ fn answer(
     let mut buffer = http1::Buffer()
     let mut open = true
     while open {
-        open = request(connection, buffer, handler, head_timeout; body_cap: body_cap, head_cap: head_cap, body_bytes_per_second: body_bytes_per_second)
+        open = request(connection, buffer, handler, head_timeout, idle_timeout; body_cap: body_cap, head_cap: head_cap, body_bytes_per_second: body_bytes_per_second)
         if open && buffer.len() == 0 {
             // A quiet connection is closed without a word: there is no request
             // to answer. A client that sends nothing more ends it the same way.
@@ -351,7 +351,8 @@ fn request(
     mut connection: net::Connection,
     mut buffer: http1::Buffer,
     keep handler: fn(keep Request) -> Response,
-    head_timeout: time::Duration;
+    head_timeout: time::Duration,
+    keep idle_timeout: time::Duration;
     body_cap: i64 = 1048576,
     head_cap: i64 = 16384,
     body_bytes_per_second: i64 = 500
@@ -402,10 +403,26 @@ fn request(
     }
 
     // Read the rest of the body. Some of it may have arrived with the head,
-    // so this counts from where the head ends. Each read waits until the body
-    // would fall below `body_bytes_per_second`, and not past it.
+    // so this counts from where the head ends. The body's clock starts at its
+    // first byte (ADR-326 D7): the bytes that came with the head, or else the
+    // first read after it. The wait for that read is a quiet connection's,
+    // held to `idle_timeout` (D8). Each later read waits until the body would
+    // fall below `body_bytes_per_second`, and not past it.
     let size = asked.size()
     let end = size + asked.length()
+    if buffer.len() == size && end > size {
+        let first = connection.read(within: idle_timeout) catch {
+            match error {
+                task::TimedOut => refuse(connection, 408, "408 a body that never began"),
+                else => {},
+            }
+            return false
+        }
+        if first.len() == 0 {
+            return false
+        }
+        buffer.take(first)
+    }
     let body_started = time::now()
     while buffer.len() < end {
         let mut more = Bytes([])
