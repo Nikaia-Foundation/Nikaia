@@ -9,12 +9,13 @@
 // line per check, `<check> green` or `<check> red` with its output, and exits 1
 // when one is red (`index` red: the copy could not be written).
 //
-// The first three run on a copy of the index (`git checkout-index` into
+// All four run on a copy of the index (`git checkout-index` into
 // target/pre-push-*), not on the working tree: the shared tree holds other
 // agents' unfinished files, and the self-hosted badge counted them, so the
 // check was green here and red on CI for the same commit (2026-11-01). What is
 // staged is what the next commit holds; with nothing staged it is HEAD.
-// `bump.py check` reads git itself and runs in the checkout.
+// `bump.py check` runs there too: it read the working tree, so another agent's
+// unstaged `.nika` move turned `version` red for every committer (#1187).
 
 use std::process
 
@@ -38,8 +39,8 @@ fn main() throws {
         ok = check("fmt", "cargo", ["fmt", "--all", "--", "--check"], copy.clone())
         ok = check("adr-refs", "python3", ["scripts/check-adr-refs.py"], copy.clone()) && ok
         ok = check("badges", "python3", ["scripts/badges.py", "--check"], copy.clone()) && ok
+        ok = check("version", "python3", ["scripts/bump.py", "check"], copy.clone()) && ok
     }
     process::run("rm", ["-rf", copy])
-    ok = check("version", "python3", ["scripts/bump.py", "check"], ".") && ok
     if !ok { process::exit(1) }
 }
