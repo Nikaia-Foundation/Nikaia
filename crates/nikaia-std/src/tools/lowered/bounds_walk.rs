@@ -1574,6 +1574,9 @@ pub(crate) fn bounding_lin(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFac
                     held.push(walk.arena.ge(result, a));
                     held.push(walk.arena.ge(result, b));
                 }
+                let is_a = walk.arena.equal(result, a);
+                let is_b = walk.arena.equal(result, b);
+                held.push(walk.arena.or(vec![is_a, is_b]));
                 walk.axioms.insert(name, held);
                 return Some(result);
             }

@@ -2742,7 +2742,9 @@ fn bounding_lin(
 			}
 			// **`a.min(b)` is at most each of the two, `a.max(b)` at least
 			// each** (#1516), of whole numbers: `let mut i = at.min(n)`
-			// starts a counter below `n`.
+			// starts a counter below `n`. And either is one of the two
+			// (#1514): `0 <= at` and `0 <= n` give `0 <= at.min(n)`, so
+			// `s.bytes[0..<at.min(s.bytes.len())]` is inside.
 			let picked = words.resolve(method)
 			if args.len() == 1 && (picked == "min" || picked == "max") {
 				let whole = context.std_receivers[node_key(expr)] ?? return null
@@ -2762,6 +2764,9 @@ fn bounding_lin(
 					held.push(walk.arena.ge(result, a))
 					held.push(walk.arena.ge(result, b))
 				}
+				let is_a = walk.arena.equal(result, a)
+				let is_b = walk.arena.equal(result, b)
+				held.push(walk.arena.or([is_a, is_b]))
 				walk.axioms.insert(name, held)
 				return result
 			}
