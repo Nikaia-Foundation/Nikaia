@@ -1,0 +1,43 @@
+// #1584: a program `nikaia run` builds starts with no LD_LIBRARY_PATH even
+// when the run bundle's record was written under another toolchain that is
+// gone since. A first run resolves a copy of the toolchain under a home of
+// its own (as a test that moves HOME does) and writes the record; the copy is
+// removed; a second run in the same cache must not link the program against
+// the removed copy's `std`.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "nikaia"
+}
+
+fn main() throws {
+	let nikaia = toolchain()
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let sysroot = process::run("rustc", ["--print", "sysroot"]).stdout.trim().clone()
+	let name = process::run("basename", [sysroot.clone()]).stdout.trim().clone()
+	let home = f"{tmp}/home"
+	process::run("mkdir", ["-p", f"{home}/.rustup/toolchains", f"{tmp}/a", f"{tmp}/b"])
+	// Hard links: a copy of the toolchain at another path, at no cost.
+	let copied = process::run("cp", ["-al", sysroot, f"{home}/.rustup/toolchains/{name}"])
+	if !copied.ok {
+		println(copied.stderr.trim())
+		process::exit(1)
+	}
+	fs::write(f"{tmp}/a/main.nika", fs::Root::Anywhere, "fn main() throws {\n    println(\"a\")\n}\n")
+	fs::write(f"{tmp}/b/main.nika", fs::Root::Anywhere, "fn main() throws {\n    println(\"b\")\n}\n")
+	let cache = f"{tmp}/cache"
+	let moved: Vec[(String, String)] = [("HOME", home.clone()), ("RUSTUP_HOME", f"{home}/.rustup"), ("RUSTUP_TOOLCHAIN", name.clone()), ("NIKAIA_CACHE_DIR", cache.clone())]
+	let first = process::run(nikaia.clone(), ["run", "main.nika"]; dir: f"{tmp}/a", env: moved, env_remove: ["LD_LIBRARY_PATH"])
+	println(f"first: {first.stdout.trim()} (exit {first.code})")
+	process::run("rm", ["-rf", home])
+	let back: Vec[(String, String)] = [("NIKAIA_CACHE_DIR", cache.clone())]
+	let second = process::run(nikaia, ["run", "main.nika"]; dir: f"{tmp}/b", env: back, env_remove: ["LD_LIBRARY_PATH"])
+	println(f"second: {second.stdout.trim()} (exit {second.code})")
+	if !second.ok {
+		println(second.stderr.trim().replace(tmp, "T"))
+	}
+	process::run("rm", ["-rf", tmp])
+}

@@ -253,15 +253,13 @@ jobs:
           NIKAIA_DUMP_ACCEPTED: ${{ runner.temp }}/accepted
         run: |
           set -o pipefail
-          # As `cargo test` runs a test binary: with the toolchain's libraries
-          # on the loader's path (a program a test builds with `nikaia run`
-          # links `std` dynamically and was only ever run so), and with
-          # rustup's homes and toolchain fixed, as its proxy sets them (a test
-          # that moves HOME still finds `cargo`, `rustc` and the registry).
+          # With rustup's homes and toolchain fixed, as its proxy sets them
+          # under `cargo test` (a test that moves HOME still finds `cargo`,
+          # `rustc` and the registry). No LD_LIBRARY_PATH: a program a test
+          # builds with `nikaia run` finds the toolchain's `std` by the path
+          # written into it (#281, #1584).
           export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
           export RUSTUP_TOOLCHAIN="$(rustup show active-toolchain | cut -d' ' -f1)"
-          sysroot=$(rustc --print sysroot)
-          export LD_LIBRARY_PATH="$sysroot/lib:$(rustc --print target-libdir)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
           itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
           heavy="$HEAVY_MAP_TRUST $HEAVY_SYSROOT_CORES $HEAVY_SYSROOT_PAIR $HEAVY_CORPUS $HEAVY_REST $HEAVY_ELSEWHERE"
