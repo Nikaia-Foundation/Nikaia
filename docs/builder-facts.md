@@ -244,4 +244,8 @@ together with the specification section and an example test.
 * `nikaia test --filter` matches plain text, not a regex: pass one `--filter NAME` per test to run several. (issue-1657)
 * `lowered.rs` changes on every `lower-std` after a `.nika` edit (`LOWERED_DIGEST`): commit it with your lowered file, and check stability by comparing it before and after the second build. (issue-1657)
 * `artifact = "rust-library"` has its own path in `project_drive_drive_to` (`crate_build`): a subcommand added there needs both the program case and the library case probed. (issue-1657)
+* A test of a driver step that builds a compiler needs a stub `cargo` on PATH whose built "compiler" bakes in the source it was built from; with a BUILD of `true` the old code finds no compiler and the test passes there for nothing. (issue-1665)
+* `nikaia run` of a scratch copy of a `tests/compiler` program cannot find the toolchain through its parent; replace `toolchain()` and `root()` with absolute paths in the copy. (issue-1665)
+* The test runner's processes start in `ProgramHost::ran` in `crates/nikaia/src/project.rs`, not in `project_tests.nika`, and `std::process::run` cannot replace them because it returns text only (`NotText` on bytes). (issue-1672)
+* A test program can now set `NIKAIA_TEST_TIME_LIMIT` (default 300 s) on its nested `nikaia test`, which turns a fails-before run of a hang into a few seconds on the new binary; on the old binary, wrap it in `timeout`. (issue-1672)
 
