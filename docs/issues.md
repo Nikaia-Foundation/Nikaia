@@ -138,6 +138,9 @@ it, like the checks in `docs/supervisor.md`.
   Never a Rust test file or a `#[test]` (CLAUDE.md); a builder reads one an
   older issue still names as that program, and does not report it (#1671).
   The order is the order to build in; an item resting on another says so.
+  An item is work a builder can do without GitHub: what to say on another
+  issue is a report's `Comment: #N <text>`, which the driver posts, and an
+  issue whose only point is such a request is closed as noise (#1698, #1707).
   A change to a default or a lowering level names where that level is set
   (`sysroot::tools_build` for `lower-std`, not `Build::default`), the ADRs that
   limit the crate the output lands in (ADR-218 for `nikaia-std`), and the `it`
