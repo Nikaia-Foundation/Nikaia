@@ -494,13 +494,13 @@ pub(crate) fn rules_methods(program: &Program, owner: &str, words: &winnow_gramm
 
 pub(crate) fn rules_escapes(block: &Block, name: &str, methods: &collections::BTreeSet<String>, top: bool, words: &winnow_grammar::InternerContext) -> bool {
     for (at, stmt) in block.stmts.iter().enumerate().map(|(at, item)| (at as i64, item)) {
-        let mut allowed = 0;
+        let mut allowed: i64 = 0;
         match &stmt.node {
-            Stmt::Return(value) => { if rules_is_name((value).as_ref(), name, words) { allowed += 1; } },
-            Stmt::Expr(value) => { if top && at + 1 == block.stmts.len() as i64 && rules_is_name(Some(value), name, words) { allowed += 1; } },
+            Stmt::Return(value) => { allowed += rules_handed_back((value).as_ref(), name, words); },
+            Stmt::Expr(value) => { if top && at + 1 == block.stmts.len() as i64 { allowed += rules_handed_back(Some(value), name, words); } },
             _ => { },
         }
-        let mut bare = 0;
+        let mut bare: i64 = 0;
         for e in check_visit_stmt(&stmt.node) {
             match e {
                 Expr::Variable(n, _) => {
@@ -517,8 +517,9 @@ pub(crate) fn rules_escapes(block: &Block, name: &str, methods: &collections::BT
                 },
                 Expr::Return(value, _) => {
                     let value = nikaia_std::boxed::open(value);
-                    if rules_is_name((value).as_ref(), name, words) { allowed += 1; }
+                    allowed += rules_handed_back((value).as_ref(), name, words);
                 },
+                Expr::StructLit { fields, .. } => { for field in fields.iter() { if field.value.is_none() && words.resolve(field.name) == name { bare += 1; } } },
                 Expr::Closure { .. } => { return true; },
                 Expr::Spawn { .. } => { return true; },
                 _ => { },
@@ -528,6 +529,19 @@ pub(crate) fn rules_escapes(block: &Block, name: &str, methods: &collections::BT
         for inner in check_visit_stmt_blocks(&stmt.node) { if rules_escapes(inner, name, methods, false, words) { return true; } }
     }
     false
+}
+
+pub(crate) fn rules_handed_back(expr: Option<&Expr>, name: &str, words: &winnow_grammar::InternerContext) -> i64 {
+    let e = match expr { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+    match e {
+        Expr::Variable(n, _) => { let n = *n; if words.resolve(n) == name { 1 } else { 0 } },
+        Expr::StructLit { fields, .. } => {
+            let mut count: i64 = 0;
+            for field in fields.iter() { if field.value.is_none() { if words.resolve(field.name) == name { count += 1; } } else { count += rules_handed_back(Option::as_ref(&field.value), name, words); } }
+            count
+        },
+        _ => 0,
+    }
 }
 
 pub(crate) fn rules_is_name(expr: Option<&Expr>, name: &str, words: &winnow_grammar::InternerContext) -> bool {
@@ -1176,7 +1190,7 @@ pub(crate) fn rules_element_inside(walk: &mut BoundsWalk, len: i64, index: &Expr
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn rules_exit(walk: &mut BoundsWalk, facts: &BoundsFacts, returned: Option<&Expr>, throwing: bool, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
     bounding_returned(walk, facts, returned, throwing, context, program, words, ask);
-    for built in walk.rule_built.copy_owned() { if walk.checking && rules_is_name(returned, &built, words) { rules_lengths_hold(walk, facts, &built, ask); } }
+    for built in walk.rule_built.copy_owned() { if walk.checking && rules_handed_back(returned, &built, words) > 0 { rules_lengths_hold(walk, facts, &built, ask); } }
     if !walk.checking || !walk.rule_roots.contains_key("self") { return; }
     let self_owner = nikaia_std::index::or(match walk.rule_roots.get("self") {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),

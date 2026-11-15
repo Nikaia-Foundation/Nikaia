@@ -620,7 +620,9 @@ fn rules_outside(changed: ref BoundsChanged, types: ref collections::BTreeMap[St
 /// statement of its own body, to a literal of one of `owners`, hands it
 /// back only by a `return` or its tail, and uses it otherwise only through
 /// its fields and as the receiver of a method of its type, with no lambda
-/// and no task in it. The `length` rules of that value are asked for where
+/// and no task in it. It may be handed back as a field of the literal a
+/// `return` or the tail hands back (#1653), itself a field of one, and so
+/// on. The `length` rules of that value are asked for where
 /// it is handed back and before each such method (`rules_exit`,
 /// `rules_at_call`), so neither its literal nor what it changes of its
 /// lengths counts against them. The name, its type and the statement that
@@ -683,13 +685,11 @@ fn rules_escapes(block: ref Block, name: ref String, methods: ref collections::B
         let mut allowed = 0
         match stmt.node {
             Stmt::Return(value) => {
-                if rules_is_name(value, name, words) {
-                    allowed += 1
-                }
+                allowed += rules_handed_back(value, name, words)
             },
             Stmt::Expr(value) => {
-                if top && at + 1 == block.stmts.len() && rules_is_name(value, name, words) {
-                    allowed += 1
+                if top && at + 1 == block.stmts.len() {
+                    allowed += rules_handed_back(value, name, words)
                 }
             },
             else => {},
@@ -713,8 +713,15 @@ fn rules_escapes(block: ref Block, name: ref String, methods: ref collections::B
                     }
                 },
                 Expr::Return(value, _) => {
-                    if rules_is_name(value, name, words) {
-                        allowed += 1
+                    allowed += rules_handed_back(value, name, words)
+                },
+                // A field written by its name alone uses the value as a
+                // whole, though no `Variable` stands for it.
+                Expr::StructLit { fields, .. } => {
+                    for field in fields {
+                        if field.value == null && words.resolve(field.name) == name {
+                            bare += 1
+                        }
                     }
                 },
                 Expr::Closure { .. } => return true,
@@ -732,6 +739,30 @@ fn rules_escapes(block: ref Block, name: ref String, methods: ref collections::B
         }
     }
     return false
+}
+
+/// **How often `expr` hands back `name` as a whole**: once where it is the
+/// name alone; of a struct literal, each field that is the name (by its
+/// name alone too) or a literal that hands it back (#1653).
+fn rules_handed_back(expr: ref Expr?, name: ref String, words: ref winnow_grammar::InternerContext) -> i64 {
+    let e = expr ?? return 0
+    return match e {
+        Expr::Variable(n, _) => if words.resolve(n) == name { 1 } else { 0 },
+        Expr::StructLit { fields, .. } => {
+            let mut count = 0
+            for field in fields {
+                if field.value == null {
+                    if words.resolve(field.name) == name {
+                        count += 1
+                    }
+                } else {
+                    count += rules_handed_back(field.value, name, words)
+                }
+            }
+            count
+        },
+        else => 0,
+    }
 }
 
 /// Whether `expr` is the name `name` alone.
@@ -1598,7 +1629,7 @@ fn rules_exit(mut walk: BoundsWalk, facts: ref BoundsFacts, returned: ref Expr?,
     bounding_returned(walk, facts, returned, throwing, context, program, words, ask)
     // What a builder hands back (`rules_builder`).
     for built in walk.rule_built.clone() {
-        if walk.checking && rules_is_name(returned, built, words) {
+        if walk.checking && rules_handed_back(returned, built, words) > 0 {
             rules_lengths_hold(walk, facts, built, ask)
         }
     }

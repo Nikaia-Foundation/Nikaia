@@ -866,7 +866,11 @@ fn bounding_pass(
 	// **The rules between list fields** (ADR-369 D4), of `self` and of each
 	// parameter of a type that has them.
 	rules_given(walk, facts, args, words)
-	let leaves = bounding_block(walk, body, facts, context, program, words, ask)
+	// The body's statements walked as a block's, but what it ends with is
+	// asked with the facts of its own names still held, as a `return` there
+	// would be (#1653): a builder's tail hands back a local.
+	let mut bound: Vec[String] = []
+	let leaves = bounding_stmts(walk, body, 0, facts, bound, context, program, words, ask)
 	if !leaves {
 		// What the body ends with is what it hands back.
 		rules_exit(walk, facts, rules_tail(body), false, context, program, words, ask)

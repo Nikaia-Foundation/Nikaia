@@ -384,7 +384,8 @@ pub(crate) fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block,
     }
     bounding_derived_entry(walk, &mut facts, args, body, context);
     rules_given(walk, &mut facts, args, words);
-    let leaves = bounding_block(walk, body, &mut facts, context, program, words, ask);
+    let mut bound: Vec<String> = vec![];
+    let leaves = bounding_stmts(walk, body, 0, &mut facts, &mut bound, context, program, words, ask);
     if !leaves { rules_exit(walk, &facts, (rules_tail(body)).as_ref(), false, context, program, words, ask); }
 }
 
