@@ -7,7 +7,7 @@ pub(crate) fn check_finding_of(found: &Finding) -> CheckFinding {
     CheckFinding { severity, span: found.span.clone(), code: nikaia_std::block::Text::from(found.code.to_string()), message: nikaia_std::block::Text::from(found.message.to_string()), notes: found.notes.copy_owned(), help: match found.help.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    }, labels: vec![] }
+    }, labels: vec![], edit: None }
 }
 
 impl CheckState {

@@ -558,11 +558,22 @@ pub struct CheckFinding {
     /// **The places in the source it points at**, each with what happens
     /// there (Part III C.2, rule 5).
     pub labels: Vec[CheckLabel],
+    /// **The edit its help names, as data** (#1714): set only where the edit
+    /// is unambiguous, so that `nikaia fix` can make it and the author
+    /// reviews the diff (ADR-005 §3). It changes nothing that is shown.
+    pub edit: CheckEdit?,
+}
+
+/// **A suggested edit to the source** (#1714): the bytes of `span` replaced
+/// by `text`; an empty `text` deletes them.
+pub struct CheckEdit {
+    pub span: Span,
+    pub text: String,
 }
 
 /// A refusal at `span`: an error with no labels.
 pub fn check_refusal(code: ref String, span: ref Span, message: String, notes: Vec[String], help: String?) -> CheckFinding {
-    return CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: code.clone(), message: message, notes: notes, help: help, labels: [] }
+    return CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: code.clone(), message: message, notes: notes, help: help, labels: [], edit: null }
 }
 
 /// **What the checker looks at and does not own**: the file's names, this

@@ -447,7 +447,7 @@ pub(crate) fn check_core_args_door_block<H: CheckHost>(state: &mut CheckState, w
             held.push(view);
         } else if found.is_unknown() && !state.is_a_number(world, &lock) { held.push(Ty::Unknown); } else {
             let door = check_core_args_door(writing);
-            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1124"), message: format!("`{}` takes locks, but this is a `{}`.", door, found.text()), notes: vec![String::from("Taking several locks together keeps them in one order, and only a lock can be taken.")], help: Some(String::from("Pass `SharedMut[T]` values or `Locked[T]` fields.")), labels: vec![] });
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1124"), message: format!("`{}` takes locks, but this is a `{}`.", door, found.text()), notes: vec![String::from("Taking several locks together keeps them in one order, and only a lock can be taken.")], help: Some(String::from("Pass `SharedMut[T]` values or `Locked[T]` fields.")), labels: vec![], edit: None });
             held.push(Ty::Unknown);
         }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };

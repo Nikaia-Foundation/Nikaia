@@ -11,7 +11,7 @@ impl CheckState {
         let letters: Vec<scalar> = nikaia_std::list::chars(called.chars());
         let mut written = nikaia_std::block::Text::from(called.to_string());
         if !letters.is_empty() && (*unsafe { nikaia_std::proven::read(&letters, (0) as usize) }).to_ascii_lowercase() != *unsafe { nikaia_std::proven::read(&letters, (0) as usize) } { written = nikaia_std::block::Text::from(method.to_string()); }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK2203"), message: format!("`{}` takes a lock, but you're already holding one here.", written), notes: vec![String::from("This block runs while a lock is held, so taking a second lock inside it can deadlock.")], help: Some(String::from("Take both locks at once with `access_all(a, b) fn(x, y) { … }`, or compute the value before the block and pass it in.")), labels: vec![CheckLabel { span: span.clone(), word: method, text: String::from("takes a second lock"), main: true }] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK2203"), message: format!("`{}` takes a lock, but you're already holding one here.", written), notes: vec![String::from("This block runs while a lock is held, so taking a second lock inside it can deadlock.")], help: Some(String::from("Take both locks at once with `access_all(a, b) fn(x, y) { … }`, or compute the value before the block and pass it in.")), labels: vec![CheckLabel { span: span.clone(), word: method, text: String::from("takes a second lock"), main: true }], edit: None });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

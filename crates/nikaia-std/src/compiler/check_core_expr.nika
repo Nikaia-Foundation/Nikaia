@@ -59,7 +59,7 @@ fn check_core_expr_char_scalars[H: CheckHost](mut state: CheckState, host: ref H
         let one = scalars[0]
         let hex = hex_of(one as i64)
         let note = f"Your editor stored this character decomposed, as {count} scalars; composed (NFC) they are the one scalar `'{one}'`, and that is what the literal is."
-        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1213", message: f"This `'…'` is written as {count} scalars that compose to one, `'{one}'`.", notes: [note], help: f"Write the composed character, `'{one}'`, or `'\\u{{{hex}}}'`.", labels: [] })
+        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1213", message: f"This `'…'` is written as {count} scalars that compose to one, `'{one}'`.", notes: [note], help: f"Write the composed character, `'{one}'`, or `'\\u{{{hex}}}'`.", labels: [], edit: null })
         return
     }
     let mut quoted: String = ""

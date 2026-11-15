@@ -839,7 +839,7 @@ fn project_drive_splice_checked[H: ProjectDriveHost](host: ref H, rust_library: 
         return 0
     }
     let span = project_drive_splice_span(toml, key)
-    let shown = Shown { warning: false, code: "NK1348", message: message, notes: [], help: help, span: span, labels: [] }
+    let shown = Shown { warning: false, code: "NK1348", message: message, notes: [], help: help, span: span, labels: [], edit: null }
     host.eprint(rendered(shown, path, toml))
     return 1
 }
@@ -924,7 +924,7 @@ fn project_drive_no_main[H: ProjectDriveHost](host: ref H, entry: ref fs::Path, 
     }
     let message = f"A program starts at its `fn main`, and `{path}` declares none."
     let help: String = "Add `fn main()` to it, or, for a package that is built as a library, name the library under `[build]`: `artifact = \"rust-library\"` or `artifact = \"c-library\"`."
-    let shown = Shown { warning: false, code: "NK1351", message: message, notes: [], help: help, span: Span { start: 0, end: 0 }, labels: [] }
+    let shown = Shown { warning: false, code: "NK1351", message: message, notes: [], help: help, span: Span { start: 0, end: 0 }, labels: [], edit: null }
     host.eprint(rendered(shown, path, source))
     return 1
 }
@@ -934,7 +934,7 @@ fn project_drive_no_main[H: ProjectDriveHost](host: ref H, entry: ref fs::Path, 
 fn project_drive_features_refused[H: ProjectDriveHost](host: ref H, refusal: ref FeaturesRefusal) -> i32 sync {
     let (path, toml) = host.manifest_text()
     let span = features_span(toml, refusal.feature, refusal.entry)
-    let shown = Shown { warning: false, code: refusal.code.clone(), message: refusal.message.clone(), notes: [], help: refusal.help?.clone(), span: span, labels: [] }
+    let shown = Shown { warning: false, code: refusal.code.clone(), message: refusal.message.clone(), notes: [], help: refusal.help?.clone(), span: span, labels: [], edit: null }
     host.eprint(rendered(shown, path, toml))
     return 1
 }

@@ -133,7 +133,7 @@ pub fn lost_sync(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledg
         let mut notes: Vec<String> = vec![];
         if pause.chain.len() > 1 { notes.push(format!("{}, which pauses here.", pause_path(&pause.chain))); }
         notes.push(format!("{} can pause.", site.what));
-        let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: site.span.start, end: site.span.end }, code: String::from("NK2211"), message, notes, help: Some(help), labels: vec![] };
+        let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: site.span.start, end: site.span.end }, code: String::from("NK2211"), message, notes, help: Some(help), labels: vec![], edit: None };
         out.push_str(&render(&finding, pause.unit));
     }
     out

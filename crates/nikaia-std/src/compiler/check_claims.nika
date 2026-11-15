@@ -52,7 +52,7 @@ pub fn check_claims_unproved(findings: ref Vec[CheckFinding], claims: ref collec
             else => continue,
         }
         let at = start as u32
-        unproved.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: at, end: at + "assert".len() as u32 }, code: "NK1300", message: message, notes: ["Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.", "`nikaia check --asserts` lists every claim and why it is not proved."], help: "Give the compiler what it needs to prove it, or build with `unproved-claims = \"warn\"` to have it checked when the program runs.", labels: [] })
+        unproved.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: at, end: at + "assert".len() as u32 }, code: "NK1300", message: message, notes: ["Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.", "`nikaia check --asserts` lists every claim and why it is not proved."], help: "Give the compiler what it needs to prove it, or build with `unproved-claims = \"warn\"` to have it checked when the program runs.", labels: [], edit: null })
     }
     return unproved
 }
@@ -77,7 +77,7 @@ pub fn check_claims_assumes_in_std(claims: ref collections::BTreeMap[(i64, i64),
             continue
         }
         let at = start as u32
-        refused.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: at, end: at + "assume".len() as u32 }, code: "NK1295", message: "`std` assumes nothing: an `assume` is refused in `std`'s Nikaia.", notes: ["`std`'s `unsafe` lives in the small crates of ADR-218, each listed."], help: "Prove the claim with `assert`, or move the code into a listed crate.", labels: [] })
+        refused.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: at, end: at + "assume".len() as u32 }, code: "NK1295", message: "`std` assumes nothing: an `assume` is refused in `std`'s Nikaia.", notes: ["`std`'s `unsafe` lives in the small crates of ADR-218, each listed."], help: "Prove the claim with `assert`, or move the code into a listed crate.", labels: [], edit: null })
     }
     return refused
 }

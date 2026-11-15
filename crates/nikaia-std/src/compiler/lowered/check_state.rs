@@ -297,9 +297,16 @@ pub struct CheckFinding {
     pub notes: Vec<String>,
     pub help: Option<String>,
     pub labels: Vec<CheckLabel>,
+    pub edit: Option<CheckEdit>,
 }
 
-pub fn check_refusal(code: &str, span: &Span, message: String, notes: Vec<String>, help: Option<String>) -> CheckFinding { CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: nikaia_std::block::Text::from(code.to_string()), message, notes, help, labels: vec![] } }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CheckEdit {
+    pub span: Span,
+    pub text: String,
+}
+
+pub fn check_refusal(code: &str, span: &Span, message: String, notes: Vec<String>, help: Option<String>) -> CheckFinding { CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: nikaia_std::block::Text::from(code.to_string()), message, notes, help, labels: vec![], edit: None } }
 
 #[derive(Debug, Clone)]
 pub struct CheckWorld<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6> {

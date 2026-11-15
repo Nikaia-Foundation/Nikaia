@@ -1996,6 +1996,17 @@ mod findings_lowered {
 pub use findings_lowered::*;
 
 #[allow(unsafe_code)]
+mod fix_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/fix.rs");
+}
+#[allow(unused_imports)]
+pub use fix_lowered::*;
+
+#[allow(unsafe_code)]
 mod fixed_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -3680,7 +3691,7 @@ pub mod check_simd {
 }
 pub mod check_state {
     #[allow(unused_imports)]
-    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, CheckHeldTaking, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
+    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, CheckHeldTaking, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
 }
 pub mod check_takes {
     #[allow(unused_imports)]
@@ -3932,6 +3943,10 @@ pub mod escapes {
 pub mod findings {
     #[allow(unused_imports)]
     pub use super::{Finding, refusal};
+}
+pub mod fix {
+    #[allow(unused_imports)]
+    pub use super::{FixPlan, fix_run, fix_planned, fix_diff};
 }
 pub mod fixed {
     #[allow(unused_imports)]
@@ -4408,4 +4423,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "42a9b7562963b563262f3de626ecfc4bc9714e9272f1bc5f39ec30982896002c";
+pub const LOWERED_DIGEST: &str = "995477a49770fe2c1b30f0a3f07b8785e65d5d04e4c534369facce274d5635ad";

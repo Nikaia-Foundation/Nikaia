@@ -1,0 +1,252 @@
+// crates/nikaia-std/src/compiler/fix.nika
+//
+// **`nikaia fix PATH...`** (#1714): the edits the checker's warnings suggest,
+// made in the source, so that the author reviews them as a diff. A finding
+// carries an edit (`CheckEdit`) only where its help names one unambiguous
+// change; the first is `NK1350`'s, the `.clone()` that copies nothing new,
+// deleted. Diagnostics suggest and the author decides (ADR-005 §3): the
+// compiler drops no clone by itself, and what a cleanup point is stays written
+// in the source (ADR-037 D7).
+//
+// **Over the bytes, not the tree**, as `migrate print-throws` is
+// (`migrate_print_throws.nika`): every token, blank and comment stays as
+// written, and only the edits are made. Each file named, and each `.nika` file
+// under a directory named (but `target/`), is checked as `nikaia check` checks
+// it (`LspHost::diagnose`, the language server's question); a file whose check
+// has an error is left alone. The edits are made in order and do not move one
+// another; two that overlap are both left, and the run names them.
+
+use std::collections
+use std::fs
+
+/// **What `fix` makes of one file**: its new text, and a line for each edit
+/// made and each one left (`path:line: code: what`).
+pub struct FixPlan {
+    pub text: String,
+    pub said: Vec[String],
+    /// The file is left alone: its check has an error, or an edit does not
+    /// fall on its characters.
+    pub left: bool,
+}
+
+/// One edit planned: the bytes `start` to `end` of the file replaced by
+/// `text`, for the finding `code`.
+struct FixEdit {
+    start: i64,
+    end: i64,
+    text: String,
+    code: String,
+}
+
+/// **`nikaia fix`**: the exit code. Each file is written where it changes and
+/// each edit named; with `dry_run` nothing is written and the diff of each
+/// file is printed instead. 1 where a file was left alone or could not be read.
+pub fn fix_run[H: LspHost](host: ref H, named: ref Vec[String], dry_run: bool) -> i64 throws {
+    let mut files: Vec[String] = []
+    for path in named {
+        fix_files_under(path, files)
+    }
+    let open: collections::BTreeMap[String, String] = collections::BTreeMap()
+    let mut code = 0
+    for file in files {
+        let source = fs::read_to_string(file, fs::Root::Anywhere) catch {
+            eprintln(f"{file}: cannot read it: {error}")
+            code = 1
+            continue
+        }
+        let mut here: Vec[Shown] = []
+        for (path, shown) in host.diagnose(file, open, false) {
+            if fix_same_file(path, file) {
+                here.push(shown.clone())
+            }
+        }
+        let plan = fix_planned(file, source, here)
+        if plan.left {
+            code = 1
+        }
+        for line in plan.said {
+            println(line)
+        }
+        if plan.text == source {
+            continue
+        }
+        if dry_run {
+            print(fix_diff(file, source, plan.text))
+            continue
+        }
+        fs::write(file, fs::Root::Anywhere, plan.text) catch {
+            eprintln(f"{file}: cannot write it: {error}")
+            code = 1
+        }
+    }
+    return code
+}
+
+/// **The edits of `found` made in `source`** (the findings of the file at
+/// `path`): none where one of them is an error. The edits are made in the
+/// order of the file; one that overlaps the one before it is left, and said.
+pub fn fix_planned(path: ref String, source: ref String, found: ref Vec[Shown]) -> FixPlan sync {
+    for shown in found {
+        if !shown.warning {
+            return FixPlan { text: source.clone(), said: [f"{path}: not fixed: its check has errors"], left: true }
+        }
+    }
+    let size = source.bytes.len() as i64
+    let mut edits: Vec[FixEdit] = []
+    for shown in found {
+        let edit = shown.edit ?? continue
+        let one = FixEdit { start: edit.span.start as i64, end: edit.span.end as i64, text: edit.text.clone(), code: shown.code.clone() }
+        if one.start > one.end || one.end > size {
+            continue
+        }
+        // A finding said twice (a file of a package checked with another)
+        // is one edit.
+        if !edits.iter().any(fn(e) { e.start == one.start && e.end == one.end && e.text == one.text }) {
+            edits.push(one)
+        }
+    }
+    edits.sort_by_key(fn(e) { e.start })
+    let mut said: Vec[String] = []
+    let mut out = ""
+    let mut at = 0
+    for edit in edits {
+        let line = fix_line_of(source, edit.start)
+        if edit.start < at {
+            said.push(f"{path}:{line}: {edit.code}: not applied: it overlaps the edit before it")
+            continue
+        }
+        let kept = fix_cut(source, at, edit.start) ?? return fix_off_characters(path, source)
+        let old = fix_cut(source, edit.start, edit.end) ?? return fix_off_characters(path, source)
+        out.push_str(kept)
+        out.push_str(edit.text)
+        at = edit.end
+        if edit.text.is_empty() {
+            said.push(f"{path}:{line}: {edit.code}: deleted `{old}`")
+        } else {
+            said.push(f"{path}:{line}: {edit.code}: replaced `{old}` with `{edit.text}`")
+        }
+    }
+    let rest = fix_cut(source, at, size) ?? return fix_off_characters(path, source)
+    out.push_str(rest)
+    return FixPlan { text: out, said: said, left: false }
+}
+
+// A file an edit would cut inside a character: left alone.
+fn fix_off_characters(path: ref String, source: ref String) -> FixPlan sync {
+    return FixPlan { text: source.clone(), said: [f"{path}: not fixed: an edit does not fall between its characters"], left: true }
+}
+
+/// **The diff of `old` to `new`, as `diff -u` writes it**, one hunk per run of
+/// changed lines, with no lines of context: the lines that differ between a
+/// common head and a common tail of each changed stretch.
+pub fn fix_diff(path: ref String, old: ref String, new: ref String) -> String sync {
+    let was: Vec[ref String] = old.split("\n").collect()
+    let now: Vec[ref String] = new.split("\n").collect()
+    let mut out = f"--- {path}\n+++ {path}\n"
+    let mut i = 0
+    let mut j = 0
+    while i < was.len() as i64 && j < now.len() as i64 {
+        if was[i] == now[j] {
+            i += 1
+            j += 1
+            continue
+        }
+        // A changed stretch ends where the rest of both is the same again:
+        // the first later pair of equal lines whose tails agree in count.
+        let left_over = was.len() as i64 - i
+        let right_over = now.len() as i64 - j
+        let mut a = i
+        let mut b = j
+        let mut found = false
+        while !found && a <= was.len() as i64 {
+            b = a - i + j + (right_over - left_over)
+            if b >= j && b <= now.len() as i64 && fix_same_from(was, a, now, b) {
+                found = true
+            } else {
+                a += 1
+            }
+        }
+        if !found {
+            a = was.len() as i64
+            b = now.len() as i64
+        }
+        out.push_str(f"@@ -{i + 1},{a - i} +{j + 1},{b - j} @@\n")
+        for k in i..<a {
+            out.push_str(f"-{was[k]}\n")
+        }
+        for k in j..<b {
+            out.push_str(f"+{now[k]}\n")
+        }
+        i = a
+        j = b
+    }
+    return out
+}
+
+// Whether `was` from `a` and `now` from `b` start with an equal line, or are
+// both at their end.
+fn fix_same_from(was: ref Vec[ref String], a: i64, now: ref Vec[ref String], b: i64) -> bool sync {
+    if a == was.len() as i64 || b == now.len() as i64 {
+        return a == was.len() as i64 && b == now.len() as i64
+    }
+    return was[a] == now[b]
+}
+
+// The 1-based line byte `at` of `source` stands on.
+fn fix_line_of(source: ref String, at: i64) -> i64 sync {
+    let mut line = 1
+    for b in source.bytes[0..<at] {
+        if b == 10 {
+            line += 1
+        }
+    }
+    return line
+}
+
+// The bytes `a` to `b` of `source`, or nothing where they do not fall
+// between its characters.
+fn fix_cut(source: ref String, a: i64, b: i64) -> String? sync {
+    if a < 0 || b < a || b > source.bytes.len() as i64 {
+        return null
+    }
+    let cut = source.bytes[a..<b].text() catch { return null }
+    return cut.clone()
+}
+
+// Whether two paths name one file.
+fn fix_same_file(a: ref String, b: ref String) -> bool sync {
+    if a == b {
+        return true
+    }
+    let one = fs::canonical(a, fs::Root::Anywhere) catch { return false }
+    let other = fs::canonical(b, fs::Root::Anywhere) catch { return false }
+    return one.display() == other.display()
+}
+
+// The file `path`, or each `.nika` file under the directory `path` but those
+// of a `target/` directory, in order.
+fn fix_files_under(path: ref String, mut files: Vec[String]) {
+    let meta = fs::metadata(path, fs::Root::Anywhere) catch {
+        files.push(path.clone())
+        return
+    }
+    if !meta.is_dir() {
+        files.push(path.clone())
+        return
+    }
+    let mut found: Vec[String] = []
+    let names = fs::walk(path, fs::Root::Anywhere) catch { return }
+    for name in names.iter() {
+        if (name.extension()?.text_of() ?? "") != "nika" {
+            continue
+        }
+        let relative = name.to_text() catch { continue }
+        if f"/{relative}".contains("/target/") {
+            continue
+        }
+        let base = path.trim_end_matches("/")
+        found.push(f"{base}/{relative}")
+    }
+    found.sort()
+    files.extend(found)
+}

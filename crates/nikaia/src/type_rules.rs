@@ -52,6 +52,8 @@ fn refused(span: Span, head: String, help: &str) -> anyhow::Error {
             text: String::new(),
             main: true,
         }],
+
+        edit: None,
     };
     crate::diagnostics::refuse_finding(finding, format!("NK1288: {head} {help}"))
 }

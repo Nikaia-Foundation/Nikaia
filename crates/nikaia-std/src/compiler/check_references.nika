@@ -185,7 +185,7 @@ impl CheckState {
                 }
             }
             if under {
-                self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: "NK1137", message: "You don't need the `ref` here: the compiler lends where it's needed.", notes: [f"`{written}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call."], help: "Remove the `ref`.", labels: [] })
+                self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: "NK1137", message: "You don't need the `ref` here: the compiler lends where it's needed.", notes: [f"`{written}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call."], help: "Remove the `ref`.", labels: [], edit: null })
                 return true
             }
         }
@@ -361,7 +361,7 @@ impl CheckState {
             if takes_a_receiver {
                 return true
             }
-            self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1137", message: "You don't need the `ref` here: the compiler lends where it's needed.", notes: [f"`{written}` only reads this argument, so it's lent already. Whether an argument is lent or handed over is decided by the function, not the call."], help: "Remove the `ref`.", labels: [] })
+            self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1137", message: "You don't need the `ref` here: the compiler lends where it's needed.", notes: [f"`{written}` only reads this argument, so it's lent already. Whether an argument is lent or handed over is decided by the function, not the call."], help: "Remove the `ref`.", labels: [], edit: null })
             return true
         }
         // **A view of a nullable handed to a nullable view** is recorded, and

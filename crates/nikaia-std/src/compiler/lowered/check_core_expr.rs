@@ -40,7 +40,7 @@ pub(crate) fn check_core_expr_char_scalars<H: CheckHost>(state: &mut CheckState,
         let one = *unsafe { nikaia_std::proven::read(&scalars, (0) as usize) };
         let hex = hex_of(one as i64);
         let note = format!("Your editor stored this character decomposed, as {} scalars; composed (NFC) they are the one scalar `'{}'`, and that is what the literal is.", count, one);
-        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1213"), message: format!("This `'…'` is written as {} scalars that compose to one, `'{}'`.", count, one), notes: vec![note], help: Some(format!("Write the composed character, `'{}'`, or `'\\u{{{}}}'`.", one, hex)), labels: vec![] });
+        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1213"), message: format!("This `'…'` is written as {} scalars that compose to one, `'{}'`.", count, one), notes: vec![note], help: Some(format!("Write the composed character, `'{}'`, or `'\\u{{{}}}'`.", one, hex)), labels: vec![], edit: None });
         return;
     }
     let mut quoted: String = String::from("");

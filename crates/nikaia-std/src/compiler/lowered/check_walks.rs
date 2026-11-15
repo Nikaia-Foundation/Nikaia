@@ -208,7 +208,7 @@ pub(crate) fn check_walks_window(state: &CheckState, world: &CheckWorld<'_, '_, 
             if clash.is_some() {
                 let verdict = nikaia_std::index::or(clash, || Verdict::NotAccountedFor);
                 let why = capitalised(&verdict.why());
-                out.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: String::from("NK2104"), message: String::from("This statement can't run at the same time as a task before it."), notes: vec![format!("{}.", why), String::from("A task runs beside the statements after it until it is waited for: the end of its group, or where its value is read.")], help: Some(String::from("If it should run after the task, move it after the group's end or after the read of the task's value, or write the task without `async`.")), labels: vec![] });
+                out.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: String::from("NK2104"), message: String::from("This statement can't run at the same time as a task before it."), notes: vec![format!("{}.", why), String::from("A task runs beside the statements after it until it is waited for: the end of its group, or where its value is read.")], help: Some(String::from("If it should run after the task, move it after the group's end or after the read of the task's value, or write the task without `async`.")), labels: vec![], edit: None });
                 break;
             }
         }
@@ -228,7 +228,7 @@ impl CheckState {
                         bound.push(nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
                     }
                     let name = nikaia_std::block::Text::from(bound.join("`, `"));
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: String::from("NK2104"), message: format!("A branch of an `overlap` can't declare `{}`.", name), notes: vec![String::from("Each statement in the block runs as its own branch, and the block's value is their results in the order they're written.")], help: Some(format!("Take the value from the block instead: `let ({}, …) = overlap {{ … }}`.", name)), labels: vec![] });
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: String::from("NK2104"), message: format!("A branch of an `overlap` can't declare `{}`.", name), notes: vec![String::from("Each statement in the block runs as its own branch, and the block's value is their results in the order they're written.")], help: Some(format!("Take the value from the block instead: `let ({}, …) = overlap {{ … }}`.", name)), labels: vec![], edit: None });
                 },
                 _ => { },
             }
@@ -251,14 +251,14 @@ impl CheckState {
                 if shared.is_some() {
                     let (name, both) = nikaia_std::index::or(shared, || ("".into(), false.into()));
                     let note = if both { format!("Both change `{}`.", name) } else { format!("One changes `{}`, and the other reads it.", name) };
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.span.clone(), code: String::from("NK2104"), message: String::from("These two branches can't run at the same time."), notes: vec![note, String::from("`overlap` runs its branches at once, so a binding one changes can't be touched by the other.")], help: Some(String::from("If they should run in order, write them as ordinary statements.")), labels: vec![] });
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.span.clone(), code: String::from("NK2104"), message: String::from("These two branches can't run at the same time."), notes: vec![note, String::from("`overlap` runs its branches at once, so a binding one changes can't be touched by the other.")], help: Some(String::from("If they should run in order, write them as ordinary statements.")), labels: vec![], edit: None });
                     break;
                 }
                 let clash = check_walks_clash(unsafe { nikaia_std::proven::read(&operations, (i) as usize) }, unsafe { nikaia_std::proven::read(&operations, (j) as usize) });
                 if clash.is_some() {
                     let verdict = nikaia_std::index::or(clash, || Verdict::NotAccountedFor);
                     let why = capitalised(&verdict.why());
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.span.clone(), code: String::from("NK2104"), message: String::from("These two branches can't run at the same time."), notes: vec![format!("{}.", why), String::from("`overlap` runs its branches at once, so they can't depend on each other.")], help: Some(String::from("If they should run in order, write them as ordinary statements.")), labels: vec![] });
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.span.clone(), code: String::from("NK2104"), message: String::from("These two branches can't run at the same time."), notes: vec![format!("{}.", why), String::from("`overlap` runs its branches at once, so they can't depend on each other.")], help: Some(String::from("If they should run in order, write them as ordinary statements.")), labels: vec![], edit: None });
                     break;
                 }
             }
@@ -305,7 +305,7 @@ impl CheckState {
                 if clash.is_some() {
                     let verdict = nikaia_std::index::or(clash, || Verdict::NotAccountedFor);
                     let why = capitalised(&verdict.why());
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: later.span.clone(), code: String::from("NK2104"), message: String::from("These two tasks can't run at the same time."), notes: vec![format!("{}.", why), String::from("The tasks of a group run at the same time, so they can't depend on each other.")], help: Some(String::from("If they should run in order, wait for the first before the second starts, or write them without `async`.")), labels: vec![] });
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: later.span.clone(), code: String::from("NK2104"), message: String::from("These two tasks can't run at the same time."), notes: vec![format!("{}.", why), String::from("The tasks of a group run at the same time, so they can't depend on each other.")], help: Some(String::from("If they should run in order, wait for the first before the second starts, or write them without `async`.")), labels: vec![], edit: None });
                     break;
                 }
             }

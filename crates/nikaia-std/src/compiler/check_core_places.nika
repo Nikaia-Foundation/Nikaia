@@ -147,7 +147,7 @@ fn check_core_places_tuple_part(mut state: CheckState, parts: ref Vec[Ty], field
         if count > 0 {
             help = f"Use one of `.0` to `.{last}`."
         }
-        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1107", message: f"This tuple has no part `.{at}`.", notes: [f"A tuple's parts are counted from 0, and this one has {count}."], help: help, labels: [] })
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1107", message: f"This tuple has no part `.{at}`.", notes: [f"A tuple's parts are counted from 0, and this one has {count}."], help: help, labels: [], edit: null })
         return Ty::Unknown
     }
     if at < 0 {
@@ -323,7 +323,7 @@ fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref Check
     let members = several_errors_of(on)
     if members.len() > 0 {
         let named = members_named(members)
-        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1107", message: f"This is an error, one of {named}, and an error has no field `{field}`.", notes: ["A field belongs to one of them, and which one it is is said by a `match`."], help: f"Take it apart first: `match error {{ … }}`, and read `{field}` in the arm of the type that has it.", labels: [] })
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1107", message: f"This is an error, one of {named}, and an error has no field `{field}`.", notes: ["A field belongs to one of them, and which one it is is said by a `match`."], help: f"Take it apart first: `match error {{ … }}`, and read `{field}` in the arm of the type that has it.", labels: [], edit: null })
         return Ty::Unknown
     }
     match on {

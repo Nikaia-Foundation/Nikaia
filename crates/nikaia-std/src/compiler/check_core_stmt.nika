@@ -1479,7 +1479,7 @@ fn check_core_stmt_an_immutable_that_changes(mut state: CheckState, world: ref C
     let note: String = "`immutable` promises that nothing reachable from the value ever changes (ADR-389). A `SharedMut`, a `Locked` and a channel end are changed through every other owner of the same storage."
     let help: String = "Bind it with `let`, or hold a value that can't change: a copy, or a `Shared[T]` of a `T` that can't change."
     let label = CheckLabel { span: at.clone(), word: "", text: "can change through another owner", main: true }
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1331", message: message, notes: [note], help: help, labels: [label] })
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1331", message: message, notes: [note], help: help, labels: [label], edit: null })
 }
 
 /// A handle to storage another owner changes: `SharedMut`, `Locked`, a

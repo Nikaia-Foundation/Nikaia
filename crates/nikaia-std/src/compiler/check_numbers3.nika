@@ -14,7 +14,7 @@ fn check_finding_of(found: ref Finding) -> CheckFinding {
     if found.warning {
         severity = CheckSeverity::Warning
     }
-    return CheckFinding { severity: severity, span: found.span.clone(), code: found.code.clone(), message: found.message.clone(), notes: found.notes.clone(), help: found.help?.clone(), labels: [] }
+    return CheckFinding { severity: severity, span: found.span.clone(), code: found.code.clone(), message: found.message.clone(), notes: found.notes.clone(), help: found.help?.clone(), labels: [], edit: null }
 }
 
 impl CheckState {

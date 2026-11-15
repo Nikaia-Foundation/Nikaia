@@ -140,6 +140,6 @@ impl CheckState {
         if self.inside_a_drop && function.ends_with("::drop") {
             help = drop_help((function.strip_suffix("::drop") ?? "").clone())
         }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK2605", message: f"This function can fail, because `{key}` can fail.", notes: [f"`{key}` can fail with {list}.", "A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it."], help: help, labels: [] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK2605", message: f"This function can fail, because `{key}` can fail.", notes: [f"`{key}` can fail with {list}.", "A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it."], help: help, labels: [], edit: null })
     }
 }

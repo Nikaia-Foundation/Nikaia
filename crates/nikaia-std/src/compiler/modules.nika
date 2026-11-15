@@ -235,7 +235,7 @@ pub fn lost_sync(contracts: ref Ledger, theirs: ref collections::BTreeMap[String
             notes.push(f"{pause_path(pause.chain)}, which pauses here.")
         }
         notes.push(f"{site.what} can pause.")
-        let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: site.span.start, end: site.span.end }, code: "NK2211", message: message, notes: notes, help: help, labels: [] }
+        let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: site.span.start, end: site.span.end }, code: "NK2211", message: message, notes: notes, help: help, labels: [], edit: null }
         out.push_str(render(finding, pause.unit))
     }
     return out

@@ -591,7 +591,7 @@ pub(crate) fn project_drive_splice_checked<H: ProjectDriveHost>(host: &H, rust_l
     }
     if message.is_empty() { return 0; }
     let span = project_drive_splice_span(&toml, &key);
-    let shown = Shown { warning: false, code: String::from("NK1348"), message, notes: vec![], help: Some(help), span, labels: vec![] };
+    let shown = Shown { warning: false, code: String::from("NK1348"), message, notes: vec![], help: Some(help), span, labels: vec![], edit: None };
     host.eprint(&rendered(&shown, &path, &toml));
     1
 }
@@ -682,7 +682,7 @@ pub(crate) fn project_drive_no_main<H: ProjectDriveHost>(host: &H, entry: &std::
     };
     let message = format!("A program starts at its `fn main`, and `{}` declares none.", path);
     let help: String = String::from("Add `fn main()` to it, or, for a package that is built as a library, name the library under `[build]`: `artifact = \"rust-library\"` or `artifact = \"c-library\"`.");
-    let shown = Shown { warning: false, code: String::from("NK1351"), message, notes: vec![], help: Some(help), span: Span { start: 0, end: 0 }, labels: vec![] };
+    let shown = Shown { warning: false, code: String::from("NK1351"), message, notes: vec![], help: Some(help), span: Span { start: 0, end: 0 }, labels: vec![], edit: None };
     host.eprint(&rendered(&shown, &path, source));
     1
 }
@@ -695,7 +695,7 @@ pub(crate) fn project_drive_features_refused<H: ProjectDriveHost>(host: &H, refu
     let shown = Shown { warning: false, code: nikaia_std::block::Text::from(refusal.code.to_string()), message: nikaia_std::block::Text::from(refusal.message.to_string()), notes: vec![], help: match refusal.help.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    }, span, labels: vec![] };
+    }, span, labels: vec![], edit: None };
     host.eprint(&rendered(&shown, &path, &toml));
     1
 }
@@ -799,8 +799,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple59611| {
-        let (a, b) = __nikaia_tuple59611;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple59647| {
+        let (a, b) = __nikaia_tuple59647;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {

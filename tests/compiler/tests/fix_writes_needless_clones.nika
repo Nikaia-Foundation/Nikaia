@@ -1,0 +1,34 @@
+// #1714: `nikaia fix` deletes the three needless clones of
+// `fix_needless_clone.nika` (one per shape of `NK1350`) and keeps the one
+// still needed. `--dry-run` names each edit and prints the diff, writing
+// nothing; `fix` writes the file, which then checks with no `NK1350` and runs
+// with the output it had.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let file = f"{tmp}/main.nika"
+    fs::write(file, fs::Root::Anywhere, "struct P { x: i64, y: i64 }\n\nfn take(s: String) -> i64 {\n    return s.len() as i64\n}\n\nfn make() -> String {\n    let mut g = String()\n    g.push_str(\"abc\")\n    return g\n}\n\nfn main() throws {\n    let p = P { x: 1, y: 2 }\n    let q = p.clone()\n    println(q.x + p.y)\n    let s = make()\n    println(take(s.clone()))\n    let xs = [1, 2, 3]\n    for x in xs.clone() {\n        println(x)\n    }\n    println(xs.len())\n    let t = make()\n    println(take(t.clone()))\n    println(t)\n}\n")
+    let before = process::run(nikaia, ["run", f"{tmp}/main.nika"])
+    let dry = process::run(nikaia, ["fix", "--dry-run", f"{tmp}/main.nika"])
+    print(f"dry run: {dry.stdout}{dry.stderr}".replace(tmp, "TMP"))
+    let same = fs::read_to_string(file, fs::Root::Anywhere) == "struct P { x: i64, y: i64 }\n\nfn take(s: String) -> i64 {\n    return s.len() as i64\n}\n\nfn make() -> String {\n    let mut g = String()\n    g.push_str(\"abc\")\n    return g\n}\n\nfn main() throws {\n    let p = P { x: 1, y: 2 }\n    let q = p.clone()\n    println(q.x + p.y)\n    let s = make()\n    println(take(s.clone()))\n    let xs = [1, 2, 3]\n    for x in xs.clone() {\n        println(x)\n    }\n    println(xs.len())\n    let t = make()\n    println(take(t.clone()))\n    println(t)\n}\n"
+    println(f"unchanged after the dry run: {same}")
+    let fixed = process::run(nikaia, ["fix", f"{tmp}/main.nika"])
+    print(f"fix: {fixed.stdout}{fixed.stderr}".replace(tmp, "TMP"))
+    print(fs::read_to_string(file, fs::Root::Anywhere))
+    let checked = process::run(nikaia, ["check", f"{tmp}/main.nika"])
+    print(f"check: {checked.stdout}{checked.stderr}".replace(tmp, "TMP"))
+    let after = process::run(nikaia, ["run", f"{tmp}/main.nika"])
+    println(f"same output: {after.stdout == before.stdout}")
+    print(after.stdout)
+    process::run("rm", ["-rf", tmp])
+}

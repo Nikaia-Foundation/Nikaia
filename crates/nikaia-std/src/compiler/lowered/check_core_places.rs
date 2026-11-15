@@ -91,7 +91,7 @@ pub(crate) fn check_core_places_tuple_part(state: &mut CheckState, parts: &[Ty],
         if last < 0 { last = 0; }
         let mut help: String = String::from("There's nothing in it to read.");
         if count > 0 { help = format!("Use one of `.0` to `.{}`.", last); }
-        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1107"), message: format!("This tuple has no part `.{}`.", at), notes: vec![format!("A tuple's parts are counted from 0, and this one has {}.", count)], help: Some(help), labels: vec![] });
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1107"), message: format!("This tuple has no part `.{}`.", at), notes: vec![format!("A tuple's parts are counted from 0, and this one has {}.", count)], help: Some(help), labels: vec![], edit: None });
         return Ty::Unknown;
     }
     if at < 0 { return Ty::Unknown; }
@@ -228,7 +228,7 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
     let members = several_errors_of(&on);
     if !members.is_empty() {
         let named = members_named(&members);
-        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1107"), message: format!("This is an error, one of {}, and an error has no field `{}`.", named, field), notes: vec![String::from("A field belongs to one of them, and which one it is is said by a `match`.")], help: Some(format!("Take it apart first: `match error {{ … }}`, and read `{}` in the arm of the type that has it.", field)), labels: vec![] });
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1107"), message: format!("This is an error, one of {}, and an error has no field `{}`.", named, field), notes: vec![String::from("A field belongs to one of them, and which one it is is said by a `match`.")], help: Some(format!("Take it apart first: `match error {{ … }}`, and read `{}` in the arm of the type that has it.", field)), labels: vec![], edit: None });
         return Ty::Unknown;
     }
     match on {

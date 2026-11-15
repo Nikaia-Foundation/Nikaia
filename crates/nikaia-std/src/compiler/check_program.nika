@@ -31,6 +31,7 @@ fn check_program_extern_convention(mut state: CheckState, abi: ref String, span:
         notes: [note],
         help: "Write `extern { … }`, or `extern(library: \"name\") { … }` for a block whose functions come from a system library.",
         labels: [],
+        edit: null,
     })
 }
 
