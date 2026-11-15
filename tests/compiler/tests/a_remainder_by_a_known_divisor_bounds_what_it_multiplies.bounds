@@ -1,0 +1,8 @@
+bounds in tests/a_remainder_by_a_known_divisor_bounds_what_it_multiplies.nika: 0 indexes, 0 proved; 7 operations, 3 proved
+     8  s * 1103515245 + 12345  proved
+     8  s * 1103515245          proved
+    13  s * 4611676795073       proved
+    18  s * 4611676795074       checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    22  state % m               checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    24  s * 1103515245 + 12345  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    24  s * 1103515245          checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

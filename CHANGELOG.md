@@ -8,7 +8,7 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
-## [0.0.1394] — 2026-11-15
+## [0.0.1395] — 2026-11-15
 
 **a test program past its time limit fails instead of hanging the run**
 - nikaia test: a test program that runs past its time limit (NIKAIA_TEST_TIME_LIMIT, 300 s by default) is killed with every process it started and fails with "timed out after N s"; the run goes on with the next test (#1672).
@@ -19,6 +19,11 @@ has no heading here; `CLAUDE.md` draws the line.
 - The compiler's Rust module is nikaia_std::compiler, like its directory; `use std::compiler` gets NK1186's toolchain note (#1659).
 - Stale ledgers caught: the driver rebuilds every committed ledger with the compiler of the tree under test (`drive.nika --ledgers BUILD`), and CI fails a stale one under --locked (#1665, #1591).
 - CI: the samples, page examples and ledgers run as a shard of their own.
+
+## [0.0.1394] — 2026-11-15
+
+**a remainder by a known divisor bounds what it multiplies**
+- The bounds walk's reading of `x % m` as a bound below `m` (also `1 - m ..= m - 1` where the sign of `x` is not known) is pinned by a test and named in ADR-306 D8 (#1643).
 
 ## [0.0.1393] — 2026-11-15
 
