@@ -17,7 +17,7 @@ pub(crate) fn mp_shapes(name: &str) -> bool { matches!(name, "clone" | "len" | "
 
 pub(crate) fn mp_is_map(name: &str) -> bool { matches!(&*(mp_short(name)), "HashMap" | "HashSet" | "TrustedMap" | "TrustedSet") }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct MpPosition {
     pub(crate) label: String,
     pub(crate) owner: String,
@@ -32,13 +32,13 @@ pub struct MpHeld<'a, 'a1> {
     pub words: &'a1 [&'a1 winnow_grammar::InternerContext],
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct MpField {
     pub(crate) name: String,
     pub(crate) ty: Type,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct MpStruct {
     pub(crate) unit: i64,
     pub(crate) fields: Vec<MpField>,
@@ -62,14 +62,14 @@ pub(crate) fn mp_structs(held: &MpHeld<'_, '_>) -> collections::BTreeMap<String,
     by_name
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct MpGather {
     pub(crate) target: String,
     pub(crate) nested: bool,
     pub(crate) counters: Vec<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct MpAt {
     pub(crate) owner: String,
     pub(crate) label: String,
@@ -119,7 +119,7 @@ pub(crate) fn mp_of(g: &mut MpGather, held: &MpHeld<'_, '_>, structs: &collectio
     for generic in ty.generics.iter() { mp_of(g, held, structs, key, arity, unit, generic, at, out, unsafe { nikaia_std::proven::add::<i64>(depth, 1) }); }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct MpDep {
     pub(crate) unknown: bool,
     pub(crate) names: collections::BTreeSet<String>,
@@ -142,7 +142,7 @@ pub(crate) fn mp_join(one: &MpDep, other: &MpDep) -> MpDep {
     MpDep { unknown: one.unknown || other.unknown, names }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum MpRes {
     Map(i64),
     Part,
@@ -676,7 +676,7 @@ pub(crate) fn mp_root_is_expr(e: &Expr) -> bool {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MpShape {
     pub groups: Vec<i64>,
     pub within: Vec<Option<i64>>,
@@ -686,20 +686,20 @@ pub struct MpShape {
     pub conflict: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MpFnMaps {
     pub key: String,
     pub lines: Vec<String>,
     pub shape: MpShape,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct MpHow {
     pub(crate) known: bool,
     pub(crate) names: collections::BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct MpParam {
     pub(crate) name: String,
     pub(crate) ty: Type,

@@ -1,0 +1,17 @@
+// #591, ADR-010 D11: a declared struct keys a map of the keyed hash too. The
+// key is read from the environment, so the map takes the per-process seed
+// (ADR-010 D2); `a_declared_type_is_a_hash_key` is the fast class.
+use std::collections
+use std::env
+use std::text
+
+struct P { x: i64, y: i64 }
+
+fn main() throws {
+    let x: i64 = text::parse_i64(env::var("NIKAIA_TEST_591_X") ?? "3") ?? 3
+    let mut read: collections::HashMap[P, i64] = collections::HashMap()
+    read.insert(P { x: x, y: 1 }, 5)
+    read.insert(P { x: 3, y: 1 }, 6)
+    read.insert(P { x: x, y: 2 }, 7)
+    println(f"{read.len()} {read[P { x: x, y: 1 }] ?? 0} {read.contains_key(P { x: 3, y: 2 })}")
+}

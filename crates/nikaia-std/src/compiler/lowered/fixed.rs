@@ -3,7 +3,7 @@
 
 pub const HASHED_FROM: i64 = 12;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Table {
     pub seed: u64,
     pub disps: Vec<(u32, u32)>,

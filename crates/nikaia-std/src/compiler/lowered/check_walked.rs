@@ -222,7 +222,7 @@ pub fn check_walked_proved(state: &mut CheckState, entries: collections::BTreeMa
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CheckWalkedProved {
     pub findings: Vec<CheckFinding>,
     pub held: collections::BTreeMap<(i64, i64), ClaimHeld>,
@@ -289,7 +289,7 @@ pub fn check_walked_with_described(library: &mut Ledger, described: &Ledger) {
     for (name, contract) in described.types.iter() { library.types.entry(nikaia_std::block::Text::from(name.to_string())).or_insert_with(|| { contract.clone() }); }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CheckMultiLock {
     Reading,
     Writing,

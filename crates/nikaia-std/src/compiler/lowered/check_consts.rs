@@ -98,7 +98,7 @@ pub fn rust_array_type(items: &[BuildValue]) -> Option<String> {
     Some(found)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CheckCrossing {
     Fits,
     Said,
@@ -216,7 +216,7 @@ impl CheckState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CheckTable {
     pub found: bool,
     pub below: String,

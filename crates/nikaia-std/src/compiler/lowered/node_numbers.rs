@@ -15,7 +15,7 @@ pub struct NodeNumbersExpr {
     pub next: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct NodeNumbersState {
     pub(crate) next: u32,
     pub(crate) spans: Vec<Option<Span>>,

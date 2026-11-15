@@ -183,6 +183,7 @@ pub fn type_entry(fields: &[String], derives: &collections::BTreeSet<String>) ->
     entry.compares = derives.contains("PartialEq");
     entry.orders = derives.contains("Ord") && derives.contains("PartialOrd");
     entry.equates = derives.contains("Eq") && derives.contains("PartialEq");
+    entry.hashes = entry.equates && derives.contains("Hash");
     entry.copies = derives.contains("Copy");
     entry
 }

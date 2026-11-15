@@ -3,7 +3,7 @@
 
 pub const CX_LEDGER_DIGEST: &str = "@LEDGER@";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CxExported {
     pub rust: String,
     pub header: String,
@@ -11,7 +11,7 @@ pub struct CxExported {
     pub node: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CxCtx {
     pub plains: Vec<CxPlain>,
     pub handles: Vec<CxHandled>,
@@ -22,7 +22,7 @@ pub struct CxCtx {
     pub user_code: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CxBuild {
     pub rust: String,
     pub declarations: String,
@@ -414,7 +414,7 @@ pub(crate) fn cx_handed_back_out(out: &CxOut, ctx: &CxCtx) -> String {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct CxParams {
     pub(crate) rust_params: Vec<String>,
     pub(crate) c_params: Vec<String>,

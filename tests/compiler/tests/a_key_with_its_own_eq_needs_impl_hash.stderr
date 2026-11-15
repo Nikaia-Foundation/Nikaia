@@ -1,0 +1,9 @@
+error[NK1260]: `HashMap` finds its keys by their hash, and `Name` doesn't hash.
+   --> tests/a_key_with_its_own_eq_needs_impl_hash.nika:15:5
+    |
+ 15 |     let by_name: collections::HashMap[Name, i64] = collections::HashMap()
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `Name` says with its own `impl Eq` when two values are equal, so a hash made from its fields could tell two equal values apart.
+    = help: Write `impl Hash for Name { … }` that feeds `into.add(…)` what `eq` compares, or key the `HashMap` by a text or a number.
+1 type error

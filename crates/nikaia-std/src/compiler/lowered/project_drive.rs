@@ -65,7 +65,7 @@ impl nikaia_std::error::Full for __NikaiaThrows_ProjectDriveRefusal__io_IoError 
 
 
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectDriveLowered {
     pub rust: String,
     pub sources: Vec<fs::Path>,
@@ -75,7 +75,7 @@ pub struct ProjectDriveLowered {
     pub node: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectDriveFast {
     pub messages: String,
     pub binary: Option<fs::Path>,
@@ -129,7 +129,7 @@ pub trait ProjectDriveHost {
     fn run_directly(&self, binary: &std::path::Path) -> Result<i32, Box<dyn std::error::Error>>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProjectDriveRefusal {
     Host,
     Refused(String),

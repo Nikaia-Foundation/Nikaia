@@ -33,7 +33,7 @@ pub(crate) fn check_walks_shared(changed_by: &[collections::BTreeSet<String>], m
     None
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct CheckWalksTask {
     pub(crate) span: Span,
     pub(crate) until: i64,
@@ -106,7 +106,7 @@ pub(crate) fn check_walks_values_operations(state: &CheckState, values: &mut Vec
     Some(out)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum CheckWalksDoor {
     NotADoor,
     Door(Operation),

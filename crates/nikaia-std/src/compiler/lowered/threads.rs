@@ -9,20 +9,20 @@ pub(crate) const CHOSEN_TYPES: [&str; 3] = ["Locked", "SharedMut", "Shared"];
 
 pub(crate) const CROSSING_DEPTH: i64 = 16;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Going {
     Ours,
     Foreign,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Refusal {
     Lock,
     Count,
     Said,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Crossing {
     May,
     MayNot { part: String, at: Option<String>, why: Refusal },
@@ -96,7 +96,7 @@ pub fn crossing(ty: &Ty, walking: &Walking<'_, '_>) -> Crossing {
     crossing_walk(ty, walking, &mut seen, CROSSING_DEPTH)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Walking<'a, 'a1> {
     pub own: &'a Ledger,
     pub library: &'a1 Ledger,

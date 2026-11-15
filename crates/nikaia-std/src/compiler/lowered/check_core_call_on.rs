@@ -232,6 +232,28 @@ pub(crate) fn check_core_call_on_compares(beside: &collections::BTreeMap<String,
     asking.totally(on)
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_call_on_unhashed(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, bounds: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty) -> Option<Ty> {
+    match on {
+        Ty::Named { name, args, .. } => {
+            if args.is_empty() && bounds.contains_key(name) {
+                let held: Vec<String> = nikaia_std::index::or(match *nikaia_std::index::get(&bounds, name) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || vec![].into());
+                if nikaia_std::list::contains(&held, &"Hash") && !world.own.traits.contains_key("Hash") { return None; }
+                return Some(on.clone());
+            }
+        },
+        Ty::Unknown => { return None; },
+        Ty::Var { .. } => { return None; },
+        _ => { },
+    }
+    let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
+    if asking.hashes(on) { return None; }
+    Some(asking.unhashed(on))
+}
+
 pub(crate) fn check_core_call_on_seen(on: &Ty) -> Option<Ty> {
     match on {
         Ty::Named { name, args, .. } => { if name == "Seen" && args.len() == 1 { return Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone()); } },
@@ -273,6 +295,21 @@ pub(crate) fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckStat
             if wants_order { return check_core_call_on_named("Ordering"); }
             return check_core_call_on_named("bool");
         }
+    }
+    if type_name == "Hasher" && entry == "add" && args.len() == 1 && !world.own.types.contains_key("Hasher") {
+        let given = check_core_expr(state, world, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span);
+        let unhashed: Option<Ty> = check_core_call_on_unhashed(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, &state.type_parameters, world, &given);
+        if unhashed.is_some() {
+            let part: Ty = nikaia_std::index::or(unhashed, || Ty::Unknown);
+            let shown = given.text();
+            let mut said: String = format!("`add` feeds the hasher, and `{}` doesn't hash.", shown);
+            if part.text() != shown { said = format!("`add` feeds the hasher, and `{}` doesn't hash: its part `{}` doesn't.", shown, part.text()); }
+            state.findings.push(check_refusal("NK1260", span, said, vec![String::from("What `add` takes is hashed by its own hash, so it has to have one: an integer, a `String`, a `bool`, a `scalar`, `Bytes`, a tuple, list or option of those, or a type of yours that hashes. A float doesn't (`NaN` isn't equal to itself).")], Some(String::from("Feed it the parts `eq` compares that hash, such as an integer or a text made from the value."))));
+        }
+        state.facts.hasher_adds.insert(id_of(receiver) as i64);
+        check_core_call_on_reached(state, Some("Hash::hash"));
+        check_core_call_on_quiet(state, receiver);
+        return Ty::Tuple(vec![]);
     }
     let stamped: Option<Ty> = check_core_call_on_seen(on);
     if stamped.is_some() {

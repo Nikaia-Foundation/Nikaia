@@ -469,6 +469,9 @@ own driver run:
 * **At least one active session runs the improvement lane and at least one the
   bug lane** (owner, 2026-11-15). A session that starts while neither runs takes
   one of them first.
+* **The supervisor puts an issue in its lane and sets its label itself**
+  (owner, 2026-11-15): it does not ask the owner first; the owner overrules
+  where they disagree.
 * **Other lanes** claim their issues with `wip` (the `yaml` lane,
   `docs/briefs/yaml/`, #928). An issue labelled `wip` is another lane's.
 

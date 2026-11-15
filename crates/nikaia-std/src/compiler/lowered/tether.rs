@@ -5,14 +5,14 @@ pub const RESULT_POSITION: &str = "<result>";
 
 pub const INPUT_POSITION: &str = "input";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Buffer {
     None,
     Named(String),
     Unknown,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PackageTypes {
     pub borrowing: collections::BTreeSet<String>,
     pub named: collections::BTreeSet<String>,

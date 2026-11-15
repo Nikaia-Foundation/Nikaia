@@ -1,0 +1,20 @@
+// #591, ADR-010 D12: what `into.add` takes hashes by its own hash, so a
+// float there is NK1260.
+struct Name { text: String }
+
+impl Eq for Name {
+    fn eq(ref self, other: ref Self) -> bool sync {
+        return self.text == other.text
+    }
+}
+
+impl Hash for Name {
+    fn hash(ref self, mut into: Hasher) sync {
+        into.add(1.5)
+    }
+}
+
+fn main() throws {
+    let n = Name { text: "a" }
+    println(n.text)
+}

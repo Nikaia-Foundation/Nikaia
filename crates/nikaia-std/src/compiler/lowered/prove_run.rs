@@ -3,14 +3,14 @@
 
 pub const PROVE_RUN_ROUNDS: i64 = 4;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProveClaimRun {
     Value(i64),
     NotRun(String),
     Stopped(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProveComptimes {
     pub by_name: collections::BTreeMap<String, i64>,
     pub at: collections::BTreeMap<i64, i64>,

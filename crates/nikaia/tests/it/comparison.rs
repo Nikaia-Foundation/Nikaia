@@ -51,7 +51,7 @@ fn a_struct_of_comparable_parts_derives_both() {
     assert!(refusals(source).is_empty(), "{:#?}", refusals(source));
     let rust = lowered(source);
     assert!(
-        rust.contains("#[derive(Debug, Clone, PartialEq, Eq)]"),
+        rust.contains("#[derive(Debug, Clone, PartialEq, Eq, Hash)]"),
         "{rust}"
     );
 }

@@ -7,7 +7,7 @@ pub enum GrDecoded {
     Unreadable(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct GrCursor {
     pub(crate) chars: Vec<scalar>,
     pub(crate) at: i64,
