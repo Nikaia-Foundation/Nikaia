@@ -2287,6 +2287,14 @@ grammar! {
             ) -> {
                 GrammarAlt { pattern: p, action: None }
             }
+          // **A body that ends without its action** (Part II 10.1, ADR-296
+          // D33): only an `@stream` entry and a `par_fold` go without one.
+          | p:g_seq peek(g_body_ends) fail(
+                "This rule's body ends without an action: write `pattern -> { action }`. \
+                 Only an `@stream` entry or a `par_fold` goes without one."
+            ) -> {
+                GrammarAlt { pattern: p, action: None }
+            }
           | p:g_seq peek("{") fail(
                 "An action stands after an arrow: write `pattern -> { action }`."
             ) -> {
@@ -2375,7 +2383,13 @@ grammar! {
                 }
             }
 
-        rule g_elem_tail -> Spanned<Pattern> = e:g_elem -> { e }
+        // **A body stops where the next rule begins** (#1550), as an
+        // `@stream` body does: without that, a body that lacks its action
+        // read `rule name` as two more elements and was refused at the next
+        // rule's `->`.
+        rule g_elem_tail -> Spanned<Pattern> = not(g_rule_starts) e:g_elem -> { e }
+
+        rule g_body_ends -> u8 = r:g_rule_starts -> { r } | "}" -> { 0 }
 
         rule g_elem -> Spanned<Pattern> =
             c:g_cut -> { c }

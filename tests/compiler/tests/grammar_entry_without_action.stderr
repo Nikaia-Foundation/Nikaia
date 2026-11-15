@@ -1,0 +1,7 @@
+error: This rule's body ends without an action: write `pattern -> { action }`.
+  --> tests/grammar_entry_without_action.nika:5:5
+   |
+ 5 |     rule name -> String = w:until(";") ";" -> { w.clone() }
+   |     ^^^^
+   |
+   = help: Only an `@stream` entry or a `par_fold` goes without one.
