@@ -42,6 +42,13 @@ it, like the checks in `docs/supervisor.md`.
   a behaviour a function does on purpose is no bug (#1677: a `Found:` merged
   two claims without a probe, and the second was the describer's rule).
   A builder's report gives each defect its own `Found:` line for this.
+  Each shape the issue names as failing (a `for` and a `while` form) is
+  run on the binary of the day; a shape that already works is named as
+  working, not as part of the defect, and the cause (I7) is looked for in
+  what the failing shape's path does that the working one's does not (#1695:
+  #1654 named the `while` forms, proved on develop; only the `for` form
+  failed, because `bounding_for` never asked the pair bounds
+  `bounding_while` asks).
 * **I6. The governing decision**: the ADR and its decision (`ADR-282 D7`) or
   the section of Part I-III that says what is right. Without one, the issue
   says "no decision yet" and is a `decision` issue, not a bug

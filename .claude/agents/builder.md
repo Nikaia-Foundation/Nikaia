@@ -59,7 +59,12 @@ You build one small slice of an issue in the Nikaia repository and end.
   decision. One defect per `Found:` line, with its probe (the snippet and the
   output it gives today); a second defect is a second `Found:` line, and a
   behaviour some function or ADR does on purpose is no Found (#1677: one line
-  merged two claims without a probe, and the second was by design). The
+  merged two claims without a probe, and the second was by design). Each
+  shape the line names (a `for` and a `while` form) was run today and fails;
+  a shape that works is left out, and the line names the suspected file and
+  function, or says the cause is unknown (#1695: #1654's Found named the
+  `while` forms, already proved, and no cause: `bounding_for` lacked the pair
+  bounds `bounding_while` asks). The
   driver files each `Found:` line as an issue for the bug lane, and
   `Issue:`, `Deviation:`, `Needs:` and `Friction:` (what cost you turns for
   nothing: a tool, a rule, a red check that was not yours) as one issue for the
