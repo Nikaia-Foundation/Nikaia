@@ -2672,7 +2672,8 @@ pub(crate) fn lent_read_with_fallback(value: &Expr, ask: &TierAsk<'_, '_, '_, '_
                 Expr::MethodCall { method, .. } => { let method = *method; ask.names.resolve(method) != "get" },
                 _ => false,
             };
-            if an_end || !lent_nullable_element(first, ask, walk) { return false; }
+            if !lent_nullable_element(first, ask, walk) { return false; }
+            if an_end { return a_literal_text(fallback); }
             a_literal_text(fallback) || tier_a_jump(fallback) || lent_read_with_fallback(fallback, ask, walk)
         },
         _ => false,

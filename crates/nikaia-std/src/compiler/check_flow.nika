@@ -247,6 +247,9 @@ pub struct CheckFlow {
     /// Those of `map_read_sites` that are a list's `get`, by the call's id
     /// (#1609): the same `Option<&T>`, said of a list.
     pub list_gets: collections::BTreeSet[i64],
+    /// A list's `first()` or `last()` of an element that is neither copied
+    /// nor a tuple: a view of what the list keeps (#1731).
+    pub list_ends: collections::BTreeSet[i64],
     /// A list's `get`, `first` or `last` of a tuple, by the call's id: a view
     /// of the element below (`Option<&T>`).
     pub lent_list_reads: collections::BTreeSet[i64],
@@ -514,6 +517,7 @@ impl CheckFlow {
             map_read_sites: collections::BTreeSet(),
             map_views: collections::BTreeSet(),
             list_gets: collections::BTreeSet(),
+            list_ends: collections::BTreeSet(),
             lent_list_reads: collections::BTreeSet(),
             owned_call_bases: collections::BTreeSet(),
             std_gets: collections::BTreeSet(),

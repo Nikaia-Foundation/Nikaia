@@ -795,6 +795,8 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
                     let added = state.facts.copied_walks.insert(id_of(expr) as i64)
                 } else if check_core_method_a_tuple(inner) {
                     let lent = state.flow.lent_list_reads.insert(id_of(expr) as i64)
+                } else if key != "Vec::get" {
+                    let ended = state.flow.list_ends.insert(id_of(expr) as i64)
                 }
             },
             else => {}

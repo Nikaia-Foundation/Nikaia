@@ -3781,8 +3781,8 @@ fn handed_kinds(value: ref Expr, kinds: ref Kinds, ask: ref TierAsk, mut walk: T
 /// **A `??` whose value is read off a lent list or map and whose fallback is
 /// a literal, a jump or another such `??`** (ADR-282 D13, D29; #1720): each
 /// side is a view of the parameter or of static text, so the whole is a
-/// view. Not `xs.first()` or `xs.last()`: the text an iterator finds is made
-/// text of its own before a literal (`emit_core_flow.nika`).
+/// view. So is `xs.first()` or `xs.last()` with a literal behind it (#1731),
+/// as the checker's `list_ends` says: the text it finds is the list's.
 fn lent_read_with_fallback(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
     return match value {
         Expr::Coalesce { value: first, fallback, .. } => {
@@ -3790,8 +3790,11 @@ fn lent_read_with_fallback(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk
                 Expr::MethodCall { method, .. } => ask.names.resolve(method) != "get",
                 else => false,
             }
-            if an_end || !lent_nullable_element(first, ask, walk) {
+            if !lent_nullable_element(first, ask, walk) {
                 return false
+            }
+            if an_end {
+                return a_literal_text(fallback)
             }
             a_literal_text(fallback) || tier_a_jump(fallback) || lent_read_with_fallback(fallback, ask, walk)
         },

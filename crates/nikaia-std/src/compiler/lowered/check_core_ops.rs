@@ -675,6 +675,10 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
             state.facts.view_fallbacks.insert(id_of(fallback) as i64);
             return check_core_ops_view("str");
         }
+        if inner == check_core_ops_named("String") && state.flow.list_ends.contains(&(id_of(value) as i64)) {
+            state.facts.view_fallbacks.insert(id_of(fallback) as i64);
+            return check_core_ops_view("str");
+        }
         if inner == check_core_ops_named("String") && !from_a_map && check_core_ops_index(value) {
             state.facts.view_fallbacks.insert(id_of(fallback) as i64);
             state.facts.lent_list_reads.insert(id_of(expr) as i64);
