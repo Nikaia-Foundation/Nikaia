@@ -954,7 +954,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); (!a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner) || check_core_stmt_a_tuple(inner)) && (state.facts.copied_walks.contains(&(id_of(value) as i64)) || state.facts.copied_reads.contains(&(id_of(value) as i64))) },
         _ => false,
     };
-    if of_a_map && !word_copied {
+    if of_a_map && !word_copied && !state.facts.copied_walks.contains(&(id_of(value) as i64)) {
         let kept: Ty = match bound {
             Ty::Nullable(ref inner) => {
                 let inner = nikaia_std::boxed::open(inner);

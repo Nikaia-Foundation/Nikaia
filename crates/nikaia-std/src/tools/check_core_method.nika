@@ -274,6 +274,17 @@ fn check_core_method_a_map(on: ref Ty) -> bool {
     }
 }
 
+/// A `std` list, whose `get` reads as a map's does (#1609).
+fn check_core_method_a_list(on: ref Ty) -> bool {
+    return match on {
+        Ty::Named { name, args, .. } => {
+            let b = check_core_method_base(name)
+            (b == "Vec" || b == "List") && args.len() == 1
+        },
+        else => false,
+    }
+}
+
 /// A view of text handed over as text of its own (ADR-282 D15).
 fn check_core_method_own(ty: Ty) -> Ty {
     if check_core_method_str_view(ty) {
@@ -1169,9 +1180,13 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
         }
     }
     // **`m.get(k)` reads the map as `m[k]` does** (#297).
-    if name == "get" && check_core_method_a_map(on) {
+    // **So does a list's**, an `Option<&T>` as well (#1609).
+    if name == "get" && (check_core_method_a_map(on) || check_core_method_a_list(on)) {
         state.flow.read_a_map = true
         state.facts.map_gets.insert(id_of(expr) as i64)
+        if check_core_method_a_list(on) {
+            state.flow.list_gets.insert(id_of(expr) as i64)
+        }
     }
     // **A receiver the method only reads is lent** (ADR-279 D5).
     let coalesced = match receiver {

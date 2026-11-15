@@ -1312,7 +1312,8 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         Ty::Nullable(inner) => ((!a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner)) || check_core_stmt_a_tuple(inner)) && (state.facts.copied_walks.contains(id_of(value) as i64) || state.facts.copied_reads.contains(id_of(value) as i64)),
         else => false,
     }
-    if of_a_map && !word_copied {
+    // **A list's `get` that copies its element out holds the value** (#1609).
+    if of_a_map && !word_copied && !state.facts.copied_walks.contains(id_of(value) as i64) {
         let kept: Ty = match bound {
             Ty::Nullable(inner) => {
                 if inner.is_a_view() {
