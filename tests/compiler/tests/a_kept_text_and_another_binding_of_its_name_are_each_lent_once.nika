@@ -1,0 +1,53 @@
+// A text a function made and put into its keep is a reference already, so a
+// map's key is handed over bare (#99); another binding of the same name - a
+// `let` in a block, a `for`, a match arm - is a value of its own and lent with
+// `&` (#1073: `contains_key(&text)` after the block, `contains_key(text)` in
+// the loop, both rustc errors).
+use std::collections
+
+struct View { head: String }
+
+fn parse(t: String) -> View { return View { head: t } }
+
+fn make(n: i64, mut texts: collections::BTreeMap[String, i64], numbers: ref collections::BTreeMap[i64, i64]) -> View throws {
+    let text = f"a{n}"
+    let v = parse(text)
+    let got: i64? = texts.get(text)?.clone()
+    println(f"get {got ?? 0}")
+    if true {
+        let text = 2
+        println(f"inner {text}")
+    }
+    if texts.contains_key(text) {
+        println("after the block")
+    }
+    for text in 0..<3 {
+        if numbers.contains_key(text) {
+            println(f"loop {text}")
+        }
+    }
+    let o: i64? = 2
+    match o {
+        null => {},
+        text => {
+            if numbers.contains_key(text) {
+                println("arm")
+            }
+        },
+    }
+    if texts.remove(text) != null {
+        println("removed")
+    }
+    return v
+}
+
+fn main() throws {
+    let mut texts: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut k = String()
+    k.push_str("a1")
+    texts.insert(k, 5)
+    let mut numbers: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+    numbers.insert(2, 7)
+    let v = make(1, texts, numbers)
+    println(v.head)
+}
