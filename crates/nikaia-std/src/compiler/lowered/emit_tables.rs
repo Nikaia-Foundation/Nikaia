@@ -72,7 +72,7 @@ pub fn emit_tables_borrowing_structs_beside(words: &winnow_grammar::InternerCont
         for name in names.iter() {
             let name = *name;
             if !borrowing.contains(&name) {
-                for ty in (*nikaia_std::index::get(&fields_of, nikaia_std::index::at(at))).iter() {
+                for ty in (*unsafe { nikaia_std::proven::read(&fields_of, (at) as usize) }).iter() {
                     if emit_tables_names_borrowing(ty, &borrowing) {
                         borrowing.push(name);
                         changed = true;

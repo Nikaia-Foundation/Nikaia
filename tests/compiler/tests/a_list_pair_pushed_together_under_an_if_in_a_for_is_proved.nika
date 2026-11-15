@@ -1,0 +1,49 @@
+// #1654 (ADR-306 D23, ADR-361 D13, ADR-369 D4): a `for` whose every turn
+// pushes both lists of a `Row` or neither (`if k != 0 { .. }`) keeps their
+// lengths equal, on a field of a local and on two locals handed to a
+// literal, so `row.ks[0]` under `row.cols.len() == 1` is proved.
+struct Row {
+	cols: Vec[u32],
+	ks: Vec[i64],
+	constant: i64,
+}
+
+fn first_k(row: ref Row) -> i64 {
+	if row.cols.len() == 1 && row.ks[0] == 1 {
+		return 1
+	}
+	return 0
+}
+
+fn dense(ks: ref Vec[i64], c: i64) -> Row {
+	let mut r = Row { cols: [], ks: [], constant: c }
+	let mut i: u32 = 0
+	for k in ks {
+		if k != 0 {
+			r.cols.push(i)
+			r.ks.push(k)
+		}
+		i += 1
+	}
+	return r
+}
+
+fn sparse(ks: ref Vec[i64], c: i64) -> Row {
+	let mut cols: Vec[u32] = []
+	let mut out: Vec[i64] = []
+	let mut i: u32 = 0
+	for k in ks {
+		if k != 0 {
+			cols.push(i)
+			out.push(k)
+		}
+		i += 1
+	}
+	return Row { cols: cols, ks: out, constant: c }
+}
+
+fn main() throws {
+	println(first_k(dense([0, 1, 0], 0)))
+	println(first_k(sparse([0, 0, 1], 0)))
+	println(first_k(dense([2, 1], 0)))
+}

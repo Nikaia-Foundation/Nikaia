@@ -3727,7 +3727,7 @@ pub(crate) fn bounding_turn_scales(walk: &BoundsWalk, body: &Block, outside: &co
     let mut bad: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut state = state;
     bounding_scales_block(body, &mut state, &mut bad, context, words);
     let mut out: Vec<(String, i64, i64)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut state = state;
-    for k in 0..state.names.len() as i64 { if !bad.contains(unsafe { nikaia_std::proven::read(&state.names, (k) as usize) }) && (*nikaia_std::index::get(&state.a, (k) as usize) > 1 || *nikaia_std::index::get(&state.b, (k) as usize) > 0) { out.push((nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&state.names, (k) as usize) }).to_string()), *nikaia_std::index::get(&state.a, (k) as usize), *nikaia_std::index::get(&state.b, (k) as usize))); } }
+    for k in 0..state.names.len() as i64 { if !bad.contains(unsafe { nikaia_std::proven::read(&state.names, (k) as usize) }) && (*unsafe { nikaia_std::proven::read(&state.a, (k) as usize) } > 1 || *unsafe { nikaia_std::proven::read(&state.b, (k) as usize) } > 0) { out.push((nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&state.names, (k) as usize) }).to_string()), *unsafe { nikaia_std::proven::read(&state.a, (k) as usize) }, *unsafe { nikaia_std::proven::read(&state.b, (k) as usize) })); } }
     out
 }
 
@@ -4203,6 +4203,7 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
             for fact in bounding_turn_bounds(walk, &mut inner, &steps, t) { turn_facts.push(fact); }
         }
     }
+    for fact in bounding_pair_bounds(walk, &mut inner, &pairs, "") { turn_facts.push(fact); }
     let followers = bounding_followers(walk, body, &name, counted, low, high, &changed, &facts, words, &ask);
     let mut scaled: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let scales = bounding_turn_scales(&walk, body, &outside, &changed, &facts, context, words);
@@ -4372,6 +4373,8 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
         }
         past = bounding_turn_bounds(walk, facts, &counters, nikaia_std::index::or(all_turns, || 0));
     }
+    let mut paired: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    if !breaks(body, words) { paired = bounding_pair_bounds(walk, facts, &pairs, ""); }
     let mut left: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let followers = followers;
     for x in followers.iter() {
         let e = bounding_rename(walk, facts, x);
@@ -4403,6 +4406,10 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
         bounding_push(&walk, facts, fact);
     }
     for list in filled.iter() { bounding_shift(walk, facts, &length_of(list), count); }
+    for fact in paired.iter() {
+        let fact = nikaia_std::num::value(fact);
+        bounding_push(&walk, facts, fact);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

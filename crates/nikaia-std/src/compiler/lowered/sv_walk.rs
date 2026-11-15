@@ -201,7 +201,7 @@ pub(crate) fn sv_walk_start(query: &SvQuery, carried: &[Vec<u32>]) -> Option<SvW
             let col = *unsafe { nikaia_std::proven::read(&row.cols, (i) as usize) } as i64;
             if col >= columns { return None; }
             w.col_atoms[nikaia_std::index::at(col)].push(a);
-            w.col_ks[nikaia_std::index::at(col)].push(*nikaia_std::index::get(&row.ks, (i) as usize));
+            (*unsafe { nikaia_std::proven::slot(&mut w.col_ks, (col) as usize) }).push(*nikaia_std::index::get(&row.ks, (i) as usize));
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         w.row_value.push(row.constant);

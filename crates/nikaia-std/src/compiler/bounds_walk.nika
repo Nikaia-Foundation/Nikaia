@@ -7404,6 +7404,13 @@ fn bounding_for(
 			}
 		}
 	}
+	// **Two counters a turn raises together keep their gap** (#1634,
+	// #1654): `n - n@ <= m - m@` at each head, whatever counts the turns;
+	// both ways for two lists every path pushes both or neither (`if k != 0
+	// { cols.push(i); ks.push(k) }`), so their lengths stay equal.
+	for fact in bounding_pair_bounds(walk, inner, pairs, "") {
+		turn_facts.push(fact)
+	}
 	// **A name that only takes the binding's values follows it** (ADR-361
 	// D13, #1516): `prev = i` the one change of `prev` in the body of `for
 	// i in low..<high`, with `prev` below `low` where the loop is reached.
@@ -7631,6 +7638,12 @@ fn bounding_for(
 		}
 		past = bounding_turn_bounds(walk, facts, counters, all_turns ?? 0)
 	}
+	// A loop no `break` leaves is left at a head, where the pairs' gaps
+	// hold; the values they were reached with are named before the change.
+	let mut paired: Vec[i64] = []
+	if !breaks(body, words) {
+		paired = bounding_pair_bounds(walk, facts, pairs, "")
+	}
 	let mut left: Vec[(String, i64)] = []
 	for x in followers {
 		let e = bounding_rename(walk, facts, x)
@@ -7661,6 +7674,9 @@ fn bounding_for(
 	}
 	for list in filled {
 		bounding_shift(walk, facts, length_of(list), count)
+	}
+	for fact in paired {
+		bounding_push(walk, facts, fact)
 	}
 }
 
