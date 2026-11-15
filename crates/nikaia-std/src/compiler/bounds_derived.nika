@@ -69,6 +69,9 @@ pub struct Derived {
 struct DerivedScan {
 	calls: collections::BTreeMap[String, Vec[(i64, i64)]],
 	values: collections::BTreeSet[String],
+	/// **The `let` names of each block the scan stands in** (#1666): a read
+	/// of one is the local, not a function of that name used as a value.
+	locals: Vec[collections::BTreeSet[String]],
 }
 
 /// The most claims one function is asked about at each call.
@@ -77,7 +80,7 @@ fn most_claims() -> i64 {
 }
 
 fn derived_scan() -> DerivedScan {
-	return DerivedScan { calls: collections::BTreeMap(), values: collections::BTreeSet() }
+	return DerivedScan { calls: collections::BTreeMap(), values: collections::BTreeSet(), locals: [] }
 }
 
 /// Nothing derived, for a program not walked through.
@@ -740,9 +743,21 @@ fn derived_block(
 	words: ref winnow_grammar::InternerContext,
 	mut scan: DerivedScan,
 ) {
+	scan.locals.push(collections::BTreeSet())
 	for stmt in block.stmts {
 		derived_statement(stmt.node, stmt.span.start as i64, words, scan)
 	}
+	scan.locals.pop()
+}
+
+/// Whether `name` is a `let` of a block the scan stands in.
+fn derived_a_local(scan: ref DerivedScan, name: ref String) -> bool {
+	for names in scan.locals {
+		if names.contains(name) {
+			return true
+		}
+	}
+	return false
 }
 
 fn derived_statement(
@@ -752,7 +767,17 @@ fn derived_statement(
 	mut scan: DerivedScan,
 ) {
 	match stmt {
-		Stmt::Let { value, .. } => derived_expr(value, at, words, scan),
+		// The names are bound after their value is read: `let top =
+		// self.top()` calls the method, and a later `top` is the local.
+		Stmt::Let { names, value, .. } => {
+			derived_expr(value, at, words, scan)
+			let last = scan.locals.len() - 1
+			if last >= 0 {
+				for name in names {
+					scan.locals[last].insert(words.resolve(name).clone())
+				}
+			}
+		},
 		Stmt::Comptime { value, .. } => derived_expr(value, at, words, scan),
 		Stmt::Expr(value) => derived_expr(value, at, words, scan),
 		Stmt::Assign { target, value, .. } => {
@@ -847,7 +872,10 @@ fn derived_expr(
 ) {
 	match expr {
 		Expr::Variable(name, _) => {
-			scan.values.insert(words.resolve(name).clone())
+			let text = words.resolve(name).clone()
+			if !derived_a_local(scan, text) {
+				scan.values.insert(text)
+			}
 		},
 		Expr::Path(segments, _) => {
 			for segment in segments {

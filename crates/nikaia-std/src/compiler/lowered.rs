@@ -3482,7 +3482,7 @@ pub mod check_core_flow {
 }
 pub mod check_core_leaves {
     #[allow(unused_imports)]
-    pub use super::{check_core_field_of_self, check_core_a_field_of_a_borrowed_subject, check_core_a_field_of_a_borrowed_subject_given, check_core_a_field_of_a_lent_place_handed_back, check_core_lent_places_in_arms_handed_back, check_core_a_lent_place_passed, check_core_a_kept_lambda, check_core_literal_by_use, check_core_holes, check_core_lambda, check_core_lambda_enter, check_core_lambda_leave, check_core_a_field, check_core_a_nullable, check_core_returns, check_core_an_assert};
+    pub use super::{check_core_field_of_self, check_core_a_field_of_a_borrowed_subject, check_core_a_field_of_a_borrowed_subject_given, check_core_a_field_of_a_lent_place_handed_back, check_core_lent_places_in_arms_handed_back, check_core_a_lent_place_passed, check_core_a_kept_lambda, check_core_literal_by_use, check_core_holes, check_core_lambda, check_core_lambda_enter, check_core_lambda_leave, check_core_a_field, check_core_a_nullable, check_core_a_text_option_into_a_view, check_core_returns, check_core_an_assert};
 }
 pub mod check_core_method {
     #[allow(unused_imports)]
@@ -4408,4 +4408,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "74fcca86eb7089cd61139846740edd3159087bd4e1d4558d2ab1539af0b26424";
+pub const LOWERED_DIGEST: &str = "b0d3ccca57b808a6b93acb6410c1555bc7b3d5a66438ecdac268043405507371";

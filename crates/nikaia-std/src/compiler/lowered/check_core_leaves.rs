@@ -553,6 +553,24 @@ pub fn check_core_a_field(value: &Expr) -> bool { matches!(value, Expr::Field { 
 
 pub fn check_core_a_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
 
+pub fn check_core_a_text_option_into_a_view(found: &Ty, expected: &Ty) -> bool {
+    let wanted = match expected {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
+            Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && (name == TEXT_VIEW || name == TEXT) },
+            _ => false,
+        } },
+        _ => false,
+    };
+    if !wanted { return false; }
+    match found {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
+            Ty::Named { name, args, .. } => args.is_empty() && (name == TEXT || name == TEXT_VIEW),
+            _ => false,
+        } },
+        _ => false,
+    }
+}
+
 pub(crate) fn check_core_lambda_held(ty: &Ty) -> Ty {
     match ty {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
@@ -615,6 +633,10 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
             state.facts.lent_returns.remove(&(span.start as i64));
             state.facts.lent_option_results.insert(node_key(given));
         }
+        if !state.flow.expected_either && check_core_a_text_option_into_a_view(&found, &nikaia_std::index::or(match state.expected.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || Ty::Unknown)) { state.facts.text_option_results.insert(node_key(given)); }
     }
     state.flow.lambda_expected = None;
     let inside = state.flow.lambda_returns.len() as i64;

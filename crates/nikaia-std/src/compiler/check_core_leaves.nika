@@ -726,6 +726,31 @@ pub fn check_core_a_nullable(ty: ref Ty) -> bool {
     }
 }
 
+/// **A `String?` handed back into a declared `ref String?`** (#1666): a map's
+/// read, its `get`, a `let` of either or a text field's option is the option
+/// of a view of the map's own text (`Option<&String>` below), and the result
+/// is the option of a text view (`Option<&str>`); the emitter writes the view
+/// of each, which is the same `Option<&str>` where it is one already.
+pub fn check_core_a_text_option_into_a_view(found: ref Ty, expected: ref Ty) -> bool {
+    let wanted = match expected {
+        Ty::Nullable(inner) => match inner {
+            Ty::Named { name, args, view } => view && args.is_empty() && (name == TEXT_VIEW || name == TEXT),
+            else => false,
+        },
+        else => false,
+    }
+    if !wanted {
+        return false
+    }
+    return match found {
+        Ty::Nullable(inner) => match inner {
+            Ty::Named { name, args, .. } => args.is_empty() && (name == TEXT || name == TEXT_VIEW),
+            else => false,
+        },
+        else => false,
+    }
+}
+
 /// What a nullable type holds, or the type itself.
 fn check_core_lambda_held(ty: ref Ty) -> Ty {
     return match ty {
@@ -799,6 +824,9 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
         if lending && check_core_a_field(given) && check_core_a_nullable(found) && !found.is_a_view() && check_core_a_nullable(state.expected?.clone() ?? Ty::Unknown) {
             state.facts.lent_returns.remove(span.start as i64)
             state.facts.lent_option_results.insert(node_key(given))
+        }
+        if !state.flow.expected_either && check_core_a_text_option_into_a_view(found, state.expected?.clone() ?? Ty::Unknown) {
+            state.facts.text_option_results.insert(node_key(given))
         }
     }
     state.flow.lambda_expected = null

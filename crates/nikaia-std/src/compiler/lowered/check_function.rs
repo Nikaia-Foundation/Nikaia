@@ -517,6 +517,7 @@ pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, w
     if lending || tail_view { shown = view_of_type(&shown); }
     match &last.node {
         Stmt::Expr(value) => {
+            if !state.flow.expected_either && check_core_a_text_option_into_a_view(&shown, expected) { state.facts.text_option_results.insert(node_key(value)); }
             if lending && nullable && tail_nullable && check_core_a_field(value) { state.facts.lent_option_results.insert(node_key(value)); } else if lending && nullable { state.facts.lent_reads.insert(id_of(value) as i64); } else if lending { state.facts.lent_returns.insert(span.start as i64); }
             if !lending {
                 if !tail_view { state.narrowed_reads_given_back(value); }

@@ -652,6 +652,10 @@ fn check_function_tail_checks[H: CheckHost](mut state: CheckState, world: ref Ch
     }
     match last.node {
         Stmt::Expr(value) => {
+            // **A `String?` handed back into a `ref String?`** (#1666).
+            if !state.flow.expected_either && check_core_a_text_option_into_a_view(shown, expected) {
+                state.facts.text_option_results.insert(node_key(value))
+            }
             if lending && nullable && tail_nullable && check_core_a_field(value) {
                 // A `T?` lent into a `ref T?` is the option of a view (#1486).
                 state.facts.lent_option_results.insert(node_key(value))

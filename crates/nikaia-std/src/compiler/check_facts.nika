@@ -679,6 +679,9 @@ pub struct CheckFacts {
     /// **A `T?` place handed back into a `ref T?` result** (#1486): written
     /// `.as_ref()`, the option of a view, not `&` before it.
     pub lent_option_results: collections::BTreeSet[i64],
+    /// **A `String?` handed back into a `ref String?` result** (#1666): the
+    /// option of a view of a map's text, written as the option of a text view.
+    pub text_option_results: collections::BTreeSet[i64],
     pub view_fallbacks: collections::BTreeSet[i64],
     /// **A map read that jumps where it finds nothing** (`m[k] ?? return`),
     /// by the `??`: of a value that moves, the answer is a view of the map
@@ -946,6 +949,7 @@ impl CheckFacts {
             lent_list_reads: collections::BTreeSet(),
             lent_reads: collections::BTreeSet(),
             lent_option_results: collections::BTreeSet(),
+            text_option_results: collections::BTreeSet(),
             view_fallbacks: collections::BTreeSet(),
             map_read_views: collections::BTreeSet(),
             keep_plans: null,

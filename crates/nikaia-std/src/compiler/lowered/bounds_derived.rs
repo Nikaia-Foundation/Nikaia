@@ -34,11 +34,12 @@ pub struct Derived {
 pub(crate) struct DerivedScan {
     pub(crate) calls: collections::BTreeMap<String, Vec<(i64, i64)>>,
     pub(crate) values: collections::BTreeSet<String>,
+    pub(crate) locals: Vec<collections::BTreeSet<String>>,
 }
 
 pub(crate) fn most_claims() -> i64 { 12 }
 
-pub(crate) fn derived_scan() -> DerivedScan { DerivedScan { calls: collections::BTreeMap::new(), values: collections::BTreeSet::new() } }
+pub(crate) fn derived_scan() -> DerivedScan { DerivedScan { calls: collections::BTreeMap::new(), values: collections::BTreeSet::new(), locals: vec![] } }
 
 pub fn no_derived() -> Derived { Derived { functions: collections::BTreeMap::new(), order: vec![], walked: 0, answers: collections::BTreeMap::new(), entry: collections::BTreeMap::new() } }
 
@@ -468,11 +469,29 @@ pub fn derived_callees(program: &Program, words: &winnow_grammar::InternerContex
     out
 }
 
-pub(crate) fn derived_block(block: &Block, words: &winnow_grammar::InternerContext, scan: &mut DerivedScan) { for stmt in block.stmts.iter() { derived_statement(&stmt.node, stmt.span.start as i64, words, scan); } }
+pub(crate) fn derived_block(block: &Block, words: &winnow_grammar::InternerContext, scan: &mut DerivedScan) {
+    scan.locals.push(collections::BTreeSet::new());
+    for stmt in block.stmts.iter() { derived_statement(&stmt.node, stmt.span.start as i64, words, scan); }
+    scan.locals.pop();
+}
+
+pub(crate) fn derived_a_local(scan: &DerivedScan, name: &str) -> bool {
+    for names in scan.locals.iter() { if names.contains(name) { return true; } }
+    false
+}
 
 pub(crate) fn derived_statement(stmt: &Stmt, at: i64, words: &winnow_grammar::InternerContext, scan: &mut DerivedScan) {
     match stmt {
-        Stmt::Let { value, .. } => { derived_expr(value, at, words, scan); },
+        Stmt::Let { names, value, .. } => {
+            derived_expr(value, at, words, scan);
+            let last = unsafe { nikaia_std::proven::sub::<i64>(scan.locals.len() as i64, 1) };
+            if last >= 0 {
+                for name in names.iter() {
+                    let name = *name;
+                    (*unsafe { nikaia_std::proven::slot(&mut scan.locals, (last) as usize) }).insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
+                }
+            }
+        },
         Stmt::Comptime { value, .. } => { derived_expr(value, at, words, scan); },
         Stmt::Expr(value) => { derived_expr(value, at, words, scan); },
         Stmt::Assign { target, value, .. } => {
@@ -520,7 +539,8 @@ pub(crate) fn derived_expr(expr: &Expr, at: i64, words: &winnow_grammar::Interne
     match expr {
         Expr::Variable(name, _) => {
             let name = *name;
-            scan.values.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
+            let text = nikaia_std::block::Text::from(words.resolve(name).to_string());
+            if !derived_a_local(&scan, &text) { scan.values.insert(text); }
         },
         Expr::Path(segments, _) => {
             for segment in segments.iter() {
