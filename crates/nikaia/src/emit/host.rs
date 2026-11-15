@@ -21,10 +21,10 @@
 use anyhow::Result;
 #[allow(unused_imports)]
 use nikaia_std::block::names::{String, ToText, Vec, format, vec};
-use nikaia_std::tools::emit_host::EmitHost;
-use nikaia_std::tools::emit_kinds::EmitRefused;
-use nikaia_std::tools::emit_seeds::EmitSeedsShape;
-use nikaia_std::tools::emit_state::EmitWalk;
+use nikaia_std::compiler::emit_host::EmitHost;
+use nikaia_std::compiler::emit_kinds::EmitRefused;
+use nikaia_std::compiler::emit_seeds::EmitSeedsShape;
+use nikaia_std::compiler::emit_state::EmitWalk;
 
 use super::Emitter;
 use crate::ast::{Block, Expr};
@@ -123,7 +123,11 @@ impl EmitHost for Emitter<'_> {
     }
 
     fn order_of(&self, block: &Block) -> Vec<i64> {
-        nikaia_std::tools::emit_order::emit_order(block, &self.order_proofs, &self.parsed.interner)
+        nikaia_std::compiler::emit_order::emit_order(
+            block,
+            &self.order_proofs,
+            &self.parsed.interner,
+        )
     }
 
     fn wrap_hole(&self, hole: &Expr, wraps: &[(i64, winnow_grammar::Symbol)]) -> Expr {

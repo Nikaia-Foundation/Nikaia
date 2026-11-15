@@ -33,16 +33,16 @@ fn said(found: &[Finding]) -> String {
 
 #[test]
 fn the_article_follows_the_word() {
-    assert_eq!(nikaia_std::tools::check_words::article("`i64`"), "an");
-    assert_eq!(nikaia_std::tools::check_words::article("`f64`"), "an");
-    assert_eq!(nikaia_std::tools::check_words::article("`u8`"), "a");
-    assert_eq!(nikaia_std::tools::check_words::article("`usize`"), "a");
+    assert_eq!(nikaia_std::compiler::check_words::article("`i64`"), "an");
+    assert_eq!(nikaia_std::compiler::check_words::article("`f64`"), "an");
+    assert_eq!(nikaia_std::compiler::check_words::article("`u8`"), "a");
+    assert_eq!(nikaia_std::compiler::check_words::article("`usize`"), "a");
     assert_eq!(
-        nikaia_std::tools::check_words::article("`io::IoError`"),
+        nikaia_std::compiler::check_words::article("`io::IoError`"),
         "an"
     );
-    assert_eq!(nikaia_std::tools::check_words::article("`String`"), "a");
-    assert_eq!(nikaia_std::tools::check_words::article("`Error`"), "an");
+    assert_eq!(nikaia_std::compiler::check_words::article("`String`"), "a");
+    assert_eq!(nikaia_std::compiler::check_words::article("`Error`"), "an");
 }
 
 /// `NK2105` on a caught `io::IoError`, and `NK1199` on an `f64` and an `i64`.

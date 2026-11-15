@@ -1,0 +1,6 @@
+// `compiler` is the toolchain's own module (`nikaia_std::compiler`), not one
+// of `std`'s: `use std::compiler` is `NK1186` with a note saying why (#1659).
+use std::compiler
+
+fn main() {
+}

@@ -236,7 +236,7 @@ together with the specification section and an example test.
 * A package with no `fn main` needs `artifact = "rust-library"` in its manifest; `build` and `check --rustc` refuse it otherwise (NK1351), and `scripts/ledgers.nika` builds every directory with `build`. (issue-1591, #1657)
 * The ADR that ADR-270 replaced is archived: cite ADR-270 (D2→D4, D6→D22) and never name the archived number, not even in a warning, or pre-push's adr-refs check is red. (issue-1591, #1662)
 * A test program in `tests/compiler` is run with `nikaia test --filter NAME` and updated with `--bless`, not with `nikaia run FILE`. (issue-1591)
-* Moving `crates/nikaia-std/src/compiler/` means editing `SYSROOT_TOOLS` in `sysroot_cache.nika` and in its lowered `.rs` by hand before the first build, because the old binary cannot lower from the new path. (issue-1600)
+* Moving `crates/nikaia-std/src/compiler/` means editing `SYSROOT_COMPILER` in `sysroot_cache.nika` and in its lowered `.rs` by hand before the first build, because the old binary cannot lower from the new path. (issue-1600)
 * The `__nikaia_tupleN` names in lowered files are byte offsets, so any change to a `.nika` comment's length renumbers them in the lowered output; that is not a behaviour change. (issue-1600)
 * Test programs that `git archive HEAD` (`drive_badges_head`) see only committed files, so they fail on a tree whose fix is not yet committed; rerun them after the commit. (issue-1600)
 * A batch of test programs is driven by hand with `NIKAIA_TEST_BATCH=LIST nikaia build --project CARRIER` (LIST holds `NAME<TAB>ENTRY` lines, each program with its own `nikaia.toml`); `LIST.included` names what lowered, and `NIKAIA_LOWER_THREADS=1` makes it run in a fixed order. (issue-1639)

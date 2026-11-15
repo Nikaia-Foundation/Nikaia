@@ -7,7 +7,7 @@
 //
 // Moved from the compiler's `describe.rs` by ADR-290's route (#124): lowered
 // by `nikaia lower-std` to `surface.rs` beside it, `include!`d as
-// `nikaia_std::tools::surface`, and called from `describe`. It reads the Rust
+// `nikaia_std::compiler::surface`, and called from `describe`. It reads the Rust
 // grammar's items (`rust.nika`) and the path work (`paths.nika`) beside it.
 //
 // **Fail-closed where the source is silent**: a module nothing declares is not

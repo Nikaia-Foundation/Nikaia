@@ -23,11 +23,11 @@ use crate::check::Finding;
 use crate::contracts::Ledger;
 use crate::parser::Parsed;
 
-pub use nikaia_std::tools::views::{Destination, Stored};
+pub use nikaia_std::compiler::views::{Destination, Stored};
 
 /// Every naked view parameter in this unit whose view is stored.
 pub fn analyse(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<Stored> {
-    nikaia_std::tools::views::views_stored(
+    nikaia_std::compiler::views::views_stored(
         &asked(parsed, own, library),
         &parsed.program.items,
         &|value: &Expr| own_buffer(parsed, value, own, library),
@@ -36,7 +36,7 @@ pub fn analyse(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<Stored> {
 
 /// The refusals: every stored naked view whose destination names no buffer.
 pub fn check(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<Finding> {
-    nikaia_std::tools::views::views_checked(
+    nikaia_std::compiler::views::views_checked(
         &asked(parsed, own, library),
         &parsed.program.items,
         &|value: &Expr| own_buffer(parsed, value, own, library),
@@ -52,8 +52,8 @@ pub fn result_sources(
     parsed: &Parsed,
     own: &Ledger,
     library: &Ledger,
-) -> Vec<nikaia_std::tools::views::ResultSource> {
-    nikaia_std::tools::views::result_sources(
+) -> Vec<nikaia_std::compiler::views::ResultSource> {
+    nikaia_std::compiler::views::result_sources(
         &asked(parsed, own, library),
         &parsed.program.items,
         &|value: &Expr| own_buffer(parsed, value, own, library),
@@ -67,8 +67,8 @@ pub fn result_sources_inferred(
     parsed: &Parsed,
     own: &Ledger,
     library: &Ledger,
-) -> Vec<nikaia_std::tools::views::ResultSource> {
-    nikaia_std::tools::views::result_sources_inferred(
+) -> Vec<nikaia_std::compiler::views::ResultSource> {
+    nikaia_std::compiler::views::result_sources_inferred(
         &asked(parsed, own, library),
         &parsed.program.items,
         &|value: &Expr| own_buffer(parsed, value, own, library),
@@ -81,8 +81,8 @@ pub fn result_package(
     parsed: &Parsed,
     own: &Ledger,
     library: &Ledger,
-) -> nikaia_std::tools::views::ResultPackage {
-    nikaia_std::tools::views::result_package(&asked(parsed, own, library))
+) -> nikaia_std::compiler::views::ResultPackage {
+    nikaia_std::compiler::views::result_package(&asked(parsed, own, library))
 }
 
 /// `result_sources` with the package's part made once by the caller.
@@ -90,9 +90,9 @@ pub fn result_sources_in(
     parsed: &Parsed,
     own: &Ledger,
     library: &Ledger,
-    package: &nikaia_std::tools::views::ResultPackage,
-) -> Vec<nikaia_std::tools::views::ResultSource> {
-    nikaia_std::tools::views::result_sources_in(
+    package: &nikaia_std::compiler::views::ResultPackage,
+) -> Vec<nikaia_std::compiler::views::ResultSource> {
+    nikaia_std::compiler::views::result_sources_in(
         &asked(parsed, own, library),
         package,
         &parsed.program.items,
@@ -105,9 +105,9 @@ pub fn places_stored_in(
     parsed: &Parsed,
     own: &Ledger,
     library: &Ledger,
-    package: &nikaia_std::tools::views::ResultPackage,
-) -> Vec<nikaia_std::tools::views::PlacesStored> {
-    nikaia_std::tools::views::places_stored_in(
+    package: &nikaia_std::compiler::views::ResultPackage,
+) -> Vec<nikaia_std::compiler::views::PlacesStored> {
+    nikaia_std::compiler::views::places_stored_in(
         &asked(parsed, own, library),
         package,
         &parsed.program.items,
@@ -121,8 +121,8 @@ pub fn places_stored(
     parsed: &Parsed,
     own: &Ledger,
     library: &Ledger,
-) -> Vec<nikaia_std::tools::views::PlacesStored> {
-    nikaia_std::tools::views::places_stored(
+) -> Vec<nikaia_std::compiler::views::PlacesStored> {
+    nikaia_std::compiler::views::places_stored(
         &asked(parsed, own, library),
         &parsed.program.items,
         &|value: &Expr| own_buffer(parsed, value, own, library),
@@ -135,7 +135,7 @@ pub fn carried(parsed: &Parsed, own: &Ledger, library: &Ledger) -> HashMap<usize
     let mut out: HashMap<usize, HashSet<Ident>> = HashMap::new();
     // `tools/views.nika` says which names each method carries: the parameter,
     // and the struct parameter that carries it, written over the same buffer.
-    for (method, symbol) in nikaia_std::tools::views::carrying(&analyse(parsed, own, library)) {
+    for (method, symbol) in nikaia_std::compiler::views::carrying(&analyse(parsed, own, library)) {
         out.entry(method as usize).or_default().insert(symbol);
     }
     out
@@ -145,8 +145,8 @@ fn asked<'a>(
     parsed: &'a Parsed,
     own: &'a Ledger,
     library: &'a Ledger,
-) -> nikaia_std::tools::views::Asked<'a, 'a, 'a> {
-    nikaia_std::tools::views::Asked {
+) -> nikaia_std::compiler::views::Asked<'a, 'a, 'a> {
+    nikaia_std::compiler::views::Asked {
         names: &parsed.interner,
         own,
         library,

@@ -51,12 +51,12 @@ use super::{Ledger, Sync};
 /// ([ADR-288](../../../docs/specification/adr/adr-288.md) D28), and whether it
 /// is a construct rather than a function
 /// ([ADR-292](../../../docs/specification/adr/adr-292.md) D16).
-pub use nikaia_std::tools::sync::Violation;
+pub use nikaia_std::compiler::sync::Violation;
 
 /// Every call a `sync` function makes that the ledgers say can pause.
 pub fn check(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<Violation> {
     // **The walk is Nikaia** (`tools/sync.nika`, #125).
-    let mut found = nikaia_std::tools::sync::unit_violations(
+    let mut found = nikaia_std::compiler::sync::unit_violations(
         &parsed.program,
         &parsed.interner,
         &|name: &str| parsed.unaliased(name),
@@ -100,8 +100,8 @@ pub fn infer(
     library: &Ledger,
     resolved: &BTreeMap<String, MethodCalls>,
 ) -> Noted {
-    use nikaia_std::tools::sync::{self as nika, SyncGraph};
-    use nikaia_std::tools::throws::MethodsCalled;
+    use nikaia_std::compiler::sync::{self as nika, SyncGraph};
+    use nikaia_std::compiler::throws::MethodsCalled;
 
     // **The walk is Nikaia** (`tools/sync.nika`, #125): every body's calls,
     // the type checker's method calls merged in - one whose receiver is not
@@ -216,7 +216,7 @@ impl Default for Noted {
 
 /// **The way from a function to the statement that makes it pause**, in
 /// Nikaia (`tools/modules.nika`, which says it, ADR-294, #125).
-pub use nikaia_std::tools::modules::ModulesPause as Pause;
+pub use nikaia_std::compiler::modules::ModulesPause as Pause;
 
 /// What one expression tells either analysis, where it is a call at all.
 ///
@@ -265,7 +265,7 @@ pub(crate) fn reached(
     own: &Ledger,
     library: &Ledger,
 ) -> Option<Reached> {
-    use nikaia_std::tools::calls::{Callee, callee_of};
+    use nikaia_std::compiler::calls::{Callee, callee_of};
     Some(
         match callee_of(&parsed.interner, expr, own, library, &parsed.program.items)? {
             Callee::Own(name) => Reached::Own(name),

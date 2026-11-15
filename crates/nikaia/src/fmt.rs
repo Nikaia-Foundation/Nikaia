@@ -28,7 +28,7 @@ pub fn format(source: &str) -> Result<String> {
         starts.push(characters_before(source, span.start as usize));
         ends.push(characters_before(source, span.end as usize));
     }
-    let formatted = nikaia_std::tools::fmt::fmt_source(source, starts, ends)
+    let formatted = nikaia_std::compiler::fmt::fmt_source(source, starts, ends)
         .map_err(|refusal| anyhow::anyhow!("{refusal}"))?;
     let again = match parse_to_ast(&formatted) {
         Ok(again) => again,

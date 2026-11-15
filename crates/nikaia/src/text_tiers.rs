@@ -48,7 +48,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{Block, Expr, Item, Stmt};
 use crate::parser::Parsed;
-use nikaia_std::tools::text_tiers::SliceFills;
+use nikaia_std::compiler::text_tiers::SliceFills;
 
 /// **No two nodes of the tree share an id** ([ADR-340](../../../docs/specification/adr/adr-340.md)
 /// D2): a node the parser placed twice - `xs[a..]` holds `xs` as the base and
@@ -98,7 +98,7 @@ pub fn refine(parsed: &mut Parsed) {
 /// published structs, as written (`tier_beside_fields`), and what the struct
 /// literals of all of them put into each field (`tier_slice_fills`, #1272).
 pub struct BesideFields {
-    pub fields: BTreeMap<String, Vec<nikaia_std::tools::ty::FieldContract>>,
+    pub fields: BTreeMap<String, Vec<nikaia_std::compiler::ty::FieldContract>>,
     pub fills: SliceFills,
 }
 
@@ -123,8 +123,8 @@ pub fn beside_fields(files: &[&Parsed]) -> BesideFields {
         .map(|parsed| crate::check::parsed_view_of(parsed))
         .collect();
     BesideFields {
-        fields: nikaia_std::tools::text_tiers::tier_beside_fields(&views),
-        fills: nikaia_std::tools::text_tiers::tier_slice_fills(&views),
+        fields: nikaia_std::compiler::text_tiers::tier_beside_fields(&views),
+        fills: nikaia_std::compiler::text_tiers::tier_slice_fills(&views),
     }
 }
 
@@ -132,13 +132,13 @@ pub fn beside_fields(files: &[&Parsed]) -> BesideFields {
 pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
     separate_repeated_ids(parsed);
     comptime_text_is_a_view(parsed);
-    use nikaia_std::tools::text_tiers::{TierAsk, hand_number, text_tiers, tier_write};
+    use nikaia_std::compiler::text_tiers::{TierAsk, hand_number, text_tiers, tier_write};
     let library = crate::contracts::std_ledger();
     // Built once: every proved condition is parsed and refined here, and
     // `std`'s ledger never changes, so neither does its index.
-    static METHODS: std::sync::OnceLock<nikaia_std::tools::ty::MethodIndex> =
+    static METHODS: std::sync::OnceLock<nikaia_std::compiler::ty::MethodIndex> =
         std::sync::OnceLock::new();
-    let methods = METHODS.get_or_init(|| nikaia_std::tools::ty::method_index(library));
+    let methods = METHODS.get_or_init(|| nikaia_std::compiler::ty::method_index(library));
     let ask = TierAsk {
         names: &parsed.interner,
         aliases: &parsed.aliases,
@@ -153,7 +153,7 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
     // Its text views in an impl of a trait were written `String` (#1250).
     // A list whose elements the walk found views is not lent for its element
     // (#1343): the element handed back is a view of the buffers.
-    let handed = nikaia_std::tools::text_tiers::tier_hand_back(
+    let handed = nikaia_std::compiler::text_tiers::tier_hand_back(
         &mut parsed.program,
         &parsed.interner,
         &beside.fills,

@@ -55,7 +55,7 @@ use crate::parser::Parsed;
 /// ([ADR-294](../../../docs/specification/adr/adr-294.md) step (b)):
 /// `nikaia-std/src/compiler/ty.nika`, beside the type language their fields
 /// hold. Re-exported here so that every reader keeps its path.
-pub use nikaia_std::tools::ty::{
+pub use nikaia_std::compiler::ty::{
     ConfigContract, Crosses, FieldContract, FnContract, Ledger, Lock, Notes, Provenance, Signature,
     Sync, Threads, TypeContract, VariantContract,
 };
@@ -68,7 +68,7 @@ pub trait SyncOps {
 impl SyncOps for Sync {
     fn from(&self) -> Option<&str> {
         // In Nikaia (`tools/contracts_core.nika`, #125).
-        nikaia_std::tools::contracts_core::contracts_sync_from(self)
+        nikaia_std::compiler::contracts_core::contracts_sync_from(self)
     }
 }
 
@@ -113,7 +113,7 @@ pub trait VariantOps {
 
 impl VariantOps for VariantContract {
     fn parse(text: &str) -> VariantContract {
-        nikaia_std::tools::ledger::variant_of(text)
+        nikaia_std::compiler::ledger::variant_of(text)
     }
 }
 
@@ -128,12 +128,12 @@ pub trait SignatureOps: Sized {
 impl SignatureOps for Signature {
     /// The arguments a *call* passes, which is the parameters after a receiver.
     fn arguments(&self) -> &[(String, ty::Ty)] {
-        nikaia_std::tools::contracts_core::contracts_arguments(self)
+        nikaia_std::compiler::contracts_core::contracts_arguments(self)
     }
 
     /// Read one back from the text above.
     fn parse(text: &str) -> Result<Signature> {
-        nikaia_std::tools::ledger::signature_of(text).map_err(|refusal| anyhow!("{refusal}"))
+        nikaia_std::compiler::ledger::signature_of(text).map_err(|refusal| anyhow!("{refusal}"))
     }
 }
 
@@ -195,7 +195,7 @@ impl LedgerOps for Ledger {
     /// files starts from before it absorbs its modules.
     fn empty() -> Self {
         // In Nikaia (`tools/contracts_core.nika`, #125).
-        nikaia_std::tools::contracts_core::contracts_headed(VERSION, &toolchain(), INFERENCE)
+        nikaia_std::compiler::contracts_core::contracts_headed(VERSION, &toolchain(), INFERENCE)
     }
 
     fn infer(parsed: &Parsed) -> Self {
@@ -246,7 +246,7 @@ impl LedgerOps for Ledger {
     /// uses for packages of its own (`modules::Dependency::reachable`).
     fn published(&self, foreign: &BTreeSet<String>) -> Ledger {
         // In Nikaia (`tools/ledger_ops.nika`, ADR-294, #125).
-        nikaia_std::tools::ledger_ops::published_entries(self, foreign)
+        nikaia_std::compiler::ledger_ops::published_entries(self, foreign)
     }
 
     /// Whether this ledger may be **believed** for the sources given, and which
@@ -266,7 +266,7 @@ impl LedgerOps for Ledger {
     /// not this function's question: nothing calls it with an empty `sources`.
     fn stale_against(&self, sources: &BTreeMap<String, String>) -> Vec<String> {
         // In Nikaia (`tools/ledger_ops.nika`).
-        nikaia_std::tools::ledger_ops::stale_units(self, sources)
+        nikaia_std::compiler::ledger_ops::stale_units(self, sources)
     }
 
     /// Every entry of `other`, under `module::`.
@@ -314,7 +314,7 @@ impl LedgerOps for Ledger {
         other: Ledger,
     ) {
         // In Nikaia (`tools/ledger_ops.nika`, ADR-294, #125).
-        nikaia_std::tools::ledger_ops::absorb_into(self, module, renames, &other);
+        nikaia_std::compiler::ledger_ops::absorb_into(self, module, renames, &other);
     }
 
     /// The contracts, and the type checker's pass that helped produce them.
@@ -393,13 +393,13 @@ impl LedgerOps for Ledger {
     /// The file, as it is written out: `tools/ledger_text.nika` (ADR-294,
     /// #125), beside `ledger.nika`, which reads it back.
     fn render(&self) -> String {
-        nikaia_std::tools::ledger_text::ledger_text(self)
+        nikaia_std::compiler::ledger_text::ledger_text(self)
     }
 
     /// **What the contract beside it was derived from**
     /// ([ADR-251](../../../docs/specification/adr/adr-251.md) D1), in Nikaia.
     fn render_derived(&self) -> String {
-        nikaia_std::tools::ledger_text::derived_text(self)
+        nikaia_std::compiler::ledger_text::derived_text(self)
     }
 
     /// The contract at `path` with the record beside it read in, where there
@@ -413,7 +413,7 @@ impl LedgerOps for Ledger {
         // The files are read here; what they say is `tools/contracts_core.nika`'s.
         let written = std::fs::read_to_string(path).ok()?;
         let derived = std::fs::read_to_string(derived_path(path)).ok();
-        nikaia_std::tools::contracts_core::contracts_read_beside(
+        nikaia_std::compiler::contracts_core::contracts_read_beside(
             &written,
             derived.map(String::from),
         )
@@ -422,7 +422,7 @@ impl LedgerOps for Ledger {
     /// The same file under a **description's** header
     /// ([ADR-290](../../../docs/specification/adr/adr-290.md) D5), in Nikaia.
     fn render_description(&self, crate_name: &str, version: &str, notes: &Notes) -> String {
-        nikaia_std::tools::ledger_text::description_text(self, crate_name, version, notes)
+        nikaia_std::compiler::ledger_text::description_text(self, crate_name, version, notes)
     }
 
     /// The header line and everything after it, shared by both renderings.
@@ -434,7 +434,9 @@ impl LedgerOps for Ledger {
     /// about ([ADR-290](../../../docs/specification/adr/adr-290.md) D3), in
     /// Nikaia.
     fn render_from_with(&self, out: &mut String, notes: &Notes) {
-        out.push_str(&nikaia_std::tools::ledger_text::contract_text(self, notes));
+        out.push_str(&nikaia_std::compiler::ledger_text::contract_text(
+            self, notes,
+        ));
     }
 
     /// Read a ledger back - a library's, or this project's own.
@@ -447,7 +449,7 @@ impl LedgerOps for Ledger {
     /// shape, what each table and key means, and a signature back from the
     /// file's spelling.
     fn parse(text: &str) -> Result<Self> {
-        nikaia_std::tools::ledger::read(text).map_err(|refusal| anyhow!("{refusal}"))
+        nikaia_std::compiler::ledger::read(text).map_err(|refusal| anyhow!("{refusal}"))
     }
 }
 
@@ -534,12 +536,12 @@ pub const INPUT: &str = "input";
 /// The `throws` list exactly as the ledger writes it, in Nikaia
 /// (`tools/ledger_text.nika`): the note is the contract (Part III C.4).
 pub fn throws_text(throws: &[String]) -> String {
-    nikaia_std::tools::ledger_text::throws_text(throws)
+    nikaia_std::compiler::ledger_text::throws_text(throws)
 }
 
 /// Every type name this file declares.
 pub fn declared_types(parsed: &Parsed) -> BTreeSet<String> {
-    nikaia_std::tools::ledger_items::types_this_file_declares(&parsed.program, &parsed.interner)
+    nikaia_std::compiler::ledger_items::types_this_file_declares(&parsed.program, &parsed.interner)
 }
 
 /// The type parameters an `impl` head declares, in the order it writes them.
@@ -563,13 +565,13 @@ pub fn impl_parameters(
     target: &crate::ast::Type,
     declared: &BTreeSet<String>,
 ) -> Vec<String> {
-    nikaia_std::tools::ledger_items::impl_parameters(&parsed.interner, target, declared)
+    nikaia_std::compiler::ledger_items::impl_parameters(&parsed.interner, target, declared)
 }
 
 /// A literal, as the grammar once required a default to be: its text is the
 /// value, in this language and the one below.
 pub fn a_literal(expr: &Expr) -> bool {
-    nikaia_std::tools::ledger_items::a_literal(expr)
+    nikaia_std::compiler::ledger_items::a_literal(expr)
 }
 
 /// **A build-time value as the literal the ledger records** (ADR-318 D1-D3):
@@ -642,7 +644,7 @@ fn infer_package_with(
     // each derived column and the defaults. What holds a view is computed
     // per unit here, by name (#544): a `Symbol` is interned by the parse
     // of one file, so a set of them means nothing to another.
-    let views: Vec<nikaia_std::tools::parsed_view::ParsedView<'_, '_, '_, '_, '_, '_>> = units
+    let views: Vec<nikaia_std::compiler::parsed_view::ParsedView<'_, '_, '_, '_, '_, '_>> = units
         .iter()
         .map(|parsed| crate::check::parsed_view_of(parsed))
         .collect();
@@ -671,7 +673,7 @@ fn infer_package_with(
                 .then(Vec::new),
         ),
     };
-    nikaia_std::tools::ledger_items::ledger_infer_package(
+    nikaia_std::compiler::ledger_items::ledger_infer_package(
         &mut ledger,
         &views,
         &borrowing,
@@ -689,7 +691,7 @@ fn infer_package_with(
 /// A value as the literal both languages spell it the same way, where it has
 /// one.
 pub fn literal_of(value: &crate::build_time::Value) -> Option<String> {
-    nikaia_std::tools::ledger_items::literal_of(value, &|f: f64| format!("{f:?}"))
+    nikaia_std::compiler::ledger_items::literal_of(value, &|f: f64| format!("{f:?}"))
 }
 
 /// What `ledger_infer_package` asks of the compiler (`tools/ledger_items.nika`,
@@ -775,14 +777,14 @@ impl InferHost<'_> {
     }
 }
 
-impl nikaia_std::tools::ledger_items::LedgerInferHost for InferHost<'_> {
+impl nikaia_std::compiler::ledger_items::LedgerInferHost for InferHost<'_> {
     fn check_units(&self, ledger: &Ledger) {
         let checked = self.timed("check_units", || self.checked_units(ledger));
         *self.resolved.borrow_mut() = checked
             .iter()
             .flat_map(|c| c.methods.iter().map(|(k, v)| (k.clone(), v.clone())))
             .collect();
-        *self.stored.borrow_mut() = nikaia_std::tools::ledger_items::ledger_items_stored(
+        *self.stored.borrow_mut() = nikaia_std::compiler::ledger_items::ledger_items_stored(
             &mut checked
                 .iter()
                 .map(|c| c.stored_code.clone())
@@ -829,11 +831,11 @@ impl nikaia_std::tools::ledger_items::LedgerInferHost for InferHost<'_> {
         });
     }
 
-    fn result_package(&self, own: &Ledger) -> nikaia_std::tools::views::ResultPackage {
+    fn result_package(&self, own: &Ledger) -> nikaia_std::compiler::views::ResultPackage {
         // The ledgers alone: any unit's interner serves, none is read.
         self.timed("result_package", || match self.units.first() {
             Some(parsed) => crate::views::result_package(parsed, own, self.library),
-            None => nikaia_std::tools::views::ResultPackage {
+            None => nikaia_std::compiler::views::ResultPackage {
                 owned_results: Default::default(),
                 read_by_free: Default::default(),
             },
@@ -844,8 +846,8 @@ impl nikaia_std::tools::ledger_items::LedgerInferHost for InferHost<'_> {
         &self,
         unit: i64,
         own: &Ledger,
-        package: &nikaia_std::tools::views::ResultPackage,
-    ) -> Vec<nikaia_std::tools::views::ResultSource> {
+        package: &nikaia_std::compiler::views::ResultPackage,
+    ) -> Vec<nikaia_std::compiler::views::ResultSource> {
         self.timed("result_sources", || {
             crate::views::result_sources_in(self.units[unit as usize], own, self.library, package)
         })
@@ -855,8 +857,8 @@ impl nikaia_std::tools::ledger_items::LedgerInferHost for InferHost<'_> {
         &self,
         unit: i64,
         own: &Ledger,
-        package: &nikaia_std::tools::views::ResultPackage,
-    ) -> Vec<nikaia_std::tools::views::PlacesStored> {
+        package: &nikaia_std::compiler::views::ResultPackage,
+    ) -> Vec<nikaia_std::compiler::views::PlacesStored> {
         self.timed("places_stored", || {
             crate::views::places_stored_in(self.units[unit as usize], own, self.library, package)
         })

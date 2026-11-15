@@ -21,7 +21,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // **They are read by a grammar written in Nikaia**
 // ([ADR-290](../../docs/specification/adr/adr-290.md) D13):
 // `crates/nikaia-std/src/compiler/rust.nika`, lowered ahead of time and reached
-// from here as an ordinary Rust module — `nikaia_std::tools::rust`, a call and
+// from here as an ordinary Rust module — `nikaia_std::compiler::rust`, a call and
 // nothing else ([ADR-290](../../docs/specification/adr/adr-290.md) D16). What
 // stood here before was a hand-written character scanner that matched `pub fn`
 // at the start of a line and counted braces without knowing what a brace is;
@@ -74,9 +74,9 @@ use anyhow::{Context, Result, bail};
 
 use crate::contracts::{Ledger, Notes};
 
+use nikaia_std::compiler::describe::{self, DescribeHost};
+use nikaia_std::compiler::surface;
 use nikaia_std::rt::exec::block_on;
-use nikaia_std::tools::describe::{self, DescribeHost};
-use nikaia_std::tools::surface;
 
 /// What a run of the command did, for the line it prints.
 #[derive(Debug)]
@@ -221,7 +221,7 @@ pub fn draft(root: &Path, crate_word: &str) -> Result<(Ledger, Described)> {
         );
         // **Read by the grammar, offered by `tools/surface.nika`** (ADR-290
         // D3-D4): this drives the two and hands the items between them.
-        let items = nikaia_std::tools::rust::file(text)
+        let items = nikaia_std::compiler::rust::file(text)
             .map_err(|error| anyhow::anyhow!("{relative}: {error}"))?;
         surface::read_items(&mut surface, relative, &items);
     }

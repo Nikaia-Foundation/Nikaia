@@ -59,8 +59,8 @@ use super::tether::{RESULT, State};
 /// What a whole unit says about views, which types hold one and what the
 /// structs among them are made of, with the questions asked of a type, a
 /// method's name and a ledger: `tools/keep.nika` (ADR-294, #125).
-use nikaia_std::tools::keep::KeepContext as Context;
-pub use nikaia_std::tools::keep::takes_a_keep;
+use nikaia_std::compiler::keep::KeepContext as Context;
+pub use nikaia_std::compiler::keep::takes_a_keep;
 
 /// A source, by the statement it stands in and - for a call - the callee:
 /// what the emitter has in hand where it writes either.
@@ -310,8 +310,8 @@ pub(crate) fn buffer_plans(
     beside: Option<&Context>,
     ledger: &Ledger,
     library: &Ledger,
-) -> Vec<nikaia_std::tools::buffers::BufferPlan> {
-    use nikaia_std::tools::buffers::{self as nika, BufferAsk};
+) -> Vec<nikaia_std::compiler::buffers::BufferPlan> {
+    use nikaia_std::compiler::buffers::{self as nika, BufferAsk};
     let mut context = Context::of(&parsed.interner, &parsed.program.items);
     if let Some(theirs) = beside {
         context.borrowing.extend(theirs.borrowing.iter().cloned());
@@ -337,8 +337,8 @@ pub(crate) fn buffer_plans(
     .kept
     .into_iter()
     .collect();
-    let own_methods = nikaia_std::tools::ty::method_index(ledger);
-    let library_methods = nikaia_std::tools::ty::method_index(library);
+    let own_methods = nikaia_std::compiler::ty::method_index(ledger);
+    let library_methods = nikaia_std::compiler::ty::method_index(library);
     let ask = BufferAsk {
         names: &parsed.interner,
         own: ledger,
@@ -363,8 +363,8 @@ fn place(at: i64) -> usize {
     at as usize
 }
 
-fn keep_from(keep: nikaia_std::tools::buffers::KeepAt) -> KeepAt {
-    use nikaia_std::tools::buffers::KeepAt as Nika;
+fn keep_from(keep: nikaia_std::compiler::buffers::KeepAt) -> KeepAt {
+    use nikaia_std::compiler::buffers::KeepAt as Nika;
     match keep {
         Nika::Param => KeepAt::Param,
         Nika::Frame => KeepAt::Frame,
@@ -374,8 +374,8 @@ fn keep_from(keep: nikaia_std::tools::buffers::KeepAt) -> KeepAt {
     }
 }
 
-fn source_from(source: nikaia_std::tools::buffers::Source) -> Source {
-    use nikaia_std::tools::buffers::Source as Nika;
+fn source_from(source: nikaia_std::compiler::buffers::Source) -> Source {
+    use nikaia_std::compiler::buffers::Source as Nika;
     match source {
         Nika::Buffer { at, name, ty, span } => Source::Buffer {
             at: place(at),
@@ -402,8 +402,8 @@ fn source_from(source: nikaia_std::tools::buffers::Source) -> Source {
     }
 }
 
-fn escape_from(escape: nikaia_std::tools::buffers::Escape) -> Escape {
-    use nikaia_std::tools::buffers::Escape as Nika;
+fn escape_from(escape: nikaia_std::compiler::buffers::Escape) -> Escape {
+    use nikaia_std::compiler::buffers::Escape as Nika;
     match escape {
         Nika::Returned => Escape::Result,
         Nika::Param(name) => Escape::Param(name),
@@ -412,7 +412,7 @@ fn escape_from(escape: nikaia_std::tools::buffers::Escape) -> Escape {
     }
 }
 
-pub(crate) fn from_nikaia(plan: nikaia_std::tools::buffers::BufferPlan) -> Plan {
+pub(crate) fn from_nikaia(plan: nikaia_std::compiler::buffers::BufferPlan) -> Plan {
     Plan {
         key: plan.key,
         first: (plan.first >= 0).then(|| place(plan.first)),
@@ -477,12 +477,12 @@ pub(crate) fn from_nikaia(plan: nikaia_std::tools::buffers::BufferPlan) -> Plan 
 
 /// The name a call's callee is written as.
 pub fn callee_name(parsed: &Parsed, func: &Expr) -> Option<String> {
-    nikaia_std::tools::keep::written_callee(&parsed.interner, func, &|path: &str| {
+    nikaia_std::compiler::keep::written_callee(&parsed.interner, func, &|path: &str| {
         parsed.unaliased(path)
     })
 }
 
 /// The local an expression is rooted in: `xs`, `self.items`, `m[k]`.
 pub fn root_of(parsed: &Parsed, expr: &Expr) -> Option<String> {
-    nikaia_std::tools::keep::root_of(&parsed.interner, expr)
+    nikaia_std::compiler::keep::root_of(&parsed.interner, expr)
 }

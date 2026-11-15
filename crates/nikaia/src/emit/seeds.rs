@@ -21,7 +21,7 @@ use std::collections::BTreeMap;
 use crate::ast::Type;
 use crate::contracts::maps::Shape;
 use crate::parser::Parsed;
-use nikaia_std::tools::emit_seeds::{
+use nikaia_std::compiler::emit_seeds::{
     EmitSeedsHost, EmitSeedsPlace, EmitSeedsTables, emit_seeds_fill_calls, emit_seeds_key,
     emit_seeds_read, emit_seeds_tables, emit_seeds_write,
 };

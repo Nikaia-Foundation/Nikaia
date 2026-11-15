@@ -12,7 +12,7 @@
 
 #[allow(unused_imports)]
 use nikaia_std::block::names::{String, ToText, Vec, format, vec};
-use nikaia_std::tools::build_eval::{BtHost, BtRan, BtRead, bt_evaluate};
+use nikaia_std::compiler::build_eval::{BtHost, BtRan, BtRead, bt_evaluate};
 
 use crate::assets::Reads;
 use crate::ast::{Expr, Item};
@@ -24,19 +24,19 @@ use crate::parser::Parsed;
 /// a sign, a float as the machine carries one, a truth value, decoded text, a
 /// fixed-length list, a pair, a variant or a struct of the program's own -
 /// each a kind a `const` can carry (ADR-287 D6).
-pub use nikaia_std::tools::build_values::BuildValue as Value;
+pub use nikaia_std::compiler::build_values::BuildValue as Value;
 
 /// Why a build-time expression did not come to a value: declared in Nikaia
 /// (`tools/build_eval.nika`, ADR-294, #125), with a grammar's wall in the
 /// checker's own type.
-pub use nikaia_std::tools::build_eval::BtRefusal as Refusal;
+pub use nikaia_std::compiler::build_eval::BtRefusal as Refusal;
 
 /// What a name outside a build-time body is worth: a `comptime` already
 /// evaluated, or a `let` whose value folded.
 /// **An integer while the program is built**: a magnitude and a sign, the
 /// shape the tree gives a literal (ADR-294 D11), with what the evaluator does
 /// with two of them written in Nikaia (`tools/integers.nika`).
-pub use nikaia_std::tools::integers::Integer;
+pub use nikaia_std::compiler::integers::Integer;
 
 pub type Known<'a> = &'a dyn Fn(&str) -> Option<Value>;
 
@@ -232,7 +232,7 @@ impl Host<'_> {
 /// refuses a literal the set does not cover. Both read
 /// `crates/nikaia-std/src/compiler/escapes.nika`, where the table is Nikaia
 /// ([ADR-294](../../docs/specification/adr/adr-294.md), #125).
-pub use nikaia_std::tools::escapes::NotAnEscape as Refused;
+pub use nikaia_std::compiler::escapes::NotAnEscape as Refused;
 
 /// The escapes this language has, as a reader of a diagnostic wants them
 /// ([Part I 2.5](../../docs/specification/10-nikaia-light.md)).
@@ -252,7 +252,7 @@ pub(crate) fn char_of(n: i64) -> Option<char> {
 /// here safe: everything this returns `Some` for is something `decoded`
 /// returns `None` for, and `rustc` refuses in its own words.
 pub fn an_escape_nothing_names(literal: &str) -> Option<Refused> {
-    nikaia_std::tools::escapes::an_escape_nothing_names(literal, &char_of)
+    nikaia_std::compiler::escapes::an_escape_nothing_names(literal, &char_of)
 }
 
 /// **What a written string literal means** — the value behind the spelling.
@@ -269,18 +269,18 @@ pub fn an_escape_nothing_names(literal: &str) -> Option<Refused> {
 /// the pair to the only standard that settles it: the same literal, read at
 /// build time and at run time, printing the same bytes.
 pub fn decoded(literal: &str) -> Option<String> {
-    nikaia_std::tools::escapes::decoded(literal, &char_of)
+    nikaia_std::compiler::escapes::decoded(literal, &char_of)
 }
 
 /// The inverse of [`decoded`]: a value, spelled as a literal `rustc` reads.
 /// Every control character is written as an escape.
 pub fn written(text: &str) -> String {
-    nikaia_std::tools::escapes::as_a_literal(text)
+    nikaia_std::compiler::escapes::as_a_literal(text)
 }
 
 /// **Why a function may not run while the program is built**, read off its
 /// ledger entry ([ADR-287](../../../docs/specification/adr/adr-287.md) D13,
 /// D14), by `tools/build_eval.nika`. Nothing where it may run.
 pub(crate) fn may_not_run(contract: &crate::contracts::FnContract) -> Option<String> {
-    nikaia_std::tools::build_eval::bt_may_not_run(contract)
+    nikaia_std::compiler::build_eval::bt_may_not_run(contract)
 }

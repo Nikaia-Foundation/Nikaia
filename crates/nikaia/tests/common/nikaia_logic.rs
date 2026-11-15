@@ -5,20 +5,20 @@
 #[allow(unused_imports)]
 use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
-use nikaia_std::tools::logic_alethe::lg_alethe_write;
-use nikaia_std::tools::logic_lia::LgBudget;
-use nikaia_std::tools::logic_normal::{
+use nikaia_std::compiler::logic_alethe::lg_alethe_write;
+use nikaia_std::compiler::logic_lia::LgBudget;
+use nikaia_std::compiler::logic_normal::{
     LgNormal, lg_certificate_of, lg_certificate_text, lg_model_of, lg_model_text, lg_normal_of,
 };
-use nikaia_std::tools::logic_search::{lg_check, lg_verify, lg_verify_model};
-use nikaia_std::tools::logic_smtlib::{LgRead, lg_smtlib_read, lg_smtlib_write};
-use nikaia_std::tools::prover_arena::TermArena;
+use nikaia_std::compiler::logic_search::{lg_check, lg_verify, lg_verify_model};
+use nikaia_std::compiler::logic_smtlib::{LgRead, lg_smtlib_read, lg_smtlib_write};
+use nikaia_std::compiler::prover_arena::TermArena;
 
-pub use nikaia_std::tools::logic_lia::{
+pub use nikaia_std::compiler::logic_lia::{
     LgAnswer as Answer, LgCertificate as Certificate, LgModel as Model, LgRefutation as Refutation,
     LgRejected as Rejected, LgStep as Step, LgUnknown as Unknown,
 };
-pub use nikaia_std::tools::logic_smtlib::LgReadError as ReadError;
+pub use nikaia_std::compiler::logic_smtlib::LgReadError as ReadError;
 
 pub type TermId = i64;
 
@@ -177,7 +177,7 @@ impl Normal {
 
 pub mod smtlib {
     use super::*;
-    pub use nikaia_std::tools::logic_smtlib::LgReadError as ReadError;
+    pub use nikaia_std::compiler::logic_smtlib::LgReadError as ReadError;
 
     pub struct Script {
         pub arena: Arena,

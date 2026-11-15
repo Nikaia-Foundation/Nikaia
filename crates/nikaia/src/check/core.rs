@@ -16,7 +16,7 @@
 use super::*;
 #[allow(unused_imports)]
 use nikaia_std::block::names::{String, ToText, Vec, format, vec};
-use nikaia_std::tools::check_narrow::CheckNarrowing;
+use nikaia_std::compiler::check_narrow::CheckNarrowing;
 use std::ops::{Deref, DerefMut};
 
 /// The checker's state, which is out of the checker while Nikaia code runs.

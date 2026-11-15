@@ -68,7 +68,7 @@ pub fn compiler_identity() -> &'static str {
             format!(
                 "{}\n{}",
                 env!("NIKAIA_COMPILER"),
-                nikaia_std::tools::LOWERED_DIGEST
+                nikaia_std::compiler::LOWERED_DIGEST
             )
             .as_bytes(),
         )

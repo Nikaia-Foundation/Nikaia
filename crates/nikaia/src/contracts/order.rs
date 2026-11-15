@@ -66,7 +66,7 @@ use super::Ledger;
 /// (`Accounted`), and whether two of them, or a run, keep their order
 /// (`Verdict`, `verdict`, `group_verdict`, `group_of`). What stays here is the
 /// walk that does the reducing.
-pub use nikaia_std::tools::order::{
+pub use nikaia_std::compiler::order::{
     Accounted, Operation, Verdict, group_of, group_verdict, verdict,
 };
 
@@ -99,10 +99,10 @@ pub fn operation(
 /// failure leaves uncaught, whether its result may cross back from the closure
 /// overlapping builds (ADR-005 §1 Group B, `Destination::Ours`).
 pub fn accounted(parsed: &Parsed, stmt: &Stmt, own: &Ledger, library: &Ledger) -> Accounted {
-    nikaia_std::tools::order::accounted(
+    nikaia_std::compiler::order::accounted(
         stmt,
         &parsed.interner,
-        &nikaia_std::tools::threads::Walking {
+        &nikaia_std::compiler::threads::Walking {
             own,
             library,
             into: super::send::Destination::Ours,
@@ -147,7 +147,7 @@ pub fn block_mentions(parsed: &Parsed, block: &crate::ast::Block, name: &str) ->
 /// of an interpolated string, inside a `dsl` body - every word of the raw text
 /// counts as one. **Written in Nikaia** (`tools/names.nika`, #125).
 pub(super) fn names_in(parsed: &Parsed, expr: &Expr, out: &mut BTreeSet<String>) {
-    nikaia_std::tools::names::names_in(expr, &parsed.interner, out);
+    nikaia_std::compiler::names::names_in(expr, &parsed.interner, out);
 }
 
 /// Every name the statements of a block mention, the names a statement binds
@@ -157,7 +157,7 @@ pub(super) fn names_in_block(
     block: &crate::ast::Block,
     out: &mut BTreeSet<String>,
 ) {
-    nikaia_std::tools::names::names_in_block(block, &parsed.interner, out);
+    nikaia_std::compiler::names::names_in_block(block, &parsed.interner, out);
 }
 
 /// **Every `overlap { … }` block in a program, and what it was allowed**
@@ -183,10 +183,10 @@ pub fn overlap_report(
 ) -> String {
     // The report is `tools/order.nika`'s (#125); the blocks a body holds are
     // found by the emitter's walk, and whether a branch pauses is its answer.
-    nikaia_std::tools::order::overlap_report(
+    nikaia_std::compiler::order::overlap_report(
         &parsed.program.items,
         &parsed.interner,
-        &nikaia_std::tools::threads::Walking {
+        &nikaia_std::compiler::threads::Walking {
             own,
             library,
             into: super::send::Destination::Ours,

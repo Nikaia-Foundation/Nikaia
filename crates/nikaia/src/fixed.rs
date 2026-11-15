@@ -21,7 +21,7 @@
 use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 /// Where a scan stops being as good as a hash
 /// ([ADR-311](../../../docs/specification/adr/adr-311.md) D10).
-pub const HASHED_FROM: usize = nikaia_std::tools::fixed::HASHED_FROM as usize;
+pub const HASHED_FROM: usize = nikaia_std::compiler::fixed::HASHED_FROM as usize;
 
 /// A table, ready to be written into a `const`.
 pub struct Table {
@@ -44,7 +44,7 @@ pub struct Table {
 /// but `crates/nikaia/tests/fixed_map.rs`, which **runs** a program over both
 /// table shapes.
 pub fn fnv(key: &str, seed: u64) -> u64 {
-    nikaia_std::tools::fixed::fnv(key, seed)
+    nikaia_std::compiler::fixed::fnv(key, seed)
 }
 
 /// Build the table for these keys, in the order they were written - CHD from
@@ -53,7 +53,7 @@ pub fn fnv(key: &str, seed: u64) -> u64 {
 ///
 /// `None` where no seed worked, which is reported rather than looped on.
 pub fn build(keys: &[String]) -> Option<Table> {
-    let table = nikaia_std::tools::fixed::build(keys)?;
+    let table = nikaia_std::compiler::fixed::build(keys)?;
     Some(Table {
         seed: table.seed,
         disps: table.disps,

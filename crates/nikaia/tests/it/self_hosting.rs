@@ -25,7 +25,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 /// replaced is gone, so these cases are what hold the answers where they were.
 #[test]
 fn the_compilers_spelling_is_nikaia() {
-    use nikaia_std::tools::spelling::{distance, one_edit_apart};
+    use nikaia_std::compiler::spelling::{distance, one_edit_apart};
     let d = |a: &str, b: &str| distance(a, b);
     assert_eq!(d("name", "name"), 0);
     assert_eq!(d("", "abc"), 3);
@@ -49,7 +49,7 @@ fn the_compilers_spelling_is_nikaia() {
 /// and in the order the body names it, and a body without one has none.
 #[test]
 fn the_compilers_dsl_holes_are_nikaia() {
-    use nikaia_std::tools::dsl::parameters;
+    use nikaia_std::compiler::dsl::parameters;
     assert_eq!(
         parameters("SELECT * FROM users WHERE id = :id AND name = :name"),
         vec!["id", "name"]

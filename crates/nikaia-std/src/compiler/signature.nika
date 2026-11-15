@@ -6,7 +6,7 @@
 //
 // Moved from the compiler's `describe.rs` by ADR-290's route (#124): lowered
 // by `nikaia lower-std` to `signature.rs` beside it, `include!`d as
-// `nikaia_std::tools::signature`, and called from `describe`. It reads the
+// `nikaia_std::compiler::signature`, and called from `describe`. It reads the
 // ledger's records beside it for `Ty`, as `ledger.nika` does.
 //
 // **What it cannot translate is `Ty::Unknown`**, the ledger's `?`: the absence

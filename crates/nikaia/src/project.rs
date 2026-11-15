@@ -28,19 +28,19 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use nikaia_std::rt::exec::block_on;
-use nikaia_std::tools::project_batch;
-use nikaia_std::tools::project_check;
-use nikaia_std::tools::project_drive::{self, ProjectDriveRefusal};
-use nikaia_std::tools::project_lower;
-use nikaia_std::tools::project_members::{
+use nikaia_std::compiler::project_batch;
+use nikaia_std::compiler::project_check;
+use nikaia_std::compiler::project_drive::{self, ProjectDriveRefusal};
+use nikaia_std::compiler::project_lower;
+use nikaia_std::compiler::project_members::{
     self, ProjectMembersForeignHost, ProjectMembersHost, ProjectMembersManifest,
     ProjectMembersMember, ProjectMembersRefusal, project_members_canonical as canonical,
 };
-use nikaia_std::tools::project_settings::{self, ProjectSettingsRefusal, ProjectWords};
-use nikaia_std::tools::project_tests::{self, ProjectTestsOutcome as Outcome};
-pub use nikaia_std::tools::project_tests::{OutputTest, ProgramTest};
-use nikaia_std::tools::project_write::{self, ProjectWriteRefusal};
+use nikaia_std::compiler::project_settings::{self, ProjectSettingsRefusal, ProjectWords};
+use nikaia_std::compiler::project_tests::{self, ProjectTestsOutcome as Outcome};
+pub use nikaia_std::compiler::project_tests::{OutputTest, ProgramTest};
+use nikaia_std::compiler::project_write::{self, ProjectWriteRefusal};
+use nikaia_std::rt::exec::block_on;
 
 use anyhow::{Context, Result, anyhow};
 use orchestrator::cache::{Artifacts, Cache, Choices, Layout, Lockfile};
@@ -477,9 +477,9 @@ impl Manifests {
     /// write of its note is the `io::IoError` it threw (ADR-392).
     fn error(
         &self,
-        thrown: nikaia_std::tools::__NikaiaThrows_ProjectMembersRefusal__io_IoError,
+        thrown: nikaia_std::compiler::__NikaiaThrows_ProjectMembersRefusal__io_IoError,
     ) -> anyhow::Error {
-        use nikaia_std::tools::__NikaiaThrows_ProjectMembersRefusal__io_IoError as Thrown;
+        use nikaia_std::compiler::__NikaiaThrows_ProjectMembersRefusal__io_IoError as Thrown;
         let thrown = match thrown {
             Thrown::ProjectMembersRefusal(thrown) => thrown,
             Thrown::io_IoError(thrown) => return anyhow!("{}", thrown.split().0),
@@ -861,7 +861,7 @@ pub fn diagnose(
     input: &Path,
     open: &modules::Open,
     alone: bool,
-) -> Vec<(String, nikaia_std::tools::render::Shown)> {
+) -> Vec<(String, nikaia_std::compiler::render::Shown)> {
     let (checked, mut found) = diagnostics::collecting(|| -> Result<()> {
         let (manifest, packages) = match alone {
             true => (Manifest::default(), Vec::new()),
@@ -937,7 +937,7 @@ pub fn definition(
                         .iter()
                         .map(|unit| crate::check::parsed_view_of(&unit.parsed))
                         .collect();
-                    let (file, span, name) = nikaia_std::tools::check_declared::declared_site(
+                    let (file, span, name) = nikaia_std::compiler::check_declared::declared_site(
                         &views, at as i64, facts, offset,
                     )?;
                     Some((
@@ -955,13 +955,13 @@ pub fn definition(
 /// [`diagnose`] and [`definition`].
 pub struct Lsp;
 
-impl nikaia_std::tools::lsp::LspHost for Lsp {
+impl nikaia_std::compiler::lsp::LspHost for Lsp {
     fn diagnose(
         &self,
         entry: &str,
         open: &BTreeMap<String, String>,
         alone: bool,
-    ) -> Vec<(String, nikaia_std::tools::render::Shown)> {
+    ) -> Vec<(String, nikaia_std::compiler::render::Shown)> {
         diagnose(Path::new(entry), open, alone)
     }
 
@@ -1130,7 +1130,7 @@ impl LowerHost<'_> {
             .package_name()
             .map(str::to_text)
             .unwrap_or_else(|| settings.words.symbol_prefix.clone());
-        let kept = nikaia_std::tools::project_features::features_kept(
+        let kept = nikaia_std::compiler::project_features::features_kept(
             rust,
             features,
             &package,
@@ -1614,7 +1614,7 @@ pub const WARNINGS: &str = "warnings";
 /// ([ADR-290](../../docs/specification/adr/adr-290.md) D1): the struct, how a
 /// build reads it and what it gives a program's packages are
 /// `ProjectMembersForeign` in `tools/project_members.nika` (P4b).
-pub use nikaia_std::tools::project_members::ProjectMembersForeign as Foreign;
+pub use nikaia_std::compiler::project_members::ProjectMembersForeign as Foreign;
 
 /// What a build of `root` is at its boundary
 /// (`project_members_foreign_of`, P4b).
@@ -1954,7 +1954,7 @@ pub fn write_ledger(path: &Path, ledger: &str, locked: bool) -> Result<()> {
 /// and leaves you to find out what. 13.5 asks this diff to narrate a cause; it
 /// cannot do that without saying whose contract moved.
 pub fn changed_lines(ledger: &str, committed: &str) -> Vec<String> {
-    nikaia_std::tools::diffs::changed_lines(ledger, committed)
+    nikaia_std::compiler::diffs::changed_lines(ledger, committed)
 }
 
 /// Which of the three explanations a run was asked for
@@ -3555,11 +3555,11 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         )
     }
 
-    fn features(&self) -> Vec<nikaia_std::tools::manifest::ManifestFeature> {
+    fn features(&self) -> Vec<nikaia_std::compiler::manifest::ManifestFeature> {
         self.project.manifest.file().features.clone()
     }
 
-    fn rust_library(&self) -> Option<nikaia_std::tools::manifest::ManifestRustLibrary> {
+    fn rust_library(&self) -> Option<nikaia_std::compiler::manifest::ManifestRustLibrary> {
         self.project.manifest.file().rust_library.clone()
     }
 
@@ -4027,7 +4027,7 @@ mod tests {
     #[test]
     fn cpu_comes_after_the_users_rustflags() {
         let e = |encoded: Option<&str>, plain: Option<&str>, cpu: &str| {
-            nikaia_std::tools::project_settings::encoded_with_cpu(encoded, plain, cpu)
+            nikaia_std::compiler::project_settings::encoded_with_cpu(encoded, plain, cpu)
         };
         assert_eq!(e(None, None, "x86-64-v3"), None);
         assert_eq!(

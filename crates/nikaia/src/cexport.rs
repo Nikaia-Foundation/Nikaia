@@ -36,9 +36,9 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use anyhow::Result;
 
-use nikaia_std::tools::cexport::{CX_LEDGER_DIGEST, cx_export};
-use nikaia_std::tools::cexport_model::{CxEntry, cx_entries_bound, cx_entries_in};
-use nikaia_std::tools::cexport_node::cx_node_gyp;
+use nikaia_std::compiler::cexport::{CX_LEDGER_DIGEST, cx_export};
+use nikaia_std::compiler::cexport_model::{CxEntry, cx_entries_bound, cx_entries_in};
+use nikaia_std::compiler::cexport_node::cx_node_gyp;
 
 use crate::modules::Program;
 
@@ -65,7 +65,7 @@ pub const LEDGER_DIGEST: &str = CX_LEDGER_DIGEST;
 
 /// The refusal for a library build whose entry package exports nothing.
 pub fn nothing_exported() -> anyhow::Error {
-    anyhow::anyhow!(nikaia_std::tools::cexport_model::cx_nothing_exported())
+    anyhow::anyhow!(nikaia_std::compiler::cexport_model::cx_nothing_exported())
 }
 
 /// The wrappers and the header for every entry point the program's own files
@@ -121,7 +121,7 @@ pub fn export(
 
 #[cfg(test)]
 mod tests {
-    use nikaia_std::tools::cexport_model::cx_std_codes;
+    use nikaia_std::compiler::cexport_model::cx_std_codes;
 
     /// **An `errno` is the target's** (ADR-284 D33): Linux's on both Linux
     /// targets, WASI's under WebAssembly; the rest of `std`'s numbers are fixed.

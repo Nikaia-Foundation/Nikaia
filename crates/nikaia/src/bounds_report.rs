@@ -24,7 +24,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use crate::bounds::{BoundsChecks, OverflowChecks};
 use crate::contracts::Ledger;
 use crate::parser::Parsed;
-use nikaia_std::tools::bounds_report::{
+use nikaia_std::compiler::bounds_report::{
     BoundsReportFacts, bounds_report_checked, bounds_report_trace, bounds_report_trace_rows,
 };
 
@@ -154,5 +154,5 @@ pub fn derived(
         &std::collections::BTreeSet::new(),
         through_loops,
     );
-    nikaia_std::tools::bounds_report::bounds_report_derived(&proven.derived, source)
+    nikaia_std::compiler::bounds_report::bounds_report_derived(&proven.derived, source)
 }

@@ -33,7 +33,7 @@ fn block_start(lines: ref Vec[ref String], at: i64) -> i64 {
 fn is_movable(body: ref Vec[String]) -> bool {
     let mut literals = 0
     for line in body {
-        if line.contains("rust") || line.contains("Command") || line.contains("lower_tools") || line.contains("printed_and_lowered") || line.contains("scratch_dir") {
+        if line.contains("rust") || line.contains("Command") || line.contains("lower_compiler") || line.contains("printed_and_lowered") || line.contains("scratch_dir") {
             return false
         }
         if line.trim() == "r#\"" { literals += 1 }

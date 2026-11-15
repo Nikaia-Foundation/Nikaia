@@ -63,7 +63,7 @@ fn a_constructor_call_of_a_struct_in_another_file_is_the_new_it_has() {
          return Wrapped { node: name, at: at }\n}\n",
     )
     .expect("write b");
-    let lowered = nikaia::sysroot::lower_tools(&dir).expect("the package lowers");
+    let lowered = nikaia::sysroot::lower_compiler(&dir).expect("the package lowers");
     let _ = std::fs::remove_dir_all(&dir);
     assert!(
         lowered.contains("Wrapped::new(name, at)"),

@@ -468,7 +468,7 @@ fn a_nested_shared_type_is_translated_whole() {
 /// as the names the program wrote.
 #[test]
 fn a_rustc_message_is_put_in_the_programs_words() {
-    use nikaia_std::tools::rustc_words::in_this_language;
+    use nikaia_std::compiler::rustc_words::in_this_language;
     assert_eq!(
         in_this_language("expected `Rc<Vec<Arc<Conn>>>`, found `MyRc<u8>`"),
         "expected `Shared[Vec<Shared[Conn]>]`, found `MyRc<u8>`"

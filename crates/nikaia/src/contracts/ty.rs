@@ -34,7 +34,7 @@ use crate::parser::Parsed;
 /// `Ty` and `Shape` are declared in Nikaia ([ADR-294](../../../docs/specification/adr/adr-294.md)
 /// D1): `nikaia-std/src/compiler/ty.nika`, with the words below, the text a type
 /// is written as, and what the checker asks of one.
-pub use nikaia_std::tools::ty::{
+pub use nikaia_std::compiler::ty::{
     ARRAY, ENDS, PAR, PAUSES, REPLAYS, SEEN, SEQ, SIZED, Shape, TEXT, TEXT_VIEW, Ty, bind, qualify,
     renamed, split_args, substitute,
 };
@@ -135,12 +135,12 @@ impl TyOps for Ty {
     /// Read one back: `tools/ty.nika`'s `parse` (ADR-294 step (c)), which reads
     /// what [`Ty::text`] writes and the older spellings a ledger may still hold.
     fn parse(text: &str) -> Ty {
-        nikaia_std::tools::ty::parse(text)
+        nikaia_std::compiler::ty::parse(text)
     }
 
     /// The type a `.nika` declaration names.
     fn from_ast(parsed: &Parsed, ty: &ast::Type) -> Ty {
         // **In Nikaia** (`tools/declared.nika`, ADR-294, #125).
-        nikaia_std::tools::declared::written_ty(&parsed.interner, &parsed.aliases, ty)
+        nikaia_std::compiler::declared::written_ty(&parsed.interner, &parsed.aliases, ty)
     }
 }

@@ -29,7 +29,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // read: it reaches everything, and stays where it was written.
 
 use anyhow::{Result, anyhow};
-pub use nikaia_std::tools::ty::Touch;
+pub use nikaia_std::compiler::ty::Touch;
 
 /// **The order a set of touches is kept and written in**: the kind, then the
 /// parameter (none first), then the resource a literal named (none first),
@@ -140,7 +140,7 @@ pub trait TouchOps: Sized {
 impl TouchOps for Touch {
     /// Read one back from the text a ledger writes.
     fn parse(text: &str) -> Result<Touch> {
-        nikaia_std::tools::ledger::touch_of(text).map_err(|refusal| anyhow!("{refusal}"))
+        nikaia_std::compiler::ledger::touch_of(text).map_err(|refusal| anyhow!("{refusal}"))
     }
 
     /// Whether this compiler knows what the named resource *is* (ADR-292 D3).
@@ -162,7 +162,7 @@ impl TouchOps for Touch {
 /// destination the moment anybody types `2>&1`, so `println` / `eprintln` /
 /// `println` stays a group in order - and the kinds stay separate in the
 /// ledger, because `eprintln` genuinely does not write standard output.
-pub use nikaia_std::tools::touch::Reached;
+pub use nikaia_std::compiler::touch::Reached;
 
 // --- what a body reaches (ADR-288 D22) ---------------------------------------
 
@@ -172,8 +172,8 @@ use crate::ast::Expr;
 use crate::check::MethodCalls;
 use crate::contracts::Ledger;
 use crate::parser::Parsed;
-use nikaia_std::tools::throws::MethodsCalled;
-use nikaia_std::tools::touch::{self as nika, TouchGraph};
+use nikaia_std::compiler::throws::MethodsCalled;
+use nikaia_std::compiler::touch::{self as nika, TouchGraph};
 
 /// Give every function in the ledger the `touches` its body earns
 /// ([ADR-288](../../../../docs/specification/adr/adr-288.md) D22).

@@ -6,7 +6,7 @@
 //
 // Moved from the compiler's `describe.rs` by ADR-290's route: lowered by
 // `nikaia lower-std` to `paths.rs` beside it, `include!`d as
-// `nikaia_std::tools::paths`, and called from `describe`. What stays Rust is
+// `nikaia_std::compiler::paths`, and called from `describe`. What stays Rust is
 // the table these answers fill - which modules are `pub`, which items are
 // reachable - until that moves too (#124).
 //

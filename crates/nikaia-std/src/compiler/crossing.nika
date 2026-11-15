@@ -6,7 +6,7 @@
 //
 // Moved from the compiler's `describe.rs` by ADR-290's route (#124): lowered
 // by `nikaia lower-std` to `crossing.rs` beside it, `include!`d as
-// `nikaia_std::tools::crossing`, and called from `describe`. It reads the
+// `nikaia_std::compiler::crossing`, and called from `describe`. It reads the
 // ledger's records beside it, as `ledger.nika` does, for `Crosses`.
 //
 // **Every answer here errs towards silence.** A draft that said `crosses =
