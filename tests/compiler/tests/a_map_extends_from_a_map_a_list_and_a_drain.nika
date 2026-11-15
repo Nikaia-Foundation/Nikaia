@@ -1,0 +1,45 @@
+use std::collections
+
+fn word(s: String) -> String {
+    let mut w = String()
+    w.push_str(s)
+    return w
+}
+
+fn main() throws {
+    let mut a: collections::BTreeMap[String, String] = collections::BTreeMap()
+    let mut b: collections::BTreeMap[String, String] = collections::BTreeMap()
+    b.insert("k", "v")
+    a.extend(b)
+    println(f"{a.len()}")
+    let mut h: collections::HashMap[String, String] = collections::HashMap()
+    let mut g: collections::HashMap[String, String] = collections::HashMap()
+    g.insert(word("k"), word("v"))
+    h.extend(g)
+    println(f"{h.len()}")
+    // a list of pairs, a later pair replaces an earlier value
+    let pairs: Vec[(String, String)] = [(word("x"), word("1")), (word("x"), word("2")), (word("y"), word("3"))]
+    a.extend(pairs)
+    println(f"{a.len()} {a["x"] ?? "none"}")
+    let pairs2: Vec[(String, String)] = [(word("x"), word("1")), (word("x"), word("2"))]
+    h.extend(pairs2)
+    println(f"{h.len()} {h["x"] ?? "none"}")
+    // a sequence of owned pairs
+    let mut c: collections::BTreeMap[String, String] = collections::BTreeMap()
+    c.insert(word("z"), word("9"))
+    a.extend(c.drain())
+    println(f"{a.len()}")
+    let mut d: collections::HashMap[String, String] = collections::HashMap()
+    d.insert(word("z"), word("9"))
+    h.extend(d.drain())
+    println(f"{h.len()}")
+    // read again: D4's copy
+    let mut e: collections::BTreeMap[String, String] = collections::BTreeMap()
+    e.insert(word("q"), word("7"))
+    a.extend(e.clone())
+    println(f"{a.len()} {e.len()}")
+    let mut f: collections::HashMap[String, String] = collections::HashMap()
+    f.insert(word("q"), word("7"))
+    h.extend(f.clone())
+    println(f"{h.len()} {f.len()}")
+}

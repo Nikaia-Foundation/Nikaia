@@ -6158,6 +6158,16 @@ fn put_into_container(place: ref Declaring, method: ref String, args: ref Vec[Ex
             flow_value(going_into(place.owner, ty.generics[0], [0], true), args[0], given[0], ask, walk)
             flow_value(going_into(place.owner, ty.generics[1], [1], true), args[1], given[1], ask, walk)
         }
+        // **`m.extend(pairs)`** (ADR-collections-1 D6): the pairs' keys go
+        // into the keys and their values into the values, as `extend` of a
+        // set puts its items into the elements.
+        if method == "extend" && args.len() == 1 && given.len() == 1 && ty.generics.len() == 2 {
+            let keys = pair_kinds(args[0], true, given[0], ask, walk)
+            let values = pair_kinds(args[0], false, given[0], ask, walk)
+            flow_value(going_into(place.owner, ty.generics[0], [0], false), args[0], keys, ask, walk)
+            flow_value(going_into(place.owner, ty.generics[1], [1], false), args[0], values, ask, walk)
+            extended_from(place, args[0], ask, walk)
+        }
         return
     }
     // `insert(i, v)` on a run: the value is last.
@@ -6166,6 +6176,48 @@ fn put_into_container(place: ref Declaring, method: ref String, args: ref Vec[Ex
     }
     let wrap = method != "extend" && method != "append"
     flow_value(going_into(place.owner, ty.generics[0], [0], wrap), args[args.len() - 1], given[given.len() - 1], ask, walk)
+    if method == "extend" && args.len() == 1 {
+        extended_from(place, args[0], ask, walk)
+    }
+}
+
+/// **A container extended from another declared one is of its tier**
+/// (ADR-collections-1 D3, D6): `extend` moves the elements over as they are,
+/// so the two element positions are linked, as a list handed whole is
+/// (ADR-282 D16); `a.extend(b)` with literals in `b` and text of its own in
+/// `a` is one type below, not a `&str` going into an `EitherText`.
+fn extended_from(place: ref Declaring, items: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+    let from = extend_source(items, ask)
+    let found = place_of(from, ask, walk) ?? return
+    link(found, [], place, [], ask, walk)
+}
+
+/// What an `extend` takes its elements out of: `other` for `other`,
+/// `other.drain()` and `other.clone()`.
+fn extend_source(items: ref Expr, ask: ref TierAsk) -> ref Expr {
+    match items {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let name = ask.names.resolve(method)
+            if args.len() == 0 && (name == "drain" || name == "clone") {
+                return receiver
+            }
+        },
+        else => {}
+    }
+    return items
+}
+
+/// What the keys (`keys`) or the values of the pairs handed to a map's
+/// `extend` are: those of the map they come from (`other`, `other.drain()`,
+/// `other.clone()`),
+/// else all the argument holds.
+fn pair_kinds(pairs: ref Expr, keys: bool, given: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
+    let from = extend_source(pairs, ask)
+    let found = place_of(from, ask, walk) ?? return given.clone()
+    if !a_map(ask.names, found.ty) {
+        return given.clone()
+    }
+    return element_kinds(found, keys, ask, walk)
 }
 
 fn mapped(params: ref Vec[winnow_grammar::Symbol], body: ref Block, received: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {

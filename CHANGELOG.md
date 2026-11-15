@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1380] — 2026-11-15
+
+**std: every map has extend, and an extend links its source's text tier to the target's (ADR-collections-1 D6) (#1605)**
+- std: `extend` on `HashMap` and `BTreeMap` from another map, a list of pairs or a drain, a later pair replacing the value (ADR-collections-1 D6); an `extend` from a container of literals into one of owned text no longer fails in rustc (NK1343).
+
 ## [0.0.1379] — 2026-11-15
 
 **check: a name proved not null is still bound outside the loop around the proof (NK2105) (#1574)**

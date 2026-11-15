@@ -4372,11 +4372,44 @@ pub(crate) fn put_into_container(place: &Declaring, method: &str, args: &[Expr],
             flow_value(&going_into(&place.owner, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, vec![0], true), Some(unsafe { nikaia_std::proven::read(&args, (0) as usize) }), unsafe { nikaia_std::proven::read(&given, (0) as usize) }, ask, walk);
             flow_value(&going_into(&place.owner, unsafe { nikaia_std::proven::read(&ty.generics, (1) as usize) }, vec![1], true), Some(unsafe { nikaia_std::proven::read(&args, (1) as usize) }), unsafe { nikaia_std::proven::read(&given, (1) as usize) }, ask, walk);
         }
+        if method == "extend" && args.len() == 1 && given.len() == 1 && ty.generics.len() == 2 {
+            let keys = pair_kinds(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, true, unsafe { nikaia_std::proven::read(&given, (0) as usize) }, ask, walk);
+            let values = pair_kinds(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, false, unsafe { nikaia_std::proven::read(&given, (0) as usize) }, ask, walk);
+            flow_value(&going_into(&place.owner, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, vec![0], false), Some(unsafe { nikaia_std::proven::read(&args, (0) as usize) }), &keys, ask, walk);
+            flow_value(&going_into(&place.owner, unsafe { nikaia_std::proven::read(&ty.generics, (1) as usize) }, vec![1], false), Some(unsafe { nikaia_std::proven::read(&args, (0) as usize) }), &values, ask, walk);
+            extended_from(place, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, ask, walk);
+        }
         return;
     }
     if ty.generics.is_empty() || args.is_empty() || given.is_empty() { return; }
     let wrap = method != "extend" && method != "append";
     flow_value(&going_into(&place.owner, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, vec![0], wrap), Some(unsafe { nikaia_std::proven::read(&args, (nikaia_std::proven::sub::<i64>(args.len() as i64, 1)) as usize) }), unsafe { nikaia_std::proven::read(&given, (nikaia_std::proven::sub::<i64>(given.len() as i64, 1)) as usize) }, ask, walk);
+    if method == "extend" && args.len() == 1 { extended_from(place, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, ask, walk); }
+}
+
+pub(crate) fn extended_from(place: &Declaring, items: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    let from = extend_source(items, ask);
+    let found = match place_of(from, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+    link(&found, &mut vec![], place, &mut vec![], ask, walk);
+}
+
+pub(crate) fn extend_source<'r>(items: &'r Expr, ask: &TierAsk<'_, '_, '_, '_, '_>) -> &'r Expr {
+    match items {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let name = ask.names.resolve(method);
+            if args.is_empty() && (name == "drain" || name == "clone") { return receiver; }
+        },
+        _ => { },
+    }
+    items
+}
+
+pub(crate) fn pair_kinds(pairs: &Expr, keys: bool, given: &Kinds, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
+    let from = extend_source(pairs, ask);
+    let found = match place_of(from, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return given.clone() };
+    if !a_map(ask.names, &found.ty) { return given.clone(); }
+    element_kinds(&found, keys, ask, walk)
 }
 
 pub(crate) fn mapped(params: &[winnow_grammar::Symbol], body: &Block, received: &Kinds, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
