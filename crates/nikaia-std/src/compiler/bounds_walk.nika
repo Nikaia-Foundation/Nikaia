@@ -8524,8 +8524,14 @@ fn bounding_if_join(
 
 /// The facts of a branch's end that read a name the `if` changed and do
 /// not hold past it already.
+///
+/// **A name the walk made inside the branch, pinned there to a number, is
+/// read as that number** (#1655): a loop's entry length (`#29:cols.len()
+/// == 0`) is unknown to the other branch, so `cols.len() - #29:cols.len()
+/// >= ks.len()` is also offered as `cols.len() - 0 >= ks.len()`, which the
+/// branch holds as well and the other one may prove.
 fn bounding_join_candidates(
-	walk: ref BoundsWalk,
+	mut walk: BoundsWalk,
 	facts: ref BoundsFacts,
 	changed: ref BoundsChanged,
 	branch: ref BoundsFacts,
@@ -8540,6 +8546,67 @@ fn bounding_join_candidates(
 				out.push(fact)
 				break
 			}
+		}
+	}
+	let pinned = bounding_pinned(walk, branch)
+	if pinned.is_empty() {
+		return out
+	}
+	let mut settled: Vec[i64] = []
+	for fact in out {
+		let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+		walk.arena.variables(fact, read)
+		let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+		for v in read {
+			if pinned.contains_key(v) {
+				given.insert(v.clone(), walk.arena.int(pinned[v] ?? 0))
+			}
+		}
+		if given.is_empty() {
+			continue
+		}
+		let plain = walk.arena.substitute(fact, given)
+		if !out.contains(plain) && !settled.contains(plain) && !facts.facts.contains(plain) {
+			settled.push(plain)
+		}
+	}
+	for fact in settled {
+		out.push(fact)
+	}
+	return out
+}
+
+/// The names the walk made (`#` in them: a loop's entry value, a renamed
+/// value) that a fact of `branch` pins to a number, `x == n`.
+fn bounding_pinned(walk: ref BoundsWalk, branch: ref BoundsFacts) -> collections::BTreeMap[String, i64] {
+	let mut out: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	for fact in branch.facts {
+		match walk.arena.at(fact) {
+			SolverTerm::Eq(a, b) => {
+				let mut name: String? = null
+				let mut value: i64? = null
+				match walk.arena.at(a) {
+					SolverTerm::Var(v) => {
+						name = v.clone()
+						value = walk.arena.constant(b)
+					},
+					else => {
+						match walk.arena.at(b) {
+							SolverTerm::Var(v) => {
+								name = v.clone()
+								value = walk.arena.constant(a)
+							},
+							else => {},
+						}
+					},
+				}
+				let n = name ?? continue
+				let k = value ?? continue
+				if n.contains("#") {
+					out.insert(n, k)
+				}
+			},
+			else => {},
 		}
 	}
 	return out

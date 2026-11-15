@@ -4827,24 +4827,74 @@ pub(crate) fn bounding_else(walk: &mut BoundsWalk, else_branch: Option<&Block>, 
 pub(crate) fn bounding_if_join(walk: &mut BoundsWalk, facts: &mut BoundsFacts, changed: &BoundsChanged, then_facts: &BoundsFacts, else_facts: &BoundsFacts, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
     if changed.values.is_empty() { return; }
     let mut kept: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for fact in bounding_join_candidates(&walk, &facts, changed, then_facts) { if else_facts.facts.contains(&fact) || bounding_proves(&walk, else_facts, fact, ask) { kept.push(fact); } }
-    for fact in bounding_join_candidates(&walk, &facts, changed, else_facts) { if !kept.contains(&fact) && bounding_proves(&walk, then_facts, fact, ask) { kept.push(fact); } }
+    for fact in bounding_join_candidates(walk, &facts, changed, then_facts) { if else_facts.facts.contains(&fact) || bounding_proves(&walk, else_facts, fact, ask) { kept.push(fact); } }
+    for fact in bounding_join_candidates(walk, &facts, changed, else_facts) { if !kept.contains(&fact) && bounding_proves(&walk, then_facts, fact, ask) { kept.push(fact); } }
     for fact in kept.iter() {
         let fact = nikaia_std::num::value(fact);
         bounding_push(&walk, facts, fact);
     }
 }
 
-pub(crate) fn bounding_join_candidates(walk: &BoundsWalk, facts: &BoundsFacts, changed: &BoundsChanged, branch: &BoundsFacts) -> Vec<i64> {
+pub(crate) fn bounding_join_candidates(walk: &mut BoundsWalk, facts: &BoundsFacts, changed: &BoundsChanged, branch: &BoundsFacts) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
     for fact in branch.facts.iter() {
         let fact = nikaia_std::num::value(fact);
         if facts.facts.contains(&fact) || out.contains(&fact) { continue; }
         for name in changed.values.iter() {
-            if bounding_touches(walk, fact, name) {
+            if bounding_touches(&walk, fact, name) {
                 out.push(fact);
                 break;
             }
+        }
+    }
+    let pinned = bounding_pinned(&walk, branch);
+    if pinned.is_empty() { return out; }
+    let mut settled: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for fact in out.iter() {
+        let fact = nikaia_std::num::value(fact);
+        let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+        walk.arena.variables(fact, &mut read);
+        let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+        for v in read.iter() { if pinned.contains_key(v) { given.insert(nikaia_std::block::Text::from(v.to_string()), walk.arena.int(nikaia_std::index::or(*nikaia_std::index::get(&pinned, v), || 0))); } }
+        if given.is_empty() { continue; }
+        let plain = walk.arena.substitute(fact, &given);
+        if !out.contains(&plain) && !settled.contains(&plain) && !facts.facts.contains(&plain) { settled.push(plain); }
+    }
+    for fact in settled.iter() {
+        let fact = nikaia_std::num::value(fact);
+        out.push(fact);
+    }
+    out
+}
+
+pub(crate) fn bounding_pinned(walk: &BoundsWalk, branch: &BoundsFacts) -> collections::BTreeMap<String, i64> {
+    let mut out: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    for fact in branch.facts.iter() {
+        let fact = nikaia_std::num::value(fact);
+        match walk.arena.at(fact) {
+            SolverTerm::Eq(a, b) => {
+                let mut name: Option<String> = None;
+                let mut value: Option<i64> = None;
+                match walk.arena.at(a) {
+                    SolverTerm::Var(ref v) => {
+                        name = Some(nikaia_std::block::Text::from(v.to_string()));
+                        value = walk.arena.constant(b);
+                    },
+                    _ => {
+                        match walk.arena.at(b) {
+                            SolverTerm::Var(ref v) => {
+                                name = Some(nikaia_std::block::Text::from(v.to_string()));
+                                value = walk.arena.constant(a);
+                            },
+                            _ => { },
+                        }
+                    },
+                }
+                let n = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let k = match value { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if n.contains('#') { out.insert(n, k); }
+            },
+            _ => { },
         }
     }
     out
