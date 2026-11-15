@@ -153,6 +153,22 @@ pub fn mark_trusted(ledger: &mut Ledger, calls: &[SourceCall], file: &str, text:
     }
 }
 
+pub fn main_parameters_source() -> String { String::from("the command line, through `main`'s parameters,") }
+
+pub fn takes_the_command_line(program: &Program, names: &winnow_grammar::InternerContext) -> bool {
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Fn { name, receiver, args, config, .. } => {
+                let name = *name;
+                let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if receiver.is_none() && names.resolve(called) == "main" && (!args.is_empty() || !config.is_empty()) { return true; }
+            },
+            _ => { },
+        }
+    }
+    false
+}
+
 pub(crate) fn a_source(library: &Ledger, name: &str) -> bool {
     let contract = match *nikaia_std::index::get(&library.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return false };
     contract.provenance.is_some()

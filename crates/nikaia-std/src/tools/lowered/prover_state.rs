@@ -278,7 +278,13 @@ impl ProverState {
             outcome.held = ClaimHeld::Refused;
             if self.collecting { return outcome; }
             let first = nikaia_std::index::or(tainted_name, || "".into());
-            outcome.findings.push(Finding { code: String::from("NK1202"), span, message: format!("`{}` is a claim about data from outside the program.", written), notes: vec![format!("`{}` comes from outside the program, so nothing the compiler can see says what it holds.", first), String::from("That it is wrong is a case the program has to handle, not a defect an `assert` catches.")], help: Some(format!("Check it where it arrives, with a guard the program handles: `throw BadInput({}) if !({})`, or `return … if !({})`. After that line, this `assert` is proved.", first, written, written)), warning: false, labels: vec![] });
+            let guard = format!("Check it where it arrives, with a guard the program handles: `throw BadInput({}) if !({})`, or `return … if !({})`. After that line, this `assert` is proved.", first, written, written);
+            let from_the_command_line = nikaia_std::index::or(match *nikaia_std::index::get(&scope.sources, &first) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || "".into()) == "cli::args";
+            let help = if from_the_command_line { format!("{} Or take the word as a parameter of `main`: an `assert` about it there is checked where the words arrive (ADR-360 D4). Or write `cli::args(trusted: true)` where the operator chooses the command line.", guard) } else { guard };
+            outcome.findings.push(Finding { code: String::from("NK1202"), span, message: format!("`{}` is a claim about data from outside the program.", written), notes: vec![format!("`{}` comes from outside the program, so nothing the compiler can see says what it holds.", first), String::from("That it is wrong is a case the program has to handle, not a defect an `assert` catches.")], help: Some(help), warning: false, labels: vec![] });
             return outcome;
         }
         let refuted_values = nikaia_std::index::or(refuted, || collections::BTreeMap::new().into()); #[allow(unused_mut, clippy::redundant_locals)] let mut through_summaries = through_summaries;

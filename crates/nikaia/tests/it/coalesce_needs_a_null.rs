@@ -114,7 +114,7 @@ fn a_list_of_optionals_replaces_a_null_and_an_index_past_the_end_still_stops() {
          \x20   println(f\"{a} {shown} {ys[0] ?? \"x\"}\")\n\
          \x20   let zs: Vec[i64] = [4, 5]\n\
          \x20   println(f\"{zs.first() ?? 0}\")\n\
-         \x20   println(f\"{xs[5 - cli::args().len()] ?? 0}\")\n\
+         \x20   println(f\"{xs[5 - cli::args(trusted: true).len()] ?? 0}\")\n\
          }\n";
     let (ok, out, err) = run("coalesce-list-of-optionals", source);
     assert!(!ok, "an index past the end stops the program");

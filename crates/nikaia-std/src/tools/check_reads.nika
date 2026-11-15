@@ -249,6 +249,21 @@ impl CheckState {
             || (self.a_lent_name(world, side) && (check_copied(ty) || check_owned_text(ty)))
             || self.a_side_is_lent(world, side, ty)
             || check_core_stmt_got_compared(self, world, side, ty)
+            || self.a_narrowed_read_lent(side)
+    }
+
+    /// **A `T?` a test proved set, read lent** (ADR-382): below it is
+    /// `x.as_ref().unwrap()`, a `&T`, though its type here is the `T`, so
+    /// beside a value it is read through `*` (#1599: `made != ty` with
+    /// `made: String?` compared a `&Text` with a `Text`).
+    /// A field's read is `as_deref` text below, compared as it is.
+    fn a_narrowed_read_lent(ref self, side: ref Expr) -> bool sync {
+        match side {
+            Expr::Variable(_, _) => {}
+            else => return false,
+        }
+        let bits = self.facts.narrowed_reads.get(node_key(side)) ?? return false
+        return bits % 2 == 0 && (bits / 8) % 2 == 0 && (bits / 32) % 2 == 0
     }
 
     /// A parameter the function is lent, or a `let` over a place: a view below

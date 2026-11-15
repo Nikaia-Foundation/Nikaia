@@ -203,6 +203,30 @@ pub fn mark_trusted(mut ledger: Ledger, calls: ref Vec[SourceCall], file: ref St
     }
 }
 
+/// What `--trust` names for `main`'s parameters (ADR-399 D1).
+pub fn main_parameters_source() -> String {
+    return "the command line, through `main`'s parameters,"
+}
+
+/// **Whether the file's free `main` takes parameters** (ADR-360 D1,
+/// ADR-399 D1): they are read from the words of the command line, so they
+/// are an untrusted source with no call to see. No marker makes them
+/// trusted (owner, 2026-11-14): `cli::args(trusted: true)` is the way.
+pub fn takes_the_command_line(program: ref Program, names: ref winnow_grammar::InternerContext) -> bool {
+    for item in program.items {
+        match item.node {
+            Item::Fn { name, receiver, args, config, .. } => {
+                let called = name ?? continue
+                if receiver == null && names.resolve(called) == "main" && (args.len() > 0 || config.len() > 0) {
+                    return true
+                }
+            }
+            else => {}
+        }
+    }
+    return false
+}
+
 /// Whether `library` describes `name` as a source: an entry with a
 /// provenance (ADR-010 D2).
 fn a_source(library: ref Ledger, name: ref String) -> bool {

@@ -123,10 +123,11 @@
 # `provenance` marks a **source**: a function whose result is bytes that entered
 # the program from outside, and who chose them (ADR-010 D2). Its absence is not
 # "trusted" - it is "this is not a source", which is what almost every function
-# is. The arguments the program was started with are the operator's own, so
-# `trusted`. Standard input, every file read while the program runs, a socket
-# and another program's output are `untrusted` (ADR-365 D1): a path or a pipe
-# does not say who wrote the bytes. Each such source takes the option
+# is. Every source read while the program runs is `untrusted`: standard input,
+# every file, a socket and another program's output (ADR-365 D1: a path or a
+# pipe does not say who wrote the bytes), the environment (ADR-397) and the
+# words the program was started with (ADR-399 D1: `xargs`, a glob, a server or
+# a caller with fewer rights chose them as often as the operator did). Each such source takes the option
 # `trusted: bool = false`; a call that writes `trusted: true` says the operator
 # chose them (ADR-365 D2). The option is the compiler's: the emitter does not
 # hand it to the function below, which reads the same bytes either way.
@@ -155,8 +156,13 @@ panics = false
 # future.
 sync = true
 touches = ["args read"]
-provenance = "trusted"
-signature = "() -> cli::Args"
+# Untrusted (ADR-399 D1): the words are whoever built the command line's, so a
+# claim about one is NK1202 and a map keyed by one gets the keyed hash, unless
+# the call says `trusted: true` (D3). `main`'s parameters are read from the
+# same words and are as untrusted; their preconditions are checked where the
+# words arrive (ADR-360 D4).
+provenance = "untrusted"
+signature = "(; trusted: bool = false) -> cli::Args"
 
 # The argument at a position, and **there may not be one** - which is the half
 # the corpus writes every time: `cli::args().nth(1) ?? "default"` opens six of
