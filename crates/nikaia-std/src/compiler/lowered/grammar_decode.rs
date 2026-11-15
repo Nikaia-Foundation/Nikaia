@@ -175,6 +175,8 @@ pub fn gr_manifest(key: &str, dependencies: &[(String, String)]) -> String {
         out.push_str(&format!("{} = {}\n", name, value));
     }
     if traced { out.push_str("\n[features]\ntrace = [\"winnow-grammar/trace\"]\n"); }
+    out.push_str(CR_DEPENDENCY_PROFILE);
+    out.push_str(&cr_own_profile(&format!("p{}", key)));
     out
 }
 

@@ -40,23 +40,29 @@ static HEAP: Heap = Heap;
 ")
 }
 
-pub fn cr_bundle_manifest(dependencies: &[(String, String)]) -> String {
+pub fn cr_bundle_manifest(name: &str, dependencies: &[(String, String)]) -> String {
     let mut manifest: String = String::from("# GENERATED. The library build-time code links against (ADR-321 D3).
 
 [workspace]
 
 [package]
-name = \"nikaia_bundle\"
-version = \"0.0.0\"
-edition = \"2024\"
-
-[lib]
-path = \"src/lib.rs\"
-
-[dependencies]
 ");
-    for (name, value) in dependencies.iter() { manifest.push_str(&format!("{} = {}\n", name, value)); }
+    manifest.push_str(&format!("name = \"{}\"\n", name));
+    manifest.push_str("version = \"0.0.0\"\nedition = \"2024\"\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\n");
+    for (dependency, value) in dependencies.iter() { manifest.push_str(&format!("{} = {}\n", dependency, value)); }
+    manifest.push_str(CR_DEPENDENCY_PROFILE);
     manifest
+}
+
+pub const CR_DEPENDENCY_PROFILE: &str = "\n[profile.dev]\noverflow-checks = false\ndebug-assertions = false\ndebug = 0\npanic = \"unwind\"\n";
+
+pub fn cr_own_profile(name: &str) -> String {
+    format!("
+[profile.dev.package.{}]
+overflow-checks = true
+debug-assertions = true
+debug = 2
+", name)
 }
 
 pub(crate) fn cr_main(value_fn: &str, dump: &str, budget: u64, memory: u64) -> String {

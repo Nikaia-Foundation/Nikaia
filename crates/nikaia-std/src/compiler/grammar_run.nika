@@ -20,7 +20,8 @@ pub trait GrammarRunHost {
     fn driver(ref self) -> String sync throws
     /// The sub-project's `Cargo.toml`, for the crate `p<key>`.
     fn manifest(ref self, key: ref String, program: ref String) -> String sync
-    /// Where every grammar run's parser is compiled.
+    /// Where every grammar run's parser is compiled: the one tree every
+    /// build-time sub-build compiles `std` in (#1705).
     fn shared_target(ref self) -> fs::Path sync
     /// The directory Cargo starts in.
     fn where_tools_start(ref self) -> fs::Path sync
@@ -61,7 +62,9 @@ pub fn grammar_run_compile_and_run[H: GrammarRunHost](host: ref H, at: ref fs::P
     // same for all of them, and under each project's workshop it was
     // compiled again for every new project (half a minute before the
     // first grammar could run). Each parser is a crate of its own name
-    // (`p<key>`), so they share the directory without meeting.
+    // (`p<key>`), so they share the directory without meeting. **And the
+    // bundles'** (#1705): with the profile they give their dependencies
+    // (`gr_manifest`), Cargo finds the `std` a bundle compiled there.
     let target = host.shared_target()
     let cargo = env::var("CARGO") ?? "cargo"
     let built = process::run(cargo, ["build", "--quiet", "--manifest-path", manifest_path.display(), "--target-dir", target.display()]; dir: host.where_tools_start().display()) catch {

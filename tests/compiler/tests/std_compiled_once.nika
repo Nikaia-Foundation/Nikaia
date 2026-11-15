@@ -1,0 +1,52 @@
+// #1705: the tests compiled `std` up to four times on a cold cache, once in
+// each target directory a kind of cache had of its own (the program's rlibs,
+// the run bundle, the build-time bundle, the grammar runs' parsers). The
+// bundles and the parsers share one tree now, with one dependency profile, so
+// Cargo compiles `nikaia-std` twice: there and in the program's tree, which a
+// program's Cargo build holds locked while it asks for a bundle. A program
+// with a grammar run and a build-time value, built (its value computed under
+// that lock) and then run on a fresh cache, through a Cargo that counts.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
+		],
+	).stdout.trim().clone()
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let nikaia = toolchain()
+	let real = process::run("sh", ["-c", "echo ${CARGO:-$(command -v cargo)}"]).stdout.trim().clone()
+	let path = process::run("sh", ["-c", "echo $PATH"]).stdout.trim().clone()
+	process::run("mkdir", ["-p", f"{tmp}/p/src", f"{tmp}/bin"])
+	let shim = f"{tmp}/bin/cargo"
+	fs::write(shim, fs::Root::Anywhere, SHIM)
+	process::run("chmod", ["+x", shim.clone()])
+	let p = f"{tmp}/p"
+	fs::write(f"{p}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"once\"\nversion = \"0.1.0\"\n")
+	fs::write(f"{p}/src/main.nika", fs::Root::Anywhere, PROGRAM)
+	let log = f"{tmp}/cargo.log"
+	let env = [("RUST_BACKTRACE", "0"), ("CARGO_TERM_COLOR", "never"), ("NIKAIA_CACHE_DIR", f"{tmp}/cache"), ("CARGO", shim.clone()), ("REAL_CARGO", real), ("SHIM_LOG", log.clone()), ("PATH", f"{tmp}/bin:{path}")]
+	let built = process::run(nikaia, ["build"]; dir: p.clone(), env: env.clone())
+	println(f"build: {built.code}")
+	let ran = process::run(nikaia, ["run"]; dir: p, env: env)
+	println(f"run: {ran.code}, printed: {ran.stdout.trim()}")
+	let compiled = process::run("sh", ["-c", f"grep -c 'Compiling nikaia-std' {log}"]).stdout.trim().clone()
+	println(f"nikaia-std compiled: {compiled}")
+	process::run("rm", ["-rf", tmp])
+}
+
+comptime SHIM: ref String = "#!/bin/bash\n# Cargo, with what it compiles counted: `--quiet` dropped, its `Compiling` lines kept.\nargs=()\nfor a in \"$@\"; do [ \"$a\" = --quiet ] || args+=(\"$a\"); done\n{ \"$REAL_CARGO\" \"${args[@]}\" 2>&1 1>&3 | tee -a \"$SHIM_LOG\" >&2; } 3>&1\nexit ${PIPESTATUS[0]}\n"
+
+comptime PROGRAM: ref String = "pub struct Setting {\n\tkey: ref String,\n\tvalue: ref String,\n}\n\ngrammar Cfg {\n\trule WSE = multispace1 -> { }\n\trule WS = (WSE | COMMENT)* -> { }\n\trule COMMENT = \"#\" until(line_ending) -> { }\n\trule NAME -> ref String = s:raw_ident -> { s }\n\trule VALUE -> ref String = s:until(\"#\" | line_ending) -> { s.trim() }\n\trule setting -> Setting = key:NAME \"=\" value:VALUE -> { Setting { key, value } }\n\tentry rule file -> Vec[Setting] = settings:setting* -> { settings }\n}\n\ncomptime SETTINGS: Array[Setting, 1] = Cfg::file(\"host = example.com\\n\")\n\nfn twice(n: i64) -> i64 {\n\treturn n * 2\n}\n\ncomptime N: i64 = twice(21)\n\nfn main() throws {\n\tfor s in SETTINGS {\n\t\tprintln(f\"{s.key}={s.value} {N}\")\n\t}\n}\n"

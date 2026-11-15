@@ -3850,6 +3850,50 @@ fn run_directly(binary: &std::path::Path, args: &[String]) -> Result<i32> {
     Ok(status.code().unwrap_or(1))
 }
 
+/// **Where the compiler's own sub-builds compile `std`** (#1705): one tree,
+/// `build-time/<key>` in the user cache, shared by the two bundles
+/// (`tools/comptime_bundle.nika`) and every grammar run's parser, keyed as a
+/// program with no settings keys its rlibs (`Sysroot::rlib_cache`, ADR-002 D4)
+/// and so evicted with its compiler.
+///
+/// A tree of its own for each was a compile of `std` each, about ten seconds
+/// apiece; they share one because each gives its dependencies the profile a
+/// generated workspace does. **Not the programs' tree itself**: a program's
+/// Cargo build holds its target directory locked while the compiler, as its
+/// `rustc`, asks for a bundle, and the bundle's Cargo waited on that lock for
+/// ever. Asked once a process.
+pub fn build_time_tree() -> PathBuf {
+    static HELD: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    let tree = HELD.get_or_init(|| {
+        let manifest = Manifest::default();
+        // Settings with nothing set do not fail; were they to, the
+        // sub-builds still get a tree of their own.
+        let key = match Settings::resolve(&manifest, None, None) {
+            Ok(settings) => {
+                let codegen = Codegen::new(
+                    &manifest.codegen_for(&settings.words.target),
+                    &settings.panic_strategy(),
+                );
+                orchestrator::cache::Key::sysroot(
+                    env!("NIKAIA_RUSTC_VERSION"),
+                    &settings.words.target,
+                    &codegen.render(),
+                    &settings.words.reentrancy_check,
+                    "",
+                )
+                .as_str()
+                .to_text()
+            }
+            Err(_) => "unsettled".to_text(),
+        };
+        Layout::user_cache_dir().join("build-time").join(key)
+    });
+    // Marked used at every ask, as `rlib_cache` does for a program, so
+    // `prune` keeps it while it is used and evicts it after.
+    orchestrator::cache::use_entry(tree);
+    tree.clone()
+}
+
 /// The same, for a program this compiler wrote for its own use — the parser a
 /// grammar run compiles ([`crate::grammar_run`]).
 ///

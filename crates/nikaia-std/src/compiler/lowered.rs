@@ -1996,17 +1996,6 @@ mod findings_lowered {
 pub use findings_lowered::*;
 
 #[allow(unsafe_code)]
-mod fix_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/fix.rs");
-}
-#[allow(unused_imports)]
-pub use fix_lowered::*;
-
-#[allow(unsafe_code)]
 mod fixed_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -3691,7 +3680,7 @@ pub mod check_simd {
 }
 pub mod check_state {
     #[allow(unused_imports)]
-    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, CheckHeldTaking, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
+    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, CheckHeldTaking, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
 }
 pub mod check_takes {
     #[allow(unused_imports)]
@@ -3752,7 +3741,7 @@ pub mod comptime_bundle {
 }
 pub mod comptime_driver {
     #[allow(unused_imports)]
-    pub use super::{cr_bundle_source, cr_bundle_manifest, cr_with_driver};
+    pub use super::{cr_bundle_source, cr_bundle_manifest, CR_DEPENDENCY_PROFILE, cr_own_profile, cr_with_driver};
 }
 pub mod comptime_tree {
     #[allow(unused_imports)]
@@ -3943,10 +3932,6 @@ pub mod escapes {
 pub mod findings {
     #[allow(unused_imports)]
     pub use super::{Finding, refusal};
-}
-pub mod fix {
-    #[allow(unused_imports)]
-    pub use super::{FixPlan, fix_run, fix_planned, fix_diff};
 }
 pub mod fixed {
     #[allow(unused_imports)]
@@ -4423,4 +4408,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "9b1093bfaeeedc92961984a77bbb38c9b8af1013421eee97ab4826793ca4e606";
+pub const LOWERED_DIGEST: &str = "23fb991d89b1ee6403e6e72820e83e5d16efccd558f049624e6857f1e2aff462";

@@ -257,6 +257,11 @@ pub fn gr_manifest(key: ref String, dependencies: ref Vec[(String, String)]) -> 
     if traced {
         out.push_str("\n[features]\ntrace = [\"winnow-grammar/trace\"]\n")
     }
+    // **The dependencies as a program builds them** (#1705): `std`, `winnow`
+    // and the grammar runtime are then the ones a program build compiled in
+    // the same tree, and the parser's own code keeps Cargo's checks.
+    out.push_str(CR_DEPENDENCY_PROFILE)
+    out.push_str(cr_own_profile(f"p{key}"))
     return out
 }
 

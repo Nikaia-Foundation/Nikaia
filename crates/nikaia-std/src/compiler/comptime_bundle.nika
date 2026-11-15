@@ -87,6 +87,9 @@ pub trait ComptimeBundleHost {
     fn user_cache_dir(ref self) -> fs::Path sync
     /// Marks a cache entry used.
     fn use_entry(ref self, at: ref fs::Path) sync
+    /// The target directory a bundle is built in: the one tree every
+    /// build-time sub-build compiles `std` in (#1705).
+    fn shared_target(ref self) -> fs::Path sync
     /// The directory Cargo and `rustc` start in.
     fn where_tools_start(ref self) -> fs::Path sync
     /// `rustc -vV`, once.
@@ -114,24 +117,14 @@ pub extern crate winnow;
 pub extern crate winnow_grammar;
 "
 
-/// The run bundle's profile: what `[profile.dev]` of a generated workspace
-/// says about a crate that is not the program's.
-comptime COMPTIME_BUNDLE_RUN_PROFILE: ref String = "
-[profile.dev]
-overflow-checks = false
-debug-assertions = false
-debug = 0
-panic = \"unwind\"
-"
-
 /// The crates the bundle names: `std`, and what a `grammar` lowers to.
 comptime COMPTIME_BUNDLE_NAMED: Array[ref String, 3] = ["nikaia_std", "winnow", "winnow_grammar"]
 
 /// The crates the bundle names, as a list.
 /// **The library and the crates Cargo's JSON messages name** (#1163): the
-/// `nikaia_bundle` target's dynamic library (`.so`, `.dylib` or `.dll`, as
-/// the platform names one) and each named crate's `rlib`.
-pub fn comptime_bundle_artifacts(messages: String, named: ref Vec[String]) -> ComptimeBundleArtifacts {
+/// `library` target's dynamic library (`.so`, `.dylib` or `.dll`, as the
+/// platform names one) and each named crate's `rlib`.
+pub fn comptime_bundle_artifacts(messages: String, named: ref Vec[String], library: ref String) -> ComptimeBundleArtifacts {
     let mut dylib: fs::Path? = null
     let mut rlibs: Vec[(String, fs::Path)] = []
     for message in cargo_json_lines(messages) {
@@ -143,7 +136,7 @@ pub fn comptime_bundle_artifacts(messages: String, named: ref Vec[String]) -> Co
         if named.iter().any(fn(each) { each == name }) {
             let rlib = files.iter().find(fn(file) { cargo_json_extension(file) == "rlib" }) ?? continue
             rlibs.push((name, rlib.clone()))
-        } else if name == "nikaia_bundle" {
+        } else if name == library {
             dylib = files.iter().find(fn(file) { let extension = cargo_json_extension(file); extension == "so" || extension == "dylib" || extension == "dll" })?.clone()
         }
     }
@@ -260,19 +253,35 @@ fn comptime_bundle_path(text: String) -> fs::Path {
 }
 
 /// A bundle's manifest and its one file.
+///
+/// The build-time bundle's own crate keeps Cargo's checks (`cr_own_profile`);
+/// the run bundle's is built as a program's dependency is.
 fn comptime_bundle_bundle_text[H: ComptimeBundleHost](flavour: ComptimeBundleFlavour, host: ref H) -> (String, String) {
-    let mut manifest = cr_bundle_manifest(host.runtime_dependencies(comptime_bundle_named().join(" ")))
+    let name = comptime_bundle_library(flavour)
+    let mut manifest = cr_bundle_manifest(name, host.runtime_dependencies(comptime_bundle_named().join(" ")))
     let source = match flavour {
-        ComptimeBundleFlavour::BuildTime => cr_bundle_source(),
-        ComptimeBundleFlavour::Run => {
-            manifest.push_str(COMPTIME_BUNDLE_RUN_PROFILE)
-            COMPTIME_BUNDLE_RUN_SOURCE.clone()
+        ComptimeBundleFlavour::BuildTime => {
+            manifest.push_str(cr_own_profile(name))
+            cr_bundle_source()
         },
+        ComptimeBundleFlavour::Run => COMPTIME_BUNDLE_RUN_SOURCE.clone(),
     }
     return (manifest, source)
 }
 
-/// Where a bundle lives: the user cache, keyed by its manifest and its file.
+/// **The bundle's crate**, one name for each flavour: the two are built in
+/// one target directory (#1705), where a dynamic library's file carries no
+/// hash. What links against one names it `nikaia_bundle` either way
+/// (`--extern`).
+fn comptime_bundle_library(flavour: ComptimeBundleFlavour) -> String {
+    return match flavour {
+        ComptimeBundleFlavour::BuildTime => "nikaia_bundle",
+        ComptimeBundleFlavour::Run => "nikaia_run_bundle",
+    }
+}
+
+/// Where a bundle's sources and record live: the user cache, keyed by its
+/// manifest and its file. What Cargo builds goes to the shared tree.
 fn comptime_bundle_bundle_dir[H: ComptimeBundleHost](flavour: ComptimeBundleFlavour, manifest: String, source: String, host: ref H) -> fs::Path {
     let key = comptime_bundle_digest(f"{manifest}\n{source}")
     let short: String = key.scalars.take(16).collect()
@@ -319,13 +328,18 @@ fn comptime_bundle_bundle_of[H: ComptimeBundleHost](flavour: ComptimeBundleFlavo
     let lib_rs = dir.join("src").join("lib.rs")
     comptime_bundle_write_if_changed(lib_rs, bundle_source, host.unique_beside(lib_rs))
     let cargo = env::var("CARGO") ?? "cargo"
-    let built = process::run(cargo, ["rustc", "--quiet", "--lib", "--crate-type", "dylib", "--message-format=json", "--manifest-path", cargo_toml.display(), "--target-dir", at.join("target").display(), "--", "-C", "prefer-dynamic"]; dir: host.where_tools_start().display()) catch {
+    // **Built in the build-time tree** (#1705): one tree and one dependency
+    // profile, so Cargo compiles `std` once for both bundles and the grammar
+    // runs' parsers. Not the programs' own tree: a program's Cargo build holds
+    // that one locked while its compile asks for a bundle.
+    let target = host.shared_target()
+    let built = process::run(cargo, ["rustc", "--quiet", "--lib", "--crate-type", "dylib", "--message-format=json", "--manifest-path", cargo_toml.display(), "--target-dir", target.display(), "--", "-C", "prefer-dynamic"]; dir: host.where_tools_start().display()) catch {
         throw ComptimeBundleFailed::Said(f"running cargo: {error}")
     }
     if !built.ok {
         throw ComptimeBundleFailed::Said(built.stderr)
     }
-    let found = comptime_bundle_artifacts(built.stdout, comptime_bundle_named())
+    let found = comptime_bundle_artifacts(built.stdout, comptime_bundle_named(), comptime_bundle_library(flavour))
     if found.rlibs.len() != COMPTIME_BUNDLE_NAMED.len() {
         throw ComptimeBundleFailed::Said("cargo built the bundle and named no library")
     }
