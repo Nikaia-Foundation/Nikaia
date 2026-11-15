@@ -1,0 +1,42 @@
+// scripts/agent.nika --commits N: the section of a builder's prompt that lists
+// the commits on HEAD naming issue #N, with a `Fixes #N` line called out first
+// (#1682: #1665 was briefed after a commit had fixed it). `#16650` names
+// another issue; an issue no commit names gives an empty line. Run in a git
+// repository of its own.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/agent.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/agent.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn commit(tmp: String, message: String) throws {
+    process::run("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", message]; dir: tmp)
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain()
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("git", ["init", "-q"]; dir: tmp.clone())
+    commit(tmp.clone(), "drive: a first step\n\nPart of #1665")
+    commit(tmp.clone(), "drive: another issue\n\nFixes #16650")
+    commit(tmp.clone(), "drive: the rest\n\nFixes #1500, #1665")
+    for n in ["1665", "1500", "1400"] {
+        let cmd = f"{nikaia} run {repo}/scripts/agent.nika -- --commits {n} 2>/dev/null | sed -E 's/[0-9a-f]{{7,}}/SHA/g'"
+        let out = process::run("sh", ["-c", cmd]; dir: tmp.clone())
+        println(f"[{n}]")
+        println(out.stdout.trim())
+    }
+    process::run("rm", ["-rf", tmp])
+}
