@@ -86,7 +86,7 @@ pub fn brace_groups(text: &str) -> Vec<String> {
                 at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 while ((at) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } != '}' { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }
         if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '{' {
@@ -125,7 +125,7 @@ pub fn collapsed_doubled_braces(text: &str) -> Option<String> {
                 }
             }
             if ((at) as usize) < c.len() { out.push(*unsafe { nikaia_std::proven::read(&c, (at) as usize) }); }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }
         if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '{' && ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '{' {

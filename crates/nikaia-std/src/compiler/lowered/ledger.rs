@@ -1117,7 +1117,7 @@ pub(crate) fn is_named(part: &str) -> bool {
     let c: Vec<scalar> = nikaia_std::list::chars(rest.chars());
     let mut end: i64 = 0;
     while end < c.len() as i64 && is_word_char(*unsafe { nikaia_std::proven::read(&c, (end) as usize) }) { end = unsafe { nikaia_std::proven::add::<i64>(end, 1) }; }
-    if end == 0 || !(is_lower(*nikaia_std::index::get(&c, 0)) || *unsafe { nikaia_std::proven::read(&c, (0) as usize) } == '_') { return false; }
+    if end == 0 || !(is_lower(*unsafe { nikaia_std::proven::read(&c, (0) as usize) }) || *unsafe { nikaia_std::proven::read(&c, (0) as usize) } == '_') { return false; }
     let after = trimmed_start(&slice(&c, end, c.len() as i64));
     after.starts_with(':') && !after.starts_with("::")
 }
