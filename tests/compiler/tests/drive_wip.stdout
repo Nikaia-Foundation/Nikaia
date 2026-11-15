@@ -14,12 +14,12 @@ a Bytes field filled from a[1..] fails at rustc (Into &[u8] -> Bytes), not cover
 
 ## To build
 
-- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`); a behaviour the code does on purpose (name the function or ADR) closes it as by design.
-- [ ] Fix it where it lives, with a test in `tests/compiler/tests/`.
+- [ ] Reproduce the Found: a compiler, lowering or `std` defect with a probe (`nikaia run scripts/probe.nika -- SNIPPET`), a defect in `docs/` or `scripts/` with the command or check that shows it; a behaviour the code does on purpose (name the function or ADR) closes it as by design.
+- [ ] Fix it where it lives, with a test in `tests/compiler/tests/`, unless a check that already runs (name it, e.g. `check-adr-refs.py` for a docs citation) turns red on it.
 
 ## Done when
 
-The probe gives the specified result and its test is green.
+The probe or check gives the specified result and the test or check that guards it is green.
 
 
 ---
@@ -38,12 +38,12 @@ supervisor decision
 
 ## To build
 
-- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`); a behaviour the code does on purpose (name the function or ADR) closes it as by design.
-- [ ] Fix it where it lives, with a test in `tests/compiler/tests/`.
+- [ ] Reproduce the Found: a compiler, lowering or `std` defect with a probe (`nikaia run scripts/probe.nika -- SNIPPET`), a defect in `docs/` or `scripts/` with the command or check that shows it; a behaviour the code does on purpose (name the function or ADR) closes it as by design.
+- [ ] Fix it where it lives, with a test in `tests/compiler/tests/`, unless a check that already runs (name it, e.g. `check-adr-refs.py` for a docs citation) turns red on it.
 
 ## Done when
 
-The probe gives the specified result and its test is green.
+The probe or check gives the specified result and the test or check that guards it is green.
 
 
 ---

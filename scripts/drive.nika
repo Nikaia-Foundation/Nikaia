@@ -15,7 +15,8 @@
 // `drive_found`); an area entered with an empty queue is skipped (`FOCUS
 // <area> empty, skipped`); every area empty escalates. Before each cycle the open
 // issues labelled `ready` and the area's name, without `wip`, are appended to
-// DIR/batch.txt as `#N` (`QUEUED #N <area>`, drive_queue). A run on issue N
+// DIR/batch.txt as `#N` (`QUEUED #N <area>`, drive_queue; one a commit on
+// develop already `Fixes`: `SKIPPED #N fixed on develop`). A run on issue N
 // sets `wip` on it first and, by its report, keeps it (done, `Fixes:` names
 // #N; promote closes the issue), swaps `ready` for `blocked` (blocked), or
 // removes it (anything else), drive_wip_after; an escalation mid-run leaves
@@ -26,6 +27,7 @@
 // `--focus-next FILE [SKIPPED...]`, `--focus-log DIR AREA BRIEF...` (the
 // block's comment), `--focus-issue FILE NAME|DIR...`, `--blocks DIR`,
 // `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add),
+// `--fixed-in LOG N...` (drive_fixed_in),
 // `--wip-after RESULT FIXES N`, `--found-issue NAME N FOUND NEEDS`,
 // `--improve-issue NAME N REPORT`, `--time-up` (drive_time_up: `up` or `not up`).
 //
@@ -2046,8 +2048,8 @@ fn drive_found_body(name: String, issue: String, found: String, needs: String) -
 	if needs != ""
 		&& drive_word(needs) != "none" { body = body + f"\n## Needs\n\n{needs.trim()}\n" }
 	body = body
-		+ "\n## To build\n\n- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`); a behaviour the code does on purpose (name the function or ADR) closes it as by design.\n- [ ] Fix it where it lives, with a test in `tests/compiler/tests/`.\n"
-	body = body + "\n## Done when\n\nThe probe gives the specified result and its test is green.\n"
+		+ "\n## To build\n\n- [ ] Reproduce the Found: a compiler, lowering or `std` defect with a probe (`nikaia run scripts/probe.nika -- SNIPPET`), a defect in `docs/` or `scripts/` with the command or check that shows it; a behaviour the code does on purpose (name the function or ADR) closes it as by design.\n- [ ] Fix it where it lives, with a test in `tests/compiler/tests/`, unless a check that already runs (name it, e.g. `check-adr-refs.py` for a docs citation) turns red on it.\n"
+	body = body + "\n## Done when\n\nThe probe or check gives the specified result and the test or check that guards it is green.\n"
 	return body + drive_footer()
 }
 
@@ -2589,10 +2591,42 @@ fn drive_queue_prune(dir: String) throws {
 	for tag in closed { println(f"DROPPED {tag} closed") }
 }
 
+// The numbers among NUMBERS that a commit message in LOG (the bodies of
+// `git log`) finishes: named on a line `Fixes #N[, #M]` (CLAUDE.md). Such an
+// issue stays open until `promote` brings the commit to `main`, so it is no
+// work for a builder (#1678: #1662 was briefed after eaed1a6f fixed it).
+fn drive_fixed_in(log: String, numbers: Vec[String]) -> Vec[String] {
+	let mut named: Vec[String] = []
+	for l in log.split("\n") {
+		let line = l.trim().clone()
+		if !line.starts_with("Fixes ") { continue }
+		for w in line.replace(",", " ").split(" ") {
+			let n = (w.trim().strip_prefix("#") ?? "").clone()
+			if n != "" { named.push(n) }
+		}
+	}
+	let mut out: Vec[String] = []
+	for n in numbers {
+		if named.contains(n.clone()) { out.push(n.clone()) }
+	}
+	return out
+}
+
+// The numbers among NUMBERS that a commit of the last 400 on HEAD (`develop`)
+// finishes (drive_fixed_in).
+fn drive_fixed_on_develop(numbers: Vec[String]) -> Vec[String] throws {
+	if numbers.len() == 0 { return [] }
+	let got = process::run("git", ["log", "-400", "--format=%B", "--grep=^Fixes "])
+	if !got.ok { return [] }
+	return drive_fixed_in(got.stdout, numbers)
+}
+
 // Queues the lane's ready issues (owner, 2026-11-06): the open issues
 // labelled `ready` and AREA, without `wip` (one being worked on), go into DIR/batch.txt as `#N` lines, oldest
-// first (drive_queue_add); prints `QUEUED #N AREA` for each new one. Closed
-// ones still queued are dropped first (drive_queue_prune).
+// first (drive_queue_add); prints `QUEUED #N AREA` for each new one. One a
+// commit on `develop` already finishes is left out (`SKIPPED #N fixed on
+// develop`, drive_fixed_on_develop, #1678). Closed ones still queued are
+// dropped first (drive_queue_prune).
 fn drive_queue(dir: String, area: String) throws {
 	drive_queue_prune(dir.clone())
 	let repo = drive_repo()
@@ -2606,9 +2640,18 @@ fn drive_queue(dir: String, area: String) throws {
 		],
 	)
 	if !got.ok { return }
-	let mut numbers: Vec[String] = []
+	let mut open: Vec[String] = []
 	for n in got.stdout.trim().split("\n") {
-		if n.trim() != "" { numbers.push(n.trim().clone()) }
+		if n.trim() != "" { open.push(n.trim().clone()) }
+	}
+	let fixed = drive_fixed_on_develop(open.clone())
+	let mut numbers: Vec[String] = []
+	for n in open {
+		if fixed.contains(n.clone()) {
+			println(f"SKIPPED #{n} fixed on develop")
+		} else {
+			numbers.push(n.clone())
+		}
 	}
 	if numbers.len() == 0 { return }
 	let path = f"{dir}/batch.txt"
@@ -2847,6 +2890,16 @@ fn main() throws {
 			i += 1
 		}
 		print(drive_queue_add(drive_read(args[2]), numbers))
+		return
+	}
+	if args.len() >= 3 && args[1] == "--fixed-in" {
+		let mut numbers: Vec[String] = []
+		let mut i = 3
+		while i < args.len() {
+			numbers.push(args[i].clone())
+			i += 1
+		}
+		println(drive_fixed_in(drive_read(args[2]), numbers).join(" "))
 		return
 	}
 	if args.len() == 5 && args[1] == "--wip-after" {
