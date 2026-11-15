@@ -108,6 +108,13 @@ it, like the checks in `docs/supervisor.md`.
   The probe's stub types keep each field's visibility as the real type
   declares it, so a `pub` site is never stood for by a private stub that
   proves (#1693: #1652's probe had private fields, its site `pub` ones).
+  A probe that stands for sites keeps, at each site, the expression that
+  builds the indexed value (a loop that pushes, an `if` expression, a
+  `.clone()`, a field read), and the issue quotes those lines of one real
+  site beside the probe, so the builder compares them before building; a
+  probe of another form proves no site, and a *Measure* item on it shows
+  no change (#1703: #1655's probe built `cols` by a loop over `ks`, the
+  `sv_*` sites by `if ks.len() == 0 { [] } else { b.row.cols.clone() }`).
   Each group's probe is shown still checked on the binary of the day (its
   `--bounds` row in the issue); a probe that already proves counts nothing,
   and the issue names the real site instead (#1634: its probe was proved by
