@@ -44,6 +44,11 @@ it, like the checks in `docs/supervisor.md`.
   the function is called from more than one file (ADR-391 D1) (#1465).
   The probe names what it needs in order to fail (which writes keep a field
   rule alive), so a test grown from it still fails before the fix (#1483).
+  It is the whole command that fails, as run: which package is built and
+  with which setting; where a library builds clean and only a program that
+  uses it fails, the probe is that program (#1716: #1686's http failure
+  showed only when hello-http was built at "yes", the http library alone
+  built).
   One defect per bug issue, each with its own probe: two claims are two
   issues, and a claim no probe shows is checked against the code first, since
   a behaviour a function does on purpose is no bug (#1677: a `Found:` merged

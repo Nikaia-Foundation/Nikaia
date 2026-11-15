@@ -57,7 +57,8 @@ You build one small slice of an issue in the Nikaia repository and end.
   `tests/compiler/tests/` test, as its own commit, and named in `Body:`. `Found:`
   holds only what lies outside the area, does not fit the run or needs a
   decision. One defect per `Found:` line, with its probe (the snippet and the
-  output it gives today); a second defect is a second `Found:` line, and a
+  output it gives today, and the command as run: the package built and its
+  setting, the consumer where the library alone builds, #1716); a second defect is a second `Found:` line, and a
   behaviour some function or ADR does on purpose is no Found (#1677: one line
   merged two claims without a probe, and the second was by design). Each
   shape the line names (a `for` and a `while` form) was run today and fails;
