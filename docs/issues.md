@@ -96,6 +96,11 @@ it, like the checks in `docs/supervisor.md`.
   `--bounds` row in the issue); a probe that already proves counts nothing,
   and the issue names the real site instead (#1634: its probe was proved by
   D13 turn counting, and the real sites needed a field-entry fact).
+  This holds for every claim of what the walk does today, not only a counted
+  group: "today it stays checked" carries the probe's `--bounds` row from the
+  binary of the day, and a figure from another prover (the solver) is named
+  as such (#1643: the walk already proved `x % m`, the claim came from the
+  solver, #1689).
 * **I9. A numbered *To build* list.** Each item is one change a builder can
   commit on its own, and names its test: a `.nika` with `.stdout` / `.stderr`
   in `tests/compiler/tests/` (or the package's tests), and the rows it must show
