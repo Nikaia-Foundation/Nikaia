@@ -416,8 +416,15 @@ pub(crate) fn check_handed_expr(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let word = view.text(method);
             let from_receiver = check_handed_carries(world, view, key, receiver, &held);
+            let mut only: Option<String> = None;
+            let owner = check_handed_owner(view, key, receiver);
+            if owner.is_some() {
+                let named = format!("{}::{}", nikaia_std::index::or(owner.as_deref(), || ""), word);
+                if check_handed_defines(world, view, &named) { only = Some(named); }
+            }
             for callee in closed.iter() {
                 if !callee.ends_with(&*format!("::{}", word)) { continue; }
+                if only.is_some() && *callee != nikaia_std::index::or(only.as_deref(), || "") { continue; }
                 let params = check_handed_params_of(world, view, callee);
                 let skip: i64 = if !params.is_empty() && *unsafe { nikaia_std::proven::read(&params, (0) as usize) } == "self" { 1 } else { 0 };
                 if from_receiver.is_some() && skip == 1 { if check_handed_insert(held, callee, "self", nikaia_std::index::or(from_receiver.as_deref(), || "")) { changed = true; } }
@@ -433,6 +440,132 @@ pub(crate) fn check_handed_expr(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
         _ => { },
     }
     changed
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_owner(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, receiver: &Expr) -> Option<String> {
+    match receiver {
+        Expr::StructLit { name, .. } => { let name = *name; return Some(view.text(name)); },
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let text = view.text(name);
+            if text == "self" {
+                let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
+                return if parts.len() == 2 { Some(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string())) } else { None };
+            }
+            return check_handed_typed_in(view, key, &text);
+        },
+        _ => { },
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_defines(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, named: &str) -> bool {
+    if check_handed_params_in(view, named).is_some() { return true; }
+    for unit in world.beside.iter() { if check_handed_params_in(unit, named).is_some() { return true; } }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_typed_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, name: &str) -> Option<String> {
+    for item in view.items.iter() {
+        match &item.node {
+            Item::Fn { name: own, .. } => {
+                let own = *own;
+                if check_handed_name(view, own, None) == key { return check_handed_typed(view, &item.node, name); }
+            },
+            Item::Impl { target, methods, .. } => {
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name: own, .. } => {
+                            let own = *own;
+                            if check_handed_name(view, own, Some(&view.text(target.name))) == key { return check_handed_typed(view, &method.node, name); }
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_typed(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, name: &str) -> Option<String> {
+    let mut found: Vec<String> = vec![];
+    match item {
+        Item::Fn { args, body, .. } => {
+            for arg in args.iter() { if view.text(arg.name) == name { found.push(match check_handed_type_name(view, &arg.ty) { Some(__nikaia_value) => __nikaia_value, None => return None }); } }
+            if !check_handed_typed_block(view, body, name, &mut found) { return None; }
+        },
+        _ => { return None; },
+    }
+    if found.is_empty() { return None; }
+    for each in found.iter() { if *each != *unsafe { nikaia_std::proven::read(&found, (0) as usize) } { return None; } }
+    Some(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&found, (0) as usize) }).to_string()))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_type_name(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Type) -> Option<String> {
+    if ty.is_tuple || ty.is_nullable || (*ty.code).is_some() || !ty.generics.is_empty() { return None; }
+    Some(view.text(ty.name))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_typed_block(view: &ParsedView<'_, '_, '_, '_, '_, '_>, block: &Block, name: &str, found: &mut Vec<String>) -> bool {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Let { names, ty, value, .. } => {
+                for bound in names.iter() {
+                    let bound = *bound;
+                    if view.text(bound) == name {
+                        if names.len() != 1 { return false; }
+                        if ty.is_some() { found.push(match check_handed_type_name(view, match ty { Some(__nikaia_value) => __nikaia_value, None => return false }) { Some(__nikaia_value) => __nikaia_value, None => return false }); } else {
+                            match value {
+                                Expr::StructLit { name: built, .. } => { let built = *built; found.push(view.text(built)); },
+                                _ => { return false; },
+                            }
+                        }
+                    }
+                }
+            },
+            Stmt::Comptime { name: bound, .. } => {
+                let bound = *bound;
+                if view.text(bound) == name { return false; }
+            },
+            Stmt::For { bindings, .. } => {
+                for bound in bindings.iter() {
+                    let bound = *bound;
+                    if view.text(bound) == name { return false; }
+                }
+            },
+            _ => { },
+        }
+        for expr in check_visit_stmt(&stmt.node) {
+            match expr {
+                Expr::Match { arms, .. } => { for arm in arms.iter() { if nikaia_std::list::contains(&check_handed_pattern_names(view, &arm.pattern), &name) { return false; } } },
+                Expr::Closure { params, .. } => {
+                    for param in params.iter() {
+                        let param = *param;
+                        if view.text(param) == name { return false; }
+                    }
+                },
+                Expr::Select(arms, _) => { for arm in arms.iter() { if arm.binding.is_some() && view.text(match arm.binding { Some(__nikaia_value) => __nikaia_value, None => return false }) == name { return false; } } },
+                Expr::TryCatch { .. } => { if name == "error" { return false; } },
+                _ => { },
+            }
+        }
+        for inner in check_visit_stmt_blocks(&stmt.node) { if !check_handed_typed_block(view, inner, name, found) { return false; } }
+    }
+    true
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

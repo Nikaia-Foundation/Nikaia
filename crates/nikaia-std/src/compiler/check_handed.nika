@@ -15,7 +15,7 @@
 // what its binding holds where it is read, a branch or a loop body adding to
 // what held before it (#1699), a result of the package's own function holds
 // what its arguments held, and a method of the package is every method of
-// that name.
+// that name, unless the syntax names the receiver's type (#1700).
 
 use std::collections
 
@@ -492,8 +492,21 @@ fn check_handed_expr(world: ref CheckWorld, view: ref ParsedView, key: ref Strin
         Expr::MethodCall { receiver, method, args, .. } => {
             let word = view.text(method)
             let from_receiver = check_handed_carries(world, view, key, receiver, held)
+            // A receiver whose own type the syntax names reaches that type's
+            // method alone (#1700).
+            let mut only: String? = null
+            let owner = check_handed_owner(view, key, receiver)
+            if owner != null {
+                let named = f"{owner ?? ""}::{word}"
+                if check_handed_defines(world, view, named) {
+                    only = named
+                }
+            }
             for callee in closed {
                 if !callee.ends_with(f"::{word}") {
+                    continue
+                }
+                if only != null && callee != (only ?? "") {
                     continue
                 }
                 let params = check_handed_params_of(world, view, callee)
@@ -517,6 +530,177 @@ fn check_handed_expr(world: ref CheckWorld, view: ref ParsedView, key: ref Strin
         else => {},
     }
     return changed
+}
+
+/// **The own type a method call's receiver is, as the syntax names it**
+/// (#1700): `self` in a method of `B`, a literal `B { … }`, or a name every
+/// binding of which in the function names `B` (a parameter `b: B`, a `let b =
+/// B { … }` or `let b: B`). Null where the syntax does not say.
+fn check_handed_owner(view: ref ParsedView, key: ref String, receiver: ref Expr) -> String? sync {
+    match receiver {
+        Expr::StructLit { name, .. } => return view.text(name),
+        Expr::Variable(name, _) => {
+            let text = view.text(name)
+            if text == "self" {
+                let parts: Vec[ref String] = key.split("::").collect()
+                return if parts.len() == 2 { parts[0].clone() } else { null }
+            }
+            return check_handed_typed_in(view, key, text)
+        },
+        else => {},
+    }
+    return null
+}
+
+/// Whether the package defines the function or method `named`.
+fn check_handed_defines(world: ref CheckWorld, view: ref ParsedView, named: ref String) -> bool sync {
+    if check_handed_params_in(view, named) != null {
+        return true
+    }
+    for unit in world.beside {
+        if check_handed_params_in(unit, named) != null {
+            return true
+        }
+    }
+    return false
+}
+
+/// The type every binding of `name` in the function `key` of a file names.
+fn check_handed_typed_in(view: ref ParsedView, key: ref String, name: ref String) -> String? sync {
+    for item in view.items {
+        match item.node {
+            Item::Fn { name: own, .. } => {
+                if check_handed_name(view, own, null) == key {
+                    return check_handed_typed(view, item.node, name)
+                }
+            },
+            Item::Impl { target, methods, .. } => {
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name: own, .. } => {
+                            if check_handed_name(view, own, view.text(target.name)) == key {
+                                return check_handed_typed(view, method.node, name)
+                            }
+                        },
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return null
+}
+
+fn check_handed_typed(view: ref ParsedView, item: ref Item, name: ref String) -> String? sync {
+    let mut found: Vec[String] = []
+    match item {
+        Item::Fn { args, body, .. } => {
+            for arg in args {
+                if view.text(arg.name) == name {
+                    found.push(check_handed_type_name(view, arg.ty) ?? return null)
+                }
+            }
+            if !check_handed_typed_block(view, body, name, found) {
+                return null
+            }
+        },
+        else => return null,
+    }
+    if found.len() == 0 {
+        return null
+    }
+    for each in found {
+        if each != found[0] {
+            return null
+        }
+    }
+    return found[0].clone()
+}
+
+/// A plain named type, `B` or `ref B`: no arguments, no `?`, no tuple, no code.
+fn check_handed_type_name(view: ref ParsedView, ty: ref Type) -> String? sync {
+    if ty.is_tuple || ty.is_nullable || ty.code != null || ty.generics.len() > 0 {
+        return null
+    }
+    return view.text(ty.name)
+}
+
+/// Adds the type each `let` of `name` in a block names to `found`; false
+/// where a binding of it names none (a `let` of a call, a `for`, a pattern,
+/// a lambda's parameter).
+fn check_handed_typed_block(view: ref ParsedView, block: ref Block, name: ref String, mut found: Vec[String]) -> bool sync {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Let { names, ty, value, .. } => {
+                for bound in names {
+                    if view.text(bound) == name {
+                        if names.len() != 1 {
+                            return false
+                        }
+                        if ty != null {
+                            found.push(check_handed_type_name(view, ty ?? return false) ?? return false)
+                        } else {
+                            match value {
+                                Expr::StructLit { name: built, .. } => found.push(view.text(built)),
+                                else => return false,
+                            }
+                        }
+                    }
+                }
+            },
+            Stmt::Comptime { name: bound, .. } => {
+                if view.text(bound) == name {
+                    return false
+                }
+            },
+            Stmt::For { bindings, .. } => {
+                for bound in bindings {
+                    if view.text(bound) == name {
+                        return false
+                    }
+                }
+            },
+            else => {},
+        }
+        for expr in check_visit_stmt(stmt.node) {
+            match expr {
+                Expr::Match { arms, .. } => {
+                    for arm in arms {
+                        if check_handed_pattern_names(view, arm.pattern).contains(name) {
+                            return false
+                        }
+                    }
+                },
+                Expr::Closure { params, .. } => {
+                    for param in params {
+                        if view.text(param) == name {
+                            return false
+                        }
+                    }
+                },
+                Expr::Select(arms, _) => {
+                    for arm in arms {
+                        if arm.binding != null && view.text(arm.binding ?? return false) == name {
+                            return false
+                        }
+                    }
+                },
+                Expr::TryCatch { .. } => {
+                    if name == "error" {
+                        return false
+                    }
+                },
+                else => {},
+            }
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            if !check_handed_typed_block(view, inner, name, found) {
+                return false
+            }
+        }
+    }
+    return true
 }
 
 /// The own function a call names, by its key: `helper`, `Bag::make`.
