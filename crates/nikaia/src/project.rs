@@ -2985,38 +2985,40 @@ fn run_program_tests<'a>(
         .collect::<Result<Vec<Vec<_>>>>()?;
     // **One build per setting for the programs** (`project_tests_batches`);
     // not at `--bless`, which keeps what a build says beside each program.
+    // The builds run on a thread of their own, one after the other (the
+    // settings share Cargo's target directory and its lock), while the
+    // workers already make the reports; a worker waits for a setting's build
+    // only when it runs a program at that setting.
     let batch_places = settings
         .iter()
         .map(|_| Sandbox::new())
         .collect::<Result<Vec<_>>>()?;
-    let batches = settings
+    let batches: Vec<std::sync::OnceLock<std::result::Result<BTreeMap<_, _>, String>>> = settings
         .iter()
-        .zip(&batch_places)
-        .map(|(setting, place)| {
-            if suite.bless || suite.bless_stderr {
-                return Ok(BTreeMap::new());
-            }
-            let host = ProgramHost {
-                exe: std::env::current_exe().context("finding this compiler")?,
-                failed: RefCell::new(None),
-            };
-            match block_on(project_tests::project_tests_batches(
-                &host, programs, root, setting, &place.0,
-            )) {
-                Ok(found) => Ok(found),
-                Err(error) => Err(host
-                    .failed
-                    .into_inner()
-                    .unwrap_or_else(|| anyhow!("{error}"))),
-            }
-        })
-        .collect::<Result<Vec<_>>>()?;
+        .map(|_| std::sync::OnceLock::new())
+        .collect();
     let batches = &batches;
     let next = AtomicUsize::new(0);
     let (send, receive) = std::sync::mpsc::channel();
     std::thread::scope(|scope| {
+        let next = &next;
+        let batch_places = &batch_places;
+        scope.spawn(move || {
+            for ((setting, place), slot) in settings.iter().zip(batch_places).zip(batches) {
+                let found = if suite.bless || suite.bless_stderr {
+                    Ok(BTreeMap::new())
+                } else {
+                    build_program_batches(programs, root, setting, &place.0)
+                        .map_err(|error| format!("{error:#}"))
+                };
+                if found.is_err() {
+                    next.store(programs.len(), Ordering::SeqCst);
+                }
+                let _ = slot.set(found);
+            }
+        });
         for place in &places {
-            let (send, next) = (send.clone(), &next);
+            let send = send.clone();
             scope.spawn(move || {
                 loop {
                     let k = next.fetch_add(1, Ordering::SeqCst);
@@ -3031,6 +3033,8 @@ fn run_program_tests<'a>(
                                 .zip(place)
                                 .zip(batches)
                                 .map(|((setting, place), batch)| {
+                                    let batch =
+                                        batch.wait().as_ref().map_err(|e| anyhow!("{e}"))?;
                                     let batched = batch.get(&program.name);
                                     run_program_test(
                                         program, root, setting, &place.0, batched, &reports,
@@ -3059,8 +3063,36 @@ fn run_program_tests<'a>(
                 shown += 1;
             }
         }
+        // A failed build stops the programs before they start; it is the error.
+        for batch in batches {
+            if let Some(Err(error)) = batch.get() {
+                return Err(anyhow!("{error}"));
+            }
+        }
         Ok(())
     })
+}
+
+/// The one build per SETTING of the PROGRAMS (`project_tests_batches`).
+fn build_program_batches(
+    programs: &[ProgramTest],
+    root: &Path,
+    setting: &str,
+    place: &Path,
+) -> Result<BTreeMap<String, project_tests::ProjectTestsBatched>> {
+    let host = ProgramHost {
+        exe: std::env::current_exe().context("finding this compiler")?,
+        failed: RefCell::new(None),
+    };
+    match block_on(project_tests::project_tests_batches(
+        &host, programs, root, setting, place,
+    )) {
+        Ok(found) => Ok(found),
+        Err(error) => Err(host
+            .failed
+            .into_inner()
+            .unwrap_or_else(|| anyhow!("{error}"))),
+    }
 }
 
 /// The package's test programs, by name (`tools/project_tests.nika`).
