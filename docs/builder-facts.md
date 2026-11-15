@@ -62,6 +62,10 @@ together with the specification section and an example test.
   `lower-std` and build cycle takes 10-15 minutes: find every change it needs
   with probes on the old binary first; one cycle less is the largest saving a
   run can make (a9, v6, v7). Put a `&` on one command, never on a chain (P4b).
+  **One `lower-std` or build at a time:** while a cycle runs in the
+  background, start no other `lower-std`, build or touched test until it
+  wakes you; two `lower-std` runs write the same lowered files and one
+  silently undoes the other (issue-1711).
 * **Probes live in the scratchpad**, outside any project: `nikaia check FILE`
   inside `tests/compiler/tests/` reads the sibling files (prover lane).
 * **Never commit a `nikaia.lock` you did not mean to change**: it changes with each build. Most are
