@@ -896,7 +896,7 @@ fn drive_ci_branch(dir: String) -> String {
 // self-hosted share there, so the committed badge did not match the committed
 // tree and CI's `badges.py --check` was red on it.
 fn drive_badges() throws {
-	for attempt in 1..3 {
+	for attempt in 1..<4 {
 		drive_badges_once()
 		if drive_badges_check() { return }
 		println(f"BADGES check red after attempt {attempt}, again")
