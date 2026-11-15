@@ -145,7 +145,10 @@ impl CheckState {
             let found = self.binding(name);
             if found.is_some() {
                 let local = match found { Some(__nikaia_value) => __nikaia_value, None => return };
-                if is_a_handle(&local.ty) { self.facts.task_handles.insert((task, nikaia_std::block::Text::from(name.to_string()))); }
+                if is_a_handle(&local.ty) {
+                    self.facts.task_handles.insert((task, nikaia_std::block::Text::from(name.to_string())));
+                    self.a_handle_a_task_takes(name, &local.ty, task, span);
+                }
                 if !self.takes_away(world, &local.ty) { continue; }
                 self.moved_into_a_task.push((nikaia_std::block::Text::from(name.to_string()), local.ty.clone(), span.end as i64, nikaia_std::block::Text::from(who.to_string())));
             }

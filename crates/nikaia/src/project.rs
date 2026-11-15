@@ -2034,6 +2034,22 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                 &program.contracts,
                 library,
                 settings.build.user_parallelism == crate::emit::UserParallelism::Yes,
+                // Which handovers duplicate a handle is the check's (ADR-312
+                // D2, #1502); an explanation runs before it, so it asks the
+                // check's walk the emitter asks.
+                Some(&crate::check::propagation_against(
+                    &unit.parsed,
+                    &program
+                        .units
+                        .iter()
+                        .enumerate()
+                        .filter(|(other, _)| *other != at as usize)
+                        .map(|(_, other)| &other.parsed)
+                        .collect::<Vec<_>>(),
+                    &program.contracts,
+                    &program.described,
+                    self.reads,
+                )),
             ),
             "tethers" => crate::contracts::tether::report(&unit.parsed, &program.contracts),
             "asserts" => crate::check::claims_report(

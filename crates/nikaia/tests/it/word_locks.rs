@@ -22,7 +22,7 @@ fn decisions(source: &str) -> Vec<sharing::Decision> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std ships a ledger");
-    sharing::analyse_program(&parsed, &own, &library, true).decisions
+    sharing::analyse_program(&parsed, &own, &library, true, None).decisions
 }
 
 fn count_of(source: &str, function: &str, value: &str) -> sharing::Decision {
@@ -105,7 +105,7 @@ fn the_explanation_names_the_row() {
         let parsed = parse_to_ast(PROGRAM).expect("the source parses");
         let own = Ledger::infer(&parsed);
         let library = Ledger::parse(STD).expect("std ships a ledger");
-        sharing::report(&parsed, &own, &library, true)
+        sharing::report(&parsed, &own, &library, true, None)
     };
     assert!(report.contains("word    `hits`"), "{report}");
     assert!(report.contains("compare-and-swap"), "{report}");

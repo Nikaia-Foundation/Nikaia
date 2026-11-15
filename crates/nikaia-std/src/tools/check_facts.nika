@@ -177,6 +177,11 @@ pub struct CheckFacts {
     pub stored_handles: collections::BTreeSet[i64],
     /// `P { a }` over such a name, by the struct literal and the field.
     pub stored_handle_fields: collections::BTreeSet[(i64, String)],
+    /// **A handle handed on at its last use is moved, not duplicated**
+    /// (ADR-312 D2, #1502): a call's argument naming one that nothing reads
+    /// afterwards, by the argument's id. Taken out of `stored_handles`,
+    /// `stored_handle_fields` and `task_handles` likewise.
+    pub moved_handles: collections::BTreeSet[i64],
     pub copied_tuple_parts: collections::BTreeSet[(i64, String)],
     pub std_lengths: collections::BTreeSet[i64],
     pub sized_lengths: collections::BTreeSet[i64],
@@ -723,6 +728,7 @@ impl CheckFacts {
             kept_fn_fields: collections::BTreeSet(),
             stored_handles: collections::BTreeSet(),
             stored_handle_fields: collections::BTreeSet(),
+            moved_handles: collections::BTreeSet(),
             copied_tuple_parts: collections::BTreeSet(),
             std_lengths: collections::BTreeSet(),
             sized_lengths: collections::BTreeSet(),

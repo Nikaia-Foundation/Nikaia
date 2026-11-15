@@ -550,6 +550,7 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
     for item in items.iter() {
         state.hands_over(world, item, unsafe { nikaia_std::proven::read(&walked, (at) as usize) }, "put into a list", span);
         check_core_places_store_handle(state, item, unsafe { nikaia_std::proven::read(&walked, (at) as usize) });
+        if check_core_places_a_handle(unsafe { nikaia_std::proven::read(&walked, (at) as usize) }) { state.a_handle_handed_on(world, item, unsafe { nikaia_std::proven::read(&walked, (at) as usize) }, span); }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     let mut a_null = false;

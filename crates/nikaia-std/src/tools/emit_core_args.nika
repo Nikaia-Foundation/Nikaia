@@ -494,9 +494,10 @@ impl EmitState {
                 return
             }
         }
-        // ADR-312 D1: a handle on a shared value is **duplicated, never moved**,
-        // where it is handed on by value, and only where the argument names one.
-        let shares_a_handle = i < takes_a_handle.len() && takes_a_handle[i] && emit_arg_names_a_place(arg)
+        // ADR-312 D1, D2: a handle on a shared value is **duplicated** where it
+        // is handed on by value, only where the argument names one, and only
+        // where the name is read again: at its last use it moves (#1502).
+        let shares_a_handle = i < takes_a_handle.len() && takes_a_handle[i] && emit_arg_names_a_place(arg) && !self.facts.moved_handles.contains(node)
         // **A kept function value handed to code that keeps it is cloned**
         // (#1008): a `Kept` is an `Arc`, and the name may be read again
         // (a second call, a loop, a recursive call).

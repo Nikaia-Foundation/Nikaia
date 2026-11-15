@@ -448,9 +448,13 @@ pub(crate) fn check_core_places_a_declared_field<H: CheckHost>(state: &mut Check
         }
     }
     if check_core_places_a_handle(&given) {
-        if value.is_none() { state.facts.stored_handle_fields.insert((id_of(expr) as i64, nikaia_std::block::Text::from(field.to_string()))); } else {
+        if value.is_none() {
+            state.facts.stored_handle_fields.insert((id_of(expr) as i64, nikaia_std::block::Text::from(field.to_string())));
+            state.a_handle_stored_by_name(field, &given, id_of(expr) as i64, span);
+        } else {
             let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return true };
             check_core_places_store_handle(state, v, &given);
+            state.a_handle_handed_on(world, v, &given, span);
         }
     }
     state.field_is_reachable(name, &found_field, span);

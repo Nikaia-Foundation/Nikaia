@@ -287,6 +287,22 @@ pub struct CheckPendingConcat {
     pub taken: CheckTaken,
 }
 
+/// **A handle on a shared value handed on by value** (ADR-312 D2, #1502):
+/// duplicated where its name is read again afterwards, moved at its last
+/// use. Decided at the end of the body, as data is (`handles_read_again`).
+pub struct CheckPendingHandle {
+    /// The read the handle is handed on by, by its id; or the struct literal
+    /// of a `P { a }`, or the task's lambda.
+    pub node: i64,
+    /// `""` for a read; the field of a `P { a }`; the name a task takes.
+    pub field: String,
+    /// A task's body reads the name inside its own span: only a later read
+    /// counts there.
+    pub task: bool,
+    /// The handover, as a taking, for `first_read_after`.
+    pub taken: CheckTaken,
+}
+
 /// Whether reading `read` touches what taking `taken` took: the same path, a
 /// part of it (`p.name` after `p`), or the whole it was part of (`p` after
 /// `p.name`).

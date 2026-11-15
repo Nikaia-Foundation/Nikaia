@@ -593,13 +593,16 @@ fn check_core_places_a_declared_field[H: CheckHost](mut state: CheckState, world
         }
     }
     // **A handle on a shared value stored by value is duplicated**
-    // (ADR-312 D1, #1411), so the name can be read again.
+    // (ADR-312 D1, #1411), so the name can be read again; at its last use it
+    // is moved (D2, #1502).
     if check_core_places_a_handle(given) {
         if value == null {
             state.facts.stored_handle_fields.insert((id_of(expr) as i64, field.clone()))
+            state.a_handle_stored_by_name(field, given, id_of(expr) as i64, span)
         } else {
             let v: ref Expr = value ?? return true
             check_core_places_store_handle(state, v, given)
+            state.a_handle_handed_on(world, v, given, span)
         }
     }
     state.field_is_reachable(name, found_field, span)

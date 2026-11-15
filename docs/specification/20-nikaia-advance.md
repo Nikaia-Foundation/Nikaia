@@ -818,7 +818,7 @@ Calling a function runs it now. A task that runs concurrently or in parallel is 
 #### The @detached Contract
 `async(detached)` is a `@detached` context, which gives it **implicit move semantics**: a captured value moves into the task. The parent scope cannot use the captured data while the detached task owns it. A use after the move is refused with `NK2101` (Part I 8.3).
 * **Ordinary data is cloned.** A program that keeps **data** in the parent, a string, a number, a struct or a collection of those, calls `.clone()` before starting the task, and the copy is what the task takes (Part I 8.3).
-* **A handle is duplicated.** A handle on a `Shared[T]` is **duplicated** where it is handed to the task, so the name in the parent keeps working and there is nothing to call. Copying a handle copies none of the data (Part I 6.2). `--sharing` names the duplication site.
+* **A handle is duplicated.** A handle on a `Shared[T]` is **duplicated** where it is handed to the task and its name is read after the `spawn`, so the name in the parent keeps working and there is nothing to call; at its last use it is moved into the task (Part I 6.2). Copying a handle copies none of the data (Part I 6.2). `--sharing` names the duplication site.
 
 A move is refused only where the type is **known** and a move takes the value away. A number, a `bool`, a `scalar` and a view are *copied*, so the parent keeps them: `let message = "Hello"` is not this case, and `let message: String = "Hello"` is. A value whose type nothing describes is not refused (Part III C.4). An assignment between the start and the later use clears the refusal.
 

@@ -259,6 +259,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             state.flow.barrier = Some(String::from("task"));
             state.flow.async_depth += 1;
             state.flow.async_started += 1;
+            state.flow.starts_async = true;
             let changed_from = state.changed.len() as i64;
             let mut run = false;
             match inner {
@@ -367,6 +368,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             if written_async && state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
             if child {
                 state.flow.async_started += 1;
+                state.flow.starts_async = true;
                 state.an_async_inside_a_door(span);
             }
             check_core_ops_spawn(state, world, host, body, written_async, child, span)

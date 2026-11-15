@@ -264,6 +264,10 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             state.hands_over(world, value, &found_here, &format!("passed to `{}`, which keeps it", written), span);
         }
+        if given_here.is_some() && check_core_places_a_handle(&declared) {
+            let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            state.a_handle_handed_on(world, value, &found_here, span);
+        }
         let mut literal_wants = want.clone();
         if kept && state.decided_by_this_argument(signature, &wanted, at) { literal_wants = Ty::Named { name: String::from("String"), args: vec![], view: false }; }
         let literal_var = check_arguments_var_name(&declared);
