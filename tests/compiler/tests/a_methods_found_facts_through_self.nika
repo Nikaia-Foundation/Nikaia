@@ -1,0 +1,35 @@
+/// A method's found facts are read as a free function's, with `self` as one
+/// more argument (ADR-306 D34): `push_len` hands back a position below
+/// `self.items.len()` at its every return, so the caller's `s.items[i]` is
+/// proved; `count` takes `self` lent, so what it hands back is at most
+/// `self.items.len()`, and `pick` hands back one below it from a method of
+/// the same type.
+struct Stack { items: Vec[i64] }
+
+impl Stack {
+	fn push_len(mut self, x: i64) -> i64 sync {
+		self.items.push(x)
+		return self.items.len() - 1
+	}
+
+	fn count(ref self) -> i64 sync {
+		return self.items.len()
+	}
+
+	fn pick(mut self) -> i64 sync {
+		let i = self.push_len(7)
+		return i
+	}
+}
+
+fn main() throws {
+	let mut s = Stack { items: [] }
+	let i = s.push_len(4)
+	println(s.items[i])
+	let n = s.count()
+	if n > 0 {
+		println(s.items[n - 1])
+	}
+	let j = s.pick()
+	println(s.items[j])
+}
