@@ -121,10 +121,10 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b">
         <details class="safe-why"><summary class="safe-chip safe-chip-part">Where the compiler's view ends</summary>
-<p><span class="why why-limit">Beyond what a compiler sees</span> What valid data is depends on your program. The guard says it; the compiler checks that there is one. Who wrote a file or what arrives on standard input is something only the program knows, and it says so with <code>trusted: true</code> where it reads them, and <code>--trust</code> lists each such place.</p>
+<p><span class="why why-limit">Beyond what a compiler sees</span> What valid data is depends on your program. The guard says it; the compiler checks that there is one. Who chose a file, a variable of the environment or the words on the command line is something only the program knows. It says so with <code>trusted: true</code> where it reads them, and <code>--trust</code> lists each such place.</p>
 </details>
         <h3><a href="{{ "/safe/outside-data.html" | relative_url }}">A guard where the data arrives</a></h3>
-        <p>A claim about a value from outside, an <code>assert</code> or a function's precondition, is refused until a guard handles the bad case. After the guard the claim is proved. Words on the command line are checked against <code>main</code>'s preconditions before the body runs.</p>
+        <p>Everything read while the program runs is from outside: the command line, the environment, standard input, files, other programs and the network. A claim about such a value, an <code>assert</code> or a function's precondition, is refused until a guard handles the bad case. After the guard the claim is proved. Words taken as parameters of <code>main</code> are checked against its preconditions before the body runs.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">let out = process::run("git", ["rev-parse", "HEAD"])
 let n: int = out.stdout.len()
 assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: `n == 41` is a claim about data from outside the program.</b></code></pre></div>
@@ -140,8 +140,15 @@ assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre clas
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Chosen by the compiler</span>
         <h3>Keys an attacker cannot line up</h3>
-        <p>A map whose keys come from the network gets a hash with a random seed, so whoever sends the keys cannot pick ones that all land in the same place and slow the program down. A map filled from data the program trusts keeps a faster hash. <code>--trust</code> shows which map got which.</p>
+        <p>A map keyed by data from outside gets a hash with a random seed, so whoever sends the keys cannot pick ones that all land in the same place and slow the program down. A map filled from data the program trusts keeps a faster hash. <code>--trust</code> shows which map got which.</p>
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-316.html" | relative_url }}">ADR-316 →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Chosen by the compiler</span>
+        <h3><a href="{{ "/safe/outside-data.html" | relative_url }}">A log line stays one line</a></h3>
+        <p>Text from outside written to the log, with <code>eprintln</code>, a <code>panic</code> or an uncaught error, has its control characters written as <code>\n</code> or <code>\u{1b}</code>, so it cannot start a forged line or steer a terminal. The program's own text, and everything on standard output, is written as it is. <code>--trust</code> lists every log call that escapes.</p>
+<div class="home-code markdown-body"><pre class="diagnostic"><code>login failed for x\nlogin ok for admin</code></pre></div>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-398.html" | relative_url }}">ADR-398 →</a>
       </div>
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Chosen by the compiler</span>
