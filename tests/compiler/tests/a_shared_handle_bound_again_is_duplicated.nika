@@ -1,0 +1,69 @@
+// A handle on a shared value handed on by a `let`, an assignment, a tuple,
+// a variant or a store into a field or a list is duplicated where its name
+// is read again, and moved at its last use (Part I 6.2, ADR-312 D1, D2,
+// #1212). Before, the lowering moved the `Rc` and rustc refused the next read.
+struct Settings { name: String, retries: int }
+
+struct Holder { s: Shared[Settings] }
+
+enum Boxed { One(Shared[Settings]), Empty }
+
+fn nothing() -> Boxed {
+	return Boxed::Empty
+}
+
+fn is_empty(b: Boxed) -> bool {
+	return match b {
+		Boxed::Empty => true,
+		else => false,
+	}
+}
+
+struct Noisy { name: String }
+
+impl Drop for Noisy {
+	fn drop(mut self) {
+		println(f"{self.name} goes") catch { }
+	}
+}
+
+fn show(s: Shared[Settings]) throws {
+	println(s.name)
+}
+
+fn main() throws {
+	let settings = Shared(Settings { name: "prod", retries: 3 })
+	let for_log = settings
+	show(for_log)
+	println(settings.retries)
+
+	let mut other = Shared(Settings { name: "test", retries: 1 })
+	println(other.name)
+	other = settings
+	println(f"{other.name} {settings.name}")
+
+	let pair = (settings, 2)
+	println(f"{pair.0.retries} {settings.retries}")
+
+	let mut boxed = nothing()
+	println(f"empty: {is_empty(boxed)}")
+	boxed = Boxed::One(settings)
+	match boxed {
+		Boxed::One(s) => println(s.name),
+		Boxed::Empty => println("empty"),
+	}
+
+	let mut holder = Holder { s: Shared(Settings { name: "old", retries: 0 }) }
+	holder.s = settings
+	let mut all = [Shared(Settings { name: "old", retries: 0 })]
+	all[0] = settings
+	println(f"{holder.s.name} {all[0].name} {settings.name}")
+
+	let from_field = holder.s
+	println(f"{from_field.retries} {holder.s.retries}")
+
+	// At its last use the handle moves: the value goes with the new name.
+	let noisy = Shared(Noisy { name: "noisy" })
+	let last = noisy
+	println(last.name)
+}

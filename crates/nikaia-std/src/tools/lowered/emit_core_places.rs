@@ -171,6 +171,7 @@ impl EmitState {
             let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(part))?;
             out.push(&before);
             self.emit_expr(world, walk, out, host, part, depth, flow, scope)?;
+            if self.facts.stored_handles.contains(&node_key(part)) { out.push(".clone()"); }
             out.push(&after);
         }
         out.push(")");

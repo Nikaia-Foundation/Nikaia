@@ -559,6 +559,7 @@ pub(crate) fn check_core_places_a_kept_fn(state: &CheckState, name: &str, given:
 pub(crate) fn check_core_places_a_handle(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, view, .. } => { let view = *view; !view && (name == "Shared" || name == "SharedMut") },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); check_core_places_a_handle(inner) },
         _ => false,
     }
 }
@@ -569,6 +570,14 @@ pub fn check_core_places_store_handle(state: &mut CheckState, value: &Expr, ty: 
     if !check_core_places_a_handle(ty) { return; }
     let place = matches!(value, Expr::Variable(_, _) | Expr::Field { .. });
     if place { state.facts.stored_handles.insert(id_of(value) as i64); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_places_give_handle(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, span: &Span) {
+    if !check_core_places_a_handle(ty) { return; }
+    check_core_places_store_handle(state, value, ty);
+    state.a_handle_handed_on(world, value, ty, span);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

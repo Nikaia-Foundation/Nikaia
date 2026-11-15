@@ -296,6 +296,15 @@ pub fn literal_type(expr: ref Expr) -> String? {
     }
 }
 
+/// What a hull's one argument holds: a literal's type, or the struct a
+/// struct literal builds (`SharedMut(Node { … })` holds a `Node`, #1212).
+fn held_type(expr: ref Expr, asked: ref Asked) -> String? {
+    return match expr {
+        Expr::StructLit { name, .. } => asked.names.resolve(name).clone(),
+        else => literal_type(expr),
+    }
+}
+
 /// The sentence a published position gets.
 pub fn published_reason(key: ref String, at: ref String) -> String {
     if at == RESULT_POSITION {
@@ -337,6 +346,8 @@ pub fn holds_shared(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, .. } => name == "Shared" || name == "SharedMut" || any_holds_shared(args),
         Ty::Tuple(parts) => any_holds_shared(parts),
+        // `next: SharedMut[Node]?` holds one where it holds anything (#1212).
+        Ty::Nullable(inner) => holds_shared(inner),
         else => false,
     }
 }
@@ -1212,7 +1223,7 @@ fn hull_written(func: ref Expr, args: ref Vec[Expr], asked: ref Asked) -> Ty? {
         return null
     }
     if args.len() == 1 {
-        let held = literal_type(args[0]) ?? return plain_type(named)
+        let held = held_type(args[0], asked) ?? return plain_type(named)
         return Ty::Named { name: named, args: [plain_type(held)], view: false }
     }
     return plain_type(named)
@@ -1231,6 +1242,11 @@ fn hands_back(value: ref Expr, asked: ref Asked, mut walk: SharingWalk) {
 // A handle whose allocation this analysis did not watch being made: the floor
 // holds and says so (ADR-037 D7: only a proof may take an atomic away).
 fn origin_unseen(function: ref String, named: ref String, value: ref Expr, asked: ref Asked, mut walk: SharingWalk) {
+    // `null` holds no allocation, so it has no count to decide (#1212).
+    match value {
+        Expr::LitNull(_) => return,
+        else => {}
+    }
     walk.slots.force(function, named, origin_reason(value, asked.names), Fallback::UnseenOrigin)
 }
 
@@ -1483,8 +1499,42 @@ fn sharing_method(call: ref Expr, asked: ref Asked, holes_of: fn(ref Expr) -> Ve
             }
         }
     }
-    sharing_arguments(SharingCall { callee: method, is_method: true }, args, config, asked, holes_of, ty_of, walk)
+    // **The value a door opens has the lock's content type** (6.3, #1212):
+    // `a.update fn(mut n) { n.next = b }` stores `b` in `Node.next`, which
+    // joins it with that field's count as a written type would.
+    let opened = door_opened(method, receiver, args, asked, walk)
+    if opened != null {
+        let (param, content) = opened ?? return
+        let before = walk.scope[param]?.clone()
+        walk.scope.insert(param.clone(), content)
+        sharing_arguments(SharingCall { callee: method, is_method: true }, args, config, asked, holes_of, ty_of, walk)
+        if before == null {
+            walk.scope.remove(param)
+        } else {
+            walk.scope.insert(param, before ?? Ty::Unknown)
+        }
+    } else {
+        sharing_arguments(SharingCall { callee: method, is_method: true }, args, config, asked, holes_of, ty_of, walk)
+    }
     sharing_expression(receiver, asked, holes_of, ty_of, walk)
+}
+
+/// The lambda parameter of `h.update fn(mut v) { … }` or `h.access fn(v) {
+/// … }` on a named `SharedMut[T]` or `Locked[T]`, and its type `T`.
+fn door_opened(method: ref String, receiver: ref Expr, args: ref Vec[Expr], asked: ref Asked, walk: ref SharingWalk) -> (String, Ty)? {
+    if (method != "update" && method != "access") || args.len() != 1 {
+        return null
+    }
+    let handle = named_handle(receiver, asked.names, walk.scope) ?? return null
+    let ty = walk.scope[handle] ?? return null
+    let content = match ty {
+        Ty::Named { name, args: inner, .. } => if (name == "SharedMut" || name == "Locked") && inner.len() == 1 { inner[0].clone() } else { return null },
+        else => return null,
+    }
+    return match args[0] {
+        Expr::Closure { params, .. } => if params.len() == 1 { (asked.names.resolve(params[0]).clone(), content) } else { null },
+        else => null,
+    }
 }
 
 fn a_copy_out_of_the_lock(receiver: ref Expr, asked: ref Asked, mut walk: SharingWalk) {

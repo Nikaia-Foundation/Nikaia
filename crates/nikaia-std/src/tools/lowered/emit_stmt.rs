@@ -531,6 +531,7 @@ impl EmitState {
             _ => false,
         };
         self.emit_core_operand(world, walk, out, host, value, viewed, depth, flow, &inner)?;
+        if !self.facts.lent_lets.contains(&at) && self.facts.stored_handles.contains(&node_key(value)) { out.push(".clone()"); }
         out.push(&after);
         out.push(";");
         Ok(())
@@ -621,7 +622,10 @@ impl EmitState {
         let appended = op.is_some() && self.facts.appended_texts.contains(&at);
         if appended { out.push("::core::convert::AsRef::<str>::as_ref(&"); }
         let either_back = op.is_none() && !own_view && !reputted && self.either_result(world, value);
-        if !own_view { self.emit_expr(world, walk, out, host, value, depth, flow, scope)?; }
+        if !own_view {
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
+            if op.is_none() && self.facts.stored_handles.contains(&node_key(value)) { out.push(".clone()"); }
+        }
         if either_back { out.push(".into()"); }
         if appended { out.push(")"); }
         out.push(&after);
@@ -639,6 +643,7 @@ impl EmitState {
         out.push("{ let __nikaia_stored = ");
         out.push(&before);
         self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
+        if self.facts.stored_handles.contains(&node_key(value)) { out.push(".clone()"); }
         out.push(&after);
         let mut lent_on = false;
         match base {
@@ -699,6 +704,7 @@ impl EmitState {
         out.push("{ let __nikaia_stored = ");
         out.push(&before);
         self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
+        if self.facts.stored_handles.contains(&node_key(value)) { out.push(".clone()"); }
         out.push(&after);
         out.push("; ");
         self.emit_expr(world, walk, out, host, keeper, depth, flow.place(), scope)?;

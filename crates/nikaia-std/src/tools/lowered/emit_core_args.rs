@@ -333,7 +333,7 @@ impl EmitState {
         let mut lend = self.facts.lent_args.contains(&node) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(&node)) || self.facts.lent_literals.contains(&node));
         if lent_path && !emit_arg_names_a_place(arg) { lend = false; }
         let change = self.facts.mut_args.contains(&node);
-        let duplicate = shares_a_handle || hands_on_kept;
+        let duplicate = shares_a_handle || hands_on_kept || self.facts.stored_handles.contains(&node);
         let future = emit_arg_is_closure(arg) && self.facts.future_lambdas.contains(&node) && !self.facts.kept_lambdas.contains_key(&node);
         let mut pointer: i64 = 0;
         if self.foreign_params.contains_key(callee) {

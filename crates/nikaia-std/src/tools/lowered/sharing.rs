@@ -199,6 +199,13 @@ pub fn literal_type(expr: &Expr) -> Option<String> {
     }
 }
 
+pub(crate) fn held_type(expr: &Expr, asked: &Asked<'_, '_, '_>) -> Option<String> {
+    match expr {
+        Expr::StructLit { name, .. } => { let name = *name; Some(nikaia_std::block::Text::from(asked.names.resolve(name).to_string())) },
+        _ => literal_type(expr),
+    }
+}
+
 pub fn published_reason(key: &str, at: &str) -> String {
     if at == RESULT_POSITION { return format!("`{}` is public and hands a `Shared` back, so what the caller does with it is in a unit this build cannot see", key); }
     format!("`{}` is public, so its callers are in a unit this build cannot see, and one of them may cross a thread with it", key)
@@ -224,6 +231,7 @@ pub fn holds_shared(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, .. } => name == "Shared" || name == "SharedMut" || any_holds_shared(args),
         Ty::Tuple(parts) => any_holds_shared(parts),
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); holds_shared(inner) },
         _ => false,
     }
 }
@@ -842,7 +850,7 @@ pub(crate) fn hull_written(func: &Expr, args: &[Expr], asked: &Asked<'_, '_, '_>
     };
     if !is_hull(&named) { return None; }
     if args.len() == 1 {
-        let held = match literal_type(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return Some(plain_type(&named)) };
+        let held = match held_type(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, asked) { Some(__nikaia_value) => __nikaia_value, None => return Some(plain_type(&named)) };
         return Some(Ty::Named { name: named, args: vec![plain_type(&held)], view: false });
     }
     Some(plain_type(&named))
@@ -855,7 +863,13 @@ pub(crate) fn hands_back(value: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut Sha
     walk.slots.join(&slot(&walk.function, RESULT), &source);
 }
 
-pub(crate) fn origin_unseen(function: &str, named: &str, value: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) { walk.slots.force(function, named, origin_reason(value, asked.names), Some(Fallback::UnseenOrigin)); }
+pub(crate) fn origin_unseen(function: &str, named: &str, value: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) {
+    match value {
+        Expr::LitNull(_) => { return; },
+        _ => { },
+    }
+    walk.slots.force(function, named, origin_reason(value, asked.names), Some(Fallback::UnseenOrigin));
+}
 
 pub(crate) fn a_crossing_reaches(named: &str, why: &str, fallback: Option<Fallback>, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) {
     let ty = match match *nikaia_std::index::get(&walk.scope, named) {
@@ -1049,8 +1063,32 @@ pub(crate) fn sharing_method(call: &Expr, asked: &Asked<'_, '_, '_>, holes_of: &
         let why = format!("a lambda handed to `{}` uses it, and that lambda runs on a thread the program asked for", method);
         for arg in args.iter() { for named in names_used_by(arg, asked) { a_crossing_reaches(&named, &why, None, asked, walk); } }
     }
-    sharing_arguments(&SharingCall { callee: Some(method), is_method: true }, args, config, asked, &holes_of, &ty_of, walk);
+    let opened = door_opened(&method, receiver, args, asked, &walk);
+    if opened.is_some() {
+        let (param, content) = match opened { Some(__nikaia_value) => __nikaia_value, None => return };
+        let before = match *nikaia_std::index::get(&walk.scope, &param) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        walk.scope.insert(nikaia_std::block::Text::from(param.to_string()), content);
+        sharing_arguments(&SharingCall { callee: Some(method), is_method: true }, args, config, asked, &holes_of, &ty_of, walk);
+        if before.is_none() { walk.scope.remove(&param); } else { walk.scope.insert(param, nikaia_std::index::or(before, || Ty::Unknown)); }
+    } else { sharing_arguments(&SharingCall { callee: Some(method), is_method: true }, args, config, asked, &holes_of, &ty_of, walk); }
     sharing_expression(receiver, asked, &holes_of, &ty_of, walk);
+}
+
+pub(crate) fn door_opened(method: &str, receiver: &Expr, args: &[Expr], asked: &Asked<'_, '_, '_>, walk: &SharingWalk) -> Option<(String, Ty)> {
+    if method != "update" && method != "access" || args.len() != 1 { return None; }
+    let handle = match named_handle(receiver, asked.names, &walk.scope) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let ty = match *nikaia_std::index::get(&walk.scope, &handle) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let content = match ty {
+        Ty::Named { name, args: inner, .. } => if (name == "SharedMut" || name == "Locked") && inner.len() == 1 { (*unsafe { nikaia_std::proven::read(&inner, (0) as usize) }).clone() } else { return None; },
+        _ => return None,
+    };
+    match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
+        Expr::Closure { params, .. } => if params.len() == 1 { Some((nikaia_std::block::Text::from(asked.names.resolve(*unsafe { nikaia_std::proven::read(&params, (0) as usize) }).to_string()), content)) } else { None },
+        _ => None,
+    }
 }
 
 pub(crate) fn a_copy_out_of_the_lock(receiver: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) {

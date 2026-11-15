@@ -1,0 +1,27 @@
+// Two `SharedMut` nodes that point at one another (Part I 6.2, #1212): the
+// handle `a` is duplicated into `first` and into `b`, because its name is
+// read again; `b` is moved into `a` at its last use. An optional handle read
+// off a field is duplicated too. The owner-count cycle is never released;
+// how it should be is open (#1212, item 3).
+struct Node { name: String, next: SharedMut[Node]? }
+
+struct Start { node: SharedMut[Node]? }
+
+fn name_of(n: SharedMut[Node]) -> String {
+	return n.access fn(open) { open.name.clone() }
+}
+
+fn main() throws {
+	let a = SharedMut(Node { name: "a", next: null })
+	let first = a
+	let b = SharedMut(Node { name: "b", next: a })
+	a.update fn(mut n) { n.next = b }
+	println(f"linked {name_of(first)}")
+	let linked = a.access fn(open) { open.next != null }
+	println(f"a points on: {linked}")
+	let start = Start { node: a }
+	let again = start.node
+	if again != null && start.node != null {
+		println("the start is read twice")
+	}
+}

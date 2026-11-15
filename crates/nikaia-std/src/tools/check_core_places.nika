@@ -754,6 +754,9 @@ fn check_core_places_a_kept_fn(state: ref CheckState, name: ref String, given: r
 fn check_core_places_a_handle(ty: ref Ty) -> bool sync {
     return match ty {
         Ty::Named { name, view, .. } => !view && (name == "Shared" || name == "SharedMut"),
+        // A handle that may be absent is one too (#1212): `Option<Rc<_>>`
+        // duplicates the handle it holds.
+        Ty::Nullable(inner) => check_core_places_a_handle(inner),
         else => false,
     }
 }
@@ -773,6 +776,17 @@ pub fn check_core_places_store_handle(mut state: CheckState, value: ref Expr, ty
     if place {
         state.facts.stored_handles.insert(id_of(value) as i64)
     }
+}
+
+/// **A handle handed on by a `let`, an assignment, a tuple or a variant**
+/// (Part I 6.2, ADR-312 D1, D2, #1212): duplicated where its name is read
+/// again, moved at its last use, as one stored into a field or a list is.
+pub fn check_core_places_give_handle(mut state: CheckState, world: ref CheckWorld, value: ref Expr, ty: ref Ty, span: ref Span) sync {
+    if !check_core_places_a_handle(ty) {
+        return
+    }
+    check_core_places_store_handle(state, value, ty)
+    state.a_handle_handed_on(world, value, ty, span)
 }
 
 pub fn check_core_struct_literal[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, written: winnow_grammar::Symbol, fields: ref Vec[FieldInit], span: ref Span) -> Ty sync {

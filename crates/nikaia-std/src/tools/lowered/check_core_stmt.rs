@@ -732,6 +732,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         state.hands_over(world, value, &found, &to, span);
         let owned_root = check_core_stmt_a_part_of_an_owned_parameter(&state, world, value) || mutable && check_core_stmt_a_part_of_an_unchanged_let(&state, world, value);
         moved_out = a_name_or_a_field(value) && owned_root && (state.findings.len() as i64) == before;
+        check_core_places_give_handle(state, world, value, &found, span);
     }
     for n in bound_names.iter() { if n != "_" { state.written_at.push((nikaia_std::block::Text::from(n.to_string()), span.start as i64)); } }
     state.a_let_that_may_lend(world, &bound_names, value, &found);
@@ -1335,6 +1336,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
         if lent { found = Ty::Named { name: nikaia_std::block::Text::from(TEXT_VIEW.to_string()), args: vec![], view: true }; } else {
             let to: String = if check_core_stmt_an_index(target) { String::from("written into a container") } else { String::from("assigned to another name") };
             state.hands_over(world, value, &found, &to, span);
+            check_core_places_give_handle(state, world, value, &found, span);
             if check_core_stmt_owns_whole(&into) { state.narrowed_reads_given_back(value); }
         }
     }

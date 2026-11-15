@@ -449,6 +449,7 @@ fn check_core_call_variant_parts[H: CheckHost](mut state: CheckState, world: ref
         }
         if state.text_literal(world, parts[i], arg, true) == null {
             state.hands_over(world, arg, found[i], "put into a variant", span)
+            check_core_places_give_handle(state, world, arg, found[i], span)
             // **A view kept in a part that holds `String` is refused as a
             // field's is**, with the field's code (`NK1106`, #1507): pushed into a list handed back,
             // it outlived what it views, and rustc said so (`NK1343`).
@@ -1239,6 +1240,7 @@ pub fn check_core_tuple[H: CheckHost](mut state: CheckState, world: ref CheckWor
     let mut i = 0
     for part in parts {
         state.hands_over(world, part, found[i], "put into a tuple", span)
+        check_core_places_give_handle(state, world, part, found[i], span)
         i += 1
     }
     return Ty::Tuple(found)

@@ -523,7 +523,8 @@ impl EmitState {
         }
         // **And `&mut` for a parameter the callee declared `mut`** (D3).
         let change = self.facts.mut_args.contains(node)
-        let duplicate = shares_a_handle || hands_on_kept
+        // A handle put into a variant (`stored_handles`, #1212) likewise.
+        let duplicate = shares_a_handle || hands_on_kept || self.facts.stored_handles.contains(node)
         // **A lambda handed to a parameter whose type may pause** (ADR-277 D11).
         let future = emit_arg_is_closure(arg) && self.facts.future_lambdas.contains(node) && !self.facts.kept_lambdas.contains_key(node)
         // **The pointer a C declaration takes** (ADR-302 D5).
