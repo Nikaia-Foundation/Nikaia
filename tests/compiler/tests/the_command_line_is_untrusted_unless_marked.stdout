@@ -1,0 +1,25 @@
+-- an assert on cli::args
+error[NK1202]: `n > 0` is a claim about data from outside the program.
+   = help: Check it where it arrives, with a guard the program handles: `throw BadInput(n) if !(n > 0)`, or `return … if !(n > 0)`. After that line, this `assert` is proved. Or take the word as a parameter of `main`: an `assert` about it there is checked where the words arrive (ADR-360 D4). Or write `cli::args(trusted: true)` where the operator chooses the command line.
+-- after the guard
+Checked p.nika
+-- trusted: true, a claim as any other
+error[NK1300]: `assert(n > 0)` is not proved: nothing before it shows it.
+-- a map keyed by cli::args, no marker
+input provenance: untrusted
+    cli::Args::nth is trusted
+    cli::args is untrusted
+-- a map keyed by cli::args, trusted: true
+input provenance: trusted
+    cli::Args::nth is trusted
+    cli::args is trusted: `trusted: true` at p.nika:6
+-- the ledger
+[fn."main"]
+trusted = ["cli::args at p.nika:6"]
+-- a parameter of main
+input provenance: untrusted
+    the command line, through `main`'s parameters, is untrusted
+-- main(0) exits with 2
+error: `n` is 0, which breaks `main`'s precondition `n > 0`.
+usage: p <n>
+For more, try `p --help`.

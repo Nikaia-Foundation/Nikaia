@@ -466,7 +466,7 @@ pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_
 
 pub(crate) fn a_named_buffer(made: &Buffer) -> bool { matches!(made, Buffer::Named(_)) }
 
-pub(crate) fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String, walk: &BufferWalk) -> Buffer {
+pub(crate) fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &dyn Fn(&str) -> String, walk: &BufferWalk) -> Buffer {
     if names.len() != 1 { return Buffer::None; }
     match value {
         Expr::MethodCall { receiver, method, .. } => {
@@ -480,14 +480,55 @@ pub(crate) fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Opti
         _ => { },
     }
     if joins_text(value, ask, walk) { return Buffer::Named(String::from("String")); }
-    let field_text = text_field_of_a_call(value, ask, unaliased);
+    let field_text = text_field_of_a_call(value, ask, &unaliased);
     if field_text.is_some() { return Buffer::Named(nikaia_std::index::or(field_text, || "".into())); }
-    let found = makes_a_buffer(value, &Asked { names: ask.names, own: ask.own, library: ask.library }, unaliased);
+    let found = makes_a_buffer(value, &Asked { names: ask.names, own: ask.own, library: ask.library }, &unaliased);
     if a_named_buffer(&found) { return found; }
     let literal = matches!(value, Expr::LitStr { .. });
     if literal && ty.is_none() && ask.given_up.contains_key(&at) { return Buffer::Named(String::from("String")); }
     if !is_the_buffer(value, ask, walk) && declares_text(ask.names, ty) { return Buffer::Named(String::from("String")); }
+    let tails = tails_made_here(names, value, at, ask, &unaliased, walk);
+    if tails.is_some() { return Buffer::Named(nikaia_std::index::or(tails, || "".into())); }
     found
+}
+
+pub(crate) fn tails_made_here(names: &[winnow_grammar::Symbol], value: &Expr, at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &dyn Fn(&str) -> String, walk: &BufferWalk) -> Option<String> {
+    let mut tails: Vec<Expr> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    match value {
+        Expr::If { then_branch, else_branch, .. } => {
+            let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return None };
+            tails.push(match ending_of(then_branch) { Some(__nikaia_value) => __nikaia_value, None => return None });
+            tails.push(match ending_of(other) { Some(__nikaia_value) => __nikaia_value, None => return None });
+        },
+        Expr::Match { arms, .. } => { for arm in arms.iter() { tails.push(arm.body.clone()); } },
+        Expr::Block(block, _) => { tails.push(match ending_of(block) { Some(__nikaia_value) => __nikaia_value, None => return None }); },
+        _ => { return None; },
+    }
+    let mut made: Option<String> = None;
+    for tail in tails.iter() {
+        if is_the_buffer(tail, ask, walk) { continue; }
+        let inner = match tail {
+            Expr::If { .. } => tails_made_here(names, tail, at, ask, unaliased, walk),
+            Expr::Match { .. } => tails_made_here(names, tail, at, ask, unaliased, walk),
+            Expr::Block(_, _) => tails_made_here(names, tail, at, ask, unaliased, walk),
+            _ => match made_here(names, tail, None, at, ask, &unaliased, walk) {
+                Buffer::Named(ref buffer) => Some(nikaia_std::block::Text::from(buffer.to_string())),
+                _ => None,
+            },
+        };
+        let ty = match inner { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if made.is_some() && *made.as_ref().unwrap() != ty { return None; }
+        made = Some(ty);
+    }
+    made
+}
+
+pub(crate) fn ending_of(block: &Block) -> Option<Expr> {
+    if block.stmts.is_empty() { return None; }
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
+        Stmt::Expr(value) => Some(value.clone()),
+        _ => None,
+    }
 }
 
 pub(crate) fn text_by_every_method(ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, method: &str) -> Option<String> {

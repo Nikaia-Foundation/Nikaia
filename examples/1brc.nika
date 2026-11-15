@@ -151,7 +151,9 @@ impl Summary {
 // ---------------------------------------------------------------------------
 
 fn main() throws {
-    let path = cli::args().nth(1) ?? "measurements.txt"
+    // The command line is untrusted too (ADR-399 D1); `trusted: true` says
+    // the challenge's runner chose it, so the maps keep the fast hash (D3).
+    let path = cli::args(trusted: true).nth(1) ?? "measurements.txt"
 
     // `fs::map` maps the file into memory instead of reading it, so a file of
     // many gigabytes is never copied, and every station name points into it.

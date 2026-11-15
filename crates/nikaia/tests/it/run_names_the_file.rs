@@ -51,13 +51,15 @@ fn a_backend_refusal_names_the_file_that_was_run() {
 
 /// **And a panic while it runs names it too**: the abort table (ADR-300 D9)
 /// is written by the build of the copy, under the name of the file run.
+/// The words are marked trusted (ADR-399 D3), so the unproved index is
+/// checked as it runs rather than refused as one outside data chose.
 #[test]
 fn a_panic_names_the_file_that_was_run() {
     let dir = common::scratch_dir("run-names-the-file-panic");
     let input = dir.join("stops.nika");
     std::fs::write(
         &input,
-        "use std::cli\nfn main() throws {\n    let xs = [1, 2, 3]\n    let i = 7 - cli::args().len()\n    println(f\"{xs[i]}\")\n}\n",
+        "use std::cli\nfn main() throws {\n    let xs = [1, 2, 3]\n    let i = 7 - cli::args(trusted: true).len()\n    println(f\"{xs[i]}\")\n}\n",
     )
     .expect("write the source");
     let ran = Command::new(env!("CARGO_BIN_EXE_nikaia"))

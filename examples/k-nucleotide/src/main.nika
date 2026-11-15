@@ -164,7 +164,9 @@ fn main() throws {
 
     // The section to count, by the start of its header. Lines are uppercased,
     // since FASTA may write DNA in either case.
-    let wanted = cli::args().nth(1) ?? "THREE"
+    // The command line is untrusted too (ADR-399 D1); `trusted: true` says
+    // the challenge's runner chose it, so the maps keep the fast hash (D3).
+    let wanted = cli::args(trusted: true).nth(1) ?? "THREE"
 
     let mut dna = String()
     for section in sections {
