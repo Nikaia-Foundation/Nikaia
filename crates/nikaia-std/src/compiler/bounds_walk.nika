@@ -342,6 +342,10 @@ struct BoundsWalk {
 	/// method of its type is called on it, not given; empty in any other
 	/// body.
 	rule_built: collections::BTreeSet[String],
+	/// The `node_key` of that builder's literal, -1 where none: a literal
+	/// asks its `length` rules where it stands (`rules_literal_holds`),
+	/// but not this one.
+	rule_built_literal: i64,
 	/// **The postcondition this walk looks for** (ADR-306 D23): the name of
 	/// each list parameter by position, empty for any other and when the
 	/// walk looks for none; whether the function returns a list (`each`).
@@ -746,6 +750,7 @@ fn bounding_new(
 		checked_results: collections::BTreeSet(),
 		rule_failed: collections::BTreeSet(),
 		rule_built: collections::BTreeSet(),
+		rule_built_literal: -1,
 		lists: collections::BTreeSet(),
 		return_params: [],
 		return_each: false,
@@ -8896,11 +8901,16 @@ fn bounding_children(
 			words,
 			ask,
 		),
-		Expr::StructLit { fields, .. } => {
+		Expr::StructLit { name, fields, .. } => {
 			for field in fields {
 				bounding_maybe_expr(walk, field.value, facts, context, program, words, ask)
 			}
 			bounding_field_inits(walk, fields, facts, context, program, words, ask)
+			// A list given by a name keeps the `length` rules only where
+			// the names are as long (#1652).
+			if walk.checking && node_key(expr) != walk.rule_built_literal {
+				rules_literal_holds(walk, words.resolve(name), fields, facts, words, ask)
+			}
 		},
 		Expr::With { base, fields, .. } => {
 			bounding_expr(walk, base, facts, context, program, words, ask)

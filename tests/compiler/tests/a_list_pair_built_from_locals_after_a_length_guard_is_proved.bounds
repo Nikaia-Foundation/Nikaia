@@ -1,0 +1,2 @@
+bounds in tests/a_list_pair_built_from_locals_after_a_length_guard_is_proved.nika: 1 indexes, 1 proved; 0 operations, 0 proved
+    12  row.ks[0]  proved

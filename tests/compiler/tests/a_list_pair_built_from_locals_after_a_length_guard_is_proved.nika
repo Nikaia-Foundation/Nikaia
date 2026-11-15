@@ -1,0 +1,29 @@
+// #1652 (ADR-306 D23, ADR-369 D4): a literal that gives both lists of a
+// `Row` by a name, after a guard that returns when their lengths differ,
+// builds them as long as each other, so `row.ks[0]` under
+// `row.cols.len() == 1` is proved.
+struct Row {
+	cols: Vec[u32],
+	ks: Vec[i64],
+	constant: i64,
+}
+
+fn first_k(row: ref Row) -> i64 {
+	if row.cols.len() == 1 && row.ks[0] == 1 {
+		return 1
+	}
+	return 0
+}
+
+fn parsed(cols: Vec[u32], ks: Vec[i64]) -> Row? {
+	if cols.len() != ks.len() {
+		return null
+	}
+	return Row { cols: cols, ks: ks, constant: 0 }
+}
+
+fn main() throws {
+	let row = parsed([7], [1]) ?? Row { cols: [], ks: [], constant: 0 }
+	println(first_k(row))
+	println(parsed([7], [1, 2]) == null)
+}

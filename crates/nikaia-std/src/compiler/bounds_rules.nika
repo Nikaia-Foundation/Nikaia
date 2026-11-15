@@ -224,7 +224,7 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                     match stmt.node {
                         Stmt::Let { value, .. } => match value {
                             Expr::StructLit { name, fields, .. } => {
-                                rules_literal(words.resolve(name), fields, every_field, defaults, built, true, words)
+                                rules_literal(words.resolve(name), fields, every_field, defaults, built, true, false, words)
                                 rules_built_fields(fields, "", every_field, defaults, built, dropped, words)
                             },
                             else => {},
@@ -975,7 +975,12 @@ fn rules_built_fields(fields: ref Vec[FieldInit], owner: ref String, lists: ref 
 
 /// **A literal of a candidate type** (`Self` within its own `impl`): what
 /// it builds each list field as, a field it leaves out as its default.
-fn rules_literal(name: ref String, fields: ref Vec[FieldInit], lists: ref collections::BTreeMap[String, Vec[String]], defaults: ref collections::BTreeMap[String, String], mut built: collections::BTreeMap[String, Vec[String]], loose: bool, words: ref winnow_grammar::InternerContext) {
+///
+/// A list field given by a name (`Row { cols: cols }`, `Row { cols }`) is
+/// `any` to the `length` rules too, where `named`: the walk asks them of
+/// the names where the literal stands (`rules_literal_holds`, #1652). Not
+/// of `Self`, which the walk does not resolve.
+fn rules_literal(name: ref String, fields: ref Vec[FieldInit], lists: ref collections::BTreeMap[String, Vec[String]], defaults: ref collections::BTreeMap[String, String], mut built: collections::BTreeMap[String, Vec[String]], loose: bool, named: bool, words: ref winnow_grammar::InternerContext) {
     let own = lists.get(name) ?? return
     // What it gives each field it names, for `floor` and `cap` (#1642):
     // `f=shape;` each, `any` for the literal of a builder, whose rules are
@@ -997,17 +1002,20 @@ fn rules_literal(name: ref String, fields: ref Vec[FieldInit], lists: ref collec
         let inner_key = f"{key}[]"
         let mut shape = defaults.get(key)?.clone() ?? "other"
         let mut inside = defaults.get(inner_key)?.clone() ?? "other"
+        let mut by_name = false
         for field in fields {
             if words.resolve(field.name) == f {
                 shape = rules_shape(field.value)
                 inside = rules_inner_shape(field.value)
+                by_name = named && rules_named_list(field.value, f, words) != null
             }
         }
         // The shape the `length` rules compare (`#len`): any for the
-        // literal of a builder (`rules_builder`).
+        // literal of a builder (`rules_builder`) and for a list given by a
+        // name.
         let length_key = f"{key}#len"
         let mut known_length = built.get(length_key)?.clone() ?? []
-        known_length.push(if loose { "any" } else { shape.clone() })
+        known_length.push(if loose || by_name { "any" } else { shape.clone() })
         built.insert(length_key, known_length)
         let mut known = built.get(key)?.clone() ?? []
         known.push(shape)
@@ -1018,6 +1026,106 @@ fn rules_literal(name: ref String, fields: ref Vec[FieldInit], lists: ref collec
     }
 }
 
+/// **The name a literal gives a list field by** (#1652): the local or
+/// parameter of `Row { cols: cols }` and of `Row { cols }`; null for any
+/// other value, `self` too.
+fn rules_named_list(value: ref Expr?, field: ref String, words: ref winnow_grammar::InternerContext) -> String? {
+    let given = value ?? return field.clone()
+    match given {
+        Expr::Variable(name, _) => {
+            let written = words.resolve(name)
+            if written != "self" {
+                return written.clone()
+            }
+        },
+        else => {},
+    }
+    return null
+}
+
+/// **Whether `body` holds a literal of `owner` that gives one of the lists
+/// of a `length` rule by a name** (`rules_literal`): its walk asks the rule
+/// there (`rules_literal_holds`).
+fn rules_names_lists(body: ref Block, owner: ref String, of_impl: ref String, held: ref Vec[BoundsRule], words: ref winnow_grammar::InternerContext) -> bool {
+    let mut fields: Vec[String] = []
+    for rule in held {
+        if rule.kind == "length" && rule.owner == owner {
+            fields.push(rule.a.clone())
+            fields.push(rule.b.clone())
+        }
+    }
+    if fields.is_empty() {
+        return false
+    }
+    let mut lists: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    lists.insert(owner.clone(), fields.clone())
+    let mut built: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    let mut dropped: collections::BTreeSet[String] = collections::BTreeSet()
+    rules_built_block(body, of_impl, lists, collections::BTreeMap(), built, dropped, words)
+    for f in fields {
+        let shapes = built.get(f"{owner}.{f}#len")?.clone() ?? []
+        if shapes.contains("any") {
+            return true
+        }
+    }
+    return false
+}
+
+/// **A literal that gives a list of a `length` rule by a name** (#1652):
+/// `Row { cols: cols, ks: ks }` builds its lists as long as the names are
+/// where it stands, so each `length` rule of its type is asked of them
+/// there (`rules_literal` counts the literal as `any`). The other list
+/// given by a list literal is its count; given otherwise, or left out, the
+/// rule fails. Not of a builder's own literal, whose rules are asked where
+/// it is handed back (`rule_built_literal`).
+fn rules_literal_holds(mut walk: BoundsWalk, name: ref String, fields: ref Vec[FieldInit], facts: ref BoundsFacts, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+    if !walk.checking || name == "Self" {
+        return
+    }
+    for (at, rule) in walk.rules.clone().iter().enumerate() {
+        if rule.kind != "length" || rule.owner != name || walk.rule_failed.contains(at) {
+            continue
+        }
+        let (named_a, a) = rules_literal_side(walk, fields, rule.a, words)
+        let (named_b, b) = rules_literal_side(walk, fields, rule.b, words)
+        if !named_a && !named_b {
+            continue
+        }
+        if a < 0 || b < 0 {
+            walk.rule_failed.insert(at)
+            continue
+        }
+        let multiple = rules_times(walk, rule.times, b)
+        let goal = walk.arena.equal(a, multiple)
+        let proved = bounding_proves(walk, facts, goal, ask)
+        bounding_traced(walk, facts, goal, proved)
+        if !proved {
+            walk.rule_failed.insert(at)
+        }
+    }
+}
+
+/// The length a literal gives the list field `f`, as a term, and whether
+/// by a name: the name's length, or a list literal's count; -1 for any
+/// other value and for a field left out.
+fn rules_literal_side(mut walk: BoundsWalk, fields: ref Vec[FieldInit], f: ref String, words: ref winnow_grammar::InternerContext) -> (bool, i64) {
+    for field in fields {
+        if words.resolve(field.name) != f {
+            continue
+        }
+        let named = rules_named_list(field.value, f, words)
+        if named != null {
+            return (true, walk.arena.var(length_of(named ?? "")))
+        }
+        let given = field.value ?? return (false, -1)
+        return match given {
+            Expr::ListLit { items, .. } => (false, walk.arena.int(items.len() as i64)),
+            else => (false, -1),
+        }
+    }
+    return (false, -1)
+}
+
 fn rules_built(expr: ref Expr, owner: ref String, lists: ref collections::BTreeMap[String, Vec[String]], defaults: ref collections::BTreeMap[String, String], mut built: collections::BTreeMap[String, Vec[String]], mut dropped: collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) {
     match expr {
         Expr::StructLit { name, fields, .. } => {
@@ -1025,7 +1133,7 @@ fn rules_built(expr: ref Expr, owner: ref String, lists: ref collections::BTreeM
             if written == "Self" {
                 written = owner.clone()
             }
-            rules_literal(written, fields, lists, defaults, built, false, words)
+            rules_literal(written, fields, lists, defaults, built, false, words.resolve(name) != "Self", words)
             rules_built_fields(fields, owner, lists, defaults, built, dropped, words)
         },
         Expr::With { base, fields, .. } => {
@@ -1240,7 +1348,7 @@ fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Pro
                 // checked where it stands (ADR-306 D22, D28).
                 Item::Fn { args, body, .. } => {
                     let locals = rules_locals(owner, args, body, "", context, words)
-                    if !locals.is_empty() {
+                    if !locals.is_empty() || rules_names_lists(body, owner, "", held, words) {
                         let mut owners: collections::BTreeSet[String] = collections::BTreeSet()
                         owners.insert(owner.clone())
                         let made = rules_builder(body, owners, program, words)
@@ -1262,7 +1370,7 @@ fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Pro
                                     continue
                                 }
                                 let locals = rules_locals(owner, args, body, impl_of, context, words)
-                                if !locals.is_empty() {
+                                if !locals.is_empty() || rules_names_lists(body, owner, impl_of, held, words) {
                                     rules_check(held, owner, "", "", args, body, locals, context, program, words, ask, failed)
                                 }
                             },
@@ -1326,6 +1434,7 @@ fn rules_check(held: ref Vec[BoundsRule], owner: ref String, method: ref String,
     walk.checking = true
     if !built.is_empty() {
         walk.rule_built.insert(built.clone())
+        walk.rule_built_literal = rules_built_literal(body, built, owner, words)
     }
     for (at, rule) in held.iter().enumerate() {
         if rule.kind == "result" && rule.a == method {
@@ -1336,6 +1445,25 @@ fn rules_check(held: ref Vec[BoundsRule], owner: ref String, method: ref String,
     for at in walk.rule_failed {
         failed.insert(at)
     }
+}
+
+/// The `node_key` of the literal a builder binds `built` to (`rules_builder`:
+/// a statement of its body, of the type `owner`); -1 where none.
+fn rules_built_literal(body: ref Block, built: ref String, owner: ref String, words: ref winnow_grammar::InternerContext) -> i64 {
+    for stmt in body.stmts {
+        match stmt.node {
+            Stmt::Let { names, value, .. } => match value {
+                Expr::StructLit { name, .. } => {
+                    if names.len() == 1 && words.resolve(names[0]) == built && words.resolve(name) == owner {
+                        return node_key(value)
+                    }
+                },
+                else => {},
+            },
+            else => {},
+        }
+    }
+    return -1
 }
 
 // --- The rules in the walk -----------------------------------------------------
