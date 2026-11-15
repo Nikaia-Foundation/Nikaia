@@ -923,8 +923,7 @@ fn sv_real_value(
 	let node = arena.at(id)
 	return match node {
 		SolverTerm::Int(n) => sv_int(n),
-		// Through `sv_real_named`, not `values[name]`: #1304.
-		SolverTerm::Var(name) => sv_real_named(values, name),
+		SolverTerm::Var(name) => values[name] ?? sv_int(0),
 		SolverTerm::Add(a, b) => {
 			let x = sv_real_value(arena, a, values) ?? return null
 			let y = sv_real_value(arena, b, values) ?? return null
