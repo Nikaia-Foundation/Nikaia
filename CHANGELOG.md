@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1397] — 2026-11-15
+
+**the driver accepts a cut itself when the builder needs nothing**
+- scripts/drive.nika, batch.nika, release.nika: a report with Result done or partial, a green gate, Needs: none and Owner: none no longer stops the driver; it is marked auto-accepted, listed in review.txt and released with the next version (#1694).
+
 ## [0.0.1396] — 2026-11-15
 
 **a value scaled each turn of a counted loop is proved**
