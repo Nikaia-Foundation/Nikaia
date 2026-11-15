@@ -133,7 +133,9 @@ pub mod text {
 /// `src/runtime`, lowered by `nikaia lower-std` into its `lowered.rs` (one file per `.nika` beside it) the way
 /// the tools are, and kept apart from them because a program compiles this
 /// half and never the compiler's. Unpublished: `std.contracts` does not list
-/// it, and `std`'s Rust (`http1.rs`) is its only caller.
+/// it, and `std`'s Rust is its only caller: `http1.rs` calls it, and
+/// `env.rs` re-exports `vars` as `env::vars`, whose entry `std.contracts`
+/// writes by hand for its provenance (#1601).
 ///
 /// `unnecessary_cast`, as in `tools` below: a proved index at a literal is
 /// lowered `proven::read(&xs, (0) as usize)` (ADR-306 D27).

@@ -2148,10 +2148,11 @@ signature = "(data: ref Vec[u8]) -> String"
 #
 # **`env::var(name)` is the value of an environment variable, null where it is
 # unset, empty or not Unicode; `env::temp_dir()` is the directory for
-# temporary files.** Neither has a `touches` line: an absent one means *touches
-# everything* (Part III 13.5), so a read of the environment keeps its order
-# against every other effect, one of which may set the variable. Both are
-# `sync`: a read of the process's own memory, nothing to pause on.
+# temporary files; `env::vars(prefix)` lists the variables.** None has a
+# `touches` line: an absent one means *touches everything* (Part III 13.5), so
+# a read of the environment keeps its order against every other effect, one of
+# which may set the variable. All are `sync`: a read of the process's own
+# memory, nothing to pause on.
 #
 # Whoever started the program chose its environment, and that need not be the
 # operator: a CGI host, a caller with fewer rights, a CI job. So the value is
@@ -2172,6 +2173,32 @@ pub = true
 panics = false
 sync = true
 signature = "() -> fs::Path"
+
+# The variables whose name starts with `prefix`, as (name, value) pairs sorted
+# by name; a name or value that is not Unicode, or an empty value, is left out.
+#
+# Nikaia (`src/runtime/env.nika`, #1601) over `env::pairs`, and written here
+# rather than inferred because a source's provenance is not inferred: the
+# values are **untrusted** unless the call says `trusted: true` (ADR-397 D1,
+# D2). The prefix is required, so a program asks for the variables it uses;
+# `env::vars("")` lists them all, and says so.
+[fn."env::vars"]
+pub = true
+panics = false
+sync = true
+provenance = "untrusted"
+signature = "(prefix: ref String; trusted: bool = false) -> Vec[(String, String)]"
+
+# The operating system's list of the environment, raw: every name and value as
+# bytes, empty values and bytes that are not Unicode included (#1601). The one
+# Rust primitive under `env::vars`, and `std`'s own: a program reads the
+# environment through `env::var` and `env::vars`.
+[fn."env::pairs"]
+pub = false
+panics = false
+sync = true
+provenance = "untrusted"
+signature = "() -> Vec[(Bytes, Bytes)]"
 
 # ## The CPU level a program is built for (ADR-371 D6)
 #
