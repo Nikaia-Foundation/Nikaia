@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1393] — 2026-11-15
+
+**a field clamped after each shortening stays within its list**
+- Bounds: a whole-number field clamped after each shortening of its list is proved within it — `self.text[self.cursor - 1]` after `pop` and a clamp needs no check.
+
 ## [0.0.1392] — 2026-11-15
 
 **a counter proved through a second counter**
