@@ -280,6 +280,10 @@ fn body_start_millis() -> i64 {
 // The limits are options after the `;`, so a program names only the ones it
 // changes.
 //
+// `tls:` serves HTTPS (ADR-289 D34): `tls: net::Tls::files("cert.pem",
+// "key.pem")`. Each connection's TLS handshake runs in its own task, and past
+// it a connection carries plaintext, so nothing below changes for it.
+//
 // The accepting is `std::net`'s (ADR-326 D10): bind first, so the address can
 // be printed (port `0` picks any free one), then `serve` the listener. Nothing
 // here waits in a special way. `serve` and `read` are plain calls with no
@@ -292,9 +296,10 @@ pub fn listen(
     head_timeout: time::Duration? = null,
     body_bytes_per_second: i64 = 500,
     idle_timeout: time::Duration? = null,
-    connections: i64 = 0
+    connections: i64 = 0,
+    tls: net::Tls? = null
 ) throws {
-    let listener = net::listen(at)
+    let listener = net::listen(at; tls: tls)
     let bound = listener.address()
     println(f"http: listening on {bound}")
 

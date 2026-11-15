@@ -6354,17 +6354,54 @@ pub = true
 panics = false
 touches = ["socket write"]
 throws = ["io::IoError"]
-signature = "(address: ref String) -> net::Listener"
+signature = "(address: ref String; tls: net::Tls? = null) -> net::Listener"
 
 # Connect to an address.
 #
-# It fails where nothing is listening there.
+# It fails where nothing is listening there. With `tls:` the TLS handshake runs
+# before it returns, and the address's host must be a name the server's
+# certificate carries.
 [fn."net::connect"]
 pub = true
 panics = false
 touches = ["socket write"]
 throws = ["io::IoError"]
-signature = "(address: ref String) -> net::Connection"
+signature = "(address: ref String; tls: net::Tls? = null) -> net::Connection"
+
+# **TLS is an option of the socket** ([ADR-289](../../docs/specification/adr/adr-289.md)
+# D34, by ADR-303 D2: `rustls` on the `ring` provider). Past the handshake a
+# connection carries plaintext, so every protocol above `net` is unchanged.
+# What `tls:` takes: a server's certificate and key, or a client's trust.
+#
+# `net::listen(at; tls: net::Tls::files("cert.pem", "key.pem"))` serves TLS;
+# `net::connect(at; tls: net::Tls::trusting("cert.pem"))` speaks it.
+[type."net::Tls"]
+pub = true
+crosses = true
+
+# A server's TLS: its certificate chain and its private key, each read from a
+# PEM file.
+#
+# It fails where a file cannot be read, holds no certificate or key, or the key
+# does not suit the certificate; the error names the file.
+[fn."net::Tls::files"]
+pub = true
+panics = false
+touches = ["file(certificate) read", "file(key) read"]
+throws = ["io::IoError"]
+signature = "(certificate: ref String, key: ref String) -> net::Tls"
+
+# A client's TLS: it trusts the certificates in a PEM file besides the system's
+# roots, so a program can talk to a server with a certificate of its own.
+#
+# It fails where the file cannot be read or holds no certificate; the error
+# names the file.
+[fn."net::Tls::trusting"]
+pub = true
+panics = false
+touches = ["file(certificate) read"]
+throws = ["io::IoError"]
+signature = "(certificate: ref String) -> net::Tls"
 
 # The next connection, waiting for one where there is none yet.
 #
@@ -6448,13 +6485,15 @@ signature = "(self: ref Connection) -> String"
 # Accept connections and run `handler` on each, in a task of its own.
 #
 # A handler that panics or throws ends its own connection, and the server goes
-# on. Out of descriptors, it pauses accepting rather than ending.
+# on. Out of descriptors, it pauses accepting rather than ending. With `tls:`
+# each connection's handshake runs in its task before the handler; a failed one
+# closes that connection, is said on standard error, and the server goes on.
 [fn."net::serve"]
 pub = true
 touches = ["socket read", "socket write"]
 throws = ["io::IoError"]
 keeps = ["handler"]
-signature = "(address: ref String, handler: fn(net::Connection) throws)"
+signature = "(address: ref String, handler: fn(net::Connection) throws; tls: net::Tls? = null)"
 
 # **`net::serve` on a listener already bound** (ADR-326 D10): `net::serve(at, h)`
 # is `net::listen(at).serve(h)`. `connections:` is D5's test tool, counted here

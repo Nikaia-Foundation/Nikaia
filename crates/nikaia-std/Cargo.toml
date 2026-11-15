@@ -111,6 +111,13 @@ unicode-normalization = "0.1.25"
 # is ready - which is what keeps D1's and D3's decisions from being remade by a
 # dependency.
 polled = { path = "../unsafe/polled" }
+# **TLS is never ours** (ADR-303 D2, ADR-289 D34; `src/tls.rs`): `net::Tls`
+# is `rustls` on the `ring` provider, with no `aws-lc-rs` (default features off),
+# so it builds with the C compiler Rust already needs and no system package. The
+# PEM files are read with `rustls-pki-types`' own reader, and `Tls::trusting`
+# adds the system's roots from `rustls-native-certs`.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-native-certs = "0.8"
 
 # ADR-303 D3's completion half. A *target* gate and not a feature gate: the
 # bindings do not exist off Linux at all. On Linux whether the ring is used is

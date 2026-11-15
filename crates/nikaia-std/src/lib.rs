@@ -82,6 +82,7 @@ pub mod supervisor;
 pub mod target;
 pub mod task;
 pub mod tether;
+mod tls;
 /// **What a library's entry point reads from C and writes back to it**
 /// ([ADR-284](../../../docs/specification/adr/adr-284.md) D5-D7): the wrapper
 /// the compiler writes calls into here for every raw pointer it is handed.

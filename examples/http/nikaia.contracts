@@ -150,7 +150,7 @@ keeps = ["body_bytes_per_second", "body_cap", "connections", "handler", "head_ca
 locks = true
 panics = true
 views = ["at: borrowed"]
-signature = "(at: String, handler: fn(Request) -> Response; body_cap: i64 = 1048576, head_cap: i64 = 16384, head_timeout: time::Duration? = None, body_bytes_per_second: i64 = 500, idle_timeout: time::Duration? = None, connections: i64 = 0)"
+signature = "(at: String, handler: fn(Request) -> Response; body_cap: i64 = 1048576, head_cap: i64 = 16384, head_timeout: time::Duration? = None, body_bytes_per_second: i64 = 500, idle_timeout: time::Duration? = None, connections: i64 = 0, tls: net::Tls? = None)"
 
 [fn."refuse"]
 locks = true
