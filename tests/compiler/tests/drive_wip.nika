@@ -3,7 +3,9 @@
 // Fixes (keep, block, remove), and the title, labels and body of an issue the
 // driver files from a report's `Found:`; --improve-issue (owner, 2026-11-15):
 // the issue it files for the improvement lane from a report's `Issue:`,
-// `Deviation:`, `Needs:` and `Friction:`, and `none` for a clean report.
+// `Deviation:`, `Needs:` and `Friction:`, and `none` for a clean report;
+// --comment-issue (#1698): the comment it posts on issue N for a report's
+// `Comment: #N <text>`, and a `Comment:` without a number filed as improvement.
 use std::fs
 use std::process
 
@@ -45,6 +47,11 @@ fn main() throws {
     drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1624", "1624", bad.clone()])
     let good = process::run("mktemp", []).stdout.trim().clone()
     fs::write(good.clone(), fs::Root::Anywhere, "Result: done\nIssue: complete\nDeviation: none\nNeeds: none\nFriction: none\n")
-    drive(repo, nikaia, ["--improve-issue", "issue-1625", "1625", good.clone()])
-    process::run("rm", ["-f", bad, good])
+    drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1625", "1625", good.clone()])
+    drive(repo.clone(), nikaia.clone(), ["--comment-issue", "issue-1625", "1625", good.clone()])
+    let said = process::run("mktemp", []).stdout.trim().clone()
+    fs::write(said.clone(), fs::Root::Anywhere, "Result: done\nNeeds: none\nComment: #1531 group D waits on group C, from #1634\nComment: none\nComment: on the plan, no number\n")
+    drive(repo.clone(), nikaia.clone(), ["--comment-issue", "issue-1676", "1676", said.clone()])
+    drive(repo, nikaia, ["--improve-issue", "issue-1676", "", said.clone()])
+    process::run("rm", ["-f", bad, good, said])
 }

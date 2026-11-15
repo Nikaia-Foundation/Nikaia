@@ -667,6 +667,7 @@ The builder writes exactly `<full brief path>.report.md`, these fields only:
     Changelog: none | <one sentence for the version heading>
     Owner: none | <one question for the owner, never a role>   (batch.nika: `OWNER <brief>: <text>`; cycle.nika writes the first to DIR/QUESTION, a second while it exists prints `OWNER second: ...`)
     Friction: none | <one sentence: what cost turns or tokens needlessly (a tool, a rule, noise such as a red check that was not the run's)>
+    Comment: #N <text>   (optional, one line each: what to say on issue N, which the run is not about; drive.nika posts it there, #1698)
     Cache: none | <large entries newly created, MB>
     Disk freed: <GB>
     Measure: <builds=.. clippy_with_tests=.. ...>   (never under Found)
@@ -681,7 +682,10 @@ is not `none`.
 The driver files issues from the report itself (owner, 2026-11-15): each
 `Found:` as an issue labelled `bugs` for the bug lane, and, once per report, an
 `Issue:` that is not `complete`, a `Deviation:`, `Needs:` or `Friction:` other
-than `none` as one issue labelled `improve` for the improvement lane (*Lanes*).
+than `none` as one issue labelled `improve` for the improvement lane (*Lanes*),
+and posts each `Comment: #N <text>` as a comment on issue N (#1698: a `Needs:
+supervisor: comment on #N` became an improvement issue no builder could do,
+having no GitHub). A `Comment:` without its `#N` goes to the improvement issue.
 Nobody has to ask a builder what went badly. The supervisor reads the reports'
 fields before the next batch, writes the `Supervisor:` line, comments on or
 reopens an issue a `Deviation` leaves open, lists

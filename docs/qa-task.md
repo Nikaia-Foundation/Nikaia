@@ -25,7 +25,7 @@ lane's copy, with the two paths below made the lane's own.
   function.
 
 ## Report (at most 15 lines, to exactly `docs/qa-task.md.report.md`)
-Fields: Result, Files, Commit, Body (optional), Fixes, Pushed, Tests, Gate, Deviation, Found, Needs, Changelog, Issue, Owner (a question for the owner), Friction, Disk freed, and last `Attribution:` with your commit trailer lines below it.
+Fields: Result, Files, Commit, Body (optional), Fixes, Pushed, Tests, Gate, Deviation, Found, Needs, Changelog, Issue, Owner (a question for the owner), Comment (`#N <text>`, what to say on another issue; the driver posts it, one line each), Friction, Disk freed, and last `Attribution:` with your commit trailer lines below it.
 * Fields with nothing to say hold the bare word: `done`, `none`.
 * `Result: done` only when every red step is fixed; `partial` otherwise.
 * `Found:` only for a defect this run cannot fix (the driver files it as an issue): one defect per `Found:` line, with its probe (#1677).

@@ -32,7 +32,7 @@ ending with the Claude Code footer), rule I13.
 * No cause after about 40 turns: stop, `Result: partial` with what you ruled out, the probe, and the suspected file and function.
 
 ## Report (at most 15 lines, to exactly `{REPORT}`)
-Fields: Result, Files, Commit, Body (optional), Fixes, Pushed, Tests, Gate, Deviation, Found, Needs, Changelog, Issue, Owner (a question for the owner), Friction, Disk freed, and last `Attribution:` with your commit trailer lines below it.
+Fields: Result, Files, Commit, Body (optional), Fixes, Pushed, Tests, Gate, Deviation, Found, Needs, Changelog, Issue, Owner (a question for the owner), Comment (`#N <text>`, what to say on another issue; the driver posts it, one line each), Friction, Disk freed, and last `Attribution:` with your commit trailer lines below it.
 * `Result:`, `Gate:` (`green` or `red <check>`), `Deviation:`, `Found:` and the other fields with nothing to say hold the bare word: `done`, `none`. Anything after it reads as content.
 * `Result: done` only when the issue's *Done when* holds; `partial` with the items left otherwise.
 * `Deviation:` only for an item of the issue built otherwise than written, or not built. `Found:` only for a defect outside your area, or one this run cannot fix: one defect per `Found:` line, with its probe and the output it gives, only the shapes that fail today, and the suspected file and function or `cause unknown` (#1695); a by-design behaviour is none (#1677). A correct program your own change refuses (a fail-closed check's false refusal) is no `Deviation:` but one `Found:` line per shape, with its probe (#1680). Everything else goes into `Body:`; how you verified goes into `Tests:`.

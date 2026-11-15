@@ -55,8 +55,10 @@
 //                                 `Deviation:`, `Needs:` and `Friction:`
 //                                 filed as one issue for the improvement
 //                                 lane (`ready`, `improve`; `IMPROVE #N
-//                                 <brief>`, drive_improve_file); the batch
-//                                 goes on
+//                                 <brief>`, drive_improve_file); each
+//                                 `Comment: #N <text>` posted on issue N
+//                                 (`COMMENT #N <brief>`, drive_comment_file,
+//                                 #1698); the batch goes on
 //     BUMP pending, CI green      cycle.nika -- DIR --apply
 //     CUT, RED, BATCH DONE        the batch's suite runs and is waited for,
 //                                 then the driver stops for the supervisor
@@ -1941,6 +1943,7 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 		println(found)
 		drive_found_file(dir.clone(), brief.clone())
 	}
+	drive_comment_file(dir.clone(), brief.clone())
 	drive_improve_file(dir, brief)
 }
 
@@ -2117,7 +2120,71 @@ fn drive_improve_items(text: String) -> Vec[String] {
 		if value == "" || word == "none" || word == "complete" || word == "-" { continue }
 		items.push(f"{key}: {value}")
 	}
+	for c in drive_fields(text, "Comment") {
+		if c != "" && drive_word(c.clone()) != "none" && drive_comment_issue(c.clone()) == "" {
+			items.push(f"Comment (no issue number): {c}")
+		}
+	}
 	return items
+}
+
+// The issue a report's `Comment:` value names, `#1531 group D waits ...` gives
+// `1531`; "" when it does not start with `#N` and a text.
+fn drive_comment_issue(value: String) -> String {
+	let t = value.trim()
+	if !t.starts_with("#") { return "" }
+	let space = t.find(" ") ?? t.len()
+	if space == t.len() || space < "#0".len() { return "" }
+	let number = f"{t["#".len()..<space]}"
+	for c in number.chars() {
+		if c < '0' || c > '9' { return "" }
+	}
+	return number
+}
+
+// The text of a report's `Comment:` value after its `#N`.
+fn drive_comment_text(value: String) -> String {
+	let t = value.trim()
+	let space = t.find(" ") ?? t.len()
+	return f"{t[space..]}".trim().clone()
+}
+
+// The `Comment:` values of a report that name an issue (`#N <text>`): what a
+// builder without GitHub wants said on an issue its run is not about (#1698).
+fn drive_comments(text: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	for c in drive_fields(text, "Comment") {
+		if drive_comment_issue(c.clone()) != "" { out.push(c) }
+	}
+	return out
+}
+
+// The body of a comment the driver posts for a report's `Comment:` VALUE from
+// the run of NAME (issue ISSUE): where it came from, the text, the footer.
+fn drive_comment_body(name: String, issue: String, value: String) -> String {
+	let from = if issue == "" { f"the run of `{name}`" } else { f"the run of `{name}` (#{issue})" }
+	return f"From the report of {from}:\n\n{drive_comment_text(value)}\n" + drive_footer()
+}
+
+// Posts each `Comment: #N <text>` of a report on issue N (#1698: a `Needs:
+// supervisor: comment on #N` became an improvement issue no builder could
+// do); `<brief>: comment #N` goes into DIR/found.txt (a comment with that
+// line is not posted again) and `COMMENT #N <brief>` is printed.
+fn drive_comment_file(dir: String, brief: String) throws {
+	let report = drive_report_of(brief.clone())
+	if report == "" { return }
+	let name = drive_stem(brief.clone())
+	let issue = drive_issue(brief)
+	for c in drive_comments(drive_read(report)) {
+		let n = drive_comment_issue(c.clone())
+		if drive_read(f"{dir}/found.txt").contains(f"{name}: comment #{n}\n") { continue }
+		if !drive_comment(n.clone(), drive_comment_body(name.clone(), issue.clone(), c)) {
+			println(f"comment failed for {name} on #{n}")
+			continue
+		}
+		drive_append(f"{dir}/found.txt", f"{name}: comment #{n}")
+		println(f"COMMENT #{n} {name}")
+	}
 }
 
 // The body of an issue filed for the improvement lane from ITEMS of the
@@ -2943,6 +3010,17 @@ fn main() throws {
 		println(drive_improve_title(args[2].clone(), args[3].clone(), items[0].clone()))
 		println("ready,improve")
 		print(drive_improve_body(args[2].clone(), args[3].clone(), items))
+		return
+	}
+	// The comments a report asks for (#1698), without posting them: per
+	// `Comment: #N <text>` the issue and the body.
+	if args.len() == 5 && args[1] == "--comment-issue" {
+		let comments = drive_comments(drive_read(args[4]))
+		if comments.len() == 0 { println("none") }
+		for c in comments {
+			println(f"#{drive_comment_issue(c.clone())}")
+			print(drive_comment_body(args[2].clone(), args[3].clone(), c))
+		}
 		return
 	}
 	// The cleanup alone (#1521), in the directory it runs in.
