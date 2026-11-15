@@ -1,7 +1,7 @@
 # ADR-grammar-engine-1: winnow-grammar Is Written in Nikaia, in This Repository, and Its Rust Target Is Published on crates.io Under Its Own Names
 
-**Status:** Accepted
-**Date:** November 15, 2026 (owner's decision)
+**Status:** Open
+**Date:** November 15, 2026 (owner's decision; built as an experiment on a branch of its own, not on `develop`)
 **Answers:** whether the grammar engine every Nikaia grammar lowers to, the Rust
 crate winnow-grammar, stays a Rust dependency or is written in Nikaia, where
 its source lives, and how Rust users keep getting it
@@ -16,7 +16,10 @@ is lowered and the `.rs` committed: the model for D7);
 [ADR-grammar-1](adr-grammar-1.md), [ADR-grammar-2](adr-grammar-2.md),
 [ADR-366](adr-366.md), [ADR-372](adr-372.md), [ADR-388](adr-388.md) (what a
 grammar says; the engine is what they lower to); [ADR-298](adr-298.md) (no
-macros in Nikaia: the `grammar!` macro is the Rust target's, not the language's)
+macros in Nikaia: the `grammar!` macro is the Rust target's, not the language's);
+[ADR-218](adr-218.md) D1, D2 (an `unsafe` topic is a crate of its own: changed
+by D10 for a published Rust target); [ADR-378](adr-378.md) (what is proved is
+not checked again)
 
 ## 1. Question
 
@@ -141,6 +144,28 @@ count no more instructions under callgrind than with 0.2
 git dependency. A test of 0.2 that compares a message may change only in the
 message's span or wording, never in what it reports.
 
+### D9 — The Rust target carries what it reaches of `nikaia-std` inside it, privately.
+
+The rust-library build copies the items of `nikaia-std` that the package
+reaches, by the reachability ADR-393 D3 already derives, into a private module
+of the published crate; the crate does not depend on `nikaia-std`. This is
+required, not only convenient: `nikaia-std` depends on winnow-grammar, so a
+winnow-grammar that depended on `nikaia-std` would be a cycle Cargo refuses. A
+type of `nikaia-std` in the public API of a published Rust target is refused,
+since two published targets would each carry their own copy and a Rust user
+holding both could not pass one's value to the other.
+
+### D10 — The `unsafe` crates the target reaches go into it as private modules; none is published.
+
+The engine is built for the most a parser can do: what the compiler proved is
+not checked again (ADR-378), in the published crate as in Nikaia. The crates
+under `crates/unsafe/` that the target reaches are copied into it as private
+modules, each with its `README`'s argument for every `unsafe`, and Miri runs on
+the published crate under both aliasing models as ADR-218 D2 runs it on the
+crates. No crate of `crates/unsafe/` is published for this. The hand-written
+`unsafe` of winnow-grammar 0.2 (`rt/bytes.rs`) is not carried over: each site is
+a proved site of the emitter or a topic of `crates/unsafe/`.
+
 ## 5. Consequences
 
 * The engine's faults are found and fixed here, by the rules for the compiler:
@@ -154,16 +179,14 @@ message's span or wording, never in what it reports.
 * The compiler and its engine are built by one revision of the toolchain;
   a language gap the engine meets is a gap of the language, handled by
   `CLAUDE.md`, *A missing form stops the work*.
-* The cost: a shell of hand-written Rust in the macro crate, and committed
-  lowered crates that every change to the package regenerates.
+* A published crate carries copies of `std` and `unsafe` modules: a fix in
+  one of them reaches Rust users with the next release of the target.
+* The cost: a shell of hand-written Rust in the macro crate, committed lowered
+  crates that every change to the package regenerates, and the `unsafe`
+  arguments checked once more, on the published crate.
 
 ## 6. What this does not decide
 
-* **Whether the Rust target depends on `nikaia-std`.** ADR-393 D1 lowers a
-  package over `nikaia-std`. If the engine needs it, Rust users take it as a
-  dependency and publication waits until it is on crates.io (ADR-336 D2). Probed
-  first, on a piece of the runtime; if it is needed, the question goes to the
-  owner.
 * **Whether a Nikaia type can implement a Rust trait the runtime implements
   today**, winnow's `ParserError` for `ParseError` first. Probed first; if Nikaia
   cannot say it, it is a gap of the language and goes to a decision.
