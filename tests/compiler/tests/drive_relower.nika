@@ -67,10 +67,16 @@ fn case(nikaia: String, repo: String, tmp: String, name: String, kind: String, l
         let stub = "use std::fs\n\nfn main() throws {\n    fs::write(\"examples/a/nikaia.contracts\", fs::Root::Anywhere, \"refreshed\\n\")\n    println(\"refreshed examples/a/nikaia.contracts\")\n}\n"
         sh(work.clone(), f"mkdir -p scripts target/fast; ln -s {nikaia} target/fast/nikaia; printf 'target/\\nscripts/\\n' > .git/info/exclude")
         fs::write(f"{work}/scripts/ledgers.nika", fs::Root::Anywhere, stub)
+        // The driver builds the compiler of the tree in a worktree of its own
+        // (#1665) with `cargo build`; a stub `cargo` first on PATH makes that
+        // compiler this one and puts the stub ledgers script in the worktree
+        // (`scripts/` is not tracked here).
+        sh(work.clone(), f"mkdir -p bin; printf '#!/bin/sh\\nmkdir -p scripts \"$CARGO_TARGET_DIR/fast\"\\ncp {work}/scripts/ledgers.nika scripts/\\nln -sf {nikaia} \"$CARGO_TARGET_DIR/fast/nikaia\"\\n' > bin/cargo; chmod +x bin/cargo; echo bin/ >> .git/info/exclude")
     }
     // The stub badges: the sources of the tree they are measured on.
     let badges = "ls crates/src | tr '\\n' ' ' > assets/badges/self-hosted.svg"
-    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--merge-fetched", lower, "true", badges]; dir: work.clone())
+    let path = process::run("sh", ["-c", "echo $PATH"]).stdout.trim().clone()
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--merge-fetched", lower, "true", badges]; dir: work.clone(), env: [("PATH", f"{work}/bin:{path}")])
     let head = sh(work.clone(), "git rev-parse HEAD").bytes[0..<8].text().clone()
     println(f"== {name}")
     println(out.stdout.trim().replace(head, "SHA"))
