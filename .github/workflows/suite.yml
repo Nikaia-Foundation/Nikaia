@@ -325,6 +325,9 @@ jobs:
           # The ledgers of tests/compiler are committed like a lockfile
           # (ADR-268 D2, D6): a change to its src/ that leaves them stale fails.
           (cd tests/compiler && nikaia build --locked)
+          # So are those of every example and package with one, built on a
+          # clean target where no warm cache hides a new proof question (#1591).
+          env -u NIKAIA_DUMP_ACCEPTED nikaia run scripts/ledgers.nika -- --check --exe "$PWD/target/release/nikaia"
 
       # The accepted-programs sweep (#705) of this shard's own dump, right
       # after its tests: no job waits for the slowest shard to sweep them all.

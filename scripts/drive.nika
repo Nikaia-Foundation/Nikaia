@@ -571,10 +571,12 @@ fn drive_merge_fetched(lower: String, build: String, badges: String) throws {
 
 // True when a merge that brought PATHS must be regenerated (#1333): a change
 // under `crates/` or `tools/` can change what `lower-std` writes and the
-// badges' self-hosted share; documentation and briefs cannot.
+// badges' self-hosted share, and one under `examples/` or `packages/` the
+// committed ledgers (#1591); documentation and briefs cannot.
 fn drive_merge_generates(paths: Vec[String]) -> bool {
 	for p in paths {
 		if p.starts_with("crates/") || p.starts_with("tools/") { return true }
+		if p.starts_with("examples/") || p.starts_with("packages/") { return true }
 	}
 	return false
 }
@@ -631,7 +633,9 @@ fn drive_merge_relower(unmerged: String, lower: String, build: String, badges: S
 // binary emits with the old emitter, 2026-11-08: one round reverted unrelated
 // files), stages the changed lowered paths and nothing else, and runs BADGES
 // on an export of the staged tree (as drive_badges does on HEAD, #1348),
-// staging the changed `assets/badges/*.svg`. Then commits the merge, with the
+// staging the changed `assets/badges/*.svg`, then the ledgers of the merged
+// tree (drive_ledgers_refresh, #1591), staging the changed ledger files. Then
+// commits the merge, with the
 // regenerated files in it (the autostash is applied after that commit), and
 // prints `MERGE <sha8> re-lowered <paths>` for a conflict, `MERGE <sha8>
 // regenerated <paths>` (or `nothing changed`) for a clean merge; a merge of
@@ -729,6 +733,18 @@ fn drive_merge_regenerate(unmerged: String, lower: String, build: String, badges
 	}
 	let staged = process::run("git", ["add", "--", "assets/badges/"])
 	if !staged.ok { drive_merge_abort_paths(unmerged, "git add of the badges failed") }
+	// The ledgers of the merged tree, with the compiler built from it (#1591).
+	let tree_now = process::run("git", ["write-tree"]).stdout.trim().clone()
+	let ledgers = drive_ledgers_refresh(tree_now)
+	if ledgers.len() > 0 {
+		let mut add_ledgers: Vec[String] = ["add", "--"]
+		for p in ledgers {
+			add_ledgers.push(p.clone())
+			changed.push(p.clone())
+		}
+		let added_ledgers = process::run("git", add_ledgers)
+		if !added_ledgers.ok { drive_merge_abort_paths(unmerged, "git add of the ledgers failed") }
+	}
 	let done = process::run("git", ["commit", "-q", "--no-edit"])
 	if !done.ok { drive_merge_abort_paths(unmerged, "the merge commit failed") }
 	let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
@@ -922,8 +938,53 @@ fn drive_badges() throws {
 	println("BADGES regenerated and committed")
 }
 
+// The committed ledgers of the examples and packages (`nikaia.contracts`,
+// `nikaia.derived`, `nikaia.proofs`; ADR-270 D4) follow the
+// sources and the compiler as the badges do (#1591): before each suite they
+// are built again on a clean target from HEAD (`scripts/ledgers.nika --
+// --refresh --tree HEAD`, with the compiler BUILD makes of this checkout)
+// and only the ledger files that changed are committed. A build that fails is
+// printed and left to CI's `--check`, which is red on it too.
+fn drive_ledgers(build: String) throws {
+	let built = process::run("sh", ["-c", f"{build} 2>&1"])
+	if !built.ok {
+		println("LEDGERS not refreshed: the compiler did not build")
+		println(drive_tail(built.stdout, 20))
+		return
+	}
+	let paths = drive_ledgers_refresh("HEAD")
+	if paths.len() == 0 { return }
+	let mut add: Vec[String] = ["add", "--"]
+	let mut commit: Vec[String] = ["commit", "-q", "-m", "ledgers: regenerate for the tree under test", "--"]
+	for p in paths.clone() {
+		add.push(p.clone())
+		commit.push(p)
+	}
+	process::run("git", add)
+	let done = process::run("git", commit)
+	if !done.ok { drive_escalate(f"committing the ledgers failed: {done.stderr.trim()}") }
+	println(f"LEDGERS regenerated and committed: {paths.join(" ")}")
+}
+
+// Runs `scripts/ledgers.nika -- --refresh` on the git tree TREE with this
+// checkout's compiler; the ledger paths it rewrote. A failed directory is
+// printed (`LEDGERS failed ...`) and its files are left as they were. A
+// checkout without the script or a compiler has no ledgers to refresh.
+fn drive_ledgers_refresh(tree: String) -> Vec[String] throws {
+	if drive_exe() == "" || !fs::exists("scripts/ledgers.nika", fs::Root::Anywhere) { return [] }
+	let exe = process::run("realpath", [drive_exe()]).stdout.trim().clone()
+	let out = process::run(exe.clone(), ["run", "scripts/ledgers.nika", "--", "--refresh", "--tree", tree, "--exe", exe])
+	let mut paths: Vec[String] = []
+	for line in out.stdout.split("\n") {
+		if line.starts_with("refreshed ") { paths.push((line.strip_prefix("refreshed ") ?? "").trim().clone()) }
+	}
+	if !out.ok { println("LEDGERS failed\n" + drive_tail(out.stdout + out.stderr, 30)) }
+	return paths
+}
+
 fn drive_launch(dir: String) throws {
 	drive_badges()
+	drive_ledgers("cargo build -q --profile fast -p nikaia")
 	let sha = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 	let branch = drive_ci_branch(dir)
 	let log = process::run("realpath", [dir.clone()]).stdout.trim() + "/suite.log"

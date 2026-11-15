@@ -7,9 +7,9 @@
 // where no warm entry can hide a question the book does not hold. A change
 // that asks new questions or infers new contracts fails this test until it
 // commits the new entries. Only the ledger verdict is printed. `json` has no
-// `main`, and a program build of it is refused with NK1351 before its ledger
-// is read (#1622, Part III 13.3), so it is checked `--locked` with `rustc`
-// instead, which compares its ledgers the same way.
+// `main` and names `artifact = "rust-library"`, so `build` makes it a
+// library (#1622, #1591, Part III 13.3). `scripts/ledgers.nika -- --check`
+// runs the same check on every ledger directory, in CI.
 use std::fs
 use std::process
 
@@ -48,7 +48,7 @@ fn main() throws {
 	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
 	let nikaia = toolchain()
 	let repo = root()
-	locked(nikaia, repo, tmp, "packages/json", ["check", "--rustc", "--locked", "src/main.nika"])
+	locked(nikaia, repo, tmp, "packages/json", ["build", "--locked"])
 	locked(nikaia, repo, tmp, "packages/yaml", ["build", "--locked"])
 	locked(nikaia, repo, tmp, "tests/page-examples", ["build", "--locked"])
 	process::run("rm", ["-rf", tmp])

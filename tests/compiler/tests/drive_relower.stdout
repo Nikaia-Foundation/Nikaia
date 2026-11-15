@@ -75,3 +75,17 @@ base
 old
 
 local
+== clean, an example
+MERGE SHA regenerated crates/nikaia-std/src/tools/lowered/new.rs assets/badges/self-hosted.svg examples/a/nikaia.contracts
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+2
+no merge open
+ M notes.txt
+assets/badges/self-hosted.svg
+crates/nikaia-std/src/tools/lowered/new.rs
+examples/a/nikaia.contracts
+base
+a.nika 
+local
+refreshed

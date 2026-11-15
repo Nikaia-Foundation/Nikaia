@@ -1,0 +1,8 @@
+--list:
+  examples/app: nikaia build --locked
+  packages/lib: nikaia check --rustc --locked src/main.nika
+  exit 0
+--check:
+  examples/app: ledger stale
+  packages/lib: ledger stale
+  exit 1
