@@ -137,29 +137,29 @@ fn sv_sx_not(l: u32) -> u32 {
 /// slacks), the tableau, the values and bounds, the trail and its levels.
 pub struct SvSimplex {
 	/// Each query column's name, as a model names it.
-	pub names: Vec[String],
-	pub col_var: collections::BTreeMap[u32, i64],
+	names: Vec[String],
+	col_var: collections::BTreeMap[u32, i64],
 	/// Each variable's query column, `-1` for a slack.
-	pub var_col: Vec[i64],
+	var_col: Vec[i64],
 	/// Each variable's form over the query columns: its column, or the
 	/// form its slack stands for.
-	pub var_form: Vec[SvRow],
-	pub slack_of: collections::BTreeMap[String, i64],
-	pub rows: Vec[SvRow],
+	var_form: Vec[SvRow],
+	slack_of: collections::BTreeMap[String, i64],
+	rows: Vec[SvRow],
 	/// Each row's basic variable.
-	pub basic: Vec[i64],
+	basic: Vec[i64],
 	/// Each variable's row, `-1` where it is not basic.
-	pub row_of: Vec[i64],
-	pub values: Vec[SvDelta],
-	pub lower: Vec[SvSide],
-	pub upper: Vec[SvSide],
-	pub undo: Vec[SvUndo],
-	pub trail: Vec[u32],
+	row_of: Vec[i64],
+	values: Vec[SvDelta],
+	lower: Vec[SvSide],
+	upper: Vec[SvSide],
+	undo: Vec[SvUndo],
+	trail: Vec[u32],
 	/// Per level above zero: the undo stack's and the trail's length when
 	/// it began.
-	pub levels: Vec[i64],
-	pub marks: Vec[i64],
-	pub implied: Vec[SvImplied],
+	levels: Vec[i64],
+	marks: Vec[i64],
+	implied: Vec[SvImplied],
 	pub found: collections::BTreeMap[String, i64],
 	/// The values of the last consistent final check as rationals, a real
 	/// column's with `δ` replaced (ADR-270 D27); empty where a step left
