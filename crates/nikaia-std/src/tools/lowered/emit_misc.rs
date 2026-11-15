@@ -138,6 +138,23 @@ impl EmitState {
             let key = node_key(each);
             if key != top && !apart.contains(&key) && self.emit_call_fails(world, each) { return true; }
         }
+        let mut elsewhere: collections::BTreeSet<i64> = collections::BTreeSet::new();
+        for each in visited_in_expr(guarded) {
+            match each {
+                Expr::Closure { .. } => { for inner in visited_in_expr(each) { elsewhere.insert(node_key(inner)); } },
+                Expr::TryCatch { expr, .. } => {
+                    let expr = nikaia_std::boxed::open(expr);
+                    for inner in visited_in_expr(expr) { elsewhere.insert(node_key(inner)); }
+                },
+                _ => { },
+            }
+        }
+        for each in visited_in_expr(guarded) {
+            match each {
+                Expr::Throw(_, _) => { if !elsewhere.contains(&node_key(each)) { return true; } },
+                _ => { },
+            }
+        }
         false
     }
     pub fn lambda_decides(&self, key: &str) -> bool {

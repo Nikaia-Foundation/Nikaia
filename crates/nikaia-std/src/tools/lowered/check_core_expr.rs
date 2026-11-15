@@ -601,6 +601,19 @@ pub(crate) fn check_core_expr_throw<H: CheckHost>(state: &mut CheckState, world:
         }
     }
     state.a_way_out("throw", "", span);
+    if state.flow.guarded.is_some() {
+        let held: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        let mut guarded = nikaia_std::index::or(held, || CheckGuarded::nothing());
+        guarded.fallible = true;
+        match thrown {
+            Ty::Unknown => { },
+            _ => { guarded.thrown.insert(thrown.text()); },
+        }
+        state.flow.guarded = Some(guarded);
+    }
     if !stops_at_the_lambda { state.a_throw_here(&thrown, span); }
     Ty::Unknown
 }

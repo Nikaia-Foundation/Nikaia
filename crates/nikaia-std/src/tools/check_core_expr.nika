@@ -773,6 +773,21 @@ fn check_core_expr_throw[H: CheckHost](mut state: CheckState, world: ref CheckWo
         }
     }
     state.a_way_out("throw", "", span)
+    // **And the `catch` it is guarded by** (Part I 7.1, #1635): a `throw` in
+    // the guarded half is an error source of that `catch`, as a failing call
+    // there is, so the `catch` has something to handle (no `NK1134`).
+    if state.flow.guarded != null {
+        let held: CheckGuarded? = state.flow.guarded?.clone()
+        let mut guarded = held ?? CheckGuarded::nothing()
+        guarded.fallible = true
+        match thrown {
+            Ty::Unknown => {},
+            else => {
+                guarded.thrown.insert(thrown.text())
+            },
+        }
+        state.flow.guarded = guarded
+    }
     // **And the function it is in** (Part I 7.1, #1627): one that does not
     // say `throws` is refused, as for a failing call (`NK2605`).
     if !stops_at_the_lambda {
