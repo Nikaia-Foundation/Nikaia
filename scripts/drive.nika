@@ -2016,15 +2016,16 @@ fn drive_wip_end(dry: bool, brief: String) throws {
 	}
 }
 
-// The labels of an issue filed from a report's `Found:` in AREA: `ready`,
-// AREA and `bugs` (the bug lane takes it, owner 2026-11-15; the improvement
-// lane relabels what is no compiler defect), `decision` instead of `ready`
-// when `Needs:` asks for something.
-fn drive_found_labels(needs: String, area: String) -> Vec[String] {
+// The labels of an issue filed from a report's `Found:`: `ready` and `bugs`
+// (the bug lane takes it, owner 2026-11-15; the improvement lane relabels
+// what is no compiler defect), `decision` instead of `ready` when `Needs:`
+// asks for something. Never a second lane label: one lane label per issue
+// says which lane builds it (owner, 2026-11-15); the body names the run it
+// came from.
+fn drive_found_labels(needs: String) -> Vec[String] {
 	let mut status: String = "decision"
 	if needs == "" || drive_word(needs) == "none" { status = "ready" }
-	if area == "bugs" { return [status, area] }
-	return [status, area, "bugs"]
+	return [status, "bugs"]
 }
 
 // The title of an issue filed from FOUND: its first 80 characters, cut at a
@@ -2062,7 +2063,7 @@ fn drive_found_body(name: String, issue: String, found: String, needs: String) -
 }
 
 // Files a report's `Found:` as an issue (owner, 2026-11-06): labels
-// drive_found_labels (AREA: the last part of DIR), title drive_found_title,
+// drive_found_labels, title drive_found_title,
 // body drive_found_body; `<brief>: filed #N` goes into DIR/found.txt and
 // `FILED #N <brief>` is printed. A failed call is logged (`file failed for
 // <brief>`), the Found stays in found.txt for the supervisor.
@@ -2072,14 +2073,13 @@ fn drive_found_file(dir: String, brief: String) throws {
 	let text = drive_read(report)
 	let needs = drive_field(text.clone(), "Needs")
 	let name = drive_stem(brief.clone())
-	let area = drive_stem(dir.clone())
 	let issue = drive_issue(brief)
 	for found in drive_founds(text) {
 		let body = drive_found_body(name.clone(), issue.clone(), found.clone(), needs.clone())
 		let number = drive_issue_new(
 			drive_found_title(found),
 			body,
-			drive_found_labels(needs.clone(), area.clone()),
+			drive_found_labels(needs.clone()),
 		)
 		if number == "" {
 			println(f"file failed for {name}")
@@ -2997,7 +2997,7 @@ fn main() throws {
 	}
 	if args.len() == 6 && args[1] == "--found-issue" {
 		println(drive_found_title(args[4].clone()))
-		println(drive_found_labels(args[5].clone(), "views").join(","))
+		println(drive_found_labels(args[5].clone()).join(","))
 		print(drive_found_body(args[2].clone(), args[3].clone(), args[4].clone(), args[5].clone()))
 		return
 	}
