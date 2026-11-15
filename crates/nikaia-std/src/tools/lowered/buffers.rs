@@ -776,8 +776,22 @@ pub(crate) fn is_the_buffer(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_,
             true => is_the_buffer(receiver, ask, walk),
             false => false,
         } },
+        Expr::If { then_branch, else_branch, .. } => {
+            let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
+            ends_in_the_buffer(then_branch, ask, walk) && ends_in_the_buffer(other, ask, walk)
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms.iter() { if !is_the_buffer(&arm.body, ask, walk) { return false; } }
+            !arms.is_empty()
+        },
+        Expr::Block(block, _) => ends_in_the_buffer(block, ask, walk),
         _ => false,
     }
+}
+
+pub(crate) fn ends_in_the_buffer(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+    let tail = match ending_of(block) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    is_the_buffer(&tail, ask, walk)
 }
 
 pub(crate) fn struct_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> Option<String> {
