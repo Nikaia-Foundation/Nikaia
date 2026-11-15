@@ -235,11 +235,21 @@ impl CheckState {
     }
     pub(crate) fn frame_of(&self, name: &str) -> i64 {
         let mut frame_at = self.scope.len() as i64;
+        let mut found: i64 = -1;
+        let mut id: i64 = -1;
         while frame_at > 0 {
             frame_at = unsafe { nikaia_std::proven::sub::<i64>(frame_at, 1) };
-            for local in (*unsafe { nikaia_std::proven::read(&self.scope, (frame_at) as usize) }).iter() { if local.name == name { return frame_at; } }
+            let mut at = (*unsafe { nikaia_std::proven::read(&self.scope, (frame_at) as usize) }).len() as i64;
+            while at > 0 {
+                at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
+                if nikaia_std::index::get(unsafe { nikaia_std::proven::read(&self.scope, (frame_at) as usize) }, nikaia_std::index::at(at)).name == name {
+                    if found < 0 { id = nikaia_std::index::get(unsafe { nikaia_std::proven::read(&self.scope, (frame_at) as usize) }, nikaia_std::index::at(at)).id; }
+                    if nikaia_std::index::get(unsafe { nikaia_std::proven::read(&self.scope, (frame_at) as usize) }, nikaia_std::index::at(at)).id != id { return found; }
+                    found = frame_at as i64;
+                }
+            }
         }
-        -1
+        found
     }
     pub(crate) fn around_a_repeat(&self, bound: i64, path: &str) -> i64 {
         let mut at = self.repeats.len() as i64;
