@@ -1,0 +1,135 @@
+---
+layout: home
+title: Large programs in Nikaia
+description: >-
+  The compiler and its prover are written in Nikaia, and so are the checks that run over them. What that shows, where it stops, and an invitation to build a large program with us.
+---
+<!--
+  Level 3: the topic in full. Every figure here is counted from the repository
+  with the command named beside it, on the date given.
+-->
+
+<section class="home-section" id="check">
+  <div class="home-inner">
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/good/#large" | relative_url }}">Made for good</a></p>
+    <h1 class="home-heading">Large programs in Nikaia</h1>
+    <div class="limit-class">
+        <dl class="limit-steps">
+          <dt>The problem</dt>
+          <dd><strong>Checks that work on a page of code have to keep working on a program of a hundred thousand lines.</strong></dd>
+          <dt>An example</dt>
+          <dd>The compiler's own analyses, for sharing, pausing, what a function throws and which index stays in bounds, are Nikaia code, and the same checks run over them on every build.</dd>
+          <dt>How it is done</dt>
+          <dd>We write our own large programs in Nikaia: the compiler, the prover and its solver. Every defect the checks show in that code is fixed in the compiler, with a test, and not written around.</dd>
+          <dt>The limit</dt>
+          <dd>These are programs we wrote ourselves, by people who know the language from the inside. How often a check flags correct code across them is being measured now, and the figure is not in yet.</dd>
+        </dl>
+
+        <div class="limit-details home-code markdown-body">
+  <div class="home-inner">
+    <h2 id="compiler">The compiler, written in Nikaia</h2>
+    <p>
+      The compiler is moving from Rust into Nikaia part by part. On November 15, 2026,
+      123,337 lines of the toolchain were Nikaia, 87.2&nbsp;% of it, counted by
+      <code>scripts/self_hosting.py</code>. The compiler's own package,
+      <code>crates/nikaia-std/src/tools/</code>, holds 295 files and about 197,000 lines.
+      The largest files are the text tiers (9,259 lines), the bounds walk (8,874) and the
+      prover's walk (3,944).
+    </p>
+    <p>
+      The package is checked as one program, each file with the rest beside it, and is
+      lowered to Rust and built on every change. A design that only works on small examples
+      shows up here first, as a slow build, a refusal of correct code or a message nobody
+      can act on. Such a find is fixed in the compiler as its own change.
+    </p>
+
+    <h2 id="prover">The prover and its solver, written in Nikaia</h2>
+    <p>
+      The compiler drops a bounds or overflow check when it can prove the check never
+      fails. The prover that decides this and the reference solver it asks, which decides
+      linear integer arithmetic, are Nikaia code, about 13,300 lines together. A second solver engine, a
+      CDCL(T) loop with simplex, fast paths and a strategy layer, is another 14,000 lines of
+      Nikaia, measured against standard SMT-LIB problem sets by
+      <code>scripts/solver.nika</code>. No solver is trusted: each answer comes with a
+      certificate that a small checker replays before the compiler uses it.
+      <a href="{{ "/research/prover/architecture.html" | relative_url }}">The prover's architecture →</a>
+    </p>
+    <p>
+      The solver's inner loops were measured against hand-written Rust. Most of the gap
+      found was in how an index is lowered to Rust (<a href="{{ "/docs/solver-workload.html" | relative_url }}">solver workload</a>,
+      section 8).
+    </p>
+
+    <h2 id="reach">What the checks reach on that code</h2>
+    <p>
+      Over the 247 files of the package at that commit, <code>nikaia lower-std --bounds --asserts</code>
+      found 2,677 indexes and proved 1,544 of them in bounds (57.7&nbsp;%), and proved
+      923 of 1,633 arithmetic steps free of overflow (56.5&nbsp;%). No file was refused. The
+      1,846 checks that are not proved stay in the program and run.
+      (<a href="{{ "/docs/formal-verification.html" | relative_url }}">Formal verification</a>,
+      section 2.)
+    </p>
+    <p>
+      Two figures are still missing: how many of the warnings across this code flag code that
+      is in fact correct, and how the time spent checking grows with the size of the package.
+      Both are measured in
+      <a href="https://github.com/Nikaia-Foundation/Nikaia/issues/1625">#1625</a>, and every
+      false alarm it finds becomes its own fix. One is known already: the outside-data check
+      flags an index in one of our scripts that is safe
+      (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/1624">#1624</a>).
+    </p>
+  </div>
+</div>
+      </div>
+
+    <div class="limit-details home-code markdown-body" id="case-study">
+      <h2>Build a large program with us</h2>
+      <p>
+        Our own programs show what Nikaia does in the hands of the people who build it. The
+        next step is a large program written by someone else, for a purpose of their own. We
+        are looking for a few such projects, and we will help build them.
+      </p>
+      <h3>What we offer</h3>
+      <ul>
+        <li>A defect or a missing part of the language that your project meets goes ahead of
+          other work, and is fixed in the compiler.</li>
+        <li>Help with the design and the code, from the people who build the compiler, in
+          the open.</li>
+        <li>A write-up we publish together: what worked, what the checks found, what they
+          missed and what it cost, measured.</li>
+      </ul>
+      <h3>What an application shows</h3>
+      <p>
+        Tell us why your project would make a good case study for Nikaia. It helps to say:
+      </p>
+      <ul>
+        <li>what the program does, and how large you expect it to become;</li>
+        <li>why safety and speed both matter for it, for example a service that has to keep
+          running, data that has to stay correct, or work that runs long or often;</li>
+        <li>what it would show about Nikaia that our own programs do not, such as a different
+          kind of concurrency, outside data, a domain with its own rules;</li>
+        <li>whether the code can be public, so that every finding can be shown;</li>
+        <li>who will look after it once it runs.</li>
+      </ul>
+      <h3>How to apply</h3>
+      <p>
+        Write to us on the <a href="https://discord.gg/CtnPEbPDWu">Nikaia Discord</a> with the
+        points above. We answer each application, and we take on only as many projects as we can
+        support well.
+      </p>
+      <h3>What to know first</h3>
+      <p>
+        Nikaia is pre-alpha. Rules still change, and some parts are missing; the
+        <a href="{{ "/good/pre-alpha.html" | relative_url }}">pre-alpha page</a> lists them. The
+        Nikaia Foundation is a project, not yet a legal body, and it does not pay for work. What
+        we can give is our time, priority in the compiler and a published result.
+      </p>
+    </div>
+
+    <div class="safe-reading">
+      <h2>Go deeper</h2>
+      <ul><li><a href="{{ "/research/prover/architecture.html" | relative_url }}">The prover's architecture</a></li><li><a href="{{ "/docs/formal-verification.html" | relative_url }}">What the language proves today</a></li><li><a href="{{ "/docs/solver-workload.html" | relative_url }}">The solver's workload</a></li><li><a href="https://github.com/Nikaia-Foundation/Nikaia/issues/1625">#1625: measuring the checks across our own code</a></li></ul>
+    </div>
+    <p class="safe-others">More under Made for good: <a href="{{ "/good/built-in-the-open.html" | relative_url }}">Built in the open</a><a href="{{ "/good/pre-alpha.html" | relative_url }}">Pre-alpha: what to expect</a><a href="{{ "/manifesto.html" | relative_url }}">Why Nikaia exists</a></p>
+  </div>
+</section>
