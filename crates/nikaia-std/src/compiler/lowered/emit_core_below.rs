@@ -321,28 +321,34 @@ impl EmitState {
     pub fn branch_pauses(&self, world: &EmitWorld<'_, '_, '_, '_>, stmt: &Stmt, at: i64) -> bool {
         match stmt {
             Stmt::Expr(value) => {
-                for each in visited_in_expr(value) {
-                    match each {
-                        Expr::Call { func, .. } => {
-                            let func = nikaia_std::boxed::open(func);
-                            let key = call_pausing_key(world.words, world.aliases, &self.own_contracts, world.library, func);
-                            if key.is_some() { return true; }
-                        },
-                        Expr::MethodCall { receiver, .. } => {
-                            let receiver = nikaia_std::boxed::open(receiver);
-                            if self.method_pauses(node_key(receiver)) { return true; }
-                        },
-                        Expr::SafeMethod { receiver, .. } => {
-                            let receiver = nikaia_std::boxed::open(receiver);
-                            if self.method_pauses(node_key(receiver)) { return true; }
-                        },
-                        _ => { },
-                    }
-                }
+                for each in visited_in_expr(value) { if self.expr_pauses(world, each) { return true; } }
                 return false;
             },
             _ => return false,
         }
+    }
+    pub fn block_pauses(&self, world: &EmitWorld<'_, '_, '_, '_>, block: &Block) -> bool {
+        for each in visited_in_block(block) { if self.expr_pauses(world, each) { return true; } }
+        false
+    }
+    pub(crate) fn expr_pauses(&self, world: &EmitWorld<'_, '_, '_, '_>, each: &Expr) -> bool {
+        match each {
+            Expr::Call { func, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                let key = call_pausing_key(world.words, world.aliases, &self.own_contracts, world.library, func);
+                if key.is_some() { return true; }
+            },
+            Expr::MethodCall { receiver, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver);
+                if self.method_pauses(node_key(receiver)) { return true; }
+            },
+            Expr::SafeMethod { receiver, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver);
+                if self.method_pauses(node_key(receiver)) { return true; }
+            },
+            _ => { },
+        }
+        false
     }
     pub fn write_keep_prelude(&self, walk: &mut EmitWalk, out: &mut EmitOut, function: &str, at: i64, depth: i64) {
         if walk.preluded.contains(&at) { return; }

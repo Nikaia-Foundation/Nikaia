@@ -1,0 +1,57 @@
+// A call through a function field fails in the box (ADR-351 D2). A handler
+// that pauses and does not read the error must not hold the caught `Result`
+// across the pause, or the task is not `Send` and cannot go to the pool at
+// `user-parallelism = "yes"` (#1715).
+use std::time
+
+enum Bad { Neg }
+
+impl Error for Bad {
+    fn message(ref self) -> String {
+        "neg"
+    }
+}
+
+struct Step {
+    run: fn(i64) -> i64 throws,
+}
+
+fn risky(n: i64) -> i64 throws {
+    if n < 0 {
+        throw Bad::Neg
+    }
+    return n
+}
+
+fn w(s: Step, n: i64) -> i64 throws {
+    let v = s.run(n) catch {
+        time::sleep(1.millis())
+        return 0
+    }
+    return v
+}
+
+fn valued(s: Step, n: i64) -> i64 throws {
+    return s.run(n) catch {
+        time::sleep(1.millis())
+        -1
+    }
+}
+
+fn dropped(s: Step, n: i64) throws {
+    s.run(n) catch {
+        time::sleep(1.millis())
+    }
+}
+
+fn main() throws {
+    let a = spawn fn { w(Step { run: risky }, -1) }
+    let b = spawn fn { w(Step { run: risky }, 5) }
+    let c = spawn fn { valued(Step { run: risky }, -1) }
+    let d = spawn fn { dropped(Step { run: risky }, -1) }
+    println(a.join())
+    println(b.join())
+    println(c.join())
+    d.join()
+    println("dropped")
+}
