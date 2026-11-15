@@ -192,8 +192,15 @@ fn agent_micro(cost: String) -> i64 throws {
     let whole = text::parse_i64(parts[0].clone()) ?? 0
     if parts.len() < 2 { return whole * 1000000 }
     let padded = parts[1].clone() + "000000"
-    let frac = text::parse_i64(padded.bytes[0..6].text()) ?? 0
+    let frac = text::parse_i64(padded.bytes[0..<6].text()) ?? 0
     return whole * 1000000 + frac
+}
+
+// "12.345678" of micro-dollars, the inverse of agent_micro; below zero is 0.
+fn agent_usd(micro: i64) -> String throws {
+    if micro <= 0 { return "0.000000" }
+    let frac = f"{1000000 + micro % 1000000}"
+    return f"{micro / 1000000}." + frac.bytes[1..<7].text()
 }
 
 fn agent_escalate(dir: String, why: String) throws {
@@ -499,10 +506,13 @@ fn main() throws {
         let mut debrief = f"{abs}.debrief.md"
         if stem != "" { debrief = f"{stem}.debrief.md" }
         fs::write(debrief, fs::Root::Anywhere, agent_result(asked.stdout.clone()) + "\n")
+        // A resumed session's `total_cost_usd` counts the whole session: the
+        // debrief costs what it adds to the run's.
         let more = agent_json(asked.stdout.clone(), "total_cost_usd")
         if more != "" {
             let with_run = agent_read(f"{dir}/cost.txt")
-            fs::write(f"{dir}/cost.txt", fs::Root::Anywhere, with_run + f"{today} {more}\n")
+            let added = agent_usd(agent_micro(more) - agent_micro(cost.clone()))
+            fs::write(f"{dir}/cost.txt", fs::Root::Anywhere, with_run + f"{today} {added}\n")
         }
     }
     if out.timed_out { agent_escalate(dir.clone(), "timed out after 150 minutes") }
