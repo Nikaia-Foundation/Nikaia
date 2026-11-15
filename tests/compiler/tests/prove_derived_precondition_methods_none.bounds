@@ -5,4 +5,4 @@ bounds in tests/prove_derived_precondition_methods_none.nika: 4 indexes, 0 prove
     30  self.arms[at] * 3  proved
     30  self.arms[at]      checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
     37  self.arms[at]      checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
-    47  k += 1             checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    47  k += 1             checked: a counter the loop on line 45 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)

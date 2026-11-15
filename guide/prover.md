@@ -121,7 +121,7 @@ fn main() throws {
 ```text
 $ nikaia check --bounds checks.nika
 bounds in checks.nika: 2 indexes, 1 proved; 3 operations, 1 proved - written without their check: indexes off, operations off
-     4  total + xs[i]  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+     4  total + xs[i]  checked: a counter the loop on line 3 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
      4  xs[i]          proved
     10  xs[0]          checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
     15  part * 100     proved
@@ -187,7 +187,7 @@ fn main() throws {
 $ nikaia check --bounds counters.nika
 bounds in counters.nika: 0 indexes, 0 proved; 2 operations, 1 proved - written without their check: indexes off, operations off
      5  n += 1  proved
-    15  n += 1  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    15  n += 1  checked: a counter the loop on line 13 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
 Checked counters.nika
 ```
 

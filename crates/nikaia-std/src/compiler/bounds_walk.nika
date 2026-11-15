@@ -5539,7 +5539,8 @@ fn bounding_while(
 	// (ADR-361 D13): `t` is `i - i@`, and its other counters lie within
 	// their steps times `t`, at the head of each turn (not past a `break`).
 	let outside = bounding_changed_in_expr(cond, context, words).values
-	let steps = bounding_turn_steps(walk, body, outside, changed, facts, context, words, ask)
+	let mut pairs: Vec[(String, String)] = []
+	let steps = bounding_turn_steps(walk, body, outside, changed, facts, context, words, ask, pairs)
 	let mut turn_facts: Vec[i64] = []
 	let mut step: Vec[(String, i64, i64, i64?)] = []
 	let mut others: Vec[(String, i64, i64, i64?)] = []
@@ -5578,6 +5579,9 @@ fn bounding_while(
 		for fact in bounding_turn_bounds(walk, facts, others, t) {
 			turn_facts.push(fact)
 		}
+	}
+	for fact in bounding_pair_bounds(walk, facts, pairs, counter) {
+		turn_facts.push(fact)
 	}
 	bounding_loop_change(walk, facts, changed, cands)
 	for fact in invariant {
@@ -5857,12 +5861,33 @@ fn bounding_steps_down(
 /// **What one turn adds to each name it changes only by constants**
 /// (ADR-361 D13): `names[k]` grows by at least `low[k]` and at most
 /// `high[k]` along every path from the head of a turn to its end; `live`
-/// where a path still runs.
+/// where a path still runs. `gap_low[a * n + b]` and `gap_high[a * n +
+/// b]`, `n` the number of names, are the least and the most `names[a]`
+/// grows by beyond `names[b]` along one path (#1634): what makes the
+/// relation between two counters an induction too.
 struct BoundsSteps {
 	names: Vec[String],
 	low: Vec[i64],
 	high: Vec[i64],
+	gap_low: Vec[i64],
+	gap_high: Vec[i64],
 	live: bool,
+}
+
+/// `state.names[k]` grows by `by` along the path: its sums, and its gap to
+/// each other name.
+fn bounding_steps_add(mut state: BoundsSteps, k: i64, by: i64) {
+	state.low[k] += by
+	state.high[k] += by
+	let n = state.names.len()
+	for j in 0..<n {
+		if j != k {
+			state.gap_low[k * n + j] += by
+			state.gap_high[k * n + j] += by
+			state.gap_low[j * n + k] -= by
+			state.gap_high[j * n + k] -= by
+		}
+	}
 }
 
 /// `a` and `b` joined: the paths of either.
@@ -5873,6 +5898,8 @@ fn bounding_steps_join(mut a: BoundsSteps, b: ref BoundsSteps) {
 	if !a.live {
 		a.low = b.low.clone()
 		a.high = b.high.clone()
+		a.gap_low = b.gap_low.clone()
+		a.gap_high = b.gap_high.clone()
 		a.live = true
 		return
 	}
@@ -5882,6 +5909,14 @@ fn bounding_steps_join(mut a: BoundsSteps, b: ref BoundsSteps) {
 		}
 		if b.high[k] > a.high[k] {
 			a.high[k] = b.high[k]
+		}
+	}
+	for k in 0..<a.gap_low.len() {
+		if b.gap_low[k] < a.gap_low[k] {
+			a.gap_low[k] = b.gap_low[k]
+		}
+		if b.gap_high[k] > a.gap_high[k] {
+			a.gap_high[k] = b.gap_high[k]
 		}
 	}
 }
@@ -5903,6 +5938,12 @@ fn bounding_steps_join(mut a: BoundsSteps, b: ref BoundsSteps) {
 /// ends at most its adds since above that value, so `n - n@ <= high * t`
 /// still holds, and `n` stays at or above the least constant (the fourth
 /// part, its `low` 0).
+///
+/// **Two counters a turn raises together** (#1634, ADR-361 D5 item 2's
+/// octagons): `(n, m)` goes into `pairs` where both only grow, neither is
+/// set back, and no path of a turn raises `n` more than `m`; then `n - n@
+/// <= m - m@` holds at each head by the same induction, whether or not
+/// anything counts the turns (`while a < cap { if c { a += 1; b += 1 } }`).
 fn bounding_turn_steps(
 	mut walk: BoundsWalk,
 	body: ref Block,
@@ -5912,8 +5953,9 @@ fn bounding_turn_steps(
 	context: ref BoundsContext,
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	mut pairs: Vec[(String, String)],
 ) -> Vec[(String, i64, i64, i64?)] {
-	let mut start = BoundsSteps { names: [], low: [], high: [], live: true }
+	let mut start = BoundsSteps { names: [], low: [], high: [], gap_low: [], gap_high: [], live: true }
 	for x in changed.values {
 		if walk.pinned.contains(path_root(x)) || outside.contains(x) || !facts.ints.contains(x) {
 			continue
@@ -5972,10 +6014,16 @@ fn bounding_turn_steps(
 	if start.names.is_empty() {
 		return []
 	}
+	for _ in 0..<(start.names.len() * start.names.len()) {
+		start.gap_low.push(0)
+		start.gap_high.push(0)
+	}
 	let mut ends = BoundsSteps {
 		names: start.names.clone(),
 		low: start.low.clone(),
 		high: start.high.clone(),
+		gap_low: start.gap_low.clone(),
+		gap_high: start.gap_high.clone(),
 		live: false,
 	}
 	let mut bad: collections::BTreeSet[String] = collections::BTreeSet()
@@ -6008,7 +6056,29 @@ fn bounding_turn_steps(
 			out.push((name, 0, ends.high[k], least))
 		}
 	}
+	let n = ends.names.len()
+	for a in 0..<n {
+		for b in 0..<n {
+			if a != b
+				&& ends.gap_high[a * n + b] <= 0
+				&& bounding_steps_rising(out, ends.names[a])
+				&& bounding_steps_rising(out, ends.names[b]) {
+					pairs.push((ends.names[a].clone(), ends.names[b].clone()))
+				}
+		}
+	}
 	return out
+}
+
+/// Whether `name` is one of the counters `steps` found that only grows and
+/// is never set back.
+fn bounding_steps_rising(steps: ref Vec[(String, i64, i64, i64?)], name: ref String) -> bool {
+	for (each, low, high, floor) in steps {
+		if each == name {
+			return floor == null && low >= 0 && high > 0
+		}
+	}
+	return false
 }
 
 fn bounding_steps_block(
@@ -6044,8 +6114,7 @@ fn bounding_steps_block(
 				}
 				let back = bounding_step_literal(value)
 				if by != null && k < state.names.len() {
-					state.low[k] += by ?? 0
-					state.high[k] += by ?? 0
+					bounding_steps_add(state, k, by ?? 0)
 				} else if op == null && back != null && k < state.names.len() {
 					// Set back to a constant: what the turn adds counts
 					// from here (`bounding_turn_steps`).
@@ -6086,6 +6155,8 @@ fn bounding_steps_block(
 						names: state.names.clone(),
 						low: state.low.clone(),
 						high: state.high.clone(),
+						gap_low: state.gap_low.clone(),
+						gap_high: state.gap_high.clone(),
 						live: state.live,
 					}
 					bounding_steps_block(then_branch, state, ends, bad, resets, context, words)
@@ -6139,8 +6210,7 @@ fn bounding_steps_push(
 	for name in assigned_in_expr(args[0], words) {
 		bad.insert(name.clone())
 	}
-	state.low[k] += 1
-	state.high[k] += 1
+	bounding_steps_add(state, k, 1)
 	return true
 }
 
@@ -6289,24 +6359,7 @@ fn bounding_turn_bounds(
 ) -> Vec[i64] {
 	let mut out: Vec[i64] = []
 	for (name, low, high, floor) in steps {
-		// A length's copy is named outside the list's path: what the loop
-		// changes of the list does not take it away.
-		let entry = if name.ends_with(".len()") { f"#{walk.entries}:{name}" } else {
-			f"{name}#{walk.entries}"
-		}
-		walk.entries += 1
-		let e = walk.arena.var(entry)
-		let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
-		given.insert(name.clone(), e)
-		let mut copies: Vec[i64] = []
-		for fact in facts.facts {
-			if walk.arena.mentions(fact, name) {
-				copies.push(walk.arena.substitute(fact, given))
-			}
-		}
-		for copy in copies {
-			bounding_push(walk, facts, copy)
-		}
+		let e = bounding_entry_value(walk, facts, name)
 		let now = walk.arena.var(name)
 		let moved = walk.arena.sub(now, e)
 		let least = walk.arena.int(low)
@@ -6321,6 +6374,67 @@ fn bounding_turn_bounds(
 			out.push(walk.arena.ge(moved, lowest))
 		}
 		out.push(walk.arena.le(moved, ceiling))
+	}
+	return out
+}
+
+/// **A name for the value `name` has where a loop is reached**, handed
+/// back as a term; what held of that value is pushed onto `facts` (the
+/// facts the loop is reached with, before its changes are taken away). A
+/// length's copy is named outside the list's path: what the loop changes
+/// of the list does not take it away.
+fn bounding_entry_value(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String) -> i64 {
+	let entry = if name.ends_with(".len()") { f"#{walk.entries}:{name}" } else {
+		f"{name}#{walk.entries}"
+	}
+	walk.entries += 1
+	let e = walk.arena.var(entry)
+	let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	given.insert(name.clone(), e)
+	let mut copies: Vec[i64] = []
+	for fact in facts.facts {
+		if walk.arena.mentions(fact, name) {
+			copies.push(walk.arena.substitute(fact, given))
+		}
+	}
+	for copy in copies {
+		bounding_push(walk, facts, copy)
+	}
+	return e
+}
+
+/// **The relations of `pairs` at each head of a turn** (#1634): `n - n@
+/// <= m - m@` for each `(n, m)`, with fresh names for the values where the
+/// loop is reached (`bounding_entry_value`); none that reads `skip`, the
+/// name that counts the turns, whose own facts already say it. At most
+/// eight, so a loop of many counters does not swell the facts.
+fn bounding_pair_bounds(
+	mut walk: BoundsWalk,
+	mut facts: BoundsFacts,
+	pairs: ref Vec[(String, String)],
+	skip: ref String,
+) -> Vec[i64] {
+	let mut out: Vec[i64] = []
+	let mut entered: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	for (n, m) in pairs {
+		if out.len() >= 8 || n == skip || m == skip {
+			continue
+		}
+		if !entered.contains_key(n) {
+			let e = bounding_entry_value(walk, facts, n)
+			entered.insert(n.clone(), e)
+		}
+		if !entered.contains_key(m) {
+			let e = bounding_entry_value(walk, facts, m)
+			entered.insert(m.clone(), e)
+		}
+		let n_then = entered.get(n) ?? continue
+		let m_then = entered.get(m) ?? continue
+		let n_now = walk.arena.var(n)
+		let m_now = walk.arena.var(m)
+		let n_moved = walk.arena.sub(n_now, n_then)
+		let m_moved = walk.arena.sub(m_now, m_then)
+		out.push(walk.arena.le(n_moved, m_moved))
 	}
 	return out
 }
@@ -6825,7 +6939,8 @@ fn bounding_for(
 	for binding in bindings {
 		outside.insert(words.resolve(binding).clone())
 	}
-	let steps = bounding_turn_steps(walk, body, outside, changed, facts, context, words, ask)
+	let mut pairs: Vec[(String, String)] = []
+	let steps = bounding_turn_steps(walk, body, outside, changed, facts, context, words, ask, pairs)
 	let mut turn_facts: Vec[i64] = []
 	// The turns the loop ends with when no `break` leaves it: a range's
 	// span where its start lies at or below its end, a collection's length.
@@ -7455,11 +7570,22 @@ fn bounding_built(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String
 			let fact = walk.arena.equal(len, copied)
 			bounding_push(walk, facts, fact)
 		},
-		// Each list field of a literal, as its value is built.
+		// Each list field of a literal, as its value is built; a field given
+		// a whole-number literal holds it (#1634: `Tally { seen: 0 }` starts
+		// a counter a loop then raises).
 		Expr::StructLit { fields, .. } => {
 			for field in fields {
 				let given = field.value ?? continue
-				bounding_built(walk, facts, f"{name}.{words.resolve(field.name)}", given, words)
+				let path = f"{name}.{words.resolve(field.name)}"
+				let literal = bounding_step_literal(given)
+				if literal != null {
+					let v = walk.arena.var(path)
+					let c = walk.arena.int(literal ?? 0)
+					let fact = walk.arena.equal(v, c)
+					bounding_push(walk, facts, fact)
+					facts.ints.insert(path.clone())
+				}
+				bounding_built(walk, facts, path, given, words)
 			}
 		},
 		else => {},

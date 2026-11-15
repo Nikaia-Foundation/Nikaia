@@ -1,0 +1,27 @@
+// #1634 (ADR-361 D7, D13): a counter no bound of its loop reaches stays
+// checked, and the report names the loop that raises it. `forever`'s loop
+// leaves only where `n` meets `target`, which a negative `target` never
+// does: no exit test bounds it from above; `twice` raises `n` by two where
+// its turns grow `i` by one, which can pass `i64::MAX` when `m` is near it.
+fn forever(target: i64) -> i64 sync {
+	let mut n: i64 = 0
+	while n != target {
+		n += 1
+	}
+	return n
+}
+
+fn twice(m: i64) -> i64 sync {
+	let mut i: i64 = 0
+	let mut n: i64 = 0
+	while i < m {
+		i += 1
+		n += 1
+		n += 1
+	}
+	return n
+}
+
+fn main() throws {
+	println(f"{forever(2)} {twice(3)}")
+}
