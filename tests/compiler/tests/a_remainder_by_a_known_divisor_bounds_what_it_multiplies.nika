@@ -1,0 +1,32 @@
+/// `x % m` for a known `m > 0` lies within `-(m - 1)..=m - 1`, and within
+/// `0..=m - 1` where it is known not negative (ADR-306 D8, D32, #1643): the
+/// `*` and `+` of `next` are proved; the edge is `m - 1` exactly, so the
+/// product one past it stays checked, as does a remainder by an unknown `m`.
+fn next(state: i64) -> i64 {
+	let s = state % 1000003
+	if s < 0 { return 0 }
+	return s * 1103515245 + 12345
+}
+
+fn either_sign(state: i64) -> i64 {
+	let s = state % 1000003
+	return s * 4611676795073
+}
+
+fn one_past(state: i64) -> i64 {
+	let s = state % 1000003
+	return s * 4611676795074
+}
+
+fn unknown(state: i64, m: i64) -> i64 {
+	let s = state % m
+	if s < 0 { return 0 }
+	return s * 1103515245 + 12345
+}
+
+fn main() throws {
+	println(next(2000010))
+	println(either_sign(-3))
+	println(one_past(2))
+	println(unknown(17, 5))
+}
