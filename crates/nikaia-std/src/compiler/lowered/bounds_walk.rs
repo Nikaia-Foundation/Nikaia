@@ -3202,7 +3202,7 @@ pub(crate) fn bounding_loop_walk(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut
 }
 
 pub(crate) fn bounding_loop_guesses(walk: &mut BoundsWalk, stmt: &Stmt, entry: &BoundsFacts, changed: &BoundsChanged, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Vec<i64> {
-    let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    #[allow(unused_mut)] let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     match stmt {
         Stmt::For { bindings, .. } => {
             for binding in bindings.iter() {
@@ -3256,6 +3256,16 @@ pub(crate) fn bounding_loop_guesses(walk: &mut BoundsWalk, stmt: &Stmt, entry: &
             }
         }
     }
+    let mut remainders: Vec<(String, i64)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
+    bounding_remainders_set(walk, body, entry, changed, context, program, words, &mut remainders);
+    for (name, most) in remainders.iter() {
+        let most = nikaia_std::num::value(most);
+        if nikaia_std::list::contains(&bound, &name) { continue; }
+        let n = walk.arena.var(name);
+        let zero = walk.arena.int(0);
+        let top = walk.arena.int(most);
+        for guess in [walk.arena.ge(n, zero), walk.arena.le(n, top)] { if !out.contains(&guess) { out.push(guess); } }
+    }
     for each in body.stmts.iter() {
         let guard = match bounding_break_guard(&each.node) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let denied = match bounding_denial(walk, &guard, entry, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -3267,6 +3277,41 @@ pub(crate) fn bounding_loop_guesses(walk: &mut BoundsWalk, stmt: &Stmt, entry: &
         }
     }
     out
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn bounding_remainders_set(walk: &mut BoundsWalk, block: &Block, entry: &BoundsFacts, changed: &BoundsChanged, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, out: &mut Vec<(String, i64)>) {
+    for each in block.stmts.iter() {
+        match &each.node {
+            Stmt::Assign { target, op, value } => {
+                let place = match path_of(target, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if place.contains('.') || !entry.ints.contains(&place) || !bounding_changes_name(changed, &place) { continue; }
+                let mut divisor: Option<Expr> = None;
+                if bounding_is_op((op).as_ref(), &BinaryOp::Rem) { divisor = Some(value.clone()); } else if op.is_none() {
+                    match value {
+                        Expr::Binary { op, rhs, .. } => {
+                            let rhs = nikaia_std::boxed::open(rhs);
+                            if *op == BinaryOp::Rem { divisor = Some(rhs.clone()); }
+                        },
+                        _ => { },
+                    }
+                }
+                let d = match divisor { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let term = match bounding_lin(walk, &d, entry, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let m = match walk.arena.constant(term) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if m >= 1 { out.push((nikaia_std::block::Text::from(place.to_string()), unsafe { nikaia_std::proven::sub::<i64>(m, 1) })); }
+            },
+            Stmt::Expr(expr) => { match expr {
+                Expr::If { then_branch, else_branch, .. } => {
+                    bounding_remainders_set(walk, then_branch, entry, changed, context, program, words, out);
+                    let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    bounding_remainders_set(walk, other, entry, changed, context, program, words, out);
+                },
+                _ => { },
+            }; },
+            _ => { },
+        }
+    }
 }
 
 pub(crate) fn bounding_restated(walk: &mut BoundsWalk, entry: &BoundsFacts, changed: &BoundsChanged, a: i64, b: i64) -> Vec<i64> {

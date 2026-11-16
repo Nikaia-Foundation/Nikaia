@@ -5680,6 +5680,25 @@ fn bounding_loop_guesses(
 			}
 		}
 	}
+	// **A name a turn sets to a remainder lies inside what its divisor
+	// leaves** (#1690): `state = (state * a + c) % m`, `m` a constant, offers
+	// `0 <= state` and `state <= m - 1`, asked where the loop is reached and
+	// kept through each turn as any other.
+	let mut remainders: Vec[(String, i64)] = []
+	bounding_remainders_set(walk, body, entry, changed, context, program, words, remainders)
+	for (name, most) in remainders {
+		if bound.contains(name) {
+			continue
+		}
+		let n = walk.arena.var(name)
+		let zero = walk.arena.int(0)
+		let top = walk.arena.int(most)
+		for guess in [walk.arena.ge(n, zero), walk.arena.le(n, top)] {
+			if !out.contains(guess) {
+				out.push(guess)
+			}
+		}
+	}
 	for each in body.stmts {
 		let guard = bounding_break_guard(each.node) ?? continue
 		let denied = bounding_denial(walk, guard, entry, context, program, words) ?? continue
@@ -5695,6 +5714,59 @@ fn bounding_loop_guesses(
 		}
 	}
 	return out
+}
+
+/// The whole-number names of `changed` that `block` sets to `e % m` or by
+/// `x %= m`, at any depth of its `if`s, with `m - 1` for `m` a constant of at
+/// least one (#1690).
+fn bounding_remainders_set(
+	mut walk: BoundsWalk,
+	block: ref Block,
+	entry: ref BoundsFacts,
+	changed: ref BoundsChanged,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	mut out: Vec[(String, i64)],
+) {
+	for each in block.stmts {
+		match each.node {
+			Stmt::Assign { target, op, value } => {
+				let place = path_of(target, words) ?? continue
+				if place.contains(".") || !entry.ints.contains(place) || !bounding_changes_name(changed, place) {
+					continue
+				}
+				let mut divisor: Expr? = null
+				if bounding_is_op(op, BinaryOp::Rem) {
+					divisor = value.clone()
+				} else if op == null {
+					match value {
+						Expr::Binary { op, rhs, .. } => {
+							if op == BinaryOp::Rem {
+								divisor = rhs.clone()
+							}
+						},
+						else => {},
+					}
+				}
+				let d = divisor ?? continue
+				let term = bounding_lin(walk, d, entry, context, program, words) ?? continue
+				let m = walk.arena.constant(term) ?? continue
+				if m >= 1 {
+					out.push((place.clone(), m - 1))
+				}
+			},
+			Stmt::Expr(expr) => match expr {
+				Expr::If { then_branch, else_branch, .. } => {
+					bounding_remainders_set(walk, then_branch, entry, changed, context, program, words, out)
+					let other = else_branch ?? continue
+					bounding_remainders_set(walk, other, entry, changed, context, program, words, out)
+				},
+				else => {},
+			},
+			else => {},
+		}
+	}
 }
 
 /// **What held of the value a changed name starts with, said of the name**
