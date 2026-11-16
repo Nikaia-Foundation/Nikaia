@@ -327,6 +327,9 @@ struct FnDecl {
     /// callee owns what is handed there, so it is never lent, even where the
     /// body only hands it back.
     keeps: Vec[bool],
+    /// The options declared `String` or `String?` (#1740): each crosses as
+    /// the text of its own its type says, as its default does (ADR-282 D29).
+    text_options: collections::BTreeSet[String],
     result: Type?,
     published: bool,
     /// A method of a trait's: its signature is the trait's.
@@ -443,13 +446,13 @@ fn declare_rules(def: ref GrammarDef, names: ref winnow_grammar::InternerContext
     for rule in def.rules {
         let key = f"{gname}::{names.resolve(rule.name)}"
         declared.rules.insert(key.clone())
-        declared.fns.insert(key, FnDecl { params: [], changes: [], keeps: [], result: rule.ret_type?.clone(), published: def.public && rule.is_entry, of_a_trait: false, changes_self: false })
+        declared.fns.insert(key, FnDecl { params: [], changes: [], keeps: [], text_options: collections::BTreeSet(), result: rule.ret_type?.clone(), published: def.public && rule.is_entry, of_a_trait: false, changes_self: false })
     }
 }
 
 fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::InternerContext, mut declared: TextDeclared, of_a_trait: bool) {
-    let (name, receiver, args, ret_type, is_public) = match item {
-        Item::Fn { name, receiver, args, ret_type, is_public, .. } => (name, receiver, args, ret_type, is_public),
+    let (name, receiver, args, config, ret_type, is_public) = match item {
+        Item::Fn { name, receiver, args, config, ret_type, is_public, .. } => (name, receiver, args, config, ret_type, is_public),
         else => return,
     }
     let changes_self = receiver?.is_mut ?? false
@@ -466,7 +469,13 @@ fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::
         changes.push(arg.mutable)
         keeps.push(arg.keep)
     }
-    declared.fns.insert(key, FnDecl { params: params, changes: changes, keeps: keeps, result: ret_type?.clone(), published: is_public || of_a_trait, of_a_trait: of_a_trait, changes_self: changes_self })
+    let mut text_options: collections::BTreeSet[String] = collections::BTreeSet()
+    for option in config {
+        if plain_string(names, option.ty) {
+            text_options.insert(names.resolve(option.name).clone())
+        }
+    }
+    declared.fns.insert(key, FnDecl { params: params, changes: changes, keeps: keeps, text_options: text_options, result: ret_type?.clone(), published: is_public || of_a_trait, of_a_trait: of_a_trait, changes_self: changes_self })
 }
 
 fn own_name(name: ref winnow_grammar::Symbol?, names: ref winnow_grammar::InternerContext) -> String {
@@ -5343,6 +5352,7 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         Expr::Call { func, args, config, .. } => {
             let kinds = call_kinds(func, args, ask, walk)
             std_option_lists(func, config, ask, walk)
+            program_option_texts(func, config, ask, walk)
             kinds
         },
         Expr::Field { base, .. } => field_kinds(expr, base, ask, walk),
@@ -5889,6 +5899,24 @@ fn std_option_lists(func: ref Expr, config: ref Vec[ConfigArg], ask: ref TierAsk
             if a_followed(ask.names, whole.ty) && holds_text(ask.names, whole.ty) {
                 demote_inside(whole.owner, whole.ty, [], ask, walk)
             }
+        }
+    }
+}
+
+/// **A name bound to a literal, handed to a `String` option of this
+/// program's, is text of its own** (ADR-282 D17, D29, #1740): an option
+/// crosses as the text of its own its type says, as its default does, so
+/// the binding is declared `String`, as one handed to a `String` parameter
+/// is; a kept option takes it, a lent one is lent it.
+fn program_option_texts(func: ref Expr, config: ref Vec[ConfigArg], ask: ref TierAsk, mut walk: TierWalk) {
+    if config.len() == 0 {
+        return
+    }
+    let callee = tier_callee(func, ask) ?? return
+    let function = walk.declared.fns[callee]?.clone() ?? return
+    for option in config {
+        if function.text_options.contains(ask.names.resolve(option.name)) {
+            owned_literal_lets(option.value, ask, walk)
         }
     }
 }
@@ -7145,6 +7173,25 @@ fn decide_tiers(flows: ref Flows, declared: ref TextDeclared, mut demoted: colle
     }
     for word in only_read {
         out.remove(word)
+    }
+    // **A name bound to a literal stays one binding** (ADR-282 D17, #1740):
+    // a parameter it is kept in that is only read takes text of its own just
+    // above, so the binding is declared `String`, and a static view it is
+    // kept in beside (a `String?` parameter) takes text of its own too.
+    for (_, kept) in flows.literal_lets {
+        let mut owned = false
+        for word in kept {
+            if only_read.contains(word) {
+                owned = true
+            }
+        }
+        if owned {
+            for word in kept {
+                if lasting_tier(out[word]?.clone() ?? Tier::Owned) {
+                    out.remove(word)
+                }
+            }
+        }
     }
     for word in flows.viewed {
         out.insert(word.clone(), Tier::View)

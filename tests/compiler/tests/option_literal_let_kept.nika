@@ -1,0 +1,15 @@
+// A name bound to a literal, handed to a `String` option that keeps it
+// (#1740): the binding is text of its own, as for a `String` parameter.
+fn keep(mut all: Vec[String]; s: String = "default") {
+    all.push(s)
+}
+
+fn main() throws {
+    let mut all: Vec[String] = []
+    let b = "bound"
+    keep(all; s: b)
+    keep(all)
+    println(all.len())
+    println(all[0])
+    println(all[1])
+}

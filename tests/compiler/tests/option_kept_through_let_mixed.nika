@@ -1,0 +1,41 @@
+// An option kept through a `let` or a `match` into a list of both kinds of
+// text (#1740): the wrap into the mixed list hands on what it wraps.
+fn through_let(mut all: Vec[String]; s: String = "d") {
+    let v = s
+    all.push(v)
+}
+
+fn through_match(mut all: Vec[String]; s: String? = null) {
+    match s {
+        null => {}
+        v => all.push(v),
+    }
+}
+
+fn lasting(mut all: Vec[String], s: String?) {
+    match s {
+        null => {}
+        v => all.push(v),
+    }
+}
+
+fn owned(mut all: Vec[String], s: String?) {
+    match s {
+        null => {}
+        v => all.push(v),
+    }
+}
+
+fn main() throws {
+    let mut all: Vec[String] = []
+    let a = "a"
+    lasting(all, a)
+    through_let(all; s: "b")
+    through_match(all; s: "c")
+    let n = 4
+    owned(all, n.to_string())
+    println(all.len())
+    for each in all {
+        println(each)
+    }
+}

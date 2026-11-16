@@ -201,6 +201,7 @@ pub(crate) struct FnDecl {
     pub(crate) params: Vec<Type>,
     pub(crate) changes: Vec<bool>,
     pub(crate) keeps: Vec<bool>,
+    pub(crate) text_options: collections::BTreeSet<String>,
     pub(crate) result: Option<Type>,
     published: bool,
     pub(crate) of_a_trait: bool,
@@ -282,7 +283,7 @@ pub(crate) fn declare_rules(def: &GrammarDef, names: &winnow_grammar::InternerCo
     for rule in def.rules.iter() {
         let key = format!("{}::{}", gname, names.resolve(rule.name));
         declared.rules.insert(nikaia_std::block::Text::from(key.to_string()));
-        declared.fns.insert(key, FnDecl { params: vec![], changes: vec![], keeps: vec![], result: match rule.ret_type.as_ref() {
+        declared.fns.insert(key, FnDecl { params: vec![], changes: vec![], keeps: vec![], text_options: collections::BTreeSet::new(), result: match rule.ret_type.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, published: def.public && rule.is_entry, of_a_trait: false, changes_self: false });
@@ -290,8 +291,8 @@ pub(crate) fn declare_rules(def: &GrammarDef, names: &winnow_grammar::InternerCo
 }
 
 pub(crate) fn declare_function(item: &Item, target: Option<&str>, names: &winnow_grammar::InternerContext, declared: &mut TextDeclared, of_a_trait: bool) {
-    let (name, receiver, args, ret_type, is_public) = match item {
-        Item::Fn { name, receiver, args, ret_type, is_public, .. } => { let is_public = *is_public; let name = *name; (name, receiver, args, ret_type, is_public) },
+    let (name, receiver, args, config, ret_type, is_public) = match item {
+        Item::Fn { name, receiver, args, config, ret_type, is_public, .. } => { let is_public = *is_public; let name = *name; (name, receiver, args, config, ret_type, is_public) },
         _ => return,
     };
     let changes_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
@@ -306,7 +307,9 @@ pub(crate) fn declare_function(item: &Item, target: Option<&str>, names: &winnow
         changes.push(arg.mutable);
         keeps.push(arg.keep);
     }
-    declared.fns.insert(key, FnDecl { params, changes, keeps, result: match ret_type {
+    let mut text_options: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for option in config.iter() { if plain_string(names, &option.ty) { text_options.insert(nikaia_std::block::Text::from(names.resolve(option.name).to_string())); } }
+    declared.fns.insert(key, FnDecl { params, changes, keeps, text_options, result: match ret_type {
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
     }, published: is_public || of_a_trait, of_a_trait, changes_self });
@@ -3798,6 +3801,7 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &m
             let func = nikaia_std::boxed::open(func);
             let kinds = call_kinds(func, args, ask, walk);
             std_option_lists(func, config, ask, walk);
+            program_option_texts(func, config, ask, walk);
             kinds
         },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); field_kinds(expr, base, ask, walk) },
@@ -4228,6 +4232,16 @@ pub(crate) fn std_option_lists(func: &Expr, config: &[ConfigArg], ask: &TierAsk<
             if a_followed(ask.names, &whole.ty) && holds_text(ask.names, &whole.ty) { demote_inside(&whole.owner, &whole.ty, &mut vec![], ask, walk); }
         }
     }
+}
+
+pub(crate) fn program_option_texts(func: &Expr, config: &[ConfigArg], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    if config.is_empty() { return; }
+    let callee = match tier_callee(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let function = match match *nikaia_std::index::get(&walk.declared.fns, &callee) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    for option in config.iter() { if function.text_options.contains(ask.names.resolve(option.name)) { owned_literal_lets(&option.value, ask, walk); } }
 }
 
 pub(crate) fn std_whole_list(value: &Expr, want: &Ty, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
@@ -5142,6 +5156,18 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
         }
     }
     for word in only_read.iter() { out.remove(word); }
+    for (_, kept) in flows.literal_lets.iter() {
+        let mut owned = false;
+        for word in kept.iter() { if only_read.contains(word) { owned = true; } }
+        if owned {
+            for word in kept.iter() {
+                if lasting_tier(&nikaia_std::index::or(match *nikaia_std::index::get(&out, word) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || Tier::Owned)) { out.remove(word); }
+            }
+        }
+    }
     for word in flows.viewed.iter() { out.insert(nikaia_std::block::Text::from(word.to_string()), Tier::View); }
     for (word, count) in flows.arm_uses.iter() {
         let count = nikaia_std::num::value(count);
