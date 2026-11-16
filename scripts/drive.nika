@@ -2204,16 +2204,28 @@ fn drive_found_title(found: String) -> String {
 // The body of an issue filed from a report's `Found:`: where it came from (the
 // brief, its issue), the Found, `Needs:` when it asks for something, a *To
 // build* and a *Done when* for the builder that takes it (docs/issues.md),
-// then the footer.
+// then the footer. The fix item names where a non-compiler Found is fixed
+// (#1769: a stale guide example read as a compiler defect to fix).
 fn drive_found_body(name: String, issue: String, found: String, needs: String) -> String {
 	let from = if issue == "" { f"the run of `{name}`" } else { f"the run of `{name}` (#{issue})" }
 	let mut body = f"Filed by the driver from the `Found:` of {from} (owner, 2026-11-06).\n\n## Found\n\n{found.trim()}\n"
 	if needs != ""
 		&& drive_word(needs) != "none" { body = body + f"\n## Needs\n\n{needs.trim()}\n" }
 	body = body
-		+ "\n## To build\n\n- [ ] Reproduce the Found: a compiler, lowering or `std` defect with a probe (`nikaia run scripts/probe.nika -- SNIPPET`), a defect in `docs/` or `scripts/` with the command or check that shows it; a behaviour the code does on purpose (name the function or ADR) closes it as by design. The Found line may lack them (#1710): the commit message, or the report's `Body:` when closed, gives the probe or check with its expected output, the ADR or Part I-III section that says so, and its actual output (docs/issues.md I5, I6), and the cause, file and function, traced or suspected (I7).\n- [ ] Fix it where it lives, with a test in `tests/compiler/tests/`, unless a check that already runs (name it, e.g. `check-adr-refs.py` for a docs citation) turns red on it.\n"
+		+ "\n## To build\n\n- [ ] Reproduce the Found: a compiler, lowering or `std` defect with a probe (`nikaia run scripts/probe.nika -- SNIPPET`), a defect in `docs/`, `guide/`, `website/` or `scripts/` (a stale example, a wrong rule) with the command or check that shows it; a behaviour the code does on purpose (name the function or ADR) closes it as by design. The Found line may lack them (#1710): the commit message, or the report's `Body:` when closed, gives the probe or check with its expected output, the ADR or Part I-III section that says so, and its actual output (docs/issues.md I5, I6), and the cause, file and function, traced or suspected (I7).\n- [ ] Fix it in the file where it lives: a compiler, lowering or `std` defect in the compiler, a stale page example or rule in its page or `docs/` file, a script defect in the script. Add a test in `tests/compiler/tests/` unless a check that already runs turns red on it (name it: pre-push's `page-examples` for `guide/` and `website/`, `check-adr-refs.py` for a docs citation).\n"
 	body = body + "\n## Done when\n\nThe probe or check gives the expected output the first item names from its ADR or Part I-III section, and a `tests/compiler/tests/` test (or the named check) that failed on the unfixed tree is green; or the issue is closed as by design, naming the function or ADR.\n"
 	return body + drive_footer()
+}
+
+// The report's `Needs:` as it goes with each of its COUNT Founds: whole
+// when there is one, "" when there are several, since a report has one
+// `Needs:` and it cannot say which Found it asks for (#1769: #1675's run
+// gave a stale guide example the `Needs:` of its other Found). A Found that
+// waits on a decision says `no decision yet` itself (drive_found_labels); the
+// `Needs:` still reaches the improvement issue (drive_improve_items).
+fn drive_found_needs(count: int, needs: String) -> String {
+	if count == 1 { return needs }
+	return ""
 }
 
 // Files a report's `Found:` as an issue (owner, 2026-11-06): labels
@@ -2225,10 +2237,11 @@ fn drive_found_file(dir: String, brief: String) throws {
 	let report = drive_report_of(brief.clone())
 	if report == "" { return }
 	let text = drive_read(report)
-	let needs = drive_field(text.clone(), "Needs")
+	let founds = drive_founds(text.clone())
+	let needs = drive_found_needs(founds.len(), drive_field(text, "Needs"))
 	let name = drive_stem(brief.clone())
 	let issue = drive_issue(brief)
-	for found in drive_founds(text) {
+	for found in founds {
 		let body = drive_found_body(name.clone(), issue.clone(), found.clone(), needs.clone())
 		let number = drive_issue_new(
 			drive_found_title(found),
@@ -3207,6 +3220,18 @@ fn main() throws {
 		println(drive_found_title(args[4].clone()))
 		println(drive_found_labels(args[4].clone(), args[5].clone()).join(","))
 		print(drive_found_body(args[2].clone(), args[3].clone(), args[4].clone(), args[5].clone()))
+		return
+	}
+	// Each issue drive_found_file would file from the report REPORT of run
+	// NAME (issue ISSUE): labels, then body (#1769).
+	if args.len() == 5 && args[1] == "--found-issues" {
+		let text = drive_read(args[4].clone())
+		let founds = drive_founds(text.clone())
+		let needs = drive_found_needs(founds.len(), drive_field(text, "Needs"))
+		for found in founds {
+			println(drive_found_labels(found.clone(), needs.clone()).join(","))
+			print(drive_found_body(args[2].clone(), args[3].clone(), found, needs.clone()))
+		}
 		return
 	}
 	if args.len() == 5 && args[1] == "--improve-issue" {
