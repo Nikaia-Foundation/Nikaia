@@ -420,6 +420,22 @@ it, like the checks in `docs/supervisor.md`.
   the figure measured before (#1470: "1.2 times its time" without a
   baseline cost a run its measuring), and names any recomputation the
   pass already does per body that the change would multiply.
+  A time figure names the commit it was measured on (subject and date,
+  as I8a asks of a count). An issue that makes `lower-std` faster gives
+  the split by pass from one `NIKAIA_LOWER_TIMES=1 lower-std` run (the
+  phase totals of `Phases` in `sysroot.rs` and the ledger's per-pass
+  times of `InferHost::timed` in `contracts/mod.rs`), and its items cover the largest passes or
+  say why one is left out (#1914: #1308 gave the ledger 11.0 s; its run
+  measured 47.7 s at 7293a57a, 28.6 s of it the `panics` pass no item
+  named).
+  An item that adds or changes Rust names what allows it under
+  CLAUDE.md's *no new Rust*: the exception it falls under (the
+  specification lanes, a clap flag in `main.rs`), the owner's or the
+  supervisor's decision by date and issue, or a move of that Rust into
+  Nikaia ordered first. Without one it says `no decision yet` and is a
+  `decision` (I6) (#1914: #1308 ordered per-function entry points in the
+  Rust passes of `contracts/*.rs` and an on-disk form of the Rust
+  `Checked`, and its run stopped for the decision, #1913).
   Several steps in one pass get one limit on the whole run, or a per-step
   limit only where that step's own cost was measured or estimated (#1470: a
   1.2 times limit per probe could not hold the cost of D25's own checks).
