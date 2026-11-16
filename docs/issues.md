@@ -307,6 +307,17 @@ it, like the checks in `docs/supervisor.md`.
   none exists yet (a `decision`, I6). Its probe holds those writes, since
   without writes no field rule is found (#1719: #1668's step asked for an
   element rule on `place`, which holds `-1`, against `heap`, which shrinks).
+  The form that excludes them is checked as an induction step, not on the
+  states the program reaches: pick any state the rule allows, run each
+  `mut self` method on it, and the rule must hold after. A write that
+  picks its element through another relation ("the element that pointed
+  past the new end") makes that relation part of the rule (`heap[place[v]]
+  == v`), and the decision names how the walk would state it; a relation
+  the prover's terms cannot say (`prover_arena.nika`: linear terms over
+  integers, no element read) is a gap, a `decision` (I6), not an item.
+  The issue writes the induction step out with the state tried (#1891:
+  #1718's decided rule held at `heap=[0,1], place=[0,1,1]` and broke after
+  `pop`, since only the pair link tells which element to set to `-1`).
   A probe that stands for sites keeps, at each site, the expression that
   builds the indexed value (a loop that pushes, an `if` expression, a
   `.clone()`, a field read), and the issue quotes those lines of one real
