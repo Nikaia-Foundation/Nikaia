@@ -120,7 +120,7 @@ together with the specification section and an example test.
 * A rustc "temporary dropped while borrowed" or "mismatched types" on text usually comes from the text-tier pass (`text_tiers.nika`, ADR-282), not the keep code: lower the probe and check whether a `Vec[String]` became `Vec<&str>`. (issue-1287)
 * `.to_string()` of text is emitted as the bare receiver (`text_as_is`, ADR-282 D8); copying text out of a view is `.clone()`, and a kept view of a temporary is NK1102 by design. (issue-1287)
 * `nikaia test --filter X` prints no `test result` line when nothing matches, so a wait loop that counts result lines never ends. (issue-1287)
-* `nikaia check` on a single `crates/nikaia-std/src/compiler/*.nika` fails with NK1135 for imported types (`Span`); only the `lower-std` cycle checks a tool file. (issue-1289)
+* `nikaia check` on a single `crates/nikaia-std/src/compiler/*.nika` fails with NK1135 for imported types (`Span`); only the `lower-std` cycle checks a tool file. Its first step needs no build: after each edit of a tools file run `$S/old/nikaia lower-std` alone (seconds to a minute, one file re-lowered), and fix what it refuses before the 5-minute build (`let mut v = ""` later given a `String` is NK1105 by ADR-282; start it as `String()`). (issue-1289, #1764)
 * `nikaia lower F.nika` in the scratchpad writes `F.rs` beside it; read `__nikaia_main` there before guessing at an emitter cause. (issue-1289)
 * `scripts/pre-push.nika` checks only what is staged, so run it after `git add` of your files, or it is green on nothing. (issue-1290)
 * `cargo test -p nikaia-std --lib emit_core_args::` matches no test, because lowered modules have no unit tests; skip it for a `tools/*.nika` change. (issue-1290)
