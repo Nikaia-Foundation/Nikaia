@@ -8,6 +8,18 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1404] — 2026-11-16
+
+**Builders' changes (#1805, #1808, #1832, #1836, #1839, #1841, #1842, #1846, #1863)**
+- Bounds: compiler functions no other package or Rust host calls are private, so the walk derives their preconditions; a private function another file calls keeps its published text tier (part of #1831).
+- Bounds: derived preconditions also over field paths of a parameter, non-zero divisors, non-empty lists and non-overflowing steps (ADR-391 D1 widened, #1832).
+- Bounds: --bounds names the gate of a parameter no precondition bounds, and the walk visits a range's ends (#1863).
+- Bounds: a capped bound stands past a loop that shortens the list only through methods of its own value (#1808).
+- A match on a part bound out of a lent parameter binds through the reference, without ref (#1805); a text item a walk lends is looked up as the str it holds.
+- Emitter: a function value failing in a sum hands each member on to its caller's channel (#1836); a program's own Result or Option no longer hides the prelude's (#1846).
+- Coalesce: m[k] ?? name over a map of a word takes the fallback as it is (#1841); a simd vector or time::Duration read out of a map with ?? is a copy (#1842).
+- nikaia run: the run bundle's fingerprint also walks std's path dependencies, so an edit there rebuilds the runtime (#1839).
+
 ## [0.0.1403] — 2026-11-16
 
 **Builders' changes (#1613, #1614, #1615, #1806)**
