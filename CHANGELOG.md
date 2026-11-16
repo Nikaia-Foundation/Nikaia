@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1415] — 2026-11-16
+
+**Builders' changes (#1943)**
+- Bounds: a field another file writes through a list item, a clone() or a for binding of another type no longer takes a found rule away (sv_simplex `self.values[s]` proved).
+
 ## [0.0.1414] — 2026-11-16
 
 **Builders' changes (#1930)**
