@@ -480,6 +480,7 @@ pub struct ProjectTestsRan {
     pub stdout: Bytes,
     pub stderr: Bytes,
     pub timed_out: bool,
+    pub capped: i64,
 }
 
 pub(crate) fn project_tests_time_limit() -> i64 {
@@ -488,6 +489,19 @@ pub(crate) fn project_tests_time_limit() -> i64 {
         true => given,
         false => 300,
     }
+}
+
+pub(crate) fn project_tests_process_limit() -> i64 {
+    let given = nikaia_std::index::or(text::parse_i64(nikaia_std::index::or(env::var("NIKAIA_TEST_PROCESS_LIMIT"), || "".into()).trim()), || 0);
+    match given > 0 {
+        true => given,
+        false => 4096,
+    }
+}
+
+pub(crate) fn project_tests_capped_outcome(cap: i64, stdout: Bytes, said: &str) -> ProjectTestsOutcome {
+    let shown = format!("ran into its cap of {} processes and threads (NIKAIA_TEST_PROCESS_LIMIT): a fork or a thread past it was refused, and every process it started was ended\n{}", cap, said);
+    ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout, stderr: shown, files: vec![], bounds: vec![] }
 }
 
 pub(crate) fn project_tests_build_time_limit() -> i64 {
@@ -514,11 +528,11 @@ pub(crate) fn project_tests_build_timed_out_outcome(limit: i64, said: &str) -> P
 
 pub trait ProjectTestsProgramHost {
     fn package_name(&self, root: &std::path::Path) -> Result<Option<String>, std::boxed::Box<dyn std::error::Error>>;
-    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
+    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
     fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, std::boxed::Box<dyn std::error::Error>>;
-    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<Option<ProjectTestsRan>, std::boxed::Box<dyn std::error::Error>>;
+    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64) -> Result<Option<ProjectTestsRan>, std::boxed::Box<dyn std::error::Error>>;
     fn batched(&self, setting: &str, project: &std::path::Path, own: &std::path::Path, list: &std::path::Path, within: i64) -> Result<ProjectTestsBatchBuilt, std::boxed::Box<dyn std::error::Error>>;
-    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
+    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64, processes: i64) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -744,10 +758,12 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     let entry = project_tests_prepared(host, program, root, own).await?;
     let written = format!("tests/{}.nika", program.name);
     let limit = project_tests_time_limit();
+    let processes = project_tests_process_limit();
     match batched {
         None => { },
         Some(batch) => {
-            let out = host.ran_batched(&batch.binary, &program.name, root, own, &program.stdin, limit)?;
+            let out = host.ran_batched(&batch.binary, &program.name, root, own, &program.stdin, limit, processes)?;
+            if out.capped > 0 { return Ok(project_tests_capped_outcome(out.capped, out.stdout, &project_tests_relocated(&out.stderr, &batch.entry, &written, root))); }
             if out.timed_out { return Ok(project_tests_timed_out_outcome(limit, out.stdout, &project_tests_relocated(&out.stderr, &batch.entry, &written, root))); }
             let ran = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&out.stderr, &batch.entry, &written, root));
             let outcome = project_tests_bounds_outcome(program, &ran, &nikaia_std::block::Text::from(reports.bounds.to_string()), &nikaia_std::block::Text::from(reports.asserts.to_string()));
@@ -758,15 +774,15 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     let report = nikaia_std::block::Text::from(reports.bounds.to_string());
     let asserts = nikaia_std::block::Text::from(reports.asserts.to_string());
     let building = project_tests_build_time_limit();
-    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]), building)?;
+    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]), building, 0)?;
     if built.timed_out { return Ok(project_tests_build_timed_out_outcome(building, &project_tests_relocated(&built.stderr, &entry, &written, root))); }
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, &project_tests_relocated(&built.stderr, &entry, &written, root));
         return Ok(project_tests_bounds_outcome(program, &refused, &report, &asserts));
     }
-    let ran = match host.built(&project, root, own, &program.stdin, limit)? {
+    let ran = match host.built(&project, root, own, &program.stdin, limit, processes)? {
         None => {
-            let out = host.compiler("run", setting, &project, root, own, &program.stdin, limit)?;
+            let out = host.compiler("run", setting, &project, root, own, &program.stdin, limit, processes)?;
             let said = out.stderr.copy_of();
             (out, said)
         },
@@ -776,6 +792,7 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
         },
     };
     let (out, said) = ran;
+    if out.capped > 0 { return Ok(project_tests_capped_outcome(out.capped, out.stdout, &project_tests_relocated(&said, &entry, &written, root))); }
     if out.timed_out { return Ok(project_tests_timed_out_outcome(limit, out.stdout, &project_tests_relocated(&said, &entry, &written, root))); }
     let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&said, &entry, &written, root));
     Ok(project_tests_bounds_outcome(program, &outcome, &report, &asserts))

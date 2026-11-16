@@ -1,0 +1,7 @@
+exit 1
+program "fine" (tests/fine.nika) ... ok
+program "forks_deep" (tests/forks_deep.nika) ... FAILED
+--- program "forks_deep" (tests/forks_deep.nika)
+test result: FAILED. 1 passed; 1 failed
+ran into its cap of 64 processes and threads (NIKAIA_TEST_PROCESS_LIMIT): a fork or a thread past it was refused, and every process it started was ended
+left 0

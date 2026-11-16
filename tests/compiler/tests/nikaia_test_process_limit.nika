@@ -1,0 +1,35 @@
+// #1919: `nikaia test` caps the processes and threads a test program may
+// hold (`NIKAIA_TEST_PROCESS_LIMIT`), so one that forks without end cannot
+// fill the machine's PID space: `forks_deep` starts a chain of `bash`
+// processes 300 levels deep, each waiting on the next, runs into a cap of 64,
+// fails with its name and the cap, and leaves no process of it behind.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"forking\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() {}\n")
+    fs::write(f"{tmp}/deep.sh", fs::Root::Anywhere, "if [ \"$1\" -gt 0 ]; then bash \"$0\" $(($1 - 1)); else sleep 600; fi\n")
+    fs::write(f"{tmp}/tests/fine.nika", fs::Root::Anywhere, "fn main() throws {\n    println(\"fine\")\n}\n")
+    fs::write(f"{tmp}/tests/fine.stdout", fs::Root::Anywhere, "fine\n")
+    fs::write(f"{tmp}/tests/forks_deep.nika", fs::Root::Anywhere, f"use std::process\n\nfn main() throws {{\n    process::run(\"bash\", [\"{tmp}/deep.sh\", \"300\"])\n}}\n")
+    let out = process::run(nikaia, ["test"]; dir: tmp.clone(), env: [("NIKAIA_TEST_PROCESS_LIMIT", "64"), ("NIKAIA_TEST_TIME_LIMIT", "120"), ("NIKAIA_TEST_BUILD_TIME_LIMIT", "0")])
+    println(f"exit {out.code}")
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.starts_with("program ") || line.starts_with("--- ") || line.starts_with("ran into") || line.starts_with("timed out") || line.starts_with("test result") {
+            println(line)
+        }
+    }
+    let left = process::run("sh", ["-c", f"ps -eo args | grep -F '{tmp}/deep.sh' | grep -vc grep"]).stdout.trim().clone()
+    println(f"left {left}")
+    process::run("rm", ["-rf", tmp])
+}
