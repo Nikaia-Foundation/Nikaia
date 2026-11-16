@@ -154,6 +154,14 @@ it, like the checks in `docs/supervisor.md`.
   #1654 named the `while` forms, proved on develop; only the `for` form
   failed, because `bounding_for` never asked the pair bounds
   `bounding_while` asks).
+  A probe of ownership (a move, a copy, a view handed out, a result
+  taken out of a block or a `ref` parameter) holds owned text made by a
+  call (`fn make() -> String { let mut g = String(); g.push_str("hi");
+  return g }`), never a literal: the text-tier pass (ADR-282) lowers
+  literal-filled text to `&str`, which is `Copy`, so the probe passes and
+  the premise drawn from it is wrong (#1908: #1651's item 1 rested on
+  probe h, `access` handing out a literal field; with owned text the
+  block moves out of `&T` and rustc refuses it, #1905).
 * **I6. The governing decision**: the ADR and its decision (`ADR-282 D7`) or
   the section of Part I-III that says what is right. Without one, the issue
   says "no decision yet" and is a `decision` issue, not a bug
