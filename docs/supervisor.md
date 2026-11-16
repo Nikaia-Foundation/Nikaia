@@ -523,6 +523,19 @@ own driver run:
   brief template, a check that turns builders red for nothing) it builds; noise
   (one run's slip, already fixed, a wish against an ADR) it closes with a
   one-line reason. An issue that is a compiler defect it relabels `bugs`.
+* **Safety lane, `docs/briefs/safety/`** (owner, 2026-11-16): the issues
+  labelled `safety`: that a program built with Nikaia cannot be attacked or
+  brought down. Data from outside that smuggles itself into a log, a query or
+  a command (injection); memory safety, ownership and sharing (doors, tasks,
+  `--sharing`); robustness when the program's own memory runs out; and the
+  rules that refuse an unsafe use of outside data (ADR-269 D6, ADR-396), as
+  rules and diagnostics. It does not make the prover stronger: where a rule
+  waits for a proof the prover cannot give, the lane files that for the solver
+  lane and the rule's issue is `blocked` on it.
+* **Solver lane** (owner, 2026-11-16): the issues labelled `solver`: proving.
+  The solver (ADR-270), the bounds walk and the prover behind `--bounds`
+  (indexes, divisors, overflow, relations between values, summaries), the
+  ledger's facts, and the verification of the backend.
 * **At least one active session runs the improvement lane and at least one the
   bug lane** (owner, 2026-11-15). A session that starts while neither runs takes
   one of them first.
