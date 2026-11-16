@@ -45,6 +45,15 @@ pub struct ProjectWords {
     /// default, refuses the program (`NK1300`); `warn` builds it, each such
     /// claim a warning and a check where it is reached.
     pub unproved_claims: String,
+    /// **What data from outside at a raw sink is, unproved and not allowed**
+    /// (ADR-raw-sinks-1 D3): `error`, the default, refuses the program
+    /// (`NK1308`); `warn` builds it, each such call a warning and a check
+    /// where it is reached. Read from the application's manifest only.
+    pub raw_sinks: String,
+    /// **The raw sinks this build allows** (ADR-raw-sinks-1 D4, D5): the
+    /// application's `[allow]` keys, a dependency's as `NAME:key`, and each
+    /// `--allow` word after them.
+    pub allow: Vec[String],
     /// **What is made** (ADR-284 D4): `"program"`; `"c-library"`, which
     /// exports every `pub extern fn` with a body and writes the header; or
     /// `"rust-library"`, the package as the lib crate `nikaia_<name>`
@@ -88,6 +97,15 @@ pub fn unproved_claims(word: String) -> String throws {
     return match word {
         "error" | "warn" => word,
         else => throw ProjectSettingsRefusal::Refused(f"`unproved-claims` is `error` or `warn`, not `{word}`. `error` refuses a program with a claim the compiler did not prove; `warn` builds it and checks the claim when it runs."),
+    }
+}
+
+/// `error` or `warn`, what `--raw-sinks` and `[build] raw-sinks` may say
+/// (ADR-raw-sinks-1 D3).
+pub fn raw_sinks(word: String) -> String throws {
+    return match word {
+        "error" | "warn" => word,
+        else => throw ProjectSettingsRefusal::Refused(f"`raw-sinks` is `error` or `warn`, not `{word}`. `error` refuses a program that hands data from outside to a raw sink unproved and not allowed; `warn` builds it and checks the data when the call is reached."),
     }
 }
 
@@ -183,6 +201,9 @@ pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: Over
     let refuted = if words.refuted_claims == "warn" { "/refuted-claims:warn" } else { "" }
     // The same for a claim not proved (ADR-380 D2).
     let unproved = if words.unproved_claims == "warn" { "/unproved-claims:warn" } else { "" }
+    // A build that checks a raw sink's data at run time lowers the check
+    // (ADR-raw-sinks-1 D3).
+    let sinks = if words.raw_sinks == "warn" { "/raw-sinks:warn" } else { "" }
     let removed_bounds = match bounds { BoundsChecks::Kept => "", else => f"/remove-bounds-checks:{bounds.name()}" }
     let removed_overflow = match overflow { OverflowChecks::Kept => "", else => f"/remove-overflow-checks:{overflow.name()}" }
     let skip_free = if skip_free_on { "/skip-free-at-exit:on" } else { "" }
@@ -198,7 +219,7 @@ pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: Over
     let root = if crate_root == "crate" { "" } else { f"/root:{crate_root}" }
     // A dependency's lowering writes no allocator (ADR-327 D9).
     let heap = if counts_heap { "" } else { "/dependency" }
-    return f"{words.target}/{words.user_parallelism}/{words.reentrancy_check}{tests}{refuted}{unproved}{removed_bounds}{removed_overflow}{skip_free}{library}{cpu}{root}{heap}"
+    return f"{words.target}/{words.user_parallelism}/{words.reentrancy_check}{tests}{refuted}{unproved}{sinks}{removed_bounds}{removed_overflow}{skip_free}{library}{cpu}{root}{heap}"
 }
 
 /// What a panic does on this machine (ADR-037 D1), in Cargo's vocabulary.
@@ -250,6 +271,8 @@ comptime PROJECT_SETTINGS_OPTIMIZATION_VAR: ref String = "NIKAIA_OPTIMIZATION"
 comptime PROJECT_SETTINGS_REFUTED_VAR: ref String = "NIKAIA_REFUTED_CLAIMS"
 /// `--unproved-claims`, resolved ([ADR-380](../../../docs/specification/adr/adr-380.md) D2).
 comptime PROJECT_SETTINGS_UNPROVED_VAR: ref String = "NIKAIA_UNPROVED_CLAIMS"
+/// `--raw-sinks`, resolved (ADR-raw-sinks-1 D3).
+comptime PROJECT_SETTINGS_RAW_SINKS_VAR: ref String = "NIKAIA_RAW_SINKS"
 /// `[build] artifact` and `symbol-prefix` (ADR-284 D4, D13).
 comptime PROJECT_SETTINGS_ARTIFACT_VAR: ref String = "NIKAIA_BUILD_ARTIFACT"
 comptime PROJECT_SETTINGS_PREFIX_VAR: ref String = "NIKAIA_SYMBOL_PREFIX"
@@ -279,11 +302,12 @@ pub trait ProjectSettingsHost {
 /// refuted and unproved claims' words and the artifact. The symbol prefix, the
 /// target's words and the optimizations are parsed by the Rust adapter, after
 /// these, in this order.
-fn project_settings_checked(target: String, user_parallelism: String, reentrancy_check: String, optimization: String, refuted: String, unproved: String, made: String, symbol_prefix: String, tests: bool, cpu: String?) -> ProjectWords throws {
+fn project_settings_checked(target: String, user_parallelism: String, reentrancy_check: String, optimization: String, refuted: String, unproved: String, sinks: String, made: String, symbol_prefix: String, tests: bool, cpu: String?) -> ProjectWords throws {
     let refuted_claims = refuted_claims(refuted)
     let unproved_claims = unproved_claims(unproved)
+    let raw_sinks = raw_sinks(sinks)
     let artifact = artifact(made)
-    return ProjectWords { target: target, user_parallelism: user_parallelism, reentrancy_check: reentrancy_check, optimization: optimization, refuted_claims: refuted_claims, unproved_claims: unproved_claims, artifact: artifact, symbol_prefix: symbol_prefix, tests: tests, bind: null, bind_features: null, cpu: cpu }
+    return ProjectWords { target: target, user_parallelism: user_parallelism, reentrancy_check: reentrancy_check, optimization: optimization, refuted_claims: refuted_claims, unproved_claims: unproved_claims, raw_sinks: raw_sinks, allow: [], artifact: artifact, symbol_prefix: symbol_prefix, tests: tests, bind: null, bind_features: null, cpu: cpu }
 }
 
 /// **The words, flag over manifest over built-in default.** `manifest` is
@@ -302,10 +326,11 @@ pub fn project_settings_resolve(manifest: fn(ref String, ref String) -> String s
     let optimization = manifest("optimization", "")
     let refuted = manifest("refuted-claims", "error")
     let unproved = manifest("unproved-claims", "error")
+    let sinks = manifest("raw-sinks", "error")
     let made = manifest("artifact", "program")
     let named = (package ?? "program").replace("-", "_")
     let symbol_prefix = manifest("symbol-prefix", named)
-    return project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, made, symbol_prefix, false, null)
+    return project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, sinks, made, symbol_prefix, false, null)
 }
 
 /// **What the driver put in the environment.** Absent means the wrapper was
@@ -317,12 +342,13 @@ pub fn project_settings_from_env[H: ProjectSettingsHost](default_target: String,
     let optimization = host.env_var(PROJECT_SETTINGS_OPTIMIZATION_VAR) ?? ""
     let refuted = host.env_var(PROJECT_SETTINGS_REFUTED_VAR) ?? "error"
     let unproved = host.env_var(PROJECT_SETTINGS_UNPROVED_VAR) ?? "error"
+    let sinks = host.env_var(PROJECT_SETTINGS_RAW_SINKS_VAR) ?? "error"
     let made = host.env_var(PROJECT_SETTINGS_ARTIFACT_VAR) ?? "program"
     let symbol_prefix = host.env_var(PROJECT_SETTINGS_PREFIX_VAR) ?? "program"
     let tests = host.env_var(PROJECT_SETTINGS_TESTS_VAR) != null
     let level = host.env_var(PROJECT_SETTINGS_CPU_VAR) ?? ""
     let cpu: String? = if level.is_empty() { null } else { level }
-    return project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, made, symbol_prefix, tests, cpu)
+    return project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, sinks, made, symbol_prefix, tests, cpu)
 }
 
 /// **The command line's `--refuted-claims` and `--unproved-claims` over the
@@ -340,6 +366,34 @@ pub fn project_settings_refutations(words: ref ProjectWords, refuted: String?, u
         null => words.unproved_claims.clone(),
     }
     return (refuted_word, unproved_word)
+}
+
+/// **The command line's `--raw-sinks` over the manifest's**
+/// (ADR-raw-sinks-1 D3): the word the build then has.
+pub fn project_settings_raw_sinks(words: ref ProjectWords, flag: String?) -> String throws {
+    return match flag?.clone() {
+        word => raw_sinks(word),
+        null => words.raw_sinks.clone(),
+    }
+}
+
+/// **What the build allows** (ADR-raw-sinks-1 D4, D5): the manifest's
+/// `[allow]` words, then each `--allow=KEY` or `--allow=PACKAGE:KEY`, a key
+/// outside the four refused naming them.
+pub fn project_settings_allowed(manifest: ref Vec[String], flags: ref Vec[String]) -> Vec[String] throws {
+    let mut allowed = manifest.clone()
+    for flag in flags {
+        let key = match flag.split_once(":") {
+            (_, key) => key,
+            null => flag.clone(),
+        }
+        if !raw_sinks_allow_keys().iter().any(fn(known) { known == key }) {
+            let expected = raw_sinks_allow_keys().join(", ")
+            throw ProjectSettingsRefusal::Refused(f"`--allow={flag}` names no raw sink. The keys are: {expected}, each alone or after a package's name and `:`.")
+        }
+        allowed.push(flag.clone())
+    }
+    return allowed
 }
 
 /// **`--cpu=LEVEL`** ([ADR-002](../../../docs/specification/adr/adr-002.md)
@@ -390,6 +444,7 @@ pub fn project_settings_as_env(words: ref ProjectWords) -> Vec[(String, String)]
         (PROJECT_SETTINGS_OPTIMIZATION_VAR.clone(), words.optimization.clone()),
         (PROJECT_SETTINGS_REFUTED_VAR.clone(), words.refuted_claims.clone()),
         (PROJECT_SETTINGS_UNPROVED_VAR.clone(), words.unproved_claims.clone()),
+        (PROJECT_SETTINGS_RAW_SINKS_VAR.clone(), words.raw_sinks.clone()),
         (PROJECT_SETTINGS_ARTIFACT_VAR.clone(), words.artifact.clone()),
         (PROJECT_SETTINGS_PREFIX_VAR.clone(), words.symbol_prefix.clone()),
     ]

@@ -28,6 +28,8 @@ pub struct ProjectWords {
     pub optimization: String,
     pub refuted_claims: String,
     pub unproved_claims: String,
+    pub raw_sinks: String,
+    pub allow: Vec<String>,
     pub artifact: String,
     pub symbol_prefix: String,
     pub tests: bool,
@@ -47,6 +49,13 @@ pub fn unproved_claims(word: String) -> Result<String, nikaia_std::error::Thrown
     Ok(match &*word {
         "error" | "warn" => word,
         _ => return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`unproved-claims` is `error` or `warn`, not `{}`. `error` refuses a program with a claim the compiler did not prove; `warn` builds it and checks the claim when it runs.", word)), &"unproved_claims")),
+    })
+}
+
+pub fn raw_sinks(word: String) -> Result<String, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
+    Ok(match &*word {
+        "error" | "warn" => word,
+        _ => return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`raw-sinks` is `error` or `warn`, not `{}`. `error` refuses a program that hands data from outside to a raw sink unproved and not allowed; `warn` builds it and checks the data when the call is reached.", word)), &"raw_sinks")),
     })
 }
 
@@ -99,6 +108,7 @@ pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &Overf
     let tests = if words.tests { "/tests" } else { "" };
     let refuted = if words.refuted_claims == "warn" { "/refuted-claims:warn" } else { "" };
     let unproved = if words.unproved_claims == "warn" { "/unproved-claims:warn" } else { "" };
+    let sinks = if words.raw_sinks == "warn" { "/raw-sinks:warn" } else { "" };
     let removed_bounds = match bounds {
         BoundsChecks::Kept => String::from(""),
         _ => format!("/remove-bounds-checks:{}", bounds.name()),
@@ -112,7 +122,7 @@ pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &Overf
     let cpu = if words.cpu.is_some() { format!("/cpu:{}", cpu_key) } else { String::from("") };
     let root = if crate_root == "crate" { String::from("") } else { format!("/root:{}", crate_root) };
     let heap = if counts_heap { "" } else { "/dependency" };
-    format!("{}/{}/{}{}{}{}{}{}{}{}{}{}{}", words.target, words.user_parallelism, words.reentrancy_check, tests, refuted, unproved, removed_bounds, removed_overflow, skip_free, library, cpu, root, heap)
+    format!("{}/{}/{}{}{}{}{}{}{}{}{}{}{}{}", words.target, words.user_parallelism, words.reentrancy_check, tests, refuted, unproved, sinks, removed_bounds, removed_overflow, skip_free, library, cpu, root, heap)
 }
 
 pub fn panic_strategy(target: &Target) -> String {
@@ -154,6 +164,8 @@ pub(crate) const PROJECT_SETTINGS_REFUTED_VAR: &str = "NIKAIA_REFUTED_CLAIMS";
 
 pub(crate) const PROJECT_SETTINGS_UNPROVED_VAR: &str = "NIKAIA_UNPROVED_CLAIMS";
 
+pub(crate) const PROJECT_SETTINGS_RAW_SINKS_VAR: &str = "NIKAIA_RAW_SINKS";
+
 pub(crate) const PROJECT_SETTINGS_ARTIFACT_VAR: &str = "NIKAIA_BUILD_ARTIFACT";
 
 pub(crate) const PROJECT_SETTINGS_PREFIX_VAR: &str = "NIKAIA_SYMBOL_PREFIX";
@@ -170,11 +182,12 @@ pub trait ProjectSettingsHost {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn project_settings_checked(target: String, user_parallelism: String, reentrancy_check: String, optimization: String, refuted: String, unproved: String, made: String, symbol_prefix: String, tests: bool, cpu: Option<String>) -> Result<ProjectWords, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
+pub(crate) fn project_settings_checked(target: String, user_parallelism: String, reentrancy_check: String, optimization: String, refuted: String, unproved: String, sinks: String, made: String, symbol_prefix: String, tests: bool, cpu: Option<String>) -> Result<ProjectWords, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
     let refuted_claims = refuted_claims(refuted)?;
     let unproved_claims = unproved_claims(unproved)?;
+    let raw_sinks = raw_sinks(sinks)?;
     let artifact = artifact(made)?;
-    Ok(ProjectWords { target, user_parallelism, reentrancy_check, optimization, refuted_claims, unproved_claims, artifact, symbol_prefix, tests, bind: None, bind_features: None, cpu })
+    Ok(ProjectWords { target, user_parallelism, reentrancy_check, optimization, refuted_claims, unproved_claims, raw_sinks, allow: vec![], artifact, symbol_prefix, tests, bind: None, bind_features: None, cpu })
 }
 
 pub fn project_settings_resolve(manifest: &impl Fn(&str, &str) -> String, package: Option<&str>, target: Option<String>, user_parallelism: Option<String>, default_target: &str) -> Result<ProjectWords, std::boxed::Box<dyn std::error::Error>> {
@@ -190,10 +203,11 @@ pub fn project_settings_resolve(manifest: &impl Fn(&str, &str) -> String, packag
     let optimization = manifest("optimization", "");
     let refuted = manifest("refuted-claims", "error");
     let unproved = manifest("unproved-claims", "error");
+    let sinks = manifest("raw-sinks", "error");
     let made = manifest("artifact", "program");
     let named = nikaia_std::block::Text::from(nikaia_std::index::or(package, || "program").replace('-', "_"));
     let symbol_prefix = manifest("symbol-prefix", &named);
-    Ok(project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, made, symbol_prefix, false, None)?)
+    Ok(project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, sinks, made, symbol_prefix, false, None)?)
 }
 
 pub fn project_settings_from_env<H: ProjectSettingsHost>(default_target: &str, host: &H) -> Result<ProjectWords, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
@@ -203,12 +217,13 @@ pub fn project_settings_from_env<H: ProjectSettingsHost>(default_target: &str, h
     let optimization = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_OPTIMIZATION_VAR), || "".into());
     let refuted = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_REFUTED_VAR), || "error".into());
     let unproved = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_UNPROVED_VAR), || "error".into());
+    let sinks = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_RAW_SINKS_VAR), || "error".into());
     let made = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_ARTIFACT_VAR), || "program".into());
     let symbol_prefix = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_PREFIX_VAR), || "program".into());
     let tests = host.env_var(PROJECT_SETTINGS_TESTS_VAR).is_some();
     let level = nikaia_std::index::or(host.env_var(PROJECT_SETTINGS_CPU_VAR), || "".into());
     let cpu: Option<String> = if level.is_empty() { None } else { Some(level) };
-    Ok(project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, made, symbol_prefix, tests, cpu)?)
+    Ok(project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, sinks, made, symbol_prefix, tests, cpu)?)
 }
 
 pub fn project_settings_refutations(words: &ProjectWords, refuted: Option<&str>, unproved: Option<&str>) -> Result<(String, String), nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
@@ -227,6 +242,32 @@ pub fn project_settings_refutations(words: &ProjectWords, refuted: Option<&str>,
         None => nikaia_std::block::Text::from(words.unproved_claims.to_string()),
     };
     Ok((refuted_word, unproved_word))
+}
+
+pub fn project_settings_raw_sinks(words: &ProjectWords, flag: Option<&str>) -> Result<String, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
+    Ok(match match flag {
+        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
+        None => None,
+    } {
+        Some(word) => raw_sinks(word)?,
+        None => nikaia_std::block::Text::from(words.raw_sinks.to_string()),
+    })
+}
+
+pub fn project_settings_allowed(manifest: &[String], flags: &[String]) -> Result<Vec<String>, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
+    let mut allowed = manifest.copy_owned();
+    for flag in flags.iter() {
+        let key = match flag.split_once(":") {
+            Some((_, key)) => nikaia_std::either_text::either(key),
+            None => nikaia_std::either_text::either(nikaia_std::block::Text::from(flag.to_string())),
+        };
+        if !raw_sinks_allow_keys().iter().any(|known| { AsRef::<str>::as_ref(&(known)) == AsRef::<str>::as_ref(&(key)) }) {
+            let expected = nikaia_std::block::Text::from(raw_sinks_allow_keys().join(", "));
+            return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`--allow={}` names no raw sink. The keys are: {}, each alone or after a package's name and `:`.", flag, expected)), &"project_settings_allowed"));
+        }
+        allowed.push(nikaia_std::block::Text::from(flag.to_string()));
+    }
+    Ok(allowed)
 }
 
 pub fn project_settings_chosen_cpu(level: String, levels: &[String], target_name: &str) -> Result<Option<String>, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
@@ -256,7 +297,7 @@ pub fn project_settings_cpu_rustflags<H: ProjectSettingsHost>(words: &ProjectWor
 }
 
 pub fn project_settings_as_env(words: &ProjectWords) -> Vec<(String, String)> {
-    let mut env: Vec<(String, String)> = vec![(nikaia_std::block::Text::from(PROJECT_SETTINGS_TARGET_VAR.to_string()), nikaia_std::block::Text::from(words.target.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_PARALLELISM_VAR.to_string()), nikaia_std::block::Text::from(words.user_parallelism.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_REENTRANCY_VAR.to_string()), nikaia_std::block::Text::from(words.reentrancy_check.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_OPTIMIZATION_VAR.to_string()), nikaia_std::block::Text::from(words.optimization.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_REFUTED_VAR.to_string()), nikaia_std::block::Text::from(words.refuted_claims.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_UNPROVED_VAR.to_string()), nikaia_std::block::Text::from(words.unproved_claims.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_ARTIFACT_VAR.to_string()), nikaia_std::block::Text::from(words.artifact.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_PREFIX_VAR.to_string()), nikaia_std::block::Text::from(words.symbol_prefix.to_string()))];
+    let mut env: Vec<(String, String)> = vec![(nikaia_std::block::Text::from(PROJECT_SETTINGS_TARGET_VAR.to_string()), nikaia_std::block::Text::from(words.target.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_PARALLELISM_VAR.to_string()), nikaia_std::block::Text::from(words.user_parallelism.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_REENTRANCY_VAR.to_string()), nikaia_std::block::Text::from(words.reentrancy_check.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_OPTIMIZATION_VAR.to_string()), nikaia_std::block::Text::from(words.optimization.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_REFUTED_VAR.to_string()), nikaia_std::block::Text::from(words.refuted_claims.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_UNPROVED_VAR.to_string()), nikaia_std::block::Text::from(words.unproved_claims.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_RAW_SINKS_VAR.to_string()), nikaia_std::block::Text::from(words.raw_sinks.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_ARTIFACT_VAR.to_string()), nikaia_std::block::Text::from(words.artifact.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_PREFIX_VAR.to_string()), nikaia_std::block::Text::from(words.symbol_prefix.to_string()))];
     if words.tests { env.push((nikaia_std::block::Text::from(PROJECT_SETTINGS_TESTS_VAR.to_string()), String::from("1"))); }
     match match words.cpu.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),

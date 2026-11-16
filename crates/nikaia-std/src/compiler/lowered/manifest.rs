@@ -7,7 +7,17 @@ pub enum Switch {
     Moved(String),
 }
 
-pub fn known() -> Vec<String> { vec![String::from("target"), String::from("user-parallelism"), String::from("reentrancy-check"), String::from("cleanup-deadline"), String::from("optimization"), String::from("refuted-claims"), String::from("unproved-claims"), String::from("artifact"), String::from("symbol-prefix")] }
+pub fn known() -> Vec<String> { vec![String::from("target"), String::from("user-parallelism"), String::from("reentrancy-check"), String::from("cleanup-deadline"), String::from("optimization"), String::from("refuted-claims"), String::from("unproved-claims"), String::from("artifact"), String::from("symbol-prefix"), String::from("raw-sinks")] }
+
+pub fn raw_sinks_allow_keys() -> Vec<String> { vec![String::from("untrusted-shell"), String::from("untrusted-sql"), String::from("untrusted-markup"), String::from("untrusted-paths-anywhere")] }
+
+pub fn raw_sinks_allow_key(table: &str, key: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+    if !contains(&raw_sinks_allow_keys(), key) {
+        let expected = choices(&raw_sinks_allow_keys());
+        return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` has no key called `{}`. The keys are: {}.", table, key, expected)), &"raw_sinks_allow_key"));
+    }
+    Ok(())
+}
 
 pub(crate) fn withdrawn(key: &str) -> &'static str {
     if key == "ordering" { return "statements run in the order they are written, so there's nothing left for it to turn off. To run two things together, write `overlap { … }`; `--overlaps` shows which branches did"; }
@@ -124,10 +134,11 @@ pub struct ManifestFile {
     pub features: Vec<ManifestFeature>,
     pub rust_library: Option<ManifestRustLibrary>,
     pub notes: Vec<String>,
+    pub allow: Vec<String>,
     pub root: Option<fs::Path>,
 }
 
-pub fn manifest_empty() -> ManifestFile { ManifestFile { build: collections::BTreeMap::new(), package: collections::BTreeMap::new(), name: None, version: String::from("0.0.0"), dependencies: collections::BTreeMap::new(), codegen: collections::BTreeMap::new(), libraries: collections::BTreeMap::new(), features: vec![], rust_library: None, notes: vec![], root: None } }
+pub fn manifest_empty() -> ManifestFile { ManifestFile { build: collections::BTreeMap::new(), package: collections::BTreeMap::new(), name: None, version: String::from("0.0.0"), dependencies: collections::BTreeMap::new(), codegen: collections::BTreeMap::new(), libraries: collections::BTreeMap::new(), features: vec![], rust_library: None, notes: vec![], allow: vec![], root: None } }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ManifestFeature {
@@ -186,6 +197,7 @@ pub fn manifest_parse(items: &[ManifestItem]) -> Result<ManifestFile, nikaia_std
     manifest.libraries = manifest_libraries(items)?;
     manifest.features = manifest_features(items);
     manifest.rust_library = manifest_rust_library(items);
+    manifest.allow = manifest_allow(items)?;
     for value in items.iter() {
         if value.section != "build" || value.name.is_empty() || !value.key.is_empty() { continue; }
         if value.table {
@@ -202,6 +214,32 @@ pub fn manifest_parse(items: &[ManifestItem]) -> Result<ManifestFile, nikaia_std
         }
     }
     Ok(manifest)
+}
+
+pub(crate) fn manifest_allow(items: &[ManifestItem]) -> Result<Vec<String>, nikaia_std::error::Thrown<Refused>> {
+    let mut allowed: Vec<String> = vec![];
+    for item in items.iter() {
+        if item.name.is_empty() { continue; }
+        let mut table: String = String::from("");
+        let mut key: String = String::from("");
+        let mut word: String = String::from("");
+        if item.section == "allow" && item.key.is_empty() && !(item.name == "packages" && item.table) {
+            table = String::from("[allow]");
+            key = nikaia_std::block::Text::from(item.name.to_string());
+            word = nikaia_std::block::Text::from(item.name.to_string());
+        } else if item.section == "allow.packages" && !item.key.is_empty() {
+            table = format!("[allow.packages.{}]", item.name);
+            key = nikaia_std::block::Text::from(item.key.to_string());
+            word = format!("{}:{}", item.name, item.key);
+        } else if item.section == "allow.packages" && !item.table { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` in `[allow.packages]` is a table of keys, as `[allow.packages.{}]` with `untrusted-shell = true` under it.", item.name, item.name)), &"manifest_allow")); } else { continue; }
+        raw_sinks_allow_key(&table, &key)?;
+        match &*item.text {
+            "true" => { allowed.push(word); },
+            "false" => { },
+            _ => { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` in `{}` is `true` or `false`, not `{}`.", key, table, item.text)), &"manifest_allow")); },
+        }
+    }
+    Ok(allowed)
 }
 
 pub fn manifest_has_build_section(manifest: &ManifestFile) -> bool { !manifest.build.is_empty() || !manifest.codegen.is_empty() }

@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1413] — 2026-11-16
+
+**Builders' changes (#1916, #1918)**
+- Drivers sharing a checkout merge origin/develop one at a time (a merge lock, waits for git's index.lock and MERGE_HEAD) and re-lower the merge from the committed tree with a compiler built from it, so another agent's uncommitted `.nika` or freshly built binary no longer breaks the merge (#1916).
+- commit.nika --dry-run lists the hunks of each listed source and writes Reviewed: into the report, and the commit refuses when a listed file changed since; lower_mine.nika --write writes only the lowered files of the .nika files given
+
 ## [0.0.1412] — 2026-11-16
 
 **Builders' changes (#1755, #1756, #1757, #1758, #1870, #1871, #1872, #1878, #1888, #1894, #1925)**

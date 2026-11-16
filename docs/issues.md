@@ -395,6 +395,18 @@ it, like the checks in `docs/supervisor.md`.
   builder (#1910: #1307's item 1 asked `lower-std` to record each package
   entry a file reads, and every check and emit pass walks `beside`, `own`,
   the call graphs and `provenance` directly).
+  A new refusal (an NK code, a fail-closed check) that our own code
+  (`std`, the compiler's `.nika`, `packages/`, `examples/`) must first be
+  moved to pass is staged in items a run can each commit: the check
+  lands first where it cannot turn our build red (behind a `warn`
+  setting such as `raw-sinks = "warn"`, or as a warning code), the
+  moves follow, one item per area, and a last item turns it into the
+  refusal. The issue names the setting or warning that carries the
+  middle stage; where none exists or the choice is open, it says `no
+  decision yet` (a `decision`, I6). Never "not merged until our own
+  code builds under it", which makes the check, every move and the
+  switch one commit (#1942: #1253's step 10 tied steps 4, 5 and 10
+  together).
   An item settles each choice that changes what its result does, or says
   the builder chooses (#1733: #1717 left open whether a merge with no local
   commits fast-forwards, and a merge commit alone would have made the suite

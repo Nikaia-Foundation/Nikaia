@@ -36,7 +36,24 @@ pub enum Switch {
 /// Part I 1.2 names the options rather than counting them, and this list is
 /// what a manifest is checked against.
 pub fn known() -> Vec[String] {
-    return ["target", "user-parallelism", "reentrancy-check", "cleanup-deadline", "optimization", "refuted-claims", "unproved-claims", "artifact", "symbol-prefix"]
+    return ["target", "user-parallelism", "reentrancy-check", "cleanup-deadline", "optimization", "refuted-claims", "unproved-claims", "artifact", "symbol-prefix", "raw-sinks"]
+}
+
+/// **The keys `[allow]` may carry** (ADR-raw-sinks-1 D2, D4): one per raw
+/// sink, each letting data from outside the program reach it unproved. A key
+/// outside these is refused naming them, as a `[build]` typo is.
+pub fn raw_sinks_allow_keys() -> Vec[String] {
+    return ["untrusted-shell", "untrusted-sql", "untrusted-markup", "untrusted-paths-anywhere"]
+}
+
+/// **One `[allow]` key, checked** (ADR-raw-sinks-1 D4, D5): one of the four,
+/// where `table` is how the message names its table (`[allow]`,
+/// `[allow.packages.thumbs]`).
+pub fn raw_sinks_allow_key(table: ref String, key: ref String) throws {
+    if !contains(raw_sinks_allow_keys(), key) {
+        let expected = choices(raw_sinks_allow_keys())
+        throw Refused::Because(f"`{table}` has no key called `{key}`. The keys are: {expected}.")
+    }
 }
 
 // A key this compiler had and no longer has, with what to do instead, or
@@ -185,8 +202,9 @@ fn choices(words: ref Array[String]) -> String {
 
 /// One value of `nikaia.toml`, in the plain words the `toml` reader gives it
 /// (MF). The adapter walks the document once, in the file's key order, and
-/// hands over the six sections this module reads (`package`, `dependencies`,
-/// `library`, `build`, `features`, `rust-library`), their entries, and each key of an entry that is a
+/// hands over the sections this module reads (`package`, `dependencies`,
+/// `library`, `build`, `features`, `rust-library`, `allow`, and
+/// `allow.packages` for the tables inside `[allow.packages]`), their entries, and each key of an entry that is a
 /// table. Nothing deeper: no reader looks further in.
 pub struct ManifestItem {
     /// The top-level table it is in.
@@ -264,6 +282,11 @@ pub struct ManifestFile {
     /// failing a manifest somebody already wrote to the specification would
     /// punish them for the move ([ADR-303](../../../docs/specification/adr/adr-303.md) D5).
     pub notes: Vec[String],
+    /// **What `[allow]` lets through** (ADR-raw-sinks-1 D4, D5): each key set
+    /// to `true`, the package's own as `untrusted-shell` and a dependency's,
+    /// from `[allow.packages.NAME]`, as `NAME:untrusted-shell`, the words
+    /// `--allow` takes.
+    pub allow: Vec[String],
     /// The directory the manifest was found in, and therefore the project root.
     /// `None` when there was no manifest at all.
     pub root: fs::Path?,
@@ -271,7 +294,7 @@ pub struct ManifestFile {
 
 /// The manifest of no project: every section empty.
 pub fn manifest_empty() -> ManifestFile {
-    return ManifestFile { build: collections::BTreeMap(), package: collections::BTreeMap(), name: null, version: "0.0.0", dependencies: collections::BTreeMap(), codegen: collections::BTreeMap(), libraries: collections::BTreeMap(), features: [], rust_library: null, notes: [], root: null }
+    return ManifestFile { build: collections::BTreeMap(), package: collections::BTreeMap(), name: null, version: "0.0.0", dependencies: collections::BTreeMap(), codegen: collections::BTreeMap(), libraries: collections::BTreeMap(), features: [], rust_library: null, notes: [], allow: [], root: null }
 }
 
 /// **One entry of `[features]`** (ADR-393 D2, Part III 13.3): a feature and
@@ -356,6 +379,7 @@ pub fn manifest_parse(items: ref Vec[ManifestItem]) -> ManifestFile throws {
     manifest.libraries = manifest_libraries(items)
     manifest.features = manifest_features(items)
     manifest.rust_library = manifest_rust_library(items)
+    manifest.allow = manifest_allow(items)
 
     for value in items {
         if value.section != "build" || value.name.len() == 0 || value.key.len() > 0 {
@@ -381,6 +405,41 @@ pub fn manifest_parse(items: ref Vec[ManifestItem]) -> ManifestFile throws {
         }
     }
     return manifest
+}
+
+/// **`[allow]` and `[allow.packages.NAME]`** (ADR-raw-sinks-1 D4, D5): the
+/// keys set to `true`, a dependency's written `NAME:key`. A key outside the
+/// four, or a value that is not `true` or `false`, is refused.
+fn manifest_allow(items: ref Vec[ManifestItem]) -> Vec[String] throws {
+    let mut allowed: Vec[String] = []
+    for item in items {
+        if item.name.len() == 0 {
+            continue
+        }
+        let mut table: String = ""
+        let mut key: String = ""
+        let mut word: String = ""
+        if item.section == "allow" && item.key.len() == 0 && !(item.name == "packages" && item.table) {
+            table = "[allow]"
+            key = item.name.clone()
+            word = item.name.clone()
+        } else if item.section == "allow.packages" && item.key.len() > 0 {
+            table = f"[allow.packages.{item.name}]"
+            key = item.key.clone()
+            word = f"{item.name}:{item.key}"
+        } else if item.section == "allow.packages" && !item.table {
+            throw Refused::Because(f"`{item.name}` in `[allow.packages]` is a table of keys, as `[allow.packages.{item.name}]` with `untrusted-shell = true` under it.")
+        } else {
+            continue
+        }
+        raw_sinks_allow_key(table, key)
+        match item.text {
+            "true" => allowed.push(word),
+            "false" => {}
+            else => throw Refused::Because(f"`{key}` in `{table}` is `true` or `false`, not `{item.text}`."),
+        }
+    }
+    return allowed
 }
 
 /// Whether this manifest says anything about how to build.

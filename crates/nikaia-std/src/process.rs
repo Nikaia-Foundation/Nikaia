@@ -34,6 +34,13 @@ use std::time::{Duration, Instant};
 
 use crate::io::IoError;
 
+/// `process::is_word(part)`: its Nikaia half, `runtime/raw_sinks.nika`, the
+/// precondition of `process::shell` (ADR-raw-sinks-1 D2, #1253).
+pub use crate::runtime::is_word;
+/// `process::shell(command)`: its Nikaia half, `runtime/shell.nika`, the
+/// one raw sink of this module (ADR-raw-sinks-1 §4).
+pub use crate::runtime::shell;
+
 /// What a program that ran to its end left behind.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Output {
