@@ -221,9 +221,18 @@ pub fn check_simd_a_call(world: ref CheckWorld, value: ref Expr) -> bool sync {
 
 /// **The type a constructor of `std::simd` takes where it stands** (D3):
 /// `want` where it is a vector or a mask, else nothing - a field's, a
-/// parameter's, an assigned place's or a result's declared type.
+/// parameter's, an assigned place's or a result's declared type. A list
+/// literal declared a `Vec` or `Array` of vectors takes it too, and hands
+/// its element type on to each constructor in it, as under a `let`.
 pub fn check_simd_wanted(world: ref CheckWorld, value: ref Expr, want: ref Ty?) -> Ty? sync {
     let ty: Ty = want?.clone() ?? return null
+    let list = match value {
+        Expr::ListLit { .. } => true,
+        else => false,
+    }
+    if list && check_simd_element(ty) != null {
+        return ty
+    }
     if !check_simd_a_call(world, value) || check_simd_kind(ty).len() == 0 {
         return null
     }

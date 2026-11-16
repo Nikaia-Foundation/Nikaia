@@ -201,6 +201,8 @@ pub fn check_simd_wanted(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: 
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let list = matches!(value, Expr::ListLit { .. });
+    if list && check_simd_element(Some(&ty)).is_some() { return Some(ty); }
     if !check_simd_a_call(world, value) || check_simd_kind(&ty).is_empty() { return None; }
     Some(ty)
 }

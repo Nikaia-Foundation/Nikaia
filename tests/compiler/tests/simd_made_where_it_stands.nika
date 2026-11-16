@@ -1,5 +1,5 @@
 // A constructor of `std::simd` takes its type from where it stands (ADR-377
-// D3): a field, a list of vectors, an argument, an assigned place and a
+// D3): a field, a list of vectors (in a field too), an argument, an assigned place and a
 // result, as it does from a `let` that declares one.
 use std::simd
 
@@ -22,5 +22,14 @@ fn main() throws {
     let more: Vec[simd::Fixed[u8, 16]] = [simd::splat(3)]
     let mut x: simd::Fixed[u8, 16] = simd::splat(4)
     x = simd::splat(1)
-    println(f"{p.a.sum()} {p.b.wrapping_sum()} {list[1].sum()} {more[0].wrapping_sum()} {total(simd::splat(5))} {x.wrapping_sum()} {halves().sum()}")
+    println(f"{p.a.sum()} {p.b.wrapping_sum()} {list[1].sum()} {more[0].wrapping_sum()} {total(simd::splat(5))} {x.wrapping_sum()} {halves().sum()} {listed(1.0)}")
+}
+
+struct Bodies {
+    masses: Array[simd::Fixed[f64, 2], 2],
+}
+
+fn listed(m: f64) -> f64 {
+    let b = Bodies { masses: [simd::splat(m), simd::splat(2.0)] }
+    return b.masses[0].sum() + b.masses[1].sum()
 }
