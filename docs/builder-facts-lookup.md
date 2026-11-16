@@ -70,6 +70,13 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **CI has no `target/fast`**: a test that runs the toolchain takes the
   `nikaia` that runs it (`readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe`).
   A red test that passes locally: check what CI lacks first.
+* **Each `crates/unsafe/*` crate is its own workspace**: it has no `fast`
+  profile (`cargo test --profile fast` there fails, *profile `fast` is not
+  defined*), and a plain `cargo test` inside it builds a cold `target/` of
+  its own. Run its checks from the root against one shared target dir, kept
+  between runs under the git-ignored `target/`: `cargo test --manifest-path
+  crates/unsafe/NAME/Cargo.toml --target-dir target/unsafe` (`clippy` the
+  same); nothing to delete afterwards. (#1917)
 
 ### Probes
 
