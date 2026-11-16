@@ -463,7 +463,7 @@ pub(crate) fn sv_check_test_single(query: &SvQuery, steps: Vec<SvStep>) -> SvLog
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== accepted\n"));
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_check_test_report("clauses (input, learn, delete)", &sv_check_test_clauses(), &sv_check_test_clause_log(false))));
@@ -478,7 +478,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== rejected\n"));
     out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_check_test_report("negative multiplier on an inequality", &sv_check_test_bounds(), &sv_check_test_farkas_log(-1, 1, vec![sv_check_test_neg(0u32), sv_check_test_neg(1u32)])))); __nikaia_value };

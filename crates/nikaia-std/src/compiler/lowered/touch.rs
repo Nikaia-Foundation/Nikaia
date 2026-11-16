@@ -236,7 +236,7 @@ pub(crate) fn holds_touch(touches: &[Touch], touch: &Touch) -> bool {
 pub(crate) fn touch_test_reached(kind: String, named: Option<String>, write: bool) -> Reached { Reached { kind, named, unknown: false, write } }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     for written in ["file(path) read", "file(path) write", "file('a.txt') write", "stdout write", "stderr write", "args read"] {
         let touch = match touch_of(written) {
             Ok(value) => value,
@@ -251,7 +251,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let touch = match touch_of("file(path) read") {
         Ok(value) => value,
         Err(_error) => {
@@ -276,7 +276,7 @@ pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     for written in ["file(path)", "file(path) maybe", "file(path read", "(x) read"] {
         let mut parsed = true;
         match touch_of(written) {
@@ -289,7 +289,7 @@ pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let typo = touch_test_reached(String::from("stdoutt"), None, true);
     if !(!typo.conflicts_with(&touch_test_reached(String::from("stdout"), None, true))) { nikaia_std::abort::assertion_failed("assert(!typo.conflicts_with(touch_test_reached(\"stdout\", null, true)))", None, &[]) };
     if !(!typo.conflicts_with(&touch_test_reached(String::from("file"), Some(String::from("a.txt")), true))) { nikaia_std::abort::assertion_failed("assert(!typo.conflicts_with(touch_test_reached(\"file\", \"a.txt\", true)))", None, &[]) };
@@ -297,7 +297,7 @@ pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_4() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let file = touch_test_reached(String::from("file"), Some(String::from("a.txt")), true);
     let out = touch_test_reached(String::from("stdout"), None, true);
     if !(!file.conflicts_with(&out)) { nikaia_std::abort::assertion_failed("assert(!file.conflicts_with(out))", None, &[]) };
@@ -305,7 +305,7 @@ pub(crate) fn __nikaia_test_4() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_5() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let out = touch_test_reached(String::from("stdout"), None, true);
     let err = touch_test_reached(String::from("stderr"), None, true);
     if !(out.conflicts_with(&err)) { nikaia_std::abort::assertion_failed("assert(out.conflicts_with(err))", None, &[]) };
@@ -316,7 +316,7 @@ pub(crate) fn __nikaia_test_5() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_6() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_6() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let one = touch_test_reached(String::from("file"), Some(String::from("a.txt")), false);
     let same = touch_test_reached(String::from("file"), Some(String::from("a.txt")), false);
     if !(!one.conflicts_with(&same)) { nikaia_std::abort::assertion_failed("assert(!one.conflicts_with(same))", None, &[]) };
@@ -327,7 +327,7 @@ pub(crate) fn __nikaia_test_6() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_7() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_7() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let a = touch_test_reached(String::from("file"), Some(String::from("a.txt")), true);
     let b = touch_test_reached(String::from("file"), Some(String::from("b.txt")), true);
     if !(!a.conflicts_with(&b)) { nikaia_std::abort::assertion_failed("assert(!a.conflicts_with(b))", None, &[]) };
@@ -335,7 +335,7 @@ pub(crate) fn __nikaia_test_7() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_8() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_8() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let unknown = Reached { kind: String::from("file"), named: None, unknown: true, write: true };
     let read = touch_test_reached(String::from("file"), Some(String::from("a.txt")), false);
     if !(unknown.conflicts_with(&read)) { nikaia_std::abort::assertion_failed("assert(unknown.conflicts_with(read))", None, &[]) };

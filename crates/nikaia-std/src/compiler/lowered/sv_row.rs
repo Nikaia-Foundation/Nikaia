@@ -210,7 +210,7 @@ pub(crate) fn sv_row_test_show(r: Option<&SvRow>) -> String {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== building\n"));
     let r = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(5u32, 2), sv_row_test_term(1u32, -3), sv_row_test_term(5u32, 4), sv_row_test_term(9u32, 0), sv_row_test_term(2u32, 7), sv_row_test_term(2u32, -7)], 4), || sv_row_constant(0).into());

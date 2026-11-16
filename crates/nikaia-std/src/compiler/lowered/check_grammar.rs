@@ -167,7 +167,7 @@ impl CheckState {
             let inner = self.pattern_type(world, pat, rules);
             return match inner {
                 Ty::Nullable(_) => inner,
-                _ => Ty::Nullable(Box::new(inner)),
+                _ => Ty::Nullable(std::boxed::Box::new(inner)),
             };
         }
         let called = bare_reference(pat, world);

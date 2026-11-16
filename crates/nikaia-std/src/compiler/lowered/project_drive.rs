@@ -83,17 +83,17 @@ pub struct ProjectDriveFast {
 
 pub trait ProjectDriveHost {
     fn entry(&self) -> fs::Path;
-    fn explain_if_asked(&self) -> Result<(), Box<dyn std::error::Error>>;
-    fn drive_members(&self) -> Result<Vec<ProjectMembersMember>, Box<dyn std::error::Error>>;
-    fn lower_member(&self, at: i64, no_cache: bool, writes: bool, crate_root: &str) -> Result<ProjectDriveLowered, Box<dyn std::error::Error>>;
-    fn check_libraries(&self, at: i64, own: &[fs::Path]) -> Result<Vec<String>, Box<dyn std::error::Error>>;
-    fn write_ledgers(&self, at: i64, locked: bool) -> Result<(), Box<dyn std::error::Error>>;
+    fn explain_if_asked(&self) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
+    fn drive_members(&self) -> Result<Vec<ProjectMembersMember>, std::boxed::Box<dyn std::error::Error>>;
+    fn lower_member(&self, at: i64, no_cache: bool, writes: bool, crate_root: &str) -> Result<ProjectDriveLowered, std::boxed::Box<dyn std::error::Error>>;
+    fn check_libraries(&self, at: i64, own: &[fs::Path]) -> Result<Vec<String>, std::boxed::Box<dyn std::error::Error>>;
+    fn write_ledgers(&self, at: i64, locked: bool) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn tests_build(&self) -> bool;
     fn eprint(&self, text: &str);
-    fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), Box<dyn std::error::Error>>;
+    fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn gen_dir(&self) -> fs::Path;
-    fn write_publishable(&self) -> Result<(), Box<dyn std::error::Error>>;
-    fn write_spliced(&self, src: &std::path::Path, lowered: &str) -> Result<(), Box<dyn std::error::Error>>;
+    fn write_publishable(&self) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
+    fn write_spliced(&self, src: &std::path::Path, lowered: &str) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn switches_path(&self) -> fs::Path;
     fn own_dir(&self) -> fs::Path;
     fn choices(&self) -> (String, String);
@@ -105,31 +105,31 @@ pub trait ProjectDriveHost {
     fn target_triple(&self) -> String;
     fn host_triple(&self) -> Option<String>;
     fn toolchain_can_build_for(&self, triple: &str) -> bool;
-    fn write_workspace(&self, rust: &[String]) -> Result<fs::Path, Box<dyn std::error::Error>>;
-    fn member_manifest(&self, at: i64, rust: &str) -> Result<String, Box<dyn std::error::Error>>;
+    fn write_workspace(&self, rust: &[String]) -> Result<fs::Path, std::boxed::Box<dyn std::error::Error>>;
+    fn member_manifest(&self, at: i64, rust: &str) -> Result<String, std::boxed::Box<dyn std::error::Error>>;
     fn features(&self) -> Vec<ManifestFeature>;
     fn rust_library(&self) -> Option<ManifestRustLibrary>;
     fn manifest_text(&self) -> (String, String);
     fn runs_without_cargo(&self, link_flags: &[String]) -> bool;
-    fn compile_fast(&self, rust: &str) -> Result<Option<ProjectDriveFast>, Box<dyn std::error::Error>>;
+    fn compile_fast(&self, rust: &str) -> Result<Option<ProjectDriveFast>, std::boxed::Box<dyn std::error::Error>>;
     fn settings_env(&self) -> Vec<(String, String)>;
     fn root_tag(&self) -> String;
     fn shown_as(&self) -> Option<(String, String)>;
     fn entry_without_main(&self) -> Option<String>;
-    fn allowlist(&self) -> Result<Option<fs::Path>, Box<dyn std::error::Error>>;
-    fn cpu_rustflags(&self) -> Result<Option<String>, Box<dyn std::error::Error>>;
-    fn make_cargo(&self, manifest: &std::path::Path, env: &[(String, String)], unset: &[String], shared: bool) -> Result<(), Box<dyn std::error::Error>>;
+    fn allowlist(&self) -> Result<Option<fs::Path>, std::boxed::Box<dyn std::error::Error>>;
+    fn cpu_rustflags(&self) -> Result<Option<String>, std::boxed::Box<dyn std::error::Error>>;
+    fn make_cargo(&self, manifest: &std::path::Path, env: &[(String, String)], unset: &[String], shared: bool) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn is_library(&self) -> bool;
-    fn cargo_messages(&self, verb: &str, args: &[String]) -> Result<(i32, String), Box<dyn std::error::Error>>;
+    fn cargo_messages(&self, verb: &str, args: &[String]) -> Result<(i32, String), std::boxed::Box<dyn std::error::Error>>;
     fn settle(&self);
-    fn report(&self, messages: &str) -> Result<(), Box<dyn std::error::Error>>;
+    fn report(&self, messages: &str) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn package_name(&self) -> Option<String>;
     fn bind(&self) -> Option<String>;
     fn bind_features(&self) -> Option<Vec<String>>;
-    fn own_copy(&self, built: &std::path::Path) -> Result<fs::Path, Box<dyn std::error::Error>>;
+    fn own_copy(&self, built: &std::path::Path) -> Result<fs::Path, std::boxed::Box<dyn std::error::Error>>;
     fn record_resolved_dependencies(&self) -> Option<String>;
-    fn cargo_run(&self, args: &[String]) -> Result<i32, Box<dyn std::error::Error>>;
-    fn run_directly(&self, binary: &std::path::Path) -> Result<i32, Box<dyn std::error::Error>>;
+    fn cargo_run(&self, args: &[String]) -> Result<i32, std::boxed::Box<dyn std::error::Error>>;
+    fn run_directly(&self, binary: &std::path::Path) -> Result<i32, std::boxed::Box<dyn std::error::Error>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -157,7 +157,7 @@ impl std::error::Error for ProjectDriveRefusal {}
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, no_cache: bool, locked: bool) -> Result<(i32, Option<fs::Path>), Box<dyn std::error::Error>> {
+pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, no_cache: bool, locked: bool) -> Result<(i32, Option<fs::Path>), std::boxed::Box<dyn std::error::Error>> {
     let rust_library = project_drive_artifact(host) == "rust-library";
     if rust_library && subcommand == "run" { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Refused(String::from("This package is built as a library (`artifact = \"rust-library\"`), and a library has nothing to run: `nikaia build` writes it as a Rust crate, and a Rust program depends on it.")), &"project_drive_drive_to")); }
     let crate_build = rust_library && (subcommand == "build" || subcommand == "check") && !host.tests_build();
@@ -478,7 +478,7 @@ pub fn project_drive_no_std_for(triple: &str) -> String { format!("cannot build 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn project_drive_cargo_env<H: ProjectDriveHost>(host: &H, link_flags: &[String], no_cache: bool, shared: bool, fetched: String) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+pub(crate) fn project_drive_cargo_env<H: ProjectDriveHost>(host: &H, link_flags: &[String], no_cache: bool, shared: bool, fetched: String) -> Result<Vec<(String, String)>, std::boxed::Box<dyn std::error::Error>> {
     let mut env = host.settings_env();
     env.push((String::from("NIKAIA_RUSTC_WRAPPER"), String::from("1")));
     env.push((String::from("NIKAIA_GEN_DIR"), nikaia_std::fs::path::to_text(&(host.gen_dir()))?));
@@ -578,7 +578,7 @@ pub async fn project_drive_publishable(root: &std::path::Path, file: &ManifestFi
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &str, python: Option<&str>, node: Option<&str>, messages: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &str, python: Option<&str>, node: Option<&str>, messages: &str) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let made = nikaia_std::fs::path::join(&(host.own_dir()), std::path::Path::new(&("c-library")));
     project_drive_make_dir(&made)?;
     let package = nikaia_std::index::or(host.package_name(), || "program".into());
@@ -629,7 +629,7 @@ pub fn project_drive_rust_crate(name: &str) -> String { format!("nikaia_{}", nik
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn project_drive_rust_library<H: ProjectDriveHost>(host: &H, members: &[ProjectMembersMember], rust: &[String], checking: bool) -> Result<i32, Box<dyn std::error::Error>> {
+pub(crate) fn project_drive_rust_library<H: ProjectDriveHost>(host: &H, members: &[ProjectMembersMember], rust: &[String], checking: bool) -> Result<i32, std::boxed::Box<dyn std::error::Error>> {
     let target = match nikaia_std::fs::path::parent(&(host.own_dir())) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::raise(ProjectDriveRefusal::Failed(format!("{} has no directory", nikaia_std::fs::path::display(&(host.own_dir())))), &"project_drive_rust_library")) };
     let made = nikaia_std::fs::path::join(&(target), std::path::Path::new(&("rust-library")));
     let features = host.features();
@@ -872,12 +872,12 @@ pub fn project_drive_backend_said(messages: &str) -> bool { messages.lines().any
 pub trait ProjectDriveKeptHost {
     fn user_cache_dir(&self) -> fs::Path;
     fn use_entry(&self, entry: &std::path::Path);
-    fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), Box<dyn std::error::Error>>;
+    fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
 }
 
 pub fn project_drive_not_the_entry(file: &std::path::Path, root: &std::path::Path, entry: &str) -> String { format!("{} is not the entry point of the project at {}.\n`nikaia run` with a file runs the program whose entry it is, and this project's program starts at `{}`. Run `nikaia run --project {}`, or `nikaia lower {}` to lower the file to Rust.", nikaia_std::fs::path::display(&(file)), nikaia_std::fs::path::display(&(root)), entry, nikaia_std::fs::path::display(&(root)), nikaia_std::fs::path::display(&(file))) }
 
-pub async fn project_drive_kept_for_file<H: ProjectDriveKeptHost>(file: &std::path::Path, entry: &str, host: &H) -> Result<fs::Path, Box<dyn std::error::Error>> {
+pub async fn project_drive_kept_for_file<H: ProjectDriveKeptHost>(file: &std::path::Path, entry: &str, host: &H) -> Result<fs::Path, std::boxed::Box<dyn std::error::Error>> {
     let canonical_file = project_members_canonical(file);
     let bytes: Vec<u8> = nikaia_std::fs::path::display(&(canonical_file)).bytes().collect::<Vec<_>>();
     let hex = hash::sha256_hex(&bytes);
@@ -903,18 +903,18 @@ pub async fn project_drive_kept_for_file<H: ProjectDriveKeptHost>(file: &std::pa
 pub trait ProjectDriveWrapperHost {
     fn source_path(&self) -> Option<fs::Path>;
     fn trace(&self, verdict: &str);
-    fn run(&self) -> Result<i32, Box<dyn std::error::Error>>;
+    fn run(&self) -> Result<i32, std::boxed::Box<dyn std::error::Error>>;
     fn crate_name(&self) -> Option<String>;
-    fn lower(&self, source: &std::path::Path, no_cache: bool, allowlist: Option<&std::path::Path>, shown: Option<&str>, program: bool) -> Result<(String, Vec<fs::Path>), Box<dyn std::error::Error>>;
+    fn lower(&self, source: &std::path::Path, no_cache: bool, allowlist: Option<&std::path::Path>, shown: Option<&str>, program: bool) -> Result<(String, Vec<fs::Path>), std::boxed::Box<dyn std::error::Error>>;
     fn lower_batch(&self, sources: &[fs::Path], roots: &[String], no_cache: bool) -> Vec<Option<(String, Vec<fs::Path>)>>;
-    fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), Box<dyn std::error::Error>>;
+    fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn replace_source(&self, generated: &std::path::Path);
     fn args(&self) -> Vec<String>;
     fn push_arg(&self, arg: &str);
-    fn record_dependencies(&self, inputs: &[fs::Path]) -> Result<(), Box<dyn std::error::Error>>;
+    fn record_dependencies(&self, inputs: &[fs::Path]) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
 }
 
-pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32, Box<dyn std::error::Error>> {
+pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32, std::boxed::Box<dyn std::error::Error>> {
     let source = match host.source_path() {
         None => {
             host.trace("passed through");

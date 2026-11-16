@@ -198,7 +198,7 @@ pub fn lowered_options(contract: &FnContract) -> Vec<ConfigContract> {
         if lends_option(contract, option) {
             let view = Ty::Named { name: nikaia_std::block::Text::from(TEXT_VIEW.to_string()), args: vec![], view: true };
             let lent = match &option.ty {
-                Ty::Nullable(_) => Ty::Nullable(Box::new(view)),
+                Ty::Nullable(_) => Ty::Nullable(std::boxed::Box::new(view)),
                 _ => view,
             };
             out.push(ConfigContract { name: nikaia_std::block::Text::from(option.name.to_string()), ty: lent, default: nikaia_std::block::Text::from(option.default.to_string()) });

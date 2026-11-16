@@ -394,7 +394,7 @@ impl EmitState {
         out.push(&result_open);
         if settled { out.push("nikaia_std::rt::exec::settled("); }
         let boxed = pausing.is_some() && self.closes_a_pausing_cycle(&scope.function, nikaia_std::index::or(pausing.as_deref(), || ""));
-        if boxed { out.push("Box::pin("); }
+        if boxed { out.push("std::boxed::Box::pin("); }
         let handle = nikaia_std::index::or(self.handle_from(world, func), || "".into());
         let hull = handle != "";
         if hull { if self.handle_from_may_be_null(world, func) { out.push(&format!("{}::maybe(", handle)); } else { out.push(&format!("{}::from_c(\"{}\", ", handle, self.called_name(world.words, func))); } }
@@ -908,7 +908,7 @@ impl EmitState {
             length = self.is_counted(on, &name, args);
         }
         let boxed = self.method_closes_a_pausing_cycle(&scope.function, &name);
-        if boxed { out.push("Box::pin("); }
+        if boxed { out.push("std::boxed::Box::pin("); }
         if name == "par_iter" && args.is_empty() && emit_candidates(&self.own_contracts, "par_iter").is_empty() {
             let piece = emit_call_option_named(world, config, "piece");
             let limit = emit_call_option_named(world, config, "limit");
@@ -1284,8 +1284,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple95204| {
-        let (i, word) = __nikaia_tuple95204;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple95228| {
+        let (i, word) = __nikaia_tuple95228;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

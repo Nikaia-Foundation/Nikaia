@@ -558,7 +558,7 @@ impl EmitState {
         }
         let boxed = pausing != null && self.closes_a_pausing_cycle(scope.function, pausing ?? "")
         if boxed {
-            out.push("Box::pin(")
+            out.push("std::boxed::Box::pin(")
         }
         // **A handle is made at the call and nowhere else** (ADR-302 D11, D12).
         // The declaration hands back the address C returned; the hull goes on
@@ -1327,7 +1327,7 @@ impl EmitState {
         // method of that name, so the same widening answers the question here.
         let boxed = self.method_closes_a_pausing_cycle(scope.function, name)
         if boxed {
-            out.push("Box::pin(")
+            out.push("std::boxed::Box::pin(")
         }
         // **`par_iter()` walks the list on every core at `yes`, and is the list's
         // `iter()` at `no`** (ADR-235 D1).

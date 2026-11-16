@@ -687,7 +687,7 @@ impl EmitState {
             let mut before = around_before.clone()
             let mut after = around_after.clone()
             if boxed {
-                before = f"Box::new({around_before}"
+                before = f"std::boxed::Box::new({around_before}"
                 after = f"{around_after})"
             }
             // **Into a field both kinds of text flow into, each value goes as it
@@ -754,7 +754,7 @@ impl EmitState {
                     put = f"Some({put})"
                 }
                 if boxed {
-                    out.push(f": Box::new({put})")
+                    out.push(f": std::boxed::Box::new({put})")
                 } else {
                     out.push(f": {put}")
                 }
@@ -789,7 +789,7 @@ impl EmitState {
     fn emit_place_field_default(ref self, owner: ref String, field: ref String, default: ref String, ty: ref Ty) -> String {
         let mut value = held_literal(default, ty)
         if self.is_boxed_field(owner, field) {
-            value = f"Box::new({value})"
+            value = f"std::boxed::Box::new({value})"
         }
         return f"{escaped_name(field)}: {value}"
     }
@@ -836,7 +836,7 @@ impl EmitState {
             out.push(written)
             // **A boxed field is built in its box** (ADR-246 D3).
             if self.is_boxed_field(owner, emit_text(world, field.name)) {
-                out.push(": Box::new(")
+                out.push(": std::boxed::Box::new(")
                 if field.value != null {
                     let value = field.value ?? return
                     self.emit_expr(world, walk, out, host, value, depth, flow, scope)

@@ -242,6 +242,6 @@ pub struct EmitScope {
 }
 
 impl EmitScope {
-    pub fn plain() -> EmitScope { EmitScope { origin: String::from(""), function: String::from(""), channel: String::from("Box<dyn std::error::Error>"), caught_sum: None, caught_member: None, bound: String::from(""), changed: vec![], awaited: vec![], tasks_channel: String::from(""), tasks_function: String::from("") } }
+    pub fn plain() -> EmitScope { EmitScope { origin: String::from(""), function: String::from(""), channel: String::from("std::boxed::Box<dyn std::error::Error>"), caught_sum: None, caught_member: None, bound: String::from(""), changed: vec![], awaited: vec![], tasks_channel: String::from(""), tasks_function: String::from("") } }
 }
 

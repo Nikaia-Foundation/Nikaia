@@ -23,7 +23,7 @@ pub fn type_last_segment(name: &str) -> String { nikaia_std::block::Text::from(n
 pub fn view_of_type(inner: &Ty) -> Ty {
     match inner {
         Ty::Named { name, args, view } => { let view = *view; if view { inner.clone() } else if args.is_empty() && name == "String" { Ty::Named { name: String::from("str"), args: vec![], view: true } } else { Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: args.copy_owned(), view: true } } },
-        Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); Ty::Nullable(Box::new(view_of_type(held))) },
+        Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); Ty::Nullable(std::boxed::Box::new(view_of_type(held))) },
         _ => Ty::Unknown,
     }
 }
@@ -228,7 +228,7 @@ pub(crate) fn code_as_written(ty: &Ty) -> Option<String> {
             let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
             let mut listed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for part in params.iter() { listed.push(code_param_as_written(part)); }
-            let bare = Ty::Fn { params: vec![], result: Box::new(match result {
+            let bare = Ty::Fn { params: vec![], result: std::boxed::Box::new(match result {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
             }), is_sync, can_throw };

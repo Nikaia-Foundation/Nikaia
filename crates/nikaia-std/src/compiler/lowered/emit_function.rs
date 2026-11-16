@@ -565,7 +565,7 @@ impl EmitState {
                     },
                     None => { returned = String::from("()"); },
                 }
-                let mut channel: String = String::from("Box<dyn std::error::Error>"); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+                let mut channel: String = String::from("std::boxed::Box<dyn std::error::Error>"); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                 if !has_declared_by {
                     let mut borrows_any = receiver.is_some();
                     for each in args.iter() { if self.carries_a_view(world, &each.ty) { borrows_any = true; } }

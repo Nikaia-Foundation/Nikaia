@@ -519,7 +519,7 @@ impl EmitState {
             queued = true;
             let failing = nikaia_std::index::or(self.facts.settle_fns.get(&scope.function), || false);
             let kind = emit_settle_kind(host.overlaps_user_code());
-            if failing && fallible && channel == "Box<dyn std::error::Error>" { wrapper = format!("nikaia_std::cleanup::branch_after::<{}, _, _, _>", kind); } else { wrapper = format!("nikaia_std::cleanup::branch::<{}, _, _>", kind); }
+            if failing && fallible && channel == "std::boxed::Box<dyn std::error::Error>" { wrapper = format!("nikaia_std::cleanup::branch_after::<{}, _, _, _>", kind); } else { wrapper = format!("nikaia_std::cleanup::branch::<{}, _, _>", kind); }
         }
         let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
         let inner = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1)));

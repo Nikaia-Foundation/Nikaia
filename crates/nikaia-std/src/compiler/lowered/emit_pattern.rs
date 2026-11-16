@@ -4,7 +4,7 @@
 impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn emit_pattern<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &Spanned<Pattern>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_pattern<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &Spanned<Pattern>) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         let st = out.mark();
         if emit_is_a_binding_text(world, &walk, &pattern.node) {
             match &pattern.node {
@@ -30,7 +30,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_patterns<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, patterns: &[Spanned<Pattern>], separator: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_patterns<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, patterns: &[Spanned<Pattern>], separator: &str) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         for i in 0..patterns.len() as i64 {
             if i > 0 { out.push(separator); }
             self.emit_pattern(world, walk, out, host, unsafe { nikaia_std::proven::read(&patterns, (i) as usize) })?;
@@ -40,7 +40,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_pattern_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &Spanned<Pattern>) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_pattern_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &Spanned<Pattern>) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         match &pattern.node {
             Pattern::Seq(parts) => { self.emit_patterns(world, walk, out, host, parts, " ")?; },
             Pattern::Choice(parts) => { self.emit_patterns(world, walk, out, host, parts, " | ")?; },
@@ -141,7 +141,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_text_parts<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, args: &[Spanned<Pattern>]) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_text_parts<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, args: &[Spanned<Pattern>]) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         if args.len() == 1 {
             match &unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node {
                 Pattern::Seq(parts) => {
@@ -156,7 +156,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_text_run<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, parts: &[Spanned<Pattern>]) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_text_run<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, parts: &[Spanned<Pattern>]) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         for k in 0..parts.len() as i64 {
             if k > 0 { out.push(" "); }
             let at = if k == 0 { "from" } else if k == unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) } { "to" } else { "" };
@@ -213,7 +213,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_pattern_ref<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: winnow_grammar::Symbol, generics: &[Type], args: &[Spanned<Pattern>]) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_pattern_ref<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: winnow_grammar::Symbol, generics: &[Type], args: &[Spanned<Pattern>]) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         let called = emit_text(world, name);
         if called == "list" && generics.is_empty() && args.len() == 2 {
             out.push("__nikaia_list");
@@ -298,7 +298,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_built_in_args<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, called: &str, args: &[Spanned<Pattern>]) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_built_in_args<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, called: &str, args: &[Spanned<Pattern>]) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         if args.len() == 1 && called != "until" && emit_groups_parts(&unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node) {
             out.push("(");
             self.emit_pattern(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) })?;

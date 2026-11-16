@@ -226,7 +226,7 @@ fn a_set_with_a_question_mark_is_not_a_sum() {
         common::undescribed_value("s")
     ));
     assert!(
-        rust.contains("fn unclear(s: String) -> Result<String, Box<dyn"),
+        rust.contains("fn unclear(s: String) -> Result<String, std::boxed::Box<dyn"),
         "{rust}"
     );
 }

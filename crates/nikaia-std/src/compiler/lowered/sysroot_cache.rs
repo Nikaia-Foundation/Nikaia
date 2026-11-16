@@ -20,7 +20,7 @@ pub(crate) const SYSROOT_LOWERED: &str = "lowered.rs";
 pub trait SysrootHost {
     fn use_entry(&self, entry: &std::path::Path);
     fn unique_beside(&self, path: &std::path::Path) -> fs::Path;
-    fn rustc_cpus(&self, triple: &str, more: &[String]) -> Result<String, Box<dyn std::error::Error>>;
+    fn rustc_cpus(&self, triple: &str, more: &[String]) -> Result<String, std::boxed::Box<dyn std::error::Error>>;
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -68,7 +68,7 @@ pub fn sysroot_nika_in(src: &std::path::Path) -> Result<Vec<fs::Path>, nikaia_st
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn sysroot_cpu_levels<H: SysrootHost>(triple: &str, host: &H) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+pub fn sysroot_cpu_levels<H: SysrootHost>(triple: &str, host: &H) -> Result<Vec<String>, std::boxed::Box<dyn std::error::Error>> {
     let mut levels: Vec<String> = match triple.starts_with("x86_64") {
         true => vec![String::from("x86-64"), String::from("x86-64-v2"), String::from("x86-64-v3"), String::from("x86-64-v4")],
         false => {

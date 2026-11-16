@@ -197,12 +197,12 @@ impl EmitState {
                 // function's own result is (#1016).
                 let inner = a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, result, lifetimes, count))
                 if code.can_throw {
-                    outcome = f"Result<{inner}, Box<dyn std::error::Error>>"
+                    outcome = f"Result<{inner}, std::boxed::Box<dyn std::error::Error>>"
                 } else {
                     outcome = inner
                 }
             } else if code.can_throw {
-                outcome = "Result<(), Box<dyn std::error::Error>>"
+                outcome = "Result<(), std::boxed::Box<dyn std::error::Error>>"
             }
             let runs = walk.in_parameter && walk.code_parameter_runs
             // **A view handed back from two views or none says which it is
@@ -232,7 +232,7 @@ impl EmitState {
                     let inner = a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, result, EmitLifetimes::Call, count))
                     let mut each = inner.clone()
                     if code.can_throw {
-                        each = f"Result<{inner}, Box<dyn std::error::Error>>"
+                        each = f"Result<{inner}, std::boxed::Box<dyn std::error::Error>>"
                     }
                     if runs {
                         if code.is_sync {
@@ -300,7 +300,7 @@ impl EmitState {
             if walk.code_parameter_runs {
                 return f"impl AsyncFn({params.join(", ")}) -> {outcome}"
             }
-            return f"impl Fn({params.join(", ")}) -> std::pin::Pin<Box<dyn std::future::Future<Output = {outcome}>>>"
+            return f"impl Fn({params.join(", ")}) -> std::pin::Pin<std::boxed::Box<dyn std::future::Future<Output = {outcome}>>>"
         }
 
         // `Seen[T]` is erased (ADR-281 D22): only with its argument.

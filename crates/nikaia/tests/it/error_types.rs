@@ -72,7 +72,10 @@ fn a_function_with_one_error_type_declares_it() {
         rust.contains("nikaia_std::error::Thrown<ConfigError"),
         "{rust}"
     );
-    assert!(!rust.contains("fn load() -> Result<i64, Box<dyn"), "{rust}");
+    assert!(
+        !rust.contains("fn load() -> Result<i64, std::boxed::Box<dyn"),
+        "{rust}"
+    );
 }
 
 /// **A set with `"?"` in it keeps the box**, which is what `"?"` means: the

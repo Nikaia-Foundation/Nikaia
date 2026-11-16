@@ -359,6 +359,6 @@ pub struct EmitScope {
 impl EmitScope {
     /// Nothing around: the opaque channel, no names.
     pub fn plain() -> EmitScope {
-        return EmitScope { origin: "", function: "", channel: "Box<dyn std::error::Error>", caught_sum: null, caught_member: null, bound: "", changed: [], awaited: [], tasks_channel: "", tasks_function: "" }
+        return EmitScope { origin: "", function: "", channel: "std::boxed::Box<dyn std::error::Error>", caught_sum: null, caught_member: null, bound: "", changed: [], awaited: [], tasks_channel: "", tasks_function: "" }
     }
 }
