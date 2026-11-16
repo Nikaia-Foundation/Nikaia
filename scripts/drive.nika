@@ -61,7 +61,7 @@
 //                                 lane (`ready`, `improve`; `IMPROVE #N
 //                                 <brief>`, drive_improve_file; its body
 //                                 names the run's report and commit,
-//                                 #1706), a `broke` answer said on the
+//                                 #1706), a `broke` or `wrong` answer said on the
 //                                 run's issue (`IMPROVE-BROKE #N`), a
 //                                 point an improvement issue has added
 //                                 there (`IMPROVE-DUP #M`), a deviation or
@@ -3162,7 +3162,9 @@ fn drive_improve_points(text: String) -> Vec[String] {
 // built, a deviation or a duplicate), one `<where>\t<point>` line per point
 // of drive_improve_points, `Deviation:` first as `drop deviation`:
 //   `comment #N`   an `Issue:` answer that the run's issue N broke a rule
-//                  (`broke I3: ...`, `I4b not followed: ...`): the author
+//                  or claimed what was false
+//                  (`broke I3: ...`, `I4b not followed: ...`, `wrong I7:
+//                  ...`, a wrong suspected cause): the author
 //                  fixes the issue (docs/issues.md), so it is said there;
 //   `drop settled` the point says the run closed or built it itself
 //                  (drive_improve_settled);
@@ -3222,15 +3224,25 @@ fn drive_improve_items(text: String, issue: String, existing: String) -> Vec[Str
 	return items
 }
 
-// Whether POINT is an `Issue:` answer saying only that the run's issue broke
-// a rule: its kind (before the first `: `) starts with `broke` or says `not
-// followed`.
+// Whether POINT is an `Issue:` answer about the run's issue alone: it broke a
+// rule (its kind, before the first `: `, starts with `broke` or says `not
+// followed`), or what it claims was false, its suspected cause above all (the
+// kind starts with `wrong` or says `missed`, or the answer speaks of the
+// issue's diagnosis or suspicion). A wrong guess is said on that issue, not
+// filed as an improvement issue of its own (owner, 2026-11-16: #1917, #1926,
+// #1927, #1928 each filed one run's wrong cause); the supervisor counts these
+// answers per rule (docs/supervisor.md) and files a rule change only when the
+// pattern recurs. A `rules-gap` is a point about the rules and is filed.
 fn drive_improve_broke(point: String) -> bool {
 	let rest = point.strip_prefix("Issue: ") ?? ""
 	if rest == "" { return false }
 	let colon = rest.find(": ") ?? rest.len()
 	let kind = f"{rest[0..<colon]}".trim().to_lowercase()
-	return kind.starts_with("broke") || kind.contains("not followed")
+	if kind.starts_with("rules-gap") { return false }
+	if kind.starts_with("broke") || kind.contains("not followed") { return true }
+	if kind.starts_with("wrong") || kind.contains("missed") { return true }
+	let low = rest.to_lowercase()
+	return low.contains("diagnosis") || low.contains("suspect")
 }
 
 // Whether POINT says the run settled it itself: closed, noise, nothing to
