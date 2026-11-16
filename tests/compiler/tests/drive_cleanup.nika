@@ -22,6 +22,20 @@ fn root() -> String throws {
     return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
 }
 
+// An ESCALATE line ends with the commit of the drive.nika that ran (#1801),
+// which changes with each commit: it is printed as SHA.
+fn unsha(text: String) -> String throws {
+    let mut lines: Vec[String] = []
+    for line in text.split("\n") {
+        let mut first = true
+        for part in line.split(" (drive.nika ") {
+            if first { if part.len() < line.len() { lines.push(part + " (drive.nika SHA)") } else { lines.push(part.clone()) } }
+            first = false
+        }
+    }
+    return lines.join("\n")
+}
+
 fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
@@ -56,7 +70,7 @@ fn main() throws {
         let dry = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.clone(), "--lines", f"{tmp}/lines", "--dry-run"]; dir: repo.clone(), env: faked, env_remove: ["NIKAIA_SUITE_DIR"])
         println(f"== {free} MB free (exit {dry.code})")
         for line in dry.stdout.trim().split("\n") {
-            if line.starts_with("DISK") || line.starts_with("ESCALATE") || line.starts_with("DRY-RUN") || line.contains("cache prune") { println(line.replace(tmp, "T").replace("target/release/nikaia", "target/fast/nikaia")) }
+            if line.starts_with("DISK") || line.starts_with("ESCALATE") || line.starts_with("DRY-RUN") || line.contains("cache prune") { println(unsha(line.clone()).replace(tmp, "T").replace("target/release/nikaia", "target/fast/nikaia")) }
         }
     }
     process::run("rm", ["-rf", tmp])

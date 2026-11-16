@@ -50,6 +50,16 @@ it, like the checks in `docs/supervisor.md`.
   is named as one the issue needs (I6). A sketch written in it is not
   (#1730: #116's sketch wrote `db::Value.Text`, `println(v)` of an enum,
   which is NK1201, and `Seq`/`Map`; the builder respelled them all).
+* **I4c. A failure of a script names the commit that ran, and is checked
+  against `develop`** (#1801): an issue filed from a driver or script
+  failure quotes the commit the run used (an ESCALATE line ends with
+  `(drive.nika <sha8>)`, `drive_wake` in `scripts/drive.nika`; a driver
+  keeps the script it started with until a merge brings a new one). Before
+  filing, `git log <sha8>..origin/develop -- <script>` and `git log -S
+  <function>` show whether a later commit already changed it; where one
+  did, the issue names that commit and orders only what is still missing
+  (often a test), or is not filed (#1801: #1784 was filed after its fix
+  57de760b0 had landed, and its run built only a test).
 
 ## A bug (something specified or plainly meant does not work)
 

@@ -71,8 +71,8 @@ DRY-RUN NEXT b1
 would run: target/fast/nikaia run scripts/cycle.nika -- T --apply
 DRY-RUN BUMP
 == owner (exit 2)
-ESCALATE OWNER b0: which model?
-WAKE ESCALATE OWNER b0: which model?
+ESCALATE OWNER b0: which model? (drive.nika SHA)
+WAKE ESCALATE OWNER b0: which model? (drive.nika SHA)
 == unknown (exit 2)
-ESCALATE no action for: BATCH none (no batch.txt)
-WAKE ESCALATE no action for: BATCH none (no batch.txt)
+ESCALATE no action for: BATCH none (no batch.txt) (drive.nika SHA)
+WAKE ESCALATE no action for: BATCH none (no batch.txt) (drive.nika SHA)

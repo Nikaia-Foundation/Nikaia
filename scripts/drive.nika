@@ -84,6 +84,7 @@
 // agent.nika, a stop line (above), `--max` agent runs (default 8), a merge
 // conflict on a rejected push, a suite still red after 2 QA rounds. A RED line
 // with a builder queued goes on with it (the supervisor's fix-forward brief).
+// Each ESCALATE line names the drive.nika commit that ran (drive_wake).
 //
 // `--ignore-ci-red`: a RED line of the cycle (CI red on develop) does not
 // stop the driver; NEXT and BATCH DONE go on as if CI were green, and a BUMP
@@ -241,9 +242,29 @@ fn drive_exe() -> String throws {
 // what matters): the line itself, then `WAKE <line>`. The session's watcher
 // on the log greps `^WAKE ` and nothing else; the end of the background task
 // wakes it anyway. Only ESCALATE, STOP and PUSHED go through here.
+// An ESCALATE line ends with the commit of the scripts/drive.nika this run
+// loaded, ` (drive.nika <sha8>)` (`+edited` where the tree's copy differs
+// from that commit; nothing outside a checkout holding the script): a run
+// keeps the script it started with until a merge brings a new one
+// (drive_restart), so an escalation can come from a script older than
+// develop, and the issue filed from it says which (#1801, docs/issues.md I4c).
 fn drive_wake(line: String) throws {
-	println(line)
-	println(f"WAKE {line}")
+	let mut said = line.clone()
+	if line.starts_with("ESCALATE ") {
+		let sha = drive_script_commit()
+		if sha != "" { said = f"{line} (drive.nika {sha})" }
+	}
+	println(said)
+	println(f"WAKE {said}")
+}
+
+// The last commit of scripts/drive.nika in this checkout, `+edited` where
+// the working tree's copy differs from it; "" where there is none.
+fn drive_script_commit() -> String throws {
+	let sha = process::run("git", ["log", "-1", "--format=%h", "--", "scripts/drive.nika"]).stdout.trim().clone()
+	if sha == "" { return "" }
+	if process::run("git", ["diff", "--quiet", "HEAD", "--", "scripts/drive.nika"]).code != 0 { return sha + "+edited" }
+	return sha
 }
 
 fn drive_escalate(why: String) throws {
