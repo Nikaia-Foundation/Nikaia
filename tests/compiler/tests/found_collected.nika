@@ -2,7 +2,8 @@
 // longer cuts the batch; the driver appends `<brief>: Found: ...` to
 // DIR/found.txt (created when missing) and prints a `FOUND` line, one per
 // `Found:` line (#1677). A
-// `Deviation:` still cuts.
+// `Deviation:` still cuts. A report with no Found whose `Needs: supervisor
+// decision: <gap>` names its gap gives that gap as its Found (#1744).
 use std::fs
 use std::process
 
@@ -41,6 +42,12 @@ fn main() throws {
     fs::write(f"{tmp}/b.md.report.md", fs::Root::Anywhere, head + "Found: NK1131 refuses a lent field (probe p.nika)\nFound: describe writes ? for [T; N] (probe q.nika)\nFound: none\nDeviation: none\n")
     let two = process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--found", tmp.clone(), f"{tmp}/b.md"]; dir: repo.clone())
     print(f"two: {two.stdout}")
+    fs::write(f"{tmp}/c.md.report.md", fs::Root::Anywhere, head + "Found: none\nNeeds: supervisor decision: ADR-306 has no rule for a struct result's fields\n")
+    let gap = process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--found", tmp.clone(), f"{tmp}/c.md"]; dir: repo.clone())
+    print(f"needs gap: {gap.stdout}")
+    fs::write(f"{tmp}/c.md.report.md", fs::Root::Anywhere, head + "Found: none\nNeeds: supervisor decision\n")
+    let bare = process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--found", tmp.clone(), f"{tmp}/c.md"]; dir: repo.clone())
+    print(f"needs bare: {bare.stdout}")
     fs::write(f"{tmp}/a.md.report.md", fs::Root::Anywhere, head + "Found: none\nDeviation: step 2 not built\nChangelog: none\n")
     let cut = process::run(nikaia.clone(), ["run", "scripts/batch.nika", "--", tmp.clone()]; dir: repo.clone())
     print(f"deviation: {cut.stdout}")

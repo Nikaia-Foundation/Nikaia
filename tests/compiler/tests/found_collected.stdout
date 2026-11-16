@@ -7,5 +7,7 @@ a: Found: NK1131 refuses a lent field (probe p.nika)
 a: Found: NK1131 refuses a lent field (probe p.nika)
 two: FOUND b: Found: NK1131 refuses a lent field (probe p.nika)
 FOUND b: Found: describe writes ? for [T; N] (probe q.nika)
+needs gap: FOUND c: Found: ADR-306 has no rule for a struct result's fields
+needs bare: none
 deviation: CUT a.md: Deviation: step 2 not built
 no found: none

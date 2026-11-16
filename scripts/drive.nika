@@ -420,12 +420,29 @@ fn drive_fields(body: String, key: String) -> Vec[String] {
 }
 
 // The `Found:` values of a report that name a defect (not empty, not `none`).
+// A report with none whose `Needs:` names its gap (`Needs: supervisor
+// decision: <gap>`) gives that gap (drive_needs_gap) as its one Found, so it
+// is filed as a `decision` issue (drive_found_labels), not buried in the
+// improvement issue (#1744: #1557's run put its ADR-306 question there).
 fn drive_founds(text: String) -> Vec[String] {
 	let mut out: Vec[String] = []
-	for f in drive_fields(text, "Found") {
+	for f in drive_fields(text.clone(), "Found") {
 		if f != "" && drive_word(f.clone()) != "none" { out.push(f) }
 	}
+	if out.len() == 0 {
+		let gap = drive_needs_gap(text)
+		if gap != "" { out.push(gap) }
+	}
 	return out
+}
+
+// The gap a report's `Needs: supervisor decision: <gap>` names, without the
+// words before it; "" when `Needs:` says no more than `supervisor decision`
+// or asks for something else.
+fn drive_needs_gap(text: String) -> String {
+	let needs = drive_field(text, "Needs")
+	let rest = (needs.strip_prefix("supervisor decision") ?? "").trim()
+	return (rest.strip_prefix(":") ?? "").trim().clone()
 }
 
 fn drive_word(value: String) -> String {
@@ -2256,6 +2273,8 @@ fn drive_improve_items(text: String) -> Vec[String] {
 		let value = if key == "Issue" { drive_issue_open(field) } else { field }
 		let word = drive_word(value.clone())
 		if value == "" || word == "none" || word == "complete" || word == "-" { continue }
+		// A gap filed as the report's Found (drive_founds, #1744).
+		if key == "Needs" && drive_founds(text.clone()) == [drive_needs_gap(text.clone())] { continue }
 		items.push(f"{key}: {value}")
 	}
 	for c in drive_fields(text, "Comment") {
