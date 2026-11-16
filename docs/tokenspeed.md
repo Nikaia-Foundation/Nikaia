@@ -796,6 +796,18 @@ supervisor's commit.
 | 2026-11-16 | bce1c2 | check | 52 | 3.0 | 0 | - | |
 | 2026-11-16 | 6b56fb | check | 10 | 0.4 | 0 | - | |
 | 2026-11-16 | 1b941f | check | 106 | 6.6 | 0 | - | |
+| 2026-11-16 | 1e643f | check | 55 | 3.5 | 0 | - | |
+| 2026-11-16 | 81d455 | check | 39 | 2.2 | 0 | - | |
+| 2026-11-16 | a78dcf | check | 125 | 8.4 | 0 | - | |
+| 2026-11-16 | 995e3e | check | 17 | 0.9 | 0 | - | |
+| 2026-11-16 | d7163e | check | 113 | 7.7 | 0 | - | |
+| 2026-11-16 | c407cd | check | 25 | 1.2 | 0 | - | |
+| 2026-11-16 | bf03c3 | check | 17 | 0.9 | 0 | - | |
+| 2026-11-16 | 3e901a | check | 62 | 4.8 | 0 | - | |
+| 2026-11-16 | 4f60e1 | check | 24 | 1.0 | 0 | - | |
+| 2026-11-16 | 56e227 | check | 88 | 6.2 | 0 | - | |
+| 2026-11-16 | 40d41e | check | 37 | 2.3 | 0 | - | |
+| 2026-11-16 | 0546b8 | check | 66 | 5.0 | 0 | - | |
 
 Moved lines are attributed by `scripts/tokenspeed.nika`: commits in the agent's
 window that changed a file it edited (Edit/Write/`git add` in its transcript)
