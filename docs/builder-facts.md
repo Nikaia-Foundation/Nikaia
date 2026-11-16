@@ -49,7 +49,11 @@ together with the specification section and an example test.
   use, since another agent may rebuild `target/fast/nikaia` mid-run (P5a, j5).
   Keep the copy in its own directory and name it exactly `nikaia`
   (`$S/old/nikaia`): script tests check the basename and otherwise fall back
-  to `target/fast/nikaia` (b42). `target/release/nikaia` is older than the
+  to `target/fast/nikaia` (b42), resolved under the test's tmp dir: a test
+  failing with *no such file ... target/fast/nikaia* (about 170 programs
+  carry this `toolchain()`, e.g. `describe_reads_a_tuple_parameter`) ran
+  under a copy named otherwise (`nikaia-old`, `nk`); rename it, it is no
+  defect (#1868). `target/release/nikaia` is older than the
   views syntax and cannot serve.
   The copy may predate HEAD (another session built it from another tree,
   and its mtime is when you copied it): when a fails-before result surprises,
