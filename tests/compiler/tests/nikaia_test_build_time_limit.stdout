@@ -1,0 +1,5 @@
+exit 1
+program "builds_long" (tests/builds_long.nika) ... FAILED
+--- program "builds_long" (tests/builds_long.nika)
+test result: FAILED. 0 passed; 1 failed
+build timed out after 2 s

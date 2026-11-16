@@ -490,9 +490,22 @@ pub fn project_tests_time_limit() -> i64 {
     }
 }
 
+pub fn project_tests_build_time_limit() -> i64 {
+    let given = nikaia_std::index::or(text::parse_i64(nikaia_std::index::or(env::var("NIKAIA_TEST_BUILD_TIME_LIMIT"), || "".into()).trim()), || 0);
+    match given > 0 {
+        true => given,
+        false => 1800,
+    }
+}
+
 pub fn project_tests_timed_out_outcome(limit: i64, stdout: Bytes, said: &str) -> ProjectTestsOutcome {
     let shown = format!("timed out after {} s\n{}", limit, said);
     ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout, stderr: shown, files: vec![], bounds: vec![] }
+}
+
+pub fn project_tests_build_timed_out_outcome(limit: i64, said: &str) -> ProjectTestsOutcome {
+    let shown = format!("build timed out after {} s\n{}", limit, said);
+    ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout: Bytes(vec![]), stderr: shown, files: vec![], bounds: vec![] }
 }
 
 pub trait ProjectTestsProgramHost {
@@ -500,8 +513,14 @@ pub trait ProjectTestsProgramHost {
     fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
     fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, Box<dyn std::error::Error>>;
     fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<Option<ProjectTestsRan>, Box<dyn std::error::Error>>;
-    fn batched(&self, setting: &str, project: &std::path::Path, own: &std::path::Path, list: &std::path::Path) -> Result<Option<fs::Path>, Box<dyn std::error::Error>>;
+    fn batched(&self, setting: &str, project: &std::path::Path, own: &std::path::Path, list: &std::path::Path, within: i64) -> Result<ProjectTestsBatchBuilt, Box<dyn std::error::Error>>;
     fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ProjectTestsBatchBuilt {
+    pub binary: Option<fs::Path>,
+    pub timed_out: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -612,7 +631,9 @@ pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, program
         }
         let list = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("batch.list")));
         fs::write(&list, &fs::Root::Anywhere, nikaia_std::block::Text::from(lines.join("")), false, true).await?;
-        match host.batched(setting, &nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project"))), &dir, &list)? {
+        let built = host.batched(setting, &nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project"))), &dir, &list, project_tests_build_time_limit())?;
+        if built.timed_out { continue; }
+        match built.binary {
             None => {
                 let said = match fs::read_to_string(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("batch.said"))), &fs::Root::Anywhere).await {
                     Ok(value) => value,
@@ -732,7 +753,9 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     }
     let report = nikaia_std::block::Text::from(reports.bounds.to_string());
     let asserts = nikaia_std::block::Text::from(reports.asserts.to_string());
-    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]), 0)?;
+    let building = project_tests_build_time_limit();
+    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]), building)?;
+    if built.timed_out { return Ok(project_tests_build_timed_out_outcome(building, &project_tests_relocated(&built.stderr, &entry, &written, root))); }
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, &project_tests_relocated(&built.stderr, &entry, &written, root));
         return Ok(project_tests_bounds_outcome(program, &refused, &report, &asserts));

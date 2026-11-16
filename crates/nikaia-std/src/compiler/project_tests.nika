@@ -580,11 +580,37 @@ pub fn project_tests_time_limit() -> i64 {
     }
 }
 
+/// **How long a test program's build may take** (#1774):
+/// `NIKAIA_TEST_BUILD_TIME_LIMIT` seconds, 1800 where it is not set. A build
+/// that takes longer - one stuck on a Cargo lock a nested `cargo` waits for
+/// (#1727) never ends - is ended, with every process it started, and its
+/// program fails with its name, so the run goes on and names it. The limit
+/// is its own, not a multiple of the run's: a cold build compiles `std` and
+/// takes minutes where a run takes seconds, so it sits far above any build
+/// that finishes and below a CI job's hour. A batch build that runs past it
+/// is dropped, and its programs are built alone. Zero or less, or a value
+/// that is no number, gives the default.
+pub fn project_tests_build_time_limit() -> i64 {
+    let given = text::parse_i64((env::var("NIKAIA_TEST_BUILD_TIME_LIMIT") ?? "").trim()) ?? 0
+    return match given > 0 {
+        true => given,
+        false => 1800,
+    }
+}
+
 /// **A test program that ran past its time limit** (#1672): it failed,
 /// whatever it printed, and says so first on standard error.
 pub fn project_tests_timed_out_outcome(limit: i64, stdout: Bytes, said: String) -> ProjectTestsOutcome {
     let shown = f"timed out after {limit} s\n{said}"
     return ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout: stdout, stderr: shown, files: [], bounds: [] }
+}
+
+/// **A test program whose build ran past its time limit** (#1774): it
+/// failed unrun, and says so first on standard error, before what the build
+/// wrote.
+pub fn project_tests_build_timed_out_outcome(limit: i64, said: String) -> ProjectTestsOutcome {
+    let shown = f"build timed out after {limit} s\n{said}"
+    return ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout: Bytes([]), stderr: shown, files: [], bounds: [] }
 }
 
 /// What `project_tests_program_test` asks of the compiler (`project.rs`'s
@@ -613,12 +639,20 @@ pub trait ProjectTestsProgramHost {
     fn built(ref self, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64) -> ProjectTestsRan? sync throws
     /// **The batch build** (`project_batch.nika`): this compiler's `build
     /// --user-parallelism SETTING --project PROJECT` in `own`, with
-    /// `project_batch_var()` naming `list`; the program it made, nothing where
-    /// the build failed.
-    fn batched(ref self, setting: ref String, project: ref fs::Path, own: ref fs::Path, list: ref fs::Path) -> fs::Path? sync throws
+    /// `project_batch_var()` naming `list`, ended after `within` seconds; the
+    /// program it made, nothing where the build failed or ran out of time.
+    fn batched(ref self, setting: ref String, project: ref fs::Path, own: ref fs::Path, list: ref fs::Path, within: i64) -> ProjectTestsBatchBuilt sync throws
     /// The batch's `binary NAME`, run in `dir`, with `own` as the test's
     /// directory and `stdin` on its standard input (none where it is empty).
     fn ran_batched(ref self, binary: ref fs::Path, name: ref String, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes, within: i64) -> ProjectTestsRan sync throws
+}
+
+/// **How a batch build ended** (`ProjectTestsProgramHost::batched`): the
+/// program it made, nothing where it failed; and whether it ran past its time
+/// limit (#1774).
+pub struct ProjectTestsBatchBuilt {
+    pub binary: fs::Path?,
+    pub timed_out: bool,
 }
 
 /// **What a program of a batch is run from**: the batch's binary, and the
@@ -763,7 +797,14 @@ pub fn project_tests_batches[H: ProjectTestsProgramHost](host: ref H, programs: 
         }
         let list = dir.join("batch.list")
         fs::write(list, fs::Root::Anywhere, lines.join(""))
-        match host.batched(setting, dir.join("project"), dir, list) {
+        let built = host.batched(setting, dir.join("project"), dir, list, project_tests_build_time_limit())
+        // **A batch that ran out of time is not built again** (#1774), in
+        // part or in halves, to run out of it again: its programs are built
+        // alone, each within the limit, and one that hangs fails by name.
+        if built.timed_out {
+            continue
+        }
+        match built.binary {
             null => {
                 // **Leave out the programs rustc named, and build the rest
                 // again** (#1582): the lines it cites are in their modules.
@@ -929,7 +970,11 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     }
     let report = reports.bounds.clone()
     let asserts = reports.asserts.clone()
-    let built = host.compiler("build", setting, project, own, own, Bytes([]), 0)
+    let building = project_tests_build_time_limit()
+    let built = host.compiler("build", setting, project, own, own, Bytes([]), building)
+    if built.timed_out {
+        return project_tests_build_timed_out_outcome(building, project_tests_relocated(built.stderr, entry, written, root))
+    }
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, project_tests_relocated(built.stderr, entry, written, root))
         return project_tests_bounds_outcome(program, refused, report, asserts)
