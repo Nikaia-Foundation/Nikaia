@@ -171,12 +171,11 @@ site through.
 
 ## 4. Not decided here
 
-* **Names.** The keys (`untrusted-shell`, `untrusted-sql`, `untrusted-markup`,
+* **Names and codes** are confirmed by the supervisor (2026-11-16, #1253):
+  the keys (`untrusted-shell`, `untrusted-sql`, `untrusted-markup`,
   `untrusted-paths-anywhere`), `[allow.packages.NAME]`, `--allow=KEY` and
-  `--allow=PACKAGE:KEY`, and the predicates of D2 are this record's proposal.
-  The build issue confirms them before the first commit.
-* **Codes.** `NK1308` and `NK1309` are taken from the free block after
-  `NK1303`; the supervisor confirms the reservation.
+  `--allow=PACKAGE:KEY`, the predicates of D2, and the codes `NK1308` and
+  `NK1309`, reserved after `NK1303`.
 * **`process::shell` is new API.** It runs `/bin/sh -c` on Unix; the shell on
   Windows is open.
 * **A process's program from outside.** `process::run(program, args)` with an
@@ -220,4 +219,4 @@ own precondition, and only a proof of that one admits the value.
   `html`, `http::File`, `db`). C.3 lists `NK1308` and `NK1309`.
 * Part I 1.3 says that outside data at a raw sink is proved or allowed.
 * ADR-010 D8 and ADR-108 D5 carry a note.
-* Built by an issue the supervisor files from the *To build* list.
+* Built by [#1253](https://github.com/Nikaia-Foundation/Nikaia/issues/1253).
