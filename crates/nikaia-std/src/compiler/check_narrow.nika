@@ -90,6 +90,11 @@ pub struct CheckNarrowing {
     /// binding's id: each a `&mut` of the part, so a `match` over one binds
     /// through the reference as one over the parameter does.
     pub in_place_refs: collections::BTreeSet[i64],
+    /// **The names an arm bound out of a parameter the contract lends**, by
+    /// the binding's id (#1805): the parameter arrives as a reference, so
+    /// each part not copied out is one too, and a `match` over it binds
+    /// through the reference as one over the parameter does, without `ref`.
+    pub lent_part_refs: collections::BTreeSet[i64],
     /// **The names an arm bound out of a `std` `get`**, by the binding's id
     /// (#1562): `Some(other)` over `Option<&T>` binds the `&T` below, though
     /// the name is typed the `T` here; only those that neither copy nor are
@@ -117,6 +122,7 @@ impl CheckNarrowing {
             target: -1,
             option_refs: collections::BTreeSet(),
             in_place_refs: collections::BTreeSet(),
+            lent_part_refs: collections::BTreeSet(),
             got_refs: collections::BTreeSet(),
             in_place_arms: [],
         }

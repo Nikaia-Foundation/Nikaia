@@ -1368,6 +1368,14 @@ fn check_core_flow_bound_in_place(state: ref CheckState, world: ref CheckWorld, 
     return if state.narrowing.in_place_refs.contains(local.id) { local.id } else { -1 }
 }
 
+/// Whether `value` names a part an outer arm bound out of a parameter the
+/// contract lends (#1805), a reference like the parameter.
+fn check_core_flow_bound_out_of_a_lent(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    let name = check_core_flow_variable(world, value)
+    let local = state.binding(name) ?? return false
+    return state.narrowing.lent_part_refs.contains(local.id)
+}
+
 /// **One arm of a `match`**: its type, or `null` where it jumps (ADR-276 D1).
 fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, on: ref Ty, arm: ref MatchArm, typed: ref Ty, lendable: bool, through_the_reference: bool, mut_subject: ref String?, choice: i64, taken: i64, span: ref Span) -> Ty? sync {
     // **Every alternative of an or-pattern binds the same names** (ADR-291 D1).
@@ -1422,6 +1430,8 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             in_place.insert(local.id)
             if mut_subject != null {
                 state.narrowing.in_place_refs.insert(local.id)
+            } else if through_the_reference && check_core_flow_bound_in_place(state, world, value) < 0 {
+                state.narrowing.lent_part_refs.insert(local.id)
             }
         }
     }
@@ -1536,7 +1546,8 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
     // **A parameter the contract lends arrives as a reference** (ADR-views-3
     // D1), a type that copies as well: its arms bind through it, without
     // `ref`, and a copied part is read out of it.
-    let a_lent_parameter = a_variable && !typed.is_a_view() && moves_away(typed) && state.a_lent_parameter(world, value)
+    // So does a part an arm bound out of one (#1805).
+    let a_lent_parameter = a_variable && !typed.is_a_view() && moves_away(typed) && (state.a_lent_parameter(world, value) || check_core_flow_bound_out_of_a_lent(state, world, value))
     let through_the_reference = (mut_subject != null && a_variable) || in_place_name || a_lent_parameter
     let through_a_view = check_core_flow_through_a_view(state, world, value)
     // **An owned `String` matched against a text literal is matched as a
