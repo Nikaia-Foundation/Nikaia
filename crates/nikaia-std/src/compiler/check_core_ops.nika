@@ -133,6 +133,14 @@ fn check_core_ops_lit_str(value: ref Expr) -> bool sync {
     }
 }
 
+/// A `??` itself, as the fallback of another.
+fn check_core_ops_a_coalesce(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Coalesce { .. } => true,
+        else => false,
+    }
+}
+
 /// An empty list written out: `[]`.
 fn check_core_ops_empty_list(value: ref Expr) -> bool sync {
     return match value {
@@ -984,6 +992,12 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
             state.facts.view_fallbacks.insert(id_of(fallback) as i64)
             return check_core_ops_view("str")
         }
+        // **And a list's first or last** (#1731), as its `get` is: the text
+        // it finds is the list's, never copied behind your back.
+        if inner == check_core_ops_named("String") && state.flow.list_ends.contains(id_of(value) as i64) {
+            state.facts.view_fallbacks.insert(id_of(fallback) as i64)
+            return check_core_ops_view("str")
+        }
         // **And a list's** (#342, ADR-279 D12).
         if inner == check_core_ops_named("String") && !from_a_map && check_core_ops_index(value) {
             state.facts.view_fallbacks.insert(id_of(fallback) as i64)
@@ -999,6 +1013,12 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     }
     // **And a name that is a view of text beside it** (#297).
     if nullable && inner == check_core_ops_named("String") && from_a_map && other.is_a_view() && check_core_ops_place(fallback) && check_core_ops_text_base(other) {
+        state.facts.view_coalesces.insert(id_of(expr) as i64)
+        return check_core_ops_view("str")
+    }
+    // **And a `??` beside it that came to a view of text** (#1720): `m[a] ??
+    // m[b] ?? ""` reads each map as `m[b] ?? ""` alone does, and is a view.
+    if nullable && inner == check_core_ops_named("String") && from_a_map && check_core_ops_a_coalesce(fallback) && other == check_core_ops_view("str") {
         state.facts.view_coalesces.insert(id_of(expr) as i64)
         return check_core_ops_view("str")
     }

@@ -60,7 +60,7 @@ impl EmitSeedsTables {
         sum
     }
     pub fn count_types(&mut self, declared: &[EmitSeedsDeclared]) {
-        self.types = collections::BTreeMap::new();
+        self.types.clear();
         for d in declared.iter() { if !self.excluded.contains(&d.name) { self.types.insert(nikaia_std::block::Text::from(d.name.to_string()), 0); } }
         for _ in 0..8 {
             let mut changed = false;
@@ -294,7 +294,7 @@ pub(crate) fn emit_seeds_read_barriers(tables: &mut EmitSeedsTables, units: &[Pa
             }
         }
     }
-    tables.private = collections::BTreeSet::new();
+    tables.private.clear();
     for unit in units.iter() {
         for item in unit.items.iter() {
             match &item.node {

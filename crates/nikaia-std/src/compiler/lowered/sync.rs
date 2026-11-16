@@ -155,8 +155,8 @@ pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, una
 pub(crate) fn declared_sync(is_sync: bool, sync_by: &[winnow_grammar::Symbol], node: &mut SyncNode) {
     if !is_sync || !sync_by.is_empty() { return; }
     node.reach.blocked = false;
-    node.reach.calls = collections::BTreeSet::new();
-    node.reach.through_code = collections::BTreeSet::new();
+    node.reach.calls.clear();
+    node.reach.through_code.clear();
 }
 
 pub(crate) fn leaf(blocked: bool) -> SyncNode { SyncNode { reach: SyncReach { blocked, calls: collections::BTreeSet::new(), through_code: collections::BTreeSet::new(), pauses_here: false }, site: None, unit: 0 } }

@@ -98,7 +98,7 @@ pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &
 pub fn check_walked_unsigned_slots(state: &mut CheckState, proven: &impl Fn(&CheckFacts, &collections::BTreeSet<i64>) -> collections::BTreeSet<i64>) {
     let mut slots: Vec<CheckUnsignedSlot> = vec![];
     for (_, held) in state.flow.unsigned_slots.copy_owned() { for slot in held.iter() { slots.push(slot.clone()); } }
-    state.flow.unsigned_slots = collections::BTreeMap::new();
+    state.flow.unsigned_slots.clear();
     if slots.is_empty() { return; }
     let mut nodes: collections::BTreeSet<i64> = collections::BTreeSet::new();
     for slot in slots.copy_owned() { nodes.insert(slot.node); }

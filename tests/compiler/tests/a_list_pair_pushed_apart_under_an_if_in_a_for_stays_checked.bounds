@@ -1,0 +1,3 @@
+bounds in tests/a_list_pair_pushed_apart_under_an_if_in_a_for_stays_checked.nika: 1 indexes, 0 proved; 1 operations, 0 proved
+    11  row.ks[0]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    27  i += 1     checked: a counter the loop on line 20 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)

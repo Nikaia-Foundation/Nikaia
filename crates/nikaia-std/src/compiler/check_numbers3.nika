@@ -68,8 +68,8 @@ impl CheckState {
             receivers.push(receiver)
             sums.insert(head, receivers)
         }
-        self.flow.open_sums = collections::BTreeMap()
-        self.flow.open_numbers = collections::BTreeMap()
+        self.flow.open_sums.clear()
+        self.flow.open_numbers.clear()
         for (head_at, members) in groups {
             let mut head = members[0].1.clone()
             for member in members {

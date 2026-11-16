@@ -1230,6 +1230,16 @@ fn keeps_text_as_is(expr: ref Expr, interner: ref winnow_grammar::InternerContex
     }
 }
 
+// **The text tiers' wrap into a mixed position hands on its receiver**
+// (#1740): `all.push(v.into_either())` keeps what `v` is, also a name a
+// `let` bound to a parameter.
+fn keeps_a_tier_wrap(expr: ref Expr, interner: ref winnow_grammar::InternerContext) -> bool {
+    return match expr {
+        Expr::MethodCall { method, args, .. } => args.len() == 0 && ["into_either", "into_either_maybe"].contains(interner.resolve(method)),
+        else => false,
+    }
+}
+
 // A number, a character or a truth value written out, negated or not.
 fn keeps_a_scalar_literal(expr: ref Expr) -> bool {
     return match expr {
@@ -1329,7 +1339,7 @@ fn keep_viewed_name(name: ref String, mut walk: KeepsWalk) {
 fn keeps_handed(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, walk: ref KeepsWalk) -> Vec[String] {
     match expr {
         Expr::MethodCall { receiver, .. } => {
-            if keeps_text_as_is(expr, interner, context) {
+            if keeps_text_as_is(expr, interner, context) || keeps_a_tier_wrap(expr, interner) {
                 return keeps_handed(receiver, interner, context, own, library, walk)
             }
         }
@@ -2358,7 +2368,7 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
                 let mut found = false
                 for held in declared {
                     if held.name == arg.ty.name {
-                        of = collections::BTreeMap()
+                        of.clear()
                         for (field, ty) in held.fields {
                             of.insert(field.clone(), written_ty(view.words, view.aliases, ty))
                         }

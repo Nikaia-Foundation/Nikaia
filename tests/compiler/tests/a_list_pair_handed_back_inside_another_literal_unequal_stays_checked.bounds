@@ -1,0 +1,2 @@
+bounds in tests/a_list_pair_handed_back_inside_another_literal_unequal_stays_checked.nika: 1 indexes, 0 proved; 0 operations, 0 proved
+    16  row.ks[0]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

@@ -745,7 +745,7 @@ pub(crate) fn sharing_function(item: &Item, owner: &str, asked: &Asked<'_, '_, '
         Item::Fn { name, args, body, ret_type, is_public, .. } => {
             let is_public = *is_public; let name = *name;
             walk.function = key_of_function((name).as_ref(), owner, asked.names);
-            walk.scope = collections::BTreeMap::new();
+            walk.scope.clear();
             for arg in args.iter() {
                 let ty = ty_of(&arg.ty);
                 let named = nikaia_std::block::Text::from(asked.names.resolve(arg.name).to_string());

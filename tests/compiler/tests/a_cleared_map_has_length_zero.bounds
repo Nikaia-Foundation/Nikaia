@@ -1,0 +1,2 @@
+bounds in tests/a_cleared_map_has_length_zero.nika: 1 indexes, 1 proved; 0 operations, 0 proved
+    10  a[m.len()]  proved

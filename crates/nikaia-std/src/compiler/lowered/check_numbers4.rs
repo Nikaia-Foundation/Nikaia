@@ -581,6 +581,15 @@ pub(crate) fn open_walk_the_item(ty: &Ty, held: &str) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn open_walk_an_item(ty: &Ty, held: &str) -> bool {
+    match ty {
+        Ty::Var { name, .. } => name == held,
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn open_walk_made(ty: &Ty) -> Option<Ty> {
     match ty {
         Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); Some(item.clone()) },
@@ -615,7 +624,7 @@ pub(crate) fn open_walk_item_params(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
             let mut at: i64 = 0;
             for p in params.iter() {
                 let p = *p;
-                if at < types.len() as i64 && open_walk_the_item(unsafe { nikaia_std::proven::read(&types, (at) as usize) }, held) { out.push(nikaia_std::block::Text::from(world.words.resolve(p).to_string())); }
+                if at < types.len() as i64 && open_walk_an_item(unsafe { nikaia_std::proven::read(&types, (at) as usize) }, held) { out.push(nikaia_std::block::Text::from(world.words.resolve(p).to_string())); }
                 at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
         },
@@ -676,6 +685,36 @@ impl CheckState {
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         out
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn open_walk_copied_params(&mut self, contract: &FnContract, args: &[Expr], items: Option<i64>) {
+        if items.is_none() { return; }
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+        let held = match open_walk_variable(signature) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let arguments = call_arguments(signature);
+        let mut at: i64 = 0;
+        for arg in args.iter() {
+            if at < arguments.len() as i64 {
+                match unsafe { nikaia_std::proven::read(&arguments, (at) as usize) }.1 {
+                    Ty::Fn { params: ref types, .. } => {
+                        match arg {
+                            Expr::Closure { params, .. } => {
+                                let mut index: i64 = 0;
+                                for p in params.iter() {
+                                    let p = *p;
+                                    if index < types.len() as i64 && open_walk_a_view(unsafe { nikaia_std::proven::read(&types, (index) as usize) }) && open_walk_an_item(unsafe { nikaia_std::proven::read(&types, (index) as usize) }, &held) { let added = self.facts.copied_item_params.insert((id_of(arg) as i64, index)); }
+                                    index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
+                                }
+                            },
+                            _ => { },
+                        }
+                    },
+                    _ => { },
+                }
+            }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+        }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

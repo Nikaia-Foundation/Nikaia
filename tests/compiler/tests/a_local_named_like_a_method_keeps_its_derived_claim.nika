@@ -1,0 +1,27 @@
+/// A precondition derived from the callers (ADR-391 D1) is not lost to a
+/// local named like the method (#1666): `let top = self.top()` calls the
+/// method, and the later `top` reads the local, not the method used as a
+/// value, so every call of `top` is still known and `self.xs[0]` is proved.
+struct Stack {
+	xs: Vec[i64],
+}
+
+impl Stack {
+	fn top(ref self) -> i64 sync {
+		return self.xs[0]
+	}
+
+	fn peek(ref self) -> i64 sync {
+		if self.xs.len() == 0 {
+			return 0
+		}
+		let top = self.top()
+		return top
+	}
+}
+
+fn main() throws {
+	let full = Stack { xs: [4, 5] }
+	let empty = Stack { xs: [] }
+	println(f"{full.peek()} {empty.peek()}")
+}

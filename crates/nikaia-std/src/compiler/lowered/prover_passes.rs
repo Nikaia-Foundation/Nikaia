@@ -20,29 +20,29 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
     for _ in 0..bound {
         walk.state.known = preconditions;
         walk.state.known_unwritten = unwritten;
-        walk.state.preconditions = collections::BTreeMap::new();
-        walk.state.candidates = collections::BTreeMap::new();
-        walk.state.unwritten = collections::BTreeMap::new();
-        walk.state.unstated = collections::BTreeMap::new();
+        walk.state.preconditions.clear();
+        walk.state.candidates.clear();
+        walk.state.unwritten.clear();
+        walk.state.unstated.clear();
         prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
         preconditions = walk.state.preconditions.copy_owned();
         unwritten = walk.state.unwritten.copy_owned();
         if same_preconditions(&walk.arena, &preconditions, &walk.state.known) && same_unwritten(&unwritten, &walk.state.known_unwritten) { break; }
     }
-    walk.state.known_unwritten = collections::BTreeMap::new();
-    walk.state.known = collections::BTreeMap::new();
+    walk.state.known_unwritten.clear();
+    walk.state.known.clear();
     walk.state.collecting = false;
     walk.state.preconditions = preconditions;
     walk.state.postconditions = walk.state.candidates.copy_owned();
-    walk.state.candidates = collections::BTreeMap::new();
+    walk.state.candidates.clear();
     let mut settled = false;
     while !settled {
-        walk.held = collections::BTreeMap::new();
-        walk.std_claims = collections::BTreeMap::new();
-        walk.reaches = collections::BTreeMap::new();
+        walk.held.clear();
+        walk.std_claims.clear();
+        walk.reaches.clear();
         walk.findings = vec![];
-        walk.outside = collections::BTreeMap::new();
-        walk.state.broken = collections::BTreeSet::new();
+        walk.outside.clear();
+        walk.state.broken.clear();
         prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
         settled = walk.state.broken.is_empty();
         if !settled { strike_broken(&mut walk.state); }
@@ -74,7 +74,7 @@ pub(crate) fn strike_broken(state: &mut ProverState) {
         posts.remove(nikaia_std::count::of(index));
         state.postconditions.insert(nikaia_std::block::Text::from(function.to_string()), posts);
     }
-    state.broken = collections::BTreeSet::new();
+    state.broken.clear();
 }
 
 pub(crate) fn same_preconditions(arena: &TermArena, a: &collections::BTreeMap<String, Precondition>, b: &collections::BTreeMap<String, Precondition>) -> bool { precondition_texts(arena, a) == precondition_texts(arena, b) }

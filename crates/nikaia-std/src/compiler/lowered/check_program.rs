@@ -36,7 +36,7 @@ pub(crate) fn check_program_impl<H: CheckHost>(state: &mut CheckState, world: &C
         state.subject_arguments = arguments.copy_owned();
         check_function_function(state, world, host, &method.node, &method.span, (named).as_deref());
     }
-    state.enclosing = collections::BTreeMap::new();
+    state.enclosing.clear();
     state.subject_arguments = vec![];
 }
 

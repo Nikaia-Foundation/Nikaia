@@ -751,6 +751,16 @@ fn open_walk_the_item(ty: ref Ty, held: ref String) -> bool sync {
     }
 }
 
+/// Whether a lambda's parameter type is the item or a view of it (`ref T`,
+/// what `retain`, `sort_by` and `sort_by_key` hand, #1748): a view of an open
+/// number is read out of it, so it is that number too.
+fn open_walk_an_item(ty: ref Ty, held: ref String) -> bool sync {
+    return match ty {
+        Ty::Var { name, .. } => name == held,
+        else => false,
+    }
+}
+
 fn open_walk_made(ty: ref Ty) -> Ty? sync {
     return match ty {
         Ty::Seq { item, .. } => item.clone(),
@@ -779,7 +789,7 @@ fn open_walk_item_params(world: ref CheckWorld, arg: ref Expr, ty: ref Ty, held:
         Expr::Closure { params, .. } => {
             let mut at = 0
             for p in params {
-                if at < types.len() as i64 && open_walk_the_item(types[at], held) {
+                if at < types.len() as i64 && open_walk_an_item(types[at], held) {
                     out.push(world.words.resolve(p).clone())
                 }
                 at += 1
@@ -871,6 +881,41 @@ impl CheckState {
             at += 1
         }
         return out
+    }
+
+    /// **A lambda handed a view of an open number's item takes it out**
+    /// (#1748): the parameter is the number (`open_walk_params`), and the
+    /// language below hands a `&T`, so the lowering writes the pattern `&a`.
+    pub fn open_walk_copied_params(ref mut self, contract: ref FnContract, args: ref Vec[Expr], items: i64?) sync {
+        if items == null {
+            return
+        }
+        let signature = contract.signature ?? return
+        let held = open_walk_variable(signature) ?? return
+        let arguments = call_arguments(signature)
+        let mut at = 0
+        for arg in args {
+            if at < arguments.len() as i64 {
+                match arguments[at].1 {
+                    Ty::Fn { params: types, .. } => {
+                        match arg {
+                            Expr::Closure { params, .. } => {
+                                let mut index = 0
+                                for p in params {
+                                    if index < types.len() as i64 && open_walk_a_view(types[index]) && open_walk_an_item(types[index], held) {
+                                        let added = self.facts.copied_item_params.insert((id_of(arg) as i64, index))
+                                    }
+                                    index += 1
+                                }
+                            },
+                            else => {}
+                        }
+                    },
+                    else => {}
+                }
+            }
+            at += 1
+        }
     }
 
     /// **What the call hands back** (`walk_open`): a walk of the same number

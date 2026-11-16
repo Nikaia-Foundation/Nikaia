@@ -300,14 +300,24 @@ pub fn option_at(contract: ref FnContract, name: ref String) -> i64? {
 /// option of a function - not a method, whose call this cannot tie to one
 /// entry (ADR-288) - that the body does not keep is a view below, as one
 /// written `ref String` is. One answer for the declaration, the call and
-/// the checker.
+/// the checker. **A `String?` one too** (#1729), as a `T?` parameter the
+/// body only reads is the option of a view (#1256): `Option<&str>` below.
 pub fn lends_option(contract: ref FnContract, option: ref ConfigContract) -> bool {
     let signature = contract.signature ?? return false
     if signature.takes_a_receiver() || contract.keeps.contains(option.name) {
         return false
     }
-    return match option.ty {
+    return lends_option_type(option.ty)
+}
+
+/// A `String`, or a `String?`, written plain.
+fn lends_option_type(ty: ref Ty) -> bool {
+    return match ty {
         Ty::Named { name, args, view } => !view && args.is_empty() && name == "String",
+        Ty::Nullable(inner) => match inner {
+            Ty::Named { name, args, view } => !view && args.is_empty() && name == "String",
+            else => false,
+        },
         else => false,
     }
 }
@@ -319,7 +329,12 @@ pub fn lowered_options(contract: ref FnContract) -> Vec[ConfigContract] {
     let mut out: Vec[ConfigContract] = []
     for option in signature.config {
         if lends_option(contract, option) {
-            out.push(ConfigContract { name: option.name.clone(), ty: Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }, default: option.default.clone() })
+            let view = Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }
+            let lent = match option.ty {
+                Ty::Nullable(_) => Ty::Nullable(view),
+                else => view,
+            }
+            out.push(ConfigContract { name: option.name.clone(), ty: lent, default: option.default.clone() })
         } else {
             out.push(option.clone())
         }

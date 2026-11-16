@@ -43,7 +43,7 @@ pub fn bounds_around(program: &Program, beside: &[&BoundsBeside], ledgers: &[&Le
         context.around.frames = next;
         round = unsafe { nikaia_std::proven::add::<i64>(round, 1) };
     }
-    if !settled { context.around.frames = collections::BTreeMap::new(); }
+    if !settled { context.around.frames.clear(); }
     let rules = rules_candidates(program, &context, words);
     context.around.rules = rules;
     context.around.derived = derived_of(program, beside, words);

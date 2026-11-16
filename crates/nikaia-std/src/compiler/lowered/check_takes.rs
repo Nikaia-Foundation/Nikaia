@@ -908,7 +908,7 @@ impl CheckState {
         let loans = self.flow.clone_loans.copy_owned();
         self.flow.clones = vec![];
         self.flow.clone_loans = vec![];
-        self.flow.clone_owners = collections::BTreeSet::new();
+        self.flow.clone_owners.clear();
         for one in clones.iter() {
             if self.a_clone_read_after(one) { continue; }
             let mut lent = false;

@@ -1,0 +1,36 @@
+error[NK1101]: `files` takes `certificate` and `key` by position, but you passed 2 named arguments and 0 by position.
+   --> tests/named_arguments_for_positional_parameters_are_counted.nika:22:2
+    |
+ 22 | 	println(files(certificate: "a", key: "b"))
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: It's declared as `files(certificate: String, key: String; verbose: bool = false) -> String`.
+    = note: The subject of a call is passed by position; only the options after the `;` are named (Part I 5.1).
+    = help: Write `files("a", "b")`.
+error[NK1101]: `files` takes `certificate` and `key` by position, but you passed 1 named argument and 1 by position.
+   --> tests/named_arguments_for_positional_parameters_are_counted.nika:23:2
+    |
+ 23 | 	println(files("a"; key: "b"))
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: It's declared as `files(certificate: String, key: String; verbose: bool = false) -> String`.
+    = note: The subject of a call is passed by position; only the options after the `;` are named (Part I 5.1).
+    = help: Write `files("a", "b")`.
+error[NK1101]: `files` takes `certificate` and `key` by position, but you passed 1 named argument and 0 by position.
+   --> tests/named_arguments_for_positional_parameters_are_counted.nika:24:2
+    |
+ 24 | 	println(files(verbose: true))
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: It's declared as `files(certificate: String, key: String; verbose: bool = false) -> String`.
+    = help: It takes `certificate: String`, `key: String`.
+error[NK1101]: `Tls::files` takes `certificate` and `key` by position, but you passed 2 named arguments and 0 by position.
+   --> tests/named_arguments_for_positional_parameters_are_counted.nika:27:2
+    |
+ 27 | 	println(t.files(key: "b", certificate: c))
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: It's declared as `Tls::files(ref Tls, certificate: String, key: String) -> String`.
+    = note: The subject of a call is passed by position; only the options after the `;` are named (Part I 5.1).
+    = help: Write `t.files(c, "b")`.
+4 type errors

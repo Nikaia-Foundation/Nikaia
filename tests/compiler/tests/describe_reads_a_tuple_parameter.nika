@@ -1,0 +1,29 @@
+// `nikaia describe` writes a Rust tuple parameter as the ledger's tuple,
+// part by part and kept where a part is kept, not `?` (#1679); a unit `()`
+// result, as in `Result<(), E>`, is left out of the signature.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/rs/src", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/rs/Cargo.toml", fs::Root::Anywhere, "[package]\nname = \"keeper\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\n\n[workspace]\n")
+    fs::write(f"{tmp}/rs/src/lib.rs", fs::Root::Anywhere, "pub fn owns_pair(pair: (Vec<u8>, u64)) -> u64 {\n    pair.0.len() as u64 + pair.1\n}\n\npub fn sums(pair: (u64, u64)) -> u64 {\n    pair.0 + pair.1\n}\n\npub fn nested(pair: (Option<String>, &[u8])) -> u64 {\n    pair.1.len() as u64\n}\n\npub fn checked(n: u64) -> Result<(), String> {\n    if n > 9 { Err(String::new()) } else { Ok(()) }\n}\n")
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nkeeper = { type = \"rust\", path = \"../rs\" }\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use keeper\n\nfn main() throws {\n\tlet items: Vec[u8] = [1, 2, 3]\n\tprintln(f\"{keeper::owns_pair((items, 1))} {keeper::sums((1, 2))} {keeper::nested((null, []))}\")\n\tkeeper::checked(3)\n}\n")
+    let out = process::run(toolchain(), ["describe", "keeper"]; dir: f"{tmp}/app")
+    println(f"exit {out.code}")
+    let text = process::run("cat", [f"{tmp}/app/contracts/keeper.contracts"]).stdout
+    for line in text.lines() {
+        if line.starts_with("[fn.") || line.starts_with("signature") || line.starts_with("keeps") || line.starts_with("throws") {
+            println(line)
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}

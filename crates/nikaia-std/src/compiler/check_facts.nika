@@ -396,6 +396,10 @@ pub struct CheckFacts {
     /// for it, so the lowering writes `or_insert_with` and the literal.
     pub defaulted_entries: collections::BTreeMap[i64, String],
     pub filter_patterns: collections::BTreeSet[i64],
+    /// **A lambda's parameter handed a view of an open number's item**, by
+    /// the lambda and the parameter's place (#1748): the parameter is the
+    /// number, so the lowering takes it out with the pattern `&a`.
+    pub copied_item_params: collections::BTreeSet[(i64, i64)],
     /// **An `and_modify` lambda handed a number, `bool` or `char` in the
     /// map** (#684), by the lambda: its parameter is the value, read out of
     /// the slot and written back when the lambda ends.
@@ -679,6 +683,9 @@ pub struct CheckFacts {
     /// **A `T?` place handed back into a `ref T?` result** (#1486): written
     /// `.as_ref()`, the option of a view, not `&` before it.
     pub lent_option_results: collections::BTreeSet[i64],
+    /// **A `String?` handed back into a `ref String?` result** (#1666): the
+    /// option of a view of a map's text, written as the option of a text view.
+    pub text_option_results: collections::BTreeSet[i64],
     pub view_fallbacks: collections::BTreeSet[i64],
     /// **A map read that jumps where it finds nothing** (`m[k] ?? return`),
     /// by the `??`: of a value that moves, the answer is a view of the map
@@ -821,6 +828,7 @@ impl CheckFacts {
             owned_clones: collections::BTreeSet(),
             defaulted_entries: collections::BTreeMap(),
             filter_patterns: collections::BTreeSet(),
+            copied_item_params: collections::BTreeSet(),
             copied_entry_lambdas: collections::BTreeSet(),
             lambda_params_by_use: collections::BTreeMap(),
             let_lambdas: collections::BTreeMap(),
@@ -946,6 +954,7 @@ impl CheckFacts {
             lent_list_reads: collections::BTreeSet(),
             lent_reads: collections::BTreeSet(),
             lent_option_results: collections::BTreeSet(),
+            text_option_results: collections::BTreeSet(),
             view_fallbacks: collections::BTreeSet(),
             map_read_views: collections::BTreeSet(),
             keep_plans: null,

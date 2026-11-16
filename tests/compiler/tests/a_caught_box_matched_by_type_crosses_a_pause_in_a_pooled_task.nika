@@ -1,0 +1,37 @@
+// A connection's `read(within:)` fails in the box (ADR-326 D8), and
+// `match error` opens it by the type each arm names. An arm that pauses must
+// not hold the box across the pause, or the task is not `Send` and cannot go
+// to the pool at `user-parallelism = "yes"` (#1686, met by `examples/http`).
+// A spawned throwing function also builds without rustc's unused-import
+// warning (the empty `.stderr`).
+use std::net
+use std::task
+use std::time
+
+fn pause() {
+    time::sleep(1.millis())
+}
+
+fn wait(at: String) -> String throws {
+    let mut connection = net::connect(at)
+    let more = connection.read(within: 20.millis()) catch {
+        match error {
+            task::TimedOut => {
+                pause()
+                return "timed out"
+            }
+            else => {}
+        }
+        return "failed"
+    }
+    return f"read {more.len()}"
+}
+
+fn main() throws {
+    let listener = net::listen("127.0.0.1:0")
+    let at = listener.address()
+    let waiting = spawn fn { wait(at) }
+    let silent = listener.accept()
+    println(waiting.join())
+    silent.close()
+}
