@@ -188,6 +188,13 @@ it, like the checks in `docs/supervisor.md`.
   (#1792: #1786 suspected `lin_term` in `prove_terms.nika` lacked `/` and
   `%`; the walk's quotient rule existed, and the missing fact was the `u8`
   type's upper bound).
+  A refusal at a call of a `std` function is checked against that
+  function's entry in `crates/nikaia-std/std.contracts` (its `keeps`,
+  `borrows` columns) before a walk is blamed, and every option and
+  argument of the call is run as a shape, not only the one the probe used
+  (#1830: #1797 blamed `keeps_expression` for `process::run`'s `env`;
+  `keep_option` already walked options, the ledger said `keeps = ["args"]`,
+  and `env_remove` and `stdin` failed the same way).
   A probe that mixes several conditions (outside input, a guard, a call) is
   also run with each one taken away, and the issue says which variant still
   fails: #1571 blamed the outside input, and the guard alone did not prove.

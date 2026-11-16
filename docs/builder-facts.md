@@ -63,6 +63,12 @@ together with the specification section and an example test.
   refused here). A build that shows none of your edits may have run during a
   driver rebase: check `git status` and your file, then rebuild; never touch
   others' `UU` files, name them under `Needs:` (BT, b1043).
+  An uncommitted edit of yours that is gone from the tree mid-cycle is
+  in the driver's merge (`git merge --no-commit --autostash`, by design,
+  #1333): `.git/MERGE_HEAD` exists and `git stash list` shows the
+  autostash. Never type the edit again (the autostash pop then conflicts);
+  wait in one call for the merge to end (Monitor until `.git/MERGE_HEAD`
+  is gone), check the edit is back, then run the cycle again. (#1830)
 * **Long runs go in the background** with `run_in_background` and `timeout:
   3600000`, and you wait for the wake-up, never a `sleep` or `pgrep` loop. A
   `lower-std` and build cycle takes 10-15 minutes: find every change it needs
