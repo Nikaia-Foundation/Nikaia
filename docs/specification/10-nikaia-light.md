@@ -110,6 +110,12 @@ that lives in a `std` module is refused without its prefix — `NK1117` for a
 function, `NK1135` for a type — and a prefix is refused without its `use`, each
 with the line to add. A name on this list written with a `std` module in front of it, such as `io::println`, is refused too (`NK1163`).
 
+Data from outside the program reaches a shell, an SQL text, markup written as
+it is or a path with no root to keep it in (`process::shell`, `db::raw`,
+`html::Raw`, `fs::Root::Anywhere`) only where the compiler proves it harmless,
+from its type or a guard, or the manifest's `[allow]` admits it; otherwise the
+program is refused (Part III 14.2, [ADR-400](adr/adr-400.md)).
+
 ---
 
 ## Chapter 2: Variables and Data Types
