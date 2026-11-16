@@ -1,0 +1,4 @@
+Files: docs/issues.md | Issue: rules-gap: x; wrong I3: y; rules-gap (built): z | -> NOTE: this commit changes a rules file and Issue: has rules-gap, wrong I3 without (built); mark each point this commit built `(built)` (docs/issues.md), or the driver files it again
+Files: docs/issues.md | Issue: rules-gap (built): z | -> silent
+Files: a.txt | Issue: rules-gap: x | -> silent
+Files: docs/issues.md | Issue: complete | -> silent

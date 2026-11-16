@@ -32,6 +32,14 @@
 // whose `lowered.rs` is not listed, and writes into the staged `lowered.rs`
 // the digest of the set as staged (`sysroot_package_digest`), which is what
 // `lower-std` writes on the committed tree; the working tree keeps its own.
+//
+// **An unmarked rules answer** (#1773): when the commit changes a rules file
+// (`docs/issues.md`, `CLAUDE.md`, `docs/builder-facts*.md`,
+// `.claude/agents/*.md`) and the report's `Issue:` holds an answer not
+// marked `(built)`, the script prints a `NOTE:` line: the driver files every
+// unmarked answer as an improvement issue, so a rule the commit itself built
+// comes back as one (#1739 filed as #1724, #1726 filed as #1773). It only
+// warns: the run may have built one rule and left another point open.
 
 use std::cli
 use std::fs
@@ -86,6 +94,28 @@ fn commit_git(args: Vec[String]) -> String throws {
 }
 
 // "" when fine, else the refusal.
+// The `NOTE:` line for an `Issue:` answer not marked `(built)` when FILES
+// change a rules file; "" otherwise. The answers are split as the driver's
+// `drive_issue_open` splits them.
+fn commit_unmarked_rules(report: String, files: Vec[String]) -> String {
+    let mut rules = false
+    for f in files {
+        if f == "docs/issues.md" || f == "CLAUDE.md" || f.starts_with("docs/builder-facts") || f.starts_with(".claude/agents/") { rules = true }
+    }
+    if !rules { return "" }
+    let mut open: Vec[String] = []
+    for part in commit_field(report, "Issue:").split(";") {
+        let t = part.trim()
+        let colon = t.find(": ") ?? t.len()
+        let kind = f"{t[0..<colon]}".trim().clone()
+        if kind.starts_with("rules-gap") || kind.starts_with("broke") || kind.starts_with("wrong") {
+            if !kind.ends_with("(built)") { open.push(kind) }
+        }
+    }
+    if open.len() == 0 { return "" }
+    return f"NOTE: this commit changes a rules file and Issue: has {open.join(", ")} without (built); mark each point this commit built `(built)` (docs/issues.md), or the driver files it again"
+}
+
 fn commit_check(files: Vec[String], partial: Vec[String]) -> String throws {
     for f in files.clone() {
         if commit_git(["status", "--porcelain", "--", f.clone()]) == "" { return f"REFUSED: {f} is unchanged" }
@@ -208,6 +238,10 @@ fn main() throws {
         println(why)
         process::exit(1)
     }
+    let mut changed = files.clone()
+    changed.extend(partial.clone())
+    let note = commit_unmarked_rules(report.clone(), changed)
+    if note != "" { println(note) }
     let msg = commit_message(report.clone())
     if dry {
         if files.len() > 0 { println(f"git add {files.join(" ")}") }

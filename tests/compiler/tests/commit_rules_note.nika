@@ -1,0 +1,61 @@
+// scripts/commit.nika --dry-run warns when the commit changes a rules file
+// and the report's Issue: holds an answer not marked `(built)` (#1773), and
+// is silent when every such answer is marked or no rules file changes.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run(
+        "sh",
+        [
+            "-c",
+            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+        ],
+    ).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/commit.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run(
+        "sh",
+        ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
+    ).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/commit.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    process::run("git", ["init", "-q", tmp.clone()])
+    process::run("mkdir", ["-p", f"{tmp}/docs"])
+    fs::write(f"{tmp}/docs/issues.md", fs::Root::Anywhere, "x\n")
+    fs::write(f"{tmp}/a.txt", fs::Root::Anywhere, "x\n")
+    let head = "Result: done\nCommit: a subject\nChangelog: none\n"
+    let cases = [
+        "Files: docs/issues.md\nIssue: rules-gap: x; wrong I3: y; rules-gap (built): z\n",
+        "Files: docs/issues.md\nIssue: rules-gap (built): z\n",
+        "Files: a.txt\nIssue: rules-gap: x\n",
+        "Files: docs/issues.md\nIssue: complete\n",
+    ]
+    for c in cases {
+        fs::write(f"{tmp}/X.md.report.md", fs::Root::Anywhere, f"{head}{c}Attribution:\n")
+        let out = process::run(
+            nikaia.clone(),
+            [
+                "run",
+                f"{repo}/scripts/commit.nika",
+                "--",
+                "--dry-run",
+                f"{tmp}/X.md.report.md",
+            ]; dir: tmp.clone(),
+        )
+        let note = out.stdout.split("\n").filter(fn(l) { l.starts_with("NOTE:") }).collect()
+        println(f"{c.split("\n").collect().join(" | ")}-> {if note.len() > 0 { note[0].clone() } else { "silent" }}")
+    }
+    process::run("rm", ["-rf", tmp])
+}
