@@ -65,7 +65,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   snippet copied whole from the file that ran, its `use` lines and
   manifest table with it, never retyped, #1726); the part your run can
   fix is fixed, and the line keeps only the part that needs the
-  decision, with the result it expects; a second defect is a second `Found:` line, and a
+  decision, with the result it expects, and says `no decision yet` in the
+  line, which makes the driver file it as a `decision` issue, not `ready`
+  (docs/issues.md I6, #1745); a second defect is a second `Found:` line, and a
   behaviour some function or ADR does on purpose is no Found (#1677: one line
   merged two claims without a probe, and the second was by design). Each
   shape the line names (a `for` and a `while` form) was run today and fails;

@@ -2169,12 +2169,16 @@ fn drive_wip_end(dry: bool, brief: String) throws {
 // The labels of an issue filed from a report's `Found:`: `ready` and `bugs`
 // (the bug lane takes it, owner 2026-11-15; the improvement lane relabels
 // what is no compiler defect), `decision` instead of `ready` when `Needs:`
-// asks for something. Never a second lane label: one lane label per issue
-// says which lane builds it (owner, 2026-11-15); the body names the run it
-// came from.
-fn drive_found_labels(needs: String) -> Vec[String] {
+// asks for something or the Found itself says `no decision yet` (the words
+// docs/issues.md I6 asks of an issue without its governing decision; #1745:
+// #1731 was filed `ready` from a Found that asked for a decision beside a
+// `Needs: none`). Never a second lane label: one lane label per issue says
+// which lane builds it (owner, 2026-11-15); the body names the run it came
+// from.
+fn drive_found_labels(found: String, needs: String) -> Vec[String] {
 	let mut status: String = "decision"
-	if needs == "" || drive_word(needs) == "none" { status = "ready" }
+	if (needs == "" || drive_word(needs) == "none")
+		&& !found.to_lowercase().contains("no decision yet") { status = "ready" }
 	return [status, "bugs"]
 }
 
@@ -2229,7 +2233,7 @@ fn drive_found_file(dir: String, brief: String) throws {
 		let number = drive_issue_new(
 			drive_found_title(found),
 			body,
-			drive_found_labels(needs.clone()),
+			drive_found_labels(found.clone(), needs.clone()),
 		)
 		if number == "" {
 			println(f"file failed for {name}")
@@ -3197,7 +3201,7 @@ fn main() throws {
 	}
 	if args.len() == 6 && args[1] == "--found-issue" {
 		println(drive_found_title(args[4].clone()))
-		println(drive_found_labels(args[5].clone()).join(","))
+		println(drive_found_labels(args[4].clone(), args[5].clone()).join(","))
 		print(drive_found_body(args[2].clone(), args[3].clone(), args[4].clone(), args[5].clone()))
 		return
 	}

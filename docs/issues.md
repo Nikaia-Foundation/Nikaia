@@ -277,7 +277,8 @@ unbuilt that is built is I6 ("built or text only"), a suspected function
 that does not exist is I7, an item that is wrong is I9 (#1735: #1527's run answered `wrong I3`
 and `wrong I4` for an I5/I6 and an I9 point; #1708 the same slip; #1741:
 #1729's run answered `wrong I3` for a probe that did not parse, I5, and a
-suspected function that does not exist, I7).
+suspected function that does not exist, I7; #1745: #1731's run answered
+`broke I3` for an issue filed `ready` without its decision, I6).
 
 A point the run has already closed as noise in its `Body:` (a mislabelled
 rule number a driver-filed issue copied from an earlier report, a slip

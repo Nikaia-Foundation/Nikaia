@@ -8,7 +8,8 @@
 // `Comment: #N <text>`, and a `Comment:` without a number filed as improvement;
 // an improvement issue names the run's report and commit (#1706); an `Issue:`
 // answer marked `(built)` is not filed (#1739); a `Needs: supervisor
-// decision: <gap>` without a Found is filed as the Found, not here (#1744).
+// decision: <gap>` without a Found is filed as the Found, not here (#1744);
+// a Found that says `no decision yet` is labelled `decision` (#1745).
 use std::fs
 use std::process
 
@@ -45,6 +46,8 @@ fn main() throws {
     drive(repo.clone(), nikaia.clone(), ["--wip-after", "", "", "1267"])
     drive(repo.clone(), nikaia.clone(), ["--found-issue", "issue-1267", "1267", "a Bytes field filled from a[1..] fails at rustc (Into &[u8] -> Bytes), not covered by the issue", "none"])
     drive(repo.clone(), nikaia.clone(), ["--found-issue", "v45-x", "", "a short gap", "supervisor decision"])
+    // A Found that says it has no decision is a `decision` issue (#1745).
+    drive(repo.clone(), nikaia.clone(), ["--found-issue", "v45-y", "", "a struct result's fields: no decision yet in ADR-306", "none"])
     let bad = process::run("mktemp", []).stdout.trim().clone()
     fs::write(bad.clone(), fs::Root::Anywhere, "Result: done\nCommit: drive: a partial run stays in batch.txt\nPushed: local 1a827e65\nIssue: wrong I8: item 3 was built already\nDeviation: none\nNeeds: none\nFriction: pre-push red on a badge that was not mine\n")
     drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1624", "1624", bad.clone()])
