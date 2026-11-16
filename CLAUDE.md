@@ -87,10 +87,10 @@ The rules every session and agent needs. What only the main session does
 ## Who reads what else
 
 * **Every main session** (each is a supervisor of its own work, owner
-  2026-11-14: runs its own driver, starts agents, talks to the owner, raises the
-  version and writes `CHANGELOG.md` and `docs/tokenspeed.md` for what it pushed,
-  watches CI, runs decision rounds, writes the briefs and keeps the lanes and the
-  issues): `docs/supervisor.md`.
+  2026-11-14: runs its own driver, which queues the lane's issues and releases
+  version and `CHANGELOG.md` after each push, starts agents, talks to the owner,
+  watches CI, runs decision rounds and keeps the lanes and the issues):
+  `docs/supervisor.md`.
 * **Builders**: `.claude/agents/builder.md` (the cycle and the gate) and
   `docs/builder-facts.md` (*Core*: where things live, the traps of every run),
   `docs/builder-facts-lookup.md` (the other traps and the self-hosting rules:
