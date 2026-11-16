@@ -357,6 +357,14 @@ it, like the checks in `docs/supervisor.md`.
   `Needs:` prose line the driver files as an improvement (#1897: #1848's
   bounds-walk item, an if-join and past-loop facts, was left after the
   prover item took the whole run).
+  An item whose new fact is made in one pass and read in another (the
+  prover's result summaries asked in the bounds walk) names how the fact
+  reaches each caller of the reading pass: passed in like an existing input
+  (the ledgers' `ensured`), or computed inside the reader. Where none is
+  chosen, the item says `no decision yet` and is a `decision` (I6), not
+  left to the builder (#1902: #1849's F asked the bounds walk to use
+  summaries, and `bounds::proven`'s four Rust callers, emit among them,
+  hold no prover state).
   An item settles each choice that changes what its result does, or says
   the builder chooses (#1733: #1717 left open whether a merge with no local
   commits fast-forwards, and a merge commit alone would have made the suite

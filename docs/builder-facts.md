@@ -67,6 +67,12 @@ together with the specification section and an example test.
   test that spawns `nikaia` (every `drive_*`) runs its own ancestor, so run
   a filter of many such tests with your `$S/old/nikaia` copy. (issue-1414,
   #1837)
+* **A touched test that fails on `$S/old/nikaia` too is red on `develop`, not
+  yours**: one run there settles it; then `git fetch origin develop && git log
+  --oneline HEAD..origin/develop -- tests/compiler/tests/NAME.*` shows whether
+  a re-record already landed. Name it under `Tests:` and go on; never a second
+  run to rule it out (#1902: `loop_assert_is_invariant_proved`, re-recorded in
+  the commit for ADR-361 D15's flag facts, cost #1849's run two).
 * **The checkout is shared.** A file another agent has modified: stage only
   your hunks (`git diff FILE > $S/p.diff`, delete theirs from the copy, `git
   apply --cached`, check with `git diff --cached FILE`; `git add -p` is
