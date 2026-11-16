@@ -416,7 +416,13 @@ impl EmitState {
             let mut handed = nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block);
             for i in 0..rule.args.len() as i64 {
                 out.push(&format!("let __wg_value{} = ", i));
+                let lent = self.facts.lent_rule_values.contains(&format!("{}::{}::{}", name, rule_name, emit_text(world, unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.name)));
+                if lent { out.push("("); }
                 if ((i) as usize) < values.len() { self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&values, (i) as usize) }, depth, flow, scope)?; }
+                if lent {
+                    out.push(").to_owned()");
+                    handed.push_str("&");
+                }
                 out.push("; ");
                 handed.push_str(&format!("__wg_value{}, ", i));
             }
@@ -470,7 +476,12 @@ impl EmitState {
                 for i in 0..rule.args.len() as i64 {
                     if !first { out.push(", "); }
                     first = false;
-                    if ((i) as usize) < values.len() { self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&values, (i) as usize) }, depth, flow, scope)?; }
+                    let lent = self.facts.lent_rule_values.contains(&format!("{}::{}::{}", name, rule_name, emit_text(world, unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.name)));
+                    if ((i) as usize) < values.len() && lent {
+                        out.push("&(");
+                        self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&values, (i) as usize) }, depth, flow, scope)?;
+                        out.push(")");
+                    } else if ((i) as usize) < values.len() { self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&values, (i) as usize) }, depth, flow, scope)?; }
                 }
                 for option in rule.config.iter() {
                     if !first { out.push(", "); }

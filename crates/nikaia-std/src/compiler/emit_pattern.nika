@@ -251,7 +251,13 @@ impl EmitState {
             }
             first = false
             out.push(f"{emit_text(world, rule.args[i].name)} = ")
-            if i < args.len() {
+            // **A lent value is handed as a reference** (ADR-grammar-1 D6); a
+            // value made here lives in a temporary for the call.
+            if i < args.len() && rule.args[i].ty.is_view {
+                out.push("&(")
+                self.emit_grammar_value(world, walk, out, host, args[i])
+                out.push(")")
+            } else if i < args.len() {
                 self.emit_grammar_value(world, walk, out, host, args[i])
             }
         }

@@ -599,8 +599,18 @@ impl EmitState {
             let mut handed = String()
             for i in 0..<rule.args.len() {
                 out.push(f"let __wg_value{i} = ")
+                // **A lent value is the caller's still** (ADR-grammar-1 D6):
+                // the reader's thread takes a copy, once, and lends it on.
+                let lent = self.facts.lent_rule_values.contains(f"{name}::{rule_name}::{emit_text(world, rule.args[i].name)}")
+                if lent {
+                    out.push("(")
+                }
                 if i < values.len() {
                     self.emit_expr(world, walk, out, host, values[i], depth, flow, scope)
+                }
+                if lent {
+                    out.push(").to_owned()")
+                    handed.push_str("&")
                 }
                 out.push("; ")
                 handed.push_str(f"__wg_value{i}, ")
@@ -662,7 +672,14 @@ impl EmitState {
                         out.push(", ")
                     }
                     first = false
-                    if i < values.len() {
+                    // **A lent value is handed as a reference** (ADR-grammar-1
+                    // D6): the caller keeps it.
+                    let lent = self.facts.lent_rule_values.contains(f"{name}::{rule_name}::{emit_text(world, rule.args[i].name)}")
+                    if i < values.len() && lent {
+                        out.push("&(")
+                        self.emit_expr(world, walk, out, host, values[i], depth, flow, scope)
+                        out.push(")")
+                    } else if i < values.len() {
                         self.emit_expr(world, walk, out, host, values[i], depth, flow, scope)
                     }
                 }
