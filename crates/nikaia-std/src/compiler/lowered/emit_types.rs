@@ -56,7 +56,7 @@ impl EmitState {
     pub(crate) fn boxed_part(&self, world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
         if path.len() < 2 { return false; }
         let names = emit_segments(world, path);
-        let owner = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(names.len() as i64, 2) }))).to_string());
+        let owner = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (nikaia_std::proven::sub::<i64>(names.len() as i64, 2)) as usize) }).to_string());
         let variant = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (nikaia_std::proven::sub::<i64>(names.len() as i64, 1)) as usize) }).to_string());
         self.facts.boxed_members.contains_key(&owner) && self.is_boxed(&owner, &boxed_member(&variant, at, ""))
     }

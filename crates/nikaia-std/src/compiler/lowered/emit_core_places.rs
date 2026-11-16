@@ -36,6 +36,11 @@ pub(crate) fn emit_place_already_lent(world: &EmitWorld<'_, '_, '_, '_>, node: &
             }
             name == "get" || name == "first" || name == "last"
         },
+        Expr::SafeMethod { method, .. } => {
+            let method = *method;
+            let name = emit_text(world, method);
+            name == "get" || name == "first" || name == "last"
+        },
         _ => false,
     }
 }

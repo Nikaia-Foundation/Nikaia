@@ -135,6 +135,25 @@ pub struct BoundsReturns {
 	/// list fields of `self` a position past the last argument names, the
 	/// first of them at `args.len()`; empty for a free function.
 	pub fields: Vec[String],
+	/// **The lengths of what it hands back** (ADR-306 D23, D25, #1756): of a
+	/// list it returns (`""`) or of each list field of a struct it returns
+	/// (the field's name), the positions of the arguments the length is
+	/// found equal to (`lengths`) or at least (`reaches`): a whole number's
+	/// value, or the length of a list argument (`listed`); and the pairs
+	/// `a|b` of fields found as long as each other (`alike`). `plain` where
+	/// the bounds above are looked for too: a whole number, a list of them.
+	pub plain: bool,
+	pub measures: Vec[String],
+	pub lengths: collections::BTreeMap[String, collections::BTreeSet[i64]],
+	pub reaches: collections::BTreeMap[String, collections::BTreeSet[i64]],
+	pub listed: collections::BTreeSet[i64],
+	pub alike: collections::BTreeSet[String],
+	/// The whole-number parameters, by position, the lengths were proved
+	/// with at zero or more: a list a counted loop builds is as long as the
+	/// count only where it is not below zero (ADR-391 D1's `0 <= n` is
+	/// derived after these rounds). A call reads each length as holding
+	/// where its argument is (`p < 0 || ...`).
+	pub guards: collections::BTreeSet[i64],
 }
 
 /// **What a callee's ledger entry ensures** (ADR-314 D3): each condition read
@@ -402,6 +421,22 @@ struct BoundsWalk {
 	return_lens: Vec[String],
 	return_at_least: collections::BTreeSet[i64]?,
 	return_within: collections::BTreeSet[i64]?,
+	/// **The lengths of what is handed back looked for** (ADR-306 D23,
+	/// #1756, `BoundsReturns.lengths`): by measure, the positions asked; the
+	/// parameter each position names (empty for none) and those that are
+	/// lists; the pairs of fields asked; of those, what every return seen
+	/// was proved to hold (`null` before the first).
+	return_wanted: collections::BTreeMap[String, collections::BTreeSet[i64]],
+	return_wanted_alike: collections::BTreeSet[String],
+	return_sources: Vec[String],
+	return_listed: collections::BTreeSet[i64],
+	return_lengths: collections::BTreeMap[String, collections::BTreeSet[i64]]?,
+	return_reaches: collections::BTreeMap[String, collections::BTreeSet[i64]]?,
+	return_alike: collections::BTreeSet[String]?,
+	return_measured: collections::BTreeSet[i64],
+	/// The parameters a walk of found lengths takes at zero or more
+	/// (`BoundsReturns.guards`).
+	return_assumed: Vec[String],
 	/// The context's `trace`: the bytes `--bounds-trace` asks about.
 	trace: Vec[i64],
 	/// **What a number of its own the statement being walked named is**
@@ -810,6 +845,15 @@ fn bounding_new(
 		return_lens: [],
 		return_at_least: null,
 		return_within: null,
+		return_wanted: collections::BTreeMap(),
+		return_wanted_alike: collections::BTreeSet(),
+		return_sources: [],
+		return_listed: collections::BTreeSet(),
+		return_lengths: null,
+		return_reaches: null,
+		return_alike: null,
+		return_measured: collections::BTreeSet(),
+		return_assumed: [],
 		trace: context.trace.clone(),
 		defining: collections::BTreeMap(),
 		turn_rows: [],
@@ -883,6 +927,10 @@ fn bounding_pass(
 	walk.return_unranged = false
 	walk.return_at_least = null
 	walk.return_within = null
+	walk.return_lengths = null
+	walk.return_reaches = null
+	walk.return_alike = null
+	walk.return_measured.clear()
 	let mut facts = BoundsFacts { ints: collections::BTreeSet(), facts: [], evicted: 0 }
 	for arg in args {
 		let name = words.resolve(arg.name).clone()
@@ -914,6 +962,9 @@ fn bounding_pass(
 	// **What every caller proved** (ADR-391 D1): a derived precondition
 	// holds at the entry like an `assert` written at the top.
 	bounding_derived_entry(walk, facts, args, body, context)
+	for name in walk.return_assumed.clone() {
+		bounding_at_least_zero(walk, facts, name)
+	}
 	// **The rules between list fields** (ADR-369 D4), of `self` and of each
 	// parameter of a type that has them.
 	rules_given(walk, facts, args, words)
@@ -7400,6 +7451,12 @@ fn bounding_let(
 	if names.len() == 1 && value_lin == null {
 		relations = bounding_relations_of(walk, facts, words.resolve(names[0]), value, context, program, words, ask)
 	}
+	// **The lengths the callee is found to hand back** (ADR-306 D23, #1756).
+	let mut measured: Vec[i64] = []
+	if names.len() == 1 {
+		let root = words.resolve(names[0])
+		measured = bounding_measured(walk, facts, root, root, value, context, program, words)
+	}
 	for symbol in names {
 		let name = words.resolve(symbol)
 		bounding_forget(walk, facts, name)
@@ -7466,6 +7523,9 @@ fn bounding_let(
 		}
 	}
 	bounding_built(walk, facts, name, value, words)
+	for fact in measured {
+		bounding_push(walk, facts, fact)
+	}
 	bounding_built_choice(walk, facts, name, value, context, program, words, ask)
 	if bounding_declared_list(ty, words) {
 		bounding_collected(walk, facts, name, value, context, program, words)
@@ -8518,8 +8578,15 @@ fn bounding_assign(
 		if walk.falling.contains(name) {
 			walk.fall_failed.insert(name.clone())
 		}
+		let mut measured: Vec[i64] = []
+		if op == null {
+			measured = bounding_measured(walk, facts, name, name, value, context, program, words)
+		}
 		bounding_forget(walk, facts, name)
 		bounding_built(walk, facts, name, value, words)
+		for fact in measured {
+			bounding_push(walk, facts, fact)
+		}
 		if op == null {
 			match value {
 				Expr::LitBool(up, _) => bounding_flag_set(walk, facts, name, up),
@@ -10436,14 +10503,22 @@ fn bounds_returns(
 				if twice.contains(words.resolve(symbol)) {
 					continue
 				}
-				let each = bounding_returns_each(ret_type ?? continue, words) ?? continue
+				let ret = ret_type ?? continue
+				let kind = bounding_returns_each(ret, words)
+				let measures = bounding_returns_measures(ret, list_fields, words)
+				if kind == null && measures.is_empty() {
+					continue
+				}
+				let each = kind ?? false
 				let mut below: collections::BTreeSet[i64] = collections::BTreeSet()
 				let mut at_least: collections::BTreeSet[i64] = collections::BTreeSet()
-				for k in 0..<args.len() {
-					if bounding_is_list_type(args[k].ty, words) {
-						below.insert(k)
-					} else if !each && args[k].ty.generics.is_empty() && is_whole_number(words.resolve(args[k].ty.name)) {
-						at_least.insert(k)
+				if kind != null {
+					for k in 0..<args.len() {
+						if bounding_is_list_type(args[k].ty, words) {
+							below.insert(k)
+						} else if !each && args[k].ty.generics.is_empty() && is_whole_number(words.resolve(args[k].ty.name)) {
+							at_least.insert(k)
+						}
 					}
 				}
 				// **A whole number's relations** (D31): to its whole-number
@@ -10451,7 +10526,7 @@ fn bounds_returns(
 				let within = if each { collections::BTreeSet() } else { below.clone() }
 				// A list of numbers may be bounded by its values alone (D24),
 				// a whole number by its interval (D32).
-				assumed.insert(words.resolve(symbol).clone(), BoundsReturns {
+				let mut found = BoundsReturns {
 					each: each,
 					below: below,
 					sized: collections::BTreeSet(),
@@ -10460,7 +10535,16 @@ fn bounds_returns(
 					at_least: at_least,
 					within: within,
 					fields: [],
-				})
+					plain: kind != null,
+					measures: [],
+					lengths: collections::BTreeMap(),
+					reaches: collections::BTreeMap(),
+					listed: collections::BTreeSet(),
+					alike: collections::BTreeSet(),
+					guards: collections::BTreeSet(),
+				}
+				bounding_returns_measured(found, measures, args, words)
+				assumed.insert(words.resolve(symbol).clone(), found)
 				bodies.push(item)
 				keys.push(words.resolve(symbol).clone())
 			},
@@ -10481,27 +10565,36 @@ fn bounds_returns(
 								continue
 							}
 							let symbol = name ?? continue
-							let each = bounding_returns_each(ret_type ?? continue, words) ?? continue
+							let ret = ret_type ?? continue
+							let kind = bounding_returns_each(ret, words)
+							let measures = bounding_returns_measures(ret, list_fields, words)
+							if kind == null && measures.is_empty() {
+								continue
+							}
+							let each = kind ?? false
 							let mut below: collections::BTreeSet[i64] = collections::BTreeSet()
 							let mut at_least: collections::BTreeSet[i64] = collections::BTreeSet()
-							for k in 0..<args.len() {
-								if bounding_is_list_type(args[k].ty, words) {
-									below.insert(k)
-								} else if !each && args[k].ty.generics.is_empty() && is_whole_number(words.resolve(args[k].ty.name)) {
-									at_least.insert(k)
+							let mut within: collections::BTreeSet[i64] = collections::BTreeSet()
+							if kind != null {
+								for k in 0..<args.len() {
+									if bounding_is_list_type(args[k].ty, words) {
+										below.insert(k)
+									} else if !each && args[k].ty.generics.is_empty() && is_whole_number(words.resolve(args[k].ty.name)) {
+										at_least.insert(k)
+									}
 								}
-							}
-							let mut within = if each { collections::BTreeSet() } else { below.clone() }
-							for j in 0..<lists.len() {
-								below.insert(args.len() + j)
-								// A field keeps its length where `self` is not
-								// taken `mut`.
-								if !each && !taken.is_mut {
-									within.insert(args.len() + j)
+								within = if each { collections::BTreeSet() } else { below.clone() }
+								for j in 0..<lists.len() {
+									below.insert(args.len() + j)
+									// A field keeps its length where `self` is not
+									// taken `mut`.
+									if !each && !taken.is_mut {
+										within.insert(args.len() + j)
+									}
 								}
 							}
 							let key = f"{owner}.{words.resolve(symbol)}"
-							assumed.insert(key.clone(), BoundsReturns {
+							let mut found = BoundsReturns {
 								each: each,
 								below: below,
 								sized: collections::BTreeSet(),
@@ -10510,7 +10603,16 @@ fn bounds_returns(
 								at_least: at_least,
 								within: within,
 								fields: lists.clone(),
-							})
+								plain: kind != null,
+								measures: [],
+								lengths: collections::BTreeMap(),
+								reaches: collections::BTreeMap(),
+								listed: collections::BTreeSet(),
+								alike: collections::BTreeSet(),
+								guards: collections::BTreeSet(),
+							}
+							bounding_returns_measured(found, measures, args, words)
+							assumed.insert(key.clone(), found)
 							bodies.push(method)
 							keys.push(key)
 						},
@@ -10630,8 +10732,8 @@ fn bounding_returns_round(
 					let k = walk.return_params.len()
 					walk.return_params.push(if wanted.below.contains(k) { f"self.{field}" } else { "" })
 				}
-				walk.return_each = wanted.each
-				walk.return_ranging = !wanted.each
+				walk.return_each = wanted.each && wanted.plain
+				walk.return_ranging = !wanted.each && wanted.plain
 				// **The relations looked for** (D31), of a parameter the body
 				// does not bind again and a list whose length it keeps.
 				for k in 0..<args.len() {
@@ -10700,7 +10802,43 @@ fn bounding_returns_round(
 						range = wanted.range?.clone()
 					}
 				}
-				if !held.is_empty() || range != null || !at_least.is_empty() || !within.is_empty() {
+				// **The lengths every return was proved to hold** (#1756),
+				// in a walk of their own: it takes the whole-number
+				// parameters at zero or more.
+				let mut lengths: collections::BTreeMap[String, collections::BTreeSet[i64]] = collections::BTreeMap()
+				let mut reaches: collections::BTreeMap[String, collections::BTreeSet[i64]] = collections::BTreeMap()
+				let mut alike: collections::BTreeSet[String] = collections::BTreeSet()
+				let mut guards: collections::BTreeSet[i64] = collections::BTreeSet()
+				if !wanted.lengths.is_empty() || !wanted.alike.is_empty() {
+					let mut measuring = bounding_new(args, body, bp_names(nonnegative_locals(body), words), context, program, words)
+					measuring.return_wanted = wanted.lengths.clone()
+					measuring.return_wanted_alike = wanted.alike.clone()
+					measuring.return_listed = wanted.listed.clone()
+					for k in 0..<args.len() {
+						let param = words.resolve(args[k].name).clone()
+						let mut stays = !seek_block(body, Seek::Rebound(param.clone()), words)
+						if wanted.listed.contains(k) {
+							// A list not written `mut` changes only where it
+							// is bound again (ADR-094 D3), as D31's above.
+							if args[k].mutable {
+								stays = length_stays(body, param, words)
+							}
+							stays = stays && measuring.lists.contains(param)
+						} else if stays && args[k].ty.generics.is_empty() && is_whole_number(words.resolve(args[k].ty.name)) {
+							guards.insert(k)
+							measuring.return_assumed.push(param.clone())
+						}
+						measuring.return_sources.push(if stays { param } else { "" })
+					}
+					bounds_rounds(measuring, args, body, context, program, words, ask)
+					if !seek_block(body, Seek::Unvisited(measuring.return_measured.clone()), words) {
+						lengths = bounding_nonempty(measuring.return_lengths ?? collections::BTreeMap())
+						reaches = bounding_nonempty(measuring.return_reaches ?? collections::BTreeMap())
+						alike = measuring.return_alike?.clone() ?? collections::BTreeSet()
+					}
+				}
+				if !held.is_empty() || range != null || !at_least.is_empty() || !within.is_empty()
+					|| !lengths.is_empty() || !reaches.is_empty() || !alike.is_empty() {
 					found.insert(key, BoundsReturns {
 						each: wanted.each,
 						below: held,
@@ -10710,6 +10848,13 @@ fn bounding_returns_round(
 						at_least: at_least,
 						within: within,
 						fields: wanted.fields.clone(),
+						plain: wanted.plain,
+						measures: wanted.measures.clone(),
+						lengths: lengths,
+						reaches: reaches,
+						listed: wanted.listed.clone(),
+						alike: alike,
+						guards: guards,
 					})
 				}
 			},
@@ -10778,7 +10923,13 @@ fn bounding_returns_ranged(returns: ref collections::BTreeMap[String, BoundsRetu
 fn bounding_returns_count(returns: ref collections::BTreeMap[String, BoundsReturns]) -> i64 {
 	let mut out = 0
 	for (_name, found) in returns {
-		out += found.below.len() + found.at_least.len() + found.within.len()
+		out += found.below.len() + found.at_least.len() + found.within.len() + found.alike.len()
+		for (_m, positions) in found.lengths {
+			out += positions.len()
+		}
+		for (_m, positions) in found.reaches {
+			out += positions.len()
+		}
 		if found.range != null {
 			out += 1
 		}
@@ -10803,6 +10954,7 @@ fn bounding_returned(
 	if throwing {
 		return
 	}
+	bounding_return_lengths(walk, facts, returned, context, program, words, ask)
 	if walk.return_ranging {
 		bounding_return_range(walk, facts, returned, context, program, words, ask)
 		bounding_return_relations(walk, facts, returned, context, program, words, ask)
@@ -10873,6 +11025,303 @@ fn bounding_returned(
 		}
 	}
 	walk.return_below = kept
+}
+
+/// **What a function returning `ty` is found the lengths of** (ADR-306
+/// D23, #1756): `""` for a list, each list field of a struct `fields` holds
+/// for one declared here, nothing else.
+fn bounding_returns_measures(
+	ty: ref Type,
+	fields: ref collections::BTreeMap[String, Vec[String]],
+	words: ref winnow_grammar::InternerContext,
+) -> Vec[String] {
+	if ty.is_nullable || ty.is_tuple {
+		return []
+	}
+	if bounding_is_list_type(ty, words) {
+		return [""]
+	}
+	if !ty.generics.is_empty() {
+		return []
+	}
+	return fields.get(words.resolve(ty.name))?.clone() ?? []
+}
+
+/// **The lengths a candidate is asked** (#1756): of each measure, every
+/// whole-number and every list argument, as equal and as at most; of a
+/// struct's, each pair of its list fields.
+fn bounding_returns_measured(
+	mut found: BoundsReturns,
+	measures: ref Vec[String],
+	args: ref Vec[FnArg],
+	words: ref winnow_grammar::InternerContext,
+) {
+	let mut sources: collections::BTreeSet[i64] = collections::BTreeSet()
+	for k in 0..<args.len() {
+		if bounding_is_list_type(args[k].ty, words) {
+			found.listed.insert(k)
+			sources.insert(k)
+		} else if args[k].ty.generics.is_empty() && is_whole_number(words.resolve(args[k].ty.name)) {
+			sources.insert(k)
+		}
+	}
+	for m in measures {
+		if !sources.is_empty() {
+			found.lengths.insert(m.clone(), sources.clone())
+			found.reaches.insert(m.clone(), sources.clone())
+		}
+		for other in measures {
+			if !m.is_empty() && m < other {
+				found.alike.insert(f"{m}|{other}")
+			}
+		}
+	}
+	found.measures = measures.clone()
+}
+
+/// The entries of `sets` that hold a position.
+fn bounding_nonempty(sets: ref collections::BTreeMap[String, collections::BTreeSet[i64]]) -> collections::BTreeMap[String, collections::BTreeSet[i64]] {
+	let mut out: collections::BTreeMap[String, collections::BTreeSet[i64]] = collections::BTreeMap()
+	for (m, positions) in sets {
+		if !positions.is_empty() {
+			out.insert(m.clone(), positions.clone())
+		}
+	}
+	return out
+}
+
+/// **A return, against the lengths the walk looks for** (ADR-306 D23,
+/// #1756): the length of the list handed back, or of each list field of
+/// the struct, proved equal to or at least each parameter asked (its value,
+/// or a list's length), and each pair of fields proved as long as each
+/// other; the positions kept over every return. A value read by a path is
+/// asked by its path; any other one as `result#`, with what its literal and
+/// the calls in it build (`bounding_built`, `bounding_measured`).
+fn bounding_return_lengths(
+	mut walk: BoundsWalk,
+	facts: ref BoundsFacts,
+	returned: ref Expr?,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) {
+	if walk.return_wanted.is_empty() && walk.return_wanted_alike.is_empty() {
+		return
+	}
+	let mut lengths: collections::BTreeMap[String, collections::BTreeSet[i64]] = collections::BTreeMap()
+	let mut reaches: collections::BTreeMap[String, collections::BTreeSet[i64]] = collections::BTreeMap()
+	let mut alike: collections::BTreeSet[String] = collections::BTreeSet()
+	let value = returned ?? {
+		walk.return_lengths = lengths
+		walk.return_reaches = reaches
+		walk.return_alike = alike
+		return
+	}
+	walk.return_measured.insert(node_key(value))
+	let mut given = facts.clone()
+	let mut base = path_of(value, words) ?? ""
+	if base.is_empty() {
+		base = "result#"
+		let measured = bounding_measured(walk, facts, base, base, value, context, program, words)
+		bounding_forget(walk, given, base)
+		bounding_built(walk, given, base, value, words)
+		for fact in measured {
+			bounding_push(walk, given, fact)
+		}
+	}
+	for (m, asked) in walk.return_wanted.clone() {
+		let path = if m.is_empty() { base.clone() } else { f"{base}.{m}" }
+		let len = bounding_length_named(walk, path, false)
+		let before = walk.return_lengths?.get(m)?.clone()
+		let before_reach = walk.return_reaches?.get(m)?.clone()
+		let mut equal: collections::BTreeSet[i64] = collections::BTreeSet()
+		let mut least: collections::BTreeSet[i64] = collections::BTreeSet()
+		for k in asked {
+			if k >= walk.return_sources.len() || walk.return_sources[k].is_empty() {
+				continue
+			}
+			let held_equal = before?.contains(k) ?? (walk.return_lengths == null)
+			let held_least = before_reach?.contains(k) ?? (walk.return_reaches == null)
+			if !held_equal && !held_least {
+				continue
+			}
+			let source = walk.return_sources[k].clone()
+			let term = if walk.return_listed.contains(k) {
+				bounding_length_named(walk, source, false)
+			} else {
+				walk.arena.var(source)
+			}
+			if held_equal {
+				let goal = walk.arena.equal(len, term)
+				if bounding_proves(walk, given, goal, ask) {
+					equal.insert(k)
+					continue
+				}
+			}
+			let goal = walk.arena.ge(len, term)
+			if bounding_proves(walk, given, goal, ask) {
+				least.insert(k)
+			}
+		}
+		lengths.insert(m.clone(), equal)
+		reaches.insert(m.clone(), least)
+	}
+	for pair in walk.return_wanted_alike.clone() {
+		if walk.return_alike != null && !(walk.return_alike?.contains(pair) ?? false) {
+			continue
+		}
+		let parts: Vec[ref String] = pair.split("|").collect()
+		if parts.len() != 2 {
+			continue
+		}
+		let a = bounding_length_named(walk, f"{base}.{parts[0]}", false)
+		let b = bounding_length_named(walk, f"{base}.{parts[1]}", false)
+		let goal = walk.arena.equal(a, b)
+		if bounding_proves(walk, given, goal, ask) {
+			alike.insert(pair.clone())
+		}
+	}
+	// A position proved equal at one return and at least at another is at
+	// least over both.
+	if walk.return_lengths != null {
+		let was = walk.return_lengths ?? collections::BTreeMap()
+		let was_reach = walk.return_reaches ?? collections::BTreeMap()
+		let mut kept: collections::BTreeMap[String, collections::BTreeSet[i64]] = collections::BTreeMap()
+		let mut kept_reach: collections::BTreeMap[String, collections::BTreeSet[i64]] = collections::BTreeMap()
+		for (m, now) in lengths {
+			let old = was.get(m)?.clone() ?? collections::BTreeSet()
+			let old_reach = was_reach.get(m)?.clone() ?? collections::BTreeSet()
+			let now_reach = reaches.get(m)?.clone() ?? collections::BTreeSet()
+			let mut same: collections::BTreeSet[i64] = collections::BTreeSet()
+			let mut most: collections::BTreeSet[i64] = collections::BTreeSet()
+			for k in now {
+				if old.contains(k) {
+					same.insert(k)
+				} else if old_reach.contains(k) {
+					most.insert(k)
+				}
+			}
+			for k in now_reach {
+				if old.contains(k) || old_reach.contains(k) {
+					most.insert(k)
+				}
+			}
+			kept.insert(m.clone(), same)
+			kept_reach.insert(m.clone(), most)
+		}
+		lengths = kept
+		reaches = kept_reach
+		alike = bounding_kept_names(walk.return_alike ?? collections::BTreeSet(), alike)
+	}
+	walk.return_lengths = lengths
+	walk.return_reaches = reaches
+	walk.return_alike = alike
+}
+
+/// The names both sets hold.
+fn bounding_kept_names(before: ref collections::BTreeSet[String], now: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+	let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
+	for name in before {
+		if now.contains(name) {
+			kept.insert(name.clone())
+		}
+	}
+	return kept
+}
+
+/// **What a call's found lengths say of the value it builds** (ADR-306
+/// D23, #1756): `name.len()`, or `name.f.len()` of a struct's field, equal
+/// to or at least the argument's value or a list argument's length, and two
+/// fields as long as each other; a struct literal's fields each, as the
+/// calls in them build them. Stated before `root` moves: a term that reads
+/// it is left out.
+fn bounding_measured(
+	mut walk: BoundsWalk,
+	facts: ref BoundsFacts,
+	root: ref String,
+	name: ref String,
+	value: ref Expr,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+) -> Vec[i64] {
+	let mut out: Vec[i64] = []
+	match value {
+		Expr::StructLit { fields, .. } => {
+			for field in fields {
+				let given = field.value ?? continue
+				let path = f"{name}.{words.resolve(field.name)}"
+				for fact in bounding_measured(walk, facts, root, path, given, context, program, words) {
+					out.push(fact)
+				}
+			}
+			return out
+		},
+		Expr::Call { .. } => {},
+		Expr::MethodCall { .. } => {},
+		else => return out,
+	}
+	if bounding_found_options(value) {
+		return out
+	}
+	let callee = bounding_found_key(walk, value, context, words) ?? return out
+	let found = context.returns.get(callee) ?? return out
+	if found.pending {
+		return out
+	}
+	// Each holds where every guarded argument is zero or more.
+	let mut below: Vec[i64] = []
+	for k in found.guards {
+		let term = bounding_found_term(walk, value, k, facts, context, program, words) ?? return out
+		if bounding_touches(walk, term, root) {
+			return out
+		}
+		let zero = walk.arena.int(0)
+		below.push(walk.arena.lt(term, zero))
+	}
+	let mut stated: Vec[i64] = []
+	for at_least in [false, true] {
+		let sets = if at_least { found.reaches.clone() } else { found.lengths.clone() }
+		for (m, positions) in sets {
+			let path = if m.is_empty() { name.clone() } else { f"{name}.{m}" }
+			let len = bounding_length_named(walk, path, false)
+			for k in positions {
+				let term = if found.listed.contains(k) {
+					let arg = bounding_found_path(value, found, k, words) ?? continue
+					if walk.pinned.contains(path_root(arg)) {
+						continue
+					}
+					bounding_length_named(walk, arg, false)
+				} else {
+					bounding_found_term(walk, value, k, facts, context, program, words) ?? continue
+				}
+				if bounding_touches(walk, term, root) {
+					continue
+				}
+				stated.push(if at_least { walk.arena.ge(len, term) } else { walk.arena.equal(len, term) })
+			}
+		}
+	}
+	for pair in found.alike {
+		let parts: Vec[ref String] = pair.split("|").collect()
+		if parts.len() != 2 {
+			continue
+		}
+		let a = bounding_length_named(walk, f"{name}.{parts[0]}", false)
+		let b = bounding_length_named(walk, f"{name}.{parts[1]}", false)
+		stated.push(walk.arena.equal(a, b))
+	}
+	for fact in stated {
+		if below.is_empty() {
+			out.push(fact)
+		} else {
+			let mut either = below.clone()
+			either.push(fact)
+			out.push(walk.arena.or(either))
+		}
+	}
+	return out
 }
 
 /// **The list parameters every return was found below**, by position, at

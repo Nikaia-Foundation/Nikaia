@@ -116,7 +116,7 @@ impl CheckState {
                 let mut back = width;
                 while back > 0 {
                     back = unsafe { nikaia_std::proven::sub::<i64>(back, 1) };
-                    pending.push((*nikaia_std::index::get(&inner, nikaia_std::index::at(back))).clone());
+                    pending.push((*unsafe { nikaia_std::proven::read(&inner, (back) as usize) }).clone());
                 }
             }
         }
