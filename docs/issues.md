@@ -326,6 +326,12 @@ it, like the checks in `docs/supervisor.md`.
   item goes into the issue (a comment, or the *To build* list ticked), not
   only into a report or a commit. An item found wrong is corrected in the
   issue before the next run.
+  A group or item moved to another issue leaves this one in the same edit:
+  its *To build* item is struck with `moved to #N`, and the *Done when*
+  and its figures are narrowed to what is left, so no run is held to a
+  promise the plan no longer makes (#1826: #1634's *Done when* still named
+  the group-D counters the supervisor had moved to #1681, so its run could
+  only end `partial`).
   A section that says where the work stands (a branch, uncommitted files)
   is checked against `git log` and `git branch -r` before each run (#1470:
   it named a stale branch and files already committed).
