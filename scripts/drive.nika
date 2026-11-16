@@ -3006,6 +3006,10 @@ fn drive_improve_points(text: String) -> Vec[String] {
 		if value == "" || word == "none" || word == "-" { continue }
 		// A gap filed as the report's Found (drive_founds, #1744).
 		if key == "Needs" && drive_founds(text.clone()) == [drive_needs_gap(text.clone())] { continue }
+		// A `Needs:` that is only a `#N` list is what the issue waits for;
+		// drive_blocked_on holds it until those close (#1899 was filed from
+		// #1857's `Needs: #1848, #1849`).
+		if key == "Needs" && drive_only_hashes(value.clone()) { continue }
 		items.push(f"{key}: {value}")
 	}
 	for c in drive_fields(text, "Comment") {
@@ -4073,6 +4077,20 @@ fn drive_hash_list(text: String) -> Vec[String] {
 		list = list + " " + t
 	}
 	return drive_hash_numbers(list)
+}
+
+// Whether TEXT names issues and nothing else: every word (after `,`, `:`,
+// `` ` `` and `*`) is a `#N` or `and`, and there is at least one `#N`.
+fn drive_only_hashes(text: String) -> bool {
+	let rest = text.replace(":", " ").replace("`", " ").replace("*", " ").replace(",", " ")
+	let mut any = false
+	for w in rest.split(" ") {
+		let t = w.trim()
+		if t == "" || t == "and" { continue }
+		if !t.starts_with("#") { return false }
+		any = true
+	}
+	return any
 }
 
 // The issues an issue BODY says it waits for (#1819): on a line starting
