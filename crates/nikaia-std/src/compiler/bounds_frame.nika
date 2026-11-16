@@ -115,7 +115,7 @@ fn bounds_around(
 	}
 	// **The rules between list fields** read with the frames found
 	// (ADR-369 D4, `bounds_rules.nika`): checked where a body uses them.
-	let rules = rules_candidates(program, context, words)
+	let rules = rules_candidates(program, beside, context, words)
 	context.around.rules = rules
 	// **The private functions their callers may bound** (ADR-391 D1).
 	context.around.derived = derived_of(program, beside, words)
