@@ -1,15 +1,17 @@
 WAKE PUSHED read=- do=nothing, the driver releases: PUSHED 1234abcd, release BUMP 0.0.9: a title
 WAKE STOP read=- do=restart the driver: STOP drive: time limit after 106 min
 WAKE STOP read=- do=restart the driver: ESCALATE drive: --max 8 agent runs reached (drive.nika SHA)
-WAKE CUT read=T/b1.md.report.md do=accept it with a Supervisor line in the report or file what it names, then restart the driver: ESCALATE CUT b1.md: Result: partial -> SUPERVISOR: the supervisor writes the next briefs (drive.nika SHA)
-WAKE CUT read=T/batch.txt do=write the brief or drop it from batch.txt, then restart the driver: ESCALATE CUT b2.md: brief missing -> SUPERVISOR: the supervisor writes the next briefs (drive.nika SHA)
+WAKE CUT read=T/b1.md.report.md do=accept it with a Supervisor line in the report or file what it names, then restart the driver: ESCALATE CUT b1.md: Result: partial -> SUPERVISOR: the supervisor accepts the report with a Supervisor line or files what it names (drive.nika SHA)
+WAKE CUT read=T/b1.md.report.md do=file or decide what `Found:` names, set the issue `blocked` on it, then restart the driver: ESCALATE CUT b1.md: Result: blocked -> SUPERVISOR: the supervisor files or decides what `Found:` names and sets the issue `blocked` on it (drive.nika SHA)
+WAKE CUT read=T/batch.txt do=write the brief or drop it from batch.txt, then restart the driver: ESCALATE CUT b2.md: brief missing -> SUPERVISOR: the supervisor writes the brief or drops it from batch.txt (drive.nika SHA)
 WAKE OWNER read=T/b0.report.md do=tell the owner the question, then restart the driver: ESCALATE OWNER b0: which model? (drive.nika SHA)
 WAKE OWNER read=T/b1.md.report.md do=tell the owner the question, then restart the driver: ESCALATE OWNER second: b1.md: which model? (drive.nika SHA)
 WAKE OWNER read=T/owner.txt do=tell the owner the question, then restart the driver: ESCALATE OWNER 2 open: which model? (drive.nika SHA)
-WAKE RED read=- do=write a fix-forward brief for the failed jobs it names, queued first, then restart the driver: ESCALATE RED 1234abcd test -> SUPERVISOR: the supervisor writes the next briefs (drive.nika SHA)
+WAKE RED read=- do=write a fix-forward brief for the failed jobs it names, queued first, then restart the driver: ESCALATE RED 1234abcd test -> SUPERVISOR: the supervisor queues a fix-forward for the failed jobs first (drive.nika SHA)
 WAKE RED read=T/qa-input.txt do=write a fix-forward brief from it, queued first, then restart the driver: ESCALATE drive: suite red after 2 QA rounds: test (drive.nika SHA)
 WAKE MERGE read=- do=merge origin/develop by hand and resolve the sources it names, then restart the driver: ESCALATE drive: push rejected, merge conflicted in a.nika, merge aborted (drive.nika SHA)
 WAKE MERGE read=- do=finish or abort the merge in the shared checkout now, then restart the driver: ESCALATE drive: merge left open: push rejected, merge conflicted in a.nika, and git merge --abort did not finish (x) (drive.nika SHA)
-WAKE BATCH read=- do=write the next briefs, then restart the driver: ESCALATE focus: every area empty (drive.nika SHA)
+WAKE BATCH read=- do=no ready issue left in the lane, decide or file the waiting ones (`ready`), then restart the driver: ESCALATE BATCH DONE: no ready issue left in the lane, the supervisor decides or files the waiting ones (`ready`) (drive.nika SHA)
+WAKE BATCH read=- do=no ready issue left in the lane, decide or file the waiting ones (`ready`), then restart the driver: ESCALATE focus: every area empty (drive.nika SHA)
 WAKE ESCALATE read=- do=fix the cause it names, then restart the driver: ESCALATE drive: cycle.nika failed (drive.nika SHA)
 WAKE CUT read=- do=accept it with a Supervisor line in the report or file what it names, then restart the driver: ESCALATE CUT b1.md: Result: partial

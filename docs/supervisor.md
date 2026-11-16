@@ -319,11 +319,11 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   | :--- | :--- | :--- |
   | `PUSHED` | - | nothing: the driver ran `release.nika` itself (not under `--no-bump`, nor while HEAD holds untested commits: then the next push releases) |
   | `STOP` | - | restart the driver (time limit, `--max` reached) |
-  | `CUT` | the report | accept it with a `Supervisor:` line, or file what it names; restart (`brief missing`: `DIR/batch.txt`, write or drop the brief) |
+  | `CUT` | the report | accept it with a `Supervisor:` line, or file what it names; restart (`brief missing`: `DIR/batch.txt`, write or drop the brief; `Result: blocked`: file or decide what `Found:` names, set the issue `blocked` on it) |
   | `OWNER` | the report (`DIR/owner.txt` for the open questions) | tell the owner the question; restart |
   | `RED` | `DIR/qa-input.txt` (suite red after two QA rounds); - (CI red on `develop`: the line names the jobs) | write the fix-forward brief, queued first; restart |
   | `MERGE` | - | merge `origin/develop` by hand and resolve the sources the line names (`merge left open`: finish or abort it now); restart |
-  | `BATCH` | - | write the next briefs (every focus area empty); restart |
+  | `BATCH` | - | no `ready` issue left in the lane (every focus area empty): decide or file the waiting ones (`ready`); restart |
   | `ESCALATE` | - | fix the cause the line names; restart |
 * **The cycle of one DIR.** `nikaia run scripts/drive.nika -- DIR` with
   `run_in_background` (`--max N` agent runs, default 8; `--dry-run` shows the
@@ -332,8 +332,9 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   first; the run's files stay untracked working files, #1252), applies `BUMP
   pending` when CI is green, and on `CUT`, `BATCH DONE` and a `RED` with no
   builder queued waits for the batch's suite and stops (`ESCALATE <stop line>:
-  the supervisor writes the next briefs`): the supervisor writes the next
-  briefs (for `RED` the fix-forward, queued first) and starts it again. It
+  <what to do>`, by kind, #1887): the supervisor acts on the issues (files
+  or decides the waiting ones; for `RED` the fix-forward, queued first) and
+  starts it again. It
   prints one line per agent run and stops with one final line, exit 2, on an
   escalation: an `OWNER` line, `ESCALATE` of `agent.nika`, a stop line,
   `--max` reached, a push rejected whose merge of `origin/develop` conflicted
