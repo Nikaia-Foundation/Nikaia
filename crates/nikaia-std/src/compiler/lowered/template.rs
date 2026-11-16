@@ -140,13 +140,13 @@ impl Splitter {
                     return Err(nikaia_std::error::throwing(Refused::Because(format!("unclosed `{{` in the template, at character {}", at)), &"until"));
                 }
                 let mut expr: String = String::from("");
-                for k in unsafe { nikaia_std::proven::add::<i64>(self.at, 1) }..close { expr.push(*nikaia_std::index::get(&self.c, nikaia_std::index::at(k))); }
+                for k in unsafe { nikaia_std::proven::add::<i64>(self.at, 1) }..close { expr.push(*unsafe { nikaia_std::proven::read(&self.c, (k) as usize) }); }
                 if !text.is_empty() {
                     segments.push(Segment::Text(text));
                     text = String::from("");
                 }
                 segments.push(Segment::Hole { expr: nikaia_std::block::Text::from(expr.trim().to_string()), at: position });
-                self.at = close + 1;
+                self.at = unsafe { nikaia_std::proven::add::<i64>(close, 1) };
             } else {
                 self.scan.feed(c);
                 text.push(c);

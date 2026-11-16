@@ -30,7 +30,7 @@ pub(crate) fn rules_candidates(program: &Program, beside: &[&BoundsBeside], cont
     for other in beside.iter() {
         let other = *other;
         a_program = a_program || other.has_main;
-        lost.extend(other.lost.iter().cloned());
+        lost.extend(other.changed.iter().cloned());
     }
     let mut lists: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     let mut whole: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -51,7 +51,7 @@ pub(crate) fn rules_candidates(program: &Program, beside: &[&BoundsBeside], cont
                 held.insert(nikaia_std::block::Text::from(owner.to_string()), types);
                 for field in fields.iter() {
                     let ty = words.resolve(field.ty.name);
-                    let seen = !field.is_public || (!is_public || a_program) && !lost.contains(words.resolve(field.name));
+                    let seen = !lost.contains(words.resolve(field.name)) && !lost.contains(&format!("{}.{}", owner, words.resolve(field.name))) && (!field.is_public || !is_public || a_program);
                     if seen && field.ty.generics.is_empty() && is_whole_number(ty) {
                         let f = nikaia_std::block::Text::from(words.resolve(field.name).to_string());
                         if field.default.is_some() { defaults.insert(format!("{}.{}", owner, f), rules_scalar_shape(field.default.as_ref().map(|__nikaia_it| &__nikaia_it.value))); }

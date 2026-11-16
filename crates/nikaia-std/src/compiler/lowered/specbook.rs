@@ -25,10 +25,10 @@ pub fn blocks_in(text: &str) -> Vec<SpecBlock> {
         let mut code: String = String::from("");
         for k in start..end {
             if k > start { code.push('\n'); }
-            code.push_str(nikaia_std::index::get(&lines, nikaia_std::index::at(k)));
+            code.push_str(unsafe { nikaia_std::proven::read(&lines, (k) as usize) });
         }
         found.push(SpecBlock { line: unsafe { nikaia_std::proven::add::<i64>(start, 1) }, discusses_a_refusal: discusses_a_refusal(&code), sketch: is_a_sketch(&code), code });
-        at = end + 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(end, 1) };
     }
     found
 }

@@ -3541,9 +3541,14 @@ pub(crate) fn bounding_while(walk: &mut BoundsWalk, cond: &Expr, body: &Block, c
 
 pub(crate) fn bounding_compared(cond: &Expr, words: &winnow_grammar::InternerContext) -> String {
     match cond {
-        Expr::Binary { op, lhs, .. } => {
-            let lhs = nikaia_std::boxed::open(lhs);
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
             if *op == BinaryOp::Lt { return nikaia_std::index::or(path_of(lhs, words), || "".into()); }
+            if *op == BinaryOp::And {
+                let left = bounding_compared(lhs, words);
+                if !left.is_empty() { return left; }
+                return bounding_compared(rhs, words);
+            }
             return String::from("");
         },
         _ => return String::from(""),
@@ -3551,15 +3556,20 @@ pub(crate) fn bounding_compared(cond: &Expr, words: &winnow_grammar::InternerCon
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn bounding_counter_below(walk: &mut BoundsWalk, cond: &Expr, x: &str, changed: &BoundsChanged, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> Option<i64> {
+pub(crate) fn bounding_counter_below(walk: &mut BoundsWalk, cond: &Expr, x: &str, changed: &BoundsChanged, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &dyn Fn(&TermArena, &[i64], i64) -> bool) -> Option<i64> {
     match cond {
         Expr::Binary { op, lhs, rhs, .. } => {
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            if *op == BinaryOp::And {
+                let left = bounding_counter_below(walk, lhs, x, changed, facts, context, program, words, ask);
+                if left.is_some() { return std::convert::identity(left); }
+                return bounding_counter_below(walk, rhs, x, changed, facts, context, program, words, ask);
+            }
             if *op != BinaryOp::Lt || nikaia_std::index::or(path_of(lhs, words), || "".into()) != x || !bounding_unchanged_end(rhs, changed, words) { return None; }
             let end = match bounding_lin(walk, rhs, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let now = walk.arena.var(x);
             let below = walk.arena.le(now, end);
-            if !bounding_proves(&walk, facts, below, ask) { return None; }
+            if !bounding_proves(&walk, facts, below, &ask) { return None; }
             return Some(below);
         },
         _ => return None,
@@ -3570,6 +3580,7 @@ pub(crate) fn bounding_unchanged_end(end: &Expr, changed: &BoundsChanged, words:
     let named = path_of(end, words);
     if named.is_some() { return !bounding_changes_name(changed, nikaia_std::index::or(named.as_deref(), || "")); }
     match end {
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return bounding_unchanged_end(expr, changed, words) },
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             if !args.is_empty() || words.resolve(method) != "len" { return false; }
@@ -4368,7 +4379,7 @@ pub(crate) fn bounding_choice_facts(walk: &mut BoundsWalk, facts: &BoundsFacts, 
             let mut every = true;
             for j in 0..own.len() as i64 {
                 if !every || j == k || (*unsafe { nikaia_std::proven::read(&own, (j) as usize) }).contains(&fact) { continue; }
-                let mut trial = (*nikaia_std::index::get(&states, (j) as usize)).clone();
+                let mut trial = (*unsafe { nikaia_std::proven::read(&states, (j) as usize) }).clone();
                 for held in (*unsafe { nikaia_std::proven::read(&own, (j) as usize) }).iter() {
                     let held = nikaia_std::num::value(held);
                     bounding_push(&walk, &mut trial, held);
@@ -5335,7 +5346,7 @@ pub(crate) fn bounding_else(walk: &mut BoundsWalk, else_branch: Option<&Block>, 
 }
 
 pub(crate) fn bounding_if_join(walk: &mut BoundsWalk, facts: &mut BoundsFacts, changed: &BoundsChanged, then_facts: &BoundsFacts, else_facts: &BoundsFacts, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
-    if changed.values.is_empty() { return; }
+    if changed.values.is_empty() && changed.lengths.is_empty() { return; }
     let mut kept: Vec<i64> = vec![];
     for fact in bounding_join_candidates(walk, &facts, changed, then_facts) { if else_facts.facts.contains(&fact) || bounding_proves(&walk, else_facts, fact, ask) { kept.push(fact); } }
     for fact in bounding_join_candidates(walk, &facts, changed, else_facts) { if !kept.contains(&fact) && bounding_proves(&walk, then_facts, fact, ask) { kept.push(fact); } }
@@ -5348,7 +5359,7 @@ pub(crate) fn bounding_if_join(walk: &mut BoundsWalk, facts: &mut BoundsFacts, c
 }
 
 pub(crate) fn bounding_match_join(walk: &mut BoundsWalk, facts: &mut BoundsFacts, changed: &BoundsChanged, ends: &[BoundsFacts], bound: &[Vec<String>], ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
-    if changed.values.is_empty() || ends.len() < 2 { return; }
+    if changed.values.is_empty() && changed.lengths.is_empty() || ends.len() < 2 { return; }
     let mut kept: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for k in 0..ends.len() as i64 {
         for fact in bounding_join_candidates(walk, &facts, changed, unsafe { nikaia_std::proven::read(&ends, (k) as usize) }) {
@@ -5425,12 +5436,15 @@ pub(crate) fn bounding_join_candidates(walk: &mut BoundsWalk, facts: &BoundsFact
     for fact in branch.facts.iter() {
         let fact = nikaia_std::num::value(fact);
         if facts.facts.contains(&fact) || out.contains(&fact) { continue; }
+        let mut touched = false;
         for name in changed.values.iter() {
             if bounding_touches(&walk, fact, name) {
-                out.push(fact);
+                touched = true;
                 break;
             }
         }
+        for name in changed.lengths.iter() { if !touched && bounding_touches(&walk, fact, &length_of(name)) { touched = true; } }
+        if touched { out.push(fact); }
     }
     let pinned = bounding_pinned(&walk, branch);
     if pinned.is_empty() { return out; }

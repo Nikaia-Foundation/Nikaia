@@ -1,0 +1,10 @@
+// #1550: a rule body without its action stops where the next rule begins,
+// and is refused for the missing action, not at the next rule's `->`.
+grammar G {
+    entry rule all -> Vec[String] = name*
+    rule name -> String = w:until(";") ";" -> { w.clone() }
+}
+
+fn main() throws {
+    println(G::parse("a;b;")?)
+}

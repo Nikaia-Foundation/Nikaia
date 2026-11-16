@@ -194,7 +194,7 @@ pub(crate) fn features_scan_line(line: &str, lexer: &mut FeatureLexer) -> Featur
                 }
                 lexer.string = true;
                 lexer.hashes = hashes;
-                at += 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 continue;
             }
             if word == "b" && at < n && (*unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '"' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '\'') { continue; }

@@ -121,21 +121,21 @@ impl SvWalk {
             let step = (*nikaia_std::index::get(nikaia_std::index::get(&self.col_ks, nikaia_std::index::at(m.col)), (i) as usize)).checked_mul(m.delta);
             let now = match step {
                 None => None,
-                _ => (*unsafe { nikaia_std::proven::read(&self.row_value, (a) as usize) }).checked_add(nikaia_std::index::or(step, || 0)),
+                _ => (*nikaia_std::index::get(&self.row_value, nikaia_std::index::at(a))).checked_add(nikaia_std::index::or(step, || 0)),
             };
             if now.is_none() {
                 overflow = true;
                 break;
             }
-            let h = sv_walk_holds(nikaia_std::index::or(now, || 0), &unsafe { nikaia_std::proven::read(&self.atoms, (a) as usize) }.rel);
-            if h != *unsafe { nikaia_std::proven::read(&self.holds, (a) as usize) } {
+            let h = sv_walk_holds(nikaia_std::index::or(now, || 0), &nikaia_std::index::get(&self.atoms, nikaia_std::index::at(a)).rel);
+            if h != *nikaia_std::index::get(&self.holds, nikaia_std::index::at(a)) {
                 let up: i64 = if h { 1 } else { -1 };
-                for c in (*unsafe { nikaia_std::proven::read(&self.lit_clauses, (2 * a) as usize) }).iter() {
+                for c in (*nikaia_std::index::get(&self.lit_clauses, nikaia_std::index::at(2 * a))).iter() {
                     let c = nikaia_std::num::value(c);
                     if *nikaia_std::index::get(&self.scratch, nikaia_std::index::at(c)) == 0 { self.touched.push(c); }
                     { let __nikaia_stored = up; let __nikaia_at = (c) as usize; let __nikaia_stored = *unsafe { nikaia_std::proven::read(&self.scratch, __nikaia_at) } + __nikaia_stored; unsafe { nikaia_std::proven::write(&mut self.scratch, __nikaia_at, __nikaia_stored) }; }
                 }
-                for c in (*unsafe { nikaia_std::proven::read(&self.lit_clauses, (2 * a + 1) as usize) }).iter() {
+                for c in (*nikaia_std::index::get(&self.lit_clauses, nikaia_std::index::at(2 * a + 1))).iter() {
                     let c = nikaia_std::num::value(c);
                     if *nikaia_std::index::get(&self.scratch, nikaia_std::index::at(c)) == 0 { self.touched.push(c); }
                     { let __nikaia_stored = up; let __nikaia_at = (c) as usize; let __nikaia_stored = *unsafe { nikaia_std::proven::read(&self.scratch, __nikaia_at) } - __nikaia_stored; unsafe { nikaia_std::proven::write(&mut self.scratch, __nikaia_at, __nikaia_stored) }; }
@@ -161,10 +161,10 @@ impl SvWalk {
         let mut i: i64 = 0;
         while ((i) as usize) < (*nikaia_std::index::get(&self.col_atoms, nikaia_std::index::at(m.col))).len() {
             let a = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&self.col_atoms, (m.col) as usize) }, (i) as usize);
-            { let __nikaia_stored = *nikaia_std::index::get(nikaia_std::index::get(&self.col_ks, nikaia_std::index::at(m.col)), (i) as usize) * m.delta; let __nikaia_at = (a) as usize; let __nikaia_stored = *unsafe { nikaia_std::proven::read(&self.row_value, __nikaia_at) } + __nikaia_stored; unsafe { nikaia_std::proven::write(&mut self.row_value, __nikaia_at, __nikaia_stored) }; }
-            let h = sv_walk_holds(*unsafe { nikaia_std::proven::read(&self.row_value, (a) as usize) }, &unsafe { nikaia_std::proven::read(&self.atoms, (a) as usize) }.rel);
-            if h != *unsafe { nikaia_std::proven::read(&self.holds, (a) as usize) } {
-                { let __nikaia_stored = h; unsafe { nikaia_std::proven::write(&mut self.holds, (a) as usize, __nikaia_stored) }; }
+            self.row_value[nikaia_std::index::at(a)] += *nikaia_std::index::get(nikaia_std::index::get(&self.col_ks, nikaia_std::index::at(m.col)), (i) as usize) * m.delta;
+            let h = sv_walk_holds(*nikaia_std::index::get(&self.row_value, nikaia_std::index::at(a)), &nikaia_std::index::get(&self.atoms, nikaia_std::index::at(a)).rel);
+            if h != *nikaia_std::index::get(&self.holds, nikaia_std::index::at(a)) {
+                { let __nikaia_stored = h; nikaia_std::index::set(&mut self.holds, nikaia_std::index::at(a), __nikaia_stored); }
                 let (made, lost) = if h { (2 * a, 2 * a + 1) } else { (2 * a + 1, 2 * a) };
                 for c in (*nikaia_std::index::get(&self.lit_clauses, nikaia_std::index::at(made))).copy_owned() {
                     self.true_count[nikaia_std::index::at(c)] += 1;

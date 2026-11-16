@@ -6202,9 +6202,18 @@ fn bounding_while(
 /// The name `while x < e` compares, or nothing.
 fn bounding_compared(cond: ref Expr, words: ref winnow_grammar::InternerContext) -> String {
 	match cond {
-		Expr::Binary { op, lhs, .. } => {
+		Expr::Binary { op, lhs, rhs, .. } => {
 			if op == BinaryOp::Lt {
 				return path_of(lhs, words) ?? ""
+			}
+			// A conjunct compares as the whole would (#1557): the body
+			// runs only where each holds.
+			if op == BinaryOp::And {
+				let left = bounding_compared(lhs, words)
+				if !left.is_empty() {
+					return left
+				}
+				return bounding_compared(rhs, words)
 			}
 			return ""
 		},
@@ -6216,6 +6225,8 @@ fn bounding_compared(cond: ref Expr, words: ref winnow_grammar::InternerContext)
 /// (ADR-361 D13): `x <= e` at each head, where it holds where the loop is
 /// reached and the loop changes nothing `e` reads; each turn starts with
 /// `x < e` and adds one. Past the loop, with the condition false, `x == e`.
+/// `x < e` may be one conjunct of an `&&` (#1557: `while i < n && cs[i] !=
+/// ' '`): each turn starts with every conjunct true, so with `x < e` too.
 fn bounding_counter_below(
 	mut walk: BoundsWalk,
 	cond: ref Expr,
@@ -6229,6 +6240,13 @@ fn bounding_counter_below(
 ) -> i64? {
 	match cond {
 		Expr::Binary { op, lhs, rhs, .. } => {
+			if op == BinaryOp::And {
+				let left = bounding_counter_below(walk, lhs, x, changed, facts, context, program, words, ask)
+				if left != null {
+					return left
+				}
+				return bounding_counter_below(walk, rhs, x, changed, facts, context, program, words, ask)
+			}
 			if op != BinaryOp::Lt || (path_of(lhs, words) ?? "") != x || !bounding_unchanged_end(rhs, changed, words) {
 				return null
 			}
@@ -6245,13 +6263,14 @@ fn bounding_counter_below(
 }
 
 /// Whether `end` is a name or a list's length a loop that changed `changed`
-/// leaves as it is.
+/// leaves as it is, converted or not (#1557: `cs.len() as i64`).
 fn bounding_unchanged_end(end: ref Expr, changed: ref BoundsChanged, words: ref winnow_grammar::InternerContext) -> bool {
 	let named = path_of(end, words)
 	if named != null {
 		return !bounding_changes_name(changed, named ?? "")
 	}
 	match end {
+		Expr::Cast { expr, .. } => return bounding_unchanged_end(expr, changed, words),
 		Expr::MethodCall { receiver, method, args, .. } => {
 			if !args.is_empty() || words.resolve(method) != "len" {
 				return false
