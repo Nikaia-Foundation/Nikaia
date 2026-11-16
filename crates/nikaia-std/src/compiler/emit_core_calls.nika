@@ -1142,11 +1142,14 @@ impl EmitState {
         // front of it, as for any `ref String` parameter. `replace`'s
         // replacement is lent the same way (#877). A block's text is lent as
         // the `str` it holds, `&*`: Rust's `Pattern` is a trait no other
-        // crate may give a type (#490).
+        // crate may give a type (#490). A name put into a keep is already
+        // lent (`&Text`), so it takes one `*` more (#1875).
         let lent_pattern = args.len() == 1 || (name == "replace" && args.len() == 2)
         if receiver != null && lent_pattern && self.facts.owned_patterns.contains(node_key(args[0])) {
             let text = receiver ?? return
-            let lend = if self.on_block_types() { "&*" } else { "&" }
+            let plain = if self.on_block_types() { "&*" } else { "&" }
+            let kept = if self.on_block_types() { "&**" } else { "&*" }
+            let lend = if self.emit_stmt_a_kept_name(world, walk, args[0]) { kept } else { plain }
             // `replace` answers Rust's `String`, made a block's text.
             let made = name == "replace"
             if made {
@@ -1156,7 +1159,8 @@ impl EmitState {
             out.push(f".{name}({lend}")
             self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
             if args.len() == 2 {
-                out.push(f", {lend}")
+                let lend_second = if self.emit_stmt_a_kept_name(world, walk, args[1]) { kept } else { plain }
+                out.push(f", {lend_second}")
                 self.emit_expr(world, walk, out, host, args[1], depth, flow, scope)
             }
             out.push(")")

@@ -21,19 +21,20 @@ together with the specification section and an example test.
 | Rust tests by NK code | `grep -rln NK1234 crates/nikaia/tests/it/` |
 | Specification | `docs/specification/10-nikaia-light.md`, `20-nikaia-advance.md`, `30-nikaia-tooling.md` (code table) |
 | A name, Rust or Nikaia | `nikaia run scripts/where.nika -- NAME...`: definitions with file:line and the files that call them; for an `NKnnnn` the tests and the spec row (a field is not found: grep it); `-- --outline FILE` lists each item of a file with its line range |
-| A snippet through the built compiler | `nikaia run scripts/probe.nika -- 'let x = 1\nprintln(x)'` (`--check`, `--file F.nika`): runs it with `target/fast/nikaia`, prints at most 60 lines and `exit N`; a probe for a report is the snippet and these lines |
+| A snippet through the built compiler | `nikaia run scripts/probe.nika -- 'let x = 1\nprintln(x)'` (`--check`, `--file F.nika`): runs it with `target/fast/nikaia`, prints at most 60 lines and `exit N`; a probe for a report is the snippet and these lines. A first `note: target/fast/nikaia is older than ...` line means the binary may predate HEAD: build it before reading a refusal as a defect (#1866) |
 | How a form is written | `nikaia run scripts/syntax.nika -- KEYWORD`: the specification section, an example test and the facts lines on it (e.g. `slice`, `view`, `throws`) |
 
 ### Every run
 
 * **The compiler runs as rustc inside the program's `cargo build`**, so a sub-build in the same target dir waits for ever on Cargo's lock. Nothing says so: the nested `cargo` runs `--quiet` (`comptime_bundle.nika`, `grammar_run.nika`), so Cargo's *Blocking waiting for file lock* never shows, and `nikaia test` ends a test program's build only after `NIKAIA_TEST_BUILD_TIME_LIMIT` seconds (default ten times `NIKAIA_TEST_TIME_LIMIT`, so 3000 s; 0 is no limit; #1774, #1775): such a program then fails with `build timed out after N s` and a hint naming this `ps` check. A cold build or test silent for minutes is checked once with `ps -ef --forest | grep -B2 -E 'cargo (rustc|build) .*--target-dir'`: such a `cargo` under a `nikaia` that an outer `cargo build` started, both on one target dir, is this wait; kill it, do not wait it out. (issue-1705, #1727)
+* **Check the binary against HEAD before the first `nikaia test` or probe**: `git log --oneline --since=@$(stat -c %Y target/fast/nikaia) -- crates/` lists the compiler commits `target/fast/nikaia` predates; any line means build it first (`cargo build --profile fast -p nikaia`). A stale binary shows as a refusal in code you did not touch, often the `tests/compiler` library (`src/*.nika`) refusing a test before it runs (#1862's run read NK1102/NK1103/NK1185 on `tier_private_beside_caller` from a binary older than 151d2961, 5.5 minutes lost; `probe.nika`'s `note:` covers only probes). (#1893)
 * **`nikaia run` takes the run_fast path without Cargo**: probe a build-time change with a cold `nikaia build`, not `nikaia run`. (issue-1705)
 * With `cargo --target`, proc-macro crates land in `<dir>/debug/deps`, not `<dir>/<triple>/debug/deps`. (issue-1705)
 * A test program that spawns `nikaia` finds it among its ancestors only under `nikaia test`, not `nikaia run`. (issue-1705)
 * **`lower-std` runs the bounds walk**, so a slower walk slows every `lower-std` (one ran past 20 minutes and was killed): while you change the walk, lower with the binary before your change and measure with yours once. (issue-1470)
 * **After a change to any `bounds_*.nika`, each `lower-std` re-proves std with the new walk: 10-13 minutes, not the 40 s of `builder.md`.** Plan one such cycle per hour; iterate with `check --bounds` on a probe reduced from the real site, and find a slowdown with a few `gdb` stack samples (a minute), not callgrind (an hour). (issue-1470)
 * **Another agent's uncommitted `bounds_*.nika` makes your cycle re-prove std too** (`lower-std` reads the working tree): run `git status --short crates/nikaia-std/src/compiler/bounds_*.nika` before the first cycle; with one modified there, plan 10 minutes per `lower-std`, run it in the background, and need fewer cycles; do not touch their file. (issue-1731, #1745)
-* **`lower-std` lowers the other agents' unfinished `.nika` too**: one half-written can refuse your cycle (an NK code whose `-->` names a file `git status` shows modified and not yours), and their `lowered/*.rs` change under your cycles. Save the list once before the first cycle (`git status --short crates/nikaia-std/src/compiler > $S/before.txt`); a refusal or a lowered change in a file on it, or new since, is theirs: no defect, no `Found:`, no fix, never staged (`commit.nika` adds only your `Files:`). Judge your change by your own files and the new binary's `lower-std`; name the refusal once under `Tests:`, not as friction. Their `.nika` may also lower to Rust the build refuses (a rustc error in `lowered/X.rs` of a file on the list): for each build, put HEAD's copy of only that lowered file back (`git show HEAD:PATH > PATH`, the one sanctioned exception to never restoring `lowered/` by hand; their next `lower-std` writes it again), never stage it, and name it once under `Tests:`, not as friction or `Found:`. (issue-1759, #1762, #1794)
+* **`lower-std` lowers the other agents' unfinished `.nika` too**: one half-written can refuse your cycle (an NK code whose `-->` names a file `git status` shows modified and not yours), and their `lowered/*.rs` change under your cycles. Save the list once before the first cycle (`git status --short crates/nikaia-std/src/compiler > $S/before.txt`); a refusal or a lowered change in a file on it, or new since, is theirs: no defect, no `Found:`, no fix, never staged (`commit.nika` adds only your `Files:`). Judge your change by your own files and the new binary's `lower-std`; name the refusal once under `Tests:`, not as friction. Such a refusal makes the tree's `lower-std` write no file at all, yours neither: `nikaia run scripts/lower_mine.nika -- YOUR_FILES...` lowers HEAD plus only your files in `target/lower-mine` and names each lowered file your change moves (`--write` copies them into the tree, all but `lowered.rs`; `--exe $S/old/nikaia` for the cycle's first run) (#1875). Their `.nika` may also lower to Rust the build refuses (a rustc error in `lowered/X.rs` of a file on the list): for each build, put HEAD's copy of only that lowered file back (`git show HEAD:PATH > PATH`, the one sanctioned exception to never restoring `lowered/` by hand; their next `lower-std` writes it again), never stage it, and name it once under `Tests:`, not as friction or `Found:`. (issue-1759, #1762, #1794)
 * **A change to the bounds walk that asks new questions makes committed `nikaia.proofs` stale** (the examples', a package's): `build --locked` then fails with "N questions were searched", but only on a clean target, since a warm cache hides it. The driver refreshes them before each push and after merging `origin/develop` (`drive_ledgers`), and CI fails a stale one; by hand, `nikaia run scripts/ledgers.nika -- --check` finds them and `-- --refresh` rewrites them, so commit the added entries with the change. (qa, 3c055bf5; #1591)
 * `/usr/bin/time` does not exist here; time a command with the bash `time` keyword or `date +%s.%N` before and after. (issue-1470)
 * `cargo fmt -- FILE` fails here; run `cargo fmt --all` at the repository root (plain `cargo fmt` skips `crates/unsafe/*`, outside the workspace, which pre-push's `cargo fmt --all -- --check` checks as path dependencies, #1847) or `rustfmt --edition 2024 FILE`. (issue-1473)
@@ -49,7 +50,11 @@ together with the specification section and an example test.
   use, since another agent may rebuild `target/fast/nikaia` mid-run (P5a, j5).
   Keep the copy in its own directory and name it exactly `nikaia`
   (`$S/old/nikaia`): script tests check the basename and otherwise fall back
-  to `target/fast/nikaia` (b42). `target/release/nikaia` is older than the
+  to `target/fast/nikaia` (b42), resolved under the test's tmp dir: a test
+  failing with *no such file ... target/fast/nikaia* (about 170 programs
+  carry this `toolchain()`, e.g. `describe_reads_a_tuple_parameter`) ran
+  under a copy named otherwise (`nikaia-old`, `nk`); rename it, it is no
+  defect (#1868). `target/release/nikaia` is older than the
   views syntax and cannot serve.
   The copy may predate HEAD (another session built it from another tree,
   and its mtime is when you copied it): when a fails-before result surprises,
@@ -74,6 +79,11 @@ together with the specification section and an example test.
   autostash. Never type the edit again (the autostash pop then conflicts);
   wait in one call for the merge to end (Monitor until `.git/MERGE_HEAD`
   is gone), check the edit is back, then run the cycle again. (#1830)
+  Where the merge also changed a lowered file of yours, putting the edit
+  back conflicts there: the driver gives that file HEAD's copy, unstages
+  what git staged, and prints `MERGE autostash conflicted in ...`; run
+  `lower-std` again. A conflict in a source escalates instead, and the stash
+  keeps your side (#1862).
 * **Long runs go in the background** with `run_in_background` and `timeout:
   3600000`, and you wait for the wake-up, never a `sleep` or `pgrep` loop. A
   `lower-std` and build cycle takes 10-15 minutes: find every change it needs
@@ -107,7 +117,8 @@ together with the specification section and an example test.
   When their edit is in the same compiler `.nika` as yours, its lowered
   `.rs` mixes both and cannot be split by hunks (the `__nikaia_tupleN`
   names are byte offsets): lower HEAD plus your hunks once in a copy and
-  stage its blobs. `git archive HEAD | tar -x -C $S/head`, `git diff
+  stage its blobs (`scripts/lower_mine.nika` does the copy and the
+  lowering for whole files, #1875). `git archive HEAD | tar -x -C $S/head`, `git diff
   F.nika > $S/p.diff`, drop their hunks, `git -C $S/head apply`, then
   `NIKAIA_LOWER_CACHE_SALT=$RANDOM target/fast/nikaia lower-std --sysroot
   $S/head/crates`; for the `.nika`, its `lowered/*.rs` and `lowered.rs`:
@@ -123,7 +134,14 @@ together with the specification section and an example test.
   the fix hunks staged): commit the fix (the `.nika` and its
   lowered `.rs`) before starting the step in that file. Met late, put HEAD's
   version plus the fix hunks in place, commit, then restore the step
-  (issue-1470, issue-1691).
+  (issue-1470, issue-1691). Two fixes in different `.nika` lowered in one
+  cycle are two commits too: the first lists its `.nika`, its lowered
+  `.rs` and `lowered.rs` (`commit.nika` writes the digest of what is
+  staged, so the tree's `lowered.rs` still differs for the second); a
+  lowered `.rs` both fixes move is staged for the first from `lower_mine.nika
+  -- FIRST.nika` (`git update-index --cacheinfo` of its blob in
+  `target/lower-mine`, under `Partial:`, as for a file another agent also
+  edits, above) (#1883).
 * **Never run `nikaia fmt` on `crates/nikaia-std/src/compiler/*.nika`**: it
   reindents the whole file (b1012b). Format by hand there.
 * **`pre-push` fails with *out of date: self-hosted.svg*** when a `.nika`

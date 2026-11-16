@@ -137,6 +137,15 @@ it, like the checks in `docs/supervisor.md`.
   (#1752: #1554 put seven claims in one point, among them a closure
   capture `block.rs` keeps on purpose and a thread-local read per
   allocation).
+  A census is no defect: a count of sites sorted by kind (the checked
+  sites of a `--bounds` run, grouped by shape) names no program that
+  fails and no expected output. Each group is checked against the gate
+  that leaves it (the reason its `--bounds` row prints) first; a group
+  some decision leaves on purpose is left out, and only a group none
+  explains is filed, alone, with one site's probe and the result it
+  should give (#1892: #1867's `Found:` sorted unbounded sites, every
+  group was ADR-391 D1 or the `most_widened` budget, and its run closed
+  it as by design).
   A builder's report gives each defect its own `Found:` line for this.
   Each shape the issue names as failing (a `for` and a `while` form) is
   run on the binary of the day; a shape that already works is named as
@@ -184,6 +193,14 @@ it, like the checks in `docs/supervisor.md`.
 * **I7. The cause, as far as known**: the file and function, and how sure
   (traced / suspected / unknown). With several shapes of the probe, which were
   traced to that cause.
+  `traced` means the issue shows the trace: the path followed to the
+  function (a `--bounds-trace`, the lowered line, a stack), and for a cost
+  the instructions counted there (callgrind per function, the
+  disassembly of the named code, `docs/measuring.md`); a cause read off a
+  name, or "not measured further", is `suspected` at most, with the check
+  that would settle it (#1884: #1852 said "traced to the per-call
+  thread_local read, not measured further"; the read was 3-4 inlined
+  instructions, and the program cost less than plain Rust).
   A named function is one `scripts/where.nika -- NAME` finds today; a cause
   without one says `unknown`, never a guessed name (#1741: #1729 suspected
   `own_option_containers`, which does not exist). The file named beside it
@@ -242,6 +259,13 @@ it, like the checks in `docs/supervisor.md`.
   A figure of the toolchain is measured with `lower-std --bounds`, and each
   group's probe is a real site from that run, not only a test program
   (#1414).
+  A figure names the commit it was measured on (subject and date), and the
+  supervisor measures it again before a brief when an issue it builds on
+  has landed since: #1863's 317 sites were counted before #1832, and its
+  run found 237 (#1883). A run that finds the figure moved by such a
+  commit holds itself to the reason the figure counts, and its `Issue:`
+  names the figure stale only when the commit it was measured on is
+  missing.
   Each group's probe is run against the decision the issue builds on: an
   item counts a site only when that decision's mechanism reaches its probe
   (the D24 value range of a returned list does not reach a trait method with
@@ -271,6 +295,10 @@ it, like the checks in `docs/supervisor.md`.
   probe reduced from the real code: the function and every `ref mut self`
   method of its type, with stub types, kept as the acceptance check; a
   synthetic probe passed while the real code stayed checked (#1470).
+  The reduction keeps the site's control forms: a `match` at the site is
+  a `match` in the probe, never an `if` that stands for it, since each
+  form has its own join in the walk (#1889: #1702's probe was the `if`
+  form, its `sv_check` site a `match`, which had no join at all).
   Such an item also checks for each site that the rule can read the field:
   a `pub` field gets no found bound when its type can be seen from outside
   the package (ADR-306 D22). So the issue lists each site's field as private
@@ -288,6 +316,17 @@ it, like the checks in `docs/supervisor.md`.
   none exists yet (a `decision`, I6). Its probe holds those writes, since
   without writes no field rule is found (#1719: #1668's step asked for an
   element rule on `place`, which holds `-1`, against `heap`, which shrinks).
+  The form that excludes them is checked as an induction step, not on the
+  states the program reaches: pick any state the rule allows, run each
+  `mut self` method on it, and the rule must hold after. A write that
+  picks its element through another relation ("the element that pointed
+  past the new end") makes that relation part of the rule (`heap[place[v]]
+  == v`), and the decision names how the walk would state it; a relation
+  the prover's terms cannot say (`prover_arena.nika`: linear terms over
+  integers, no element read) is a gap, a `decision` (I6), not an item.
+  The issue writes the induction step out with the state tried (#1891:
+  #1718's decided rule held at `heap=[0,1], place=[0,1,1]` and broke after
+  `pop`, since only the pair link tells which element to set to `-1`).
   A probe that stands for sites keeps, at each site, the expression that
   builds the indexed value (a loop that pushes, an `if` expression, a
   `.clone()`, a field read), and the issue quotes those lines of one real

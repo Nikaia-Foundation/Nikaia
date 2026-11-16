@@ -1,0 +1,67 @@
+// scripts/probe.nika (#1866): a `target/fast/nikaia` older than a compiler
+// source in the tree may predate HEAD, so the probe names it in a first
+// `note:` line before the output; a binary newer than every source gets none.
+// In a temp tree with a stub binary that prints what it was asked.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+	let here = process::run("pwd", []).stdout.trim().clone()
+	if fs::exists(f"{here}/scripts/probe.nika", fs::Root::Anywhere) { return here }
+	let parent = process::run(
+		"sh",
+		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
+	).stdout.trim().clone()
+	if fs::exists(f"{parent}/scripts/probe.nika", fs::Root::Anywhere) { return parent }
+	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn case(nikaia: String, repo: String, tmp: String, name: String, setup: String) throws {
+	process::run("sh", ["-c", setup]; dir: tmp.clone())
+	let out = process::run(
+		nikaia,
+		["run", f"{repo}/scripts/probe.nika", "--", "println(1)"]; dir: tmp,
+	)
+	println(f"== {name}")
+	println(out.stdout.trim())
+}
+
+fn main() throws {
+	let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
+	let repo = root()
+	let nikaia = toolchain()
+	process::run(
+		"sh",
+		[
+			"-c",
+			"mkdir -p target/fast crates/c/src; printf '#!/bin/sh\\necho stub $1\\n' > target/fast/nikaia; chmod +x target/fast/nikaia; echo a > crates/c/src/a.nika",
+		]; dir: tmp.clone(),
+	)
+	case(
+		nikaia.clone(),
+		repo.clone(),
+		tmp.clone(),
+		"binary newer than the sources",
+		"touch -d '1 hour ago' crates/c/src/a.nika",
+	)
+	case(
+		nikaia,
+		repo,
+		tmp.clone(),
+		"a source newer than the binary",
+		"touch -d '2 hours ago' target/fast/nikaia",
+	)
+	process::run("rm", ["-rf", tmp])
+}

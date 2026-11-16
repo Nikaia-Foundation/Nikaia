@@ -1,0 +1,39 @@
+// release.nika (#1886): the version's commit takes the rows the agents added
+// to the Runs table of docs/tokenspeed.md, and leaves the file alone when a
+// line was removed or changed, or a line was added outside the Runs table.
+use std::fs
+use std::process
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/release.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/release.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn added(nikaia: String, repo: String, label: String, old: String, new: String) throws {
+    let out = process::run(nikaia, ["run", "scripts/release.nika", "--", "--rows-added", old, new]; dir: repo).stdout.trim().clone()
+    println(f"{label}: {out}")
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let old = "# T\n\n## Runs\n\n| a | b |\n| 1 | 2 |\n\n## After\n"
+    added(nikaia.clone(), repo.clone(), "unchanged", old.clone(), old.clone())
+    added(nikaia.clone(), repo.clone(), "a row added", old.clone(), "# T\n\n## Runs\n\n| a | b |\n| 1 | 2 |\n| 3 | 4 |\n\n## After\n")
+    added(nikaia.clone(), repo.clone(), "a row changed", old.clone(), "# T\n\n## Runs\n\n| a | b |\n| 1 | 9 |\n\n## After\n")
+    added(nikaia.clone(), repo.clone(), "a row removed", old.clone(), "# T\n\n## Runs\n\n| a | b |\n\n## After\n")
+    added(nikaia.clone(), repo.clone(), "a row above Runs", old.clone(), "# T\n| x |\n\n## Runs\n\n| a | b |\n| 1 | 2 |\n\n## After\n")
+    added(nikaia.clone(), repo.clone(), "a row below Runs", old.clone(), "# T\n\n## Runs\n\n| a | b |\n| 1 | 2 |\n\n## After\n| y |\n")
+    added(nikaia, repo, "a prose line added", old, "# T\n\n## Runs\n\nmore\n| a | b |\n| 1 | 2 |\n\n## After\n")
+}

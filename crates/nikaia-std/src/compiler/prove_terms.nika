@@ -10,6 +10,17 @@
 // named by their place in `out`: the same terms in the same order the Rust
 // made them.
 
+/// **A value a `let mut` or an assignment gives, as a term** (ADR-361 D13,
+/// #1848): a `bool` name is a number to the walk, `true` 1 and `false` 0, so a
+/// flag a loop sets is a state name like a counter. `lin_term` itself reads
+/// numbers only: the ledgers and the summaries read it too.
+fn value_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> i64? {
+    return match expr {
+        Expr::LitBool(b, _) => built(SolverTerm::Int(if b { 1 } else { 0 }), out),
+        else => lin_term(expr, words, var, pinned, out),
+    }
+}
+
 /// `expr` as a linear term over the names `var` admits: the node's place in
 /// `out`, or nothing where it is not one. A product is linear where one side
 /// is a constant. A name or a call `pinned` gives a value the build knows is
@@ -241,6 +252,17 @@ fn call_result_name(call: ref Expr) -> String {
 pub fn claim_term(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: fn(ref String) -> bool sync, pinned: fn(ref String) -> i64? sync, mut out: Vec[SolverTerm]) -> i64? {
     return match expr {
         Expr::LitBool(b, _) => built(SolverTerm::Bool(b), out),
+        // **A `bool` name the walk follows is a number** (ADR-361 D13):
+        // `true` is 1, so the claim is that it is at least 1 (#1848).
+        Expr::Variable(name, _) => {
+            let n = words.resolve(name)
+            if !var(n) {
+                return null
+            }
+            let named = built(SolverTerm::Var(n.clone()), out)
+            let one = built(SolverTerm::Int(1), out)
+            built(SolverTerm::Ge(named, one), out)
+        },
         // **`xs.is_empty()` is `xs.len() == 0`** (#1576), where the length is
         // a name of its own as `lin_term` reads it.
         Expr::MethodCall { receiver, method, args, .. } => {

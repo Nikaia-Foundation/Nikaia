@@ -181,6 +181,11 @@ codegen-units = 1
 incremental = false
 ",
 	)
+	// valgrind 3.22 runs the executor's io_uring_enter wait as a call that
+	// does not block, under its one-thread lock, so a program that reads
+	// standard input waits for ever under callgrind (#1874): every Nikaia
+	// row runs on the blocking path, as the Rust entries read.
+	fs::write(f"{dir}/runtime.toml", fs::Root::Anywhere, "io-method = \"blocking\"\n")
 	for setting in ["on", "off"] {
 		must(
 			f"cd {dir} && RUSTFLAGS='-C overflow-checks={setting}' {nikaia} build --cpu={cpu} >build.log 2>&1 && cp target/nikaia/bin/game {bin}.{setting}",
@@ -199,7 +204,7 @@ incremental = false
 		name: name,
 		on: f"{bin}.on",
 		off: f"{bin}.off",
-		env: String(),
+		env: f"NIKAIA_RUNTIME_CONFIG={dir}/runtime.toml ",
 		source: source,
 	}
 }

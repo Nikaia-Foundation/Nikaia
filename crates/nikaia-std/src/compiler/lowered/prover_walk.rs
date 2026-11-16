@@ -335,7 +335,7 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
             prover_lengths_changed(&mut changed, body, &scope, &walk.state.readers, words);
             prover_loop_elements(walk, body, &vec![], scope, words);
             let mut state: Vec<String> = vec![];
-            for n in changed.iter() { if scope.mutables.contains(n) && scope.ints.contains(n) && !n.ends_with(".len()") { state.push(nikaia_std::block::Text::from(n.to_string())); } }
+            for n in changed.iter() { if scope.mutables.contains(n) && scope.ints.contains(n) && prover_length_follows(n, cond, body, &walk.state.readers, words) { state.push(nikaia_std::block::Text::from(n.to_string())); } }
             let mut records: Vec<LoopRecord> = vec![];
             if !state.is_empty() {
                 let at_loop = scope.with_history();
@@ -1006,7 +1006,7 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
         match iter {
             Expr::Range { start, end, inclusive, .. } => {
                 let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
-                for n in changed.iter() { if scope.mutables.contains(n) && scope.ints.contains(n) && !n.ends_with(".len()") { state.push(nikaia_std::block::Text::from(n.to_string())); } }
+                for n in changed.iter() { if scope.mutables.contains(n) && scope.ints.contains(n) && prover_length_follows(n, iter, body, &walk.state.readers, words) { state.push(nikaia_std::block::Text::from(n.to_string())); } }
                 let low = lin_term(start, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
                 let high = lin_term(end, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
                 let mut fits = !state.is_empty() && low.is_some() && high.is_some() && !scope.ints.contains(&counter) && !changed.contains(&counter);
@@ -2390,7 +2390,7 @@ pub(crate) fn prover_variable_named(value: Option<&Expr>, words: &winnow_grammar
 
 pub(crate) fn prover_assigned(walk: &mut ProverWalk, n: &str, op: Option<&BinaryOp>, value: &Expr, span: &Span, scope: &mut ProverScope, words: &winnow_grammar::InternerContext) -> bool {
     if !scope.mutables.contains(n) { return false; }
-    let read = match lin_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let read = match value_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let mut term = read;
     if op.is_some() {
         if !scope.ints.contains(n) { return false; }
@@ -2481,7 +2481,7 @@ pub(crate) fn prover_follow_mutables(walk: &mut ProverWalk, stmt: &Stmt, span: &
             if mutable && names.len() == 1 {
                 let n = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string());
                 if !pinned.contains(&n) { prover_mutable_list(walk, &n, (ty).as_ref(), value, scope, words); }
-                let term = lin_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
+                let term = value_term(value, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
                 let of_call = term.is_none() && match value {
                     Expr::Call { .. } => scope.ints.contains(&n),
                     _ => false,
@@ -2730,6 +2730,12 @@ pub(crate) fn prover_lengths_changed(changed: &mut collections::BTreeSet<String>
 pub(crate) fn prover_else_lengths_changed(changed: &mut collections::BTreeSet<String>, else_branch: Option<&Block>, scope: &ProverScope, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) {
     let block = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
     prover_lengths_changed(changed, block, scope, readers, words);
+}
+
+pub(crate) fn prover_length_follows(n: &str, cond: &Expr, body: &Block, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> bool {
+    if !n.ends_with(".len()") { return true; }
+    let list = nikaia_std::block::Text::from(nikaia_std::index::or(n.strip_suffix(".len()"), || "").to_string());
+    !changes_length_in_expr(cond, &list, readers, words) && !rebinds(body, &list, words)
 }
 
 pub(crate) fn prover_loop_keeps(n: &str, changed: &collections::BTreeSet<String>, body: &Block, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> bool {

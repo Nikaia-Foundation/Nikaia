@@ -35,7 +35,7 @@
 // (drive_queue_plan: LIST in drive_queue's `=== #N ===` record form, OPEN the
 // dependencies taken as open),
 // `--wip-after RESULT FIXES N`, `--found-issue NAME N FOUND NEEDS`,
-// `--improve-issue NAME N REPORT [DIR]`, `--improve-plan NAME N REPORT EXISTING`, `--time-up` (drive_time_up: `up` or `not up`).
+// `--improve-issue NAME N REPORT [DIR]`, `--improve-plan NAME N REPORT EXISTING`, `--time-up` (drive_time_up: `up` or `not up`), `--time-up DIR` (drive_time_check: `up`, `starts` or why not), `--pickup DIR` (drive_pickup).
 //
 // Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time;
 // before each cycle the area's ready issues (the area being DIR's last name)
@@ -72,25 +72,33 @@
 //     BUMP pending, CI green      cycle.nika -- DIR --apply
 //     CUT, RED, BATCH DONE        the batch's suite runs and is waited for,
 //                                 then the driver stops for the supervisor
-//                                 (`ESCALATE <stop line>: the supervisor
-//                                 writes the next briefs`, exit 2); the
-//                                 supervisor writes the briefs (a fix-forward
-//                                 for RED) and starts the driver again
+//                                 (`ESCALATE <stop line>: <what to do>`,
+//                                 drive_stop_next, exit 2); the supervisor
+//                                 acts on the issues (files or decides the
+//                                 waiting ones, a fix-forward issue for RED) and
+//                                 starts the driver again
 //
 // Output: one line per agent run (`builder done ...`).
 // Time limit: the background task that runs the driver is ended after 2 h,
 // the agent it runs with it. So after NIKAIA_DRIVE_LIMIT_MIN minutes (default
 // 105) the driver starts no new agent: before a builder, and before a QA for a
 // red suite, it ends with `STOP drive: time limit after <n> min`, exit 4, for
-// the supervisor to start it again. A suite still running on CI (or a red one
-// not yet handed to QA) is not lost: its files stay in target/suite.lock with
-// target/suite.lock/handover, and the next run takes the lock over (`SUITE
-// <sha8> taken over from the last run`, drive_adopt). The minutes count from
+// the supervisor to start it again. It stops so too where the minutes left
+// until the task's end (NIKAIA_DRIVE_TASK_MIN, default 120) are fewer than a
+// run of the lane takes, the longest of its last five, 60 while it has none
+// (`STOP drive: time limit after <n> min (<m> min left of 120, a run of DIR
+// takes <k> min)`, drive_time_check, #1885). A builder run cut off all the
+// same after its report (BRIEF.running left beside it) gets its follow-up at
+// the next start (`PICKUP <name>`, drive_pickup). A suite still running on
+// CI (or a red one not yet handed to QA) is not lost: its files stay in
+// target/suite.lock with target/suite.lock/handover, and the next run takes
+// the lock over (`SUITE <sha8> taken over from the last run`, drive_adopt). The minutes count from
 // the first start; a RESTART passes it on in NIKAIA_DRIVE_STARTED.
 // Escalation: one final line, exit 2, on an OWNER line, an ESCALATE of
 // agent.nika, a stop line (above), `--max` agent runs (default 8), a merge
 // conflict on a rejected push, a suite still red after 2 QA rounds. A RED line
-// with a builder queued goes on with it (the supervisor's fix-forward brief).
+// with a builder queued goes on with it (the supervisor's fix-forward, a
+// `#N` line queued first in DIR/batch.txt, which batch.nika briefs itself).
 // Each ESCALATE line names the drive.nika commit that ran (drive_wake).
 //
 // `--ignore-ci-red`: a RED line of the cycle (CI red on develop) does not
@@ -281,10 +289,13 @@ fn drive_wake(dir: String, line: String) throws {
 //     PUSHED    read=-                do=nothing (the driver released, drive_release)
 //     STOP      read=-                do=restart the driver (time limit, --max)
 //     CUT       read=<the report>     do=accept with a Supervisor line, or file it
+//                                     (Result: blocked: file or decide what Found names, block the issue on it;
+//                                     brief missing: put an issue's #N line in its place, or drop it)
 //     OWNER     read=<the report>     do=tell the owner (DIR/owner.txt for open ones)
-//     RED       read=DIR/qa-input.txt do=write the fix-forward (read=- for CI red on develop)
+//     RED       read=DIR/qa-input.txt do=file the fix-forward as a ready issue, its #N line first
+//                                     in DIR/batch.txt (read=- for CI red on develop)
 //     MERGE     read=-                do=resolve the named sources, restart
-//     BATCH     read=-                do=write the next briefs, restart
+//     BATCH     read=-                do=decide or file the waiting issues (ready), restart
 //     PROVED    read=DIR/proved.log   do=find and file the commit that lowered the proof figure
 //     ESCALATE  read=-                do=fix the cause it names, restart
 //
@@ -306,7 +317,10 @@ fn drive_wake_line(dir: String, said: String) -> String throws {
 		let brief = drive_wake_brief((body.strip_prefix("CUT ") ?? "").clone())
 		if body.contains(": brief missing") {
 			read = drive_wake_in(dir, "batch.txt")
-			act = "write the brief or drop it from batch.txt, then restart the driver"
+			act = "put the issue's `#N` line in its place or drop the line from batch.txt, then restart the driver"
+		} else if body.contains(": Result: blocked") {
+			read = drive_wake_report(dir, brief)
+			act = "file or decide what `Found:` names, set the issue `blocked` on it, then restart the driver"
 		} else {
 			read = drive_wake_report(dir, brief)
 			act = "accept it with a Supervisor line in the report or file what it names, then restart the driver"
@@ -324,11 +338,11 @@ fn drive_wake_line(dir: String, said: String) -> String throws {
 		}
 	} else if body.starts_with("RED ") {
 		kind = "RED"
-		act = "write a fix-forward brief for the failed jobs it names, queued first, then restart the driver"
+		act = "file the failed jobs it names as a `ready` issue with the push's commits, its `#N` line first in batch.txt, then restart the driver"
 	} else if body.starts_with("drive: suite red after") {
 		kind = "RED"
 		read = drive_wake_in(dir, "qa-input.txt")
-		act = "write a fix-forward brief from it, queued first, then restart the driver"
+		act = "file it as a `ready` issue, its `#N` line first in batch.txt, then restart the driver"
 	} else if body.contains("merge left open") {
 		kind = "MERGE"
 		act = "finish or abort the merge in the shared checkout now, then restart the driver"
@@ -341,7 +355,7 @@ fn drive_wake_line(dir: String, said: String) -> String throws {
 		act = "find the commit of the range that lowered the proof figure and file it for the prover lane"
 	} else if body.starts_with("BATCH DONE") || body.starts_with("focus: every area empty") {
 		kind = "BATCH"
-		act = "write the next briefs, then restart the driver"
+		act = "no ready issue left in the lane, decide or file the waiting ones (`ready`), then restart the driver"
 	}
 	return f"WAKE {kind} read={read} do={act}: {said}"
 }
@@ -433,19 +447,72 @@ fn drive_time_up() -> bool throws {
 	return drive_elapsed() >= limit * 60
 }
 
+// The seconds of one run of DIR's past runs, BRIEF.run.json: the span from
+// BRIEF.posted (written just before the agent starts) to the run.json, since
+// claude's `duration_ms` covers only the last turn of a run a background task
+// woke; that field where the span is missing or longer than the agent's 150
+// minutes (a brief run again later).
+fn drive_run_seconds(json_path: String) -> i64 throws {
+	let brief = (json_path.strip_suffix(".run.json") ?? "").clone()
+	let stat = process::run("stat", ["-c", "%Y", f"{brief}.posted", json_path.clone()])
+	let stamps = stat.stdout.trim().split("\n").collect()
+	if stamps.len() == 2 {
+		let span = (text::parse_i64(stamps[1].trim()) ?? 0) - (text::parse_i64(stamps[0].trim()) ?? 0)
+		if span > 0 && span <= 150 * 60 { return span }
+	}
+	let ms = text::parse_i64(drive_json_field(drive_read(json_path), "duration_ms")) ?? 0
+	return ms / 1000
+}
+
+// Minutes a run of DIR is expected to take (#1885): the longest of DIR's last
+// five runs (drive_run_seconds, newest run.json first), rounded up; 60 while
+// DIR has none.
+fn drive_run_minutes(dir: String) -> i64 throws {
+	let listed = process::run("sh", ["-c", "ls -t -- \"$1\"/*.run.json 2>/dev/null | head -5", "sh", dir.clone()]).stdout
+	let mut longest: i64 = 0
+	let mut seen: i64 = 0
+	for path in listed.split("\n") {
+		if path.trim() == "" { continue }
+		seen += 1
+		longest = longest.max(drive_run_seconds(path.trim().clone()))
+	}
+	if seen == 0 { return 60 }
+	return (longest + 59) / 60
+}
+
+// Whether an agent of DIR may start (#1885): "" when it may; `up` past
+// NIKAIA_DRIVE_LIMIT_MIN (drive_time_up); else, where the minutes left until
+// the task ends (NIKAIA_DRIVE_TASK_MIN, default 120: the 2 h after which the
+// harness ends the driver and its agent) are fewer than a run of DIR takes
+// (drive_run_minutes, at most NIKAIA_DRIVE_LIMIT_MIN), what says so.
+fn drive_time_check(dir: String) -> String throws {
+	if drive_time_up() { return "up" }
+	let task = text::parse_i64(env::var("NIKAIA_DRIVE_TASK_MIN") ?? "") ?? 120
+	let left = (task * 60 - drive_elapsed()) / 60
+	// A run longer than the time limit fits no task: it is counted as the
+	// limit, so a fresh driver still starts one (a lane whose runs were cut
+	// off would otherwise stop at every start).
+	let limit = text::parse_i64(env::var("NIKAIA_DRIVE_LIMIT_MIN") ?? "") ?? 105
+	let run = drive_run_minutes(dir).min(limit)
+	if left >= run { return "" }
+	return f"{left} min left of {task}, a run of {dir} takes {run} min"
+}
+
 // Ends the run at the time limit, before an agent starts: a suite this driver
 // started is left to the next run (target/suite.lock/handover), else the
-// lock is released. Exit 4.
-fn drive_time_stop() throws {
+// lock is released. Exit 4. WHY is drive_time_check's answer, named after the
+// minutes unless it is `up`.
+fn drive_time_stop(why: String) throws {
 	let minutes = drive_elapsed() / 60
+	let note = if why == "up" { "" } else { f" ({why})" }
 	let testing = drive_testing()
 	if testing != "" {
 		fs::write(drive_lock_dir() + "/handover", fs::Root::Anywhere, testing + "\n")
 		let sha = testing.split(" ").collect()[0].clone()
-		drive_wake("", f"STOP drive: time limit after {minutes} min, suite {drive_short(sha)} left to the next run")
+		drive_wake("", f"STOP drive: time limit after {minutes} min{note}, suite {drive_short(sha)} left to the next run")
 	} else {
 		drive_unlock()
-		drive_wake("", f"STOP drive: time limit after {minutes} min")
+		drive_wake("", f"STOP drive: time limit after {minutes} min{note}")
 	}
 	process::exit(4)
 }
@@ -581,8 +648,8 @@ fn drive_word(value: String) -> String {
 // Which action a cycle's output leads to, as one line:
 //   ESCALATE <why> | STOP <line> | BUMP | NEXT <abs brief>
 // STOP (CUT, BATCH DONE, or RED with no builder queued): the driver stops for
-// the supervisor, who writes the next briefs. A RED with a builder queued goes
-// on with it (the supervisor's fix-forward brief).
+// the supervisor, who acts on the issues (drive_stop_next). A RED with a builder queued goes
+// on with it (the supervisor's fix-forward, a `#N` line queued first).
 // `ignore_red` (--ignore-ci-red): a RED line leads nowhere; NEXT and BATCH DONE
 // go on as if CI were green, and BUMP still waits for a green CI line.
 fn drive_action(lines: Vec[String], ignore_red: bool) -> String {
@@ -1042,6 +1109,7 @@ fn drive_pull(cause: String, lower: String, build: String, badges: String) -> St
 			let why = (forward.stderr + forward.stdout).trim().split("\n").collect()[0].clone()
 			drive_escalate(f"{cause}, the fast-forward failed ({why})")
 		}
+		drive_autostash_settle(cause)
 	} else {
 		drive_merge_fetched(cause, lower, build, badges)
 	}
@@ -1086,7 +1154,48 @@ fn drive_suite_done() -> bool throws {
 // the way moves them aside and is tried once more (#1820); any other conflict,
 // or a failed resolution, aborts and escalates.
 fn drive_merge_fetched(cause: String, lower: String, build: String, badges: String) throws {
-	drive_merge_try(cause, lower, build, badges, true)
+	drive_merge_try(cause.clone(), lower, build, badges, true)
+	drive_autostash_settle(cause)
+}
+
+// After a merge (drive_pull's fast-forward, drive_merge_fetched): git puts
+// the autostash (the other agents' unfinished files) back once the merge is
+// committed, and where one of theirs changed a file the merge changed too
+// that conflicts, yet `git commit` and `git merge --ff-only` still exit 0
+// (#1862: a builder found a conflict marker in its uncommitted `lowered.rs`
+// and its files staged). git then stages each file of the stash it put back
+// cleanly, leaves the conflicted ones unmerged and keeps the stash. A
+// conflict only in lowered files is settled: they take HEAD's copy (the
+// agent's next `lower-std` writes theirs again from its `.nika`, which came
+// back) and the staged files are unstaged, so the tree is as before the merge
+// but for those lowered files; prints `MERGE autostash conflicted in PATHS,
+// took HEAD's copy, stash SHA keeps theirs`. A conflict in sources escalates
+// naming them and the stash.
+fn drive_autostash_settle(cause: String) throws {
+	let unmerged = process::run("git", ["diff", "--name-only", "--diff-filter=U"]).stdout.trim().clone()
+	if unmerged == "" { return }
+	let mut sources: Vec[String] = []
+	let mut lowered: Vec[String] = []
+	for p in unmerged.split("\n") {
+		if drive_is_lowered(p.clone()) { lowered.push(p.clone()) } else { sources.push(p.clone()) }
+	}
+	let stash = process::run("git", ["stash", "list", "-1", "--format=%h"]).stdout.trim().clone()
+	if sources.len() > 0 {
+		drive_escalate(f"{cause}, the merge is committed, but putting the uncommitted files back conflicted in {sources.join(" ")}: resolve them by hand, stash {stash} keeps the uncommitted side")
+	}
+	let mut take: Vec[String] = ["checkout", "HEAD", "--"]
+	for p in lowered.clone() { take.push(p) }
+	let taken = process::run("git", take)
+	if !taken.ok {
+		drive_escalate(f"{cause}, putting the uncommitted files back conflicted in {lowered.join(" ")}, and taking HEAD's copy failed")
+	}
+	let staged = process::run("git", ["diff", "--cached", "--name-only"]).stdout.trim().clone()
+	if staged != "" {
+		let mut unstage: Vec[String] = ["restore", "--staged", "--"]
+		for p in staged.split("\n") { unstage.push(p.clone()) }
+		process::run("git", unstage)
+	}
+	println(f"MERGE autostash conflicted in {lowered.join(" ")}, took HEAD's copy, stash {stash} keeps theirs")
 }
 
 // drive_merge_fetched once; RETRY says whether generated files in the way may
@@ -1979,7 +2088,10 @@ fn drive_settle(exe: String, dir: String) throws {
 		let out = drive_read(f"{dir}/suite.log")
 		let steps = drive_red_steps(out)
 		// A red suite goes to QA in the next run where the time is up.
-		if steps != "" && drive_time_up() { drive_time_stop() }
+		if steps != "" {
+			let why = drive_time_check(dir)
+			if why != "" { drive_time_stop(why) }
+		}
 		process::run("rm", ["-f", exit, drive_lock_dir() + "/testing"])
 		if steps == "" {
 			println(f"SUITE {drive_short(sha)} green")
@@ -2458,6 +2570,8 @@ fn drive_agent(exe: String, dry: bool, dir: String, brief: String, role: String)
 	if done == "" || !out.ok {
 		if first == "" { first = f"agent.nika exited with code {out.code}" }
 		drive_post_run(dir, brief.clone(), cost_from, first)
+		// An escalated run is the supervisor's, not drive_pickup's.
+		process::run("rm", ["-f", f"{brief}.running"])
 		drive_escalate(first)
 	}
 	drive_post_run(dir, brief.clone(), cost_from, "no report")
@@ -2589,7 +2703,10 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 		dry,
 		"a batch's suite that has finished (target/suite.lock/exit-<sha>): handle it (drive_settle) first; one still running: go on, CI runs it",
 	)
-	if !dry && drive_time_up() { drive_time_stop() }
+	if !dry {
+		let why = drive_time_check(dir)
+		if why != "" { drive_time_stop(why) }
+	}
 	drive_say(
 		dry,
 		"git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)",
@@ -2598,7 +2715,20 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 	drive_disk(exe.clone(), dry)
 	drive_post_brief(dry, brief)
 	drive_wip_start(dry, brief)
+	drive_say(dry, f"write {brief}.running (the run's start, removed when its follow-up is done)")
+	if !dry {
+		let cost_from = drive_line_count(drive_read(f"{dir}/cost.txt"))
+		fs::write(f"{brief}.running", fs::Root::Anywhere, f"{cost_from}\n")
+	}
 	drive_agent(exe, dry, dir, brief, "builder")
+	drive_builder_after(dry, dir, brief)
+}
+
+// The follow-up of a builder run once its agent ended: its report's `Pushed:`
+// checked, its issue's labels, the tidy, the brief appended to
+// DIR/unpushed.txt, its `Found:`, `Comment:` and improvement lines filed;
+// last, BRIEF.running removed.
+fn drive_builder_after(dry: bool, dir: String, brief: String) throws {
 	drive_report_pushed(dry, brief)
 	drive_wip_end(dry, brief)
 	drive_tidy(dry, dir.clone())
@@ -2611,7 +2741,36 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 		drive_found_file(dir.clone(), brief.clone())
 	}
 	drive_comment_file(dir.clone(), brief.clone())
-	drive_improve_file(dir, brief)
+	drive_improve_file(dir, brief.clone())
+	process::run("rm", ["-f", f"{brief}.running"])
+}
+
+// At a start (#1885): a builder run the time limit cut off after its report
+// was written (BRIEF.running left beside a report: the harness ended the
+// driver before `builder done`) gets its follow-up now, before the next
+// brief: its run posted on its issue (from the cost.txt line BRIEF.running
+// holds), `builder done <name> (picked up)`, drive_builder_after. A marker
+// without a report is left: that brief has not run to its end, the cycle
+// runs it again (agent.nika resumes its session) and writes the marker anew.
+fn drive_pickup(dir: String) throws {
+	if !fs::exists(dir, fs::Root::Anywhere) { return }
+	let mut briefs: Vec[String] = []
+	for entry in fs::read_dir(dir.clone(), fs::Root::Anywhere) {
+		let path = entry.to_text()
+		let parts: Vec[String] = path.split("/").collect()
+		let name = parts[parts.len() - 1].clone()
+		let stem = name.strip_suffix(".running") ?? ""
+		if stem != "" { briefs.push(f"{dir}/{stem}") }
+	}
+	briefs.sort()
+	for brief in briefs {
+		if drive_report_of(brief.clone()) == "" { continue }
+		let cost_from = text::parse_i64(drive_read(f"{brief}.running").trim()) ?? 0
+		println(f"PICKUP {drive_stem(brief.clone())}: its run was cut off after its report, the follow-up runs now")
+		drive_post_run(dir.clone(), brief.clone(), cost_from, "no report")
+		println(f"builder done {drive_stem(brief.clone())} (picked up)")
+		drive_builder_after(false, dir.clone(), brief.clone())
+	}
 }
 
 // Adds LABEL to issue N (`gh api -X POST .../labels`); true when it went through.
@@ -3357,9 +3516,27 @@ fn drive_found(dir: String, brief: String) -> String throws {
 	return lines.join("\n")
 }
 
+// What the supervisor does at a stop line STOP, the tail of its ESCALATE line
+// (#1887): the work order is the issue, which the driver queues itself.
+fn drive_stop_next(stop: String) -> String {
+	if stop.starts_with("CUT") && stop.contains(": Result: blocked") {
+		return "the supervisor files or decides what `Found:` names and sets the issue `blocked` on it"
+	}
+	if stop.starts_with("CUT") && stop.contains(": brief missing") {
+		return "the supervisor puts the issue's `#N` line in its place or drops the line from batch.txt"
+	}
+	if stop.starts_with("CUT") {
+		return "the supervisor accepts the report with a Supervisor line or files what it names"
+	}
+	if stop.starts_with("RED") {
+		return "the supervisor files the failed jobs as a `ready` issue, its `#N` line first in batch.txt"
+	}
+	return "no ready issue left in the lane, the supervisor decides or files the waiting ones (`ready`)"
+}
+
 // The batch ends at a stop line: its suite runs and is waited for (pushed when
-// green), then the driver stops for the supervisor, who writes the next briefs
-// (a fix-forward for RED). A dry run prints `DRY-RUN STOP <stop>`.
+// green), then the driver stops for the supervisor, who acts on the issues
+// (drive_stop_next; a fix-forward issue queued first for RED). A dry run prints `DRY-RUN STOP <stop>`.
 fn drive_stop(exe: String, dry: bool, dir: String, stop: String) throws {
 	drive_suite(exe, dry, dir)
 	drive_say(dry, "wait for the suite (drive_settle), then stop for the supervisor (exit 2)")
@@ -3369,7 +3546,7 @@ fn drive_stop(exe: String, dry: bool, dir: String, stop: String) throws {
 	}
 	drive_settle(exe, dir)
 	drive_unlock()
-	drive_wake(dir, f"ESCALATE {stop}: the supervisor writes the next briefs")
+	drive_wake(dir, f"ESCALATE {stop}: {drive_stop_next(stop.clone())}")
 	if stop.starts_with("CUT") && !stop.ends_with("brief missing") && !stop.contains(": Pushed:") && !stop.contains(": Result: blocked") {
 		println("CLEAR with a line `Supervisor: YYYY-MM-DD: accepted ...` in the report (batch.nika); the builder's lines stay")
 	}
@@ -4109,6 +4286,10 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 		let area = drive_focus_current(file)
 		let dir = drive_focus_dir(file, area)
 		if dir == "" { drive_escalate(f"focus: {path} names no area {area}") }
+		if !dry {
+			drive_pickup(bugs)
+			drive_pickup(dir.clone())
+		}
 		if !dry { drive_proved_report(dir) }
 		if !dry && drive_read("scripts/drive.nika") != own {
 			drive_settle(exe, dir)
@@ -4431,6 +4612,18 @@ fn main() throws {
 		if drive_time_up() { println("up") } else { println("not up") }
 		return
 	}
+	// The same judged for an agent of DIR (#1885): `up`, `starts`, or the
+	// minutes left against the length of DIR's runs.
+	if args.len() == 3 && args[1] == "--time-up" {
+		let why = drive_time_check(args[2])
+		println(if why == "" { "starts" } else { why })
+		return
+	}
+	// The follow-up of DIR's runs the time limit cut off (#1885).
+	if args.len() == 3 && args[1] == "--pickup" {
+		drive_pickup(args[2])
+		return
+	}
 	if args.len() == 3 && args[1] == "--blocks" {
 		let urgent = drive_focus_blocking(args[2])
 		if urgent == "" { println("none") } else { println(drive_stem(urgent)) }
@@ -4518,6 +4711,7 @@ fn main() throws {
 	let mut bumps: i64 = 0
 	let own = drive_read("scripts/drive.nika")
 	while runs <= max {
+		if !dry { drive_pickup(dir.clone()) }
 		if !dry { drive_proved_report(dir) }
 		if !dry && drive_read("scripts/drive.nika") != own {
 			drive_settle(exe.clone(), dir)

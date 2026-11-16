@@ -1,0 +1,24 @@
+/// A list that grows on every turn says nothing of `args` (ADR-361 D15,
+/// D4, #1848): no fact held where it grew, so the precondition of `need`
+/// stays unproved and the build refuses it.
+fn need(n: i64) -> i64 {
+	assert(n >= 1)
+	return n
+}
+
+pub fn f(args: ref Vec[i64], m: i64) -> i64 {
+	let mut at: Vec[i64] = []
+	let mut i = 0
+	while i < m {
+		at.push(i)
+		i += 1
+	}
+	if at.len() == 0 {
+		return 0
+	}
+	return need(args.len() as i64)
+}
+
+fn main() throws {
+	println(f([1], 2))
+}

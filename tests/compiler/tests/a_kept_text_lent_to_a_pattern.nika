@@ -1,0 +1,23 @@
+// A text made in the function and put into a keep, lent to a text method's
+// pattern whose result is a view handed back (#1875): `&**`, not `&*`.
+
+fn after(line: String, dir: String) -> String {
+	let prefix = dir + "/"
+	return line.strip_prefix(prefix) ?? ""
+}
+
+fn before(line: String, ext: String) -> String {
+	let suffix = "." + ext
+	return line.strip_suffix(suffix) ?? ""
+}
+
+fn bare(line: String, mark: String) -> String {
+	let twice = mark + mark
+	return line.trim_start_matches(twice)
+}
+
+fn main() throws {
+	println(after("target/lower-mine/crates/x.rs", "target/lower-mine"))
+	println(before("report.md", "md"))
+	println(bare("--x", "-"))
+}

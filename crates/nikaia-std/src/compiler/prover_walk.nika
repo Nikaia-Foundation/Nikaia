@@ -467,7 +467,7 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             prover_loop_elements(walk, body, [], scope, words)
             let mut state: Vec[String] = []
             for n in changed {
-                if scope.mutables.contains(n) && scope.ints.contains(n) && !n.ends_with(".len()") {
+                if scope.mutables.contains(n) && scope.ints.contains(n) && prover_length_follows(n, cond, body, walk.state.readers, words) {
                     state.push(n.clone())
                 }
             }
@@ -1342,7 +1342,7 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], m
         match iter {
             Expr::Range { start, end, inclusive, .. } => {
                 for n in changed {
-                    if scope.mutables.contains(n) && scope.ints.contains(n) && !n.ends_with(".len()") {
+                    if scope.mutables.contains(n) && scope.ints.contains(n) && prover_length_follows(n, iter, body, walk.state.readers, words) {
                         state.push(n.clone())
                     }
                 }
@@ -3219,7 +3219,7 @@ fn prover_assigned(mut walk: ProverWalk, n: ref String, op: ref BinaryOp?, value
     if !scope.mutables.contains(n) {
         return false
     }
-    let read = lin_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return false
+    let read = value_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return false
     let mut term = read
     if op != null {
         if !scope.ints.contains(n) {
@@ -3349,7 +3349,7 @@ fn prover_follow_mutables(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut 
                 }
                 // A call's result `prover_let` read (#1009): followed from
                 // what the callee ensures, or dropped if not followed.
-                let term = lin_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+                let term = value_term(value, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
                 let of_call = term == null && match value {
                     Expr::Call { .. } => scope.ints.contains(n),
                     else => false,
@@ -3706,6 +3706,18 @@ fn prover_lengths_changed(mut changed: collections::BTreeSet[String], body: ref 
 fn prover_else_lengths_changed(mut changed: collections::BTreeSet[String], else_branch: ref Block?, scope: ref ProverScope, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) {
     let block = else_branch ?? return
     prover_lengths_changed(changed, block, scope, readers, words)
+}
+
+/// **A name of a loop's state** (ADR-361 D1, D15): a whole number, or a
+/// followed list's length the turn changes only in statements the loop's
+/// problem reads (`loop_block`): not in the condition, and the list never
+/// bound again.
+fn prover_length_follows(n: ref String, cond: ref Expr, body: ref Block, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> bool {
+    if !n.ends_with(".len()") {
+        return true
+    }
+    let list = (n.strip_suffix(".len()") ?? "").clone()
+    return !changes_length_in_expr(cond, list, readers, words) && !rebinds(body, list, words)
 }
 
 /// **A followed list a loop changes only through an index** (#782) keeps

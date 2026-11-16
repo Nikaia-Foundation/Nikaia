@@ -683,6 +683,19 @@ impl ProverState {
                     continue
                 }
             }
+            // **And through the loops before it** (ADR-361 D2, D15), as an
+            // `assert` is, where it reads what one of them changes.
+            if goal != null && (!scope.loops.is_empty() || !scope.around.is_empty()) {
+                let base = scope.with_history()
+                let mut asked_through = scope.loops.clone()
+                asked_through.extend(scope.around.clone())
+                if loop_reads(arena, base, goal ?? 0, asked_through) && self.through_loops(arena, scope, goal ?? 0, base, ask) != null {
+                    if of_std {
+                        outcome.held.push(ClaimHeld::Proved)
+                    }
+                    continue
+                }
+            }
             let site = CarriedFrom { at: span.start as i64, callee: callee.clone(), place: index }
             if of_std && self.in_test {
                 outcome.held.push(ClaimHeld::ByTheTest)

@@ -156,8 +156,9 @@ code lines. The agents table of this snapshot (the per-commit table is
 
 One row per agent, from `nikaia run scripts/tokenspeed.nika -- --short DIR|FILE`
 after it ends. `scripts/agent.nika` appends the
-row of a headless run itself, once per agent id, and leaves the file to the
-supervisor's commit.
+row of a headless run itself, once per agent id; the release commit after the
+driver's push takes the rows (`scripts/release.nika`), when the file changed by
+nothing else.
 
 | date | agent | module | turns | context M | Rust lines moved | tokens per moved line | rs2nika |
 | :--- | :--- | :--- | ---: | ---: | ---: | ---: | :--- |

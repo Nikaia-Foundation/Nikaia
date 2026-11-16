@@ -120,11 +120,53 @@ fn follows_only(body: ref Block, name: ref String, binding: ref String, words: r
 /// numbers** (ADR-361 D1): changed by a deferred body or through an index or
 /// a field, or handed to a call or a method that may change it: not to one
 /// of `readers`, the functions whose parameters are all read-only (Part I:
-/// only a `mut` parameter changes the caller's value).
+/// only a `mut` parameter changes the caller's value). Nor to `push` on a
+/// list the block binds as a `Vec` or a list literal and never binds again
+/// (ADR-361 D15): `Vec::push` takes its value, so `at.push(i)` leaves `i`
+/// as it was; such a method is kept among the readers as `at.push`, a key no
+/// function's name can be.
 fn untracked_in(body: ref Block, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] sync {
+    let mut keeping = readers.clone()
+    for k in 0..<body.stmts.len() {
+        let list = std_list_bound(body.stmts[k].node, words) ?? continue
+        let mut again = false
+        for j in 0..<body.stmts.len() {
+            if j != k && rebinds_in_statement(body.stmts[j].node, list, words) {
+                again = true
+            }
+        }
+        if !again {
+            keeping.insert(f"{list}.push")
+        }
+    }
     let mut found = tally()
-    tally_block(body, Ask::Untracked(readers.clone()), false, words, found)
+    tally_block(body, Ask::Untracked(keeping), false, words, found)
     return found.names
+}
+
+/// The name a `let mut` binds to a `Vec` - its type written `Vec`, or a list
+/// literal as its value.
+fn std_list_bound(stmt: ref Stmt, words: ref winnow_grammar::InternerContext) -> String? sync {
+    return match stmt {
+        Stmt::Let { names, mutable, ty, value, .. } => {
+            if !mutable || names.len() != 1 {
+                return null
+            }
+            let listed = match value {
+                Expr::ListLit { .. } => true,
+                else => false,
+            }
+            let typed = match ty {
+                null => false,
+                t => words.resolve(t.name) == "Vec",
+            }
+            if !listed && !typed {
+                return null
+            }
+            words.resolve(names[0]).clone()
+        },
+        else => null,
+    }
 }
 
 /// **The lists a loop's body pushes onto exactly once per turn** (ADR-306
@@ -435,11 +477,14 @@ fn tally_here(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
             else => {},
         },
         Ask::Untracked(readers) => match expr {
-            Expr::MethodCall { receiver, args, .. } => {
+            Expr::MethodCall { receiver, method, args, .. } => {
                 if deferred {
                     add_variable(receiver, words, tally.names)
                 }
-                add_variables(args, words, tally.names)
+                let on = variable_text(receiver, words) ?? ""
+                if deferred || on == "" || !readers.contains(f"{on}.{words.resolve(method)}") {
+                    add_variables(args, words, tally.names)
+                }
             },
             Expr::SafeMethod { receiver, args, .. } => {
                 if deferred {

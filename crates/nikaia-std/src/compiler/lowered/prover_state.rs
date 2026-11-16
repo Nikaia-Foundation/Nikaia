@@ -339,6 +339,15 @@ impl ProverState {
                     continue;
                 }
             }
+            if goal.is_some() && (!scope.loops.is_empty() || !scope.around.is_empty()) {
+                let base = scope.with_history();
+                let mut asked_through = scope.loops.copy_owned();
+                asked_through.extend(scope.around.iter().cloned());
+                if loop_reads(&arena, &base, nikaia_std::index::or(goal, || 0), &asked_through) && self.through_loops(arena, scope, nikaia_std::index::or(goal, || 0), base, ask).is_some() {
+                    if of_std { outcome.held.push(ClaimHeld::Proved); }
+                    continue;
+                }
+            }
             let site = CarriedFrom { at: span.start as i64, callee: nikaia_std::block::Text::from(callee.to_string()), place: index };
             if of_std && self.in_test { outcome.held.push(ClaimHeld::ByTheTest); }
             if self.collecting {
