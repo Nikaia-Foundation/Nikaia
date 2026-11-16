@@ -22,6 +22,11 @@
 //   `parent`): a push then puts at most the length before it.
 // * `result`: the method `a` hands back a position of `b`: what a push to
 //   `a` may put. It holds where each `return` of the method is proved to.
+// * `ascending`: `a[i] <= a[i + 1]` of a list of whole numbers `a` (ADR-306
+//   D21, #1688; `b` empty). A candidate where every literal builds `a` empty
+//   or of one item; it holds where each push puts at least every element,
+//   and nothing but `pop`, `truncate` and `clear` changes `a`. A read of the
+//   last element, a `pop` and a `last()` bound every element left.
 //
 // **A candidate that fails is dropped; nothing is refused** (ADR-369 D4): a
 // rule is never published, and a site it does not prove keeps its check.
@@ -298,6 +303,12 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
         for a in fields {
             if dropped.contains(f"{owner}.{a}") {
                 continue
+            }
+            // `ascending`: `a[i] <= a[i + 1]` of a list of whole numbers
+            // every literal builds empty or of one item (ADR-306 D21, #1688).
+            let built_a = built.get(f"{owner}.{a}")?.clone() ?? []
+            if whole.contains(f"{owner}.{a}") && !dropped.contains(f"{owner}.{a}[]") && built_a.iter().all(fn(s) { s == "n:0" || s == "n:1" }) {
+                out.push(BoundsRule { owner: owner.clone(), kind: "ascending", a: a.clone(), b: "", times: 1 })
             }
             for b in fields {
                 if dropped.contains(f"{owner}.{b}") {
@@ -1602,6 +1613,11 @@ fn rules_give(mut walk: BoundsWalk, mut facts: BoundsFacts, root: ref String, ow
         if !every && !rules_writes(written, f"{root}.{rule.a}") && (rule.b.is_empty() || !rules_writes(written, f"{root}.{rule.b}")) {
             continue
         }
+        // An order gives nothing at the start: it is read where an element
+        // is (`rules_ascending_facts`, #1688).
+        if rule.kind == "ascending" {
+            continue
+        }
         let zero = walk.arena.int(0)
         // `0 <= a` of a whole-number field (#1642).
         if rule.kind == "floor" {
@@ -2010,6 +2026,78 @@ fn rules_up_to(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, of
     return proved
 }
 
+/// **Whether `value` is at least every element of `list`** (#1688): what a
+/// push onto an `ascending` list may put. Nothing is asked of an empty one.
+fn rules_at_least_each(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, list: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+    let v = bounding_lin(walk, value, facts, context, program, words) ?? return false
+    let each = walk.arena.var(bounding_element_of(list))
+    let above = walk.arena.ge(v, each)
+    let goal = bounding_each_guarded(walk, above)
+    let proved = bounding_proves(walk, facts, goal, ask)
+    bounding_traced(walk, facts, goal, proved)
+    return proved
+}
+
+/// **`let name = r.a[k]`, `r.a.pop() ?? …` or `r.a.last() ?? …` of an
+/// `ascending` list** (ADR-306 D21, #1688): the last element, or the one
+/// a `pop` took, is at least every element left; `k` is the last position
+/// where `k + 1 >= len(r.a)` is proved. A list found empty is no element,
+/// so the fact is guarded by its emptiness.
+fn rules_ascending_facts(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String, value: ref Expr, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+    if !walk.rules.iter().any(fn(r) { r.kind == "ascending" }) {
+        return
+    }
+    let mut list: String? = null
+    let mut last_at: Expr? = null
+    match value {
+        Expr::Index { base, index, .. } => match index {
+            Expr::Range { .. } => return,
+            else => {
+                list = path_of(base, words)
+                last_at = index.clone()
+            },
+        },
+        Expr::Coalesce { value: left, .. } => match left {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                let m = words.resolve(method)
+                if args.is_empty() && (m == "pop" || m == "last") {
+                    list = path_of(receiver, words)
+                }
+            },
+            else => return,
+        },
+        else => return,
+    }
+    let path = list ?? return
+    let mut ordered = false
+    for (root, owner) in walk.rule_roots {
+        for (at, rule) in walk.rules.iter().enumerate() {
+            if rule.kind == "ascending" && rule.owner == owner && path == f"{root}.{rule.a}" && !(walk.checking && walk.rule_failed.contains(at)) {
+                ordered = true
+            }
+        }
+    }
+    if !ordered {
+        return
+    }
+    if last_at != null {
+        let k = bounding_lin(walk, last_at ?? return, facts, context, program, words) ?? return
+        let one = walk.arena.int(1)
+        let next = walk.arena.add(k, one)
+        let len = walk.arena.var(length_of(path))
+        let last = walk.arena.ge(next, len)
+        if !bounding_proves(walk, facts, last, ask) {
+            return
+        }
+    }
+    let n = walk.arena.var(name)
+    let each = walk.arena.var(bounding_element_of(path))
+    let below = walk.arena.le(each, n)
+    let fact = bounding_each_guarded(walk, below)
+    facts.ints.insert(name.clone())
+    bounding_push(walk, facts, fact)
+}
+
 /// **An element of a list of `self` written in a checked body**
 /// (`self.a[i] = value`, ADR-306 D22): an `index` rule of `a` holds on
 /// where the value is a position of its `b`; a compound write drops it.
@@ -2029,6 +2117,11 @@ fn rules_element_write(mut walk: BoundsWalk, facts: ref BoundsFacts, target: ref
         for (at, rule) in walk.rules.clone().iter().enumerate() {
             let a = f"{root}.{rule.a}"
             if rule.owner != owner || walk.rule_failed.contains(at) {
+                continue
+            }
+            // An element written breaks an order (#1688).
+            if rule.kind == "ascending" && (list ?? "") == a {
+                walk.rule_failed.insert(at)
                 continue
             }
             // A value of `a`, or of an inner list of it (ADR-306 D28).
@@ -2145,6 +2238,21 @@ fn rules_at_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref String?, me
             }
             let a = f"{root}.{rule.a}"
             let b = f"{root}.{rule.b}"
+            if rule.kind == "ascending" {
+                // A push puts at least every element; only a shortening
+                // keeps the order else (#1688).
+                let kept = if on != a {
+                    !rules_writes(changed, a)
+                } else if method == "push" && args.len() == 1 {
+                    rules_at_least_each(walk, facts, args[0], a, context, program, words, ask)
+                } else {
+                    method == "pop" || method == "truncate" || method == "clear" || (keeps_length(method) && keeps_items(method))
+                }
+                if !kept {
+                    walk.rule_failed.insert(at)
+                }
+                continue
+            }
             if rule.kind == "index" && on == a && rule.a == rule.b {
                 // A list of its own positions: a push puts at most the length
                 // before it, and nothing may take from it.

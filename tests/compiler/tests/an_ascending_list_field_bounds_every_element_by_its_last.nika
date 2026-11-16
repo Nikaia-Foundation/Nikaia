@@ -1,0 +1,82 @@
+/// A list field of whole numbers that each push grows upwards has the found
+/// rule `ascending` (ADR-306 D21, #1688): its last element, or the one a
+/// `pop` took, bounds every element left, so a guard on that one element
+/// proves the reads of all of them. `pop`, `truncate` and `clear` keep the
+/// order; a push is proved to put at least every element.
+struct Marks {
+	at: Vec[i64],
+	items: Vec[i64],
+}
+
+impl Marks {
+	fn add(mut self, x: i64) sync {
+		self.items.push(x)
+	}
+
+	fn mark(mut self, x: i64) sync {
+		let last = self.at.last() ?? x
+		if x < last {
+			return
+		}
+		self.at.push(x)
+	}
+
+	fn show(ref self) throws {
+		let n = self.at.len()
+		if n == 0 {
+			return
+		}
+		let last = self.at[n - 1]
+		if last >= self.items.len() {
+			return
+		}
+		for a in self.at {
+			if a >= 0 {
+				println(self.items[a])
+			}
+		}
+	}
+
+	fn back(mut self) sync throws {
+		let cut = self.at.pop() ?? return
+		if cut > self.items.len() {
+			return
+		}
+		self.items.truncate(cut)
+		for a in self.at {
+			if a > 0 {
+				println(self.items[a - 1])
+			}
+		}
+	}
+
+	// The shape of #1688's probe stays checked: `cut <= items.len()` needs a
+	// bound of every mark by the length of `items`, which shrinks, and the
+	// loop's invariant `items.len() >= cut`.
+	fn back_by_pops(mut self) sync throws {
+		let cut = self.at.pop() ?? return
+		while self.items.len() > cut {
+			self.items.pop()
+		}
+		for a in self.at {
+			if a > 0 {
+				println(self.items[a - 1])
+			}
+		}
+	}
+}
+
+fn main() throws {
+	let mut m = Marks { at: [], items: [] }
+	m.add(10)
+	m.mark(1)
+	m.add(20)
+	m.add(30)
+	m.mark(3)
+	m.add(40)
+	m.mark(2)
+	m.show()
+	m.back()
+	m.mark(1)
+	m.back_by_pops()
+}

@@ -209,6 +209,11 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
         }
         for a in fields.iter() {
             if dropped.contains(&format!("{}.{}", owner, a)) { continue; }
+            let built_a = nikaia_std::index::or(match built.get(&format!("{}.{}", owner, a)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || vec![].into());
+            if whole.contains(&format!("{}.{}", owner, a)) && !dropped.contains(&format!("{}.{}[]", owner, a)) && built_a.iter().all(|s| { AsRef::<str>::as_ref(&(s)) == AsRef::<str>::as_ref(&("n:0")) || AsRef::<str>::as_ref(&(s)) == AsRef::<str>::as_ref(&("n:1")) }) { out.push(BoundsRule { owner: nikaia_std::block::Text::from(owner.to_string()), kind: String::from("ascending"), a: nikaia_std::block::Text::from(a.to_string()), b: String::from(""), times: 1 }); }
             for b in fields.iter() {
                 if dropped.contains(&format!("{}.{}", owner, b)) { continue; }
                 if AsRef::<str>::as_ref(&(a)) < AsRef::<str>::as_ref(&(b)) && rules_length_may(owner, a, b, 1, fields, &methods, &built, &dropped) && !fields.iter().any(|c| { AsRef::<str>::as_ref(&(c)) < AsRef::<str>::as_ref(&(a)) && rules_length_may(owner, c, b, 1, fields, &methods, &built, &dropped) }) { out.push(BoundsRule { owner: nikaia_std::block::Text::from(owner.to_string()), kind: String::from("length"), a: nikaia_std::block::Text::from(a.to_string()), b: nikaia_std::block::Text::from(b.to_string()), times: 1 }); }
@@ -1161,6 +1166,7 @@ pub(crate) fn rules_give(walk: &mut BoundsWalk, facts: &mut BoundsFacts, root: &
     for rule in walk.rules.copy_owned() {
         if rule.owner != owner { continue; }
         if !every && !rules_writes(written, &format!("{}.{}", root, rule.a)) && (rule.b.is_empty() || !rules_writes(written, &format!("{}.{}", root, rule.b))) { continue; }
+        if rule.kind == "ascending" { continue; }
         let zero = walk.arena.int(0);
         if rule.kind == "floor" {
             let a = walk.arena.var(&format!("{}.{}", root, rule.a));
@@ -1464,6 +1470,60 @@ pub(crate) fn rules_up_to(walk: &mut BoundsWalk, facts: &BoundsFacts, value: &Ex
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) fn rules_at_least_each(walk: &mut BoundsWalk, facts: &BoundsFacts, value: &Expr, list: &str, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {
+    let v = match bounding_lin(walk, value, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let each = walk.arena.var(&bounding_element_of(list));
+    let above = walk.arena.ge(v, each);
+    let goal = bounding_each_guarded(walk, above);
+    let proved = bounding_proves(&walk, facts, goal, ask);
+    bounding_traced(walk, facts, goal, proved);
+    proved
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn rules_ascending_facts(walk: &mut BoundsWalk, facts: &mut BoundsFacts, name: &str, value: &Expr, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+    if !walk.rules.iter().any(|r| { r.kind == "ascending" }) { return; }
+    let mut list: Option<String> = None;
+    let mut last_at: Option<Expr> = None;
+    match value {
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); match index {
+            Expr::Range { .. } => { return; },
+            _ => {
+                list = path_of(base, words);
+                last_at = Some(index.clone());
+            },
+        }; },
+        Expr::Coalesce { value: left, .. } => { let left = nikaia_std::boxed::open(left); match left {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                let m = words.resolve(method);
+                if args.is_empty() && (m == "pop" || m == "last") { list = path_of(receiver, words); }
+            },
+            _ => { return; },
+        }; },
+        _ => { return; },
+    }
+    let path = match list { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut ordered = false;
+    for (root, owner) in walk.rule_roots.iter() { for (at, rule) in walk.rules.iter().enumerate().map(|(at, item)| (at as i64, item)) { if rule.kind == "ascending" && rule.owner == *owner && path == format!("{}.{}", root, rule.a) && !(walk.checking && walk.rule_failed.contains(&at)) { ordered = true; } } }
+    if !ordered { return; }
+    if last_at.is_some() {
+        let k = match bounding_lin(walk, &match last_at { Some(__nikaia_value) => __nikaia_value, None => return }, &facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let one = walk.arena.int(1);
+        let next = walk.arena.add(k, one);
+        let len = walk.arena.var(&length_of(&path));
+        let last = walk.arena.ge(next, len);
+        if !bounding_proves(&walk, &facts, last, ask) { return; }
+    }
+    let n = walk.arena.var(name);
+    let each = walk.arena.var(&bounding_element_of(&path));
+    let below = walk.arena.le(each, n);
+    let fact = bounding_each_guarded(walk, below);
+    facts.ints.insert(nikaia_std::block::Text::from(name.to_string()));
+    bounding_push(&walk, facts, fact);
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn rules_element_write(walk: &mut BoundsWalk, facts: &BoundsFacts, target: &Expr, op: Option<&BinaryOp>, value: &Expr, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
     if !walk.checking { return; }
     let base = match target {
@@ -1476,6 +1536,10 @@ pub(crate) fn rules_element_write(walk: &mut BoundsWalk, facts: &BoundsFacts, ta
         for (at, rule) in walk.rules.copy_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) {
             let a = format!("{}.{}", root, rule.a);
             if rule.owner != owner || walk.rule_failed.contains(&at) { continue; }
+            if rule.kind == "ascending" && nikaia_std::index::or(list.as_deref(), || "") == a {
+                walk.rule_failed.insert(at);
+                continue;
+            }
             if rule.kind == "index" && nikaia_std::index::or(list.as_deref(), || "") == a || rule.kind == "inner" && nikaia_std::index::or(inner.as_deref(), || "") == a { if op.is_some() || !rules_position(walk, facts, value, &root, &rule.b, context, program, words, ask) { walk.rule_failed.insert(at); } } else if rule.kind == "inner" && nikaia_std::index::or(list.as_deref(), || "") == a { if op.is_some() || !rules_positions(walk, facts, value, &root, &rule.b, context, program, words, ask) { walk.rule_failed.insert(at); } }
         }
     }
@@ -1551,6 +1615,11 @@ pub(crate) fn rules_at_call(walk: &mut BoundsWalk, call: &Expr, receiver: Option
             if rule.owner != owner || walk.rule_failed.contains(&at) { continue; }
             let a = format!("{}.{}", root, rule.a);
             let b = format!("{}.{}", root, rule.b);
+            if rule.kind == "ascending" {
+                let kept = if on != a { !rules_writes(changed, &a) } else if method == "push" && args.len() == 1 { rules_at_least_each(walk, facts, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &a, context, program, words, ask) } else { method == "pop" || method == "truncate" || method == "clear" || keeps_length(method) && keeps_items(method) };
+                if !kept { walk.rule_failed.insert(at); }
+                continue;
+            }
             if rule.kind == "index" && on == a && rule.a == rule.b {
                 let kept = if method == "push" && args.len() == 1 { rules_up_to(walk, facts, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &root, &rule.b, context, program, words, ask) } else { keeps_length(method) && method != "fill" };
                 if !kept { walk.rule_failed.insert(at); }

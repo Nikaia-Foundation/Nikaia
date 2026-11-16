@@ -4021,6 +4021,7 @@ pub(crate) fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbo
         if key.is_some() { bounding_end_facts(walk, facts, &name, nikaia_std::index::or(key.as_deref(), || "")); }
     }
     rules_element_facts(walk, facts, &name, value, words);
+    rules_ascending_facts(walk, facts, &name, value, context, program, words, &ask);
     if whole {
         facts.ints.insert(nikaia_std::block::Text::from(name.to_string()));
         if value_lin.is_some() {
@@ -4431,7 +4432,7 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
         let only = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }).to_string());
         let item = walk.arena.var(&only);
         let mut stated = bounding_each(walk, iter, item, &facts, context, program, words);
-        let mut held = bounding_variable(iter, words);
+        let mut held = path_of(iter, words);
         if held.is_none() {
             let outer = rules_inner_of(iter, words);
             if outer.is_some() { held = Some(format!("{}[]", nikaia_std::index::or(outer.as_deref(), || ""))); }

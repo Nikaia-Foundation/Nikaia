@@ -7085,6 +7085,7 @@ fn bounding_let(
 		}
 	}
 	rules_element_facts(walk, facts, name, value, words)
+	rules_ascending_facts(walk, facts, name, value, context, program, words, ask)
 	if whole {
 		facts.ints.insert(name.clone())
 		if value_lin != null {
@@ -7739,7 +7740,9 @@ fn bounding_for(
 		let mut stated = bounding_each(walk, iter, item, facts, context, program, words)
 		// An inner list of a field (`t.col[c]`, its `.clone()`) is named
 		// by its list's `t.col[]` (ADR-306 D28).
-		let mut held = bounding_variable(iter, words)
+		// A list field by its path (`self.at`, #1688), what its rules and
+		// reads state of every element.
+		let mut held = path_of(iter, words)
 		if held == null {
 			let outer = rules_inner_of(iter, words)
 			if outer != null {
