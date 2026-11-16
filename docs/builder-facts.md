@@ -133,7 +133,14 @@ together with the specification section and an example test.
   the fix hunks staged): commit the fix (the `.nika` and its
   lowered `.rs`) before starting the step in that file. Met late, put HEAD's
   version plus the fix hunks in place, commit, then restore the step
-  (issue-1470, issue-1691).
+  (issue-1470, issue-1691). Two fixes in different `.nika` lowered in one
+  cycle are two commits too: the first lists its `.nika`, its lowered
+  `.rs` and `lowered.rs` (`commit.nika` writes the digest of what is
+  staged, so the tree's `lowered.rs` still differs for the second); a
+  lowered `.rs` both fixes move is staged for the first from `lower_mine.nika
+  -- FIRST.nika` (`git update-index --cacheinfo` of its blob in
+  `target/lower-mine`, under `Partial:`, as for a file another agent also
+  edits, above) (#1883).
 * **Never run `nikaia fmt` on `crates/nikaia-std/src/compiler/*.nika`**: it
   reindents the whole file (b1012b). Format by hand there.
 * **`pre-push` fails with *out of date: self-hosted.svg*** when a `.nika`

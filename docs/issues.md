@@ -242,6 +242,13 @@ it, like the checks in `docs/supervisor.md`.
   A figure of the toolchain is measured with `lower-std --bounds`, and each
   group's probe is a real site from that run, not only a test program
   (#1414).
+  A figure names the commit it was measured on (subject and date), and the
+  supervisor measures it again before a brief when an issue it builds on
+  has landed since: #1863's 317 sites were counted before #1832, and its
+  run found 237 (#1883). A run that finds the figure moved by such a
+  commit holds itself to the reason the figure counts, and its `Issue:`
+  names the figure stale only when the commit it was measured on is
+  missing.
   Each group's probe is run against the decision the issue builds on: an
   item counts a site only when that decision's mechanism reaches its probe
   (the D24 value range of a returned list does not reach a trait method with
