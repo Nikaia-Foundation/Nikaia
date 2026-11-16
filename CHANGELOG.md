@@ -8,6 +8,20 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1412] — 2026-11-16
+
+**Builders' changes (#1755, #1756, #1757, #1758, #1870, #1871, #1872, #1878, #1888, #1894, #1925)**
+- Bounds: a function that returns a list or a struct with list fields gives its caller found facts: `let p = mk(n)` with `P { a: vec_of(n), b: vec_of(n) }` proves `p.b[i]` for `i < p.a.len()`; `m?.get(k)?.clone()` copies the value instead of keeping `m` borrowed (ADR-306 D23, #1756).
+- Bounds: a function found to return -1 or a position below a list's length gives its caller `r < xs.len()`, so `if r >= 0 { xs[r] }` is proved (ADR-306 D23, D31, #1757).
+- Bounds: what a function returning `i64?` is found to hand back holds of the value a caller unwraps with `?? return`, `?? d`, a `match` arm or a `let` narrowed by `!= null` (ADR-306 D23, #1758).
+- Bounds: a found rule over pub fields holds when every writer is in the build; a found rule no longer holds over a private field another file of the package clears, pushes to, sorts or hands on (that read was lowered without its check); an `if` or `match` whose branches all grow a list keeps the facts over its length (ADR-306 D22, ADR-369 D4, #1755).
+- Bounds: a found struct rule survives a loop whose body calls a method of the type that grows its lists, so `self.row_of[s]` after `let s = self.new_var(-1)` is proved (part of #1925; the rest is #1930).
+- Bounds: a struct literal that gives both lists of a length rule by clones or field paths of another value's lists keeps the rule (#1888).
+- A lambda that hands back a part of its borrowed item (`rows.sort_by_key fn (row) { row.name }`) is refused with NK1131 and a `.clone()` hint, a view as `sort_by_key`'s key with NK1104, instead of an internal error (#1872).
+- A view of a field or element of a call's result (`f().out.split(" ")`) or of a file name's text, kept in a `let`, no longer fails as an internal compiler error (#1894).
+- A cut of a `Vec[u8]` compared with `Bytes` compiles and compares the bytes instead of an internal error (#1871); a cut of a text's own bytes read back as text checks only its two ends (#1870).
+- Faster list building: a block's `List::push` inlines only the store, its growth runs out of line as Rust's `Vec::push` does (reverse-complement: 10 instructions a byte instead of 14, #1878).
+
 ## [0.0.1411] — 2026-11-16
 
 **Builders' changes (#1812, #1844, #1905, #1907)**
