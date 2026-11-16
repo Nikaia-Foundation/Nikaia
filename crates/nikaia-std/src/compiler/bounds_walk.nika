@@ -78,8 +78,9 @@ pub struct BoundsContext {
 	/// Of `whole_fields`, each field and element read with its type
 	/// (ADR-306 D34): a term's type is its range.
 	pub whole_types: collections::BTreeMap[i64, String],
-	/// The `for` heads that bind one whole number, by the node walked.
-	pub whole_loops: collections::BTreeSet[i64],
+	/// The `for` heads that bind one whole number, by the node walked,
+	/// with its type.
+	pub whole_loops: collections::BTreeMap[i64, String],
 	/// The `for` heads that bind several names, by the node walked, with
 	/// the positions of those bound to a whole number.
 	pub whole_parts: collections::BTreeMap[i64, collections::BTreeSet[i64]],
@@ -248,6 +249,10 @@ struct BoundsWalk {
 	/// How many `char` codes the walk has read: each reading is a number of
 	/// its own (ADR-314 D2).
 	codes: i64,
+	/// **The calls of the condition being assumed, each by the name of its
+	/// result** (ADR-306 D23, D31, #1785): `bounding_name_calls` binds
+	/// them for the one claim, as a `let` binds a call.
+	call_names: collections::BTreeMap[i64, String],
 	/// The binding of a `for d in x.chars()` over a text binding, with the
 	/// code of `x`'s characters (ADR-314 D1).
 	loop_classes: collections::BTreeMap[String, Range],
@@ -726,6 +731,7 @@ fn bounding_new(
 		pinned: pinned,
 		nonnegative: nonnegative,
 		codes: 0,
+		call_names: collections::BTreeMap(),
 		loop_classes: collections::BTreeMap(),
 		shape: shape,
 		assumed: context.around.field_bounds.clone(),
@@ -2673,6 +2679,13 @@ fn bounding_at_least_zero(mut walk: BoundsWalk, mut facts: BoundsFacts, name: re
 	let zero = walk.arena.int(0)
 	let fact = walk.arena.ge(n, zero)
 	bounding_push(walk, facts, fact)
+	// **A name of a narrow unsigned type is at most what its type holds**
+	// (ADR-306 D34, #1786): `let d = b as i64` of a byte `b` is below 256,
+	// so `digits[d / 16]` of 16 digits is proved.
+	let most = walk.shape.narrow.get(name) ?? return
+	let top = walk.arena.int(most)
+	let below = walk.arena.le(n, top)
+	bounding_push(walk, facts, below)
 }
 
 /// Nothing known about `name`, its length or a path of fields from it
@@ -2950,6 +2963,13 @@ fn bounding_lin(
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
 ) -> i64? {
+	// A call of the condition assumed, by its result's name (#1785).
+	if !walk.call_names.is_empty() {
+		let named = walk.call_names.get(node_key(expr))?.clone()
+		if named != null {
+			return walk.arena.var(named ?? "")
+		}
+	}
 	match expr {
 		Expr::LitInt { value, negative, .. } => {
 			let n = integer_as_count(integer(value, negative)) ?? return null
@@ -4281,8 +4301,12 @@ fn bounding_assume(
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
 ) {
-	let holds = bounding_claim(walk, cond, facts, context, program, words) ?? return
-	bounding_push(walk, facts, holds)
+	bounding_name_calls(walk, facts, cond, context, program, words)
+	let holds = bounding_claim(walk, cond, facts, context, program, words)
+	walk.call_names = collections::BTreeMap()
+	if holds != null {
+		bounding_push(walk, facts, holds ?? 0)
+	}
 }
 
 fn bounding_assume_not(
@@ -4293,8 +4317,93 @@ fn bounding_assume_not(
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
 ) {
-	let holds = bounding_denial(walk, cond, facts, context, program, words) ?? return
-	bounding_push(walk, facts, holds)
+	bounding_name_calls(walk, facts, cond, context, program, words)
+	let holds = bounding_denial(walk, cond, facts, context, program, words)
+	walk.call_names = collections::BTreeMap()
+	if holds != null {
+		bounding_push(walk, facts, holds ?? 0)
+	}
+}
+
+/// **A call compared in a condition is a number of its own** (ADR-306 D23,
+/// D31, #1785): `if self.level() <= target { return }` says what `let d =
+/// self.level()` and `if d <= target` say. Each call a comparison reads
+/// whose callee has a found postcondition gets a fresh name, its relations
+/// and bounds stated of it among `facts`, for the one claim being assumed;
+/// a length it is stated against moves with the facts.
+fn bounding_name_calls(
+	mut walk: BoundsWalk,
+	mut facts: BoundsFacts,
+	cond: ref Expr,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+) {
+	match cond {
+		Expr::Unary { op, expr, .. } => match op {
+			UnaryOp::Not => bounding_name_calls(walk, facts, expr, context, program, words),
+			else => {},
+		},
+		Expr::Binary { op, lhs, rhs, .. } => {
+			if op == BinaryOp::And || op == BinaryOp::Or {
+				bounding_name_calls(walk, facts, lhs, context, program, words)
+				bounding_name_calls(walk, facts, rhs, context, program, words)
+			} else if op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge || op == BinaryOp::Eq || op == BinaryOp::Ne {
+				bounding_name_call(walk, facts, lhs, context, program, words)
+				bounding_name_call(walk, facts, rhs, context, program, words)
+			}
+		},
+		else => {},
+	}
+}
+
+/// One side of a comparison, where it is a call [`bounding_name_calls`]
+/// names.
+fn bounding_name_call(
+	mut walk: BoundsWalk,
+	mut facts: BoundsFacts,
+	side: ref Expr,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+) {
+	let call = match side {
+		Expr::Call { .. } => true,
+		Expr::MethodCall { .. } => true,
+		else => false,
+	}
+	if !call || bounding_found_options(side) || bounding_lin(walk, side, facts, context, program, words) != null {
+		return
+	}
+	let callee = bounding_found_key(walk, side, context, words) ?? return
+	let found = context.returns.get(callee) ?? return
+	if found.each || found.pending {
+		return
+	}
+	let name = f"call#{walk.codes}"
+	walk.codes += 1
+	let n = walk.arena.var(name)
+	let mut held: Vec[i64] = []
+	for k in found.at_least {
+		let term = bounding_found_term(walk, side, k, facts, context, program, words) ?? continue
+		held.push(walk.arena.ge(n, term))
+	}
+	for k in found.within {
+		let path = bounding_found_path(side, found, k, words) ?? continue
+		if walk.pinned.contains(path_root(path)) {
+			continue
+		}
+		let len = bounding_length_named(walk, path, false)
+		held.push(walk.arena.le(n, len))
+	}
+	if held.is_empty() {
+		return
+	}
+	facts.ints.insert(name.clone())
+	for fact in held {
+		bounding_push(walk, facts, fact)
+	}
+	walk.call_names.insert(node_key(side), name)
 }
 
 /// Whether `0 <= index < list.len()` follows from what holds.
@@ -7703,8 +7812,18 @@ fn bounding_for(
 	}
 	// `for x in xs` over whole numbers: `x` is a number of the walk, of
 	// which every test in the body is a fact (ADR-306 D7, #781).
-	if bindings.len() == 1 && !counted && context.whole_loops.contains(node_key(iter)) {
-		inner.ints.insert(words.resolve(bindings[0]).clone())
+	if bindings.len() == 1 && !counted {
+		let element = context.whole_loops.get(node_key(iter))
+		if element != null {
+			let only = words.resolve(bindings[0]).clone()
+			inner.ints.insert(only.clone())
+			// **Its type is its range** (ADR-306 D34, #1786): `for b in
+			// s.bytes()` binds a number in `0..=255`.
+			let held = Range::held_by_type(element ?? "")
+			if held != null {
+				bounding_bounded(walk, inner, only, held ?? Range::open())
+			}
+		}
 	}
 	// `for (at, unit) in rows`: each name bound to a whole number is one
 	// too, of which every test in the body is a fact.

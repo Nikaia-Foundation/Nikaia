@@ -541,9 +541,9 @@ impl SvSat {
         for c in self.learnts.iter() {
             let c = nikaia_std::num::value(c);
             let at = c as i64;
-            if *nikaia_std::index::get(&self.arena, nikaia_std::index::at(at + 1)) & 2u32 != 0u32 { continue; }
+            if *nikaia_std::index::get(&self.arena, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(at, 1) })) & 2u32 != 0u32 { continue; }
             let mut lits: Vec<u32> = vec![];
-            for i in 0..*nikaia_std::index::get(&self.arena, nikaia_std::index::at(at)) as i64 { lits.push(*nikaia_std::index::get(&self.arena, nikaia_std::index::at(at + 3 + i))); }
+            for i in 0..*unsafe { nikaia_std::proven::read(&self.arena, (at) as usize) } as i64 { lits.push(*nikaia_std::index::get(&self.arena, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(at, 3) } + i))); }
             out.push(lits);
         }
         out
@@ -562,7 +562,7 @@ impl SvSat {
         let mut keys: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for c in self.learnts.iter() {
             let c = nikaia_std::num::value(c);
-            let glue = (*nikaia_std::index::get(&self.arena, nikaia_std::index::at(c as i64 + 1)) >> 2) as i64;
+            let glue = (*nikaia_std::index::get(&self.arena, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(c as i64, 1) })) >> 2) as i64;
             keys.push(unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::mul::<i64>(glue, 4294967296i64), nikaia_std::proven::sub::<i64>(4294967295i64, c as i64)) });
         }
         keys.sort();
@@ -583,7 +583,7 @@ impl SvSat {
             let mut kept: Vec<u32> = vec![];
             for c in self.learnts.iter() {
                 let c = nikaia_std::num::value(c);
-                if *nikaia_std::index::get(&self.arena, nikaia_std::index::at(c as i64 + 1)) & 2u32 == 0u32 { kept.push(c); }
+                if *nikaia_std::index::get(&self.arena, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(c as i64, 1) })) & 2u32 == 0u32 { kept.push(c); }
             }
             self.learnts = kept;
         }

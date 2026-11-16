@@ -282,7 +282,7 @@ pub(crate) fn sv_unit_chain(entries: &[SvEntry], value: &mut Vec<i64>, lits: &[u
         let h = nikaia_std::num::value(h);
         let at = h as i64;
         if at >= entries.len() as i64 { return format!("hint {} is no earlier entry", h); }
-        let clause = match nikaia_std::index::get(&entries, nikaia_std::index::at(at)) {
+        let clause = match unsafe { nikaia_std::proven::read(&entries, (at) as usize) } {
             SvEntry::Clause(c) => c,
             _ => return format!("hint {} is no clause", h),
         };

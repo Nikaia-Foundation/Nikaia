@@ -1527,7 +1527,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     if !shape.is_empty() { elements = state.nested_pattern_parts(world, &elements, shape, bindings.len() as i64, "A `for`", span); }
     if bindings.len() == 1 && elements.len() == 1 {
         match *unsafe { nikaia_std::proven::read(&elements, (0) as usize) } {
-            Ty::Named { ref name, ref args, .. } => { if args.is_empty() && is_whole_number(name) { state.facts.whole_loops.insert(id_of(iter) as i64); } },
+            Ty::Named { ref name, ref args, .. } => { if args.is_empty() && is_whole_number(name) { state.facts.whole_loops.insert(id_of(iter) as i64, nikaia_std::block::Text::from(name.to_string())); } },
             _ => { },
         }
     }

@@ -216,7 +216,7 @@ pub(crate) fn sv_walk_start(query: &SvQuery, carried: &[Vec<u32>]) -> Option<SvW
         for l in (*unsafe { nikaia_std::proven::read(&w.clauses, (c) as usize) }).iter() {
             let l = nikaia_std::num::value(l);
             if ((l / 2u32) as i64) >= atoms { return None; }
-            w.lit_clauses[nikaia_std::index::at(l as i64)].push(c);
+            (*unsafe { nikaia_std::proven::slot(&mut w.lit_clauses, (l as i64) as usize) }).push(c);
             if w.lit_holds(l) { count += 1; }
         }
         w.true_count.push(count);
