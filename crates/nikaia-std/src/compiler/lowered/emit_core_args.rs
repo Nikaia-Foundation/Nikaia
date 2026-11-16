@@ -337,7 +337,6 @@ impl EmitState {
     pub(crate) fn emit_arg_into_the_box(&self, world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> i64 {
         let arity = match self.facts.boxed_fn_values.get(&node_key(arg)) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return -1 };
         let key = match emit_arg_function_key(world, arg) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
-        if call_pauses(&self.own_contracts, &key) { return -1; }
         if self.error_channel(world, &key, true, "", "", false) == "std::boxed::Box<dyn std::error::Error>" { return -1; }
         arity
     }
@@ -638,10 +637,14 @@ impl EmitState {
             let mut names: Vec<String> = vec![];
             for n in 0..boxed { names.push(format!("__nikaia_a{}", n)); }
             let joined = nikaia_std::block::Text::from(names.join(", "));
-            if arity >= 0 { out.push("async "); }
+            let key: String = nikaia_std::block::Text::from(nikaia_std::index::or(emit_arg_function_key(world, arg), || "".into()).to_string());
+            let pauses = key != "" && call_pauses(&self.own_contracts, &key);
+            if arity >= 0 || pauses { out.push("async "); }
             out.push(&format!("|{}| ", joined));
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
-            out.push(&format!("({}).map_err(Into::into)", emit_arg_passing(&names, &lent)));
+            out.push(&format!("({})", emit_arg_passing(&names, &lent)));
+            if pauses { out.push(".await"); }
+            out.push(".map_err(Into::into)");
             return Ok(());
         }
         if arity < 0 && !lent.is_empty() {

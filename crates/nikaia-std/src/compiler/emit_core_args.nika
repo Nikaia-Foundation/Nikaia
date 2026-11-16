@@ -489,13 +489,10 @@ impl EmitState {
     /// The count of parameters of a declared function named where a
     /// `fn(..) throws` parameter runs it, where its channel is not the box
     /// that type fails in (ADR-280 D9, #703); `-1` otherwise. One that pauses
-    /// is handed over as it is.
+    /// is awaited inside the closure, as one that cannot fail is (#1836).
     fn emit_arg_into_the_box(ref self, world: ref EmitWorld, arg: ref Expr) -> i64 {
         let arity = self.facts.boxed_fn_values.get(node_key(arg)) ?? return -1
         let key = emit_arg_function_key(world, arg) ?? return -1
-        if call_pauses(self.own_contracts, key) {
-            return -1
-        }
         if self.error_channel(world, key, true, "", "", false) == "std::boxed::Box<dyn std::error::Error>" {
             return -1
         }
@@ -1032,12 +1029,18 @@ impl EmitState {
                 names.push(f"__nikaia_a{n}")
             }
             let joined = names.join(", ")
-            if arity >= 0 {
+            let key: String = (emit_arg_function_key(world, arg) ?? "").clone()
+            let pauses = key != "" && call_pauses(self.own_contracts, key)
+            if arity >= 0 || pauses {
                 out.push("async ")
             }
             out.push(f"|{joined}| ")
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
-            out.push(f"({emit_arg_passing(names, lent)}).map_err(Into::into)")
+            out.push(f"({emit_arg_passing(names, lent)})")
+            if pauses {
+                out.push(".await")
+            }
+            out.push(".map_err(Into::into)")
             return
         }
         if arity < 0 && lent.len() > 0 {

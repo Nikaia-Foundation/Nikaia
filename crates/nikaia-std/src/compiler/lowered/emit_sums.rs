@@ -226,8 +226,23 @@ impl EmitState {
             arms = format!("{}if nikaia_std::error::holds::<{}>(&*error) {{ return nikaia_std::error::reopened::<{}>(error).into(); }} ", arms, held, held);
         }
         if arms == "" { return String::from(""); }
+        let mut sums: String = String::from("");
+        for (members, name) in self.sums.iter() {
+            let mut inside = !members.is_empty();
+            let mut borrows = false;
+            for member in members.iter() {
+                if !nikaia_std::list::contains(&contract.fails_with, &member) { inside = false; }
+                if self.borrows_named(world, member) { borrows = true; }
+            }
+            if inside && !borrows && (!self.is_std || self.sums_written.contains(name)) {
+                let sum = format!("{}{}", self.sum_root(), name);
+                let mut cases: String = String::from("");
+                for member in members.iter() { cases = format!("{}{}::{}(e) => e.into(), ", cases, sum, sum_variant(member)); }
+                sums = format!("{}let error = match error.downcast::<{}>() {{ Ok(sum) => return match *sum {{ {}}}, Err(error) => error }}; ", sums, sum, cases);
+            }
+        }
         let channel = nikaia_std::block::Text::from(scope.channel.to_string());
-        format!(".map_err(|error: std::boxed::Box<dyn std::error::Error>| -> {} {{ {}unreachable!(\"a function value failed outside its set\") }})", channel, arms)
+        format!(".map_err(|error: std::boxed::Box<dyn std::error::Error>| -> {} {{ {}{}unreachable!(\"a function value failed outside its set\") }})", channel, sums, arms)
     }
     pub fn error_channel(&self, world: &EmitWorld<'_, '_, '_, '_>, key: &str, elided: bool, params: &str, static_params: &str, borrows: bool) -> String {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return String::from("std::boxed::Box<dyn std::error::Error>") };

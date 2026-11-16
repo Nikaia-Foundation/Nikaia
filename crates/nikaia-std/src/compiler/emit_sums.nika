@@ -432,8 +432,36 @@ impl EmitState {
         if arms == "" {
             return ""
         }
+        // **A box that holds a sum is opened member by member** (#1836): the
+        // value's body fails in its callee's sum, and the `?` that hands that
+        // into the box puts the sum there whole, where `holds` sees none of
+        // its members. Each sum whose members all lie in the set is asked
+        // for; one with a view cannot be, as a fatal sum is not
+        // (`fatal_registrations`).
+        let mut sums: String = ""
+        for (members, name) in self.sums {
+            let mut inside = members.len() > 0
+            let mut borrows = false
+            for member in members {
+                if !contract.fails_with.contains(member) {
+                    inside = false
+                }
+                if self.borrows_named(world, member) {
+                    borrows = true
+                }
+            }
+            // A file of `std` names only the sums it writes (`emit_sums_written`).
+            if inside && !borrows && (!self.is_std || self.sums_written.contains(name)) {
+                let sum = f"{self.sum_root()}{name}"
+                let mut cases: String = ""
+                for member in members {
+                    cases = f"{cases}{sum}::{sum_variant(member)}(e) => e.into(), "
+                }
+                sums = f"{sums}let error = match error.downcast::<{sum}>() {{ Ok(sum) => return match *sum {{ {cases}}}, Err(error) => error }}; "
+            }
+        }
         let channel = scope.channel.clone()
-        return f".map_err(|error: std::boxed::Box<dyn std::error::Error>| -> {channel} {{ {arms}unreachable!(\"a function value failed outside its set\") }})"
+        return f".map_err(|error: std::boxed::Box<dyn std::error::Error>| -> {channel} {{ {sums}{arms}unreachable!(\"a function value failed outside its set\") }})"
     }
 
     /// The failure channel of the function `key`.
