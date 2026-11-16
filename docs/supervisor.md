@@ -192,6 +192,15 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   than it saves. Leaves first: a consumer moved before its dependencies finds
   its errors late. Record the state in the commit message after each chunk.
   One builder at a time for now.
+* **A sweep runs alone, and lands in one short window** (#1850). An issue
+  whose change rewrites files across the lanes (a visibility pass, a rename,
+  a migration of every compiler `.nika`: #1831 touched 459 files) is queued
+  when no other session's builder edits those files, or its brief says to
+  make the sweep the run's last step: edit, lower, build, commit, with no
+  probing or test runs in between. A sweep left uncommitted for a cycle
+  makes every other run that edits one of its files stage hunk by hunk
+  around it (#1808 filtered `pub` lines out of three bounds files and their
+  lowered `.rs` with a script).
 * **Tokens: one agent, one slice, at most 100-150 turns, then a fresh one.**
   Build agents are started as the `builder` type (`.claude/agents/builder.md`).
   The measure is tokens per moved line (target below 50 k); turns are the guard

@@ -104,6 +104,20 @@ together with the specification section and an example test.
 * **A file another agent also edits** goes under the report's `Partial:`,
   not `Files:`: stage only your hunks (`git apply --cached`), and
   `commit.nika` commits what is staged of it without `git add` (#1704).
+  When their edit is in the same compiler `.nika` as yours, its lowered
+  `.rs` mixes both and cannot be split by hunks (the `__nikaia_tupleN`
+  names are byte offsets): lower HEAD plus your hunks once in a copy and
+  stage its blobs. `git archive HEAD | tar -x -C $S/head`, `git diff
+  F.nika > $S/p.diff`, drop their hunks, `git -C $S/head apply`, then
+  `NIKAIA_LOWER_CACHE_SALT=$RANDOM target/fast/nikaia lower-std --sysroot
+  $S/head/crates`; for the `.nika`, its `lowered/*.rs` and `lowered.rs`:
+  `git update-index --cacheinfo 100644,$(git hash-object -w
+  $S/head/PATH),PATH`, list them under `Partial:` (issue-1839, #1858).
+* **Your change is a sweep** (it rewrites many files other lanes edit, e.g.
+  a visibility pass over every compiler `.nika`): make it your run's last
+  step and commit it in one go (edit, `lower-std`, build, commit), never left
+  uncommitted across probes or test runs; every other run meanwhile has to
+  stage its own files hunk by hunk around it (#1808, #1850).
 * **A defect fix and a step in the same file are two commits**, but
   `commit.nika` stages whole `Files:` (or list it under `Partial:` with only
   the fix hunks staged): commit the fix (the `.nika` and its

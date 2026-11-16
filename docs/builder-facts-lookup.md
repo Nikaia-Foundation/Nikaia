@@ -28,6 +28,10 @@ goes into the section of its topic, in one line, with the run that paid for it.
   (`project_tests_bless_program`, #1238, #1236; issue-1431). With `--filter` it blesses only that test. A new test is run
   through `nikaia test`, not only `nikaia run`: `print` writes no newline and
   the `.stdout` holds the bytes exactly (7c1643d).
+* **Only `.stdout` holds raw bytes**: `nikaia test` reads a program's
+  standard error lossily as UTF-8 (`project_tests_relocated`, #1182), so a
+  `.stderr` or `.stops` test cannot show non-UTF-8 bytes; test those on
+  standard output and keep standard error ASCII (issue-1859, #1860).
 * **`tests/compiler` runs `target/fast/nikaia`**: never run the `it` binary
   beside it, it relinks the binary (j2). Some tests spawn `target/fast/nikaia`
   by relative path and fail from a copy (`a_trait_column_*`,

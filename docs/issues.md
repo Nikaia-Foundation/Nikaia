@@ -27,7 +27,14 @@ it, like the checks in `docs/supervisor.md`.
   #N` (or the commit) for where it came up, and the issues it depends on,
   each on a line `Needs #N` (or `After`, `Blocked by`, `Waits for`,
   `Depends on`): the driver does not queue an issue while one so named is
-  open (`drive_depends_on`, #1819).
+  open (`drive_depends_on`, #1819). An item resting on a part another
+  issue builds (a shared file, a harness, a README an epic's frame item
+  makes) names that part's issue the same way, and the part is its own
+  issue: `Needs #N` on a parent that closes only after its children never
+  lets them run, and without it each child's builder meets the part
+  missing (#1853: #1615 and #1618 asked for `benches/game/README.md`,
+  which #1611's open frame item was to make). Otherwise the item says the
+  builder makes the part itself.
 * **I4a. A claim of today's behaviour is read in the code** (#1706): a
   sentence saying what the compiler, a script or the driver does today names
   the function and file it was read in, or the run that shows it (a probe,
@@ -159,6 +166,15 @@ it, like the checks in `docs/supervisor.md`.
   A step that rests on a decision says whether it is built (the function
   that does it) or text only; text only is a dependency, named by its issue
   (I4) and built first (#1453).
+  A feature, example or benchmark is checked the same way for what its
+  program must be able to say: each form it rests on (an input it reads,
+  an output it writes, a `std` entry) is run as a probe with
+  `scripts/probe.nika` before the issue is `ready`, and the result is
+  quoted. A form that fails with no decision behind it is a `decision`
+  issue filed first, and named by `Needs #N` (I4) on each issue that rests
+  on it (#1856: #1611 and #1616 named mandelbrot's binary output as what
+  it measures, and `print(Bytes(v))` is NK1343 while ADR-019 D6 leaves
+  bytes on standard output undecided; the run stopped there, #1854).
   Code the decision or the issue quotes for the new form (a call, a
   signature) is spelled as today's grammar accepts it, checked with
   `scripts/probe.nika --check` on stubs; a spelling the language refuses is
