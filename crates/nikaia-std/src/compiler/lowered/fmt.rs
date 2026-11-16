@@ -88,12 +88,12 @@ impl FmtLexer {
             return Err(nikaia_std::error::throwing(Refused::Because(format!("a comment at character {} that the parser did not see", at)), &"scan"));
         }
         if c == '"' {
-            self.at += 1;
+            self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) };
             self.quoted()?;
             return Ok(FmtKind::Text);
         }
         if c == 'f' && d == '"' {
-            self.at += 2;
+            self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 2) };
             self.interpolated()?;
             return Ok(FmtKind::Text);
         }
@@ -642,7 +642,7 @@ impl FmtPrinter {
         let mut close: i64 = -1;
         let mut k: i64 = 0;
         while k < n {
-            if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).kind == FmtKind::Open {
+            if unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.kind == FmtKind::Open {
                 let m = fmt_partner(&toks, k);
                 if m > unsafe { nikaia_std::proven::add::<i64>(k, 1) } && (fmt_sealed(&toks, k, m) || rule && unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.text == "(" || rule && unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.text == "{" && k > 0 && unsafe { nikaia_std::proven::read(&toks, (nikaia_std::proven::sub::<i64>(k, 1)) as usize) }.kind == FmtKind::Word) { k = m; } else if m > unsafe { nikaia_std::proven::add::<i64>(k, 1) } && fmt_breakable(&toks, &shape, k, m) && (group < 0 || !first) {
                     group = k;

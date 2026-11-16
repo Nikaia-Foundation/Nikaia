@@ -205,7 +205,7 @@ fn a_branch_travels_in_the_functions_own_channel() {
         "{rust}"
     );
     assert!(
-        !rust.contains("Ok::<_, Box<dyn std::error::Error>>("),
+        !rust.contains("Ok::<_, std::boxed::Box<dyn std::error::Error>>("),
         "the box is not this function's channel:\n{rust}"
     );
 }

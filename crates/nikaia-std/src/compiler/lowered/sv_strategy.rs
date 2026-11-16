@@ -234,7 +234,7 @@ pub(crate) fn sv_strategy_test_each(name: &str, source: &str) -> String {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files = nikaia_std::block::List::from_array_in([("problem__003", sv_walk_test_problem003()), ("choice", sv_walk_test_smt("sat", "Int", &vec!["x", "y"], "(assert (or (< x 0) (> x 10)))\n(assert (<= (- x y) 2))\n")), ("real", sv_walk_test_smt("sat", "Real", &vec!["x", "y"], "(assert (< 0 x 1))\n(assert (= (+ x y) 2))\n"))], nikaia_std::block::Place::Block);
     let mut out: String = String::from("");
     for (name, text) in files.iter() {
@@ -247,7 +247,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     let mut p = sv_params();
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("parameters {}\n", p.version)));

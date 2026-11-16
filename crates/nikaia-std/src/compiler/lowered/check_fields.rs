@@ -25,7 +25,7 @@ pub(crate) fn named_or_empty(ty: &Ty) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn viewed_nullable(plain: &Ty) -> Ty { Ty::Nullable(Box::new(plain.as_a_view())) }
+pub(crate) fn viewed_nullable(plain: &Ty) -> Ty { Ty::Nullable(std::boxed::Box::new(plain.as_a_view())) }
 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -70,14 +70,14 @@ impl CheckState {
             _ => {
                 if !moves(held_ty) {
                     self.facts.copied_reaches.insert(key);
-                    return Ty::Nullable(Box::new(held_ty.clone()));
+                    return Ty::Nullable(std::boxed::Box::new(held_ty.clone()));
                 }
                 if place {
                     self.facts.viewed_reaches.insert(key, viewed_of(held_ty));
                     self.facts.copied_reaches.insert(key);
                     return viewed_nullable(held_ty);
                 }
-                return Ty::Nullable(Box::new(held_ty.clone()));
+                return Ty::Nullable(std::boxed::Box::new(held_ty.clone()));
             },
         }
     }

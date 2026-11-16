@@ -567,7 +567,7 @@ grammar! {
 
         rule FLOAT_END =
             p:peek(text(NUMBER_PREFIX))
-            -> { let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = { pg_float_end(p)? }; Ok(__nikaia_done) })(); match __nikaia_acted { Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::Backtrack(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) } }
+            -> { let __nikaia_acted: ::core::result::Result<_, ::std::boxed::Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = { pg_float_end(p)? }; Ok(__nikaia_done) })(); match __nikaia_acted { Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::Backtrack(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) } }
 
         rule number_lit -> (u64, bool) =
             n:NUMBER_AT(signed = false)
@@ -579,7 +579,7 @@ grammar! {
 
         rule NUMBER_AT(signed: bool) -> (u64, bool) =
             n:NUMBER_READ(signed = signed) if(pg_number_consumed(&n) >= 0, "digits") any{0i64 + (pg_number_consumed(&n))}
-            -> { let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = { pg_number_taken(&n)? }; Ok(__nikaia_done) })(); match __nikaia_acted { Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::Backtrack(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) } }
+            -> { let __nikaia_acted: ::core::result::Result<_, ::std::boxed::Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = { pg_number_taken(&n)? }; Ok(__nikaia_done) })(); match __nikaia_acted { Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::Backtrack(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) } }
 
         rule NUMBER_READ(signed: bool) -> Number =
             p:peek(text(NUMBER_PREFIX))
@@ -1213,7 +1213,7 @@ grammar! {
 
         rule FLOAT_END =
             p:peek(text(NUMBER_PREFIX))
-            -> { let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = { pg_float_end(p)? }; Ok(__nikaia_done) })(); match __nikaia_acted { Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::Backtrack(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) } }
+            -> { let __nikaia_acted: ::core::result::Result<_, ::std::boxed::Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = { pg_float_end(p)? }; Ok(__nikaia_done) })(); match __nikaia_acted { Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::Backtrack(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) } }
 
         rule number_lit -> (u64, bool) =
             n:NUMBER_AT(signed = false)
@@ -1225,7 +1225,7 @@ grammar! {
 
         rule NUMBER_AT(signed: bool) -> (u64, bool) =
             n:NUMBER_READ(signed = signed) if(pg_number_consumed(&n) >= 0, "digits") any{0i64 + (pg_number_consumed(&n))}
-            -> { let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = { pg_number_taken(&n)? }; Ok(__nikaia_done) })(); match __nikaia_acted { Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::Backtrack(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) } }
+            -> { let __nikaia_acted: ::core::result::Result<_, ::std::boxed::Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = { pg_number_taken(&n)? }; Ok(__nikaia_done) })(); match __nikaia_acted { Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::Backtrack(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) } }
 
         rule NUMBER_READ(signed: bool) -> Number =
             p:peek(text(NUMBER_PREFIX))

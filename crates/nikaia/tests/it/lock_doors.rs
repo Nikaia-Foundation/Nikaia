@@ -90,7 +90,7 @@ fn a_set_that_reads_what_it_writes_names_the_third_door() {
     assert!(
         found[0]
             .message
-            .contains("stores a value that was read from `kasse` earlier"),
+            .contains("This `set` into `kasse` stores a value that was read from a lock earlier"),
         "{:#?}",
         found[0]
     );

@@ -32,13 +32,13 @@ pub enum UnitSaid {
 }
 
 pub trait ProjectLowerHost {
-    fn read_program(&self) -> Result<(), Box<dyn std::error::Error>>;
+    fn read_program(&self) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn open_cache(&self);
     fn source_paths(&self) -> Vec<fs::Path>;
     fn could_promise(&self) -> String;
     fn committed_ledger(&self) -> Option<Ledger>;
     fn lost_sync(&self, committed: &Ledger) -> String;
-    fn export(&self) -> Result<(), Box<dyn std::error::Error>>;
+    fn export(&self) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn cached(&self) -> Option<ProjectLowerArtifacts>;
     fn record(&self, made: &ProjectLowerArtifacts);
     fn proofs_settled(&self) -> bool;
@@ -46,13 +46,13 @@ pub trait ProjectLowerHost {
     fn eprint(&self, text: &str);
     fn check_open(&self) -> Vec<CheckUnit>;
     fn unit_source(&self, at: i64) -> String;
-    fn check_unit(&self, at: i64) -> Result<UnitSaid, Box<dyn std::error::Error>>;
-    fn check_close(&self, refused: &[String]) -> Result<(), Box<dyn std::error::Error>>;
+    fn check_unit(&self, at: i64) -> Result<UnitSaid, std::boxed::Box<dyn std::error::Error>>;
+    fn check_close(&self, refused: &[String]) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn in_a_batch(&self) -> bool;
     fn digest(&self, text: &str) -> String;
     fn batch_said(&self, key: &str) -> Option<UnitSaid>;
     fn batch_remember(&self, key: &str, said: &UnitSaid);
-    fn emit(&self) -> Result<String, Box<dyn std::error::Error>>;
+    fn emit(&self) -> Result<String, std::boxed::Box<dyn std::error::Error>>;
     fn contracts(&self) -> Ledger;
     fn published(&self) -> collections::BTreeMap<String, Published>;
     fn render(&self, ledger: &Ledger) -> (String, String);
@@ -61,7 +61,7 @@ pub trait ProjectLowerHost {
     fn parse_ledger(&self, text: &str) -> Option<Ledger>;
 }
 
-pub fn project_lower_reading<H: ProjectLowerHost>(host: &H, in_project: bool) -> Result<ProjectLowerOut, Box<dyn std::error::Error>> {
+pub fn project_lower_reading<H: ProjectLowerHost>(host: &H, in_project: bool) -> Result<ProjectLowerOut, std::boxed::Box<dyn std::error::Error>> {
     host.open_cache();
     host.read_program()?;
     let sources = host.source_paths();
@@ -102,7 +102,7 @@ pub fn project_lower_reading<H: ProjectLowerHost>(host: &H, in_project: bool) ->
     Ok(ProjectLowerOut { rust: made.rust, ledger: made.ledger, derived: made.derived, sources, reused, notes })
 }
 
-pub(crate) fn project_lower_made<H: ProjectLowerHost>(host: &H) -> Result<ProjectLowerArtifacts, Box<dyn std::error::Error>> {
+pub(crate) fn project_lower_made<H: ProjectLowerHost>(host: &H) -> Result<ProjectLowerArtifacts, std::boxed::Box<dyn std::error::Error>> {
     let mut warnings = project_lower_check(host)?;
     let rust = host.emit()?;
     let ledger = project_lower_published(host.contracts(), &host.published());
@@ -117,7 +117,7 @@ pub(crate) fn project_lower_made<H: ProjectLowerHost>(host: &H) -> Result<Projec
     Ok(made)
 }
 
-pub fn project_lower_check<H: ProjectLowerHost>(host: &H) -> Result<String, Box<dyn std::error::Error>> {
+pub fn project_lower_check<H: ProjectLowerHost>(host: &H) -> Result<String, std::boxed::Box<dyn std::error::Error>> {
     let units = host.check_open();
     let mut digest = nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block);
     let batch = host.in_a_batch();

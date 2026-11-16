@@ -215,7 +215,7 @@ impl EmitState {
             if over {
                 let budget = self.sum_member_value(world, "task::OverBudget", "nikaia_std::task::OverBudget")
                 let crash = self.sum_member_value(world, "task::Crashed", "error")
-                let rest = if crash_member { f"{name}::{sum_variant("task::Crashed")}({crash})" } else { "std::panic::resume_unwind(Box::new(error.to_string()))" }
+                let rest = if crash_member { f"{name}::{sum_variant("task::Crashed")}({crash})" } else { "std::panic::resume_unwind(std::boxed::Box::new(error.to_string()))" }
                 out.push(f"impl{decl} From<nikaia_std::task::Crashed> for {name}{params} {{\n    fn from(error: nikaia_std::task::Crashed) -> {name}{params} {{\n        if error.over_budget() {{\n            return {name}::{sum_variant("task::OverBudget")}({budget});\n        }}\n        {rest}\n    }}\n}}\n")
             }
             for member in members {
@@ -388,7 +388,7 @@ impl EmitState {
         }
         let kind = self.named_error_of(world, thrown)
         if kind == 0 {
-            return "Box<dyn std::error::Error>"
+            return "std::boxed::Box<dyn std::error::Error>"
         }
         let name = thrown[0].clone()
         // A library's error travels in an envelope too (ADR-280 D13).
@@ -416,7 +416,7 @@ impl EmitState {
     /// opened into the channel before the `?`. Nothing where the channel is
     /// the box itself.
     pub fn box_into_channel(ref self, world: ref EmitWorld, scope: ref EmitScope) -> String {
-        if scope.channel == "Box<dyn std::error::Error>" || scope.function == "" {
+        if scope.channel == "std::boxed::Box<dyn std::error::Error>" || scope.function == "" {
             return ""
         }
         let contract = self.own_contracts.functions.get(scope.function) ?? return ""
@@ -433,12 +433,12 @@ impl EmitState {
             return ""
         }
         let channel = scope.channel.clone()
-        return f".map_err(|error: Box<dyn std::error::Error>| -> {channel} {{ {arms}unreachable!(\"a function value failed outside its set\") }})"
+        return f".map_err(|error: std::boxed::Box<dyn std::error::Error>| -> {channel} {{ {arms}unreachable!(\"a function value failed outside its set\") }})"
     }
 
     /// The failure channel of the function `key`.
     pub fn error_channel(ref self, world: ref EmitWorld, key: ref String, elided: bool, params: ref String, static_params: ref String, borrows: bool) -> String {
-        let contract = self.own_contracts.functions.get(key) ?? return "Box<dyn std::error::Error>"
+        let contract = self.own_contracts.functions.get(key) ?? return "std::boxed::Box<dyn std::error::Error>"
         return self.channel_of(world, contract.fails_with, elided, params, static_params, borrows)
     }
 }

@@ -338,7 +338,7 @@ impl EmitState {
         let arity = match self.facts.boxed_fn_values.get(&node_key(arg)) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return -1 };
         let key = match emit_arg_function_key(world, arg) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
         if call_pauses(&self.own_contracts, &key) { return -1; }
-        if self.error_channel(world, &key, true, "", "", false) == "Box<dyn std::error::Error>" { return -1; }
+        if self.error_channel(world, &key, true, "", "", false) == "std::boxed::Box<dyn std::error::Error>" { return -1; }
         arity
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -416,7 +416,7 @@ impl EmitState {
             return Ok(());
         }
         let boxed_here = i < boxed_mask.len() as i64 && *unsafe { nikaia_std::proven::read(&boxed_mask, (i) as usize) };
-        if boxed_here { out.push("Box::new("); }
+        if boxed_here { out.push("std::boxed::Box::new("); }
         let node = node_key(arg);
         if i == 0 && self.facts.lookup_keys.contains(&node) {
             out.push("nikaia_std::index::AsKey::as_key(&");
@@ -565,7 +565,7 @@ impl EmitState {
                 }
                 let joined = nikaia_std::block::Text::from(names.join(", "));
                 let runs = self.facts.run_lambdas.contains(&node_key(arg));
-                if runs { out.push(&format!("async |{}| ", joined)); } else { out.push(&format!("|{}| Box::pin(async move ", joined)); }
+                if runs { out.push(&format!("async |{}| ", joined)); } else { out.push(&format!("|{}| std::boxed::Box::pin(async move ", joined)); }
                 let mut changed: Vec<winnow_grammar::Symbol> = scope.changed.copy_owned();
                 changed.extend(mutable.iter().cloned());
                 let inner = EmitScope { changed: changed, ..EmitScope::plain() };
@@ -740,13 +740,13 @@ pub(crate) fn emit_arg_passing(names: &[String], lent: &[i64]) -> String {
 pub fn emit_call_on_the_pool(key: &str) -> bool { key == "net::serve" || key == "net::Listener::serve" || key == "supervisor::child" || key == "supervisor::run" || key == "task::scope" }
 
 pub(crate) fn emit_call_tasks_channel(flow: &EmitFlow, scope: &EmitScope) -> String {
-    if flow.handled_here { return String::from("Box<dyn std::error::Error>"); }
+    if flow.handled_here { return String::from("std::boxed::Box<dyn std::error::Error>"); }
     if flow.can_throw { return nikaia_std::block::Text::from(scope.channel.to_string()); }
     String::from("nikaia_std::task::Crashed")
 }
 
 pub(crate) fn emit_call_scope_channel(channel: &str) -> String {
-    if channel == "Box<dyn std::error::Error>" { return String::from("nikaia_std::task::Boxed"); }
+    if channel == "std::boxed::Box<dyn std::error::Error>" { return String::from("nikaia_std::task::Boxed"); }
     nikaia_std::block::Text::from(channel.to_string())
 }
 
@@ -879,7 +879,7 @@ impl EmitState {
             let channel = nikaia_std::block::Text::from(nikaia_std::index::or(tasks.as_deref(), || "").to_string());
             let mut owner: String = String::from("");
             if channel == scope.channel { owner = nikaia_std::block::Text::from(scope.function.to_string()); }
-            let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>";
+            let boxed = flow.handled_here && channel == "std::boxed::Box<dyn std::error::Error>";
             let mut written = false;
             if channel != "nikaia_std::task::Crashed" && args.len() == 1 {
                 match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
@@ -998,7 +998,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_channel_holds_a_crash(&self, channel: &str) -> bool {
-        if channel == "nikaia_std::task::Crashed" || channel == "nikaia_std::task::OverBudget" || channel == "Box<dyn std::error::Error>" || channel == "nikaia_std::task::Boxed" { return true; }
+        if channel == "nikaia_std::task::Crashed" || channel == "nikaia_std::task::OverBudget" || channel == "std::boxed::Box<dyn std::error::Error>" || channel == "nikaia_std::task::Boxed" { return true; }
         if channel.starts_with("nikaia_std::error::Thrown<") { return channel.ends_with("task::Crashed>") || channel.ends_with("task::OverBudget>"); }
         let root = self.sum_root();
         for (members, name) in self.sums.iter() {
@@ -1038,7 +1038,7 @@ impl EmitState {
             }; },
             _ => { },
         }
-        let boxed: &'static str = "Box<dyn std::error::Error>";
+        let boxed: &'static str = "std::boxed::Box<dyn std::error::Error>";
         let mut own = nikaia_std::block::Text::from(channel.to_string());
         if raised { own = nikaia_std::block::Text::from(outer.to_string()); }
         if fallback {
@@ -1389,7 +1389,7 @@ impl EmitState {
                     self.emit_core_block(world, walk, &mut probe, host, body, depth, EmitFlow::plain().at(flow.statement), &tried, &EmitTail::Return)?;
                     if !probe.buf.contains('?') { channel = String::from("nikaia_std::task::Crashed"); }
                 }
-                let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>";
+                let boxed = flow.handled_here && channel == "std::boxed::Box<dyn std::error::Error>";
                 out.push(&format!("{{ let {} = &nikaia_std::task::{}::<{}>::new(); nikaia_std::task::{}({}, async ", named, made, emit_call_scope_channel(&channel), run, named));
                 if channel != "nikaia_std::task::Crashed" {
                     out.push(&format!("{{ let __scope_body: Result<_, {}> = async {{ let {} = {}; Ok(", channel, named, named));

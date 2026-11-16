@@ -1,0 +1,52 @@
+/// A precondition derived from the callers (ADR-391 D1) may bound a
+/// parameter by a multiple of a length plus a number (#1673): every caller
+/// hands `half` an `l` below `2 * xs.len()`, so `xs[l >> 1]` needs no check;
+/// `next` reads `xs[at + 1]` under `at < xs.len() - 1`, which proves `at + 1`
+/// fits as well, the length being an `i64` (#1767); and `Sat::set`
+/// reads its field through a function that halves (`var_of`), as
+/// `sv_sat.nika`'s `assign` does.
+fn half(xs: ref Vec[i64], l: i64) -> i64 sync {
+	return xs[l >> 1]
+}
+
+fn next(xs: ref Vec[i64], at: i64) -> i64 sync {
+	return xs[at + 1]
+}
+
+fn var_of(l: u32) -> i64 {
+	return (l >> 1) as i64
+}
+
+struct Sat {
+	value: Vec[i64],
+}
+
+impl Sat {
+	fn set(ref mut self, l: u32) {
+		let v = var_of(l)
+		self.value[v] = if l % 2 == 0 { 1 } else { -1 }
+	}
+}
+
+fn main() throws {
+	let xs = [1, 2, 3]
+	let mut l = 0
+	while l < 2 * xs.len() {
+		print(half(xs, l))
+		l += 1
+	}
+	println("")
+	let mut at = 0
+	while at < xs.len() - 1 {
+		print(next(xs, at))
+		at += 1
+	}
+	println("")
+	let mut sat = Sat { value: [0, 0] }
+	let mut k: u32 = 0
+	while k < 2 * sat.value.len() as u32 {
+		sat.set(k)
+		k += 2
+	}
+	println(f"{sat.value[0]} {sat.value[1]}")
+}

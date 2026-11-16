@@ -20,7 +20,7 @@ impl EmitState {
     pub(crate) fn emit_in_place_fold(&self, part: &Expr) -> i64 { nikaia_std::index::or(self.facts.in_place_folds.get(&(id_of(part) as i64)), || 0) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn emit_fold<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, spec: &FoldSpec) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_fold<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, spec: &FoldSpec) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         let rule = emit_text(world, spec.rule);
         let name = if spec.merge.is_some() { "par_fold" } else { "fold" };
         out.push(&format!("{}({}, ", name, rule));
@@ -94,7 +94,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_fold_merge<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, merge: &Expr) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_fold_merge<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, merge: &Expr) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         match merge {
             Expr::Path(segments, _) => {
                 if segments.len() == 2 {
@@ -107,7 +107,7 @@ impl EmitState {
                         Some(method) => {
                             if method.mutates_in_place() && method.args.len() == 1 {
                                 let by_view = if unsafe { nikaia_std::proven::read(&method.args, (0) as usize) }.ty.is_view { "&" } else { "" };
-                                let owner_type = host.ty_named(walk, &Type { name: owner, generics: vec![], is_view: false, is_tuple: false, is_nullable: false, code: Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false })?;
+                                let owner_type = host.ty_named(walk, &Type { name: owner, generics: vec![], is_view: false, is_tuple: false, is_nullable: false, code: std::boxed::Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false })?;
                                 out.push(&format!("|mut a: {}, b| {{ a.{}({}b); a }}", owner_type, emit_text(world, name), by_view));
                                 return Ok(());
                             }

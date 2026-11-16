@@ -157,7 +157,7 @@ pub(crate) fn migrate_ahead(c: &[scalar], k: i64) -> scalar {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn migrate_character_end(c: &[scalar], at: i64) -> i64 {
-    let mut k = at + 1;
+    let mut k = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     if k < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (k) as usize) } == '\\' { k = unsafe { nikaia_std::proven::add::<i64>(k, 2) }; } else { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
     while k < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(k)) != '\'' && *nikaia_std::index::get(&c, nikaia_std::index::at(k)) != '\n' { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
     if k < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(k)) == '\'' { return unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
@@ -206,7 +206,7 @@ pub(crate) fn migrate_closing(tokens: &[MigrateToken], open: i64) -> i64 {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn migrate_extern_end(tokens: &[MigrateToken], at: i64) -> i64 {
-    let mut k = at + 1;
+    let mut k = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     if k < tokens.len() as i64 && unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.kind == MigrateKind::Text { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
     if migrate_text_at(&tokens, k) == "(" { k = unsafe { nikaia_std::proven::add::<i64>(migrate_closing(&tokens, k), 1) }; }
     if migrate_text_at(&tokens, k) == "{" { return migrate_closing(&tokens, k); }
@@ -308,10 +308,10 @@ pub(crate) fn migrate_type_end(tokens: &[MigrateToken], at: i64) -> i64 {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn migrate_a_ref_code(tokens: &[MigrateToken], k: i64, in_brackets: bool) -> bool {
-    if unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.text != "fn" || migrate_text_at(tokens, k + 1) != "(" || nikaia_std::index::get(&tokens, nikaia_std::index::at(k + 1)).gap != "" || k == 0 { return false; }
+    if unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.text != "fn" || migrate_text_at(tokens, unsafe { nikaia_std::proven::add::<i64>(k, 1) }) != "(" || nikaia_std::index::get(&tokens, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(k, 1) })).gap != "" || k == 0 { return false; }
     let before = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&tokens, (nikaia_std::proven::sub::<i64>(k, 1)) as usize) }.text.to_string());
     if before != ":" && before != "->" && before != "[" && !(before == "," && in_brackets) { return false; }
-    let close = migrate_closing(tokens, k + 1);
+    let close = migrate_closing(tokens, unsafe { nikaia_std::proven::add::<i64>(k, 1) });
     migrate_text_at(tokens, unsafe { nikaia_std::proven::add::<i64>(close, 1) }) == "->" && migrate_text_at(tokens, unsafe { nikaia_std::proven::add::<i64>(close, 2) }) == "ref" && migrate_text_at(tokens, unsafe { nikaia_std::proven::add::<i64>(close, 3) }) != "mut" && migrate_text_at(tokens, unsafe { nikaia_std::proven::add::<i64>(close, 3) }) != "("
 }
 
@@ -436,7 +436,7 @@ pub(crate) fn migrate_trait_result(tokens: &[MigrateToken], k: i64) -> (i64, i64
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn migrate_trait_end(tokens: &[MigrateToken], k: i64) -> i64 {
-    if unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.kind != MigrateKind::Word || unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.text != "trait" || k + 1 >= tokens.len() as i64 || unsafe { nikaia_std::proven::read(&tokens, (nikaia_std::proven::add::<i64>(k, 1)) as usize) }.kind != MigrateKind::Word { return -1; }
+    if unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.kind != MigrateKind::Word || unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.text != "trait" || unsafe { nikaia_std::proven::add::<i64>(k, 1) } >= tokens.len() as i64 || unsafe { nikaia_std::proven::read(&tokens, (nikaia_std::proven::add::<i64>(k, 1)) as usize) }.kind != MigrateKind::Word { return -1; }
     let mut j = unsafe { nikaia_std::proven::add::<i64>(k, 2) };
     while j < tokens.len() as i64 && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != "{" && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != ";" {
         if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind == MigrateKind::Open { j = migrate_closing(tokens, j); }

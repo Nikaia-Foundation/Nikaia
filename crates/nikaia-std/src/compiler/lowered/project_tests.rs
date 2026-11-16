@@ -513,12 +513,12 @@ pub fn project_tests_build_timed_out_outcome(limit: i64, said: &str) -> ProjectT
 }
 
 pub trait ProjectTestsProgramHost {
-    fn package_name(&self, root: &std::path::Path) -> Result<Option<String>, Box<dyn std::error::Error>>;
-    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
-    fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, Box<dyn std::error::Error>>;
-    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<Option<ProjectTestsRan>, Box<dyn std::error::Error>>;
-    fn batched(&self, setting: &str, project: &std::path::Path, own: &std::path::Path, list: &std::path::Path, within: i64) -> Result<ProjectTestsBatchBuilt, Box<dyn std::error::Error>>;
-    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
+    fn package_name(&self, root: &std::path::Path) -> Result<Option<String>, std::boxed::Box<dyn std::error::Error>>;
+    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
+    fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, std::boxed::Box<dyn std::error::Error>>;
+    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<Option<ProjectTestsRan>, std::boxed::Box<dyn std::error::Error>>;
+    fn batched(&self, setting: &str, project: &std::path::Path, own: &std::path::Path, list: &std::path::Path, within: i64) -> Result<ProjectTestsBatchBuilt, std::boxed::Box<dyn std::error::Error>>;
+    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -597,7 +597,7 @@ pub(crate) fn project_tests_batch_least() -> i64 { 8 }
 
 pub(crate) fn project_tests_batch_carrier() -> &'static str { "grammar Carrier {\n    rule n -> ref Bytes = s:bytes(until(\";\")) -> { s }\n    entry rule top -> i64 = x:n \";\" -> { x.len() }\n}\n\nfn main() throws {\n    let r = Carrier::top(\"abc;\") catch { -1 }\n    println(f\"{r}\")\n}\n" }
 
-pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, programs: &[ProgramTest], root: &std::path::Path, setting: &str, own: &std::path::Path) -> Result<collections::BTreeMap<String, ProjectTestsBatched>, Box<dyn std::error::Error>> {
+pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, programs: &[ProgramTest], root: &std::path::Path, setting: &str, own: &std::path::Path) -> Result<collections::BTreeMap<String, ProjectTestsBatched>, std::boxed::Box<dyn std::error::Error>> {
     let __keep_frame = nikaia_std::tether::Keep::new();
     let mut found: collections::BTreeMap<String, ProjectTestsBatched> = collections::BTreeMap::new();
     if env::var("NIKAIA_TEST_NO_BATCH").is_some() { return Ok(found); }
@@ -701,7 +701,7 @@ pub(crate) fn project_tests_joined(first: &[u8], then: &[u8]) -> Bytes {
     Bytes(all)
 }
 
-pub(crate) async fn project_tests_prepared<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, own: &std::path::Path) -> Result<fs::Path, Box<dyn std::error::Error>> {
+pub(crate) async fn project_tests_prepared<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, own: &std::path::Path) -> Result<fs::Path, std::boxed::Box<dyn std::error::Error>> {
     let project = nikaia_std::fs::path::join(&(own), std::path::Path::new(&("project")));
     project_tests_empty_but(own, "project")?;
     project_tests_empty_but(&project, "target")?;
@@ -729,7 +729,7 @@ pub struct ProjectTestsReports {
     pub asserts: String,
 }
 
-pub async fn project_tests_reports<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, own: &std::path::Path) -> Result<ProjectTestsReports, Box<dyn std::error::Error>> {
+pub async fn project_tests_reports<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, own: &std::path::Path) -> Result<ProjectTestsReports, std::boxed::Box<dyn std::error::Error>> {
     let mut found = ProjectTestsReports { bounds: String::from(""), asserts: String::from("") };
     if program.bounds.is_none() && program.asserts.is_none() { return Ok(found); }
     let entry = project_tests_prepared(host, program, root, own).await?;
@@ -739,7 +739,7 @@ pub async fn project_tests_reports<H: ProjectTestsProgramHost>(host: &H, program
     Ok(found)
 }
 
-pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, setting: &str, own: &std::path::Path, batched: Option<&ProjectTestsBatched>, reports: &ProjectTestsReports) -> Result<ProjectTestsOutcome, Box<dyn std::error::Error>> {
+pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, setting: &str, own: &std::path::Path, batched: Option<&ProjectTestsBatched>, reports: &ProjectTestsReports) -> Result<ProjectTestsOutcome, std::boxed::Box<dyn std::error::Error>> {
     let project = nikaia_std::fs::path::join(&(own), std::path::Path::new(&("project")));
     let entry = project_tests_prepared(host, program, root, own).await?;
     let written = format!("tests/{}.nika", program.name);
@@ -894,9 +894,9 @@ pub struct ProjectTestsFailed {
 }
 
 pub trait ProjectTestsHost {
-    fn block_outcome(&self, binary: &std::path::Path, k: i64) -> Result<ProjectTestsOutcome, Box<dyn std::error::Error>>;
-    fn output_outcome(&self, binary: &std::path::Path, output: &OutputTest) -> Result<ProjectTestsOutcome, Box<dyn std::error::Error>>;
-    fn program_failures(&self, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, Box<dyn std::error::Error>>;
+    fn block_outcome(&self, binary: &std::path::Path, k: i64) -> Result<ProjectTestsOutcome, std::boxed::Box<dyn std::error::Error>>;
+    fn output_outcome(&self, binary: &std::path::Path, output: &OutputTest) -> Result<ProjectTestsOutcome, std::boxed::Box<dyn std::error::Error>>;
+    fn program_failures(&self, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, std::boxed::Box<dyn std::error::Error>>;
 }
 
 pub async fn project_tests_program_done(program: &ProgramTest, outcomes: Vec<(String, ProjectTestsOutcome)>, bless: bool, stderr: bool) -> Result<Option<ProjectTestsFailed>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
@@ -936,7 +936,7 @@ pub fn project_tests_report_failures(failed: &[ProjectTestsFailed]) -> Result<()
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String, fs::Path, i64)], test_builds: &[(String, fs::Path)], outputs: &[OutputTest], programs: &[(String, fs::Path)], program_tests: i64, root: &std::path::Path, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, Box<dyn std::error::Error>> {
+pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String, fs::Path, i64)], test_builds: &[(String, fs::Path)], outputs: &[OutputTest], programs: &[(String, fs::Path)], program_tests: i64, root: &std::path::Path, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, std::boxed::Box<dyn std::error::Error>> {
     let total = unsafe { nikaia_std::proven::add::<i64>(blocks.len() as i64, outputs.len() as i64) } + program_tests;
     project_tests_running(total)?;
     let mut failed: Vec<ProjectTestsFailed> = vec![];

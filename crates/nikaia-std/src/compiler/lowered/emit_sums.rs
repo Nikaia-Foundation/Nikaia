@@ -106,7 +106,7 @@ impl EmitState {
             if over {
                 let budget = self.sum_member_value(world, "task::OverBudget", "nikaia_std::task::OverBudget");
                 let crash = self.sum_member_value(world, "task::Crashed", "error");
-                let rest = if crash_member { format!("{}::{}({})", name, sum_variant("task::Crashed"), crash) } else { String::from("std::panic::resume_unwind(Box::new(error.to_string()))") };
+                let rest = if crash_member { format!("{}::{}({})", name, sum_variant("task::Crashed"), crash) } else { String::from("std::panic::resume_unwind(std::boxed::Box::new(error.to_string()))") };
                 out.push(&format!("impl{} From<nikaia_std::task::Crashed> for {}{} {{\n    fn from(error: nikaia_std::task::Crashed) -> {}{} {{\n        if error.over_budget() {{\n            return {}::{}({});\n        }}\n        {}\n    }}\n}}\n", decl, name, params, name, params, name, sum_variant("task::OverBudget"), budget, rest));
             }
             for member in members.iter() {
@@ -204,7 +204,7 @@ impl EmitState {
             return format!("{}{}{}", self.sum_root(), nikaia_std::index::or(sum, || ""), shown);
         }
         let kind = self.named_error_of(world, thrown);
-        if kind == 0 { return String::from("Box<dyn std::error::Error>"); }
+        if kind == 0 { return String::from("std::boxed::Box<dyn std::error::Error>"); }
         let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&thrown, 0)).to_string());
         if kind == 2 { return format!("nikaia_std::error::Thrown<{}>", library_error_path(&name, self.is_std)); }
         let mut shown: String = String::from("");
@@ -216,7 +216,7 @@ impl EmitState {
         format!("<{}>", params)
     }
     pub fn box_into_channel(&self, world: &EmitWorld<'_, '_, '_, '_>, scope: &EmitScope) -> String {
-        if scope.channel == "Box<dyn std::error::Error>" || scope.function == "" { return String::from(""); }
+        if scope.channel == "std::boxed::Box<dyn std::error::Error>" || scope.function == "" { return String::from(""); }
         let contract = match self.own_contracts.functions.get(&scope.function) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         let mut arms: String = String::from("");
         for member in contract.fails_with.iter() {
@@ -227,10 +227,10 @@ impl EmitState {
         }
         if arms == "" { return String::from(""); }
         let channel = nikaia_std::block::Text::from(scope.channel.to_string());
-        format!(".map_err(|error: Box<dyn std::error::Error>| -> {} {{ {}unreachable!(\"a function value failed outside its set\") }})", channel, arms)
+        format!(".map_err(|error: std::boxed::Box<dyn std::error::Error>| -> {} {{ {}unreachable!(\"a function value failed outside its set\") }})", channel, arms)
     }
     pub fn error_channel(&self, world: &EmitWorld<'_, '_, '_, '_>, key: &str, elided: bool, params: &str, static_params: &str, borrows: bool) -> String {
-        let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return String::from("Box<dyn std::error::Error>") };
+        let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return String::from("std::boxed::Box<dyn std::error::Error>") };
         self.channel_of(world, &contract.fails_with, elided, params, static_params, borrows)
     }
 }

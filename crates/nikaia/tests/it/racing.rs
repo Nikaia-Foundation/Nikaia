@@ -210,7 +210,7 @@ fn a_failing_arm_propagates_from_its_own_body() {
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
     assert!(
-        rust.contains("Ok::<_, Box<dyn std::error::Error>>("),
+        rust.contains("Ok::<_, std::boxed::Box<dyn std::error::Error>>("),
         "every arm is wrapped so the vehicle sees one shape\n{rust}"
     );
     assert!(rust.contains("let n = __nikaia_won?;"), "{rust}");

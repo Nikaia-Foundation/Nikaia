@@ -2,7 +2,7 @@
 // Edit grammar_run.nika in the directory above, not this file.
 
 pub trait GrammarRunHost {
-    fn driver(&self) -> Result<String, Box<dyn std::error::Error>>;
+    fn driver(&self) -> Result<String, std::boxed::Box<dyn std::error::Error>>;
     fn manifest(&self, key: &str, program: &str) -> String;
     fn shared_target(&self) -> fs::Path;
     fn build_target(&self) -> String;
@@ -102,16 +102,16 @@ pub(crate) async fn grammar_run_write_if_changed(path: &std::path::Path, text: &
 }
 
 pub trait GrammarDriverHost {
-    fn lowered_own(&self) -> Result<String, Box<dyn std::error::Error>>;
+    fn lowered_own(&self) -> Result<String, std::boxed::Box<dyn std::error::Error>>;
     fn beside(&self) -> i64;
-    fn lowered_beside(&self, index: i64) -> Result<String, Box<dyn std::error::Error>>;
+    fn lowered_beside(&self, index: i64) -> Result<String, std::boxed::Box<dyn std::error::Error>>;
     fn dependency_modules(&self) -> Option<String>;
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn grammar_run_driver<H: GrammarDriverHost>(host: &H, names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger, result: &Ty, named: &str, rule: &str) -> Result<String, Box<dyn std::error::Error>> {
+pub fn grammar_run_driver<H: GrammarDriverHost>(host: &H, names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger, result: &Ty, named: &str, rule: &str) -> Result<String, std::boxed::Box<dyn std::error::Error>> {
     let lowered = match host.lowered_own() {
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::raise(CheckWall::DidNotBuild { detail: format!("lowering the grammar: {}", error) }, &"grammar_run_driver")) },

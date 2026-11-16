@@ -1,0 +1,17 @@
+bounds in tests/prove_a_flag_a_search_loop_sets_bounds_the_stretch_after.nika: 6 indexes, 5 proved; 9 operations, 9 proved
+    10  was[a]                                proved
+    10  now[b]                                proved
+    20  was[i]                                proved
+    20  now[j]                                checked: a counter the loop on line 19 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+    21  i += 1                                proved
+    22  j += 1                                proved
+    25  (…) - i                               proved
+    26  (…) - j                               proved
+    31  a - i + j + (right_over - left_over)  proved
+    31  a - i + j                             proved
+    31  a - i                                 proved
+    31  right_over - left_over                proved
+    35  a += 1                                proved
+    43  was[k]                                proved
+    46  now[k]                                proved
+  derived  same_from: 0 <= a, a <= was.len(), 0 <= b, b <= now.len(), proved at the calls on lines 32

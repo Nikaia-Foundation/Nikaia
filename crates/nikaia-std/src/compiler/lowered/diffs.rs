@@ -75,7 +75,7 @@ pub fn differing_lines(expected: &str, produced: &str) -> String {
         let mut near = false;
         let from = if at >= 2 { unsafe { nikaia_std::proven::sub::<i64>(at, 2) } } else { 0 };
         let to = if ((unsafe { nikaia_std::proven::add::<i64>(at, 3) }) as usize) < marks.len() { unsafe { nikaia_std::proven::add::<i64>(at, 3) } } else { marks.len() as i64 };
-        for k in from..to { if *nikaia_std::index::get(&marks, nikaia_std::index::at(k)) != ' ' { near = true; } }
+        for k in from..to { if *unsafe { nikaia_std::proven::read(&marks, (k) as usize) } != ' ' { near = true; } }
         if !near {
             skipped = true;
             continue;

@@ -1,0 +1,56 @@
+// #1787 (ADR-361 D5): the stretch `fix_diff` writes out. The search loop
+// sets `found` only where `b >= j && b <= now.len()` held, and leaves `a <=
+// was.len()` with it; where nothing was found both are set to the lengths.
+// The walk keeps what held where a flag was set as `!found || fact`, so the
+// reads `was[k]` and `now[k]` in `for k in i..<a` and `j..<b` are proved.
+fn same_from(was: ref Vec[ref String], a: i64, now: ref Vec[ref String], b: i64) -> bool {
+	if a == was.len() as i64 || b == now.len() as i64 {
+		return a == was.len() as i64 && b == now.len() as i64
+	}
+	return was[a] == now[b]
+}
+
+fn diff(old: ref String, new: ref String) -> String {
+	let was: Vec[ref String] = old.split("\n").collect()
+	let now: Vec[ref String] = new.split("\n").collect()
+	let mut out = String()
+	let mut i = 0
+	let mut j = 0
+	while i < was.len() as i64 && j < now.len() as i64 {
+		if was[i] == now[j] {
+		    i += 1
+		    j += 1
+		    continue
+		}
+		let left_over = was.len() as i64 - i
+		let right_over = now.len() as i64 - j
+		let mut a = i
+		let mut b = j
+		let mut found = false
+		while !found && a <= was.len() as i64 {
+		    b = a - i + j + (right_over - left_over)
+		    if b >= j && b <= now.len() as i64 && same_from(was, a, now, b) {
+		        found = true
+		    } else {
+		        a += 1
+		    }
+		}
+		if !found {
+		    a = was.len() as i64
+		    b = now.len() as i64
+		}
+		for k in i..<a {
+		    out.push_str(f"-{was[k]}\n")
+		}
+		for k in j..<b {
+		    out.push_str(f"+{now[k]}\n")
+		}
+		i = a
+		j = b
+	}
+	return out
+}
+
+fn main() throws {
+	println(diff("a\nb", "a\nc"))
+}

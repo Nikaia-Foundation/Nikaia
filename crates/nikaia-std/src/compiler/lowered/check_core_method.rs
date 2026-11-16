@@ -204,7 +204,7 @@ pub(crate) fn check_core_method_own(ty: Ty) -> Ty {
     match ty {
         Ty::Nullable(ref inner) => {
             let inner = nikaia_std::boxed::open(inner);
-            if check_core_method_str_view(inner) { return Ty::Nullable(Box::new(check_core_method_named("String"))); }
+            if check_core_method_str_view(inner) { return Ty::Nullable(std::boxed::Box::new(check_core_method_named("String"))); }
         },
         _ => { },
     }
@@ -232,7 +232,7 @@ pub(crate) fn check_core_method_either_items(which: &str, on: Ty) -> Ty {
     match on {
         Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => {
             let item = nikaia_std::boxed::open(item);
-            return Ty::Seq { item: Box::new(check_core_method_own_item(which, item.clone())), is_sync, pauses, can_throw, parallel, shape: shape.clone() };
+            return Ty::Seq { item: std::boxed::Box::new(check_core_method_own_item(which, item.clone())), is_sync, pauses, can_throw, parallel, shape: shape.clone() };
         },
         _ => { },
     }
@@ -240,7 +240,7 @@ pub(crate) fn check_core_method_either_items(which: &str, on: Ty) -> Ty {
 }
 
 pub(crate) fn check_core_method_attribute(named: &str, read: &str) -> Ty {
-    if named == "attribute" { return Ty::Nullable(Box::new(check_core_method_named(read))); }
+    if named == "attribute" { return Ty::Nullable(std::boxed::Box::new(check_core_method_named(read))); }
     Ty::Named { name: String::from("Vec"), args: vec![check_core_method_named(read)], view: false }
 }
 
@@ -538,7 +538,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
             }
             if copies_as_a_view(item) {
                 state.facts.copied_walks.insert(id_of(expr) as i64);
-                walked = Ty::Seq { item: Box::new(unviewed_type(item)), is_sync, pauses, can_throw, parallel, shape: shape.clone() };
+                walked = Ty::Seq { item: std::boxed::Box::new(unviewed_type(item)), is_sync, pauses, can_throw, parallel, shape: shape.clone() };
             }
         },
         _ => { },
@@ -603,7 +603,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
                 for arg in args.iter() {
                     match arg {
                         Expr::Closure { params, .. } => {
-                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(item)], result: Box::new(None), is_sync: true, can_throw: false });
+                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(item)], result: std::boxed::Box::new(None), is_sync: true, can_throw: false });
                             check_core_ops_a_pair_split(state, world, (handed).as_ref(), params, span);
                             check_core_ops_none_named(state, (handed).as_ref(), params, span);
                         },
@@ -617,7 +617,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
                 for arg in args.iter() {
                     match arg {
                         Expr::Closure { params, .. } => {
-                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(unsafe { nikaia_std::proven::read(&items, (0) as usize) })], result: Box::new(None), is_sync: true, can_throw: false });
+                            let handed: Option<Ty> = Some(Ty::Fn { params: vec![unviewed_type(unsafe { nikaia_std::proven::read(&items, (0) as usize) })], result: std::boxed::Box::new(None), is_sync: true, can_throw: false });
                             check_core_ops_none_named(state, (handed).as_ref(), params, span);
                         },
                         _ => { },
@@ -672,7 +672,7 @@ pub(crate) fn check_core_method_cloned(state: &mut CheckState, expr: &Expr, on: 
     if !lent && !item.is_unknown() && !state.facts.copied_walks.contains(&(id_of(expr) as i64)) { state.facts.owned_clones.insert(id_of(expr) as i64); }
     if copies_as_a_view(&item) { state.facts.owned_clones.insert(id_of(expr) as i64); }
     match walked {
-        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: Box::new(unviewed_type(item)), is_sync, pauses, can_throw, parallel, shape: shape.clone() } },
+        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: std::boxed::Box::new(unviewed_type(item)), is_sync, pauses, can_throw, parallel, shape: shape.clone() } },
         _ => walked,
     }
 }
@@ -734,7 +734,7 @@ pub(crate) fn check_core_method_deadline(state: &CheckState, world: &CheckWorld<
     for option in config.iter() { if world.words.resolve(option.name) == "within" { within = true; } }
     if !within { return found; }
     match found {
-        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: Box::new(item.clone()), is_sync, pauses, can_throw, parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: true } } },
+        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: std::boxed::Box::new(item.clone()), is_sync, pauses, can_throw, parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: true } } },
         _ => found,
     }
 }
@@ -859,7 +859,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
             let owned = check_core_method_own(on);
             let nullable = matches!(owned, Ty::Nullable(_));
             if nullable { return owned; }
-            return Ty::Nullable(Box::new(owned));
+            return Ty::Nullable(std::boxed::Box::new(owned));
         }
         if name == "either_items" || name == "either_keys" || name == "either_values" || name == "either_pairs" { return check_core_method_either_items(&name, on); }
     }

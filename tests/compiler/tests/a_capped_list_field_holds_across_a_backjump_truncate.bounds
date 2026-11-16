@@ -1,0 +1,5 @@
+bounds in tests/a_capped_list_field_holds_across_a_backjump_truncate.nika: 3 indexes, 3 proved; 0 operations, 0 proved
+    32  self.marks[target]  proved
+    42  self.marks[0]       proved
+    45  self.trail[i]       proved
+  derived  backjump: 0 <= target, proved at the calls on lines 68, 70

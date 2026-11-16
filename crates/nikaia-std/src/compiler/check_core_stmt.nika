@@ -2136,7 +2136,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
         match elements[0] {
             Ty::Named { name, args, .. } => {
                 if args.is_empty() && is_whole_number(name) {
-                    state.facts.whole_loops.insert(id_of(iter) as i64)
+                    state.facts.whole_loops.insert(id_of(iter) as i64, name.clone())
                 }
             },
             else => {}

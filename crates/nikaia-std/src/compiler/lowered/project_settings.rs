@@ -164,7 +164,7 @@ pub(crate) const PROJECT_SETTINGS_CPU_VAR: &str = "NIKAIA_CPU";
 
 pub trait ProjectSettingsHost {
     fn env_var(&self, name: &str) -> Option<String>;
-    fn native_cpu(&self, triple: &str) -> Result<String, Box<dyn std::error::Error>>;
+    fn native_cpu(&self, triple: &str) -> Result<String, std::boxed::Box<dyn std::error::Error>>;
     fn hard_link(&self, from: &std::path::Path, to: &std::path::Path) -> bool;
     fn unique_beside(&self, path: &std::path::Path) -> fs::Path;
 }
@@ -177,7 +177,7 @@ pub(crate) fn project_settings_checked(target: String, user_parallelism: String,
     Ok(ProjectWords { target, user_parallelism, reentrancy_check, optimization, refuted_claims, unproved_claims, artifact, symbol_prefix, tests, bind: None, bind_features: None, cpu })
 }
 
-pub fn project_settings_resolve(manifest: &impl Fn(&str, &str) -> String, package: Option<&str>, target: Option<String>, user_parallelism: Option<String>, default_target: &str) -> Result<ProjectWords, Box<dyn std::error::Error>> {
+pub fn project_settings_resolve(manifest: &impl Fn(&str, &str) -> String, package: Option<&str>, target: Option<String>, user_parallelism: Option<String>, default_target: &str) -> Result<ProjectWords, std::boxed::Box<dyn std::error::Error>> {
     let target = nikaia_std::index::or(match target.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -237,7 +237,7 @@ pub fn project_settings_chosen_cpu(level: String, levels: &[String], target_name
     Ok(if level != *nikaia_std::index::get(&levels, 0) { Some(level) } else { None })
 }
 
-pub fn project_settings_cpu_key<H: ProjectSettingsHost>(words: &ProjectWords, triple: &str, host: &H) -> Result<String, Box<dyn std::error::Error>> {
+pub fn project_settings_cpu_key<H: ProjectSettingsHost>(words: &ProjectWords, triple: &str, host: &H) -> Result<String, std::boxed::Box<dyn std::error::Error>> {
     let level = match match words.cpu.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -248,7 +248,7 @@ pub fn project_settings_cpu_key<H: ProjectSettingsHost>(words: &ProjectWords, tr
     })
 }
 
-pub fn project_settings_cpu_rustflags<H: ProjectSettingsHost>(words: &ProjectWords, triple: &str, host: &H) -> Result<Option<String>, Box<dyn std::error::Error>> {
+pub fn project_settings_cpu_rustflags<H: ProjectSettingsHost>(words: &ProjectWords, triple: &str, host: &H) -> Result<Option<String>, std::boxed::Box<dyn std::error::Error>> {
     if words.cpu.is_none() { return Ok(None); }
     let encoded = host.env_var("CARGO_ENCODED_RUSTFLAGS");
     let plain = host.env_var("RUSTFLAGS");

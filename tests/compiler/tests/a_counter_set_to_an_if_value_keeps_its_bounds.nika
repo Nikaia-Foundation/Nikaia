@@ -1,0 +1,58 @@
+// #1669 (ADR-306): a loop counter set to another name's value keeps what
+// tied that name to the counter's old value. `i = child` past `let child =
+// if … { l + 1 } else { l }`, where the arms give `l <= child <= l + 1` and
+// `l == 2 * i + 1`, keeps `i >= 0`; the walk forgot `l`'s tie to `i` and
+// `child` was then unbounded. `2 * i + 1` is free of overflow once
+// `0 <= i < xs.len()` holds at each turn. `down` is `sv_sat.nika`'s
+// `heap_down`, with a `while true` and two ways out.
+fn sift(xs: ref Vec[i64], start: i64) -> i64 {
+    assert(start >= 0 && start < xs.len())
+    let mut s = 0
+    let mut i = start
+    while 2 * i + 1 < xs.len() {
+        let l = 2 * i + 1
+        let child = if l + 1 < xs.len() && xs[l + 1] > xs[l] { l + 1 } else { l }
+        s = s + xs[i]
+        i = child
+    }
+    return s + xs[i]
+}
+
+struct Heap {
+    heap: Vec[i64],
+}
+
+impl Heap {
+    fn down(ref mut self, start: i64) {
+        let mut i = start
+        let v = self.heap[i]
+        let n = self.heap.len()
+        while true {
+            let left = 2 * i + 1
+            if left >= n {
+                break
+            }
+            let right = left + 1
+            let child = if right < n && self.heap[right] > self.heap[left] {
+                right
+            } else {
+                left
+            }
+            let u = self.heap[child]
+            if u <= v {
+                break
+            }
+            self.heap[i] = u
+            i = child
+        }
+        self.heap[i] = v
+    }
+}
+
+fn main() throws {
+    let v: Vec[i64] = [5, 1, 9, 2, 4]
+    println(f"{sift(v, 0)}")
+    let mut h = Heap { heap: [1, 5, 3, 4, 2] }
+    h.down(0)
+    println(f"{h.heap[0]} {h.heap[1]} {h.heap[3]}")
+}

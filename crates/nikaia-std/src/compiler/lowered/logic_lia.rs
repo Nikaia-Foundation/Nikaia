@@ -499,7 +499,7 @@ pub(crate) fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
             { let __nikaia_stored = *unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(j, 1)) as usize) }; unsafe { nikaia_std::proven::write(&mut out, (j) as usize, __nikaia_stored) }; }
             j = unsafe { nikaia_std::proven::sub::<i64>(j, 1) };
         }
-        { let __nikaia_stored = x; nikaia_std::index::set(&mut out, nikaia_std::index::at(j), __nikaia_stored); }
+        { let __nikaia_stored = x; unsafe { nikaia_std::proven::write(&mut out, (j) as usize, __nikaia_stored) }; }
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     out

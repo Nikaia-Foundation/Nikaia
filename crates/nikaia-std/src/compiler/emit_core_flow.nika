@@ -463,7 +463,7 @@ impl EmitState {
             if result != "_" {
                 out.push(f"{{ let __nikaia_future: {emit_boxed_future_in(host.overlaps_user_code())}<'_, {result}> = ")
             }
-            out.push("Box::pin(async move ")
+            out.push("std::boxed::Box::pin(async move ")
         }
         // A type that may fail hands back a `Result`, as a `throws` function does:
         // the value goes inside the `Ok`. Through a `let`: `Ok({ .. })` around a
@@ -1153,7 +1153,7 @@ impl EmitState {
         walk.async_bound = ""
         let bound_here = deadline != "" && a_block
         if bound_here {
-            let boxed: String = "Box<dyn std::error::Error>"
+            let boxed: String = "std::boxed::Box<dyn std::error::Error>"
             let bound_flow = guarded with { breaks_to: -1, can_throw: true, in_lambda: false }
             let bound_scope = EmitScope::plain() with { origin: scope.origin.clone(), channel: boxed.clone() }
             out.push(f"{deadline}.bound(async {{ let __nikaia_value = ")
@@ -1164,7 +1164,7 @@ impl EmitState {
             if a_block {
                 out.push(f"'__nikaia_caught_{at}: {{ let __nikaia_value = ")
             } else {
-                out.push(f"'__nikaia_caught_{at}: {{ Ok::<_, Box<dyn std::error::Error>>(")
+                out.push(f"'__nikaia_caught_{at}: {{ Ok::<_, std::boxed::Box<dyn std::error::Error>>(")
             }
         } else {
             guarded = guarded with { breaks_to: -1 }
@@ -1181,7 +1181,7 @@ impl EmitState {
             out.push(")")
         }
         if nested && a_block && !bound_here {
-            out.push("; Ok::<_, Box<dyn std::error::Error>>(__nikaia_value) }")
+            out.push("; Ok::<_, std::boxed::Box<dyn std::error::Error>>(__nikaia_value) }")
         } else if nested && !bound_here {
             out.push(") }")
         }
@@ -1218,7 +1218,7 @@ impl EmitState {
             let own_sum = self.sum_of(scope.function)
             if own_sum != null {
                 sum = own_sum
-            } else if scope.channel == "Box<dyn std::error::Error>" {
+            } else if scope.channel == "std::boxed::Box<dyn std::error::Error>" {
                 sum = ""
                 boxed = true
             } else if scope.channel.starts_with("nikaia_std::error::Thrown<") {
@@ -1258,10 +1258,10 @@ impl EmitState {
         } else if boxed && fallback {
             // **A task over its block is handed as `task::OverBudget`**
             // (ADR-327 D13), and not as the crash that carried it.
-            opening = "let error: Box<dyn std::error::Error> = nikaia_std::task::handed(error.into());"
+            opening = "let error: std::boxed::Box<dyn std::error::Error> = nikaia_std::task::handed(error.into());"
         } else if boxed {
             // A handle whose body cannot fail hands `Crashed` or `Late` bare.
-            opening = "let error: Box<dyn std::error::Error> = error.into();"
+            opening = "let error: std::boxed::Box<dyn std::error::Error> = error.into();"
         }
         if an_else {
             if dropped {
@@ -1293,7 +1293,7 @@ impl EmitState {
         if passing.len() > 0 && (call_callee_name(world.words, world.aliases, guarded_expr) ?? "") == "supervisor::run" {
             out.push(f"{pad}Err(nikaia_std::supervisor::Stopped::Handed(error)) => return Err(error.into()),\n")
             handler_takes = f"Err(nikaia_std::supervisor::Stopped::Escalated({bound})) => "
-        } else if a_scope && scope.channel == "Box<dyn std::error::Error>" {
+        } else if a_scope && scope.channel == "std::boxed::Box<dyn std::error::Error>" {
             // **A scope's tasks fail in the box** (ADR-346 D7), so whether the
             // error is fatal is asked of the value: one the handler does not
             // name passes.
@@ -1523,7 +1523,7 @@ impl EmitState {
         // **Into the box where the signature is the box**
         // (`defects_found_running::a_typed_throw_in_a_trait_impl_is_boxed`): a trait's `throws` method is declared with the opaque channel
         // whatever its impl throws, so a typed error is raised into it.
-        if self.named_error(world, scope.function) != 0 && scope.channel != "Box<dyn std::error::Error>" {
+        if self.named_error(world, scope.function) != 0 && scope.channel != "std::boxed::Box<dyn std::error::Error>" {
             out.push("return Err(nikaia_std::error::throwing(")
         } else {
             out.push("return Err(nikaia_std::error::raise(")
@@ -1648,7 +1648,7 @@ impl EmitState {
         if failing {
             kind = "FailingTask"
             // A box is not `Send`: on the pool it crosses as `BoxedTask`'s.
-            if host.overlaps_user_code() && scope.channel == "Box<dyn std::error::Error>" {
+            if host.overlaps_user_code() && scope.channel == "std::boxed::Box<dyn std::error::Error>" {
                 kind = "BoxedTask"
             }
         }

@@ -2,6 +2,8 @@
 /// local named like the method (#1666): `let top = self.top()` calls the
 /// method, and the later `top` reads the local, not the method used as a
 /// value, so every call of `top` is still known and `self.xs[0]` is proved.
+/// The same body with the local named `t` (#1670) gives the same claim: both
+/// calls stand on one `derived` line.
 struct Stack {
 	xs: Vec[i64],
 }
@@ -18,10 +20,18 @@ impl Stack {
 		let top = self.top()
 		return top
 	}
+
+	fn peek_otherwise(ref self) -> i64 sync {
+		if self.xs.len() == 0 {
+			return 0
+		}
+		let t = self.top()
+		return t
+	}
 }
 
 fn main() throws {
 	let full = Stack { xs: [4, 5] }
 	let empty = Stack { xs: [] }
-	println(f"{full.peek()} {empty.peek()}")
+	println(f"{full.peek()} {empty.peek()} {full.peek_otherwise()} {empty.peek_otherwise()}")
 }

@@ -534,7 +534,7 @@ pub(crate) fn sv_cnf_test_show(name: &str, arena: &TermArena, facts: &[i64], goa
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut t = TermArena::empty();
     let x = t.var("x");
     let y = t.var("y");
@@ -593,7 +593,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut t = TermArena::empty();
     let x = t.var("x");
     let y = t.var("y");

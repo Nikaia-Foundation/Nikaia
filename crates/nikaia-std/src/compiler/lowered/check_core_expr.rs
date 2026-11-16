@@ -185,7 +185,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             check_core_expr_named("scalar")
         },
         Expr::LitBool(_, _) => check_core_expr_named("bool"),
-        Expr::LitNull(_) => Ty::Nullable(Box::new(Ty::Unknown)),
+        Expr::LitNull(_) => Ty::Nullable(std::boxed::Box::new(Ty::Unknown)),
         Expr::Variable(name, _) => {
             let name = *name;
             let read = check_core_expr_variable(state, world, host, expr, name, span);

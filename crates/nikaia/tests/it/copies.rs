@@ -103,7 +103,10 @@ fn a_generic_struct_is_seen_through_for_rings_and_comparison() {
          struct Block { stmts: Vec[Spanned[Stmt]] }\n\
          fn main() { print(\"x\") }\n",
     );
-    assert!(rust.contains("Group(Box<Spanned<Pattern>>)"), "{rust}");
+    assert!(
+        rust.contains("Group(std::boxed::Box<Spanned<Pattern>>)"),
+        "{rust}"
+    );
     assert!(rust.contains("Seq(Vec<Spanned<Pattern>>)"), "{rust}");
     assert!(!derive_of(&rust, "Block").contains("PartialEq"), "{rust}");
     let dir = common::scratch_dir("generic-seen-through");

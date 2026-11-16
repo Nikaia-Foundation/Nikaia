@@ -98,7 +98,7 @@ pub(crate) fn sv_walk_delta(v: i64, k: i64, rel: &SvRel, positive: bool, rng: &m
 
 impl SvWalk {
     pub(crate) fn lit_holds(&self, l: u32) -> bool {
-        let h = *nikaia_std::index::get(&self.holds, nikaia_std::index::at((l / 2u32) as i64));
+        let h = *unsafe { nikaia_std::proven::read(&self.holds, ((l / 2u32) as i64) as usize) };
         if l % 2u32 == 0u32 { h } else { !h }
     }
     pub(crate) fn falsify(&mut self, c: i64) {
@@ -216,7 +216,7 @@ pub(crate) fn sv_walk_start(query: &SvQuery, carried: &[Vec<u32>]) -> Option<SvW
         for l in (*unsafe { nikaia_std::proven::read(&w.clauses, (c) as usize) }).iter() {
             let l = nikaia_std::num::value(l);
             if ((l / 2u32) as i64) >= atoms { return None; }
-            w.lit_clauses[nikaia_std::index::at(l as i64)].push(c);
+            (*unsafe { nikaia_std::proven::slot(&mut w.lit_clauses, (l as i64) as usize) }).push(c);
             if w.lit_holds(l) { count += 1; }
         }
         w.true_count.push(count);
@@ -343,7 +343,7 @@ pub(crate) fn sv_walk_test_each(name: &str, source: &str) -> String {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files = nikaia_std::block::List::from_array_in([("problem__003", sv_walk_test_problem003()), ("equation", sv_walk_test_smt("sat", "Int", &vec!["x", "y"], "(assert (= (+ (* 3 x) (* 5 y)) 7))\n(assert (distinct x y))\n(assert (or (> x 4) (< y (- 3))))\n")), ("unsat", sv_walk_test_smt("unsat", "Int", &vec!["x"], "(assert (>= x 1))\n(assert (<= x 0))\n")), ("real", sv_walk_test_smt("sat", "Real", &vec!["x"], "(assert (< 0 x 1))\n"))], nikaia_std::block::Place::Block);
     let mut out: String = String::from("");
     for (name, text) in files.iter() {

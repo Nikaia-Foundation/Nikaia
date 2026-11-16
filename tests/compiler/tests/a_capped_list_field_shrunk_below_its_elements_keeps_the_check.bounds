@@ -1,0 +1,3 @@
+bounds in tests/a_capped_list_field_shrunk_below_its_elements_keeps_the_check.nika: 2 indexes, 1 proved; 0 operations, 0 proved
+    26  self.marks[0]  proved
+    29  self.trail[i]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

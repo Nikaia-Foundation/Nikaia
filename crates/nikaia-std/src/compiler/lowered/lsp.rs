@@ -356,8 +356,8 @@ pub fn lsp_path_uri(path: &str) -> String {
         let kept = d >= 48 && d <= 57 || d >= 65 && d <= 90 || d >= 97 && d <= 122 || d == 45 || d == 46 || d == 95 || d == 126 || d == 47;
         if kept { out.push(b as scalar); } else {
             out.push('%');
-            out.push((*nikaia_std::index::get(&digits, nikaia_std::index::at(d / 16))).clone());
-            out.push((*nikaia_std::index::get(&digits, nikaia_std::index::at(d % 16))).clone());
+            out.push((*unsafe { nikaia_std::proven::read(&digits, (d / 16) as usize) }).clone());
+            out.push((*unsafe { nikaia_std::proven::read(&digits, (d % 16) as usize) }).clone());
         }
     }
     out

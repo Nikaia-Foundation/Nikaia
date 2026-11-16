@@ -1,0 +1,9 @@
+bounds in tests/an_ascending_list_field_bounds_every_element_by_its_last.nika: 4 indexes, 3 proved; 3 operations, 3 proved
+    29  self.at[n - 1]     proved
+    29  n - 1              proved
+    35  self.items[a]      proved
+    48  self.items[a - 1]  proved
+    48  a - 1              proved
+    63  self.items[a - 1]  checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
+    63  a - 1              proved
+  derived  mark: 0 <= x, proved at the calls on lines 72, 75, 77, 80

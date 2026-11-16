@@ -1,0 +1,73 @@
+// #1675: guide/prover.md shows, under "Some shapes stop a proof", a program
+// and what `nikaia check --asserts --bounds --unproved-claims=warn` says of it.
+// This test reads both from the guide, checks the program and compares: when
+// the prover learns the shape, the guide needs a new example, and this fails.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/guide/prover.md", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/guide/prover.md", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+    let guide = process::run("cat", [f"{root()}/guide/prover.md"]).stdout
+    let mut program: Vec[String] = []
+    let mut shown: Vec[String] = []
+    let mut stage = 0
+    for line in guide.lines() {
+        if stage == 0 && line.starts_with("Some shapes stop a proof") {
+            stage = 1
+        } else if stage == 1 && line == "```nika" {
+            stage = 2
+        } else if stage == 2 && line == "```" {
+            stage = 3
+        } else if stage == 2 {
+            program.push(line.clone())
+        } else if stage == 3 && line.starts_with("$ nikaia check") {
+            stage = 4
+        } else if stage == 4 && line == "```" {
+            stage = 5
+        } else if stage == 4 {
+            shown.push(line.clone())
+        }
+    }
+    println(f"example found: {stage == 5}")
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    fs::write(f"{tmp}/shapes.nika", fs::Root::Anywhere, program.join("\n") + "\n")
+    let out = process::run(toolchain(), ["check", "--asserts", "--bounds", "--unproved-claims=warn", "shapes.nika"]; dir: tmp)
+    // The warning goes to stderr before `Checked` on stdout; the guide shows
+    // its first line and leaves the notes out as `...`.
+    let mut warned: Vec[String] = []
+    for line in out.stderr.lines() {
+        if line.starts_with("warning[") {
+            warned.push(line.clone())
+            warned.push("...")
+        }
+    }
+    let mut said: Vec[String] = []
+    for line in out.stdout.lines() {
+        if line.starts_with("Checked ") {
+            said.extend(warned.clone())
+        }
+        said.push(line.clone())
+    }
+    let now = said.join("\n")
+    let written = shown.join("\n")
+    if now == written {
+        println("the guide's output matches the compiler's")
+    } else {
+        println("the guide's output differs from the compiler's:")
+        println(now)
+    }
+    process::run("rm", ["-rf", tmp])
+}

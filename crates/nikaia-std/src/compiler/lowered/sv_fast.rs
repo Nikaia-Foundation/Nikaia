@@ -309,7 +309,7 @@ pub(crate) fn sv_fast_test_wide() -> String {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files = nikaia_std::block::List::from_array_in([("interval-unsat", sv_fast_test_smt("unsat", &vec![String::from("x"), String::from("y")], "(assert (>= (* 2 x) 5))\n(assert (<= x 2))\n(assert (<= 0 y))\n")), ("interval-sat", sv_fast_test_smt("sat", &vec![String::from("x"), String::from("y")], "(assert (<= 1 x 3))\n(assert (= y 4))\n")), ("interval-round", sv_fast_test_smt("unsat", &vec![String::from("x")], "(assert (>= (* 2 x) 3))\n(assert (<= (* 2 x) 3))\n")), ("difference-unsat", sv_fast_test_smt("unsat", &vec![String::from("x"), String::from("y"), String::from("z")], "(assert (< x y))\n(assert (< y z))\n(assert (<= z (+ x 1)))\n(assert (<= x 5))\n")), ("difference-sat", sv_fast_test_smt("sat", &vec![String::from("x"), String::from("y"), String::from("z")], "(assert (< x y))\n(assert (< y z))\n(assert (<= 0 x))\n(assert (<= z 10))\n")), ("difference-wide", sv_fast_test_wide()), ("choice", sv_fast_test_smt("sat", &vec![String::from("x")], "(assert (or (< x 0) (> x 10)))\n"))], nikaia_std::block::Place::Block);
     let mut out: String = String::from("");
     for (name, text) in files.iter() {
