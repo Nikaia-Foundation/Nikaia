@@ -46,7 +46,7 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
                     }
                     found.push(f);
                 }
-                if !found.is_empty() {
+                if !found.is_empty() || numbers.len() >= 2 {
                     if !numbers.is_empty() { scalars.insert(nikaia_std::block::Text::from(owner.to_string()), numbers); }
                     lists.insert(owner, found);
                 }
@@ -185,6 +185,18 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || "other".into()));
+            for b in nikaia_std::index::or(match scalars.get(owner) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || vec![].into()) {
+                if a == b || dropped.contains(&format!("{}.{}", owner, b)) || !paired.contains(&format!("{}|{}", a, b)) { continue; }
+                let limits = rules_scalar_values(&literals, &b, &nikaia_std::index::or(match defaults.get(&format!("{}.{}", owner, b)) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || "other".into()));
+                if rules_built_at_most(&values, &limits) { out.push(BoundsRule { owner: nikaia_std::block::Text::from(owner.to_string()), kind: String::from("atmost"), a: nikaia_std::block::Text::from(a.to_string()), b: nikaia_std::block::Text::from(b.to_string()), times: 1 }); }
+            }
+            if fields.is_empty() { continue; }
             if values.iter().all(|v| { AsRef::<str>::as_ref(&(v)) == AsRef::<str>::as_ref(&("any")) || rules_shape_length(v) >= 0 }) { out.push(BoundsRule { owner: nikaia_std::block::Text::from(owner.to_string()), kind: String::from("floor"), a: nikaia_std::block::Text::from(a.to_string()), b: String::from(""), times: 1 }); }
             for b in fields.iter() {
                 if dropped.contains(&format!("{}.{}", owner, b)) || !paired.contains(&format!("{}|{}", a, b)) { continue; }
@@ -318,6 +330,18 @@ pub(crate) fn rules_built_within(values: &[String], lengths: &[String]) -> bool 
         let v = rules_shape_length(unsafe { nikaia_std::proven::read(&values, (at) as usize) });
         let n = rules_shape_length(unsafe { nikaia_std::proven::read(&lengths, (at) as usize) });
         if v < 0 || n < 0 || v > n { return false; }
+    }
+    true
+}
+
+pub(crate) fn rules_built_at_most(values: &[String], limits: &[String]) -> bool {
+    if (values.len() as i64) != limits.len() as i64 { return false; }
+    for at in 0..values.len() as i64 {
+        if *unsafe { nikaia_std::proven::read(&values, (at) as usize) } == "any" || *unsafe { nikaia_std::proven::read(&limits, (at) as usize) } == "any" { continue; }
+        if *unsafe { nikaia_std::proven::read(&values, (at) as usize) } == "other" || *unsafe { nikaia_std::proven::read(&limits, (at) as usize) } == "other" { return false; }
+        let v = rules_shape_length(unsafe { nikaia_std::proven::read(&values, (at) as usize) });
+        let n = rules_shape_length(unsafe { nikaia_std::proven::read(&limits, (at) as usize) });
+        if v >= 0 && n >= 0 && v > n { return false; }
     }
     true
 }
@@ -684,7 +708,13 @@ pub(crate) fn rules_built_fields(fields: &[FieldInit], owner: &str, lists: &coll
 pub(crate) fn rules_literal(name: &str, fields: &[FieldInit], lists: &collections::BTreeMap<String, Vec<String>>, defaults: &collections::BTreeMap<String, String>, built: &mut collections::BTreeMap<String, Vec<String>>, loose: bool, named: bool, words: &winnow_grammar::InternerContext) {
     let own = match lists.get(name) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut given = String::from("");
-    if loose { given = String::from("any"); } else { for field in fields.iter() { given = format!("{}{}={};", given, words.resolve(field.name), rules_scalar_shape((field.value).as_ref())); } }
+    if loose { given = String::from("any"); } else {
+        for field in fields.iter() {
+            let mut shape = rules_scalar_shape((field.value).as_ref());
+            if shape == "other" && named { shape = String::from("ask"); }
+            given = format!("{}{}={};", given, words.resolve(field.name), shape);
+        }
+    }
     let lit_key = format!("{}#lit", name);
     let mut known_given = nikaia_std::index::or(match built.get(&lit_key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -748,18 +778,27 @@ pub(crate) fn rules_named_list(value: Option<&Expr>, field: &str, words: &winnow
 
 pub(crate) fn rules_names_lists(body: &Block, owner: &str, of_impl: &str, held: &[BoundsRule], words: &winnow_grammar::InternerContext) -> bool {
     #[allow(unused_mut)] let mut fields: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut asked: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut fields = fields;
     for rule in held.iter() {
         if rule.kind == "length" && rule.owner == owner {
             fields.push(nikaia_std::block::Text::from(rule.a.to_string()));
             fields.push(nikaia_std::block::Text::from(rule.b.to_string()));
         }
+        if rule.kind == "atmost" && rule.owner == owner {
+            asked.push(format!("{}=ask", rule.a));
+            asked.push(format!("{}=ask", rule.b));
+        }
     }
-    if fields.is_empty() { return false; }
+    if fields.is_empty() && asked.is_empty() { return false; }
     let mut lists: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut fields = fields;
     lists.insert(nikaia_std::block::Text::from(owner.to_string()), fields.copy_owned());
-    let mut built: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut fields = fields;
+    let mut built: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut fields = fields; #[allow(unused_mut, clippy::redundant_locals)] let mut asked = asked;
     let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new();
     rules_built_block(body, of_impl, &lists, &collections::BTreeMap::new(), &mut built, &mut dropped, words);
+    for given in nikaia_std::index::or(match built.get(&format!("{}#lit", owner)) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into()) { for part in given.split(';') { if asked.iter().any(|x| { AsRef::<str>::as_ref(&(x)) == AsRef::<str>::as_ref(&(part)) }) { return true; } } }
     for f in fields.iter() {
         let shapes = nikaia_std::index::or(match built.get(&format!("{}.{}#len", owner, f)) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -770,9 +809,23 @@ pub(crate) fn rules_names_lists(body: &Block, owner: &str, of_impl: &str, held: 
     false
 }
 
-pub(crate) fn rules_literal_holds(walk: &mut BoundsWalk, name: &str, fields: &[FieldInit], facts: &BoundsFacts, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn rules_literal_holds(walk: &mut BoundsWalk, name: &str, fields: &[FieldInit], facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
     if !walk.checking || name == "Self" { return; }
     for (at, rule) in walk.rules.copy_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) {
+        if rule.kind == "atmost" && rule.owner == name && !walk.rule_failed.contains(&at) {
+            let a = rules_literal_value(walk, fields, &rule.a, facts, context, program, words);
+            let b = rules_literal_value(walk, fields, &rule.b, facts, context, program, words);
+            if a.is_none() || b.is_none() {
+                walk.rule_failed.insert(at);
+                continue;
+            }
+            let goal = walk.arena.le(match a { Some(__nikaia_value) => __nikaia_value, None => continue }, match b { Some(__nikaia_value) => __nikaia_value, None => continue });
+            let proved = bounding_proves(&walk, facts, goal, ask);
+            bounding_traced(walk, facts, goal, proved);
+            if !proved { walk.rule_failed.insert(at); }
+            continue;
+        }
         if rule.kind != "length" || rule.owner != name || walk.rule_failed.contains(&at) { continue; }
         let (named_a, a) = rules_literal_side(walk, fields, &rule.a, words);
         let (named_b, b) = rules_literal_side(walk, fields, &rule.b, words);
@@ -787,6 +840,16 @@ pub(crate) fn rules_literal_holds(walk: &mut BoundsWalk, name: &str, fields: &[F
         bounding_traced(walk, facts, goal, proved);
         if !proved { walk.rule_failed.insert(at); }
     }
+}
+
+pub(crate) fn rules_literal_value(walk: &mut BoundsWalk, fields: &[FieldInit], f: &str, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
+    for field in fields.iter() {
+        if words.resolve(field.name) != f { continue; }
+        if field.value.is_none() && facts.ints.contains(f) { return Some(walk.arena.var(f)); }
+        let given = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+        return bounding_lin(walk, given, facts, context, program, words);
+    }
+    None
 }
 
 pub(crate) fn rules_literal_side(walk: &mut BoundsWalk, fields: &[FieldInit], f: &str, words: &winnow_grammar::InternerContext) -> (bool, i64) {
@@ -1105,6 +1168,13 @@ pub(crate) fn rules_give(walk: &mut BoundsWalk, facts: &mut BoundsFacts, root: &
             bounding_push(&walk, facts, low);
             continue;
         }
+        if rule.kind == "atmost" {
+            let a = walk.arena.var(&format!("{}.{}", root, rule.a));
+            let b = walk.arena.var(&format!("{}.{}", root, rule.b));
+            let capped = walk.arena.le(a, b);
+            bounding_push(&walk, facts, capped);
+            continue;
+        }
         let b = walk.arena.var(&length_of(&format!("{}.{}", root, rule.b)));
         let b_floor = walk.arena.ge(b, zero);
         if rule.kind == "length" {
@@ -1136,15 +1206,15 @@ pub(crate) fn rules_give(walk: &mut BoundsWalk, facts: &mut BoundsFacts, root: &
     }
 }
 
-pub(crate) fn rules_of_a_field(kind: &str) -> bool { kind == "floor" || kind == "cap" }
+pub(crate) fn rules_of_a_field(kind: &str) -> bool { kind == "floor" || kind == "cap" || kind == "atmost" }
 
 pub(crate) fn rules_field_holds(walk: &mut BoundsWalk, facts: &BoundsFacts, rule: &BoundsRule, root: &str, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {
     let name = format!("{}.{}", root, rule.a);
-    let length = length_of(&format!("{}.{}", root, rule.b));
+    let length = if rule.kind == "atmost" { format!("{}.{}", root, rule.b) } else { length_of(&format!("{}.{}", root, rule.b)) };
     for fact in facts.facts.iter() {
         let fact = nikaia_std::num::value(fact);
         match walk.arena.at(fact) {
-            SolverTerm::Le(x, y) => { if rule.kind == "cap" && rules_term_is(&walk, x, 1, &name) && rules_term_is(&walk, y, 1, &length) { return true; } },
+            SolverTerm::Le(x, y) => { if (rule.kind == "cap" || rule.kind == "atmost") && rules_term_is(&walk, x, 1, &name) && rules_term_is(&walk, y, 1, &length) { return true; } },
             SolverTerm::Ge(x, y) => {
                 let at_zero = match walk.arena.at(y) {
                     SolverTerm::Int(n) => n == 0,
@@ -1156,7 +1226,7 @@ pub(crate) fn rules_field_holds(walk: &mut BoundsWalk, facts: &BoundsFacts, rule
         }
     }
     let a = walk.arena.var(&name);
-    let goal = if rule.kind == "cap" {
+    let goal = if rule.kind == "cap" || rule.kind == "atmost" {
         let b = walk.arena.var(&length);
         walk.arena.le(a, b)
     } else {
@@ -1513,7 +1583,7 @@ pub(crate) fn rules_at_call(walk: &mut BoundsWalk, call: &Expr, receiver: Option
                     walk.rule_failed.insert(at);
                     continue;
                 }
-                if rules_writes(changed, &a) { walk.rule_failed.insert(at); }
+                if rules_writes(changed, &a) || rule.kind == "atmost" && rules_writes(changed, &b) { walk.rule_failed.insert(at); }
                 continue;
             }
             if rules_writes(changed, &a) || rules_writes(changed, &b) { walk.rule_failed.insert(at); }

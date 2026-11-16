@@ -79,7 +79,25 @@ pub fn blocked_operation(
 			names.push(name)
 		}
 	}
-	return from_binding(names, args, body, words, source, callers)
+	let found = from_binding(names, args, body, words, source, callers)
+	// **A field raised by a number or by another field** (#1681): what
+	// bounds it would be a rule of its type, and none was found.
+	if found == unbounded() && a_field_path(lhs) && (is_int_literal(rhs) || a_field_path(rhs)) {
+		return counter_field()
+	}
+	return found
+}
+
+/// Whether `expr` is a field of a name or of a path of fields from one.
+fn a_field_path(expr: ref Expr) -> bool {
+	return match expr {
+		Expr::Field { base, .. } => a_path(base),
+		else => false,
+	}
+}
+
+fn counter_field() -> String {
+	return "a field no rule of its type bounds: the walk finds `a <= b` only of two private fields a method compares (ADR-369 D4, #1681), and a count of work done has none (#1531)"
 }
 
 /// The names an expression reads, each once, in the order written.

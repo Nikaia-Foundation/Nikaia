@@ -102,8 +102,10 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                     }
                     found.push(f)
                 }
-                // One list may be a list of its own positions (ADR-306 D22).
-                if !found.is_empty() {
+                // One list may be a list of its own positions (ADR-306 D22);
+                // two whole-number fields may bound one another (`atmost`,
+                // #1681), in a type without list fields too.
+                if !found.is_empty() || numbers.len() >= 2 {
                     if !numbers.is_empty() {
                         scalars.insert(owner.clone(), numbers)
                     }
@@ -262,6 +264,24 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                 continue
             }
             let values = rules_scalar_values(literals, a, defaults.get(f"{owner}.{a}")?.clone() ?? "other")
+            // `a <= b` of two whole-number fields a statement names beside
+            // each other (#1681, ADR-369 D4): a budget counter and its
+            // limit. Each literal builds them so, or gives a value the
+            // walk asks of where it stands (`ask`, `rules_literal_holds`).
+            for b in scalars.get(owner)?.clone() ?? [] {
+                if a == b || dropped.contains(f"{owner}.{b}") || !paired.contains(f"{a}|{b}") {
+                    continue
+                }
+                let limits = rules_scalar_values(literals, b, defaults.get(f"{owner}.{b}")?.clone() ?? "other")
+                if rules_built_at_most(values, limits) {
+                    out.push(BoundsRule { owner: owner.clone(), kind: "atmost", a: a.clone(), b: b.clone(), times: 1 })
+                }
+            }
+            // A type without list fields gets only `atmost`: the walk
+            // looked at none of its fields before (#1681).
+            if fields.is_empty() {
+                continue
+            }
             if values.iter().all(fn(v) { v == "any" || rules_shape_length(v) >= 0 }) {
                 out.push(BoundsRule { owner: owner.clone(), kind: "floor", a: a.clone(), b: "", times: 1 })
             }
@@ -461,6 +481,29 @@ fn rules_built_within(values: ref Vec[String], lengths: ref Vec[String]) -> bool
         let v = rules_shape_length(values[at])
         let n = rules_shape_length(lengths[at])
         if v < 0 || n < 0 || v > n {
+            return false
+        }
+    }
+    return true
+}
+
+/// **Whether every literal gives `a` at most what it gives `b`** (#1681):
+/// both numbers, `a`'s the smaller; or a builder's, or a value one of them
+/// gives by a name or an expression, asked where the literal stands.
+fn rules_built_at_most(values: ref Vec[String], limits: ref Vec[String]) -> bool {
+    if values.len() != limits.len() {
+        return false
+    }
+    for at in 0..<values.len() {
+        if values[at] == "any" || limits[at] == "any" {
+            continue
+        }
+        if values[at] == "other" || limits[at] == "other" {
+            return false
+        }
+        let v = rules_shape_length(values[at])
+        let n = rules_shape_length(limits[at])
+        if v >= 0 && n >= 0 && v > n {
             return false
         }
     }
@@ -990,7 +1033,13 @@ fn rules_literal(name: ref String, fields: ref Vec[FieldInit], lists: ref collec
         given = "any"
     } else {
         for field in fields {
-            given = f"{given}{words.resolve(field.name)}={rules_scalar_shape(field.value)};"
+            // A value other than a number is asked where a literal the
+            // walk resolves stands (`ask`, #1681): not of `Self`.
+            let mut shape = rules_scalar_shape(field.value)
+            if shape == "other" && named {
+                shape = "ask"
+            }
+            given = f"{given}{words.resolve(field.name)}={shape};"
         }
     }
     let lit_key = f"{name}#lit"
@@ -1048,13 +1097,18 @@ fn rules_named_list(value: ref Expr?, field: ref String, words: ref winnow_gramm
 /// there (`rules_literal_holds`).
 fn rules_names_lists(body: ref Block, owner: ref String, of_impl: ref String, held: ref Vec[BoundsRule], words: ref winnow_grammar::InternerContext) -> bool {
     let mut fields: Vec[String] = []
+    let mut asked: Vec[String] = []
     for rule in held {
         if rule.kind == "length" && rule.owner == owner {
             fields.push(rule.a.clone())
             fields.push(rule.b.clone())
         }
+        if rule.kind == "atmost" && rule.owner == owner {
+            asked.push(f"{rule.a}=ask")
+            asked.push(f"{rule.b}=ask")
+        }
     }
-    if fields.is_empty() {
+    if fields.is_empty() && asked.is_empty() {
         return false
     }
     let mut lists: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
@@ -1062,6 +1116,15 @@ fn rules_names_lists(body: ref Block, owner: ref String, of_impl: ref String, he
     let mut built: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     let mut dropped: collections::BTreeSet[String] = collections::BTreeSet()
     rules_built_block(body, of_impl, lists, collections::BTreeMap(), built, dropped, words)
+    // A literal that gives a field of an `atmost` rule by a name or an
+    // expression (#1681).
+    for given in built.get(f"{owner}#lit")?.clone() ?? [] {
+        for part in given.split(";") {
+            if asked.iter().any(fn(x) { x == part }) {
+                return true
+            }
+        }
+    }
     for f in fields {
         let shapes = built.get(f"{owner}.{f}#len")?.clone() ?? []
         if shapes.contains("any") {
@@ -1078,11 +1141,27 @@ fn rules_names_lists(body: ref Block, owner: ref String, of_impl: ref String, he
 /// given by a list literal is its count; given otherwise, or left out, the
 /// rule fails. Not of a builder's own literal, whose rules are asked where
 /// it is handed back (`rule_built_literal`).
-fn rules_literal_holds(mut walk: BoundsWalk, name: ref String, fields: ref Vec[FieldInit], facts: ref BoundsFacts, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+fn rules_literal_holds(mut walk: BoundsWalk, name: ref String, fields: ref Vec[FieldInit], facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
     if !walk.checking || name == "Self" {
         return
     }
     for (at, rule) in walk.rules.clone().iter().enumerate() {
+        if rule.kind == "atmost" && rule.owner == name && !walk.rule_failed.contains(at) {
+            // `a <= b` of what the literal gives the two fields (#1681).
+            let a = rules_literal_value(walk, fields, rule.a, facts, context, program, words)
+            let b = rules_literal_value(walk, fields, rule.b, facts, context, program, words)
+            if a == null || b == null {
+                walk.rule_failed.insert(at)
+                continue
+            }
+            let goal = walk.arena.le(a ?? continue, b ?? continue)
+            let proved = bounding_proves(walk, facts, goal, ask)
+            bounding_traced(walk, facts, goal, proved)
+            if !proved {
+                walk.rule_failed.insert(at)
+            }
+            continue
+        }
         if rule.kind != "length" || rule.owner != name || walk.rule_failed.contains(at) {
             continue
         }
@@ -1103,6 +1182,24 @@ fn rules_literal_holds(mut walk: BoundsWalk, name: ref String, fields: ref Vec[F
             walk.rule_failed.insert(at)
         }
     }
+}
+
+/// **What a literal gives the whole-number field `f`, as a term** (#1681):
+/// its value where that is linear, the name of a shorthand field; null
+/// where it is neither or the literal leaves the field out (its default is
+/// a number `rules_built_at_most` compared already, and asks nothing).
+fn rules_literal_value(mut walk: BoundsWalk, fields: ref Vec[FieldInit], f: ref String, facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext) -> i64? {
+    for field in fields {
+        if words.resolve(field.name) != f {
+            continue
+        }
+        if field.value == null && facts.ints.contains(f) {
+            return walk.arena.var(f)
+        }
+        let given = field.value ?? return null
+        return bounding_lin(walk, given, facts, context, program, words)
+    }
+    return null
 }
 
 /// The length a literal gives the list field `f`, as a term, and whether
@@ -1513,6 +1610,14 @@ fn rules_give(mut walk: BoundsWalk, mut facts: BoundsFacts, root: ref String, ow
             bounding_push(walk, facts, low)
             continue
         }
+        // `a <= b` of two whole-number fields (#1681).
+        if rule.kind == "atmost" {
+            let a = walk.arena.var(f"{root}.{rule.a}")
+            let b = walk.arena.var(f"{root}.{rule.b}")
+            let capped = walk.arena.le(a, b)
+            bounding_push(walk, facts, capped)
+            continue
+        }
         let b = walk.arena.var(length_of(f"{root}.{rule.b}"))
         let b_floor = walk.arena.ge(b, zero)
         if rule.kind == "length" {
@@ -1558,10 +1663,10 @@ fn rules_give(mut walk: BoundsWalk, mut facts: BoundsFacts, root: ref String, ow
     }
 }
 
-/// Whether `kind` is a bound of one whole-number field (#1642): `floor`
-/// or `cap`, held at every exit as a `length` rule is.
+/// Whether `kind` is a bound of one whole-number field (#1642): `floor`,
+/// `cap` or `atmost` (#1681), held at every exit as a `length` rule is.
 fn rules_of_a_field(kind: ref String) -> bool {
-    return kind == "floor" || kind == "cap"
+    return kind == "floor" || kind == "cap" || kind == "atmost"
 }
 
 /// **Whether a `floor` or `cap` rule holds of `root` here** (#1642): `0 <=
@@ -1569,11 +1674,11 @@ fn rules_of_a_field(kind: ref String) -> bool {
 /// given holds with no question asked.
 fn rules_field_holds(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, root: ref String, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
     let name = f"{root}.{rule.a}"
-    let length = length_of(f"{root}.{rule.b}")
+    let length = if rule.kind == "atmost" { f"{root}.{rule.b}" } else { length_of(f"{root}.{rule.b}") }
     for fact in facts.facts {
         match walk.arena.at(fact) {
             SolverTerm::Le(x, y) => {
-                if rule.kind == "cap" && rules_term_is(walk, x, 1, name) && rules_term_is(walk, y, 1, length) {
+                if (rule.kind == "cap" || rule.kind == "atmost") && rules_term_is(walk, x, 1, name) && rules_term_is(walk, y, 1, length) {
                     return true
                 }
             },
@@ -1590,7 +1695,7 @@ fn rules_field_holds(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref Bou
         }
     }
     let a = walk.arena.var(name)
-    let goal = if rule.kind == "cap" {
+    let goal = if rule.kind == "cap" || rule.kind == "atmost" {
         let b = walk.arena.var(length)
         walk.arena.le(a, b)
     } else {
@@ -2111,7 +2216,7 @@ fn rules_at_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref String?, me
                     walk.rule_failed.insert(at)
                     continue
                 }
-                if rules_writes(changed, a) {
+                if rules_writes(changed, a) || (rule.kind == "atmost" && rules_writes(changed, b)) {
                     walk.rule_failed.insert(at)
                 }
                 continue

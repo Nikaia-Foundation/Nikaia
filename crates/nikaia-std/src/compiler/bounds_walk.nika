@@ -9225,7 +9225,7 @@ fn bounding_children(
 			// A list given by a name keeps the `length` rules only where
 			// the names are as long (#1652).
 			if walk.checking && node_key(expr) != walk.rule_built_literal {
-				rules_literal_holds(walk, words.resolve(name), fields, facts, words, ask)
+				rules_literal_holds(walk, words.resolve(name), fields, facts, context, program, words, ask)
 			}
 		},
 		Expr::With { base, fields, .. } => {

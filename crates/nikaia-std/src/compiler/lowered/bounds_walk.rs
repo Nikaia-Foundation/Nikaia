@@ -5250,7 +5250,7 @@ pub(crate) fn bounding_children(walk: &mut BoundsWalk, expr: &Expr, facts: &mut 
             let name = *name;
             for field in fields.iter() { bounding_maybe_expr(walk, (field.value).as_ref(), facts, context, program, words, &ask); }
             bounding_field_inits(walk, fields, &facts, context, program, words, &ask);
-            if walk.checking && node_key(expr) != walk.rule_built_literal { rules_literal_holds(walk, words.resolve(name), fields, &facts, words, &ask); }
+            if walk.checking && node_key(expr) != walk.rule_built_literal { rules_literal_holds(walk, words.resolve(name), fields, &facts, context, program, words, &ask); }
         },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);

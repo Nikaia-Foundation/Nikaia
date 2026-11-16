@@ -25,8 +25,19 @@ pub fn blocked_operation(op: &BinaryOp, lhs: &Expr, rhs: &Expr, args: &[FnArg], 
     if *op == BinaryOp::Mul && !is_int_literal(lhs) && !is_int_literal(rhs) { return String::from("a product of two unknowns (#386)"); }
     let mut names = names_read(lhs, words);
     for name in names_read(rhs, words) { if !nikaia_std::list::contains(&names, &name) { names.push(name); } }
-    from_binding(&names, args, body, words, source, callers)
+    let found = from_binding(&names, args, body, words, source, callers);
+    if found == unbounded() && a_field_path(lhs) && (is_int_literal(rhs) || a_field_path(rhs)) { return counter_field(); }
+    found
 }
+
+pub(crate) fn a_field_path(expr: &Expr) -> bool {
+    match expr {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); a_path(base) },
+        _ => false,
+    }
+}
+
+pub(crate) fn counter_field() -> String { String::from("a field no rule of its type bounds: the walk finds `a <= b` only of two private fields a method compares (ADR-369 D4, #1681), and a count of work done has none (#1531)") }
 
 pub(crate) fn names_read(expr: &Expr, words: &winnow_grammar::InternerContext) -> Vec<String> {
     let mut names: Vec<String> = vec![];
