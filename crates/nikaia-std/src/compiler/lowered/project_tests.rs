@@ -493,7 +493,7 @@ pub fn project_tests_time_limit() -> i64 {
 pub fn project_tests_build_time_limit() -> i64 {
     let given = text::parse_i64(nikaia_std::index::or(env::var("NIKAIA_TEST_BUILD_TIME_LIMIT"), || "".into()).trim());
     match given {
-        None => 10 * project_tests_time_limit(),
+        None => project_tests_time_limit().saturating_mul(10),
         Some(seconds) => match seconds > 0 {
             true => seconds,
             false => 0,

@@ -2323,9 +2323,9 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
                     if left || from_outside(rhs, scope.tainted, words, library, walk.state, holes_of) {
                         let goal = prover_overflow_goal(walk, expr, op_at.start as i64, scope, words)
                         if left {
-                            prover_outside_operation(walk, expr, lhs, goal, span, scope, words, library, holes_of, ask, written_of)
+                            prover_outside_operation(walk, expr, lhs, goal, op_at.start as i64, span, scope, words, library, holes_of, ask, written_of)
                         } else {
-                            prover_outside_operation(walk, expr, rhs, goal, span, scope, words, library, holes_of, ask, written_of)
+                            prover_outside_operation(walk, expr, rhs, goal, op_at.start as i64, span, scope, words, library, holes_of, ask, written_of)
                         }
                     }
                 }
@@ -2342,7 +2342,7 @@ fn prover_unwritten_check(mut walk: ProverWalk, expr: ref Expr, span: Span, scop
             // **Data from outside reaches the divisor** (ADR-396 D7).
             if !walk.state.collecting && from_outside(rhs, scope.tainted, words, library, walk.state, holes_of) {
                 let goal = prover_division_goal(walk, lhs, rhs, op_at.start as i64, scope, words)
-                prover_outside_operation(walk, expr, rhs, goal, span, scope, words, library, holes_of, ask, written_of)
+                prover_outside_operation(walk, expr, rhs, goal, op_at.start as i64, span, scope, words, library, holes_of, ask, written_of)
             }
             let d = lin_term(rhs, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return
             if walk.arena.constant(d) != null {
@@ -2417,10 +2417,10 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
     let first = prover_outside_name(walk, goal, index, scope, words, written_of)
     let source = outside_source(index, scope.tainted, scope.sources, words, library, walk.state, holes_of)
     if goal != null && prover_proves_here(walk, goal ?? 0, scope, ask) {
-        prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, scope.guard_of(walk.arena, goal ?? 0), true, false, true)
+        prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, scope.guard_of(walk.arena, goal ?? 0), true, false, true, -1)
         return
     }
-    prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, null, false, false, goal != null)
+    prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, null, false, false, goal != null, -1)
     let mut notes: Vec[String] = [outside_note(first, source)]
     if goal != null {
         let found = model(walk.arena, scope.facts, goal ?? 0)
@@ -2448,7 +2448,7 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
 /// is proved, by the guard `guard` where one proves it; an `operation` (a
 /// `/`, `%`, `+`, `-` or `*`, D7) likewise, and whether its goal was
 /// `stated` at all.
-pub fn prover_outside_record(mut walk: ProverWalk, span: Span, written: String, name: ref String, source: ref String?, guard: (i64, String)?, proved: bool, operation: bool, stated: bool) {
+pub fn prover_outside_record(mut walk: ProverWalk, span: Span, written: String, name: ref String, source: ref String?, guard: (i64, String)?, proved: bool, operation: bool, stated: bool, site: i64) {
     let mut guard_at: i64 = -1
     let mut condition: String = ""
     match guard {
@@ -2459,7 +2459,7 @@ pub fn prover_outside_record(mut walk: ProverWalk, span: Span, written: String, 
         },
     }
     let at = span.start as i64
-    walk.outside.insert((at, written.clone()), OutsideIndex { at: at, written: written, name: name.clone(), source: source?.clone() ?? "", proved: proved, guard_at: guard_at, guard: condition, operation: operation, stated: stated })
+    walk.outside.insert((at, written.clone()), OutsideIndex { at: at, written: written, name: name.clone(), source: source?.clone() ?? "", proved: proved, guard_at: guard_at, guard: condition, operation: operation, stated: stated, site: site })
 }
 
 /// **An operation that data from outside reaches, recorded for `--bounds`**
@@ -2467,14 +2467,14 @@ pub fn prover_outside_record(mut walk: ProverWalk, span: Span, written: String, 
 /// type, proved here or not, with the guard that proves it; the name from
 /// outside is the one `reached` reads. Nothing is refused yet (D8 step 3):
 /// the check stays where it is either way.
-fn prover_outside_operation(mut walk: ProverWalk, expr: ref Expr, reached: ref Expr, goal: i64?, span: Span, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) {
+fn prover_outside_operation(mut walk: ProverWalk, expr: ref Expr, reached: ref Expr, goal: i64?, site: i64, span: Span, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) {
     let first = prover_outside_name(walk, goal, reached, scope, words, written_of)
     let source = outside_source(reached, scope.tainted, scope.sources, words, library, walk.state, holes_of)
     if goal != null && prover_proves_here(walk, goal ?? 0, scope, ask) {
-        prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, scope.guard_of(walk.arena, goal ?? 0), true, true, true)
+        prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, scope.guard_of(walk.arena, goal ?? 0), true, true, true, site)
         return
     }
-    prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, null, false, true, goal != null)
+    prover_outside_record(walk, span, f"`{written_of(expr)}`", first, source, null, false, true, goal != null, site)
 }
 
 /// **A division's goal on data from outside** (ADR-396 D7): `d != 0`, and on

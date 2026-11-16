@@ -184,7 +184,8 @@ pub fn bounds_report_checked(
 /// source, and the verdict - `proved by the guard on line 14
 /// (`!(0 <= m && m < 12)`)`, `refused NK1302`, or `checked (unproved-claims =
 /// warn)`; an operation not proved is `checked: not proved, an NK1303
-/// site`, since `NK1303` is not switched on yet (D8).
+/// site`, since `NK1303` is not switched on yet (D8), and one the bounds
+/// walk proved by ranges is `proved by the bounds walk's ranges`.
 fn bounds_report_outside(facts: ref BoundsReportFacts, source: ref String) -> Vec[String] {
 	let mut rows: Vec[String] = []
 	for (_, found) in facts.outside {
@@ -193,7 +194,12 @@ fn bounds_report_outside(facts: ref BoundsReportFacts, source: ref String) -> Ve
 			from = f"from `{found.source}`"
 		}
 		let mut verdict = "refused NK1302"
-		if found.operation && !found.proved {
+		if found.operation && !found.proved && found.site >= 0 && facts.proven_arithmetic.contains(found.site) {
+			// **The bounds walk proved it** (ADR-395 D2): by ranges, where
+			// the prover states no goal or leaves it open - an `i64`'s
+			// `n + 1` after `if n > 1000 { return }`.
+			verdict = "proved by the bounds walk's ranges"
+		} else if found.operation && !found.proved {
 			// **Not refused yet** (ADR-396 D7, D8 step 3): the site
 			// `NK1303` will refuse, and whether the walk stated its goal.
 			verdict = "checked: not proved, an NK1303 site (ADR-396 D8)"
