@@ -100,6 +100,22 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "error|warn")]
     pub unproved_claims: Option<String>,
 
+    /// What data from outside the program at a raw sink is, unproved and not
+    /// allowed (ADR-raw-sinks-1 D3): `error`, the default, refuses the
+    /// program; `warn` builds it and checks the data where the call is
+    /// reached.
+    ///
+    /// Overrides `nikaia.toml`'s `[build] raw-sinks`.
+    #[arg(long, global = true, value_name = "error|warn")]
+    pub raw_sinks: Option<String>,
+
+    /// Allow one raw sink for this build, as `[allow]` does
+    /// (ADR-raw-sinks-1 D4, D5): `untrusted-shell`, `untrusted-sql`,
+    /// `untrusted-markup` or `untrusted-paths-anywhere`, or `PACKAGE:KEY` for a
+    /// dependency's. May be given more than once.
+    #[arg(long, global = true, value_name = "KEY")]
+    pub allow: Vec<String>,
+
     /// Verify the Borrow Contract Ledger instead of updating it (Part III,
     /// 13.5).
     ///
@@ -807,6 +823,9 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
         args.refuted_claims.as_deref(),
         args.unproved_claims.as_deref(),
     )?;
+    project
+        .settings
+        .sinks(args.raw_sinks.as_deref(), &args.allow)?;
     drive(args, &project, subcommand, &program_args)
 }
 
@@ -819,7 +838,8 @@ fn command_line_settings(args: &Cli, settings: &mut Settings) -> Result<()> {
     settings.refutations(
         args.refuted_claims.as_deref(),
         args.unproved_claims.as_deref(),
-    )
+    )?;
+    settings.sinks(args.raw_sinks.as_deref(), &args.allow)
 }
 
 fn drive(args: &Cli, project: &Project, subcommand: &str, program_args: &[String]) -> Result<i32> {
@@ -869,6 +889,9 @@ fn test_command(
         args.refuted_claims.as_deref(),
         args.unproved_claims.as_deref(),
     )?;
+    project
+        .settings
+        .sinks(args.raw_sinks.as_deref(), &args.allow)?;
     let filters = filters.to_vec();
     let wanted = |name: &String| project_tests::project_tests_wanted(name, &filters);
     let mut tests =
@@ -964,6 +987,9 @@ impl TestHost<'_> {
             args.refuted_claims.as_deref(),
             args.unproved_claims.as_deref(),
         )?;
+        built
+            .settings
+            .sinks(args.raw_sinks.as_deref(), &args.allow)?;
         built.drive_to(
             "build",
             &[],
@@ -1048,6 +1074,7 @@ fn single_file(args: &Cli, input: &std::path::Path, verb: Verb<'_>) -> Result<()
         args.refuted_claims.as_deref(),
         args.unproved_claims.as_deref(),
     )?;
+    settings.sinks(args.raw_sinks.as_deref(), &args.allow)?;
     if let Some(missing) = settings.build.target.unbuildable() {
         refuse!(
             "cannot build for `{}` yet: {missing}",

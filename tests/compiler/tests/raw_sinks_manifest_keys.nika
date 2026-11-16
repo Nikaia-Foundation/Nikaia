@@ -1,0 +1,42 @@
+// `[allow]` and `[allow.packages.NAME]` take the four raw-sink keys, `true`
+// or `false`; `[build] raw-sinks` and `--raw-sinks` take `error` or `warn`,
+// and `--allow` a key alone or after a package's name (ADR-raw-sinks-1 D3-D5,
+// #1253). A mistyped key is refused naming the keys there are, as a `[build]`
+// typo is, and a manifest that says them right builds.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn build(nikaia: String, manifest: String, flags: Vec[String]) throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n{manifest}")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() throws { println(\"hi\") }\n")
+    let mut args: Vec[String] = ["run"]
+    for flag in flags {
+        args.push(flag.clone())
+    }
+    let out = process::run(nikaia.clone(), args; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"exit {out.code}: {out.stdout.trim()}")
+    if !out.ok {
+        println(out.stderr.trim().replace(tmp, "TMP"))
+    }
+    process::run("rm", ["-rf", tmp])
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    build(nikaia, "[allow]\nuntrusted-shel = true\n", [])
+    build(nikaia, "[allow.packages.thumbs]\nuntrusted-sq = true\n", [])
+    build(nikaia, "[allow]\nuntrusted-shell = \"yes\"\n", [])
+    build(nikaia, "[allow.packages]\nthumbs = true\n", [])
+    build(nikaia, "[build]\nraw-sinks = \"maybe\"\n", [])
+    build(nikaia, "", ["--raw-sinks=maybe"])
+    build(nikaia, "", ["--allow=thumbs:untrusted-shel"])
+    build(nikaia, "[build]\nraw-sinks = \"warn\"\n\n[allow]\nuntrusted-shell = true\nuntrusted-sql = false\n\n[allow.packages.thumbs]\nuntrusted-paths-anywhere = true\n", ["--allow=untrusted-markup", "--allow=thumbs:untrusted-shell", "--raw-sinks=error"])
+}
