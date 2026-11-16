@@ -137,6 +137,15 @@ it, like the checks in `docs/supervisor.md`.
   (#1752: #1554 put seven claims in one point, among them a closure
   capture `block.rs` keeps on purpose and a thread-local read per
   allocation).
+  A census is no defect: a count of sites sorted by kind (the checked
+  sites of a `--bounds` run, grouped by shape) names no program that
+  fails and no expected output. Each group is checked against the gate
+  that leaves it (the reason its `--bounds` row prints) first; a group
+  some decision leaves on purpose is left out, and only a group none
+  explains is filed, alone, with one site's probe and the result it
+  should give (#1892: #1867's `Found:` sorted unbounded sites, every
+  group was ADR-391 D1 or the `most_widened` budget, and its run closed
+  it as by design).
   A builder's report gives each defect its own `Found:` line for this.
   Each shape the issue names as failing (a `for` and a `while` form) is
   run on the binary of the day; a shape that already works is named as

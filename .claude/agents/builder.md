@@ -91,7 +91,13 @@ You build one small slice of an issue in the Nikaia repository and end.
   line, which makes the driver file it as a `decision` issue, not `ready`
   (docs/issues.md I6, #1745); a second defect is a second `Found:` line, and a
   behaviour some function or ADR does on purpose is no Found (#1677: one line
-  merged two claims without a probe, and the second was by design). Each
+  merged two claims without a probe, and the second was by design); a
+  count of sites sorted by kind (the checked sites of a `--bounds` run,
+  grouped) is no Found either: each group's gate (the reason its row
+  prints) is read first, a group that gate leaves on purpose is left out,
+  and only a group no decision explains becomes its own line with one
+  site's probe (#1892: #1867's Found sorted unbounded sites, every group
+  was ADR-391 D1 or `most_widened`, and a run closed it). Each
   shape the line names (a `for` and a `while` form) was run today and fails,
   on a binary built from HEAD (your run's own build, not `$S/old/nikaia`,
   which may predate a fix: #1788 was filed from a probe a fix under #1754
