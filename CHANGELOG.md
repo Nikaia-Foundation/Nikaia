@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1401] — 2026-11-16
+
+**Builders' changes (#1818, #1819)**
+- The driver files an improvement issue only for new points: deviations stay in the report, a broke-rule answer becomes a comment on the run's issue, a point the run settled is dropped, and a point an improvement issue already has is added there as a comment.
+- The driver no longer queues an issue that waits for an open one (a `Needs #N`-style line, or a last run blocked on an open `#N`): it prints `SKIPPED #M waits for #N` and relabels it `blocked`; builders end a blocked run within their first turns.
+
 ## [0.0.1400] — 2026-11-16
 
 **Builders' changes (#1732, #1744, #1745, #1753, #1760, #1773, #1774, #1775, #1784, #1792, #1793, #1794, #1796, #1801, #1802)**
