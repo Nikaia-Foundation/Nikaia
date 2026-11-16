@@ -1,0 +1,7 @@
+bounds in tests/outside_data_an_i64_operation_the_ranges_prove_is_proved.nika: 0 indexes, 0 proved; 3 operations, 3 proved
+    12  n + 1      proved
+    13  n * 2 - 3  proved
+    13  n * 2      proved
+  outside  12  `n + 1`, `n` from `io::read_to_string`: proved by the bounds walk's ranges
+  outside  13  `n * 2 - 3`, `n * 2` from `io::read_to_string`: proved by the bounds walk's ranges
+  outside  13  `n * 2`, `n` from `io::read_to_string`: proved by the bounds walk's ranges

@@ -477,7 +477,7 @@ impl ProverState {
         let mut record = OutsideIndex { at, written: nikaia_std::block::Text::from(written.to_string()), name: nikaia_std::block::Text::from(first.to_string()), source: nikaia_std::index::or(match source.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || "".into()), proved: true, guard_at: -1, guard: String::from(""), operation: !check.index, stated: true };
+        }, || "".into()), proved: true, guard_at: -1, guard: String::from(""), operation: !check.index, stated: true, site: -1 };
         if is_proved(&ask(&arena, &scope.facts, goal)) || scope.history_reads(&arena, goal) && is_proved(&ask(&arena, &scope.with_history(), goal)) {
             match scope.guard_of(&arena, goal) {
                 None => { },
