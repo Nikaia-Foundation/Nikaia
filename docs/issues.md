@@ -350,6 +350,13 @@ it, like the checks in `docs/supervisor.md`.
   Never a Rust test file or a `#[test]` (CLAUDE.md); a builder reads one an
   older issue still names as that program, and does not report it (#1671).
   The order is the order to build in; an item resting on another says so.
+  Items in two passes that each take a run of their own (the prover's walk
+  and the bounds walk, each with its own candidates, joins and tests) are
+  two issues, the second `After #N` the first, never two items of one: a
+  run finishes the first, reports `partial`, and the half left waits in a
+  `Needs:` prose line the driver files as an improvement (#1897: #1848's
+  bounds-walk item, an if-join and past-loop facts, was left after the
+  prover item took the whole run).
   An item settles each choice that changes what its result does, or says
   the builder chooses (#1733: #1717 left open whether a merge with no local
   commits fast-forwards, and a merge commit alone would have made the suite
