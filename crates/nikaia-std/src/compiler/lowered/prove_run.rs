@@ -78,7 +78,7 @@ pub fn prove_rounds(program: &Program, words: &winnow_grammar::InternerContext, 
         record(&walked.walk.state.loops_used);
         counted(&walked.walk.state);
         round += 1;
-        let wanted: Vec<String> = walked.walk.state.wanted.iter().filter(|&call| { !pinned.contains_key(call) && !not_run.contains_key(call) && !stopped.contains_key(call) }).map(|call| { nikaia_std::block::Text::from(call.to_string()) }).collect::<Vec<_>>();
+        let wanted: Vec<String> = walked.walk.state.wanted.iter().filter(|&call| { !pinned.contains_key(nikaia_std::index::as_text(&call)) && !not_run.contains_key(nikaia_std::index::as_text(&call)) && !stopped.contains_key(nikaia_std::index::as_text(&call)) }).map(|call| { nikaia_std::block::Text::from(call.to_string()) }).collect::<Vec<_>>();
         if wanted.is_empty() || round > PROVE_RUN_ROUNDS || run.is_none() { return walked; }
         for call in wanted.iter() {
             let site = match walked.walk.state.call_sites.get(call) { Some(__nikaia_value) => __nikaia_value, None => continue };

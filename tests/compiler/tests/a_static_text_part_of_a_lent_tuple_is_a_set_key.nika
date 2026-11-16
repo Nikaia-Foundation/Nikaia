@@ -1,0 +1,21 @@
+use std::collections
+
+/// A text part of a tuple a walk lends, whose result only literals reach, is
+/// `&&str` below: a set or a map keyed by text looks it up as the `str` it
+/// holds. Before the fix Rust refused `contains` (`Text: Borrow<&str>`, #1831).
+fn official() -> Vec[(String, String)] {
+    return [("db", "0.1.0"), ("json", "0.1.0")]
+}
+
+fn main() throws {
+    let mut used: collections::BTreeSet[String] = collections::BTreeSet()
+    used.insert(f"d{"b"}")
+    let mut versions: collections::HashMap[String, i64] = collections::HashMap()
+    versions.insert(f"js{"on"}", 2)
+    for (name, version) in official().iter() {
+        if used.contains(name) {
+            println(f"{name} {version}")
+        }
+        println(versions.get(name) ?? 0)
+    }
+}

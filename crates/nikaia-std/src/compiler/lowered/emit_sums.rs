@@ -47,7 +47,7 @@ impl EmitState {
     pub fn error_sums(&self, world: &EmitWorld<'_, '_, '_, '_>) -> collections::BTreeMap<Vec<String>, String> {
         let mut out: collections::BTreeMap<Vec<String>, String> = collections::BTreeMap::new();
         for key in self.own_contracts.functions.keys() {
-            let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let contract = match self.own_contracts.functions.get(nikaia_std::index::as_text(&key)) { Some(__nikaia_value) => __nikaia_value, None => continue };
             if contract.fails_with.len() < 2 { continue; }
             let mut all_named = true;
             for member in contract.fails_with.iter() { if self.name_of_error(world, member) == 0 { all_named = false; } }

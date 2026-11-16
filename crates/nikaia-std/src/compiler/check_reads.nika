@@ -380,6 +380,14 @@ impl CheckState {
         // **A name that copied a value the ledger copies** out of a place
         // (`Symbol`) holds the value, not a view, below: it is lent with `&`.
         let copied = (self.a_lent_let(world, given) || self.a_lent_name(world, given)) && a_ledger_copies(unviewed_type(ty), [world.library])
+        // **A text part of a tuple a walk lends is a reference already**
+        // (#688, #1190), `&String` or `&&str` below even where its type is a
+        // view: a map or a set keyed by text looks it up as the `str` it
+        // holds, where passing it as it is would be `&&str` (#1831).
+        if !a_string && names_text(ty) && check_reads_keyed_by_text(on) && check_core_ops_lent_text_item(self, world, given) {
+            self.facts.map_keys.insert((id_of(given) as i64, false), FactKeyForm::Viewed)
+            return
+        }
         // A cut of a `Bytes` is a `&[u8]` below already (#1345).
         if (ty.is_a_view() && !copied) || a_string || self.facts.bytes_cuts.contains(id_of(given) as i64) {
             return

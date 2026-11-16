@@ -173,7 +173,7 @@ impl EmitState {
         let suffix = format!("::{}", method);
         for key in self.pausing_reach.keys() {
             if !key.ends_with(AsRef::<str>::as_ref(&suffix)) { continue; }
-            let seen = match self.pausing_reach.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let seen = match self.pausing_reach.get(nikaia_std::index::as_text(&key)) { Some(__nikaia_value) => __nikaia_value, None => continue };
             if seen.contains(caller) { return true; }
         }
         false

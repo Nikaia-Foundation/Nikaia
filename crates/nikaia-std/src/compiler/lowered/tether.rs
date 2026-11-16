@@ -272,7 +272,7 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
                 continue;
             }
             #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            let found = handed.get(callee); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+            let found = handed.get(nikaia_std::index::as_text(&callee)); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
             if found.is_some() {
                 let list = match found { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
                 for one in list.iter() { names.push(nikaia_std::block::Text::from(one.to_string())); }

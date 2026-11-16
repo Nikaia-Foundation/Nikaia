@@ -4,7 +4,7 @@
 pub(crate) fn reach_pausing_keys(contracts: &Ledger) -> collections::BTreeSet<String> {
     let mut pausing: collections::BTreeSet<String> = collections::BTreeSet::new();
     for key in contracts.functions.keys() {
-        let contract = match contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let contract = match contracts.functions.get(nikaia_std::index::as_text(&key)) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if !contract.sync_claim.is_sync() { pausing.insert(nikaia_std::block::Text::from(key.to_string())); }
     }
     pausing
@@ -21,7 +21,7 @@ pub fn reach_pausing_index(contracts: &Ledger) -> ReachIndex { reach_index_of(re
 pub fn reach_running_index(contracts: &Ledger) -> ReachIndex {
     let mut running: collections::BTreeSet<String> = collections::BTreeSet::new();
     for name in contracts.functions.keys() {
-        let contract = match contracts.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let contract = match contracts.functions.get(nikaia_std::index::as_text(&name)) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if reach_runs_code(contract) { running.insert(nikaia_std::block::Text::from(name.to_string())); }
     }
     reach_index_of(running)
@@ -87,7 +87,7 @@ pub fn pausing_reach(graph: &collections::BTreeMap<String, collections::BTreeSet
     }
     let mut kept: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for key in reaches.keys() {
-        if !pausing.contains(key) { continue; }
+        if !pausing.contains(nikaia_std::index::as_text(&key)) { continue; }
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         for reached in reach_set_for(&reaches, key) { if pausing.contains(&reached) { seen.insert(reached); } }
         kept.insert(nikaia_std::block::Text::from(key.to_string()), seen);

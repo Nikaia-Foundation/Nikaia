@@ -27,7 +27,7 @@ pub(crate) fn emit_type_contract(own: &Ledger, library: &Ledger, owner: &str) ->
     let suffix = format!("::{}", owner);
     for key in library.types.keys() {
         if AsRef::<str>::as_ref(&(key)) == AsRef::<str>::as_ref(&(owner)) || key.ends_with(AsRef::<str>::as_ref(&suffix)) {
-            let contract = match library.types.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let contract = match library.types.get(nikaia_std::index::as_text(&key)) { Some(__nikaia_value) => __nikaia_value, None => continue };
             return Some(contract.clone());
         }
     }

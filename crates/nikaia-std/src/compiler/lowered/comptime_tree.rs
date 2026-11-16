@@ -638,7 +638,7 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
     let gone = comptime_readers_dropped(units.len() as i64, absent.copy_owned(), &|at, gone| { host.drop_readers(*nikaia_std::index::get(&units, nikaia_std::index::at(at)), gone) });
     let left_out: collections::BTreeSet<String> = gone.difference(&absent).map(|s| { nikaia_std::block::Text::from(s.to_string()) }).collect();
     let named = host.value_fn_names(*nikaia_std::index::get(&units, nikaia_std::index::at(here)));
-    if named.iter().any(|name| { left_out.contains(name) || absent.contains(name) && known(name).is_none() }) {
+    if named.iter().any(|name| { left_out.contains(nikaia_std::index::as_text(&name)) || absent.contains(nikaia_std::index::as_text(&name)) && known(name).is_none() }) {
         let ahead = comptime_worked_out_ahead(host, bound, &absent, &known, &typed);
         if ahead.keys().all(|name| { known(name).is_some() }) { return not_here("It reads a `comptime` that can't be computed before it: one that reads it in turn"); }
         let known = |name: &str| {

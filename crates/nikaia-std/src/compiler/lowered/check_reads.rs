@@ -251,6 +251,10 @@ impl CheckState {
             return;
         }
         let copied = (self.a_lent_let(world, &given) || self.a_lent_name(world, &given)) && a_ledger_copies(&unviewed_type(&ty), &vec![world.library]);
+        if !a_string && names_text(&ty) && check_reads_keyed_by_text(on) && check_core_ops_lent_text_item(self, world, &given) {
+            self.facts.map_keys.insert((id_of(&given) as i64, false), FactKeyForm::Viewed);
+            return;
+        }
         if ty.is_a_view() && !copied || a_string || self.facts.bytes_cuts.contains(&(id_of(&given) as i64)) { return; }
         if moves(&ty) && !copied && (self.a_lent_name(world, &given) || self.a_lent_let(world, &given) || check_reads_got_past_a_jump(self, world, &given)) { return; }
         let mut a_number = matches!(given, Expr::LitInt { .. } | Expr::LitFloat(_, _));

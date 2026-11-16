@@ -1325,7 +1325,7 @@ pub(crate) fn bounding_relatives(walk: &mut BoundsWalk, t: i64, side: i64, bound
             at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
             let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
             walk.arena.variables(*unsafe { nikaia_std::proven::read(&facts.facts, (at) as usize) }, &mut read);
-            let shares = read.iter().any(|name| { own.contains(name) });
+            let shares = read.iter().any(|name| { own.contains(nikaia_std::index::as_text(&name)) });
             if shares != near { continue; }
             for y in read.iter() {
                 if own.contains(y) || tried.contains(y) || (tried.len() as i64) >= most_relatives() { continue; }
@@ -2001,7 +2001,7 @@ pub(crate) fn bounding_derived_call(walk: &mut BoundsWalk, expr: &Expr, name: &s
             let left = match bounding_derived_side(walk, &callee.params, &claim.left, false, claim.each, args, on, facts, &mut given, &mut left_reads, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let right = if claim.fixed.is_some() { walk.arena.int(nikaia_std::index::or(claim.fixed, || 0)) } else { match bounding_derived_side(walk, &callee.params, &claim.right, claim.length, claim.each, args, on, facts, &mut given, &mut right_reads, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue } };
             let right = if claim.length { bounding_scaled(walk, &claim, right) } else { right };
-            if left_reads.iter().any(|name| { right_reads.contains(name) }) { continue; }
+            if left_reads.iter().any(|name| { right_reads.contains(nikaia_std::index::as_text(&name)) }) { continue; }
             let side = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
             let goal = bounding_each_guarded(walk, side);
             if given.is_empty() { if bounding_proves(&walk, facts, goal, ask) { proved.insert(k); } } else {
