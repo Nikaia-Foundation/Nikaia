@@ -121,8 +121,8 @@ pub fn derived_of(
 	let mut defined: collections::BTreeMap[String, i64] = collections::BTreeMap()
 	for item in program.items {
 		match item.node {
-			Item::Fn { name, config, body, .. } => {
-				called.push(derived_body(config, body, words, everywhere))
+			Item::Fn { name, args, config, body, .. } => {
+				called.push(derived_body(args, config, body, words, everywhere))
 				let named = name ?? continue
 				let text = words.resolve(named).clone()
 				defined.insert(text.clone(), (defined[text] ?? 0) + 1)
@@ -130,8 +130,8 @@ pub fn derived_of(
 			Item::Impl { methods, .. } => {
 				for method in methods {
 					match method.node {
-						Item::Fn { name, config, body, .. } => {
-							called.push(derived_body(config, body, words, everywhere))
+						Item::Fn { name, args, config, body, .. } => {
+							called.push(derived_body(args, config, body, words, everywhere))
 							let named = name ?? continue
 							let text = words.resolve(named).clone()
 							defined.insert(text.clone(), (defined[text] ?? 0) + 1)
@@ -243,6 +243,7 @@ pub fn derived_key(args: ref Vec[FnArg], body: ref Block) -> i64? {
 /// One body's calls, kept in `scan` with every other name it meets; the
 /// names of the functions it calls.
 fn derived_body(
+	args: ref Vec[FnArg],
 	config: ref Vec[ConfigParam],
 	body: ref Block,
 	words: ref winnow_grammar::InternerContext,
@@ -259,7 +260,7 @@ fn derived_body(
 		scan.values.insert(name.clone())
 	}
 	let mut own = derived_scan()
-	derived_block(body, words, own)
+	derived_bound_block(body, derived_arg_names(args), words, own)
 	let mut names: collections::BTreeSet[String] = collections::BTreeSet()
 	for (name, sites) in own.calls {
 		names.insert(name.clone())
@@ -964,11 +965,36 @@ fn derived_block(
 	words: ref winnow_grammar::InternerContext,
 	mut scan: DerivedScan,
 ) {
-	scan.locals.push(collections::BTreeSet())
+	derived_bound_block(block, [], words, scan)
+}
+
+/// **`block` with `bound` its own locals from the start** (#1776): a `for`'s
+/// bindings, a lambda's or a function's parameters. A read of one is the
+/// local, not a function of that name used as a value, as with a `let`.
+fn derived_bound_block(
+	block: ref Block,
+	bound: ref Vec[winnow_grammar::Symbol],
+	words: ref winnow_grammar::InternerContext,
+	mut scan: DerivedScan,
+) {
+	let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+	for name in bound {
+		names.insert(words.resolve(name).clone())
+	}
+	scan.locals.push(names)
 	for stmt in block.stmts {
 		derived_statement(stmt.node, stmt.span.start as i64, words, scan)
 	}
 	scan.locals.pop()
+}
+
+/// The names `args` bind, for [`derived_bound_block`].
+fn derived_arg_names(args: ref Vec[FnArg]) -> Vec[winnow_grammar::Symbol] {
+	let mut names: Vec[winnow_grammar::Symbol] = []
+	for arg in args {
+		names.push(arg.name)
+	}
+	return names
 }
 
 /// Whether `name` is a `let` of a block the scan stands in.
@@ -1005,9 +1031,9 @@ fn derived_statement(
 			derived_expr(target, at, words, scan)
 			derived_expr(value, at, words, scan)
 		},
-		Stmt::For { iter, body, .. } => {
+		Stmt::For { bindings, iter, body, .. } => {
 			derived_expr(iter, at, words, scan)
-			derived_block(body, words, scan)
+			derived_bound_block(body, bindings, words, scan)
 		},
 		Stmt::While { cond, body } => {
 			derived_expr(cond, at, words, scan)
@@ -1179,7 +1205,7 @@ fn derived_expr(
 		Expr::Overlap(block, _) => derived_block(block, words, scan),
 		// A lambda's calls count as calls the walk never answers: the
 		// function they call derives nothing.
-		Expr::Closure { body, .. } => derived_block(body, words, scan),
+		Expr::Closure { params, body, .. } => derived_bound_block(body, params, words, scan),
 		Expr::Select(arms, _) => {
 			for arm in arms {
 				derived_symbol(arm.binding, words, scan)
@@ -1242,11 +1268,11 @@ fn derived_item_names(
 ) {
 	let mut scan = derived_scan()
 	match item {
-		Item::Fn { config, body, .. } => {
+		Item::Fn { args, config, body, .. } => {
 			for param in config {
 				derived_expr(param.default, 0, words, scan)
 			}
-			derived_block(body, words, scan)
+			derived_bound_block(body, derived_arg_names(args), words, scan)
 		},
 		Item::Impl { methods, .. } => {
 			for method in methods {

@@ -88,12 +88,12 @@ impl FmtLexer {
             return Err(nikaia_std::error::throwing(Refused::Because(format!("a comment at character {} that the parser did not see", at)), &"scan"));
         }
         if c == '"' {
-            self.at += 1;
+            self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) };
             self.quoted()?;
             return Ok(FmtKind::Text);
         }
         if c == 'f' && d == '"' {
-            self.at += 2;
+            self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 2) };
             self.interpolated()?;
             return Ok(FmtKind::Text);
         }

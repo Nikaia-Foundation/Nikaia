@@ -59,9 +59,9 @@ pub fn derived_of(program: &Program, beside: &[&BoundsBeside], words: &winnow_gr
     let mut defined: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for item in program.items.iter() {
         match &item.node {
-            Item::Fn { name, config, body, .. } => {
+            Item::Fn { name, args, config, body, .. } => {
                 let name = *name;
-                called.push(derived_body(config, body, words, &mut everywhere));
+                called.push(derived_body(args, config, body, words, &mut everywhere));
                 let named = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let text = nikaia_std::block::Text::from(words.resolve(named).to_string());
                 defined.insert(nikaia_std::block::Text::from(text.to_string()), nikaia_std::index::or(*nikaia_std::index::get(&defined, &text), || 0) + 1);
@@ -69,9 +69,9 @@ pub fn derived_of(program: &Program, beside: &[&BoundsBeside], words: &winnow_gr
             Item::Impl { methods, .. } => {
                 for method in methods.iter() {
                     match &method.node {
-                        Item::Fn { name, config, body, .. } => {
+                        Item::Fn { name, args, config, body, .. } => {
                             let name = *name;
-                            called.push(derived_body(config, body, words, &mut everywhere));
+                            called.push(derived_body(args, config, body, words, &mut everywhere));
                             let named = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
                             let text = nikaia_std::block::Text::from(words.resolve(named).to_string());
                             defined.insert(nikaia_std::block::Text::from(text.to_string()), nikaia_std::index::or(*nikaia_std::index::get(&defined, &text), || 0) + 1);
@@ -136,13 +136,13 @@ pub fn derived_key(args: &[FnArg], body: &Block) -> Option<i64> {
     Some(nikaia_std::index::get(&body.stmts, 0).span.start as i64)
 }
 
-pub(crate) fn derived_body(config: &[ConfigParam], body: &Block, words: &winnow_grammar::InternerContext, scan: &mut DerivedScan) -> collections::BTreeSet<String> {
+pub(crate) fn derived_body(args: &[FnArg], config: &[ConfigParam], body: &Block, words: &winnow_grammar::InternerContext, scan: &mut DerivedScan) -> collections::BTreeSet<String> {
     let mut defaults = derived_scan();
     for param in config.iter() { derived_expr(&param.default, 0, words, &mut defaults); }
     for (name, _) in defaults.calls.iter() { scan.values.insert(nikaia_std::block::Text::from(name.to_string())); }
     for name in defaults.values.iter() { scan.values.insert(nikaia_std::block::Text::from(name.to_string())); }
     let mut own = derived_scan();
-    derived_block(body, words, &mut own);
+    derived_bound_block(body, &derived_arg_names(args), words, &mut own);
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (name, sites) in own.calls.iter() {
         names.insert(nikaia_std::block::Text::from(name.to_string()));
@@ -598,10 +598,23 @@ pub fn derived_callees(program: &Program, words: &winnow_grammar::InternerContex
     out
 }
 
-pub(crate) fn derived_block(block: &Block, words: &winnow_grammar::InternerContext, scan: &mut DerivedScan) {
-    scan.locals.push(collections::BTreeSet::new());
+pub(crate) fn derived_block(block: &Block, words: &winnow_grammar::InternerContext, scan: &mut DerivedScan) { derived_bound_block(block, &vec![], words, scan); }
+
+pub(crate) fn derived_bound_block(block: &Block, bound: &[winnow_grammar::Symbol], words: &winnow_grammar::InternerContext, scan: &mut DerivedScan) {
+    let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for name in bound.iter() {
+        let name = *name;
+        names.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
+    }
+    scan.locals.push(names);
     for stmt in block.stmts.iter() { derived_statement(&stmt.node, stmt.span.start as i64, words, scan); }
     scan.locals.pop();
+}
+
+pub(crate) fn derived_arg_names(args: &[FnArg]) -> Vec<winnow_grammar::Symbol> {
+    let mut names: Vec<winnow_grammar::Symbol> = vec![];
+    for arg in args.iter() { names.push(arg.name); }
+    names
 }
 
 pub(crate) fn derived_a_local(scan: &DerivedScan, name: &str) -> bool {
@@ -627,9 +640,9 @@ pub(crate) fn derived_statement(stmt: &Stmt, at: i64, words: &winnow_grammar::In
             derived_expr(target, at, words, scan);
             derived_expr(value, at, words, scan);
         },
-        Stmt::For { iter, body, .. } => {
+        Stmt::For { bindings, iter, body, .. } => {
             derived_expr(iter, at, words, scan);
-            derived_block(body, words, scan);
+            derived_bound_block(body, bindings, words, scan);
         },
         Stmt::While { cond, body } => {
             derived_expr(cond, at, words, scan);
@@ -762,7 +775,7 @@ pub(crate) fn derived_expr(expr: &Expr, at: i64, words: &winnow_grammar::Interne
         Expr::AsyncGroup(block, _, _, _, _) => { derived_block(block, words, scan); },
         Expr::Unsafe(block, _) => { derived_block(block, words, scan); },
         Expr::Overlap(block, _) => { derived_block(block, words, scan); },
-        Expr::Closure { body, .. } => { derived_block(body, words, scan); },
+        Expr::Closure { params, body, .. } => { derived_bound_block(body, params, words, scan); },
         Expr::Select(arms, _) => {
             for arm in arms.iter() {
                 derived_symbol(arm.binding, words, scan);
@@ -820,9 +833,9 @@ pub(crate) fn derived_expr(expr: &Expr, at: i64, words: &winnow_grammar::Interne
 pub(crate) fn derived_item_names(item: &Item, words: &winnow_grammar::InternerContext, out: &mut collections::BTreeSet<String>) {
     let mut scan = derived_scan();
     match item {
-        Item::Fn { config, body, .. } => {
+        Item::Fn { args, config, body, .. } => {
             for param in config.iter() { derived_expr(&param.default, 0, words, &mut scan); }
-            derived_block(body, words, &mut scan);
+            derived_bound_block(body, &derived_arg_names(args), words, &mut scan);
         },
         Item::Impl { methods, .. } => { for method in methods.iter() { derived_item_names(&method.node, words, out); } },
         Item::Struct { fields, rules, .. } => {
