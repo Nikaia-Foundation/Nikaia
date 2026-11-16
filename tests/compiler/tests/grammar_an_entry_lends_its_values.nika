@@ -1,0 +1,23 @@
+// An entry's values are lent as a rule's are (ADR-grammar-1 D6, #1560): the
+// caller's list is still its own after the parse, and text is handed as a
+// literal or as a view.
+
+struct D { h: String }
+
+grammar G {
+	rule WS = "" -> { }
+	entry rule top(ds: Vec[D]) -> i64 = "x" n:Named(ds, "b") -> { ds.len() + n }
+	rule Named(ds: Vec[D], name: String) -> i64 = "" -> { ds.iter().filter(fn(d) { d.h == name }).count() }
+}
+
+fn count(ds: Vec[D], name: String) -> i64 throws {
+	let n = G::top("x", ds) catch { return -1 }
+	return n + name.len()
+}
+
+fn main() throws {
+	let ds: Vec[D] = [D { h: "a" }, D { h: "b" }]
+	println(G::top("x", ds) catch { return })
+	println(ds.len())
+	println(count(ds, "abc"))
+}

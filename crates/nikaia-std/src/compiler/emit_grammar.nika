@@ -355,7 +355,9 @@ impl EmitState {
         for i in 0..<rule.args.len() {
             let value_ty = host.ty_named(walk, rule.args[i].ty)
             params.push_str(f", __wg_value{i}: {value_ty}")
-            handed.push_str(f"__wg_value{i}, ")
+            // A lent value is lent from the thread's own (ADR-grammar-1 D6).
+            let lent = if self.facts.lent_rule_values.contains(f"{name}::{rule_name}::{emit_text(world, rule.args[i].name)}") { "&" } else { "" }
+            handed.push_str(f"{lent}__wg_value{i}, ")
         }
         for j in 0..<rule.config.len() {
             let option_ty = host.ty_named(walk, rule.config[j].ty)
@@ -438,10 +440,21 @@ impl EmitState {
             names.insert(emit_text(world, rule.name))
         }
         walk.grammar_rules = names
+        // **A lent value is a view here** (ADR-grammar-1 D6): the rule takes
+        // a reference and a call hands one, so nothing is cloned per call.
+        // The facts name the grammar as written, not its copy over bytes.
+        let source = emit_text(world, def.name)
         let mut valued: collections::BTreeMap[String, GrammarRule] = collections::BTreeMap()
         for rule in def.rules {
             if rule.args.len() > 0 || rule.config.len() > 0 {
-                valued.insert(emit_text(world, rule.name), rule.clone())
+                let mut taken = rule.clone()
+                let rule_name = emit_text(world, rule.name)
+                for i in 0..<taken.args.len() {
+                    if self.facts.lent_rule_values.contains(f"{source}::{rule_name}::{emit_text(world, taken.args[i].name)}") {
+                        taken.args[i].ty.is_view = true
+                    }
+                }
+                valued.insert(rule_name.clone(), taken)
             }
         }
         walk.grammar_values = valued
@@ -588,8 +601,20 @@ impl EmitState {
         // **The values a rule takes** (ADR-grammar-1 D2), its options after
         // its parameters: the engine takes them by position.
         let mut values: Vec[String] = []
-        for arg in rule.args {
-            values.push(f"{emit_text(world, arg.name)}: {host.ty_named(walk, arg.ty)}")
+        let taken: GrammarRule = walk.grammar_values.get(emit_text(world, rule.name))?.clone() ?? rule.clone()
+        for arg in taken.args {
+            // **A lent value is a reference of the call's own lifetime**
+            // (ADR-grammar-1 D6): one the caller made for the call, `Two([])`,
+            // lives as long as the call does, not as long as the input.
+            let mut owned = arg.ty.clone()
+            owned.is_view = false
+            let mut written = host.ty_named(walk, owned)
+            if arg.ty.is_view && written == "String" {
+                written = "&str"
+            } else if arg.ty.is_view {
+                written = f"&{written}"
+            }
+            values.push(f"{emit_text(world, arg.name)}: {written}")
         }
         for option in rule.config {
             values.push(f"{emit_text(world, option.name)}: {host.ty_named(walk, option.ty)}")

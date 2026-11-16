@@ -218,7 +218,8 @@ impl EmitState {
         for i in 0..rule.args.len() as i64 {
             let value_ty = host.ty_named(walk, &unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.ty)?;
             params.push_str(&format!(", __wg_value{}: {}", i, value_ty));
-            handed.push_str(&format!("__wg_value{}, ", i));
+            let lent = if self.facts.lent_rule_values.contains(&format!("{}::{}::{}", name, rule_name, emit_text(world, unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.name))) { "&" } else { "" };
+            handed.push_str(&format!("{}__wg_value{}, ", lent, i));
         }
         for j in 0..rule.config.len() as i64 {
             let option_ty = host.ty_named(walk, &unsafe { nikaia_std::proven::read(&rule.config, (j) as usize) }.ty)?;
@@ -287,8 +288,16 @@ impl EmitState {
         let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
         for rule in def.rules.iter() { names.insert(emit_text(world, rule.name)); }
         walk.grammar_rules = names;
+        let source = emit_text(world, def.name);
         let mut valued: collections::BTreeMap<String, GrammarRule> = collections::BTreeMap::new();
-        for rule in def.rules.iter() { if !rule.args.is_empty() || !rule.config.is_empty() { valued.insert(emit_text(world, rule.name), rule.clone()); } }
+        for rule in def.rules.iter() {
+            if !rule.args.is_empty() || !rule.config.is_empty() {
+                let mut taken = rule.clone();
+                let rule_name = emit_text(world, rule.name);
+                for i in 0..taken.args.len() as i64 { if self.facts.lent_rule_values.contains(&format!("{}::{}::{}", source, rule_name, emit_text(world, unsafe { nikaia_std::proven::read(&taken.args, (i) as usize) }.name))) { (*unsafe { nikaia_std::proven::slot(&mut taken.args, (i) as usize) }).ty.is_view = true; } }
+                valued.insert(nikaia_std::block::Text::from(rule_name.to_string()), taken);
+            }
+        }
         walk.grammar_values = valued;
         walk.grammar_members = vec![];
         let mut lines = false;
@@ -387,8 +396,18 @@ impl EmitState {
             Some(text) => { label = format!(" # {}", rust_string(text)); },
             None => { },
         }
-        let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for arg in rule.args.iter() { values.push(format!("{}: {}", emit_text(world, arg.name), host.ty_named(walk, &arg.ty)?)); }
+        #[allow(unused_mut)] let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let taken: GrammarRule = nikaia_std::index::or(match walk.grammar_values.get(&emit_text(world, rule.name)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || rule.clone().into()); #[allow(unused_mut, clippy::redundant_locals)] let mut values = values;
+        for arg in taken.args.iter() {
+            let mut owned = arg.ty.clone();
+            owned.is_view = false;
+            let mut written = host.ty_named(walk, &owned)?;
+            if arg.ty.is_view && written == "String" { written = String::from("&str"); } else if arg.ty.is_view { written = format!("&{}", written); }
+            values.push(format!("{}: {}", emit_text(world, arg.name), written));
+        }
         for option in rule.config.iter() { values.push(format!("{}: {}", emit_text(world, option.name), host.ty_named(walk, &option.ty)?)); }
         let taken = if values.is_empty() { String::from("") } else { format!("({})", nikaia_std::block::Text::from(values.join(", "))) };
         let rule_name = if renamed.is_empty() { emit_text(world, rule.name) } else { nikaia_std::block::Text::from(renamed.to_string()) };

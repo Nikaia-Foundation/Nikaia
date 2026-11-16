@@ -1,4 +1,4 @@
-bounds in src/main.nika: 66 indexes, 66 proved; 101 operations, 77 proved
+bounds in src/main.nika: 66 indexes, 66 proved; 101 operations, 78 proved
   1421  depth_of(x) + 1                       justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
   1427  depth_of(e.key) + 1                   justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
   1427  depth_of(e.value) + 1                 justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
@@ -22,4 +22,3 @@ bounds in src/main.nika: 66 indexes, 66 proved; 101 operations, 77 proved
   3411  (…) + tag_length(n.tag)               justified: a count over the input, which its length bounds: a tag's length
   3431  length += …                           justified: a count over the input, which its length bounds: the length of a node's text
   3493  (width - 1) * 4                       justified: a width the callers write as a literal, 2 to 8 digits
-  3493  width - 1                             justified: a width the callers write as a literal, 2 to 8 digits

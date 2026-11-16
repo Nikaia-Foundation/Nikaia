@@ -4231,4 +4231,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "4bffb113a28b72292c8a1ac3b613766799103a29f24d9ec86aef0dbfaabb4515";
+pub const LOWERED_DIGEST: &str = "bc311a0b941f502cd48d244c70f3f239771b8e5a4d79ebcf7c6fa27b33c2fe7a";

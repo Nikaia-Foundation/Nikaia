@@ -1,0 +1,16 @@
+// A guard reads a label bound before it in its own repeated group
+// (ADR-grammar-1 D4, #1561): the scan of plain scalars in #1548.
+fn ok(x: scalar, flow: bool) -> bool sync {
+	return x != ':' && !(flow && x == ',')
+}
+
+grammar G {
+	rule WS = "" -> { }
+	entry rule top -> String =
+		s:text(Run(false)) -> { s }
+	rule Run(flow: bool) = (x:any if(ok(x, flow)))+ -> { }
+}
+
+fn main() throws {
+	println(G::top("abc") catch { return })
+}
