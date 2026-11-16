@@ -114,6 +114,13 @@ fn solver_program(repo: String) -> String throws {
 // `target/solver-rod/<key>/`, the key a hash of the program's text and of the
 // `nikaia` that builds it: a second run of the same program with the same
 // toolchain (the tests run it eight times) builds nothing.
+//
+// **One build per key at a time** (#1915): `solver_run` and `solver_fuzz`,
+// each at both settings, start cold on the same key, and every one of them
+// built the whole program (about a minute of one core each) beside the
+// others, which pushed `solver_run` past its 300 s on a loaded runner. The
+// build and the copy into the kept place run under a lock of the key's
+// directory; a run that waited finds the binary there and builds nothing.
 fn solver_build(repo: String, nikaia: String) -> String throws {
 	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
 	process::run("mkdir", ["-p", f"{tmp}/src"])
@@ -133,36 +140,52 @@ fn solver_build(repo: String, nikaia: String) -> String throws {
 			nikaia.clone(),
 		],
 	).stdout.trim().clone()
+	let bin = f"{tmp}/target/nikaia/bin/solver_rod"
+	if key == "" {
+		let built = process::run(nikaia, ["build"]; dir: tmp.clone())
+		if built.ok && fs::exists(bin.clone(), fs::Root::Anywhere) { return bin }
+		solver_build_failed(built.stderr, tmp)
+		return ""
+	}
 	let kept = f"{repo}/target/solver-rod/{key}/solver_rod"
-	if key != "" && fs::exists(kept.clone(), fs::Root::Anywhere) {
+	if fs::exists(kept.clone(), fs::Root::Anywhere) {
 		process::run("rm", ["-rf", tmp])
 		return kept
 	}
-	let built = process::run(nikaia, ["build"]; dir: tmp.clone())
-	let bin = f"{tmp}/target/nikaia/bin/solver_rod"
-	if !built.ok || !fs::exists(bin.clone(), fs::Root::Anywhere) {
-		println("the solver program did not build:")
-		for line in built.stderr.lines() {
-			if line.starts_with("error") || line.contains("-->") { println(line) }
-		}
-		process::run("rm", ["-rf", tmp])
+	process::run("mkdir", ["-p", f"{repo}/target/solver-rod/{key}"])
+	// Under the lock: built only where no run before this one kept it, then
+	// copied under a name of its own and renamed, so the kept place never
+	// holds half a binary.
+	let built = process::run(
+		"flock",
+		[
+			f"{repo}/target/solver-rod/{key}/lock",
+			"sh",
+			"-c",
+			"[ -e \"$1\" ] && exit 0; \"$2\" build || exit 1; [ -e \"$3\" ] || exit 1; cp \"$3\" \"$1.$$\" && mv -f \"$1.$$\" \"$1\"",
+			"sh",
+			kept.clone(),
+			nikaia,
+			bin,
+		];
+		dir: tmp.clone(),
+	)
+	if !built.ok || !fs::exists(kept.clone(), fs::Root::Anywhere) {
+		solver_build_failed(built.stderr, tmp)
 		return ""
 	}
-	if key == "" { return bin }
-	// Copied under a name of its own, then renamed: two runs building at once
-	// both leave a whole binary.
-	process::run(
-		"sh",
-		[
-			"-c",
-			"mkdir -p \"$(dirname \"$2\")\" && cp \"$1\" \"$2.$$\" && mv -f \"$2.$$\" \"$2\"",
-			"sh",
-			bin,
-			kept.clone(),
-		],
-	)
 	process::run("rm", ["-rf", tmp])
 	return kept
+}
+
+// Says why the program did not build, from the build's `stderr`, and removes
+// its directory `tmp`.
+fn solver_build_failed(stderr: String, tmp: String) throws {
+	println("the solver program did not build:")
+	for line in stderr.lines() {
+		if line.starts_with("error") || line.contains("-->") { println(line) }
+	}
+	process::run("rm", ["-rf", tmp])
 }
 
 // --- run ---
