@@ -453,6 +453,7 @@ pub(crate) fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
     let outer = check_core_lambda_enter(state);
     let walked = check_core_block(state, world, host, body);
     state.a_map_read_handed_back(world, &walked, body);
+    check_core_lambda_tail_handed_back(state, world, host, body);
     let tail = check_core_lambda_leave(state, (outer).as_ref(), &walked, body);
     let seen: Option<CheckHanded> = match state.handed_over.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -470,6 +471,18 @@ pub(crate) fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
         state.a_handler_that_does_more_than_the_type_allows(promised, &handed, span);
     }
     (tail, paused)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_lambda_tail_handed_back<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block) {
+    if body.stmts.is_empty() || a_body_never_ends(body) { return; }
+    let last = unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) };
+    let at = Span { start: last.span.start, end: last.span.end };
+    match &last.node {
+        Stmt::Expr(value) => { check_core_a_field_of_a_lent_place_handed_back(state, world, host, value, &at); },
+        _ => { },
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
