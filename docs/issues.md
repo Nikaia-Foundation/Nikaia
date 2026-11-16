@@ -229,6 +229,16 @@ it, like the checks in `docs/supervisor.md`.
   narrowed to what the items reach (#1782: #1688 promised its probe
   proved by an "ascending" rule alone; the probe also needed each element
   of `limits` capped by `len(trail)`, which no rule gives).
+  The trace names both sides of each site's goal: a sum or a product
+  needs an upper bound of every operand, which `0 <= x` facts never give,
+  and a difference a lower one; and each fact the issue proposes is
+  checked against the form that would say it: a ledger `ensures` reads
+  only the parameters and `result`, never `self` (`bm_ensured` in
+  `bounds_matched.nika`), and a function parameter is bounded only by a
+  precondition (ADR-269 D5). A fact no form can say is a gap (a
+  `decision`, I6), not an item (#1829: #1811 expected `size + length` and
+  `(buffer.len() - size) * 1000` proved from `0 <=` ensures and from
+  `size <= buffer.len()`, which no ensures can state).
   A site in a method of a type with field rules (ADR-306 D21, D28) has a
   probe reduced from the real code: the function and every `ref mut self`
   method of its type, with stub types, kept as the acceptance check; a
