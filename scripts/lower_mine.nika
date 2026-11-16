@@ -1,0 +1,113 @@
+// `lower-std` of HEAD plus only your own files, in one call (#1875).
+//
+//     nikaia run scripts/lower_mine.nika -- [--write] [--exe EXE] FILE...
+//
+// The tree's `lower-std` lowers every agent's `.nika`, and writes nothing
+// when any one is refused: another agent's half-written file then hides
+// what your change lowers to (#1762, #1846's run). This script extracts HEAD
+// into `target/lower-mine` (`git archive HEAD`), copies each FILE (your
+// changed sources, paths from the repository root) from the working tree
+// over it, and runs `EXE lower-std --sysroot target/lower-mine/crates`
+// (EXE default `target/fast/nikaia`; for the cycle's first run, the before
+// binary). It prints the refusals (at most 30 lines), then one line per
+// lowered file your change moves: `differs PATH` where the tree's copy is
+// not it, `same PATH` where it is. With `--write`, each differing lowered
+// file is copied into the tree, except `lowered.rs`, which holds every
+// agent's `include!` lines: stage your hunks of it under `Partial:`
+// (`commit.nika` writes the digest itself). Exits 1 on a refusal.
+//
+// The copy's file names stay the same from run to run, so the `lower-std`
+// cache serves the files you did not change.
+
+use std::cli
+use std::fs
+use std::process
+
+fn mine_usage() throws {
+	println("usage: nikaia run scripts/lower_mine.nika -- [--write] [--exe EXE] FILE...")
+	process::exit(2)
+}
+
+fn mine_sh(command: String) -> process::Output throws {
+	return process::run("sh", ["-c", command])
+}
+
+// `Lowered to target/lower-mine/crates/X` -> `crates/X`, or "" for any other line.
+fn mine_lowered(line: String, copy: String) -> String {
+	let rest = line.strip_prefix("Lowered to ") ?? ""
+	if rest == "" { return "" }
+	let path = rest.trim()
+	let prefix = copy + "/"
+	return (path.strip_prefix(prefix) ?? "").to_string()
+}
+
+fn main() throws {
+	let mut args: Vec[String] = []
+	for a in cli::args() { args.push(a) }
+	let mut write = false
+	let mut exe: String = "target/fast/nikaia"
+	let mut files: Vec[String] = []
+	let mut i = 1
+	while i < args.len() {
+		let a = args[i].clone()
+		if a == "--write" {
+			write = true
+		} else if a == "--exe" {
+			if i + 1 >= args.len() { mine_usage() }
+			exe = args[i + 1].clone()
+			i = i + 1
+		} else {
+			files.push(a)
+		}
+		i = i + 1
+	}
+	if files.len() == 0 { mine_usage() }
+	let copy = "target/lower-mine"
+	let made = mine_sh(f"rm -rf {copy} && mkdir -p {copy} && git archive HEAD | tar -x -C {copy}")
+	if made.code != 0 {
+		println(f"extracting HEAD failed: {made.stderr.trim()}")
+		process::exit(1)
+	}
+	for file in files {
+		let put = mine_sh(f"mkdir -p \"$(dirname '{copy}/{file}')\" && cp '{file}' '{copy}/{file}'")
+		if put.code != 0 {
+			println(f"copying {file} failed: {put.stderr.trim()}")
+			process::exit(1)
+		}
+	}
+	let out = mine_sh(f"NIKAIA_CACHE_LIMIT=2G '{exe}' lower-std --sysroot {copy}/crates")
+	let mut shown = 0
+	for l in out.stderr.split("\n") {
+		if l.starts_with("lower-std: ") || l.trim() == "" { continue }
+		if shown == 30 {
+			println("... more refusal lines")
+			break
+		}
+		println(l)
+		shown = shown + 1
+	}
+	if out.code != 0 {
+		println(f"lower-std refused HEAD plus your files: exit {out.code}")
+		process::exit(1)
+	}
+	let mut moved = 0
+	for l in out.stdout.split("\n") {
+		let path = mine_lowered(l, copy)
+		if path == "" { continue }
+		moved = moved + 1
+		let same = mine_sh(f"cmp -s '{copy}/{path}' '{path}'")
+		if same.code == 0 {
+			println(f"same {path}")
+			continue
+		}
+		println(f"differs {path}")
+		if !write { continue }
+		if path.ends_with("/lowered.rs") {
+			println(f"  not written: {path} holds every agent's include! lines; stage your hunks under Partial:")
+			continue
+		}
+		mine_sh(f"mkdir -p \"$(dirname '{path}')\" && cp '{copy}/{path}' '{path}'")
+		println(f"  written: {path}")
+	}
+	if moved == 0 { println("HEAD's lowered files are what HEAD plus your files lower to") }
+}
