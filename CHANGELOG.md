@@ -10,8 +10,29 @@ has no heading here; `CLAUDE.md` draws the line.
 
 ## [0.0.1397] — 2026-11-15
 
-**the driver accepts a cut itself when the builder needs nothing**
-- scripts/drive.nika, batch.nika, release.nika: a report with Result done or partial, a green gate, Needs: none and Owner: none no longer stops the driver; it is marked auto-accepted, listed in review.txt and released with the next version (#1694).
+**Builders' changes (#1441, #1459, #1464, #1505, #1509, #1512, #1515, #1516, #1517, #1519, #1520, #1523, #1535, #1539, #1546)**
+- The yaml facade reads like serde_yaml 0.9: from_reader, from_value, Deserializer iterating documents, Value indexing, Tagged values, Mapping, with::singleton_map, serde_yaml's error kinds and messages.
+- Grammars: a `@stream` entry walks a repetition counted by a value, `n:i64 ":" item{n}` or `item{1, n}`, one item at a time.
+- Grammars: the engine's parse_<rule>_reader of a @stream entry is no longer public in a Rust library; only G::<rule>_reader is (ADR-grammar-2 D7, #1464).
+- Grammars: a program walks another package's `@stream` entry (`for it in a::Words::items(text)`), and a dependency's type inside an option or a sequence is known by its package's name (#1505).
+- Grammars: a `@stream` entry takes the values and options its rule declares and the caller's `words:` table (`for it in Words::items(text, n)`), as a sequential entry does.
+- Grammars: a program walks another package's @stream entry that takes values and options (for it in a::Words::items(text, n)); an option it leaves out takes the default the package declares (#1512).
+- yaml: the serde_yaml facade writes too: `to_string`, `to_writer` and `Serializer`, serde_yaml 0.9's signatures and output, over the native writer.
+- yaml: `load` resolves `%TAG` handles to full tags and `write` writes the tags no handle abbreviates verbatim; a node's tag is read with `yaml::tag(n)`.
+- yaml: every bound check proved or justified; a decimal beyond i64/u64 resolves to a float, an overlong 0x/0o to a string.
+- The bounds walk proves Bytes indexes, counters started at a min, lets of if/match values and results of callees that hand their list to a call.
+- benches/yaml counts the yaml package against unsafe-libyaml/serde_yaml and saphyr: events 2.8x saphyr-parser, tree 2.0x saphyr, typed 1.96x serde_yaml on 10 MB (checks off), causes in the README
+- Grammars: a program hands its `words:` table to another package's grammar entry that interns, `@stream` or not, and an entry whose result holds a symbol is refused without it (NK1330), as beside the call (#1519).
+- yaml: errors carry a kind; a broken later document no longer loses the good ones before it; the facade gives serde_yaml's texts for recursion limits, tag mismatches and libyaml's syntax errors
+- Fixed: throwing an error bound by a `match` over a field no longer fails to compile.
+- Views of temporary call results, results built from structs of views, and option text read through ?? now compile; NK2302 no longer suggests a ref that NK1261 refuses (#1523)
+- A typed `let` of an option of a tuple read out of a map keeps its written type, so `??` and destructuring work on it (#1535).
+- An untyped `let` of an option of a tuple of words read out of a map holds the tuple, so `??`, destructuring and `.0` work on it (#1539).
+- Bounds: the first piece of a text's split collected into a list runs without its check; std's ledger says split and rsplit give one piece at least, and String receivers resolve to str's entries for the walk (#1546).
+- A struct literal holding a view of a lent parameter may be pushed into a `mut` list parameter (ADR-283 D27); the list then points into what the parameter views.
+- yaml: the event walk writes into one list; deep nesting no longer copies each event once per level (deep 5.66x -> 2.70x saphyr).
+- A field read off a grammar rule's struct value keeps the tier of the field (a view of the input stays a view).
+- yaml: a node's tag and anchor are parsed once instead of once per alternative (large 2.52x -> 2.21x saphyr).
 
 ## [0.0.1396] — 2026-11-15
 

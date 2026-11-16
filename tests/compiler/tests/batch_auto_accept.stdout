@@ -1,0 +1,14 @@
+partial: BATCH DONE
+appended: Supervisor: DATE auto-accepted (Result/Deviation as written)
+review.txt: a.report.md
+status: BUMP pending: 1 entries
+again: BATCH DONE
+lines after a second run: 8
+done with a deviation: BATCH DONE
+review.txt: (none)
+blocked: CUT a.md: Result: blocked (report untouched: true)
+pushed none: CUT a.md: Result: partial (report untouched: true)
+gate red: CUT a.md: Result: partial (report untouched: true)
+no gate: CUT a.md: Result: partial (report untouched: true)
+needs: CUT a.md: Result: partial (report untouched: true)
+owner: OWNER a.md: which way? (report untouched: true)

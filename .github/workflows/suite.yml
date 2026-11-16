@@ -250,6 +250,17 @@ jobs:
       - name: Unpack the build
         run: tar -I zstd -xf "$RUNNER_TEMP/release.tar.zst"
 
+      # How long each program of `tests/compiler` took last time: `nikaia
+      # test` starts the longest first (#1600). Restored from the newest run
+      # of this shard, saved as this run's after the tests.
+      - name: Restore the test times
+        if: startsWith(matrix.shard, 'compiler-')
+        uses: actions/cache/restore@v4
+        with:
+          path: target/nikaia-project-tests/test-times
+          key: test-times-${{ inputs.arch }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: test-times-${{ inputs.arch }}-${{ matrix.shard }}-
+
       # Each one-file program a checker test accepts is written to the dump
       # this shard sweeps (#705).
       - name: Test
@@ -265,6 +276,11 @@ jobs:
           # written into it (#281, #1584).
           export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
           export RUSTUP_TOOLCHAIN="$(rustup show active-toolchain | cut -d' ' -f1)"
+          # One cache for the whole shard: the tests that name none would
+          # otherwise build the `std` rlibs, the build-time parsers and the
+          # comptime bundles a second time, in `~/.cache/nikaia`, beside the
+          # ones the other tests build in this directory (#1600).
+          export NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests"
           it=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
           itdir=$(awk -F'\t' '$1 ~ /\/deps\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
           heavy="$HEAVY_MAP_TRUST $HEAVY_SYSROOT_CORES $HEAVY_SYSROOT_PAIR $HEAVY_CORPUS $HEAVY_REST $HEAVY_ELSEWHERE"
@@ -307,6 +323,13 @@ jobs:
               tee "$RUNNER_TEMP/test.log"
             ;;
           esac
+
+      - name: Save the test times
+        if: always() && startsWith(matrix.shard, 'compiler-')
+        uses: actions/cache/save@v4
+        with:
+          path: target/nikaia-project-tests/test-times
+          key: test-times-${{ inputs.arch }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Name the failing tests
         if: failure()

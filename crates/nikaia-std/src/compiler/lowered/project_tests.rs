@@ -509,6 +509,60 @@ pub struct ProjectTestsBatched {
     pub entry: fs::Path,
 }
 
+pub fn project_tests_times_file(cache: &std::path::Path, root: &std::path::Path) -> fs::Path {
+    let shown = format!("{}", nikaia_std::fs::path::display(&(project_members_canonical(root))));
+    let name: String = shown.chars().map(|c| { if c.is_alphanumeric() { c } else { '-' } }).collect();
+    nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(cache), std::path::Path::new(&("test-times")))), std::path::Path::new(&(name)))
+}
+
+pub(crate) async fn project_tests_times_read(file: &std::path::Path) -> collections::BTreeMap<String, i64> {
+    let mut times: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    let bytes = nikaia_std::index::or(project_tests_written(file).await, || Bytes(vec![]).into());
+    for line in bytes.text_lossy().lines() {
+        match line.split_once("\t") {
+            None => { },
+            Some((name, ms)) => { match text::parse_i64(ms.trim()) {
+                None => { },
+                Some(given) => { times.insert(nikaia_std::block::Text::from(name.to_string()), given); },
+            }; },
+        }
+    }
+    times
+}
+
+pub async fn project_tests_order(programs: &[ProgramTest], file: &std::path::Path) -> Vec<i64> {
+    let times = project_tests_times_read(file).await;
+    let mut keyed: Vec<(i64, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut k = 0;
+    for program in programs.iter() {
+        let ms = nikaia_std::index::or(times.get(&program.name), || -1);
+        keyed.push((if ms < 0 { i64::MIN } else { unsafe { nikaia_std::proven::neg::<i64>(ms) } }, k));
+        k += 1;
+    }
+    keyed.sort();
+    keyed.iter().map(|pair| { pair.1 }).collect::<Vec<_>>()
+}
+
+pub async fn project_tests_remember(file: &std::path::Path, ran: &[(String, i64)]) {
+    let mut times = project_tests_times_read(file).await;
+    for (name, ms) in ran.iter() {
+        let ms = nikaia_std::num::value(ms);
+        times.insert(nikaia_std::block::Text::from(name.to_string()), ms);
+    }
+    let text: String = nikaia_std::block::Text::from(times.iter().map(|pair| { format!("{}\t{}\n", pair.0, pair.1) }).collect::<Vec<_>>().join(""));
+    match nikaia_std::fs::path::parent(&(file)) {
+        None => { },
+        Some(ref parent) => { match fs::create_dir(parent, &fs::Root::Anywhere, true) {
+            Ok(_) => {},
+            Err(_error) => { return; },
+        }; },
+    }
+    match fs::write(file, &fs::Root::Anywhere, text, false, true).await {
+        Ok(_) => {},
+        Err(_error) => { return; },
+    };
+}
+
 pub(crate) fn project_tests_batch_least() -> i64 { 8 }
 
 pub(crate) fn project_tests_batch_carrier() -> &'static str { "grammar Carrier {\n    rule n -> ref Bytes = s:bytes(until(\";\")) -> { s }\n    entry rule top -> i64 = x:n \";\" -> { x.len() }\n}\n\nfn main() throws {\n    let r = Carrier::top(\"abc;\") catch { -1 }\n    println(f\"{r}\")\n}\n" }

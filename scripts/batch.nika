@@ -20,7 +20,14 @@
 // in the report clears a cut on `Result:`, `Gate:` or `Deviation:` (the
 // builder's lines stay as written), never one on `Result: blocked` (it needs
 // the next brief) or on `Pushed:` (the commits are not on develop), and never
-// an `Owner:` question (supervisor, 2026-11-10); a `Found:` that is not `none` does not
+// an `Owner:` question (supervisor, 2026-11-10); the driver accepts a report
+// itself (owner, 2026-11-15, #1694) when its `Result:` is done or partial, its
+// `Pushed:` is a commit, `Gate:` is green, `Needs:` is `none` and `Owner:`
+// none or empty: the line `Supervisor: <date>: auto-accepted (Result/Deviation
+// as written)` is appended to the report instead of a cut, and a partial
+// report's name to `DIR/review.txt` (one line each, for the supervisor's
+// follow-up; `auto-accepted` counts as `accepted` in release.nika and
+// status.nika too); a `Found:` that is not `none` does not
 // cut (supervisor, 2026-11-06): the driver collects it in `DIR/found.txt`
 // (drive.nika, `drive_found`); all done prints `BATCH DONE` and the count of
 // `Changelog:` lines that are not `none`. `--tokens` appends
@@ -63,12 +70,43 @@ fn batch_report_path(dir: String, brief: String) -> String throws {
     return ""
 }
 
+// A `Supervisor:` line that accepts the report as written: `accepted ...`
+// (the supervisor's) or `auto-accepted ...` (batch_auto's).
+fn batch_accepted(text: String) -> bool {
+    for line in text.split("\n") {
+        if line.starts_with("Supervisor:") && (line.contains(": accepted") || line.contains(": auto-accepted")) { return true }
+    }
+    return false
+}
+
+// The first word of a field, lower case, without a trailing `.` or `,`.
+fn batch_word(value: String) -> String {
+    return value.split(" ").collect()[0].trim_end_matches(".").trim_end_matches(",").to_lowercase()
+}
+
+// A report the driver accepts itself (owner, 2026-11-15, #1694): `Result:`
+// done or partial, its commits pushed or local, `Gate:` green, `Needs:` none
+// and `Owner:` none (or empty, as batch_run reads it), not accepted yet, and
+// cut by batch_cut otherwise.
+fn batch_auto(text: String) -> bool {
+    let word = batch_word(batch_field(text.clone(), "Result:"))
+    let pushed = batch_field(text.clone(), "Pushed:")
+    let owner = batch_word(batch_field(text.clone(), "Owner:"))
+    if word != "done" && word != "partial" { return false }
+    if pushed == "rejected" || pushed == "none" || pushed == "" { return false }
+    if !batch_field(text.clone(), "Gate:").starts_with("green") { return false }
+    if batch_word(batch_field(text.clone(), "Needs:")) != "none" { return false }
+    if owner != "" && owner != "none" && owner != "nothing" { return false }
+    if batch_accepted(text.clone()) { return false }
+    return batch_cut(text) != ""
+}
+
 fn batch_cut(text: String) -> String {
     let result = batch_field(text.clone(), "Result:")
     let pushed = batch_field(text.clone(), "Pushed:")
     let deviation = batch_field(text.clone(), "Deviation:")
-    let gate = batch_field(text, "Gate:")
-    let accepted = batch_field(text.clone(), "Supervisor:").contains(": accepted")
+    let gate = batch_field(text.clone(), "Gate:")
+    let accepted = batch_accepted(text)
     let word = result.split(" ").collect()[0].trim_end_matches(".").clone()
     if word == "blocked" { return f"Result: {result}" }
     if word == "done" && (pushed == "rejected" || pushed == "none" || pushed == "") { return f"Pushed: {pushed}" }
@@ -114,7 +152,20 @@ fn batch_run(dir: String) -> String throws {
             let path_abs = abs.stdout.trim().clone()
             return f"NEXT {path_abs} {batch_info(path_abs)}"
         }
-        let text = fs::read_to_string(path, fs::Root::Anywhere)
+        let mut text = fs::read_to_string(path.clone(), fs::Root::Anywhere)
+        if batch_auto(text.clone()) {
+            let date = process::run("date", ["+%Y-%m-%d"]).stdout.trim().clone()
+            if !text.ends_with("\n") { text = text + "\n" }
+            text = text + f"Supervisor: {date}: auto-accepted (Result/Deviation as written)\n"
+            fs::write(path.clone(), fs::Root::Anywhere, text.clone())
+            if batch_word(batch_field(text.clone(), "Result:")) == "partial" {
+                let list = f"{dir}/review.txt"
+                let mut old: String = ""
+                if fs::exists(list.clone(), fs::Root::Anywhere) { old = fs::read_to_string(list.clone(), fs::Root::Anywhere) }
+                let parts = path.split("/").collect()
+                fs::write(list, fs::Root::Anywhere, old + parts[parts.len() - 1].clone() + "\n")
+            }
+        }
         let question = batch_field(text.clone(), "Owner:")
         let lower = question.to_lowercase()
         if question != "" && !lower.starts_with("none") && !lower.starts_with("nothing") { return f"OWNER {brief}: {question}" }

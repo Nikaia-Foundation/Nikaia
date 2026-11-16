@@ -2985,44 +2985,53 @@ fn run_program_tests<'a>(
         .collect::<Result<Vec<Vec<_>>>>()?;
     // **One build per setting for the programs** (`project_tests_batches`);
     // not at `--bless`, which keeps what a build says beside each program.
+    // The builds run on a thread of their own, one after the other (the
+    // settings share Cargo's target directory and its lock), while the
+    // workers already make the reports; a worker waits for a setting's build
+    // only when it runs a program at that setting.
     let batch_places = settings
         .iter()
         .map(|_| Sandbox::new())
         .collect::<Result<Vec<_>>>()?;
-    let batches = settings
+    let batches: Vec<std::sync::OnceLock<std::result::Result<BTreeMap<_, _>, String>>> = settings
         .iter()
-        .zip(&batch_places)
-        .map(|(setting, place)| {
-            if suite.bless || suite.bless_stderr {
-                return Ok(BTreeMap::new());
-            }
-            let host = ProgramHost {
-                exe: std::env::current_exe().context("finding this compiler")?,
-                failed: RefCell::new(None),
-            };
-            match block_on(project_tests::project_tests_batches(
-                &host, programs, root, setting, &place.0,
-            )) {
-                Ok(found) => Ok(found),
-                Err(error) => Err(host
-                    .failed
-                    .into_inner()
-                    .unwrap_or_else(|| anyhow!("{error}"))),
-            }
-        })
-        .collect::<Result<Vec<_>>>()?;
+        .map(|_| std::sync::OnceLock::new())
+        .collect();
     let batches = &batches;
+    // **The longest first** (`project_tests_order`): the run ends with its
+    // last program, so a long one started last is the run's tail.
+    let times = project_tests::project_tests_times_file(&Layout::user_cache_dir(), root);
+    let order = block_on(project_tests::project_tests_order(programs, &times));
+    let order = &order;
     let next = AtomicUsize::new(0);
     let (send, receive) = std::sync::mpsc::channel();
-    std::thread::scope(|scope| {
+    let mut ran = Vec::new();
+    let run = std::thread::scope(|scope| {
+        let next = &next;
+        let batch_places = &batch_places;
+        scope.spawn(move || {
+            for ((setting, place), slot) in settings.iter().zip(batch_places).zip(batches) {
+                let found = if suite.bless || suite.bless_stderr {
+                    Ok(BTreeMap::new())
+                } else {
+                    build_program_batches(programs, root, setting, &place.0)
+                        .map_err(|error| format!("{error:#}"))
+                };
+                if found.is_err() {
+                    next.store(programs.len(), Ordering::SeqCst);
+                }
+                let _ = slot.set(found);
+            }
+        });
         for place in &places {
-            let (send, next) = (send.clone(), &next);
+            let send = send.clone();
             scope.spawn(move || {
-                loop {
-                    let k = next.fetch_add(1, Ordering::SeqCst);
-                    let Some(program) = programs.get(k) else {
-                        break;
-                    };
+                while let Some(&k) = order.get(next.fetch_add(1, Ordering::SeqCst)) {
+                    let k = k as usize;
+                    let program = &programs[k];
+                    // Its time without the waits for the builds.
+                    let started = std::time::Instant::now();
+                    let mut waited = std::time::Duration::ZERO;
                     // The reports once per program, not once per setting.
                     let outcomes =
                         program_reports(program, root, &place[0].0).and_then(|reports| {
@@ -3031,6 +3040,10 @@ fn run_program_tests<'a>(
                                 .zip(place)
                                 .zip(batches)
                                 .map(|((setting, place), batch)| {
+                                    let waiting = std::time::Instant::now();
+                                    let batch = batch.wait();
+                                    waited += waiting.elapsed();
+                                    let batch = batch.as_ref().map_err(|e| anyhow!("{e}"))?;
                                     let batched = batch.get(&program.name);
                                     run_program_test(
                                         program, root, setting, &place.0, batched, &reports,
@@ -3039,7 +3052,8 @@ fn run_program_tests<'a>(
                                 })
                                 .collect::<Result<Vec<_>>>()
                         });
-                    if send.send((k, outcomes)).is_err() {
+                    let millis = started.elapsed().saturating_sub(waited).as_millis() as i64;
+                    if send.send((k, millis, outcomes)).is_err() {
                         break;
                     }
                 }
@@ -3048,7 +3062,8 @@ fn run_program_tests<'a>(
         drop(send);
         let mut finished = BTreeMap::new();
         let mut shown = 0;
-        for (k, outcomes) in receive {
+        for (k, millis, outcomes) in receive {
+            ran.push((programs[k].name.to_string(), millis));
             finished.insert(k, outcomes);
             while let Some(outcomes) = finished.remove(&shown) {
                 let reported = outcomes.and_then(|outcomes| done(&programs[shown], outcomes));
@@ -3059,8 +3074,38 @@ fn run_program_tests<'a>(
                 shown += 1;
             }
         }
+        // A failed build stops the programs before they start; it is the error.
+        for batch in batches {
+            if let Some(Err(error)) = batch.get() {
+                return Err(anyhow!("{error}"));
+            }
+        }
         Ok(())
-    })
+    });
+    block_on(project_tests::project_tests_remember(&times, &ran));
+    run
+}
+
+/// The one build per SETTING of the PROGRAMS (`project_tests_batches`).
+fn build_program_batches(
+    programs: &[ProgramTest],
+    root: &Path,
+    setting: &str,
+    place: &Path,
+) -> Result<BTreeMap<String, project_tests::ProjectTestsBatched>> {
+    let host = ProgramHost {
+        exe: std::env::current_exe().context("finding this compiler")?,
+        failed: RefCell::new(None),
+    };
+    match block_on(project_tests::project_tests_batches(
+        &host, programs, root, setting, place,
+    )) {
+        Ok(found) => Ok(found),
+        Err(error) => Err(host
+            .failed
+            .into_inner()
+            .unwrap_or_else(|| anyhow!("{error}"))),
+    }
 }
 
 /// The package's test programs, by name (`tools/project_tests.nika`).
@@ -3803,6 +3848,59 @@ fn run_directly(binary: &std::path::Path, args: &[String]) -> Result<i32> {
     // report for one, and the alternative - claiming success - is the one answer
     // that must not be given.
     Ok(status.code().unwrap_or(1))
+}
+
+/// **Where the compiler's own sub-builds compile `std`** (#1705), and the
+/// triple they pass Cargo as `--target`: the two bundles
+/// (`tools/comptime_bundle.nika`) and every grammar run's parser.
+///
+/// **The tree a program with no settings is built in** (`Sysroot::rlib_cache`,
+/// ADR-002 D4), with the program's `--target` and the profile a generated
+/// workspace gives its dependencies, so Cargo compiles `std` there once for the
+/// sub-builds and the program alike. They run in the driver, before the
+/// program's Cargo build takes that tree's lock. **Inside that build** - the
+/// compiler as its `rustc`, under [`WRAPPER_MARKER`] - the lock is held, and a
+/// sub-build there would wait on it for ever; one asked there (a record the
+/// driver wrote finds a bundle without one, `comptime_bundle_recorded`) goes
+/// to `build-time/<key>` beside it. A program with settings of its own has a
+/// tree of its own and shares nothing with them. Asked once a process.
+pub fn build_time_tree() -> (PathBuf, String) {
+    static HELD: std::sync::OnceLock<(PathBuf, String)> = std::sync::OnceLock::new();
+    let (tree, triple) = HELD.get_or_init(|| {
+        let manifest = Manifest::default();
+        let inside = std::env::var_os(WRAPPER_MARKER).is_some();
+        // Settings with nothing set do not fail; were they to, the
+        // sub-builds still get a tree of their own, for this machine.
+        match Settings::resolve(&manifest, None, None) {
+            Ok(settings) => {
+                let codegen = Codegen::new(
+                    &manifest.codegen_for(&settings.words.target),
+                    &settings.panic_strategy(),
+                );
+                let program = Sysroot::resolve().rlib_cache(
+                    &settings.words.target,
+                    &codegen,
+                    &settings.words.reentrancy_check,
+                    "",
+                );
+                let tree = match (inside, program.file_name()) {
+                    (true, Some(key)) => Layout::user_cache_dir().join("build-time").join(key),
+                    _ => program,
+                };
+                (tree, settings.build.target.triple().to_text())
+            }
+            Err(_) => (
+                Layout::user_cache_dir()
+                    .join("build-time")
+                    .join("unsettled"),
+                crate::emit::default_target().triple().to_text(),
+            ),
+        }
+    });
+    // Marked used at every ask, as `rlib_cache` does for a program, so
+    // `prune` keeps it while it is used and evicts it after.
+    orchestrator::cache::use_entry(tree);
+    (tree.clone(), triple.clone())
 }
 
 /// The same, for a program this compiler wrote for its own use — the parser a
