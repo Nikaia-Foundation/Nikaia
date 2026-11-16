@@ -1,0 +1,92 @@
+// The Benchmarks Game's `fannkuch-redux`: every permutation of 1..n in the
+// game's order; for each, the first item k is taken and the first k items
+// are reversed, again and again until 1 comes first. The program prints a
+// checksum (the flip counts, added for the even permutations and taken away
+// for the odd ones) and the largest flip count.
+//
+//     nikaia run main.nika -- 7
+//     228
+//     Pfannkuchen(7) = 16
+//
+// The argument is n (7 if left out); the game's published output for 7 is
+// the lines above. Written as a Nikaia programmer writes it first: lists of
+// integers, the permutations made one after the other, counted from 0.
+use std::cli
+use std::text
+
+struct Counts {
+	checksum: i64,
+	flips: i64,
+}
+
+// The flips of one permutation: `perm` is a copy, reversed in place.
+fn flips(mut perm: Vec[i64]) -> i64 sync {
+	let mut flips = 0
+	let mut k = perm[0]
+	while k != 0 {
+		let mut i = 0
+		let mut j = k
+		while i < j {
+			let t = perm[i]
+			perm[i] = perm[j]
+			perm[j] = t
+			i = i + 1
+			j = j - 1
+		}
+		flips = flips + 1
+		k = perm[0]
+	}
+	return flips
+}
+
+fn fannkuch(n: i64) -> Counts sync {
+	let mut perm: Vec[i64] = []
+	let mut count: Vec[i64] = []
+	for i in 0..<n {
+		perm.push(i)
+		count.push(0)
+	}
+	let mut checksum = 0
+	let mut most = 0
+	let mut index = 0
+	let mut r = n
+	while true {
+		while r != 1 {
+			count[r - 1] = r
+			r = r - 1
+		}
+		let f = flips(perm.clone())
+		if f > most {
+			most = f
+		}
+		if index % 2 == 0 {
+			checksum = checksum + f
+		} else {
+			checksum = checksum - f
+		}
+		// The next permutation: rotate the first r + 1 items left by one,
+		// while the counter of that rotation runs out.
+		while true {
+			if r == n {
+				return Counts { checksum: checksum, flips: most }
+			}
+			let first = perm[0]
+			for i in 0..<r {
+				perm[i] = perm[i + 1]
+			}
+			perm[r] = first
+			count[r] = count[r] - 1
+			if count[r] > 0 {
+				break
+			}
+			r = r + 1
+		}
+		index = index + 1
+	}
+}
+
+fn main() throws {
+	let n = text::parse_i64(cli::args().nth(1) ?? "7") ?? 7
+	let result = fannkuch(n)
+	println(f"{result.checksum}\nPfannkuchen({n}) = {result.flips}")
+}

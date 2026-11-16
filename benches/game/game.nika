@@ -70,6 +70,18 @@ fn games() -> Vec[Game] {
 			cpu: "ivybridge",
 			one_thread: "RAYON_NUM_THREADS=1",
 		},
+		Game {
+			name: "fannkuch-redux",
+			args: "10",
+			units: 3628800,
+			unit: "permutation",
+			nikaia: "benches/game/fannkuch-redux/main.nika",
+			speed: "benches/game/fannkuch-redux/speed.nika",
+			rust: "benches/game/fannkuch-redux/rust-6.rs",
+			label: "Rust #6",
+			cpu: "ivybridge",
+			one_thread: "RAYON_NUM_THREADS=1",
+		},
 	]
 }
 

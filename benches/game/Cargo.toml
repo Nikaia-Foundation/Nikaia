@@ -15,8 +15,12 @@ path = "n-body/rust-9.rs"
 name = "spectral-norm"
 path = "spectral-norm/rust-6.rs"
 
-# The game's Rust entries link against its `rust-libs`; spectral-norm's needs
-# rayon.
+[[bin]]
+name = "fannkuch-redux"
+path = "fannkuch-redux/rust-6.rs"
+
+# The game's Rust entries link against its `rust-libs`; spectral-norm's and
+# fannkuch-redux's need rayon.
 [dependencies]
 rayon = "1"
 
