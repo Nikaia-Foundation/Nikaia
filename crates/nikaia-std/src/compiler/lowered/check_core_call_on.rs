@@ -1350,7 +1350,7 @@ pub(crate) fn check_core_call_on_weighs(state: &mut CheckState, on: &Ty, entry: 
         Ty::Named { ref name, .. } => type_last_segment(name),
         _ => return,
     };
-    if base != "Sender" && !(base == "SharedMut" && entry == "set") { return; }
+    if base != "Sender" && !(base == "SharedMut" && (entry == "set" || entry == "set(after)")) { return; }
     let found = check_core_call_on_parameters_in(&state, &on.unseen());
     if found.is_empty() { return; }
     let mut held: collections::BTreeSet<String> = nikaia_std::index::or(match state.facts.weighed.get(&current) {

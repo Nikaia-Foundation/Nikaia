@@ -1,0 +1,13 @@
+// ADR-327 D9 (#1554, #1559): a generic body that stores its `T` with `set(…; after: seen)` lowers with the `DeepSize` bound that operation asks, as a plain `set` does.
+fn put[T: Eq + Clone](cache: SharedMut[T], v: T) -> bool {
+	let seen: T = cache.get()
+	cache.set(v; after: seen) catch { return false }
+	return true
+}
+
+fn main() throws {
+	let a: SharedMut[Vec[i64]] = SharedMut([7])
+	let ok = put(a, [1, 2])
+	let now: Vec[i64] = a.get()
+	println(f"{ok} {now.len()}")
+}

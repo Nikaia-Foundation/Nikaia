@@ -1761,7 +1761,8 @@ fn check_core_call_on_parameters_in(state: ref CheckState, ty: ref Ty) -> collec
 }
 
 /// **A std operation that weighs what it is handed** (ADR-327 D9, #1559):
-/// every method of a channel's sender, and a shared value's `set`, whose Rust
+/// every method of a channel's sender, and a shared value's `set` (with or
+/// without `after:`, #1554), whose Rust
 /// is bounded by `DeepSize` (`channel.rs`, `lock.rs`). A type parameter the
 /// receiver holds is weighed in the function being walked; the emitter
 /// writes the bound, since the weight is the language's and no Nikaia bound
@@ -1772,7 +1773,7 @@ fn check_core_call_on_weighs(mut state: CheckState, on: ref Ty, entry: ref Strin
         Ty::Named { name, .. } => type_last_segment(name),
         else => return,
     }
-    if base != "Sender" && !(base == "SharedMut" && entry == "set") {
+    if base != "Sender" && !(base == "SharedMut" && (entry == "set" || entry == "set(after)")) {
         return
     }
     let found = check_core_call_on_parameters_in(state, on.unseen())
