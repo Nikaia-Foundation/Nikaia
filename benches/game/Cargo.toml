@@ -11,6 +11,15 @@ publish = false
 name = "n-body"
 path = "n-body/rust-9.rs"
 
+[[bin]]
+name = "spectral-norm"
+path = "spectral-norm/rust-6.rs"
+
+# The game's Rust entries link against its `rust-libs`; spectral-norm's needs
+# rayon.
+[dependencies]
+rayon = "1"
+
 # The game's `rustc -C opt-level=3 -C codegen-units=1`; its
 # `-C target-cpu=ivybridge` is passed by `game.nika` in `RUSTFLAGS`.
 [profile.release]

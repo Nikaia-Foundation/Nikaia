@@ -39,6 +39,9 @@ struct Game {
 	rust: String,
 	label: String,
 	cpu: String,
+	// Where the entry runs on threads: the environment that holds it to one,
+	// for a second row (callgrind serialises threads and counts them all).
+	one_thread: String,
 }
 
 fn games() -> Vec[Game] {
@@ -53,6 +56,19 @@ fn games() -> Vec[Game] {
 			rust: "benches/game/n-body/rust-9.rs",
 			label: "Rust #9",
 			cpu: "ivybridge",
+			one_thread: "",
+		},
+		Game {
+			name: "spectral-norm",
+			args: "1000",
+			units: 40000000,
+			unit: "matrix entry",
+			nikaia: "benches/game/spectral-norm/main.nika",
+			speed: "benches/game/spectral-norm/speed.nika",
+			rust: "benches/game/spectral-norm/rust-6.rs",
+			label: "Rust #6",
+			cpu: "ivybridge",
+			one_thread: "RAYON_NUM_THREADS=1",
 		},
 	]
 }
@@ -90,6 +106,8 @@ struct Program {
 	name: String,
 	on: String,
 	off: String,
+	// The environment each run of it gets (`VAR=value `), else empty.
+	env: String,
 	// The source counted for tokens; empty where the row above counted it.
 	source: String,
 }
@@ -106,6 +124,7 @@ fn build_rust(repo: String, work: String, game: Game) -> Program throws {
 		name: f"{game.label}, `target-cpu={game.cpu}`",
 		on: f"{work}/rust-{game.cpu}-on/release/{game.name}",
 		off: f"{work}/rust-{game.cpu}-off/release/{game.name}",
+		env: String(),
 		source: game.rust.clone(),
 	}
 }
@@ -156,6 +175,7 @@ incremental = false
 		name: name,
 		on: f"{bin}.on",
 		off: f"{bin}.off",
+		env: String(),
 		source: source,
 	}
 }
@@ -168,7 +188,7 @@ fn same_output(work: String, programs: Vec[Program], args: String) throws {
 	must(f"{programs[0].on} {args} > {want}", f"{programs[0].on} {args}")
 	for p in programs {
 		for bin in [p.on.clone(), p.off.clone()] {
-			let r = sh(f"{bin} {args} | cmp -s - {want}")
+			let r = sh(f"{p.env}{bin} {args} | cmp -s - {want}")
 			if r.code != 0 {
 				println(f"FAIL: {bin} {args} prints another output than {programs[0].on}")
 				process::exit(1)
@@ -184,10 +204,10 @@ struct Count {
 
 // Instructions and mispredicted branches of one run, from callgrind's totals
 // (`events: Ir Bc Bcm Bi Bim`).
-fn count(work: String, bin: String, args: String) -> Count throws {
+fn count(work: String, env: String, bin: String, args: String) -> Count throws {
 	let file = f"{work}/out/callgrind.out"
 	must(
-		f"valgrind --tool=callgrind --branch-sim=yes --callgrind-out-file={file} {bin} {args} > /dev/null 2>{work}/out/valgrind.log",
+		f"{env}valgrind --tool=callgrind --branch-sim=yes --callgrind-out-file={file} {bin} {args} > /dev/null 2>{work}/out/valgrind.log",
 		f"callgrind of {bin}",
 	)
 	let totals = sh(f"grep -E '^(totals|summary):' {file} | head -1").stdout.trim().clone()
@@ -223,11 +243,21 @@ fn tokens(repo: String, nikaia: String, source: String) -> String throws {
 // One problem's rows: each program counted at both settings, the last column
 // its instructions with checks off against the Rust entry's.
 fn measure(nikaia: String, repo: String, work: String, game: Game) -> String throws {
-	let mut programs: Vec[Program] = [
-		build_rust(repo, work, game),
+	let rust_entry = build_rust(repo, work, game)
+	let mut programs: Vec[Program] = [rust_entry.clone()]
+	if game.one_thread.len() > 0 {
+		programs.push(Program {
+			name: f"{game.label}, one thread, `target-cpu={game.cpu}`",
+			on: rust_entry.on.clone(),
+			off: rust_entry.off.clone(),
+			env: f"{game.one_thread} ",
+			source: String(),
+		})
+	}
+	programs.extend([
 		build_nikaia(nikaia, repo, work, game, game.nikaia, "", "x86-64"),
 		build_nikaia(nikaia, repo, work, game, game.nikaia, "", "x86-64-v3"),
-	]
+	])
 	if game.speed.len() > 0 {
 		programs.push(build_nikaia(nikaia, repo, work, game, game.speed, "-speed", "x86-64"))
 		programs.push(build_nikaia(nikaia, repo, work, game, game.speed, "-speed", "x86-64-v3"))
@@ -236,8 +266,8 @@ fn measure(nikaia: String, repo: String, work: String, game: Game) -> String thr
 	let mut out = String()
 	let mut rust = 0
 	for p in programs {
-		let on = count(work, p.on, game.args)
-		let off = count(work, p.off, game.args)
+		let on = count(work, p.env, p.on, game.args)
+		let off = count(work, p.env, p.off, game.args)
 		if rust == 0 {
 			rust = off.instructions
 		}
