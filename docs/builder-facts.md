@@ -145,7 +145,7 @@ together with the specification section and an example test.
 * A `let x: Array[T]` (no length) is made a view by `lv_let_views` in `text_tiers.nika`, like fields (`sf_slice_fields`) and results (`hb_fn`); extend those passes rather than the checker. (issue-1270)
 * Package-wide facts reach a file's tier pass only through `BesideFields` in `crates/nikaia/src/text_tiers.rs` (built in `beside_fields`, read by `refine_with`); add a field there rather than a new parameter at each caller. (issue-1272)
 * A two-file package test puts the struct in `tests/compiler/src/X_beside.nika` and the user in `X_beside_caller.nika`, and the program in `tests/` calls it as `compiler_tests::fn`. (issue-1272)
-* `cargo test -p nikaia --lib text_tiers::` runs 0 tests; the tier pass is covered only by tests/compiler programs. (issue-1272)
+* `cargo test -p nikaia --lib text_tiers::` runs 0 tests; the tier pass is covered by tests/compiler programs and by the `it` tests `text_tiers::` (`crates/nikaia/tests/it/text_tiers.rs`). A checker change to lending or moving (`hands_over`, `parts_lent`, `lent_args`) is a touched test of `cargo test --profile fast -p nikaia --test it -- text_tiers::` too: #1740's first fix broke `m[line]` of a view there, and no program caught it. (issue-1272, #1753)
 * The cycle in builder.md writes `target/fast/nikaia lower-std` first, but after a failed attempt that binary holds the bad logic; run `$S/old/nikaia lower-std` first. (issue-1274)
 * A new `sv_*.nika` must be added to `solver_engine_files()` and to the hard-coded file lists in ten `tests/compiler/tests/solver_*.nika`. (issue-1339)
 * `test` is a reserved word, and the error shows only once the concatenated solver program is built. (issue-1339)

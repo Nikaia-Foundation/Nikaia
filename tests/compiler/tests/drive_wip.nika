@@ -7,7 +7,8 @@
 // --comment-issue (#1698): the comment it posts on issue N for a report's
 // `Comment: #N <text>`, and a `Comment:` without a number filed as improvement;
 // an improvement issue names the run's report and commit (#1706); an `Issue:`
-// answer marked `(built)` is not filed (#1739); a `Needs: supervisor
+// answer marked `(built)` is not filed (#1739), nor one that says nothing was
+// missing (`meets I1-I13`, #1753); a `Needs: supervisor
 // decision: <gap>` without a Found is filed as the Found, not here (#1744);
 // a Found that says `no decision yet` is labelled `decision` (#1745).
 use std::fs
@@ -64,6 +65,8 @@ fn main() throws {
     drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1707", "1707", built.clone()])
     fs::write(built.clone(), fs::Root::Anywhere, "Result: done\nIssue: rules-gap (built): no rule said an item needs no GitHub\nFriction: none\n")
     drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1708", "1708", built.clone()])
+    fs::write(built.clone(), fs::Root::Anywhere, "Result: done\nIssue: meets I1-I13; complete\nFriction: none\n")
+    drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1740", "1740", built.clone()])
     fs::write(built.clone(), fs::Root::Anywhere, "Result: blocked\nFound: none\nNeeds: supervisor decision: ADR-306 has no rule for a struct result's fields\nFriction: none\n")
     drive(repo, nikaia, ["--improve-issue", "issue-1557", "1557", built.clone()])
     process::run("rm", ["-f", bad, good, said, built])

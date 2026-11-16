@@ -2291,13 +2291,17 @@ fn drive_improve_items(text: String) -> Vec[String] {
 
 // The answers of a report's `Issue:` VALUE (joined with `;`) that are still
 // open: an answer whose kind before its first `: ` ends in `(built)` is
-// left out; "" when none is left.
+// left out, and so is one that says nothing was missing in other words than
+// `complete` (`meets I1-I13`, #1753: #1740's run wrote it and it was filed);
+// "" when none is left.
 fn drive_issue_open(value: String) -> String {
 	let mut open: Vec[String] = []
 	for part in value.split(";") {
 		let t = part.trim()
 		let colon = t.find(": ") ?? t.len()
 		if f"{t[0..<colon]}".trim().ends_with("(built)") { continue }
+		let word = drive_word(f"{t}")
+		if word == "complete" || word == "meets" { continue }
 		if t != "" { open.push(f"{t}") }
 	}
 	return open.join("; ")

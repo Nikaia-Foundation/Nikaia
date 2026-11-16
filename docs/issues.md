@@ -276,7 +276,11 @@ it, like the checks in `docs/supervisor.md`.
 After its run a builder answers, in its report and in its debrief, what the
 issue lacked that would have saved it turns or a wrong turn:
 
-* `Issue: complete` — nothing was missing.
+* `Issue: complete` — nothing was missing. Write that word, not `meets
+  I1-I13`, and nothing after it: a note for the run's own issue is a
+  `Comment: #N <text>` line, which the driver posts there; inside `Issue:`
+  it is filed as an improvement issue (#1753: #1740's run wrote `meets
+  I1-I13; comment: all three cases fixed ...`).
 * `Issue: broke I<n>: <what was missing>` — a rule above asks for it and the
   issue does not have it. The author fixes the issue; nothing changes here.
 * `Issue: rules-gap: <what was missing>` — no rule above asks for it. The
