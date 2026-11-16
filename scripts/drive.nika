@@ -217,6 +217,7 @@
 // `--cleanup` runs the cleanup alone, in the directory it runs in.
 // A builder's `Pushed: rejected` (or `none`) is rewritten when its commit is found in the log.
 // `--rewrite REPORT LOGFILE` prints the rewritten report (for tests).
+// `--wake DIR LINE...` prints each LINE's WAKE line (drive_wake_line).
 // `--issue NAME...` prints each brief's issue number (drive_issue) or `none`;
 // `--post-body BRIEF` prints the comment that posts BRIEF, `--run-body DIR
 // BRIEF` the comment of BRIEF's run from its files in DIR (for tests).
@@ -246,23 +247,112 @@ fn drive_exe() -> String throws {
 // Ends the run with exit 2; a suite still running is waited for and handled
 // first (drive_settle), with one line naming the escalation it delays.
 // A line the main session must act on (owner, 2026-11-15: woken only for
-// what matters): the line itself, then `WAKE <line>`. The session's watcher
-// on the log greps `^WAKE ` and nothing else; the end of the background task
-// wakes it anyway. Only ESCALATE, STOP and PUSHED go through here.
+// what matters): the line itself, then its WAKE line (drive_wake_line), which
+// names its kind, the one file to read and what to do, so the session reads
+// nothing else on a wake (#1821). The session's watcher on the log greps
+// `^WAKE ` and nothing else; the end of the background task wakes it anyway.
+// Only ESCALATE, STOP and PUSHED go through here; DIR is the lane the line
+// comes from ("" where none is known).
 // An ESCALATE line ends with the commit of the scripts/drive.nika this run
 // loaded, ` (drive.nika <sha8>)` (`+edited` where the tree's copy differs
 // from that commit; nothing outside a checkout holding the script): a run
 // keeps the script it started with until a merge brings a new one
 // (drive_restart), so an escalation can come from a script older than
 // develop, and the issue filed from it says which (#1801, docs/issues.md I4c).
-fn drive_wake(line: String) throws {
+fn drive_wake(dir: String, line: String) throws {
 	let mut said = line.clone()
 	if line.starts_with("ESCALATE ") {
 		let sha = drive_script_commit()
 		if sha != "" { said = f"{line} (drive.nika {sha})" }
 	}
 	println(said)
-	println(f"WAKE {said}")
+	println(drive_wake_line(dir, said))
+}
+
+// The WAKE line of a line that wakes the session (#1821), one self-contained
+// line: `WAKE <KIND> read=<path or -> do=<action>: <line>`. The kinds:
+//
+//     PUSHED    read=-                do=nothing (the driver released, drive_release)
+//     STOP      read=-                do=restart the driver (time limit, --max)
+//     CUT       read=<the report>     do=accept with a Supervisor line, or file it
+//     OWNER     read=<the report>     do=tell the owner (DIR/owner.txt for open ones)
+//     RED       read=DIR/qa-input.txt do=write the fix-forward (read=- for CI red on develop)
+//     MERGE     read=-                do=resolve the named sources, restart
+//     BATCH     read=-                do=write the next briefs, restart
+//     ESCALATE  read=-                do=fix the cause it names, restart
+//
+// The action holds no `: `, so the first one after `do=` ends it.
+fn drive_wake_line(dir: String, said: String) -> String throws {
+	let mut body = said.clone()
+	if said.starts_with("ESCALATE ") { body = (said.strip_prefix("ESCALATE ") ?? "").clone() }
+	let mut kind: String = "ESCALATE"
+	let mut read: String = "-"
+	let mut act: String = "fix the cause it names, then restart the driver"
+	if body.starts_with("PUSHED ") {
+		kind = "PUSHED"
+		act = "nothing, the driver releases"
+	} else if body.starts_with("STOP ") || body.starts_with("drive: --max ") {
+		kind = "STOP"
+		act = "restart the driver"
+	} else if body.starts_with("CUT ") {
+		kind = "CUT"
+		let brief = drive_wake_brief((body.strip_prefix("CUT ") ?? "").clone())
+		if body.contains(": brief missing") {
+			read = drive_wake_in(dir, "batch.txt")
+			act = "write the brief or drop it from batch.txt, then restart the driver"
+		} else {
+			read = drive_wake_report(dir, brief)
+			act = "accept it with a Supervisor line in the report or file what it names, then restart the driver"
+		}
+	} else if body.starts_with("OWNER ") {
+		kind = "OWNER"
+		act = "tell the owner the question, then restart the driver"
+		let mut rest = (body.strip_prefix("OWNER ") ?? "").clone()
+		if rest.starts_with("second: ") { rest = (rest.strip_prefix("second: ") ?? "").clone() }
+		let brief = drive_wake_brief(rest)
+		if brief.ends_with(" open") {
+			read = drive_wake_in(dir, "owner.txt")
+		} else {
+			read = drive_wake_report(dir, brief)
+		}
+	} else if body.starts_with("RED ") {
+		kind = "RED"
+		act = "write a fix-forward brief for the failed jobs it names, queued first, then restart the driver"
+	} else if body.starts_with("drive: suite red after") {
+		kind = "RED"
+		read = drive_wake_in(dir, "qa-input.txt")
+		act = "write a fix-forward brief from it, queued first, then restart the driver"
+	} else if body.contains("merge left open") {
+		kind = "MERGE"
+		act = "finish or abort the merge in the shared checkout now, then restart the driver"
+	} else if body.contains("merge aborted") || body.contains("the fast-forward failed") {
+		kind = "MERGE"
+		act = "merge origin/develop by hand and resolve the sources it names, then restart the driver"
+	} else if body.starts_with("BATCH DONE") || body.starts_with("focus: every area empty") {
+		kind = "BATCH"
+		act = "write the next briefs, then restart the driver"
+	}
+	return f"WAKE {kind} read={read} do={act}: {said}"
+}
+
+// The brief a CUT or OWNER line names: its text up to the first `:`.
+fn drive_wake_brief(rest: String) -> String {
+	return rest.split(":").collect()[0].trim().clone()
+}
+
+// NAME in DIR, `-` where the lane is not known.
+fn drive_wake_in(dir: String, name: String) -> String {
+	if dir == "" { return "-" }
+	return f"{dir}/{name}"
+}
+
+// The report of BRIEF in DIR (drive_report_of), `DIR/BRIEF.report.md` where
+// there is none yet, `-` where the lane is not known.
+fn drive_wake_report(dir: String, brief: String) -> String throws {
+	if dir == "" { return "-" }
+	let found = drive_report_of(f"{dir}/{brief}")
+	if found != "" { return found }
+	return f"{dir}/{brief}.report.md"
 }
 
 // The last commit of scripts/drive.nika in this checkout, `+edited` where
@@ -282,7 +372,7 @@ fn drive_escalate(why: String) throws {
 		drive_settle(exe, lane)
 	}
 	drive_unlock()
-	drive_wake(f"ESCALATE drive: {why}")
+	drive_wake(lane, f"ESCALATE drive: {why}")
 	process::exit(2)
 }
 
@@ -341,10 +431,10 @@ fn drive_time_stop() throws {
 	if testing != "" {
 		fs::write(drive_lock_dir() + "/handover", fs::Root::Anywhere, testing + "\n")
 		let sha = testing.split(" ").collect()[0].clone()
-		drive_wake(f"STOP drive: time limit after {minutes} min, suite {drive_short(sha)} left to the next run")
+		drive_wake("", f"STOP drive: time limit after {minutes} min, suite {drive_short(sha)} left to the next run")
 	} else {
 		drive_unlock()
-		drive_wake(f"STOP drive: time limit after {minutes} min")
+		drive_wake("", f"STOP drive: time limit after {minutes} min")
 	}
 	process::exit(4)
 }
@@ -551,7 +641,7 @@ fn drive_say(dry: bool, line: String) throws {
 // went on while CI ran, owner 2026-11-06), a rejected push merges nothing: a
 // merge would push HEAD's untested commits; "none", and the next suite, on
 // HEAD, pushes them all.
-fn drive_push(sha: String) -> String throws {
+fn drive_push(dir: String, sha: String) -> String throws {
 	let first = process::run("git", ["push", "origin", f"{sha}:develop"])
 	let mut pushed = sha.clone()
 	let mut head = "sha"
@@ -596,8 +686,38 @@ fn drive_push(sha: String) -> String throws {
 		let now = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 		head = if now == merge { "head" } else { "sha" }
 	}
-	drive_wake(f"PUSHED {drive_short(pushed)}")
+	let note = drive_release(dir, pushed.clone())
+	drive_wake(dir, f"PUSHED {drive_short(pushed)}, {note}")
+	if note.contains("PUSH REJECTED") { drive_escalate("the release's push was rejected") }
 	return head
+}
+
+// After a push (#1821): the release (`scripts/release.nika DIR`) runs at
+// once, so PUSHED asks nothing of the session. Not under `--no-bump` (the main
+// lane's driver releases), nor where HEAD has moved past the pushed commit:
+// release.nika commits on HEAD and pushes it, and those commits have not been
+// through the suite (the next push releases them). Its lines go to the log as
+// `RELEASE <line>`; the note it returns ends the PUSHED line.
+fn drive_release(dir: String, pushed: String) -> String throws {
+	if drive_no_bump() { return "release left to the main lane (--no-bump)" }
+	let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+	if head != pushed { return "release at the next push (HEAD holds commits the suite has not tested)" }
+	let rel = process::run(drive_exe(), ["run", "scripts/release.nika", "--", dir.clone()])
+	let mut last: String = "release.nika printed nothing"
+	for l in rel.stdout.trim().split("\n") {
+		if l.trim() == "" { continue }
+		println(f"RELEASE {l.trim()}")
+		last = l.trim().clone()
+	}
+	return f"release {last}"
+}
+
+// Whether this run was started with `--no-bump`.
+fn drive_no_bump() -> bool throws {
+	for a in cli::args() {
+		if a == "--no-bump" { return true }
+	}
+	return false
 }
 
 // The short checks on a merge of `origin/develop` before it is pushed (owner,
@@ -1505,7 +1625,7 @@ fn drive_settle(exe: String, dir: String) throws {
 		process::run("rm", ["-f", exit, drive_lock_dir() + "/testing"])
 		if steps == "" {
 			println(f"SUITE {drive_short(sha)} green")
-			let how = drive_push(sha)
+			let how = drive_push(dir, sha)
 			let mut left: Vec[String] = []
 			let mut seen: i64 = 0
 			for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
@@ -1709,7 +1829,7 @@ fn drive_suite(exe: String, dry: bool, dir: String) throws {
 	)
 	drive_say(
 		dry,
-		f"builders go on meanwhile; once it has finished (or before a bump, the next suite, the end): handle it; green: git push origin <sha>:develop, drop the tested briefs from {dir}/unpushed.txt, rm -rf target/suite.lock",
+		f"builders go on meanwhile; once it has finished (or before a bump, the next suite, the end): handle it; green: git push origin <sha>:develop, drop the tested briefs from {dir}/unpushed.txt, rm -rf target/suite.lock; then, unless --no-bump or HEAD moved past it, {exe} run scripts/release.nika -- {dir} (RELEASE lines) and WAKE PUSHED",
 	)
 	drive_say(
 		dry,
@@ -1734,7 +1854,7 @@ fn drive_suite(exe: String, dry: bool, dir: String) throws {
 	if drive_docs_only(drive_unpushed_paths()) {
 		let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 		println(f"SUITE {drive_short(head)} docs-only, pushed without the suite")
-		drive_push(head)
+		drive_push(dir, head)
 		fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
 		return
 	}
@@ -2861,7 +2981,7 @@ fn drive_stop(exe: String, dry: bool, dir: String, stop: String) throws {
 	}
 	drive_settle(exe, dir)
 	drive_unlock()
-	drive_wake(f"ESCALATE {stop}: the supervisor writes the next briefs")
+	drive_wake(dir, f"ESCALATE {stop}: the supervisor writes the next briefs")
 	if stop.starts_with("CUT") && !stop.ends_with("brief missing") && !stop.contains(": Pushed:") && !stop.contains(": Result: blocked") {
 		println("CLEAR with a line `Supervisor: YYYY-MM-DD: accepted ...` in the report (batch.nika); the builder's lines stay")
 	}
@@ -3637,7 +3757,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 		if action.starts_with("ESCALATE ") {
 			drive_settle(exe, dir)
 			drive_unlock()
-			drive_wake(action)
+			drive_wake(dir, action)
 			process::exit(2)
 		}
 		// Builders go on while CI runs the suite (owner, 2026-11-06); a
@@ -3686,7 +3806,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 		if next == "" {
 			drive_settle(exe, dir)
 			drive_unlock()
-			drive_wake("ESCALATE focus: every area empty")
+			drive_wake(dir, "ESCALATE focus: every area empty")
 			process::exit(2)
 		}
 		fs::write(path, fs::Root::Anywhere, drive_focus_set(file, next, 0))
@@ -3754,6 +3874,10 @@ fn main() throws {
 	}
 	if args.len() == 4 && args[1] == "--run-body" {
 		print(drive_run_comment(args[2], args[3].clone(), 0, "no report"))
+		return
+	}
+	if args.len() >= 3 && args[1] == "--wake" {
+		for k in 3..<args.len() { println(drive_wake_line(args[2], args[k])) }
 		return
 	}
 	if args.len() >= 2 && args[1] == "--issue" {
@@ -4006,7 +4130,7 @@ fn main() throws {
 		if action.starts_with("ESCALATE ") {
 			drive_settle(exe.clone(), dir)
 			drive_unlock()
-			drive_wake(action)
+			drive_wake(dir, action)
 			process::exit(2)
 		}
 		// A builder of the next batch and a bump wait for the batch's suite, and the cycle is read again (QA may
