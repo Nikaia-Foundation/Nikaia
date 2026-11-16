@@ -585,7 +585,8 @@ fn main() throws {
         if before != "" { agent_escalate(dir, f"two red gates in a row: {before} / {abs}: {gate}") }
     }
     // The run's row for the Runs table of docs/tokenspeed.md (#858), once per agent
-    // id. This only writes the file; the supervisor's commit takes it.
+    // id. This only writes the file; the release commit after the driver's push
+    // takes it (`release_bump` in scripts/release.nika, #1886).
     if exe != "" && fs::exists(transcript.clone(), fs::Root::Anywhere) && fs::exists("docs/tokenspeed.md", fs::Root::Anywhere) {
         let row = process::run(exe, ["run", "scripts/tokenspeed.nika", "--", "--short", transcript]).stdout.trim().clone()
         if row.starts_with("| ") {
