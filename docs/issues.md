@@ -178,6 +178,11 @@ it, like the checks in `docs/supervisor.md`.
   the builder chooses (#1733: #1717 left open whether a merge with no local
   commits fast-forwards, and a merge commit alone would have made the suite
   run).
+  An item that removes or replaces code names what that code does today
+  (I4a) and is checked against the decision it rests on (I6): code the
+  decision itself requires is not ordered away (#1735: #1527's item 3
+  removed http's spawn + join, which is how http answers 500 to a
+  panicking handler, as ADR-326 D4 asks).
   An item is work a builder can do without GitHub: what to say on another
   issue is a report's `Comment: #N <text>`, which the driver posts, and an
   issue whose only point is such a request is closed as noise (#1698, #1707).
@@ -244,6 +249,12 @@ issue lacked that would have saved it turns or a wrong turn:
   that no longer fails, a wrong file, a wrong ADR). `<n>` is the rule that
   asks for the false part; a false claim no rule covers is a `rules-gap`
   (#1706: a wrong claim of how the driver behaves was cited as I5, the probe).
+
+`<n>` is looked up in this file before it is written, never recalled: I3
+is plain language and I4 where it belongs; a probe that passes before any
+change is I5, a decision called unbuilt that is built is I6 ("built or text
+only"), an item that is wrong is I9 (#1735: #1527's run answered `wrong I3`
+and `wrong I4` for an I5/I6 and an I9 point; #1708 the same slip).
 
 A point the run has already closed as noise in its `Body:` (a mislabelled
 rule number a driver-filed issue copied from an earlier report, a slip
