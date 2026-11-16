@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1408] — 2026-11-16
+
+**prover: a list grown and a bool raised in a loop are flags; what held where they rose is kept, the loop's names projected out (ADR-361 D15)**
+- Prover: a list a loop grows and a flag it raises carry what held where they rose (ADR-361 D15): past `while … { if i < args.len() as i64 { at.push(i) } … }`, a non-empty `at` proves `args.len() >= 1`, also as a call's precondition.
+
 ## [0.0.1407] — 2026-11-16
 
 **Builders' changes (#1690, #1702, #1861, #1864, #1865)**
