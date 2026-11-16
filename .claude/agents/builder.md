@@ -86,8 +86,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   (docs/issues.md I6, #1745); a second defect is a second `Found:` line, and a
   behaviour some function or ADR does on purpose is no Found (#1677: one line
   merged two claims without a probe, and the second was by design). Each
-  shape the line names (a `for` and a `while` form) was run today and fails;
-  a shape that works is left out, and the line names the suspected file and
+  shape the line names (a `for` and a `while` form) was run today and fails,
+  on a binary built from HEAD (your run's own build, not `$S/old/nikaia`,
+  which may predate a fix: #1788 was filed from a probe a fix under #1754
+  had already made pass, #1822); a shape that works is left out, and the line names the suspected file and
   function, or says the cause is unknown (#1695: #1654's Found named the
   `while` forms, already proved, and no cause: `bounding_for` lacked the pair
   bounds `bounding_while` asks). A traced cause is run in its other
