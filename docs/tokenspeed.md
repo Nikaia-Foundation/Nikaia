@@ -838,6 +838,17 @@ supervisor's commit.
 | 2026-11-16 | 56e227 | check | 88 | 6.2 | 0 | - | |
 | 2026-11-16 | 40d41e | check | 37 | 2.3 | 0 | - | |
 | 2026-11-16 | 0546b8 | check | 66 | 5.0 | 0 | - | |
+| 2026-11-16 | 032f94 | check | 260 | 20.6 | -7 | - | |
+| 2026-11-16 | 92d38b | check | 53 | 3.2 | 0 | - | |
+| 2026-11-16 | 68f073 | check | 25 | 1.3 | 0 | - | |
+| 2026-11-16 | f88ae0 | check | 15 | 0.6 | 0 | - | |
+| 2026-11-16 | 8d9070 | check | 87 | 6.0 | 0 | - | |
+| 2026-11-16 | 7e0b3f | check | 42 | 2.3 | 0 | - | |
+| 2026-11-16 | d9e857 | check | 11 | 0.5 | 0 | - | |
+| 2026-11-16 | 8dcae4 | check | 43 | 2.5 | 0 | - | |
+| 2026-11-16 | 92feeb | check | 10 | 0.4 | 0 | - | |
+| 2026-11-16 | 6d3161 | check | 23 | 1.1 | 0 | - | |
+| 2026-11-16 | 2befb6 | check | 46 | 3.1 | 0 | - | |
 
 Moved lines are attributed by `scripts/tokenspeed.nika`: commits in the agent's
 window that changed a file it edited (Edit/Write/`git add` in its transcript)
