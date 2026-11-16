@@ -23,6 +23,9 @@ pub trait GrammarRunHost {
     /// Where every grammar run's parser is compiled: the one tree every
     /// build-time sub-build compiles `std` in (#1705).
     fn shared_target(ref self) -> fs::Path sync
+    /// The triple Cargo is told as `--target`: a program's, so that the
+    /// tree's `std` is the one its build compiled (#1705).
+    fn build_target(ref self) -> String sync
     /// The directory Cargo starts in.
     fn where_tools_start(ref self) -> fs::Path sync
     /// A path beside `path` that no other run writes at the same time.
@@ -64,10 +67,13 @@ pub fn grammar_run_compile_and_run[H: GrammarRunHost](host: ref H, at: ref fs::P
     // first grammar could run). Each parser is a crate of its own name
     // (`p<key>`), so they share the directory without meeting. **And the
     // bundles'** (#1705): with the profile they give their dependencies
-    // (`gr_manifest`), Cargo finds the `std` a bundle compiled there.
+    // (`gr_manifest`), Cargo finds the `std` a bundle compiled there. **And
+    // a program's**: with its `--target`, the tree is the one a program
+    // with no settings is built in.
     let target = host.shared_target()
+    let triple = host.build_target()
     let cargo = env::var("CARGO") ?? "cargo"
-    let built = process::run(cargo, ["build", "--quiet", "--manifest-path", manifest_path.display(), "--target-dir", target.display()]; dir: host.where_tools_start().display()) catch {
+    let built = process::run(cargo, ["build", "--quiet", "--manifest-path", manifest_path.display(), "--target-dir", target.display(), "--target", triple.clone()]; dir: host.where_tools_start().display()) catch {
         throw CheckWall::DidNotBuild { detail: f"running cargo: {error}" }
     }
     if !built.ok {
@@ -84,7 +90,7 @@ pub fn grammar_run_compile_and_run[H: GrammarRunHost](host: ref H, at: ref fs::P
         throw CheckWall::DidNotBuild { detail: f"writing {input_path.display()}: {error}" }
     }
 
-    let binary = target.join("debug").join(f"p{key}")
+    let binary = target.join(triple).join("debug").join(f"p{key}")
     let ran = process::run(binary.display(), [input_path.display()]) catch {
         fs::remove(input_path, fs::Root::Anywhere) catch {}
         throw CheckWall::DidNotBuild { detail: f"running {binary.display()}: {error}" }

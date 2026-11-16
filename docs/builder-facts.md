@@ -26,6 +26,10 @@ together with the specification section and an example test.
 
 ### Every run
 
+* **The compiler runs as rustc inside the program's `cargo build`**, so a sub-build in the same target dir waits for ever on Cargo's lock. (issue-1705)
+* **`nikaia run` takes the run_fast path without Cargo**: probe a build-time change with a cold `nikaia build`, not `nikaia run`. (issue-1705)
+* With `cargo --target`, proc-macro crates land in `<dir>/debug/deps`, not `<dir>/<triple>/debug/deps`. (issue-1705)
+* A test program that spawns `nikaia` finds it among its ancestors only under `nikaia test`, not `nikaia run`. (issue-1705)
 * **`lower-std` runs the bounds walk**, so a slower walk slows every `lower-std` (one ran past 20 minutes and was killed): while you change the walk, lower with the binary before your change and measure with yours once. (issue-1470)
 * **After a change to any `bounds_*.nika`, each `lower-std` re-proves std with the new walk: 10-13 minutes, not the 40 s of `builder.md`.** Plan one such cycle per hour; iterate with `check --bounds` on a probe reduced from the real site, and find a slowdown with a few `gdb` stack samples (a minute), not callgrind (an hour). (issue-1470)
 * **A change to the bounds walk that asks new questions makes committed `nikaia.proofs` stale** (the examples', a package's): `build --locked` then fails with "N questions were searched", but only on a clean target, since a warm cache hides it. The driver refreshes them before each push and after merging `origin/develop` (`drive_ledgers`), and CI fails a stale one; by hand, `nikaia run scripts/ledgers.nika -- --check` finds them and `-- --refresh` rewrites them, so commit the added entries with the change. (qa, 3c055bf5; #1591)
