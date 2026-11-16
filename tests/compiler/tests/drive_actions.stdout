@@ -3,6 +3,7 @@ would run: a batch's suite that has finished (target/suite.lock/exit-<sha>): han
 would run: git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)
 would run: df -m --output=avail /: under 6 GB free, the cleanup below; still under 3 GB after it, ESCALATE
 no issue for b1
+would run: write T/b1.md.running (the run's start, removed when its follow-up is done)
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
 would run: gh api repos/Nikaia-Foundation/Nikaia/issues/<issue of b1>/comments -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>
 would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (nothing committed)
@@ -39,6 +40,7 @@ would run: a batch's suite that has finished (target/suite.lock/exit-<sha>): han
 would run: git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)
 would run: df -m --output=avail /: under 6 GB free, the cleanup below; still under 3 GB after it, ESCALATE
 no issue for b1
+would run: write T/b1.md.running (the run's start, removed when its follow-up is done)
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
 would run: gh api repos/Nikaia-Foundation/Nikaia/issues/<issue of b1>/comments -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>
 would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (nothing committed)
@@ -62,6 +64,7 @@ would run: a batch's suite that has finished (target/suite.lock/exit-<sha>): han
 would run: git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)
 would run: df -m --output=avail /: under 6 GB free, the cleanup below; still under 3 GB after it, ESCALATE
 no issue for b1
+would run: write T/b1.md.running (the run's start, removed when its follow-up is done)
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
 would run: gh api repos/Nikaia-Foundation/Nikaia/issues/<issue of b1>/comments -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>
 would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (nothing committed)
