@@ -4,7 +4,8 @@
 // issue whose body says `Needs #N`, `After #N`, `Blocked by #N`, `waits for
 // #N` or `Depends on #N` with N open is `SKIPPED`; so is one whose brief's
 // last run (`issue-N.md.run1.report.md` beside LIST) ended `Result: blocked`
-// naming an open issue under `Needs:` or `Found:`. A closed dependency, a
+// naming an open issue under `Needs:` or `Found:`, or ended `Result: partial`
+// naming one under `Needs:` (#1827; a partial's `Found:` holds nothing up). A closed dependency, a
 // `Needs: supervisor decision` and a prose `after #N` hold up nothing.
 use std::fs
 use std::process
@@ -28,10 +29,11 @@ fn main() throws {
     let nikaia = toolchain()
     let dir = process::run("mktemp", ["-d"]).stdout.trim().clone()
     let list = f"{dir}/issues.txt"
-    fs::write(list.clone(), fs::Root::Anywhere, "=== #10 ===\nNo dependency.\nNeeds: supervisor decision\n=== #11 ===\n## Found\n\nNeeds #900\n=== #12 ===\n- [ ] **Blocked by** #901, #902\n=== #13 ===\nThis waits for #903 and #900 to land.\n=== #14 ===\nDepends on: #904\n=== #15 ===\nAfter #905, plain --bless no longer works; after #900 too.\n=== #18 ===\nNeeds #901; see also #900.\n=== #16 ===\nA run ended blocked.\n=== #17 ===\nA run ended partial.\n")
+    fs::write(list.clone(), fs::Root::Anywhere, "=== #10 ===\nNo dependency.\nNeeds: supervisor decision\n=== #11 ===\n## Found\n\nNeeds #900\n=== #12 ===\n- [ ] **Blocked by** #901, #902\n=== #13 ===\nThis waits for #903 and #900 to land.\n=== #14 ===\nDepends on: #904\n=== #15 ===\nAfter #905, plain --bless no longer works; after #900 too.\n=== #18 ===\nNeeds #901; see also #900.\n=== #16 ===\nA run ended blocked.\n=== #17 ===\nA run ended partial.\n=== #19 ===\nA run ended partial, waiting.\n")
     fs::write(f"{dir}/issue-16.md.run1.report.md", fs::Root::Anywhere, "Result: blocked\nFound: the walk lacks a term (#906)\nNeeds: supervisor decision\n")
     fs::write(f"{dir}/issue-17.md.report.md", fs::Root::Anywhere, "Result: partial\nFound: a gap (#900)\n")
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--queue-plan", list, "900", "901", "903", "906"]; dir: repo)
+    fs::write(f"{dir}/issue-19.md.report.md", fs::Root::Anywhere, "Result: partial - built, kept as a draft\nFound: a walk gap (#900); blocks the draft\nNeeds: #907 for the draft's last site\n")
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--queue-plan", list, "900", "901", "903", "906", "907"]; dir: repo)
     println(out.stdout.trim())
     process::run("rm", ["-rf", dir])
 }

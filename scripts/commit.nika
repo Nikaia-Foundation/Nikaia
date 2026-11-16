@@ -134,6 +134,20 @@ fn commit_copy_entry(index: String, path: String, stage: bool) -> bool throws {
     return commit_git_ok(index, ["update-index", "--add", "--cacheinfo", f"{parts[0]},{blob},{path}"])
 }
 
+// Sets PATHS in the shared index to their entries in HEAD, in one call, tried
+// up to ten times a fifth of a second apart while `index.lock` is held by
+// another agent's git (#1833); false when every try failed.
+fn commit_follow_head(paths: Vec[String]) -> bool throws {
+    if paths.len() == 0 { return true }
+    let mut args: Vec[String] = ["restore", "--staged", "--source=HEAD", "--"]
+    for p in paths { args.push(p.clone()) }
+    for _ in 0..<10 {
+        if process::run("git", args.clone()).ok { return true }
+        process::run("sleep", ["0.2"])
+    }
+    return false
+}
+
 // "" when fine, else the refusal.
 // The `NOTE:` line for an `Issue:` answer not marked `(built)` when FILES
 // change a rules file or a script; "" otherwise. The answers are split as the driver's
@@ -361,9 +375,12 @@ fn main() throws {
         process::exit(1)
     }
     // The shared index follows HEAD on the committed paths; the others'
-    // staged files stay as they were.
-    for f in listed {
-        if !commit_copy_entry("", f.clone(), false) { println(f"NOTE: could not update the shared index for {f}; `git status` may show it staged") }
+    // staged files stay as they were. One `git restore --staged` for all of
+    // them, tried again while another agent's `git status` holds
+    // `index.lock`: a call per file lost two new files to that lock and left
+    // them staged as deletions beside untracked copies (#1833).
+    if !commit_follow_head(listed.clone()) {
+        println(f"NOTE: could not update the shared index (another git holds .git/index.lock?); run `git restore --staged -- {listed.join(" ")}`, or `git status` shows these files staged (a new file as a staged deletion)")
     }
     if others.len() > 0 { println(f"left staged, not committed: {others.join(" ")}") }
     let sha = commit_git(["rev-parse", "HEAD"])

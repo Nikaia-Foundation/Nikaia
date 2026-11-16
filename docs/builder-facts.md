@@ -56,13 +56,24 @@ together with the specification section and an example test.
   build the before binary from HEAD's own sources first; a stale copy cost
   a run 30 turns chasing a regression HEAD never had. (issue-1483)
 * A rebuild while `nikaia test` runs fails tests at random: rerun the failed
-  ones alone before calling them failures. (issue-1414)
+  ones alone before calling them failures. Under `--both-settings` it shows
+  as `FAILED (the settings disagree)` on tests that pass alone (the settings
+  ran different binaries), or as `Error: running .../nikaia (deleted)`; a
+  test that spawns `nikaia` (every `drive_*`) runs its own ancestor, so run
+  a filter of many such tests with your `$S/old/nikaia` copy. (issue-1414,
+  #1837)
 * **The checkout is shared.** A file another agent has modified: stage only
   your hunks (`git diff FILE > $S/p.diff`, delete theirs from the copy, `git
   apply --cached`, check with `git diff --cached FILE`; `git add -p` is
   refused here). A build that shows none of your edits may have run during a
   driver rebase: check `git status` and your file, then rebuild; never touch
   others' `UU` files, name them under `Needs:` (BT, b1043).
+  An uncommitted edit of yours that is gone from the tree mid-cycle is
+  in the driver's merge (`git merge --no-commit --autostash`, by design,
+  #1333): `.git/MERGE_HEAD` exists and `git stash list` shows the
+  autostash. Never type the edit again (the autostash pop then conflicts);
+  wait in one call for the merge to end (Monitor until `.git/MERGE_HEAD`
+  is gone), check the edit is back, then run the cycle again. (#1830)
 * **Long runs go in the background** with `run_in_background` and `timeout:
   3600000`, and you wait for the wake-up, never a `sleep` or `pgrep` loop. A
   `lower-std` and build cycle takes 10-15 minutes: find every change it needs

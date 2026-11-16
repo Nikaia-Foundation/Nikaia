@@ -56,8 +56,8 @@ use group::{Group, ended, ran};
 /// needs: the executor owns the task, so dropping the handle drops the handle
 /// and not the work.
 pub struct TaskHandle<T> {
-    slot: std::sync::Arc<crate::rt::exec::Slot<T>>,
-    asked: std::sync::Arc<Cancelled>,
+    slot: crate::rt::exec::Uncounted<std::sync::Arc<crate::rt::exec::Slot<T>>>,
+    asked: crate::rt::exec::Uncounted<std::sync::Arc<Cancelled>>,
 }
 
 /// **The request a [`TaskHandle::cancel`] makes**
@@ -73,11 +73,11 @@ struct Cancelled {
 }
 
 impl Cancelled {
-    fn nobody_asked() -> std::sync::Arc<Cancelled> {
-        std::sync::Arc::new(Cancelled {
+    fn nobody_asked() -> crate::rt::exec::Uncounted<std::sync::Arc<Cancelled>> {
+        crate::rt::exec::Uncounted::new(std::sync::Arc::new(Cancelled {
             asked: std::sync::atomic::AtomicBool::new(false),
             waking: std::sync::Mutex::new(None),
-        })
+        }))
     }
 }
 
@@ -91,8 +91,8 @@ impl Cancelled {
 /// for any of it.
 struct Cancellable<F, T, Q: crate::cleanup::Queue> {
     body: Option<std::pin::Pin<Box<F>>>,
-    slot: std::sync::Arc<crate::rt::exec::Slot<T>>,
-    asked: std::sync::Arc<Cancelled>,
+    slot: crate::rt::exec::Uncounted<std::sync::Arc<crate::rt::exec::Slot<T>>>,
+    asked: crate::rt::exec::Uncounted<std::sync::Arc<Cancelled>>,
     /// **The cleanups this task parked**
     /// ([ADR-297](../../../docs/specification/adr/adr-297.md) D1): swapped in
     /// while it is polled, so that what it parks and what it settles are its
@@ -138,10 +138,24 @@ impl<F, T, Q: crate::cleanup::Queue> Drop for Cancellable<F, T, Q> {
         if self.body.is_some() {
             self.queues.swap();
             let _block = crate::block::enter(&self.block);
-            self.body = None;
+            self.drop_body();
             self.queues.swap();
         }
         self.queues.orphan();
+    }
+}
+
+impl<F, T, Q: crate::cleanup::Queue> Cancellable<F, T, Q> {
+    /// **Drop the body against the task, its box against nobody** (ADR-327
+    /// D9): what the body holds was counted against this task and is freed
+    /// against it, but the box was built outside every block (`start`), so
+    /// its free is given back, or the task would end with less on its
+    /// account than its value holds and its joiner take too little.
+    fn drop_body(&mut self) {
+        let size = self.body.as_deref().map_or(0, std::mem::size_of_val);
+        if self.body.take().is_some() {
+            crate::block::count(isize::try_from(size).unwrap_or(isize::MAX));
+        }
     }
 }
 
@@ -155,7 +169,7 @@ impl<F: std::future::Future<Output = T>, T, Q: crate::cleanup::Queue> Cancellabl
             // **The teardown is the drop**, and it happens here rather than in
             // `cancel` because this is the task's own thread and its pause
             // point.
-            self.body = None;
+            self.drop_body();
             return std::task::Poll::Ready(());
         }
         let Some(body) = self.body.as_mut() else {
@@ -173,14 +187,14 @@ impl<F: std::future::Future<Output = T>, T, Q: crate::cleanup::Queue> Cancellabl
         let polled = match polled {
             Ok(polled) => polled,
             Err(payload) => {
-                self.body = None;
+                self.drop_body();
                 self.slot.fail(Crashed::of(payload));
                 return std::task::Poll::Ready(());
             }
         };
         match polled {
             std::task::Poll::Ready(value) => {
-                self.body = None;
+                self.drop_body();
                 // **What the task still holds outside its block is its
                 // value's** (ADR-327 D9): it leaves the task's account here,
                 // with the block in place, and the joiner takes it.
@@ -366,6 +380,10 @@ impl<T: 'static> TaskHandle<T> {
     /// `move` meeting at the same place, with `NK2101` in front of it for the
     /// data the parent still wanted.
     pub fn start(body: impl std::future::Future<Output = T> + 'static) -> TaskHandle<T> {
+        // **The runtime's bookkeeping is no task's** (ADR-327 D9): the slot,
+        // the body's box and its place in the queue are built outside every
+        // block, so a task that starts others keeps no weight of theirs.
+        let _outside = crate::block::outside();
         let slot = crate::rt::exec::Slot::empty();
         let asked = Cancelled::nobody_asked();
         crate::rt::exec::start(Cancellable {
@@ -446,6 +464,10 @@ impl<T: Send + 'static> TaskHandle<T> {
     pub fn start_on_pool(
         body: impl std::future::Future<Output = T> + Send + 'static,
     ) -> TaskHandle<T> {
+        // **The runtime's bookkeeping is no task's** (ADR-327 D9): the slot,
+        // the body's box and its place in the queue are built outside every
+        // block, so a task that starts others keeps no weight of theirs.
+        let _outside = crate::block::outside();
         let slot = crate::rt::exec::Slot::empty();
         let asked = Cancelled::nobody_asked();
         crate::rt::exec::start_on_pool(Cancellable {
