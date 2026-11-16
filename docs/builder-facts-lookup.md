@@ -449,3 +449,10 @@ build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
   keep an `anyhow` refusal in a `RefCell` of the host to hand it back. A
   body-less trait method's text parameter is written `ref String`. Host state
   is a `RefCell` field; the Nikaia side names units by `i64` index (M3b).
+* **`Vec` in the Rust host is Nikaia's `List`**: most of `crates/nikaia/src`
+  (`project.rs`, `emit/`, `sysroot.rs`, ...) imports `nikaia_std::block::names::{Vec, vec, ...}`,
+  and `block.rs` has `pub use super::List as Vec`. A plain Rust buffer there
+  (bytes read from a pipe, `Command` args, a value handed to `std` or libc
+  code) is written `std::vec::Vec` / `std::vec::Vec::new()`, as `project.rs`
+  already does; `cargo check --release -p nikaia --message-format short`
+  catches the slip before a build. (issue-1919, #1923)
