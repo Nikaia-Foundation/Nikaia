@@ -85,6 +85,11 @@ it, like the checks in `docs/supervisor.md`.
   issues, and a claim no probe shows is checked against the code first, since
   a behaviour a function does on purpose is no bug (#1677: a `Found:` merged
   two claims without a probe, and the second was the describer's rule).
+  A cost (a read more per call) is no defect either: it is left out, or
+  filed alone as a measuring issue with its count (`docs/measuring.md`)
+  (#1752: #1554 put seven claims in one point, among them a closure
+  capture `block.rs` keeps on purpose and a thread-local read per
+  allocation).
   A builder's report gives each defect its own `Found:` line for this.
   Each shape the issue names as failing (a `for` and a `while` form) is
   run on the binary of the day; a shape that already works is named as
