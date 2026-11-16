@@ -135,6 +135,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * A nullable result written `from self` is still NK1131, and `-> ref U?` on a method is NK1343. (issue-1403)
 * A check run over `value_leaves` after the arms are checked must not re-type a leaf with `check_core_expr` unless its root is a parameter (`a_place_of_a_lent_parameter`), or names a `match` pattern bound give NK1117 in `ast.nika` during `lower-std`. (issue-1425)
 * A `pub fn` with a mixed `String` result keeps it owned (ADR-282 D22), so a borrowed-field arm needs the per-arm NK1131; probe both the tail form and the `return if` form. (issue-1425)
+* `CheckFacts.method_callees` holds the ledger key of **every** described method call, `std`'s too (`Bytes::text`, `str::trim`, `net::Connection::read(within)`), filled in `check_core_call_on_described`, not only the user's own methods its comment's `Holder::put` suggests; `!method_callees.contains_key(on_node)` therefore excludes `std` calls as well. Tell a user method from a `std` one by the key's type part (`starts_with("str::")`, `== "Bytes::text"`, as `emit_core_calls.nika` does) or by `std_receivers`. (issue-1870, #1900)
 
 ### Lowering and lower-std
 
