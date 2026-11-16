@@ -15,7 +15,8 @@
 // each of several (#1769); an improvement issue quotes the run's Found
 // lines, with the issue numbers found.txt pairs them with (#1783), and
 // the whole report, which may be gone from docs/briefs/ (#1791). A `broke I<n>`
-// answer goes to the run's issue (#1818, drive_improve_plan).
+// answer goes to the run's issue (#1818, drive_improve_plan). A Found that
+// names a scratchpad path is filed with a note that its probe is gone (#1824).
 use std::fs
 use std::process
 
@@ -54,6 +55,8 @@ fn main() throws {
     drive(repo.clone(), nikaia.clone(), ["--found-issue", "v45-x", "", "a short gap", "supervisor decision"])
     // A Found that says it has no decision is a `decision` issue (#1745).
     drive(repo.clone(), nikaia.clone(), ["--found-issue", "v45-y", "", "a struct result's fields: no decision yet in ADR-306", "none"])
+    // A Found that names its probe by a scratchpad path says it is gone (#1824).
+    drive(repo.clone(), nikaia.clone(), ["--found-issue", "issue-1751", "1751", "a churn of SharedMut runs over the budget: /tmp/claude-0/x/scratchpad/issue-1751/p.nika", "none"])
     // A report with two Founds gives neither its one `Needs:` (#1769).
     let two = process::run("mktemp", []).stdout.trim().clone()
     fs::write(two.clone(), fs::Root::Anywhere, "Result: done\nFound: guide/views.md example uses the old ref syntax\nFound: NK1131 refuses a lent field\nNeeds: group D of #1531\n")

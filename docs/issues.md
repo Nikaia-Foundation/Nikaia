@@ -100,6 +100,11 @@ it, like the checks in `docs/supervisor.md`.
   (#1726: #1715's probe threw text, lacked `use std::time` and put
   `user-parallelism` under `[package]`, where it is ignored, not under
   `[build]`; it did not compile as written and cost three probe rounds).
+  It is written out in the issue (or the `Found:` line), never pointed at
+  by a path: a file in a run's scratchpad is gone, or in another session's
+  scratchpad and unreadable, when the issue is built (#1824: #1751's Found
+  named `/tmp/claude-…/scratchpad/…` and left out the expected result
+  ADR-327 D9 gives; the supervisor's comment had to supply both).
   A probe of a missing method or `std` entry stops at that name, so the
   rest of it is never checked: it is run once more with a method that
   exists in its place (`sort_by_key` for `sort_by`), and it writes

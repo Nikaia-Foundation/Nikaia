@@ -76,7 +76,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   command as run: the package built and its
   setting, the consumer where the library alone builds, #1716; the
   snippet copied whole from the file that ran, its `use` lines and
-  manifest table with it, never retyped, #1726; a probe of a missing
+  manifest table with it, never retyped, #1726, and written out in the
+  line, never a path to it: your scratchpad is gone or unreadable when
+  the issue is built, #1824; a probe of a missing
   method stops at that name, so run its rest once with a method that
   exists in its place and write Nikaia's names, `compare` not Rust's
   `cmp`, #1749); the part your run can
