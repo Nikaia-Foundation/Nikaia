@@ -987,7 +987,7 @@ last row runs over a copy of the last bytes with zeros behind them,
 holds as many lanes as the build's widest vector register (`Lanes[T].count`, a
 constant of the build), `simd::Fixed[T, N]` holds `N` lanes on every target, `N`
 a literal power of two from 2 to 64 (`NK1297`); `T` is `u8`, `i8`, `u16`, `i16`,
-`u32`, `i32`, `u64` or `i64`; `i8`, `u16` and `i16` are lane types only. Both are
+`u32`, `i32`, `u64`, `i64`, `f32` or `f64`; `i8`, `u16` and `i16` are lane types only. Both are
 made by `simd::load(b, at)`, which reads what `b[at..<at + count]` reads and
 stops the program where that cut would, or by `simd::splat(x)`, each taking its
 type from what receives it (`NK1245` without one); `v.count()` is the lane
@@ -995,7 +995,7 @@ count. They offer lane by lane `wrapping_add`, `wrapping_sub`,
 `wrapping_mul`, `saturating_add`, `saturating_sub`, `min`, `max`, `& | ^ !`,
 `<<` and `>>` by a constant, `simd::select(mask, a, b)`, the comparisons `eq`, `ne`,
 `lt`, `le`, `gt`, `ge`, which answer a `simd::Mask[T]` (a `Fixed[T, N]`'s is `simd::Mask[T, N]`), and the reductions
-`wrapping_sum`, `min_lane` and `max_lane`. `+ - * / %` are not lane operations
+`wrapping_sum`, `min_lane` and `max_lane`. `+ - * / %` are not operations of integer lanes
 (`NK1296`); a lane shift's count is a literal below the lane's width (`NK1299`). Only a `Fixed` offers `lane(i)`, checked as an index,
 `simd::Fixed.from([…])`, `shuffle(of)` by constant indices within its lanes
 (`NK1298`), `dot_pairs(w)`, which multiplies lane by lane and adds each
@@ -1003,7 +1003,7 @@ neighbouring pair into one lane of twice the width (`u8` by `i8` into `i16`,
 saturating, `i16` by `i16` into `i32`, wrapping), `widen` and `narrow_saturating`. A mask is read as
 positions: `first() -> i64?`, `positions() -> Seq[i64]` rising, `count()`,
 `any()`, `all()`, and combined with `& | !`; each position is at least 0 and
-below the lane count, and a proof may use it.
+below the lane count, and a proof may use it. **Float lanes** (`f32`, `f64`, [ADR-377](adr/adr-377.md) D9) offer `+ - * /` lane by lane with the scalar's IEEE meaning, `sqrt`, `abs`, `min`, `max`, `select`, the comparisons, `min_lane` and `max_lane`, and on a `Fixed` `lane(i)`, `simd::Fixed.from([…])` and `sum()`, which adds neighbouring pairs to one lane in a fixed order; the integer operations are not theirs.
 
 **A `'…'` is a `u8` or a `scalar`, by its use.** One ASCII character is either;
 `'\xNN'` above `\x7F` is only a `u8`; one scalar that is not ASCII is only a
