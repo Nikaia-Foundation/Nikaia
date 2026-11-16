@@ -86,7 +86,7 @@ fn main() throws {
 	calls(log)
 
 	fs::write(f"{lib}/src/more.nika", fs::Root::Anywhere, "pub fn five() -> i64 {\n\treturn 5\n}\n")
-	for k in 2..8 {
+	for k in 2..<9 {
 		fs::write(
 			f"{lib}/tests/b{k}.nika",
 			fs::Root::Anywhere,
