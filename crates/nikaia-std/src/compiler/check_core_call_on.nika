@@ -1321,8 +1321,22 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     }
     // **`retain` takes out an item that copies** (ADR-231 D2): its lambda's
     // parameter is the item the pattern `&a` copies out, not a view of it.
-    if key == "Vec::retain" && args.len() == 1 && expected.len() == 1 && check_core_call_on_retain_copies(on, args[0]) {
+    if key == "Vec::retain" && args.len() == 1 && expected.len() == 1 && check_core_call_on_item_copies(on, args[0], 1) {
         expected[0] = check_core_call_on_unviewed_fn(expected[0])
+    }
+    // **So do `sort_by_key` and `sort_by`** (#1754): each parameter is the
+    // item, and the lowering writes the pattern `&a` for it.
+    let keyed = key == "Vec::sort_by_key" || key == "Array::sort_by_key"
+    let compared = key == "Vec::sort_by" || key == "Array::sort_by"
+    let mut handed = 1
+    if compared {
+        handed = 2
+    }
+    if (keyed || compared) && args.len() == 1 && expected.len() == 1 && check_core_call_on_item_copies(on, args[0], handed) {
+        expected[0] = check_core_call_on_unviewed_fn(expected[0])
+        for index in 0..<handed {
+            state.facts.copied_item_params.insert((id_of(args[0]) as i64, index))
+        }
     }
     let callee: FnContract? = contract.clone()
     state.call_keepers = world.keepers.get(key)?.clone() ?? collections::BTreeMap()
@@ -1701,13 +1715,14 @@ fn check_core_call_on_one_param(world: ref CheckWorld, arg: ref Expr) -> String?
 }
 
 /// A `fn` type whose parameter is no view: the slot copied in.
-/// Whether `retain`'s lambda takes out a list's item that copies and is
-/// not a view: the pattern `&a` of `check_core_method_called`, by the same
-/// test, so the parameter is the item (#1748).
-fn check_core_call_on_retain_copies(on: ref Ty, arg: ref Expr) -> bool {
+/// Whether a lambda of `handed` parameters (`retain`'s, `sort_by_key`'s,
+/// `sort_by`'s) takes out a list's item that copies and is not a view: the
+/// pattern `&a` of `check_core_method_called`, by the same test, so each
+/// parameter is the item (#1748, #1754).
+fn check_core_call_on_item_copies(on: ref Ty, arg: ref Expr, handed: i64) -> bool {
     let item: Ty = match on {
         Ty::Named { name, args, .. } => {
-            if (name == "Vec" || name == "List") && args.len() == 1 {
+            if ((name == "Vec" || name == "List") && args.len() == 1) || (name == "Array" && args.len() >= 1) {
                 args[0].clone()
             } else {
                 return false
@@ -1716,7 +1731,7 @@ fn check_core_call_on_retain_copies(on: ref Ty, arg: ref Expr) -> bool {
         else => return false,
     }
     let one = match arg {
-        Expr::Closure { params, .. } => params.len() == 1,
+        Expr::Closure { params, .. } => params.len() as i64 == handed,
         else => false,
     }
     return one && !item.is_unknown() && !item.is_a_view() && !moves(item)

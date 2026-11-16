@@ -8,7 +8,7 @@ pub fn parameters(body: &str) -> Vec<String> {
     #[allow(unused_mut)] let mut found: Vec<String> = Vec::new();
     let mut i: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut found = found;
     while i < c.len() as i64 {
-        if *nikaia_std::index::get(&c, nikaia_std::index::at(i)) != ':' {
+        if *unsafe { nikaia_std::proven::read(&c, (i) as usize) } != ':' {
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             continue;
         }

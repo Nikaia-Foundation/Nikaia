@@ -5,6 +5,7 @@
 pub struct BodyShape {
     pub constants: collections::BTreeMap<String, i64>,
     pub unsigned: collections::BTreeSet<String>,
+    pub narrow: collections::BTreeMap<String, i64>,
     pub roots: collections::BTreeSet<String>,
     pub aliases: collections::BTreeMap<String, String>,
     pub bound: collections::BTreeSet<String>,
@@ -44,7 +45,7 @@ pub(crate) struct ShapeSeen {
 }
 
 pub fn shape_of(args: &[FnArg], body: &Block, pinned: &collections::BTreeSet<String>, around: &Around, words: &winnow_grammar::InternerContext) -> BodyShape {
-    let mut seen = ShapeSeen { bound: collections::BTreeMap::new(), shape: BodyShape { constants: collections::BTreeMap::new(), unsigned: collections::BTreeSet::new(), roots: collections::BTreeSet::new(), aliases: collections::BTreeMap::new(), bound: collections::BTreeSet::new(), twice: collections::BTreeSet::new(), fields: around.fields.copy_owned() }, lost: collections::BTreeSet::new(), returning: around.returning.copy_owned() };
+    let mut seen = ShapeSeen { bound: collections::BTreeMap::new(), shape: BodyShape { constants: collections::BTreeMap::new(), unsigned: collections::BTreeSet::new(), narrow: collections::BTreeMap::new(), roots: collections::BTreeSet::new(), aliases: collections::BTreeMap::new(), bound: collections::BTreeSet::new(), twice: collections::BTreeSet::new(), fields: around.fields.copy_owned() }, lost: collections::BTreeSet::new(), returning: around.returning.copy_owned() };
     for arg in args.iter() { bind_name(words.resolve(arg.name), &mut seen); }
     look_block(body, &Look::Bound, false, around, words, &mut seen);
     for (name, times) in seen.bound.iter() {
@@ -54,7 +55,11 @@ pub fn shape_of(args: &[FnArg], body: &Block, pinned: &collections::BTreeSet<Str
     }
     for arg in args.iter() {
         let name = nikaia_std::block::Text::from(words.resolve(arg.name).to_string());
-        if once(&name, &seen) && is_unsigned(&plain_name(&arg.ty, words)) { seen.shape.unsigned.insert(name); }
+        let ty = plain_name(&arg.ty, words);
+        if once(&name, &seen) && is_unsigned(&ty) {
+            read_narrow(&name, &ty, &mut seen);
+            seen.shape.unsigned.insert(name);
+        }
     }
     look_block(body, &Look::Lets, false, around, words, &mut seen);
     look_block(body, &Look::Aliases, false, around, words, &mut seen);
@@ -191,11 +196,20 @@ pub(crate) fn declared_name(ty: Option<&Type>, words: &winnow_grammar::InternerC
     Some(plain_name(t, words))
 }
 
+pub(crate) fn read_narrow(name: &str, ty: &str, seen: &mut ShapeSeen) {
+    let held = match Range::held_by_type(ty) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let most = match held.hi { Some(__nikaia_value) => __nikaia_value, None => return };
+    if most <= 65535 { seen.shape.narrow.insert(nikaia_std::block::Text::from(name.to_string()), most); }
+}
+
 pub(crate) fn read_let(name: &str, mutable: bool, ty: Option<&Type>, value: &Expr, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {
     if !once(name, &seen) { return; }
     let declared = declared_name(ty, words);
     let whole = declared.is_none() || is_whole_number(nikaia_std::index::or(declared.as_deref(), || ""));
-    if is_unsigned(nikaia_std::index::or(declared.as_deref(), || "")) { seen.shape.unsigned.insert(nikaia_std::block::Text::from(name.to_string())); }
+    if is_unsigned(nikaia_std::index::or(declared.as_deref(), || "")) {
+        read_narrow(name, nikaia_std::index::or(declared.as_deref(), || ""), seen);
+        seen.shape.unsigned.insert(nikaia_std::block::Text::from(name.to_string()));
+    }
     if !mutable && whole {
         let n = literal_count(value);
         if n.is_some() { seen.shape.constants.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::index::or(n, || 0)); }

@@ -1,0 +1,8 @@
+bounds in tests/a_quotient_of_a_byte_by_16_reads_one_of_16_digits.nika: 5 indexes, 4 proved; 0 operations, 0 proved
+    13  digits[d / 16]      proved
+    14  digits[d % 16]      proved
+    22  digits[d / 16]      proved
+    31  digits[(…) / 16]    proved
+    36  digits[d / 16]      checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+  derived  again: b <= n, b < n, proved at the calls on lines 41
+  derived  wide: 0 <= d, proved at the calls on lines 41

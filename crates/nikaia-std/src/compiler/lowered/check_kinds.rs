@@ -219,7 +219,7 @@ impl CheckState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn a_buffer_and_its_count(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], at: i64, span: &Span) {
         if !kind_a_slice_pointer(&unsafe { nikaia_std::proven::read(&wanted, (at) as usize) }.1) { return; }
-        if at + 1 >= wanted.len() as i64 || !kind_a_usize(&unsafe { nikaia_std::proven::read(&wanted, (nikaia_std::proven::add::<i64>(at, 1)) as usize) }.1) { return; }
+        if unsafe { nikaia_std::proven::add::<i64>(at, 1) } >= wanted.len() as i64 || !kind_a_usize(&unsafe { nikaia_std::proven::read(&wanted, (nikaia_std::proven::add::<i64>(at, 1)) as usize) }.1) { return; }
         if unsafe { nikaia_std::proven::add::<i64>(at, 1) } >= given.len() as i64 { return; }
         let buffer = unsafe { nikaia_std::proven::read(&given, (at) as usize) };
         let count = unsafe { nikaia_std::proven::read(&given, (nikaia_std::proven::add::<i64>(at, 1)) as usize) };

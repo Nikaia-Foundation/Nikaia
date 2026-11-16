@@ -1,0 +1,90 @@
+/// A whole-number field that every literal builds at most another and every
+/// method keeps so is a rule the walk finds (#1681, ADR-369 D4): `used <=
+/// limit` is a fact at each method's entry, so `used != limit` leaves room
+/// for `used + 1`. A literal that gives the limit by a name is asked where
+/// it stands.
+struct Budget {
+	used: i64,
+	limit: i64,
+}
+
+impl Budget {
+	fn tick(mut self) -> bool sync {
+		if self.used == self.limit {
+			return false
+		}
+		self.used += 1
+		return true
+	}
+}
+
+fn budget(n: i64) -> Budget {
+	if n < 0 {
+		return Budget { used: 0, limit: 0 }
+	}
+	return Budget { used: 0, limit: n }
+}
+
+/// The probe of #1681: a counter raised in a loop behind its limit, which
+/// the guard alone bounds.
+struct Search {
+	steps: i64,
+	limit: i64,
+}
+
+impl Search {
+	fn run(mut self, work: ref Vec[i64]) sync {
+		for w in work {
+			if self.steps >= self.limit {
+				return
+			}
+			self.steps += 1
+		}
+	}
+}
+
+/// A method that lowers the limit below the count breaks the rule, so it
+/// is not found and the raise keeps its check.
+struct Loose {
+	used: i64,
+	limit: i64,
+}
+
+impl Loose {
+	fn tick(mut self) -> bool sync {
+		if self.used == self.limit {
+			return false
+		}
+		self.used += 1
+		return true
+	}
+
+	fn shrink(mut self) {
+		self.limit = 0
+	}
+}
+
+/// A count of work done that nothing caps names the rule it lacks.
+pub struct Stats {
+	pub pivots: i64,
+}
+
+impl Stats {
+	fn bump(mut self) sync {
+		self.pivots += 1
+	}
+}
+
+fn main() throws {
+	let mut b = budget(2)
+	println(f"{b.tick()} {b.tick()} {b.tick()}")
+	let mut s = Search { steps: 0, limit: 3 }
+	s.run([1, 2, 3, 4, 5])
+	println(s.steps)
+	let mut l = Loose { used: 0, limit: 1 }
+	println(l.tick())
+	l.shrink()
+	let mut t = Stats { pivots: 0 }
+	t.bump()
+	println(t.pivots)
+}

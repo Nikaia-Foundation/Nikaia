@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1401 (Draft)
+**Version:** 0.0.1402 (Draft)
 **Date:** 2026-11-16
 
 ---
@@ -1979,7 +1979,7 @@ error[NK2204]: You can't assign to `kasse` directly: it holds shared mutable sta
 ```
 
 ```text
-error[NK2205]: This `set` stores a value that was read from `kasse` earlier, so the lock is taken twice.
+error[NK2205]: This `set` into `kasse` stores a value that was read from a lock earlier.
   --> main.nika:6:5
    |
  6 |     kasse.set(kasse.get() + 100)
@@ -1987,7 +1987,7 @@ error[NK2205]: This `set` stores a value that was read from `kasse` earlier, so 
    |
    = note: A value read from a lock is out of date as soon as the lock is released: anything can change between the read and the store.
    = note: This is found wherever the value was read: on the line above, in another function, or in another request.
-   = help: Write `kasse.update fn(mut v) { … }`, which reads and changes the value while holding the lock.
+   = help: Write `kasse.update fn(mut v) { … }`, which reads and changes the value while holding the lock; a value from another lock goes in with `update_all(other, kasse) fn(mut x, mut v) { … }`, which holds both.
 ```
 
 The second one reads the stamp a value carries out of a lock: the inline `get`

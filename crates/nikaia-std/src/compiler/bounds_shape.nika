@@ -21,6 +21,10 @@ pub struct BodyShape {
 	/// assigned to them, because an assignment that would make one negative
 	/// stops the program.
 	pub unsigned: collections::BTreeSet[String],
+	/// Of `unsigned`, those of a narrow type (`u8`), with the most their
+	/// type holds: a term's type is its range (ADR-306 D34), so `b / 16`
+	/// of a byte is below 16 (#1786).
+	pub narrow: collections::BTreeMap[String, i64],
 	/// **Lists whose every write the walk sees** (ADR-306 D7): bound once in
 	/// the body to a literal, never assigned, handed on or captured, and
 	/// changed only by a method that writes what the walk can read
@@ -110,6 +114,7 @@ pub fn shape_of(
 		shape: BodyShape {
 			constants: collections::BTreeMap(),
 			unsigned: collections::BTreeSet(),
+			narrow: collections::BTreeMap(),
 			roots: collections::BTreeSet(),
 			aliases: collections::BTreeMap(),
 			bound: collections::BTreeSet(),
@@ -131,7 +136,9 @@ pub fn shape_of(
 	}
 	for arg in args {
 		let name = words.resolve(arg.name).clone()
-		if once(name, seen) && is_unsigned(plain_name(arg.ty, words)) {
+		let ty = plain_name(arg.ty, words)
+		if once(name, seen) && is_unsigned(ty) {
+			read_narrow(name, ty, seen)
 			seen.shape.unsigned.insert(name)
 		}
 	}
@@ -345,6 +352,17 @@ fn declared_name(ty: ref Type?, words: ref winnow_grammar::InternerContext) -> S
 	return plain_name(t, words)
 }
 
+/// **An unsigned name of a narrow type** lies at or below the most its
+/// type holds (ADR-306 D34, #1786); only the narrow ones are kept, as a fact
+/// of a `u32` or wider bounds nothing an index reads.
+fn read_narrow(name: ref String, ty: ref String, mut seen: ShapeSeen) {
+	let held = Range::held_by_type(ty) ?? return
+	let most = held.hi ?? return
+	if most <= 65535 {
+		seen.shape.narrow.insert(name.clone(), most)
+	}
+}
+
 /// `let name: ty = value`, one name: a constant, an unsigned name, a root.
 fn read_let(
 	name: ref String,
@@ -360,6 +378,7 @@ fn read_let(
 	let declared = declared_name(ty, words)
 	let whole = declared == null || is_whole_number(declared ?? "")
 	if is_unsigned(declared ?? "") {
+		read_narrow(name, declared ?? "", seen)
 		seen.shape.unsigned.insert(name.clone())
 	}
 	if !mutable && whole {

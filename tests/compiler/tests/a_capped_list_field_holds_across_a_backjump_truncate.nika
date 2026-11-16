@@ -1,0 +1,73 @@
+// A list field whose every element is at most another field's length
+// keeps that bound across a backjump (ADR-306 D21, #1785): `marks` holds
+// the length of `trail` at each level, ascending; undoing the levels above
+// `target` cuts `trail` to `start = marks[target]` and `marks` to `target`,
+// so each mark left is at most `start`, the new length. `trail[i]` below
+// the first mark is then proved, as are the cuts. The fields are private:
+// `main` reads them only through methods.
+
+struct Levels {
+	marks: Vec[i64],
+	trail: Vec[i64],
+}
+
+impl Levels {
+	fn level(ref self) -> i64 {
+		return self.marks.len()
+	}
+
+	fn assign(ref mut self, x: i64) {
+		self.trail.push(x)
+	}
+
+	fn decide(ref mut self, x: i64) {
+		self.marks.push(self.trail.len())
+		self.assign(x)
+	}
+
+	fn backjump(ref mut self, target: i64) {
+		if self.level() <= target || target < 0 {
+			return
+		}
+		let start = self.marks[target]
+		self.trail.truncate(start)
+		self.marks.truncate(target)
+	}
+
+	fn assigned(ref self) -> Vec[i64] {
+		return self.trail.clone()
+	}
+
+	fn carried(ref self) -> Vec[i64] {
+		let top = if self.marks.len() > 0 { self.marks[0] } else { self.trail.len() }
+		let mut out: Vec[i64] = []
+		for i in 0..<top {
+			out.push(self.trail[i])
+		}
+		return out
+	}
+}
+
+// The list's elements as text: a list has no text form of its own.
+fn show(xs: ref Vec[i64]) -> String {
+	let mut out: Vec[String] = []
+	for x in xs {
+		out.push(f"{x}")
+	}
+	return "[" + out.join(", ") + "]"
+}
+
+fn main() throws {
+	let mut levels = Levels { marks: [], trail: [] }
+	levels.assign(1)
+	levels.decide(2)
+	levels.assign(3)
+	levels.decide(4)
+	levels.decide(5)
+	println(show(levels.carried()))
+	levels.backjump(1)
+	println(show(levels.assigned()))
+	levels.backjump(0)
+	println(show(levels.assigned()))
+	println(levels.level())
+}

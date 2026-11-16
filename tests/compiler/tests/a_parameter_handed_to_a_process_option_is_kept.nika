@@ -1,0 +1,25 @@
+// A parameter handed on to an option of `process::run` that takes an owned
+// value is kept, not lent (ADR-views-3 D14, #1797): `env`, `env_remove` and
+// `stdin` each reached rustc as a borrow before.
+use std::process
+
+fn shown(env: Vec[(String, String)]) throws {
+    let out = process::run("sh", ["-c", "echo $A"]; env: env)
+    print(out.stdout)
+}
+
+fn removed(gone: Vec[String]) throws {
+    let out = process::run("sh", ["-c", "echo ${NIKAIA_PROBE_GONE:-none}"]; env: [("NIKAIA_PROBE_GONE", "set")], env_remove: gone)
+    print(out.stdout)
+}
+
+fn fed(input: process::Input) throws {
+    let out = process::run("cat", []; stdin: input)
+    print(out.stdout)
+}
+
+fn main() throws {
+    shown([("A", "1")])
+    removed(["NIKAIA_PROBE_GONE"])
+    fed(process::Input::Text("fed\n"))
+}

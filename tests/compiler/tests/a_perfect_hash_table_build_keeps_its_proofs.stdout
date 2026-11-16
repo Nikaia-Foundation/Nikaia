@@ -1,0 +1,2 @@
+small: 3 keys, 0 buckets
+large: 20 keys, 4 buckets, first slot holds key 0

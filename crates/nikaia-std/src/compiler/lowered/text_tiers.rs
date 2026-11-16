@@ -796,10 +796,7 @@ pub(crate) fn going_into(owner: &TextOwner, ty: &Type, path: Vec<i64>, wrap: boo
 
 pub(crate) fn adopt(value: Option<&Expr>, going: &TierGoing, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
-    let name = match given {
-        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(ask.names.resolve(name).to_string()) },
-        _ => return,
-    };
+    let name = match adopted_name(given, ask) { Some(__nikaia_value) => __nikaia_value, None => return };
     let local = match tier_local(&name, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut at = local.empty;
     let mut own = false;
@@ -820,6 +817,22 @@ pub(crate) fn adopt(value: Option<&Expr>, going: &TierGoing, ask: &TierAsk<'_, '
         return;
     }
     walk.flows.adopted.insert(at, Declaring { owner: going.owner.clone(), ty: going.ty.clone() });
+}
+
+pub(crate) fn adopted_name(given: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>) -> Option<String> {
+    match given {
+        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(ask.names.resolve(name).to_string())) },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let called = ask.names.resolve(method);
+            if !args.is_empty() || called != "clone" && called != "to_owned" && called != "to_vec" { return None; }
+            match receiver {
+                Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(ask.names.resolve(name).to_string())) },
+                _ => None,
+            }
+        },
+        _ => None,
+    }
 }
 
 pub(crate) fn adopt_lent(given: &Expr, going: &TierGoing, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
@@ -4222,7 +4235,7 @@ pub(crate) fn std_container_args(callee: &str, args: &[Expr], ask: &TierAsk<'_, 
         }
         if ((at) as usize) < params.len() { std_whole_list(arg, &unsafe { nikaia_std::proven::read(&params, (at) as usize) }.1, ask, walk); }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
-        let whole = source_of(arg, ask, walk);
+        let whole = source_of(extend_source(arg, ask), ask, walk);
         if whole.is_some() {
             let found = match whole { Some(__nikaia_value) => __nikaia_value, None => return };
             if a_followed(ask.names, &found.ty) && holds_text(ask.names, &found.ty) { demote_inside(&found.owner, &found.ty, &mut vec![], ask, walk); }
@@ -4244,7 +4257,7 @@ pub(crate) fn std_option_lists(func: &Expr, config: &[ConfigArg], ask: &TierAsk<
         for declared in signature.config.iter() {
             if declared.name != name { continue; }
             std_whole_list(&option.value, &declared.ty, ask, walk);
-            let whole = match source_of(&option.value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let whole = match source_of(extend_source(&option.value, ask), ask, walk) { Some(__nikaia_value) => __nikaia_value, None => continue };
             if a_followed(ask.names, &whole.ty) && holds_text(ask.names, &whole.ty) { demote_inside(&whole.owner, &whole.ty, &mut vec![], ask, walk); }
         }
     }
@@ -4310,10 +4323,7 @@ pub(crate) fn program_option_texts(func: &Expr, config: &[ConfigArg], ask: &Tier
 }
 
 pub(crate) fn std_whole_list(value: &Expr, want: &Ty, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
-    let name = match value {
-        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(ask.names.resolve(name).to_string()) },
-        _ => return,
-    };
+    let name = match adopted_name(value, ask) { Some(__nikaia_value) => __nikaia_value, None => return };
     let local = match tier_local(&name, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     let at = local.listed;
     if at < 0 || walk.flows.adopted.contains_key(&at) || !std_owns_text_inside(want) { return; }

@@ -342,6 +342,11 @@ pub fn manifest_parse(items: ref Vec[ManifestItem]) -> ManifestFile throws {
     let mut manifest = manifest_empty()
     for item in items {
         if item.section == "package" && item.name.len() > 0 && item.key.len() == 0 {
+            // A `[build]` switch written under `[package]` would be read by
+            // nothing, and the build would run at its default (#1772).
+            if contains(known(), item.name) {
+                throw Refused::Because(f"`{item.name}` is a `[build]` key, and `[package]` does not read it: move it under `[build]`.")
+            }
             manifest.package.insert(item.name.clone(), item.text.clone())
         }
     }
@@ -605,6 +610,14 @@ test "an unknown key is named rather than ignored" {
     let said = manifest_test_refusal(items)
     assert(said.contains("user_parallelism"))
     assert(said.contains("user-parallelism"))
+}
+
+/// A switch in the wrong table would stay at its default unsaid (#1772).
+test "a build key under package is refused naming build" {
+    let items = [manifest_test_table("package", "", false), manifest_test_word("package", "user-parallelism", "", "yes")]
+    let said = manifest_test_refusal(items)
+    assert(said.contains("user-parallelism"))
+    assert(said.contains("[build]"))
 }
 
 /// `[build.x86_64-linux]` is codegen, not a switch; it has to survive.

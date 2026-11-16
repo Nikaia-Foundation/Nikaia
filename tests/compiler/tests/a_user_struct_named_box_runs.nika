@@ -1,0 +1,31 @@
+// A user struct named `Box` (Part I uses `struct Box[T]` as an example) must
+// not collide with Rust's Box the emitter writes for the error channel of a
+// `throws` function, a caught failure and a recursive enum's member (#1798).
+struct Box {
+    name: String,
+}
+
+enum Expr {
+    Num(i64),
+    Neg(Expr),
+}
+
+fn value(e: Expr) -> i64 {
+    match e {
+        Expr::Num(n) => n,
+        Expr::Neg(inner) => 0 - value(inner),
+    }
+}
+
+fn take(b: Box, said: String) throws {
+    println(f"took {b.name} {said}")
+}
+
+fn main() throws {
+    let b = Box { name: "the value" }
+    take(b, "first")
+    take(Box { name: "another" }, "second") catch {
+        println("never")
+    }
+    println(value(Expr::Neg(Expr::Num(4))))
+}

@@ -322,7 +322,7 @@ pub(crate) fn host_ring_reach(graph: &collections::BTreeMap<String, Vec<String>>
         let mut ring: Vec<String> = vec![];
         let mut j = from;
         while j < path.len() as i64 {
-            if !(*nikaia_std::index::get(&path, nikaia_std::index::at(j))).starts_with("f:") { computed = true; }
+            if !(*unsafe { nikaia_std::proven::read(&path, (j) as usize) }).starts_with("f:") { computed = true; }
             ring.push(nikaia_std::index::or(match labels.get(unsafe { nikaia_std::proven::read(&path, (j) as usize) }) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,

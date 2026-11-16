@@ -59,7 +59,7 @@ pub fn unclosed_bracket(source: &str) -> i64 {
 pub(crate) fn past_the_line(c: &[scalar], at: i64) -> i64 {
     let mut k = at;
     while k < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (k) as usize) } != '\n' { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
-    k + 1
+    unsafe { nikaia_std::proven::add::<i64>(k, 1) }
 }
 
 pub fn opening_of_an_unclosed_comment(source: &str) -> i64 {

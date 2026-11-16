@@ -78,8 +78,9 @@ pub struct BoundsContext {
 	/// Of `whole_fields`, each field and element read with its type
 	/// (ADR-306 D34): a term's type is its range.
 	pub whole_types: collections::BTreeMap[i64, String],
-	/// The `for` heads that bind one whole number, by the node walked.
-	pub whole_loops: collections::BTreeSet[i64],
+	/// The `for` heads that bind one whole number, by the node walked,
+	/// with its type.
+	pub whole_loops: collections::BTreeMap[i64, String],
 	/// The `for` heads that bind several names, by the node walked, with
 	/// the positions of those bound to a whole number.
 	pub whole_parts: collections::BTreeMap[i64, collections::BTreeSet[i64]],
@@ -248,6 +249,10 @@ struct BoundsWalk {
 	/// How many `char` codes the walk has read: each reading is a number of
 	/// its own (ADR-314 D2).
 	codes: i64,
+	/// **The calls of the condition being assumed, each by the name of its
+	/// result** (ADR-306 D23, D31, #1785): `bounding_name_calls` binds
+	/// them for the one claim, as a `let` binds a call.
+	call_names: collections::BTreeMap[i64, String],
 	/// The binding of a `for d in x.chars()` over a text binding, with the
 	/// code of `x`'s characters (ADR-314 D1).
 	loop_classes: collections::BTreeMap[String, Range],
@@ -320,6 +325,11 @@ struct BoundsWalk {
 	/// byte each starts at, on the visit being walked: a check after one is
 	/// not asked through it again (ADR-361 D4, #1383).
 	settled_loops: collections::BTreeSet[i64],
+	/// **What held where a `bool` name was set `true`** (ADR-361 D4, #1634),
+	/// by the name: a loop that sets a flag offers `!flag || fact` for each
+	/// fact that reads a name it changes, so what held where the flag went up
+	/// holds past the loop wherever it is up.
+	flagged: collections::BTreeMap[String, Vec[i64]],
 	/// **The whole-number parameters the body never binds again**, with
 	/// their types, and every length the walk read, an `i64` (ADR-385 D1):
 	/// a value of such a type is what a goal may be stated against
@@ -335,6 +345,14 @@ struct BoundsWalk {
 	/// facts, not among the newest `most_facts()`, and join a question that
 	/// names that element (`bounding_known`).
 	rule_facts: Vec[(String, i64)],
+	/// **The `capped` bounds among `rule_facts`** (ADR-306 D21, #1785): the
+	/// fresh name that stands at most the length while it lasts, the length,
+	/// the element and the bound (`rules_capped_stand`).
+	capped: Vec[(String, String, String, i64)],
+	/// **The elements read out of an `ascending` list by position**
+	/// (#1785): the fresh name that stands while it lasts, the list, the
+	/// position and the name read (`rules_order_read`).
+	ordered: Vec[(String, String, i64, String)],
 	/// Whether this walk checks `rules` in a method: the index of each rule
 	/// the method is not proved to keep goes into `rule_failed`; the
 	/// `result` rules of the method are `checked_results`.
@@ -386,6 +404,10 @@ struct BoundsWalk {
 	/// a name they read changes; a later statement that reads `q` again speaks
 	/// of other values.
 	defining: collections::BTreeMap[String, Vec[i64]],
+	/// **The rows `--bounds-trace` shows of a loop's invariant search**
+	/// (#1669): kept apart from `proven`, which the search puts back, and
+	/// added to its trace when the pass ends.
+	turn_rows: Vec[String],
 }
 
 /// **A loop's candidate invariant, while its body is walked** (ADR-361 D4):
@@ -722,6 +744,7 @@ fn bounding_new(
 		pinned: pinned,
 		nonnegative: nonnegative,
 		codes: 0,
+		call_names: collections::BTreeMap(),
 		loop_classes: collections::BTreeMap(),
 		shape: shape,
 		assumed: context.around.field_bounds.clone(),
@@ -746,10 +769,13 @@ fn bounding_new(
 		turns: [],
 		leaving: collections::BTreeSet(),
 		settled_loops: collections::BTreeSet(),
+		flagged: collections::BTreeMap(),
 		typed: collections::BTreeMap(),
 		rules: [],
 		rule_roots: collections::BTreeMap(),
 		rule_facts: [],
+		capped: [],
+		ordered: [],
 		checking: false,
 		checked_results: collections::BTreeSet(),
 		rule_failed: collections::BTreeSet(),
@@ -771,6 +797,7 @@ fn bounding_new(
 		return_within: null,
 		trace: context.trace.clone(),
 		defining: collections::BTreeMap(),
+		turn_rows: [],
 	}
 	for arg in args {
 		let name = words.resolve(arg.name).clone()
@@ -883,6 +910,9 @@ fn bounding_pass(
 	if !leaves {
 		// What the body ends with is what it hands back.
 		rules_exit(walk, facts, rules_tail(body), false, context, program, words, ask)
+	}
+	for row in walk.turn_rows.clone() {
+		bounding_trace_row(walk, row)
 	}
 }
 
@@ -1507,6 +1537,22 @@ fn bounding_traced(mut walk: BoundsWalk, facts: ref BoundsFacts, goal: i64, prov
 	bounding_trace_row(walk, f"  goal {walk.arena.text(goal)}: {verdict}\n    facts ({known.len()} asked; {connected} connected of {facts.facts.len()} held, {facts.evicted} evicted by the cap of {most_held()}): {held}\n    rules: {found}")
 }
 
+/// **A row of a loop's invariant search** (#1669), where `--bounds-trace`
+/// asks about the statement at `at`, collecting walks too.
+fn bounding_turn_row(mut walk: BoundsWalk, at: i64, row: String) {
+	if walk.trace.len() == 2 && at >= walk.trace[0] && at < walk.trace[1] && !walk.turn_rows.contains(row) {
+		walk.turn_rows.push(row)
+	}
+}
+
+fn bounding_texts(walk: ref BoundsWalk, terms: ref Vec[i64]) -> String {
+	let mut out: Vec[String] = []
+	for term in terms {
+		out.push(walk.arena.text(term))
+	}
+	return if out.is_empty() { "none" } else { out.join(", ") }
+}
+
 /// One row of `--bounds-trace`, once however often a loop is walked again.
 fn bounding_trace_row(mut walk: BoundsWalk, row: String) {
 	if !walk.proven.trace.contains(row) {
@@ -1520,7 +1566,33 @@ fn bounding_missed(mut walk: BoundsWalk, facts: ref BoundsFacts, goal: i64) {
 		walk.open += 1
 		let mut read: collections::BTreeSet[String] = collections::BTreeSet()
 		walk.arena.variables(goal, read)
+		// **A name a fact ties to the goal's names by itself** (#1634):
+		// `was[k]` under `k < a` asks the loop that changes `a` before it.
+		let mut tied: Vec[String] = []
+		for fact in facts.facts {
+			let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+			walk.arena.variables(fact, names)
+			if names.len() != 2 {
+				continue
+			}
+			let mut touches = false
+			for name in names {
+				if read.contains(name) {
+					touches = true
+				}
+			}
+			if touches {
+				for name in names {
+					if !read.contains(name) {
+						tied.push(name.clone())
+					}
+				}
+			}
+		}
 		for name in read {
+			walk.missed.insert(name.clone(), walk.open)
+		}
+		for name in tied {
 			walk.missed.insert(name.clone(), walk.open)
 		}
 		walk.missed_goals.push(BoundsMissed {
@@ -1681,7 +1753,7 @@ fn bounding_known(walk: ref BoundsWalk, facts: ref BoundsFacts, asked: i64) -> V
 			walk.arena.variables(fact, read)
 		}
 		for (each, fact) in walk.rule_facts {
-			if read.contains(each) {
+			if read.contains(each) && rules_standing(walk, facts, fact) {
 				all.push(fact)
 			}
 		}
@@ -2649,6 +2721,13 @@ fn bounding_at_least_zero(mut walk: BoundsWalk, mut facts: BoundsFacts, name: re
 	let zero = walk.arena.int(0)
 	let fact = walk.arena.ge(n, zero)
 	bounding_push(walk, facts, fact)
+	// **A name of a narrow unsigned type is at most what its type holds**
+	// (ADR-306 D34, #1786): `let d = b as i64` of a byte `b` is below 256,
+	// so `digits[d / 16]` of 16 digits is proved.
+	let most = walk.shape.narrow.get(name) ?? return
+	let top = walk.arena.int(most)
+	let below = walk.arena.le(n, top)
+	bounding_push(walk, facts, below)
 }
 
 /// Nothing known about `name`, its length or a path of fields from it
@@ -2907,7 +2986,13 @@ fn bounding_after_change(mut walk: BoundsWalk, mut facts: BoundsFacts, changed: 
 			}
 	}
 	for name in changed.lengths {
+		// A `capped` rule's marker stands through a list that only grows
+		// (#1785).
+		let grown = rules_capped_grown(walk, facts, name, changed)
 		bounding_forget_length(walk, facts, name)
+		for fact in grown {
+			bounding_push(walk, facts, fact)
+		}
 	}
 	for name in changed.parts {
 		bounding_forget_parts(walk, facts, name)
@@ -2926,6 +3011,13 @@ fn bounding_lin(
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
 ) -> i64? {
+	// A call of the condition assumed, by its result's name (#1785).
+	if !walk.call_names.is_empty() {
+		let named = walk.call_names.get(node_key(expr))?.clone()
+		if named != null {
+			return walk.arena.var(named ?? "")
+		}
+	}
 	match expr {
 		Expr::LitInt { value, negative, .. } => {
 			let n = integer_as_count(integer(value, negative)) ?? return null
@@ -3411,6 +3503,7 @@ fn bounding_derived_call(
 				)
 					?? continue
 			}
+			let right = if claim.length { bounding_scaled(walk, claim, right) } else { right }
 			// Two reads out of one list stand for every element both: the
 			// goal would compare an element with itself, not `xs[i]` with
 			// `xs[j]`.
@@ -3567,6 +3660,20 @@ fn bounding_derived_each(
 	return null
 }
 
+/// **A claim's length side**, `scale * length + offset` (ADR-391 D1, #1673).
+fn bounding_scaled(mut walk: BoundsWalk, claim: ref DerivedClaim, length: i64) -> i64 {
+	let mut term = length
+	if claim.scale != 1 {
+		let times = walk.arena.int(claim.scale)
+		term = walk.arena.mul(times, term)
+	}
+	if claim.offset != 0 {
+		let by = walk.arena.int(claim.offset)
+		term = walk.arena.add(term, by)
+	}
+	return term
+}
+
 /// **The derived preconditions at a function's entry** (ADR-391 D1): the
 /// claims every call site proved, known as a written top `assert` is.
 fn bounding_derived_entry(
@@ -3586,7 +3693,12 @@ fn bounding_derived_entry(
 			walk.arena.var(claim.left)
 		}
 		let right = if claim.fixed != null { walk.arena.int(claim.fixed ?? 0) } else if claim.length {
-			walk.arena.var(length_of(claim.right))
+			// **The length is an `i64`** (ADR-385 D1), known before the
+			// body reads it (#1767): `at < xs.len() - 1` proves `at + 1`
+			// fits, as `bounding_length_named` states for a read length.
+			walk.typed.insert(length_of(claim.right), "i64")
+			let length = walk.arena.var(length_of(claim.right))
+			bounding_scaled(walk, claim, length)
 		} else if claim.each {
 			walk.arena.var(bounding_element_of(claim.right))
 		} else {
@@ -4095,6 +4207,7 @@ fn bounding_claim(
 ) -> i64? {
 	match expr {
 		Expr::LitBool(b, _) => return walk.arena.boolean(b),
+		Expr::Variable(name, _) => return bounding_flag_term(walk, facts, words.resolve(name), true),
 		Expr::Unary { op, expr, .. } => {
 			match op {
 				UnaryOp::Not => return bounding_denial(walk, expr, facts, context, program, words),
@@ -4142,6 +4255,7 @@ fn bounding_denial(
 ) -> i64? {
 	match expr {
 		Expr::LitBool(b, _) => return walk.arena.boolean(!b),
+		Expr::Variable(name, _) => return bounding_flag_term(walk, facts, words.resolve(name), false),
 		Expr::Unary { op, expr, .. } => {
 			match op {
 				UnaryOp::Not => return bounding_claim(walk, expr, facts, context, program, words),
@@ -4200,6 +4314,50 @@ fn bounding_denial(
 	return null
 }
 
+/// **A `bool` name as a number** (ADR-361 D4, #1634): `1` where it is
+/// `true`, `0` where it is `false`, so `if !found` reads what a loop knew
+/// where it set `found`. `up` asks for the name true. A whole-number name or
+/// a constant is no flag.
+fn bounding_flag_term(mut walk: BoundsWalk, facts: ref BoundsFacts, name: ref String, up: bool) -> i64? {
+	if facts.ints.contains(name) || walk.shape.constants.contains_key(name) {
+		return null
+	}
+	let n = walk.arena.var(name)
+	if up {
+		let one = walk.arena.int(1)
+		return walk.arena.ge(n, one)
+	}
+	let zero = walk.arena.int(0)
+	return walk.arena.le(n, zero)
+}
+
+/// **`name = true` or `false`** (#1634): the name is `1` or `0` from here,
+/// and what holds where it goes up is kept for a loop's guesses (`flagged`),
+/// the newest few, none that reads the name itself.
+fn bounding_flag_set(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String, up: bool) {
+	let n = walk.arena.var(name)
+	let value = walk.arena.int(if up { 1 } else { 0 })
+	if up {
+		let mut held = walk.flagged.get(name)?.clone() ?? []
+		for fact in facts.facts {
+			if !bounding_touches(walk, fact, name) && !held.contains(fact) {
+				held.push(fact)
+			}
+		}
+		while held.len() > most_flagged() {
+			held.remove(0)
+		}
+		walk.flagged.insert(name.clone(), held)
+	}
+	let fact = walk.arena.equal(n, value)
+	bounding_push(walk, facts, fact)
+}
+
+/// How many facts `flagged` keeps of one name.
+fn most_flagged() -> i64 {
+	return 24
+}
+
 /// A comparison of two linear terms, exactly.
 fn bounding_comparison(
 	mut walk: BoundsWalk,
@@ -4247,8 +4405,12 @@ fn bounding_assume(
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
 ) {
-	let holds = bounding_claim(walk, cond, facts, context, program, words) ?? return
-	bounding_push(walk, facts, holds)
+	bounding_name_calls(walk, facts, cond, context, program, words)
+	let holds = bounding_claim(walk, cond, facts, context, program, words)
+	walk.call_names = collections::BTreeMap()
+	if holds != null {
+		bounding_push(walk, facts, holds ?? 0)
+	}
 }
 
 fn bounding_assume_not(
@@ -4259,8 +4421,93 @@ fn bounding_assume_not(
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
 ) {
-	let holds = bounding_denial(walk, cond, facts, context, program, words) ?? return
-	bounding_push(walk, facts, holds)
+	bounding_name_calls(walk, facts, cond, context, program, words)
+	let holds = bounding_denial(walk, cond, facts, context, program, words)
+	walk.call_names = collections::BTreeMap()
+	if holds != null {
+		bounding_push(walk, facts, holds ?? 0)
+	}
+}
+
+/// **A call compared in a condition is a number of its own** (ADR-306 D23,
+/// D31, #1785): `if self.level() <= target { return }` says what `let d =
+/// self.level()` and `if d <= target` say. Each call a comparison reads
+/// whose callee has a found postcondition gets a fresh name, its relations
+/// and bounds stated of it among `facts`, for the one claim being assumed;
+/// a length it is stated against moves with the facts.
+fn bounding_name_calls(
+	mut walk: BoundsWalk,
+	mut facts: BoundsFacts,
+	cond: ref Expr,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+) {
+	match cond {
+		Expr::Unary { op, expr, .. } => match op {
+			UnaryOp::Not => bounding_name_calls(walk, facts, expr, context, program, words),
+			else => {},
+		},
+		Expr::Binary { op, lhs, rhs, .. } => {
+			if op == BinaryOp::And || op == BinaryOp::Or {
+				bounding_name_calls(walk, facts, lhs, context, program, words)
+				bounding_name_calls(walk, facts, rhs, context, program, words)
+			} else if op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge || op == BinaryOp::Eq || op == BinaryOp::Ne {
+				bounding_name_call(walk, facts, lhs, context, program, words)
+				bounding_name_call(walk, facts, rhs, context, program, words)
+			}
+		},
+		else => {},
+	}
+}
+
+/// One side of a comparison, where it is a call [`bounding_name_calls`]
+/// names.
+fn bounding_name_call(
+	mut walk: BoundsWalk,
+	mut facts: BoundsFacts,
+	side: ref Expr,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+) {
+	let call = match side {
+		Expr::Call { .. } => true,
+		Expr::MethodCall { .. } => true,
+		else => false,
+	}
+	if !call || bounding_found_options(side) || bounding_lin(walk, side, facts, context, program, words) != null {
+		return
+	}
+	let callee = bounding_found_key(walk, side, context, words) ?? return
+	let found = context.returns.get(callee) ?? return
+	if found.each || found.pending {
+		return
+	}
+	let name = f"call#{walk.codes}"
+	walk.codes += 1
+	let n = walk.arena.var(name)
+	let mut held: Vec[i64] = []
+	for k in found.at_least {
+		let term = bounding_found_term(walk, side, k, facts, context, program, words) ?? continue
+		held.push(walk.arena.ge(n, term))
+	}
+	for k in found.within {
+		let path = bounding_found_path(side, found, k, words) ?? continue
+		if walk.pinned.contains(path_root(path)) {
+			continue
+		}
+		let len = bounding_length_named(walk, path, false)
+		held.push(walk.arena.le(n, len))
+	}
+	if held.is_empty() {
+		return
+	}
+	facts.ints.insert(name.clone())
+	for fact in held {
+		bounding_push(walk, facts, fact)
+	}
+	walk.call_names.insert(node_key(side), name)
 }
 
 /// Whether `0 <= index < list.len()` follows from what holds.
@@ -4419,13 +4666,56 @@ fn bounding_block(
 	// The block's own names leave with it; a name it hid is the outer one
 	// again, and what was known of that was forgotten where it was hidden.
 	for name in bound {
-		bounding_forget(walk, facts, name)
+		bounding_leave(walk, facts, name)
 		facts.ints.remove(name)
 		if before.contains(name) {
 			facts.ints.insert(name.clone())
 		}
 	}
 	return leaves
+}
+
+/// **A block's own name leaves by its value** (#1669): where a fact states
+/// it equal to a term that does not read it (`l == i + 1`, `i == child`),
+/// the facts that read it are restated over that term, so `i == l` past
+/// `let l = i + 1` keeps `i == i#k + 1` at the end of a loop's turn; the
+/// facts left that read it leave with it.
+fn bounding_leave(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String) {
+	let mut value: i64? = null
+	let mut by = -1
+	for fact in facts.facts {
+		match walk.arena.at(fact) {
+			SolverTerm::Eq(a, b) => {
+				if walk.arena.is_the_variable(a, name) && !walk.arena.mentions(b, name) {
+					value = b
+				} else if walk.arena.is_the_variable(b, name) && !walk.arena.mentions(a, name) {
+					value = a
+				}
+			},
+			else => {},
+		}
+		if value != null {
+			by = fact
+			break
+		}
+	}
+	if value != null {
+		let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+		given.insert(name.clone(), value ?? 0)
+		let mut kept: Vec[i64] = []
+		for fact in facts.facts {
+			if fact == by {
+				continue
+			}
+			if walk.arena.mentions(fact, name) {
+				kept.push(walk.arena.substitute(fact, given))
+			} else {
+				kept.push(fact)
+			}
+		}
+		facts.facts = kept
+	}
+	bounding_forget(walk, facts, name)
 }
 
 /// **The statements of `block` from the one at `from`**, the names they
@@ -4939,6 +5229,11 @@ fn bounding_loop_invariant(
 			origins.insert(guess, origin.clone())
 		}
 	}
+	let mut asked: Vec[i64] = []
+	for (guess, _) in offered {
+		asked.push(guess)
+	}
+	bounding_turn_row(walk, start, f"  loop: offered {bounding_texts(walk, asked)}\n    held where reached: {bounding_texts(walk, guesses)}")
 	if guesses.len() == proposals.fixed.len() {
 		return null
 	}
@@ -4956,7 +5251,7 @@ fn bounding_loop_invariant(
 	// with what is left assumed and checks it once more.
 	let mut settled = false
 	let mut past = reached.clone()
-	for _round in 0..<4 {
+	for attempt in 0..<4 {
 		walk.written = written.clone()
 		walk.poisoned = poisoned.clone()
 		let mut here = reached.clone()
@@ -4969,6 +5264,7 @@ fn bounding_loop_invariant(
 		bounding_loop_walk(walk, stmt, here, guesses, context, program, words, ask)
 		walk.collecting = false
 		let frame = walk.turns.pop() ?? break
+		bounding_turn_row(walk, start, f"  loop round {attempt}: {frame.jumps.len()} of {ways} ways out walked, {frame.failed.len()} of {guesses.len()} not kept")
 		// A way out the walk did not reach is one nothing checked.
 		if frame.jumps.len() != ways {
 			break
@@ -5294,6 +5590,11 @@ fn bounding_loop_guesses(
 			SolverTerm::Eq(a, b) => {
 				out.push(walk.arena.le(a, b))
 				out.push(walk.arena.ge(a, b))
+				for restated in bounding_restated(walk, entry, changed, a, b) {
+					if !out.contains(restated) {
+						out.push(restated)
+					}
+				}
 			},
 			else => out.push(fact),
 		}
@@ -5305,6 +5606,40 @@ fn bounding_loop_guesses(
 		Stmt::For { body, .. } => body,
 		Stmt::While { body, .. } => body,
 		else => return out,
+	}
+	// **What held where the loop sets a flag holds wherever it is up**
+	// (#1634): `found = true` under `b <= now.len()` offers `!found || b <=
+	// now.len()`, kept through each turn where nothing past the flag changes
+	// `b`, and read past the loop under `if found`.
+	for (flag, held) in walk.flagged {
+		if !bounding_changes_name(changed, flag) {
+			continue
+		}
+		let n = walk.arena.var(flag)
+		let zero = walk.arena.int(0)
+		let down = walk.arena.le(n, zero)
+		for fact in held {
+			let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+			walk.arena.variables(fact, read)
+			let mut reads_changed = false
+			for name in read {
+				if bounding_changes_name(changed, name) {
+					reads_changed = true
+				}
+			}
+			let mut reads_bound = false
+			for name in bound {
+				if bounding_touches(walk, fact, name) {
+					reads_bound = true
+				}
+			}
+			if reads_changed && !reads_bound {
+				let guess = walk.arena.or([down, fact])
+				if !out.contains(guess) {
+					out.push(guess)
+				}
+			}
+		}
 	}
 	for each in body.stmts {
 		let guard = bounding_break_guard(each.node) ?? continue
@@ -5318,6 +5653,59 @@ fn bounding_loop_guesses(
 		if !reads_bound {
 			walk.leaving.insert(denied)
 			out.push(denied)
+		}
+	}
+	return out
+}
+
+/// **What held of the value a changed name starts with, said of the name**
+/// (#1669): `i == start` where the loop is reached, with `0 <= start` and
+/// `start < xs.len()`, offers `0 <= i` and `i < xs.len()`. `start` is a
+/// name the loop does not change; the facts restated read no changed name.
+fn bounding_restated(
+	mut walk: BoundsWalk,
+	entry: ref BoundsFacts,
+	changed: ref BoundsChanged,
+	a: i64,
+	b: i64,
+) -> Vec[i64] {
+	let mut out: Vec[i64] = []
+	let (counter, start) = match walk.arena.at(a) {
+		SolverTerm::Var(x) => {
+			match walk.arena.at(b) {
+				SolverTerm::Var(v) => (x.clone(), v.clone()),
+				else => return out,
+			}
+		},
+		else => return out,
+	}
+	let mut moving = false
+	let mut still = true
+	for name in changed.values {
+		if name == counter {
+			moving = true
+		}
+		if path_within(start, name) {
+			still = false
+		}
+	}
+	if !moving || !still {
+		return out
+	}
+	let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	given.insert(start.clone(), a)
+	for fact in entry.facts {
+		if !walk.arena.mentions(fact, start) || walk.arena.mentions(fact, counter) {
+			continue
+		}
+		let mut touched = false
+		for name in changed.values {
+			if bounding_touches(walk, fact, name) {
+				touched = true
+			}
+		}
+		if !touched {
+			out.push(walk.arena.substitute(fact, given))
 		}
 	}
 	return out
@@ -5534,6 +5922,8 @@ fn bounding_turn_end(
 		}
 		if !frame.failed.contains(k) && !bounding_proves(walk, facts, frame.guesses[k], ask) {
 			frame.failed.insert(k)
+			let at = walk.at
+			bounding_turn_row(walk, at, f"  turn end: {walk.arena.text(frame.guesses[k])} not kept\n    facts: {bounding_texts(walk, facts.facts)}")
 		}
 	}
 	walk.turns.push(frame)
@@ -6908,6 +7298,10 @@ fn bounding_let(
 		return
 	}
 	let name = words.resolve(names[0]).clone()
+	match value {
+		Expr::LitBool(up, _) => bounding_flag_set(walk, facts, name, up),
+		else => {},
+	}
 	// **What every arm of a choice holds** (#1516), beside the range the
 	// arms join to.
 	if value_lin == null {
@@ -6942,6 +7336,7 @@ fn bounding_let(
 		}
 	}
 	rules_element_facts(walk, facts, name, value, words)
+	rules_ascending_facts(walk, facts, name, value, context, program, words, ask)
 	if whole {
 		facts.ints.insert(name.clone())
 		if value_lin != null {
@@ -7004,13 +7399,26 @@ fn bounding_choice_facts(
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Vec[i64] {
 	let mut own: Vec[Vec[i64]] = []
+	// What holds where each arm is taken: an `if`'s condition or its
+	// denial (#1669); a `match` arm, what holds before it.
+	let mut states: Vec[BoundsFacts] = []
 	match value {
-		Expr::If { then_branch, else_branch, .. } => {
+		Expr::If { cond, then_branch, else_branch, .. } => {
 			let otherwise = else_branch ?? return []
+			let mut taken = facts.clone()
+			bounding_assume(walk, taken, cond, context, program, words)
+			let mut passed = facts.clone()
+			bounding_assume_not(walk, passed, cond, context, program, words)
 			let first = bounding_arm_value(then_branch) ?? return []
-			own.push(bounding_arm_facts(walk, facts, name, first, context, program, words, ask) ?? return [])
+			let mut held = bounding_arm_facts(walk, facts, name, first, context, program, words, ask) ?? return []
+			bounding_arm_restated(walk, facts, taken, name, first, context, program, words, held)
+			own.push(held)
+			states.push(taken)
 			let second = bounding_arm_value(otherwise) ?? return []
-			own.push(bounding_arm_facts(walk, facts, name, second, context, program, words, ask) ?? return [])
+			let mut held_else = bounding_arm_facts(walk, facts, name, second, context, program, words, ask) ?? return []
+			bounding_arm_restated(walk, facts, passed, name, second, context, program, words, held_else)
+			own.push(held_else)
+			states.push(passed)
 		},
 		Expr::Match { arms, .. } => {
 			for arm in arms {
@@ -7030,6 +7438,7 @@ fn bounding_choice_facts(
 				}
 				let arm_value = bounding_arm_body(arm.body) ?? return []
 				own.push(bounding_arm_facts(walk, facts, name, arm_value, context, program, words, ask) ?? return [])
+				states.push(facts.clone())
 			}
 		},
 		else => return [],
@@ -7048,7 +7457,7 @@ fn bounding_choice_facts(
 				if !every || j == k || own[j].contains(fact) {
 					continue
 				}
-				let mut trial = facts.clone()
+				let mut trial = states[j].clone()
 				for held in own[j] {
 					bounding_push(walk, trial, held)
 				}
@@ -7060,6 +7469,58 @@ fn bounding_choice_facts(
 		}
 	}
 	return out
+}
+
+/// **What an arm's condition says of its value, said of `name`** (#1669):
+/// in `if right < n && … { right } else { left }` the first arm's `right <
+/// n` gives `name < n`, the second's denial nothing of `left`; each fact
+/// the condition adds to `facts` (in `state`) that reads the arm's one
+/// name `v` of a value `v + c` is restated with `v` as `name - c`.
+fn bounding_arm_restated(
+	mut walk: BoundsWalk,
+	facts: ref BoundsFacts,
+	state: ref BoundsFacts,
+	name: ref String,
+	value: ref Expr,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	mut held: Vec[i64],
+) {
+	let term = bounding_lin(walk, value, facts, context, program, words) ?? return
+	let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+	walk.arena.variables(term, read)
+	if read.len() != 1 {
+		return
+	}
+	let mut v: String = ""
+	for only in read {
+		v = only.clone()
+	}
+	let mut at_zero: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	at_zero.insert(v.clone(), walk.arena.int(0))
+	let mut at_one: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	at_one.insert(v.clone(), walk.arena.int(1))
+	let zero = walk.arena.substitute(term, at_zero)
+	let one = walk.arena.substitute(term, at_one)
+	let c = walk.arena.constant(zero) ?? return
+	let d = walk.arena.constant(one) ?? return
+	if d - c != 1 {
+		return
+	}
+	let named = walk.arena.var(name)
+	let shift = walk.arena.int(c)
+	let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	given.insert(v.clone(), walk.arena.sub(named, shift))
+	for fact in state.facts {
+		if facts.facts.contains(fact) || !walk.arena.mentions(fact, v) {
+			continue
+		}
+		let restated = walk.arena.substitute(fact, given)
+		if !held.contains(restated) {
+			held.push(restated)
+		}
+	}
 }
 
 // A `match` arm's value: its body, or the last expression of a block body
@@ -7107,7 +7568,18 @@ fn bounding_arm_facts(
 			return null
 		}
 		// Both sides apart, so that each can hold of every arm alone.
-		return [walk.arena.le(n, term), walk.arena.ge(n, term)]
+		let mut sides = [walk.arena.le(n, term), walk.arena.ge(n, term)]
+		// An element read gives what a rule says of every element, as a
+		// `let` of it does (ADR-306 D21, #1785): `if xs.len() > 0 { xs[0] }
+		// else { b.len() }` of a list capped by `b`'s length.
+		let mut read = facts.clone()
+		rules_element_facts(walk, read, name, value, words)
+		for fact in read.facts {
+			if walk.arena.mentions(fact, name) && !sides.contains(fact) {
+				sides.push(fact)
+			}
+		}
+		return sides
 	}
 	// The checker marks only a `let` value's call a whole number; an arm's
 	// is one where the callee is found to hand back one (`context.returns`,
@@ -7493,8 +7965,18 @@ fn bounding_for(
 	}
 	// `for x in xs` over whole numbers: `x` is a number of the walk, of
 	// which every test in the body is a fact (ADR-306 D7, #781).
-	if bindings.len() == 1 && !counted && context.whole_loops.contains(node_key(iter)) {
-		inner.ints.insert(words.resolve(bindings[0]).clone())
+	if bindings.len() == 1 && !counted {
+		let element = context.whole_loops.get(node_key(iter))
+		if element != null {
+			let only = words.resolve(bindings[0]).clone()
+			inner.ints.insert(only.clone())
+			// **Its type is its range** (ADR-306 D34, #1786): `for b in
+			// s.bytes()` binds a number in `0..=255`.
+			let held = Range::held_by_type(element ?? "")
+			if held != null {
+				bounding_bounded(walk, inner, only, held ?? Range::open())
+			}
+		}
 	}
 	// `for (at, unit) in rows`: each name bound to a whole number is one
 	// too, of which every test in the body is a fact.
@@ -7530,7 +8012,9 @@ fn bounding_for(
 		let mut stated = bounding_each(walk, iter, item, facts, context, program, words)
 		// An inner list of a field (`t.col[c]`, its `.clone()`) is named
 		// by its list's `t.col[]` (ADR-306 D28).
-		let mut held = bounding_variable(iter, words)
+		// A list field by its path (`self.at`, #1688), what its rules and
+		// reads state of every element.
+		let mut held = path_of(iter, words)
 		if held == null {
 			let outer = rules_inner_of(iter, words)
 			if outer != null {
@@ -7549,7 +8033,7 @@ fn bounding_for(
 				}
 			}
 			for (each, fact) in walk.rule_facts.clone() {
-				if each == element {
+				if each == element && rules_standing(walk, facts, fact) {
 					stated.push(walk.arena.substitute(fact, given))
 					of_every = true
 				}
@@ -7871,6 +8355,12 @@ fn bounding_assign(
 		}
 		bounding_forget(walk, facts, name)
 		bounding_built(walk, facts, name, value, words)
+		if op == null {
+			match value {
+				Expr::LitBool(up, _) => bounding_flag_set(walk, facts, name, up),
+				else => {},
+			}
+		}
 		return
 	}
 	let value_lin = bounding_lin(walk, value, facts, context, program, words)
@@ -7936,8 +8426,14 @@ fn bounding_assign(
 		// **A value that reads the name it is given reads the old value**
 		// (#1644): `t = t * 5` states `t == 5 * t#k` over the value `t` had,
 		// renamed with what held of it; `t == 5 * t` said `t` is zero.
+		// **A value of other names keeps what tied them to the old value**
+		// (#1669): `i = child` past `let child = if … { left + 1 } else
+		// { left }` and `left == 2 * i + 1` keeps those over `i#k`, so `i`
+		// is still known at least zero; forgotten, `child` was unbounded.
 		let mut given = value_lin ?? 0
-		if walk.arena.mentions(given, name) {
+		let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+		walk.arena.variables(given, read)
+		if walk.arena.mentions(given, name) || !read.is_empty() {
 			let old = bounding_rename(walk, facts, name)
 			let mut renamed: collections::BTreeMap[String, i64] = collections::BTreeMap()
 			renamed.insert(name.clone(), old)
@@ -8194,8 +8690,89 @@ fn bounding_if_leaves(
 		bounding_extend_maybe(changed, else_branch, context, words)
 		bounding_after_change(walk, facts, changed)
 		bounding_if_join(walk, facts, changed, then_facts, else_facts, ask)
+		bounding_flag_join(walk, facts, changed, then_facts, else_facts, ask)
 	}
 	return false
+}
+
+/// **What a branch holds, under the flag that tells it from the other**
+/// (ADR-306 D9, #1634): where one branch ends with `found` up (`found >=
+/// 1`) and the other with it down, each fact only the first holds is kept as
+/// `found <= 0 || fact`, and the other way round, so `if !found { … }` later
+/// reads what held where `found` was set. Both forms hold past the `if`,
+/// whatever the flag's type: each is true in either branch.
+fn bounding_flag_join(
+	mut walk: BoundsWalk,
+	mut facts: BoundsFacts,
+	changed: ref BoundsChanged,
+	then_facts: ref BoundsFacts,
+	else_facts: ref BoundsFacts,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) {
+	if changed.values.is_empty() {
+		return
+	}
+	let mut flags: collections::BTreeSet[String] = collections::BTreeSet()
+	bounding_flag_names(walk, then_facts, flags)
+	bounding_flag_names(walk, else_facts, flags)
+	for flag in flags {
+		let n = walk.arena.var(flag)
+		let one = walk.arena.int(1)
+		let zero = walk.arena.int(0)
+		let up = walk.arena.ge(n, one)
+		let down = walk.arena.le(n, zero)
+		if bounding_proves(walk, then_facts, up, ask) && bounding_proves(walk, else_facts, down, ask) {
+			bounding_flag_kept(walk, facts, then_facts, flag, down)
+			bounding_flag_kept(walk, facts, else_facts, flag, up)
+		} else if bounding_proves(walk, then_facts, down, ask) && bounding_proves(walk, else_facts, up, ask) {
+			bounding_flag_kept(walk, facts, then_facts, flag, up)
+			bounding_flag_kept(walk, facts, else_facts, flag, down)
+		}
+	}
+}
+
+/// The names a fact of `branch` about one name alone reads (`found >= 1`,
+/// `found == 0`): the flags `bounding_flag_join` asks about. A length, a
+/// field path or a name the walk made is none.
+fn bounding_flag_names(walk: ref BoundsWalk, branch: ref BoundsFacts, mut flags: collections::BTreeSet[String]) {
+	for fact in branch.facts {
+		let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+		walk.arena.variables(fact, read)
+		if read.len() != 1 {
+			continue
+		}
+		for name in read {
+			if !name.contains(".") && !name.contains("#") && !name.contains("[") && !name.contains("(") {
+				flags.insert(name.clone())
+			}
+		}
+	}
+}
+
+/// Each fact of `branch` that does not hold past the `if` already, and does
+/// not read `flag`, kept as `other || fact`: the newest few.
+fn bounding_flag_kept(
+	mut walk: BoundsWalk,
+	mut facts: BoundsFacts,
+	branch: ref BoundsFacts,
+	flag: ref String,
+	other: i64,
+) {
+	let mut own: Vec[i64] = []
+	for fact in branch.facts {
+		if !facts.facts.contains(fact) && !bounding_touches(walk, fact, flag) {
+			own.push(fact)
+		}
+	}
+	while own.len() > most_flagged() {
+		own.remove(0)
+	}
+	for fact in own {
+		let kept = walk.arena.or([other, fact])
+		if !facts.facts.contains(kept) {
+			bounding_push(walk, facts, kept)
+		}
+	}
 }
 
 /// Walk an expression: prove the indices in it with what holds, and keep
@@ -8816,7 +9393,9 @@ fn bounding_method_call(
 		}
 		// **A method that may change its receiver changes the paths of
 		// fields from it** (ADR-306 D17): one of this program's that takes
-		// its receiver `mut`, or one `keeps_length` does not know.
+		// its receiver `mut`, or one `keeps_length` does not know. What a
+		// `truncate` leaves of an ordered list is read first (#1785).
+		let left = rules_truncated(walk, facts, name, method, args, context, program, words, ask)
 		if context.around.changing_receivers.contains(method) || !keeps_length(method) {
 			bounding_forget_parts(walk, facts, name)
 		} else if !keeps_items(method) {
@@ -8825,6 +9404,10 @@ fn bounding_method_call(
 			bounding_forget_element(walk, facts, f"{name}|*|", false)
 		}
 		bounding_method(walk, facts, name, method, args, context, program, words, ask)
+		for fact in left {
+			bounding_push(walk, facts, fact)
+		}
+		rules_capped_call(walk, name, method)
 	}
 	// **Only a `mut` parameter changes what it is handed** (ADR-094 D3):
 	// every other argument is `ref`, or a `Bytes` or a text view that no
@@ -9010,7 +9593,7 @@ fn bounding_children(
 			// A list given by a name keeps the `length` rules only where
 			// the names are as long (#1652).
 			if walk.checking && node_key(expr) != walk.rule_built_literal {
-				rules_literal_holds(walk, words.resolve(name), fields, facts, words, ask)
+				rules_literal_holds(walk, words.resolve(name), fields, facts, context, program, words, ask)
 			}
 		},
 		Expr::With { base, fields, .. } => {

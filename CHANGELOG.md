@@ -8,6 +8,17 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1402] — 2026-11-16
+
+**Prover and bugs lanes: derived preconditions widened, flags, narrow types, shrinking field bounds, NK2205 (#1669, #1673, #1681, #1688, #1767, #1785, #1786, #1787; #1754, #1759, #1772, #1788, #1797, #1798, #1799)**
+- bounds: a derived precondition bounds a parameter by a multiple of a length plus a number (l < 2 * xs.len()) and knows a length is an i64, so at < xs.len() - 1 proves at + 1 (#1673, #1767)
+- bounds: a counter set to an if-expression's value keeps its loop invariant (#1669); a found rule a <= b of two private fields is given at entry and checked at each write (#1681)
+- bounds: a list field's elements capped by another field's length that shrinks (ADR-306 D21; #1688, #1785); a narrow unsigned name and a for over whole numbers lie in their type's range (ADR-306 D34; #1786)
+- Prover: what held where a loop or branch set a flag is proved under that flag (#1787)
+- ADR-391 D1 widened: derived preconditions also over a parameter's field paths, a non-zero divisor, a non-empty list and a non-overflowing step (build: #1832)
+- NK2205 no longer names the receiver of set as the lock the value was read from (#1799); Rust's Box is emitted as std::boxed::Box (#1798)
+- std: process::run keeps env, env_remove and stdin (#1797); manifest refuses a [build] key under [package] (#1772); sort_by_key hands the lambda the item (#1754, #1788); a second nikaia test compiles neither build again (#1759)
+
 ## [0.0.1401] — 2026-11-16
 
 **Builders' changes (#1818, #1819)**

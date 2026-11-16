@@ -472,7 +472,7 @@ pub(crate) fn check_core_call_on_now_expected(state: &CheckState, world: &CheckW
     };
     if parts.len() != 2 { return expected; }
     if entry == "or_insert_with" {
-        let wrapped: Ty = match *nikaia_std::index::get(&expected, 0) {
+        let wrapped: Ty = match *unsafe { nikaia_std::proven::read(&expected, (0) as usize) } {
             Ty::Fn { ref params, ref result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); if result.is_none() && !(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).is_unknown() { Ty::Fn { params: params.copy_owned(), result: std::boxed::Box::new(Some((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).clone())), is_sync, can_throw } } else { (*unsafe { nikaia_std::proven::read(&expected, (0) as usize) }).clone() } },
             _ => (*unsafe { nikaia_std::proven::read(&expected, (0) as usize) }).clone(),
         };
@@ -1010,7 +1010,15 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
             }
         }
     }
-    if key == "Vec::retain" && args.len() == 1 && expected.len() == 1 && check_core_call_on_retain_copies(on, unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { { let __nikaia_stored = check_core_call_on_unviewed_fn(unsafe { nikaia_std::proven::read(&expected, (0) as usize) }); unsafe { nikaia_std::proven::write(&mut expected, (0) as usize, __nikaia_stored) }; } }
+    if key == "Vec::retain" && args.len() == 1 && expected.len() == 1 && check_core_call_on_item_copies(on, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, 1) { { let __nikaia_stored = check_core_call_on_unviewed_fn(unsafe { nikaia_std::proven::read(&expected, (0) as usize) }); unsafe { nikaia_std::proven::write(&mut expected, (0) as usize, __nikaia_stored) }; } }
+    let keyed = key == "Vec::sort_by_key" || key == "Array::sort_by_key";
+    let compared = key == "Vec::sort_by" || key == "Array::sort_by";
+    let mut handed: i64 = 1;
+    if compared { handed = 2; }
+    if (keyed || compared) && args.len() == 1 && expected.len() == 1 && check_core_call_on_item_copies(on, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, handed) {
+        { let __nikaia_stored = check_core_call_on_unviewed_fn(unsafe { nikaia_std::proven::read(&expected, (0) as usize) }); unsafe { nikaia_std::proven::write(&mut expected, (0) as usize, __nikaia_stored) }; }
+        for index in 0..handed { state.facts.copied_item_params.insert((id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64, index)); }
+    }
     let callee: Option<FnContract> = Some(contract.clone());
     state.call_keepers = nikaia_std::index::or(match world.keepers.get(key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1290,13 +1298,13 @@ pub(crate) fn check_core_call_on_one_param(world: &CheckWorld<'_, '_, '_, '_, '_
     }
 }
 
-pub(crate) fn check_core_call_on_retain_copies(on: &Ty, arg: &Expr) -> bool {
+pub(crate) fn check_core_call_on_item_copies(on: &Ty, arg: &Expr, handed: i64) -> bool {
     let item: Ty = match on {
-        Ty::Named { name, args, .. } => { if (name == "Vec" || name == "List") && args.len() == 1 { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { return false; } },
+        Ty::Named { name, args, .. } => { if (name == "Vec" || name == "List") && args.len() == 1 || name == "Array" && !args.is_empty() { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { return false; } },
         _ => return false,
     };
     let one = match arg {
-        Expr::Closure { params, .. } => params.len() == 1,
+        Expr::Closure { params, .. } => (params.len() as i64) == handed,
         _ => false,
     };
     one && !item.is_unknown() && !item.is_a_view() && !moves(&item)

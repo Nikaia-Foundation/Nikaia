@@ -389,8 +389,9 @@ In order, the prover today does not reason about:
   `is_sorted(xs)`.
 
 Some shapes stop a proof even where every value is a whole number. A precondition is not
-carried back through a function that calls itself, and a counter that counts down to zero is
-not yet tied to the length it started from (the warning's notes are left out of the output):
+carried back through a function that calls itself, and a counter that moves by two each turn
+is not tied to the length its loop tests: the walk proves `xs[i + 1]` inside the loop, but not
+the `i + 1` of the loop's own test (the warning's notes are left out of the output):
 
 ```nika
 fn percent(part: int, whole: int) -> int {
@@ -403,18 +404,18 @@ fn halved(part: int, whole: int, depth: int) -> int {
     return halved(part, whole, depth - 1) / 2
 }
 
-fn last_first(xs: Vec[int]) -> int {
-    let mut k = xs.len()
+fn last_odd(xs: Vec[int]) -> int {
+    let mut i = 0
     let mut s = 0
-    while k > 0 {
-        k -= 1
-        s = xs[k]
+    while i + 1 < xs.len() {
+        s = xs[i + 1]
+        i += 2
     }
     return s
 }
 
 fn main() throws {
-    println(f"{halved(1, 4, 3)} {last_first([5, 6])}")
+    println(f"{halved(1, 4, 3)} {last_odd([5, 6, 7, 8])}")
 }
 ```
 
@@ -422,11 +423,14 @@ fn main() throws {
 $ nikaia check --asserts --bounds --unproved-claims=warn shapes.nika
 asserts in shapes.nika: 1 - not proved 1 (refused 0, checked at run time 1, checked by a test 0); checked where the words arrive 0; proved 0 (proved 0, preconditions proved at every call 0)
   shapes.nika:2  assert(whole > 0)  precondition of `percent`: one call checks it when it runs; any other call proves it or reaches the entry that checks it
-bounds in shapes.nika: 1 indexes, 0 proved; 3 operations, 1 proved - written without their check: indexes off, operations off
-     3  part * 100  checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
-     8  depth - 1   checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
-    15  k -= 1      proved
-    16  xs[k]       checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+bounds in shapes.nika: 1 indexes, 1 proved; 6 operations, 3 proved - written without their check: indexes on, operations on
+     3  part * 100 / whole  proved
+     3  part * 100          checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+     8  depth - 1           checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    14  i + 1               checked: a counter the loop on line 14 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+    15  xs[i + 1]           proved
+    15  i + 1               proved
+    16  i += 2              proved
 warning[NK1300]: `assert(whole > 0)`, the precondition of `percent`, is not proved: one call does not prove it.
 ...
 Checked shapes.nika

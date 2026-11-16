@@ -1,0 +1,29 @@
+// `sort_by_key(fn(a) { a })` hands back the number itself wherever the list
+// lives (#1788, fixed with #1754): an untyped literal, a `mut` parameter,
+// a struct field, and lists of `scalar` and `i32`.
+
+struct H {
+    xs: Vec[i64],
+}
+
+fn sorted(mut v: Vec[i64]) {
+    v.sort_by_key(fn(a) { a })
+}
+
+fn main() throws {
+    let mut v = [3, 1, 2]
+    v.sort_by_key(fn(a) { a })
+    println(v.iter().join(", "))
+    let mut z: Vec[i64] = [5, 4, 6]
+    sorted(z)
+    println(z.iter().join(", "))
+    let mut h = H { xs: [9, 7, 8] }
+    h.xs.sort_by_key(fn(a) { a })
+    println(h.xs.iter().join(", "))
+    let mut cs: Vec[scalar] = ['c', 'a', 'b']
+    cs.sort_by_key(fn(c) { c })
+    println(cs.iter().join(", "))
+    let mut w: Vec[i32] = [3, 1, 2]
+    w.sort_by_key(fn(a) { a })
+    println(w.iter().join(", "))
+}
