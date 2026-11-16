@@ -1,6 +1,6 @@
 bounds in tests/prove_a_test_of_a_tuple_part_bounds_its_read.nika: 4 indexes, 3 proved; 8 operations, 0 proved
     14  sum += xs[u] + name.len()                 checked: a counter the loop on line 10 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
-    14  xs[u] + name.len()                        checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    14  xs[u] + name.len()                        checked: a parameter no precondition bounds, of a `pub` function, whose preconditions are the ones its author writes (ADR-391 D4): an `assert` at the top of the function makes it one (ADR-269 D5)
     14  xs[u]                                     proved
     23  sum += xs[unit]                           checked: a counter the loop on line 21 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
     23  xs[unit]                                  proved

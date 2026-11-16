@@ -1,6 +1,6 @@
 bounds in tests/prove_a_value_read_out_of_a_map.nika: 8 indexes, 7 proved; 4 operations, 1 proved
-    16  values[k] + values[j] + values[i]  checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
-    16  values[k] + values[j]              checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    16  values[k] + values[j] + values[i]  checked: a parameter no precondition bounds, of a `pub` function, whose preconditions are the ones its author writes (ADR-391 D4): an `assert` at the top of the function makes it one (ADR-269 D5)
+    16  values[k] + values[j]              checked: a parameter no precondition bounds, of a `pub` function, whose preconditions are the ones its author writes (ADR-391 D4): an `assert` at the top of the function makes it one (ADR-269 D5)
     16  values[k]                          proved
     16  values[j]                          proved
     16  values[i]                          proved

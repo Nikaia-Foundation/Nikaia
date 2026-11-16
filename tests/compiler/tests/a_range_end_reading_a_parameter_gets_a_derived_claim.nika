@@ -1,0 +1,16 @@
+// A `for` over a range whose end reads a parameter: the derivation of a
+// private function's preconditions (ADR-391 D1) walks the range's ends too, so
+// `last + 1` gets the claim `last < toks.len()` its callers prove (#1863).
+
+fn ranged(toks: Vec[i64], last: i64) -> i64 {
+    let mut n = 0
+    for k in 1..<last + 1 {
+        n = n + toks[k - 1]
+    }
+    return n
+}
+
+fn main() throws {
+    let toks = [1, 2, 3]
+    println(f"{ranged(toks, 2)}")
+}

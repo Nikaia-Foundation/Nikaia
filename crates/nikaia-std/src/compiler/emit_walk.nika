@@ -118,6 +118,18 @@ fn visited_in_expr(expr: ref Expr) -> Vec[ref Expr] {
             out.extend(visited_in_expr(base))
             out.extend(visited_in_expr(index))
         },
+        // **A range's ends are expressions of the tree** (#1863): `1..<last + 1`
+        // reads `last`, and a walk past them missed its derived claim.
+        Expr::Range { start, end, .. } => {
+            out.extend(visited_in_expr(start))
+            out.extend(visited_in_expr(end))
+        },
+        Expr::With { base, fields, .. } => {
+            out.extend(visited_in_expr(base))
+            for field in fields {
+                out.extend(visited_in_maybe(field.value))
+            }
+        },
         Expr::Cast { expr, .. } => out.extend(visited_in_expr(expr)),
         Expr::Coalesce { value, fallback, .. } => {
             out.extend(visited_in_expr(value))

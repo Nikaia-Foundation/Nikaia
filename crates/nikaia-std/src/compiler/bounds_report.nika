@@ -27,6 +27,9 @@ pub struct BoundsReportFacts {
 	/// The derived preconditions, each with the call sites that prove it
 	/// (ADR-391 D4, `derived_rows`).
 	pub derived: Vec[String],
+	/// What keeps each function from its callers' bounds, as the prover's
+	/// derivation found it (`derived_gates`, #1863).
+	pub gates: collections::BTreeMap[String, String],
 	/// **Each index data from outside reaches** (ADR-396 D5), and each
 	/// `/`, `%`, `+`, `-` and `*` (D7), as the prover's walk left it
 	/// (`CheckFacts::outside_indices`).
@@ -51,8 +54,21 @@ struct BoundsReportWalk {
 	/// Index nodes already listed: an index read in a statement is listed once.
 	seen: collections::BTreeSet[i64],
 	sites: Vec[BoundsReportSite],
-	/// The function walked is one its callers bound (ADR-391 D1).
-	callers: bool,
+	/// What keeps the function walked from its callers' bounds
+	/// (`derived_gates`, #1863): `""` where its callers bound it (ADR-391
+	/// D1).
+	gate: String,
+}
+
+/// The gate `gates` names for the function `name`; a function it does not
+/// name, which `derived_of` never weighed, is none its callers bound.
+fn bounds_report_gate(gates: ref collections::BTreeMap[String, String], name: ref String) -> String {
+	return gates[name]?.clone() ?? "a function the derivation does not weigh"
+}
+
+/// The gate outside a function: a grammar's action has no callers.
+fn bounds_report_no_function() -> String {
+	return "a grammar's action"
 }
 
 /// The report, for one file, over a check the caller ran. What is proved does
@@ -68,23 +84,26 @@ pub fn bounds_report_checked(
 	overflow: OverflowChecks,
 	holes_of: fn(ref Expr) -> Vec[Expr] sync,
 ) -> String {
-	let mut walk = BoundsReportWalk { seen: collections::BTreeSet(), sites: [], callers: false }
+	let mut walk = BoundsReportWalk { seen: collections::BTreeSet(), sites: [], gate: bounds_report_no_function() }
 	let none: Vec[FnArg] = []
-	let callees = derived_callees(program, words)
 	for item in program.items {
 		match item.node {
 			Item::Fn { name, args, body, .. } => {
-				walk.callers = callees.contains(words.resolve(name ?? continue))
+				walk.gate = bounds_report_gate(facts.gates, words.resolve(name ?? continue))
 				bounds_report_function(args, body, words, source, facts, holes_of, walk)
-				walk.callers = false
+				walk.gate = bounds_report_no_function()
 			},
-			Item::Impl { methods, .. } => {
+			Item::Impl { trait_name, methods, .. } => {
 				for method in methods {
 					match method.node {
 						Item::Fn { name, args, body, .. } => {
-							walk.callers = callees.contains(words.resolve(name ?? continue))
+							walk.gate = if trait_name != null {
+								"a method of a trait's `impl`, called wherever the trait is"
+							} else {
+								bounds_report_gate(facts.gates, words.resolve(name ?? continue))
+							}
 							bounds_report_function(args, body, words, source, facts, holes_of, walk)
-							walk.callers = false
+							walk.gate = bounds_report_no_function()
 						},
 						else => {},
 					}
@@ -419,7 +438,7 @@ fn bounds_report_stmt(
 						body,
 						words,
 						source,
-						walk.callers,
+						walk.gate,
 					)
 				}
 				walk.sites.push(BoundsReportSite {
@@ -505,7 +524,7 @@ fn bounds_report_site(
 				let proved = facts.proven_indices.contains(key)
 				let mut blocked: String? = null
 				if !proved {
-					blocked = blocked_index(base, index, args, body, words, source, walk.callers)
+					blocked = blocked_index(base, index, args, body, words, source, walk.gate)
 				}
 				walk.sites.push(BoundsReportSite {
 					line: line,
@@ -525,7 +544,7 @@ fn bounds_report_site(
 				let proved = facts.proven_indices.contains(key)
 				let mut blocked: String? = null
 				if !proved {
-					blocked = blocked_index(receiver, given[0], args, body, words, source, walk.callers)
+					blocked = blocked_index(receiver, given[0], args, body, words, source, walk.gate)
 				}
 				walk.sites.push(BoundsReportSite {
 					line: line,
@@ -542,7 +561,7 @@ fn bounds_report_site(
 				let proved = facts.proven_arithmetic.contains(at)
 				let mut blocked: String? = null
 				if !proved {
-					blocked = blocked_operation(op, lhs, rhs, args, body, words, source, walk.callers)
+					blocked = blocked_operation(op, lhs, rhs, args, body, words, source, walk.gate)
 				}
 				walk.sites.push(BoundsReportSite {
 					line: bounds_report_line(source, at),

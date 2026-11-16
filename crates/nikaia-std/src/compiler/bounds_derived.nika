@@ -78,6 +78,9 @@ pub struct Derived {
 	/// The claims every call site proved, by the function's `key`: the
 	/// facts at its entry.
 	pub entry: collections::BTreeMap[i64, Vec[DerivedClaim]],
+	/// **Why a function is no candidate** (#1863), by its name: the first
+	/// gate `derived_candidate` stopped it at, for `--bounds`'s reasons.
+	pub gates: collections::BTreeMap[String, String],
 }
 
 /// What a scan found: each call by the callee's name, and every name met
@@ -107,6 +110,7 @@ fn no_derived() -> Derived {
 		walked: 0,
 		answers: collections::BTreeMap(),
 		entry: collections::BTreeMap(),
+		gates: collections::BTreeMap(),
 	}
 }
 
@@ -147,6 +151,7 @@ fn derived_of(
 			else => derived_item_names(item.node, words, everywhere.values),
 		}
 	}
+	let own_values = everywhere.values.clone()
 	for other in beside {
 		for name in other.names {
 			everywhere.values.insert(name.clone())
@@ -172,6 +177,20 @@ fn derived_of(
 			else => {},
 		}
 	}
+	// **A name only another file meets is a call there** (#1863): its gate
+	// says so, apart from a function this file names as a value.
+	let mut beside_only: Vec[String] = []
+	for (name, gate) in derived.gates {
+		if gate == "a function named as a value or outside a call, whose calls the walk does not all see (ADR-391 D1)" && !own_values.contains(name) {
+			beside_only.push(name.clone())
+		}
+	}
+	for name in beside_only {
+		derived.gates.insert(
+			name.clone(),
+			"a function another file of the package calls, whose calls the derivation does not gather (ADR-391 D1)",
+		)
+	}
 	derived.order = derived_callers_first(derived, called)
 	return derived
 }
@@ -194,20 +213,36 @@ fn derived_candidate(
 		Item::Fn { name, receiver, args, config, spread, body, is_public, is_extern, .. } => {
 			let named = name ?? return
 			let text = words.resolve(named).clone()
-			if is_public
-				|| is_extern
-				|| (receiver != null) != method
-				|| spread != null
-				|| !config.is_empty()
-				|| (args.is_empty() && !method) {
-					return
-				}
-			if (defined[text] ?? 0) != 1 || everywhere.values.contains(text) {
+			let gate = if is_public {
+				"a `pub` function, whose preconditions are the ones its author writes (ADR-391 D4)"
+			} else if is_extern {
+				"an `extern` function"
+			} else if (receiver != null) != method {
+				"a function of an `impl` that takes no `self`"
+			} else if spread != null || !config.is_empty() {
+				"a function with a spread or settings"
+			} else if (args.is_empty() && !method) {
+				"a function without parameters"
+			} else if (defined[text] ?? 0) != 1 {
+				"a name defined more than once in the file"
+			} else if everywhere.values.contains(text) {
+				"a function named as a value or outside a call, whose calls the walk does not all see (ADR-391 D1)"
+			} else if (everywhere.calls[text]?.len() ?? 0) == 0 {
+				"a function no body of the package calls"
+			} else {
+				""
+			}
+			if gate != "" {
+				derived.gates.insert(text.clone(), gate.to_string())
 				return
 			}
 			let sites = everywhere.calls[text] ?? return
 			let claims = derived_claims(args, body, method, steps, words)
-			if sites.is_empty() || claims.is_empty() {
+			if claims.is_empty() {
+				derived.gates.insert(
+					text.clone(),
+					"a function whose body reads no parameter in a shape a claim is proposed for (ADR-391 D1)",
+				)
 				return
 			}
 			let key = derived_key(args, body) ?? return
@@ -1142,17 +1177,14 @@ fn derived_rows(around: ref Around) -> Vec[String] {
 	return rows
 }
 
-/// **The private functions this file calls and names nowhere else**, for
-/// `--bounds`'s reasons: a parameter of one is bounded by its callers or by
-/// nothing.
-fn derived_callees(
-	program: ref Program,
-	words: ref winnow_grammar::InternerContext,
-) -> collections::BTreeSet[String] {
-	let none: Vec[ref BoundsBeside] = []
-	let mut out: collections::BTreeSet[String] = collections::BTreeSet()
-	for (name, _) in derived_of(program, none, words).functions {
-		out.insert(name.clone())
+/// **Of each function, what keeps it from its callers' bounds**, for
+/// `--bounds`'s reasons (#1863): `""` for a private function this file calls
+/// and names nowhere else, whose parameters are bounded by its callers or by
+/// nothing; else the gate `derived_candidate` stopped it at.
+fn derived_gates(derived: ref Derived) -> collections::BTreeMap[String, String] {
+	let mut out = derived.gates.clone()
+	for (name, _) in derived.functions {
+		out.insert(name.clone(), "")
 	}
 	return out
 }

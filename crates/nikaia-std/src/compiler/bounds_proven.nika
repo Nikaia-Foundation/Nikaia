@@ -41,6 +41,9 @@ pub struct BoundsAllProven {
 	pub negations: collections::BTreeSet[i64],
 	pub calls: collections::BTreeMap[i64, String],
 	pub derived: Vec[String],
+	/// **What keeps each function from its callers' bounds** (#1863), for
+	/// `--bounds`: `derived_gates`, `""` where they bound it (ADR-391 D1).
+	pub gates: collections::BTreeMap[String, String],
 	/// What `--bounds-trace` shows (#1495), each goal's rows once.
 	pub trace: Vec[String],
 }
@@ -73,6 +76,7 @@ pub fn bounds_proven(
 		negations: collections::BTreeSet(),
 		calls: collections::BTreeMap(),
 		derived: [],
+		gates: collections::BTreeMap(),
 		trace: [],
 	}
 	// What each call may change, each function's frame among it (ADR-306
@@ -167,6 +171,7 @@ pub fn bounds_proven(
 		}
 	}
 	out.derived = derived_rows(context.around)
+	out.gates = derived_gates(context.around.derived)
 	// **A grammar's actions, walked like a function's body** (ADR-314 D1),
 	// from what each binding matched.
 	let none: Vec[FnArg] = []

@@ -38,6 +38,7 @@ pub struct Derived {
     pub walked: i64,
     pub answers: collections::BTreeMap<i64, collections::BTreeSet<i64>>,
     pub entry: collections::BTreeMap<i64, Vec<DerivedClaim>>,
+    pub gates: collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -51,7 +52,7 @@ pub(crate) fn most_claims() -> i64 { 12 }
 
 pub(crate) fn derived_scan() -> DerivedScan { DerivedScan { calls: collections::BTreeMap::new(), values: collections::BTreeSet::new(), locals: vec![] } }
 
-pub(crate) fn no_derived() -> Derived { Derived { functions: collections::BTreeMap::new(), order: vec![], walked: 0, answers: collections::BTreeMap::new(), entry: collections::BTreeMap::new() } }
+pub(crate) fn no_derived() -> Derived { Derived { functions: collections::BTreeMap::new(), order: vec![], walked: 0, answers: collections::BTreeMap::new(), entry: collections::BTreeMap::new(), gates: collections::BTreeMap::new() } }
 
 pub(crate) fn derived_of(program: &Program, beside: &[&BoundsBeside], words: &winnow_grammar::InternerContext) -> Derived {
     let mut derived = no_derived();
@@ -84,6 +85,7 @@ pub(crate) fn derived_of(program: &Program, beside: &[&BoundsBeside], words: &wi
             _ => { derived_item_names(&item.node, words, &mut everywhere.values); },
         }
     }
+    let own_values = everywhere.values.copy_owned();
     for other in beside.iter() {
         let other = *other;
         for name in other.names.iter() { everywhere.values.insert(nikaia_std::block::Text::from(name.to_string())); }
@@ -106,6 +108,9 @@ pub(crate) fn derived_of(program: &Program, beside: &[&BoundsBeside], words: &wi
             _ => { },
         }
     }
+    let mut beside_only: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for (name, gate) in derived.gates.iter() { if gate == "a function named as a value or outside a call, whose calls the walk does not all see (ADR-391 D1)" && !own_values.contains(name) { beside_only.push(nikaia_std::block::Text::from(name.to_string())); } }
+    for name in beside_only.iter() { derived.gates.insert(nikaia_std::block::Text::from(name.to_string()), String::from("a function another file of the package calls, whose calls the derivation does not gather (ADR-391 D1)")); }
     derived.order = derived_callers_first(&derived, &called);
     derived
 }
@@ -117,11 +122,20 @@ pub(crate) fn derived_candidate(derived: &mut Derived, item: &Item, position: i6
             let is_extern = *is_extern; let is_public = *is_public; let name = *name; let spread = *spread;
             let named = match name { Some(__nikaia_value) => __nikaia_value, None => return };
             let text = nikaia_std::block::Text::from(words.resolve(named).to_string());
-            if is_public || is_extern || (receiver.is_some()) != method || spread.is_some() || !config.is_empty() || args.is_empty() && !method { return; }
-            if nikaia_std::index::or(*nikaia_std::index::get(&defined, &text), || 0) != 1 || everywhere.values.contains(&text) { return; }
+            let gate: String = if is_public { String::from("a `pub` function, whose preconditions are the ones its author writes (ADR-391 D4)") } else if is_extern { String::from("an `extern` function") } else if (receiver.is_some()) != method { String::from("a function of an `impl` that takes no `self`") } else if spread.is_some() || !config.is_empty() { String::from("a function with a spread or settings") } else if args.is_empty() && !method { String::from("a function without parameters") } else if nikaia_std::index::or(*nikaia_std::index::get(&defined, &text), || 0) != 1 { String::from("a name defined more than once in the file") } else if everywhere.values.contains(&text) { String::from("a function named as a value or outside a call, whose calls the walk does not all see (ADR-391 D1)") } else if nikaia_std::index::or(match *nikaia_std::index::get(&everywhere.calls, &text) {
+                Some(__nikaia_it) => Some(__nikaia_it.len() as i64),
+                None => None,
+            }, || 0) == 0 { String::from("a function no body of the package calls") } else { String::from("") };
+            if gate != "" {
+                derived.gates.insert(nikaia_std::block::Text::from(text.to_string()), gate);
+                return;
+            }
             let sites = match *nikaia_std::index::get(&everywhere.calls, &text) { Some(__nikaia_value) => __nikaia_value, None => return };
             let claims = derived_claims(args, body, method, steps, words);
-            if sites.is_empty() || claims.is_empty() { return; }
+            if claims.is_empty() {
+                derived.gates.insert(nikaia_std::block::Text::from(text.to_string()), String::from("a function whose body reads no parameter in a shape a claim is proposed for (ADR-391 D1)"));
+                return;
+            }
             let key = match derived_key(args, body) { Some(__nikaia_value) => __nikaia_value, None => return };
             let mut params: Vec<String> = vec![];
             for arg in args.iter() { params.push(nikaia_std::block::Text::from(words.resolve(arg.name).to_string())); }
@@ -711,10 +725,9 @@ pub(crate) fn derived_rows(around: &Around) -> Vec<String> {
     rows
 }
 
-pub(crate) fn derived_callees(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
-    let none: Vec<&BoundsBeside> = vec![];
-    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for (name, _) in derived_of(program, &none, words).functions.iter() { out.insert(nikaia_std::block::Text::from(name.to_string())); }
+pub(crate) fn derived_gates(derived: &Derived) -> collections::BTreeMap<String, String> {
+    let mut out = derived.gates.copy_owned();
+    for (name, _) in derived.functions.iter() { out.insert(nikaia_std::block::Text::from(name.to_string()), String::from("")); }
     out
 }
 

@@ -612,8 +612,8 @@ pub(crate) fn local_vec_handed_back(asked: &Asked<'_, '_, '_>, block: &Block, at
     let mut uses: i64 = 0;
     let mut allowed: i64 = 0;
     let mut handed: i64 = 0;
-    for j in at + 1..block.stmts.len() as i64 {
-        if returns_named(asked.names, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).node, name) || tail && unsafe { nikaia_std::proven::add::<i64>(j, 1) } == block.stmts.len() as i64 && a_tail_named(asked.names, &unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.node, name) { handed += 1; }
+    for j in unsafe { nikaia_std::proven::add::<i64>(at, 1) }..block.stmts.len() as i64 {
+        if returns_named(asked.names, &unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.node, name) || tail && unsafe { nikaia_std::proven::add::<i64>(j, 1) } == block.stmts.len() as i64 && a_tail_named(asked.names, &unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.node, name) { handed = unsafe { nikaia_std::proven::add::<i64>(handed, 1) }; }
         match &unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.node {
             Stmt::For { iter, .. } => { if a_variable_named(asked.names, iter, name) { allowed += 1; } },
             _ => { },

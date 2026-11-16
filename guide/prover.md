@@ -125,7 +125,7 @@ bounds in checks.nika: 2 indexes, 1 proved; 3 operations, 1 proved - written wit
      4  xs[i]          proved
     10  xs[0]          checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
     15  part * 100     proved
-    19  x * 2          checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    19  x * 2          checked: a parameter no precondition bounds, of a function whose body reads no parameter in a shape a claim is proposed for (ADR-391 D1): an `assert` at the top of the function makes it one (ADR-269 D5)
 Checked checks.nika
 ```
 
@@ -426,7 +426,7 @@ asserts in shapes.nika: 1 - not proved 1 (refused 0, checked at run time 1, chec
 bounds in shapes.nika: 1 indexes, 1 proved; 6 operations, 3 proved - written without their check: indexes on, operations on
      3  part * 100 / whole  proved
      3  part * 100          checked: a parameter whose callers do not prove a bound (ADR-391 D1)
-     8  depth - 1           checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+     8  depth - 1           checked: a parameter whose callers do not prove a bound (ADR-391 D1)
     14  i + 1               checked: a counter the loop on line 14 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
     15  xs[i + 1]           proved
     15  i + 1               proved

@@ -765,8 +765,8 @@ pub(crate) fn vc_assign(block: &Block, j: i64, target: &Expr, whole: bool, at: &
     let viewer = vc_first_viewing(&views, &root);
     if whole && vc_looped_over(&views, &root) || !whole && vc_any_watches(&views, &root, &vc_path_of(target, ask)) { vc_refuse(&root, at, &views, walk); } else if whole && viewer >= 0 && declared.contains_key(&root) {
         let mut changed = false;
-        for k in j + 1..block.stmts.len() as i64 {
-            if vc_changes(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(k)).node, &root, ask, holes_of, &walk) {
+        for k in unsafe { nikaia_std::proven::add::<i64>(j, 1) }..block.stmts.len() as i64 {
+            if vc_changes(&unsafe { nikaia_std::proven::read(&block.stmts, (k) as usize) }.node, &root, ask, holes_of, &walk) {
                 changed = true;
                 break;
             }

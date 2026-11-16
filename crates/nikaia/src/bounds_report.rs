@@ -117,6 +117,7 @@ pub fn report_checked(
         proven_arithmetic: proven.arithmetic.iter().copied().collect(),
         proven_negations: proven.negations.iter().copied().collect(),
         derived: proven.derived,
+        gates: proven.gates,
         outside: checked.facts.outside_indices.clone(),
         unproved_warn,
     };

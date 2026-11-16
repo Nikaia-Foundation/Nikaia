@@ -101,6 +101,16 @@ pub(crate) fn visited_in_expr(expr: &Expr) -> Vec<&Expr> {
             out.extend(visited_in_expr(base));
             out.extend(visited_in_expr(index));
         },
+        Expr::Range { start, end, .. } => {
+            let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
+            out.extend(visited_in_expr(start));
+            out.extend(visited_in_expr(end));
+        },
+        Expr::With { base, fields, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            out.extend(visited_in_expr(base));
+            for field in fields.iter() { out.extend(visited_in_maybe((field.value).as_ref())); }
+        },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); out.extend(visited_in_expr(expr)); },
         Expr::Coalesce { value, fallback, .. } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
