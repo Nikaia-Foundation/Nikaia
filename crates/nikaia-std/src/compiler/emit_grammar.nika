@@ -975,7 +975,7 @@ impl EmitState {
                         null => if fields[i].ty.is_nullable { f"match f{i} {{ Some(Some(v)) => v, _ => None }}" } else { f"match f{i} {{ Some(Some(v)) => v, Some(None) => {refused}, None => {missing} }}" },
                     }
                     if self.is_boxed_field(owner, field) {
-                        given = f"Box::new({given})"
+                        given = f"std::boxed::Box::new({given})"
                     }
                     built_fields.push(f"{escaped_name(field)}: {given}")
                 }
@@ -1050,7 +1050,7 @@ impl EmitState {
     fn emit_failing_action[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, action: ref Block, cut: bool) sync throws {
         let mode = if cut { "Cut" } else { "Backtrack" }
         let inside = EmitFlow::plain() with { can_throw: true }
-        out.push("{ let __nikaia_acted: ::core::result::Result<_, Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = ")
+        out.push("{ let __nikaia_acted: ::core::result::Result<_, ::std::boxed::Box<dyn ::std::error::Error>> = (|| { let __nikaia_done = ")
         self.emit_core_block(world, walk, out, host, action, 3, inside, EmitScope::plain(), EmitTail::Value)
         out.push("; Ok(__nikaia_done) })(); ")
         out.push(f"match __nikaia_acted {{ Ok(done) => done, Err(failed) => return Err(::winnow_grammar::winnow::error::ErrMode::{mode}(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, failed))) }} }}")

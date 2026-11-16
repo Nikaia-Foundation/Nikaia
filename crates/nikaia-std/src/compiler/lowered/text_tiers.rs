@@ -4343,12 +4343,12 @@ pub(crate) fn tier_written_type(ty: &Ty, names: &winnow_grammar::InternerContext
             if name.contains("::") { return None; }
             let mut parts: Vec<Type> = vec![];
             for arg in args.iter() { parts.push(match tier_written_type(arg, names) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
-            Some(Type { name: names.intern_string(name), generics: parts, is_view: view, is_tuple: false, is_nullable: false, code: Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false })
+            Some(Type { name: names.intern_string(name), generics: parts, is_view: view, is_tuple: false, is_nullable: false, code: std::boxed::Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false })
         },
         Ty::Tuple(items) => {
             let mut parts: Vec<Type> = vec![];
             for item in items.iter() { parts.push(match tier_written_type(item, names) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
-            Some(Type { name: names.intern_string("tuple"), generics: parts, is_view: false, is_tuple: true, is_nullable: false, code: Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false })
+            Some(Type { name: names.intern_string("tuple"), generics: parts, is_view: false, is_tuple: true, is_nullable: false, code: std::boxed::Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false })
         },
         Ty::Nullable(inner) => {
             let inner = nikaia_std::boxed::open(inner);

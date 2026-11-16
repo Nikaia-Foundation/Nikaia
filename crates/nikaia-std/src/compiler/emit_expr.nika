@@ -640,7 +640,7 @@ impl EmitState {
         out.push(f"nikaia_std::func::Kept(std::sync::Arc::new(move |{names.join(", ")}| ")
         let inside = EmitFlow::plain() with { can_throw: fails, statement: flow.statement }
         if pauses {
-            out.push("Box::pin(async move ")
+            out.push("std::boxed::Box::pin(async move ")
         }
         if fails {
             out.push("{ Ok(")

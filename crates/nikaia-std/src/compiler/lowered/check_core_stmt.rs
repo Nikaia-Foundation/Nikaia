@@ -963,7 +963,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let kept: Ty = match bound {
             Ty::Nullable(ref inner) => {
                 let inner = nikaia_std::boxed::open(inner);
-                if inner.is_a_view() { bound.clone() } else { Ty::Nullable(Box::new(view_of_type(inner))) }
+                if inner.is_a_view() { bound.clone() } else { Ty::Nullable(std::boxed::Box::new(view_of_type(inner))) }
             },
             _ => bound.clone(),
         };

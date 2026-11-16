@@ -97,7 +97,7 @@ pub enum CxPart {
     Value(CxByValue),
     Choice(i64),
     Record(i64),
-    Array(Box<CxPart>, i64),
+    Array(std::boxed::Box<CxPart>, i64),
 }
 
 impl CxRecord {
@@ -285,7 +285,7 @@ pub(crate) fn cx_part(words: &winnow_grammar::InternerContext, plains: &[CxPlain
     if words.resolve(ty.name) == "Array" && ty.generics.len() == 2 {
         let element = cx_one_part(words, plains, declared, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) });
         let count = unsafe { nikaia_std::proven::read(&ty.generics, (1) as usize) }.count;
-        if element.is_some() && count.is_some() { found = Some(CxPart::Array(Box::new(nikaia_std::index::or(element, || CxPart::Choice(0))), nikaia_std::index::or(count, || 0))); }
+        if element.is_some() && count.is_some() { found = Some(CxPart::Array(std::boxed::Box::new(nikaia_std::index::or(element, || CxPart::Choice(0))), nikaia_std::index::or(count, || 0))); }
     } else { found = cx_one_part(words, plains, declared, ty); }
     Ok(match found { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(CxRefused::Because(cx_not_yet(written, "field of an `extern` struct or enum")), &"cx_part")) })
 }

@@ -315,7 +315,7 @@ pub(crate) fn sv_num_test_dorder(a: &SvDelta, b: &SvDelta) -> String {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== item 1: i64 kept small\n"));
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("reduced chain: {}\n", sv_num_test_chain(true, 40))));
@@ -343,7 +343,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== item 2: rationals and delta\n"));
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("6/-4 = {}, 0/-5 = {}, 1/0: {}\n", sv_num_test_show((sv_rat(6, -4)).as_ref()), sv_num_test_show((sv_rat(0, -5)).as_ref()), sv_num_test_show((sv_rat(1, 0)).as_ref()))));

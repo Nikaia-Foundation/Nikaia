@@ -834,7 +834,7 @@ pub(crate) fn sv_sat_test_run(name: &str, q: &SvQuery, s: &mut SvSat, budget: i6
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let hole = sv_sat_test_pigeons(4u32, 3u32);
     let made = sv_sat_of(&hole);
     if !(made.is_some()) { nikaia_std::abort::assertion_failed("assert(made != null)", None, &[("made", (&&nikaia_std::abort::Operand(&(made))).shown()), ]) };
@@ -846,7 +846,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let chain = sv_sat_test_query(6u32, vec![vec![sv_sat_test_pos(0u32), sv_sat_test_pos(1u32)], vec![sv_sat_test_pos(0u32), sv_sat_test_neg(1u32), sv_sat_test_pos(2u32)], vec![sv_sat_test_neg(1u32), sv_sat_test_neg(2u32), sv_sat_test_pos(3u32)], vec![sv_sat_test_neg(2u32), sv_sat_test_neg(3u32)], vec![sv_sat_test_neg(0u32), sv_sat_test_pos(4u32)], vec![sv_sat_test_neg(4u32), sv_sat_test_pos(5u32)], vec![sv_sat_test_neg(4u32), sv_sat_test_neg(5u32)]]);
     let made = sv_sat_of(&chain);
     if !(made.is_some()) { nikaia_std::abort::assertion_failed("assert(made != null)", None, &[("made", (&&nikaia_std::abort::Operand(&(made))).shown()), ]) };
@@ -869,7 +869,7 @@ pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let random = sv_sat_test_random3(150u32, 600u32, 7);
     let made = sv_sat_of(&random);
     if !(made.is_some()) { nikaia_std::abort::assertion_failed("assert(made != null)", None, &[("made", (&&nikaia_std::abort::Operand(&(made))).shown()), ]) };
@@ -881,7 +881,7 @@ pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let six = sv_sat_test_pigeons(6u32, 5u32);
     let made = sv_sat_of(&six);
     if !(made.is_some()) { nikaia_std::abort::assertion_failed("assert(made != null)", None, &[("made", (&&nikaia_std::abort::Operand(&(made))).shown()), ]) };
@@ -896,7 +896,7 @@ pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_4() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let hole = sv_sat_test_pigeons(4u32, 3u32);
     let made = sv_sat_of(&hole);
     if !(made.is_some()) { nikaia_std::abort::assertion_failed("assert(made != null)", None, &[("made", (&&nikaia_std::abort::Operand(&(made))).shown()), ]) };
@@ -924,7 +924,7 @@ pub(crate) fn __nikaia_test_4() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_5() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let seven = sv_sat_test_pigeons(7u32, 6u32);
     let made = sv_sat_of(&seven);
     if !(made.is_some()) { nikaia_std::abort::assertion_failed("assert(made != null)", None, &[("made", (&&nikaia_std::abort::Operand(&(made))).shown()), ]) };

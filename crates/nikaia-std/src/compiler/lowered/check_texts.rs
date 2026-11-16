@@ -382,7 +382,7 @@ impl CheckState {
                     }
                 }
                 let built = match answered { Some(__nikaia_value) => __nikaia_value, None => return None };
-                if nullable { return Some(Ty::Nullable(Box::new(built))); }
+                if nullable { return Some(Ty::Nullable(std::boxed::Box::new(built))); }
                 return Some(built);
             },
         }

@@ -84,10 +84,10 @@ pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &
         Expr::Path(segments, _) => {
             if receiver && !args.is_empty() {
                 let first = args.remove(0);
-                Expr::MethodCall { receiver: Box::new(first), method: *nikaia_std::index::get(&segments, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) })), args, config: vec![], id: fresh_id() }
-            } else { Expr::Call { func: Box::new(Expr::Path(segments.copy_owned(), fresh_id())), args, config: vec![], id: fresh_id() } }
+                Expr::MethodCall { receiver: std::boxed::Box::new(first), method: *nikaia_std::index::get(&segments, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) })), args, config: vec![], id: fresh_id() }
+            } else { Expr::Call { func: std::boxed::Box::new(Expr::Path(segments.copy_owned(), fresh_id())), args, config: vec![], id: fresh_id() } }
         },
-        Expr::Variable(name, _) => { let name = *name; Expr::Call { func: Box::new(Expr::Variable(name, fresh_id())), args, config: vec![], id: fresh_id() } },
+        Expr::Variable(name, _) => { let name = *name; Expr::Call { func: std::boxed::Box::new(Expr::Variable(name, fresh_id())), args, config: vec![], id: fresh_id() } },
         _ => panic("a kept function is a name or a path"),
     };
     (names, call)

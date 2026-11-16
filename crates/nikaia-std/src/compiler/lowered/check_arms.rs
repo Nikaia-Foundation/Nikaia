@@ -65,7 +65,7 @@ pub(crate) fn the_types_meet_with_holes(a: &Ty, b: &Ty) -> Option<Ty> {
         (Ty::Nullable(x), Ty::Nullable(y)) => {
             let x = nikaia_std::boxed::open(x); let y = nikaia_std::boxed::open(y);
             let inner = match the_types_meet_with_holes(x, y) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            Ty::Nullable(Box::new(inner))
+            Ty::Nullable(std::boxed::Box::new(inner))
         },
         _ => {
             if a != b { return None; }
@@ -132,7 +132,7 @@ impl CheckState {
             if plain.is_none() { plain = Some(text.clone()); }
         }
         for arm in arms.iter() { self.an_arm_beside_a_null(world, arm, literals, &text); }
-        Some(Ty::Nullable(Box::new(nikaia_std::index::or(plain, || Ty::Unknown))))
+        Some(Ty::Nullable(std::boxed::Box::new(nikaia_std::index::or(plain, || Ty::Unknown))))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

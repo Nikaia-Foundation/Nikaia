@@ -1501,7 +1501,7 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
     }
     if !state.block_leaves(world, handler) && check_core_flow_widened_by_null(&value, &answers) {
         state.facts.nullable_catches.insert(node_key(guarded_expr));
-        return Ty::Nullable(Box::new(answers.clone()));
+        return Ty::Nullable(std::boxed::Box::new(answers.clone()));
     }
     if state.block_leaves(world, handler) || value.is_unknown() || value.fits(&answers) {
         if a_type_variable(&answers) && a_plain_string(&value) {

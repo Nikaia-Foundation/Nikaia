@@ -65,7 +65,7 @@ pub trait ComptimeBundleHost {
     fn not_built(&self, key: &str) -> Option<String>;
     fn remember_not_built(&self, key: &str, detail: &str);
     fn unique_beside(&self, path: &std::path::Path) -> fs::Path;
-    fn run_child(&self, binary: &std::path::Path, level: &str, libraries: &[fs::Path], name: &str) -> Result<ComptimeBundleRan, Box<dyn std::error::Error>>;
+    fn run_child(&self, binary: &std::path::Path, level: &str, libraries: &[fs::Path], name: &str) -> Result<ComptimeBundleRan, std::boxed::Box<dyn std::error::Error>>;
 }
 
 pub(crate) const COMPTIME_BUNDLE_RUN_SOURCE: &str = "// GENERATED: the library `nikaia run` links a program against.\npub extern crate nikaia_std;\npub extern crate winnow;\npub extern crate winnow_grammar;\n";

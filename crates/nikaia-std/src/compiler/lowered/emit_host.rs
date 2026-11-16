@@ -7,7 +7,7 @@ pub trait EmitHost {
     fn block_mentions(&self, block: &Block, name: &str) -> bool;
     fn error_type(&self, node: &Expr) -> Option<String>;
     fn known_nonnegative(&self, body: &Block) -> Option<Vec<String>>;
-    fn ty_named(&self, walk: &mut EmitWalk, ty: &Type) -> Result<String, Box<dyn std::error::Error>>;
+    fn ty_named(&self, walk: &mut EmitWalk, ty: &Type) -> Result<String, std::boxed::Box<dyn std::error::Error>>;
     fn given_up_unmuted(&self, at: i64) -> bool;
     fn given_up_rebound(&self, at: i64) -> Option<bool>;
     fn order_of(&self, block: &Block) -> Vec<i64>;
@@ -19,7 +19,7 @@ pub trait EmitHost {
     fn seeds_shape(&self, key: &str) -> Option<EmitSeedsShape>;
     fn set_main_params(&self, params: &[String]);
     fn main_params(&self) -> Vec<String>;
-    fn refuse_unwritten_item(&self, written: &Spanned<Item>) -> Result<(), Box<dyn std::error::Error>>;
+    fn refuse_unwritten_item(&self, written: &Spanned<Item>) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn counts_steps(&self) -> bool;
     fn skip_free_at_exit(&self) -> bool;
     fn counts_heap(&self) -> bool;

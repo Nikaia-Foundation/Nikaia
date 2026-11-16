@@ -295,7 +295,7 @@ impl EmitState {
                 }
             }
             if result != "_" { out.push(&format!("{{ let __nikaia_future: {}<'_, {}> = ", emit_boxed_future_in(host.overlaps_user_code()), result)); }
-            out.push("Box::pin(async move ");
+            out.push("std::boxed::Box::pin(async move ");
         }
         let valueless = self.facts.valueless_lambdas.contains(&node_key(node));
         let leaves = emit_a_body_that_leaves(world, body);
@@ -748,7 +748,7 @@ impl EmitState {
         walk.async_bound = String::from("");
         let bound_here = deadline != "" && a_block;
         if bound_here {
-            let boxed: &'static str = "Box<dyn std::error::Error>";
+            let boxed: &'static str = "std::boxed::Box<dyn std::error::Error>";
             let bound_flow = EmitFlow { breaks_to: -1, can_throw: true, in_lambda: false, ..guarded };
             let bound_scope = EmitScope { origin: nikaia_std::block::Text::from(scope.origin.to_string()), channel: nikaia_std::block::Text::from(boxed.to_string()), ..EmitScope::plain() };
             out.push(&format!("{}.bound(async {{ let __nikaia_value = ", deadline));
@@ -756,14 +756,14 @@ impl EmitState {
             out.push(&format!("; Ok::<_, {}>(__nikaia_value) }}).await", boxed));
         } else if nested {
             guarded = EmitFlow { breaks_to: at, ..guarded };
-            if a_block { out.push(&format!("'__nikaia_caught_{}: {{ let __nikaia_value = ", at)); } else { out.push(&format!("'__nikaia_caught_{}: {{ Ok::<_, Box<dyn std::error::Error>>(", at)); }
+            if a_block { out.push(&format!("'__nikaia_caught_{}: {{ let __nikaia_value = ", at)); } else { out.push(&format!("'__nikaia_caught_{}: {{ Ok::<_, std::boxed::Box<dyn std::error::Error>>(", at)); }
         } else { guarded = EmitFlow { breaks_to: -1, ..guarded }; }
         walk.boxed_scope = false;
         let bracketed = emit_flow_struct_headed(guarded_expr);
         if bracketed && !bound_here { out.push("("); }
         if !bound_here { self.emit_expr(world, walk, out, host, guarded_expr, depth, guarded, scope)?; }
         if bracketed && !bound_here { out.push(")"); }
-        if nested && a_block && !bound_here { out.push("; Ok::<_, Box<dyn std::error::Error>>(__nikaia_value) }"); } else if nested && !bound_here { out.push(") }"); }
+        if nested && a_block && !bound_here { out.push("; Ok::<_, std::boxed::Box<dyn std::error::Error>>(__nikaia_value) }"); } else if nested && !bound_here { out.push(") }"); }
         let a_scope = a_scope_call && walk.boxed_scope;
         walk.boxed_scope = false;
         let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1))); #[allow(clippy::redundant_locals)] let passing = passing;
@@ -782,7 +782,7 @@ impl EmitState {
         }
         if caught && sum.is_none() && emit_catch_is_a_join(world, guarded_expr) && !walk.plain_tasks.contains(&emit_join_receiver(world, guarded_expr)) {
             let own_sum = self.sum_of(&scope.function);
-            if own_sum.is_some() { sum = std::convert::identity(own_sum); } else if scope.channel == "Box<dyn std::error::Error>" {
+            if own_sum.is_some() { sum = std::convert::identity(own_sum); } else if scope.channel == "std::boxed::Box<dyn std::error::Error>" {
                 sum = Some(String::from(""));
                 boxed = true;
             } else if scope.channel.starts_with("nikaia_std::error::Thrown<") { named = true; }
@@ -804,7 +804,7 @@ impl EmitState {
         let inside = flow.handling(named);
         let inside_scope = EmitScope { caught_sum: sum, ..scope.clone() };
         let mut opening: Option<String> = None;
-        if named { opening = Some(String::from("let (error, __nikaia_site) = error.split();")); } else if boxed && fallback { opening = Some(String::from("let error: Box<dyn std::error::Error> = nikaia_std::task::handed(error.into());")); } else if boxed { opening = Some(String::from("let error: Box<dyn std::error::Error> = error.into();")); }
+        if named { opening = Some(String::from("let (error, __nikaia_site) = error.split();")); } else if boxed && fallback { opening = Some(String::from("let error: std::boxed::Box<dyn std::error::Error> = nikaia_std::task::handed(error.into());")); } else if boxed { opening = Some(String::from("let error: std::boxed::Box<dyn std::error::Error> = error.into();")); }
         if an_else {
             if dropped { out.push(" {} else "); } else if self.facts.nullable_catches.contains(&node_key(guarded_expr)) { out.push(" { Some(value) } else "); } else if self.facts.owned_catches.contains(&node_key(guarded_expr)) {
                 let copy = if self.on_block_types() { "copy_owned" } else { "to_owned" };
@@ -818,7 +818,7 @@ impl EmitState {
         if !passing.is_empty() && nikaia_std::index::or(call_callee_name(world.words, world.aliases, guarded_expr), || "".into()) == "supervisor::run" {
             out.push(&format!("{}Err(nikaia_std::supervisor::Stopped::Handed(error)) => return Err(error.into()),\n", pad));
             handler_takes = format!("Err(nikaia_std::supervisor::Stopped::Escalated({})) => ", bound);
-        } else if a_scope && scope.channel == "Box<dyn std::error::Error>" {
+        } else if a_scope && scope.channel == "std::boxed::Box<dyn std::error::Error>" {
             let mut unless: String = String::from("");
             for ty in fatal_named(handler, world.words) { if !ty.contains("::") && emit_is_fatal(&self.own_contracts, &ty) { unless = format!("{} && !nikaia_std::error::holds::<{}>(&*error)", unless, ty); } }
             out.push(&format!("{}Err(nikaia_std::task::Boxed(error)) if nikaia_std::process::Ending::fatal_code(&error).is_some(){} => return Err(error),\n", pad, unless));
@@ -956,7 +956,7 @@ impl EmitState {
             }
             return Ok(());
         }
-        if self.named_error(world, &scope.function) != 0 && scope.channel != "Box<dyn std::error::Error>" { out.push("return Err(nikaia_std::error::throwing("); } else { out.push("return Err(nikaia_std::error::raise("); }
+        if self.named_error(world, &scope.function) != 0 && scope.channel != "std::boxed::Box<dyn std::error::Error>" { out.push("return Err(nikaia_std::error::throwing("); } else { out.push("return Err(nikaia_std::error::raise("); }
         self.emit_expr(world, walk, out, host, inner, depth, flow, scope)?;
         out.push(&format!(", &{}))", rust_string(&scope.origin)));
         Ok(())
@@ -980,7 +980,7 @@ impl EmitState {
                 let mut at: u32 = 0u32;
                 if flow.statement > 0 { at = u32::try_from(flow.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")); }
                 let guarded = Expr::Block(body.clone(), numbered_id(id_of(task)));
-                let caught = Expr::TryCatch { expr: Box::new(guarded), handler: handler.clone(), id: numbered_id(id) };
+                let caught = Expr::TryCatch { expr: std::boxed::Box::new(guarded), handler: handler.clone(), id: numbered_id(id) };
                 let wrapped = Block { stmts: vec![Spanned::new(Stmt::Expr(caught), Span { start: at, end: at })] };
                 self.emit_flow_task(world, walk, out, host, node_key(lambda), &wrapped, depth, &flow, scope)?;
             },
@@ -1037,7 +1037,7 @@ impl EmitState {
         let mut kind: &'static str = "TaskHandle";
         if failing {
             kind = "FailingTask";
-            if host.overlaps_user_code() && scope.channel == "Box<dyn std::error::Error>" { kind = "BoxedTask"; }
+            if host.overlaps_user_code() && scope.channel == "std::boxed::Box<dyn std::error::Error>" { kind = "BoxedTask"; }
         }
         if host.overlaps_user_code() { out.push(&format!("nikaia_std::task::{}::start_on_pool(async move ", kind)); } else { out.push(&format!("nikaia_std::task::{}::start(async move ", kind)); }
         if failing {

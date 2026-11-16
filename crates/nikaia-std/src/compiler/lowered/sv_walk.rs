@@ -343,7 +343,7 @@ pub(crate) fn sv_walk_test_each(name: &str, source: &str) -> String {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files = nikaia_std::block::List::from_array_in([("problem__003", sv_walk_test_problem003()), ("equation", sv_walk_test_smt("sat", "Int", &vec!["x", "y"], "(assert (= (+ (* 3 x) (* 5 y)) 7))\n(assert (distinct x y))\n(assert (or (> x 4) (< y (- 3))))\n")), ("unsat", sv_walk_test_smt("unsat", "Int", &vec!["x"], "(assert (>= x 1))\n(assert (<= x 0))\n")), ("real", sv_walk_test_smt("sat", "Real", &vec!["x"], "(assert (< 0 x 1))\n"))], nikaia_std::block::Place::Block);
     let mut out: String = String::from("");
     for (name, text) in files.iter() {

@@ -496,7 +496,7 @@ impl EmitState {
         if call_pauses(self.own_contracts, key) {
             return -1
         }
-        if self.error_channel(world, key, true, "", "", false) == "Box<dyn std::error::Error>" {
+        if self.error_channel(world, key, true, "", "", false) == "std::boxed::Box<dyn std::error::Error>" {
             return -1
         }
         return arity
@@ -595,7 +595,7 @@ impl EmitState {
         // around everything else this argument is written with.
         let boxed_here = i < boxed_mask.len() && boxed_mask[i]
         if boxed_here {
-            out.push("Box::new(")
+            out.push("std::boxed::Box::new(")
         }
         let node = node_key(arg)
         // **A lookup's key of no known type** (0.0.235): the reference the map
@@ -909,7 +909,7 @@ impl EmitState {
                 if runs {
                     out.push(f"async |{joined}| ")
                 } else {
-                    out.push(f"|{joined}| Box::pin(async move ")
+                    out.push(f"|{joined}| std::boxed::Box::pin(async move ")
                 }
                 let mut changed: Vec[winnow_grammar::Symbol] = scope.changed.clone()
                 changed.extend(mutable.clone())
@@ -1185,7 +1185,7 @@ pub fn emit_call_on_the_pool(key: ref String) -> bool {
 /// `Crashed` alone where nothing else can.
 fn emit_call_tasks_channel(flow: EmitFlow, scope: ref EmitScope) -> String {
     if flow.handled_here {
-        return "Box<dyn std::error::Error>"
+        return "std::boxed::Box<dyn std::error::Error>"
     }
     if flow.can_throw {
         return scope.channel.clone()
@@ -1197,7 +1197,7 @@ fn emit_call_tasks_channel(flow: EmitFlow, scope: ref EmitScope) -> String {
 /// where a `catch` opens it, so its tasks may borrow (`task::Boxed`); its
 /// tasks still fail in the box.
 fn emit_call_scope_channel(channel: ref String) -> String {
-    if channel == "Box<dyn std::error::Error>" {
+    if channel == "std::boxed::Box<dyn std::error::Error>" {
         return "nikaia_std::task::Boxed"
     }
     return channel.clone()
@@ -1431,7 +1431,7 @@ impl EmitState {
             if channel == scope.channel {
                 owner = scope.function.clone()
             }
-            let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>"
+            let boxed = flow.handled_here && channel == "std::boxed::Box<dyn std::error::Error>"
             // **The scope's function may throw itself** (ADR-346 D7): its error
             // is the scope's, after its tasks' (`settled`).
             let mut written = false
@@ -1602,7 +1602,7 @@ impl EmitState {
     fn emit_channel_holds_a_crash(ref self, channel: ref String) -> bool sync {
         // `task::OverBudget` takes a crash apart (ADR-327 D13): a full block
         // is its own, any other crash unwinds on.
-        if channel == "nikaia_std::task::Crashed" || channel == "nikaia_std::task::OverBudget" || channel == "Box<dyn std::error::Error>" || channel == "nikaia_std::task::Boxed" {
+        if channel == "nikaia_std::task::Crashed" || channel == "nikaia_std::task::OverBudget" || channel == "std::boxed::Box<dyn std::error::Error>" || channel == "nikaia_std::task::Boxed" {
             return true
         }
         if channel.starts_with("nikaia_std::error::Thrown<") {
@@ -1675,7 +1675,7 @@ impl EmitState {
             },
             else => {},
         }
-        let boxed: String = "Box<dyn std::error::Error>"
+        let boxed: String = "std::boxed::Box<dyn std::error::Error>"
         let mut own = channel.clone()
         if raised {
             own = outer.clone()
@@ -2197,7 +2197,7 @@ impl EmitState {
                         channel = "nikaia_std::task::Crashed"
                     }
                 }
-                let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>"
+                let boxed = flow.handled_here && channel == "std::boxed::Box<dyn std::error::Error>"
                 out.push(f"{{ let {named} = &nikaia_std::task::{made}::<{emit_call_scope_channel(channel)}>::new(); nikaia_std::task::{run}({named}, async ")
                 // **Its function may throw itself** (ADR-346 D7), as `task::scope`'s.
                 if channel != "nikaia_std::task::Crashed" {

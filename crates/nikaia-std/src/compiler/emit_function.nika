@@ -972,7 +972,7 @@ impl EmitState {
                 }
                 // **The failure channel** (ADR-280 D1). A method that implements
                 // a trait keeps the box.
-                let mut channel: String = "Box<dyn std::error::Error>"
+                let mut channel: String = "std::boxed::Box<dyn std::error::Error>"
                 if !has_declared_by {
                     let mut borrows_any = receiver != null
                     for each in args {

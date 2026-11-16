@@ -113,8 +113,8 @@ impl EmitState {
             if (*code.result).is_some() {
                 let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
                 let inner = a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, result, &lifetimes, &count));
-                if code.can_throw { outcome = format!("Result<{}, Box<dyn std::error::Error>>", inner); } else { outcome = inner; }
-            } else if code.can_throw { outcome = String::from("Result<(), Box<dyn std::error::Error>>"); }
+                if code.can_throw { outcome = format!("Result<{}, std::boxed::Box<dyn std::error::Error>>", inner); } else { outcome = inner; }
+            } else if code.can_throw { outcome = String::from("Result<(), std::boxed::Box<dyn std::error::Error>>"); }
             let runs = walk.in_parameter && walk.code_parameter_runs;
             if (*code.result).is_some() {
                 let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
@@ -129,7 +129,7 @@ impl EmitState {
                     for part in ty.generics.iter() { called.push(a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, part, &EmitLifetimes::Call, &count))); }
                     let inner = a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, result, &EmitLifetimes::Call, &count));
                     let mut each = nikaia_std::block::Text::from(inner.to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut called = called;
-                    if code.can_throw { each = format!("Result<{}, Box<dyn std::error::Error>>", inner); }
+                    if code.can_throw { each = format!("Result<{}, std::boxed::Box<dyn std::error::Error>>", inner); }
                     if runs {
                         if code.is_sync { return format!("impl for<'call> Fn({}) -> {}", nikaia_std::block::Text::from(called.join(", ")), each); }
                         return format!("impl for<'call> AsyncFn({}) -> {}", nikaia_std::block::Text::from(called.join(", ")), each);
@@ -173,7 +173,7 @@ impl EmitState {
                 return format!("impl Fn({}){}", nikaia_std::block::Text::from(params.join(", ")), shape);
             }
             if walk.code_parameter_runs { return format!("impl AsyncFn({}) -> {}", nikaia_std::block::Text::from(params.join(", ")), outcome); }
-            return format!("impl Fn({}) -> std::pin::Pin<Box<dyn std::future::Future<Output = {}>>>", nikaia_std::block::Text::from(params.join(", ")), outcome);
+            return format!("impl Fn({}) -> std::pin::Pin<std::boxed::Box<dyn std::future::Future<Output = {}>>>", nikaia_std::block::Text::from(params.join(", ")), outcome);
         }
         if name == "Seen" && ty.generics.len() == 1 {
             let mut inner: Type = (*unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }).clone();

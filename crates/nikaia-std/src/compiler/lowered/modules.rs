@@ -897,12 +897,12 @@ pub trait ModulesEmitHost {
     fn own_names(&self) -> collections::BTreeSet<String>;
     fn barrier_names(&self, all: bool) -> collections::BTreeSet<String>;
     fn preamble(&self) -> String;
-    fn emit_unit(&self, at: i64, provenance: &Provenance, offset: i64) -> Result<String, Box<dyn std::error::Error>>;
+    fn emit_unit(&self, at: i64, provenance: &Provenance, offset: i64) -> Result<String, std::boxed::Box<dyn std::error::Error>>;
     fn has_main(&self) -> bool;
     fn map_rows(&self) -> Vec<(i64, i64, i64)>;
 }
 
-pub fn modules_emit_reading<H: ModulesEmitHost>(host: &H, packages: &[Option<String>], shown: &[String], sources: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
+pub fn modules_emit_reading<H: ModulesEmitHost>(host: &H, packages: &[Option<String>], shown: &[String], sources: &[&str]) -> Result<String, std::boxed::Box<dyn std::error::Error>> {
     let mut provenance = host.trust();
     if provenance == Provenance::Trusted {
         let called = host.own_names();
@@ -988,7 +988,7 @@ pub(crate) fn modules_reach_test_shown(found: &[collections::BTreeSet<String>]) 
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let a = modules_reach_test_file(&vec![("a_help", false, vec!["a_deeper"]), ("a_deeper", false, vec![]), ("", false, vec!["a_used"]), ("a_used", false, vec![])]);
     let b = modules_reach_test_file(&vec![("", true, vec!["a_help", "b_help"]), ("b_help", false, vec!["a_used"])]);
     let found = modules_only_tests_package(&vec![a, b]);
@@ -998,7 +998,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let a = modules_reach_test_file(&vec![("a_help", false, vec![]), ("", true, vec!["a_help"])]);
     let b = modules_reach_test_file(&vec![("", false, vec!["a_help"])]);
     let found = modules_only_tests_package(&vec![a, b]);
@@ -1008,7 +1008,7 @@ pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let a = modules_reach_test_file(&vec![("twin", false, vec![]), ("", true, vec!["twin"])]);
     let b = modules_reach_test_file(&vec![("twin", false, vec![])]);
     let found = modules_only_tests_package(&vec![a, b]);
@@ -1018,7 +1018,7 @@ pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let a = modules_reach_test_file(&vec![("ARun", false, vec![]), ("a_check", false, vec!["ARun"]), ("AKept", false, vec![]), ("", false, vec!["AKept"])]);
     let b = modules_reach_test_file(&vec![("", true, vec!["a_check", "AKept"])]);
     let found = modules_only_tests_package(&vec![a, b]);

@@ -164,7 +164,7 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                     let mut out: Option<Ty> = None;
                     let walked = check_core_args_walked(&written, &came_to);
                     if walked.is_some() { out = std::convert::identity(walked); } else if !written.is_unknown() && !check_core_args_open_option(&written) { out = Some(written); } else if !came_to.is_unknown() { out = Some(came_to); } else if !written.is_unknown() { out = Some(written); }
-                    return Ty::Fn { params: given.copy_owned(), result: Box::new(out), is_sync: !pauses, can_throw: fails };
+                    return Ty::Fn { params: given.copy_owned(), result: std::boxed::Box::new(out), is_sync: !pauses, can_throw: fails };
                 },
                 _ => { },
             }

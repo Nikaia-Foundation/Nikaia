@@ -219,7 +219,7 @@ impl CheckState {
     pub(crate) fn choice_of_views_and_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, only_lent: bool, views_only: bool) -> Option<Ty> {
         if !is_a_choice(value) { return None; }
         let text = a_string_type();
-        let maybe_text = Ty::Nullable(Box::new(a_string_type()));
+        let maybe_text = Ty::Nullable(std::boxed::Box::new(a_string_type()));
         let mut views = 0;
         let mut owned = 0;
         let mut absent = false;
@@ -250,7 +250,7 @@ impl CheckState {
             }
         } else { self.note_mixed(world, value, absent); }
         let view = Ty::Named { name: nikaia_std::block::Text::from(TEXT_VIEW.to_string()), args: vec![], view: true };
-        if absent { return Some(Ty::Nullable(Box::new(view))); }
+        if absent { return Some(Ty::Nullable(std::boxed::Box::new(view))); }
         Some(view)
     }
 }

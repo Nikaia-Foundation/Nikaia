@@ -318,7 +318,7 @@ impl EmitState {
                     match body {
                         Expr::Closure { body: block, .. } => {
                             let guarded = Expr::Block(block.clone(), numbered_id(id_of(expr)));
-                            let caught = Expr::TryCatch { expr: Box::new(guarded), handler: handler.clone(), id: numbered_id(id.get()) };
+                            let caught = Expr::TryCatch { expr: std::boxed::Box::new(guarded), handler: handler.clone(), id: numbered_id(id.get()) };
                             let kind = self.emit_child_kind(id_of(expr) as i64, &flow)?;
                             self.emit_async_task(world, walk, out, host, &caught, id_of(expr) as i64, &kind, depth, &flow, scope)?;
                         },
@@ -435,7 +435,7 @@ impl EmitState {
         }
         out.push(&format!("nikaia_std::func::Kept(std::sync::Arc::new(move |{}| ", nikaia_std::block::Text::from(names.join(", "))));
         let inside = EmitFlow { can_throw: fails, statement: flow.statement, ..EmitFlow::plain() };
-        if pauses { out.push("Box::pin(async move "); }
+        if pauses { out.push("std::boxed::Box::pin(async move "); }
         if fails { out.push("{ Ok("); } else { out.push("{ "); }
         let outer = walk.in_a_kept_call;
         walk.in_a_kept_call = true;

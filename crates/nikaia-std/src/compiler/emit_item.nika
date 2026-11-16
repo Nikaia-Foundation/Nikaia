@@ -578,7 +578,7 @@ impl EmitState {
                 bridge = "CleanupSend"
                 send = " + Send"
             }
-            out.push(f"impl{declares} nikaia_std::cleanup::{bridge} for {target_name}{applied} {{\n    fn cleanup(&mut self) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ::std::string::String>>{send} + '_>> {{\n        Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({target_name}::cleanup(self){awaited}) }})\n    }}\n}}\n")
+            out.push(f"impl{declares} nikaia_std::cleanup::{bridge} for {target_name}{applied} {{\n    fn cleanup(&mut self) -> std::pin::Pin<std::boxed::Box<dyn std::future::Future<Output = Result<(), ::std::string::String>>{send} + '_>> {{\n        std::boxed::Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({target_name}::cleanup(self){awaited}) }})\n    }}\n}}\n")
             return
         }
         // **`impl Eq`, `impl Ord` and `impl Hash` are the language's**
@@ -757,7 +757,7 @@ impl EmitState {
         }
         let mut outcome = returned.clone()
         if method.can_throw {
-            outcome = f"Result<{returned}, Box<dyn std::error::Error>>"
+            outcome = f"Result<{returned}, std::boxed::Box<dyn std::error::Error>>"
         }
         // **A method that may pause is declared in the return-position form**
         // (ADR-288 D26); `+ Send` follows the executor, not the type.

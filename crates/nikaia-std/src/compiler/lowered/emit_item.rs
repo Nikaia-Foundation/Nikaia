@@ -133,7 +133,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn emit_item<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_item<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         let at = written.span.start;
         let only_in_tests = emit_fn_only_in_tests(world.words, &written.attributes);
         let test_gate = if only_in_tests { "#[cfg(test)]\n" } else { "" };
@@ -372,7 +372,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_item_impl<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, trait_name: Option<winnow_grammar::Symbol>, target: &Type, methods: &[Spanned<Item>]) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_item_impl<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, trait_name: Option<winnow_grammar::Symbol>, target: &Type, methods: &[Spanned<Item>]) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         let borrows = self.borrows(world, target.name);
         let mut params = "";
         let mut lifetimes = EmitLifetimes::Elided;
@@ -417,7 +417,7 @@ impl EmitState {
                 bridge = "CleanupSend";
                 send = " + Send";
             }
-            out.push(&format!("impl{} nikaia_std::cleanup::{} for {}{} {{\n    fn cleanup(&mut self) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ::std::string::String>>{} + '_>> {{\n        Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({}::cleanup(self){}) }})\n    }}\n}}\n", declares, bridge, target_name, applied, send, target_name, awaited));
+            out.push(&format!("impl{} nikaia_std::cleanup::{} for {}{} {{\n    fn cleanup(&mut self) -> std::pin::Pin<std::boxed::Box<dyn std::future::Future<Output = Result<(), ::std::string::String>>{} + '_>> {{\n        std::boxed::Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({}::cleanup(self){}) }})\n    }}\n}}\n", declares, bridge, target_name, applied, send, target_name, awaited));
             return Ok(());
         }
         if has_trait && (trait_text == "Eq" || trait_text == "Ord" || trait_text == "Hash") && !emit_item_declares_trait(world, &trait_text) {
@@ -488,7 +488,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_trait_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, trait_name: &str, method: &TraitMethod, is_sync: bool, foreign: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_trait_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, trait_name: &str, method: &TraitMethod, is_sync: bool, foreign: bool) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         walk.floor = true;
         let key = format!("{}::{}", trait_name, emit_text(world, method.name));
         #[allow(unused_mut)] let mut from_names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -554,7 +554,7 @@ impl EmitState {
             }
         }
         let mut outcome = nikaia_std::block::Text::from(returned.to_string());
-        if method.can_throw { outcome = format!("Result<{}, Box<dyn std::error::Error>>", returned); }
+        if method.can_throw { outcome = format!("Result<{}, std::boxed::Box<dyn std::error::Error>>", returned); }
         let mut ret: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
         if !is_sync {
             let send = if host.user_parallelism() { " + Send" } else { "" };
@@ -602,7 +602,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_bridge<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, trait_name: &str, declared: &TraitMethod, target: &str, method: &Item) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_bridge<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, trait_name: &str, declared: &TraitMethod, target: &str, method: &Item) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         let mut own_throws = false;
         match method {
             Item::Fn { can_throw, .. } => {

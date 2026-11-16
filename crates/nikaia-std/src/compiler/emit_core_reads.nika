@@ -746,7 +746,7 @@ impl EmitState {
             queued = true
             let failing = self.facts.settle_fns.get(scope.function) ?? false
             let kind = emit_settle_kind(host.overlaps_user_code())
-            if failing && fallible && channel == "Box<dyn std::error::Error>" {
+            if failing && fallible && channel == "std::boxed::Box<dyn std::error::Error>" {
                 wrapper = f"nikaia_std::cleanup::branch_after::<{kind}, _, _, _>"
             } else {
                 wrapper = f"nikaia_std::cleanup::branch::<{kind}, _, _>"

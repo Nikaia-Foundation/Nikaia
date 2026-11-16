@@ -298,7 +298,7 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
                     None => None,
                 }, || BinaryOp::Add);
                 if given == BinaryOp::Add || given == BinaryOp::Sub || given == BinaryOp::Mul || given == BinaryOp::Div || given == BinaryOp::Rem {
-                    let written_out = Expr::Binary { op: given, lhs: Box::new(target.clone()), rhs: Box::new(value.clone()), span, grouped: false, id: fresh_id() };
+                    let written_out = Expr::Binary { op: given, lhs: std::boxed::Box::new(target.clone()), rhs: std::boxed::Box::new(value.clone()), span, grouped: false, id: fresh_id() };
                     prover_unwritten_check(walk, &written_out, span, &scope, &nested, words, library, &holes_of, &ask, &model, &written_of);
                 }
             }
