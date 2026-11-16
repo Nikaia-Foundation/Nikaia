@@ -590,6 +590,16 @@ struct FieldsScan {
 	/// written or mentioned goes into `lost`, whatever `live` holds.
 	recording: bool,
 	lost: collections::BTreeSet[String],
+	/// Recording, each field written, grown, emptied or reordered (`push`,
+	/// `clear`, `sort`), or handed to a call as it is: a mention that only
+	/// reads it is not here. One reached through `self` in an `impl`, or
+	/// given in a literal, is named with its type (`Row.cols`).
+	changed: collections::BTreeSet[String],
+	/// The type of the `impl` scanned, `""` outside one.
+	self_type: String,
+	/// Each parameter of the function scanned, with the last name of its
+	/// type: a write through `mut plan: BufferPlan` is named `BufferPlan.holds`.
+	typed: collections::BTreeMap[String, String],
 }
 
 /// **What a file beside the one proved says to its walks**, read once per
@@ -605,6 +615,9 @@ pub struct BoundsBeside {
 	pub reached: collections::BTreeSet[String],
 	pub has_main: bool,
 	pub lost: collections::BTreeSet[String],
+	/// Each field it writes, grows, empties or reorders, or hands to a call
+	/// (#1755): a found rule over that field no longer holds of it.
+	pub changed: collections::BTreeSet[String],
 }
 
 /// [`BoundsBeside`] of one file, `words` its words.
@@ -620,6 +633,9 @@ pub fn bounds_beside(program: ref Program, words: ref winnow_grammar::InternerCo
 		here: false,
 		recording: true,
 		lost: collections::BTreeSet(),
+		changed: collections::BTreeSet(),
+		self_type: "",
+		typed: collections::BTreeMap(),
 	}
 	let mut reached: collections::BTreeSet[String] = collections::BTreeSet()
 	let has_main = fields_declared(program, words, false, scan, reached)
@@ -631,7 +647,7 @@ pub fn bounds_beside(program: ref Program, words: ref winnow_grammar::InternerCo
 	for item in program.items {
 		fields_item(item, words, scan, ignored)
 	}
-	return BoundsBeside { names, declared, reached, has_main, lost: scan.lost }
+	return BoundsBeside { names, declared, reached, has_main, lost: scan.lost, changed: scan.changed }
 }
 
 fn fields_seen(
@@ -646,6 +662,9 @@ fn fields_seen(
 		here: true,
 		recording: false,
 		lost: collections::BTreeSet(),
+		changed: collections::BTreeSet(),
+		self_type: "",
+		typed: collections::BTreeMap(),
 	}
 	let mut reached: collections::BTreeSet[String] = collections::BTreeSet()
 	let mut a_program = fields_declared(program, words, true, scan, reached)
@@ -742,7 +761,15 @@ fn fields_item(
 	mut writers: collections::BTreeSet[i64],
 ) {
 	match item.node {
-		Item::Fn { config, body, .. } => {
+		Item::Fn { args, config, body, .. } => {
+			let had = scan.typed.clone()
+			for arg in args {
+				if arg.ty.generics.is_empty() {
+					scan.typed.insert(words.resolve(arg.name).clone(), rules_last_name(words.resolve(arg.ty.name)))
+				} else {
+					scan.typed.remove(words.resolve(arg.name))
+				}
+			}
 			scan.walked = false
 			for param in config {
 				fields_expr(param.default, words, scan)
@@ -754,11 +781,15 @@ fn fields_item(
 				writers.insert(item.span.start)
 			}
 			scan.walked = false
+			scan.typed = had
 		},
-		Item::Impl { methods, .. } => {
+		Item::Impl { target, methods, .. } => {
+			let was = scan.self_type.clone()
+			scan.self_type = rules_last_name(words.resolve(target.name))
 			for method in methods {
 				fields_item(method, words, scan, writers)
 			}
+			scan.self_type = was
 		},
 		Item::Struct { rules, .. } => {
 			for rule in rules {
@@ -783,6 +814,11 @@ fn fields_item(
 	}
 }
 
+/// A method that keeps a list's length and moves or rewrites its elements.
+fn fields_reorders(method: ref String) -> bool {
+	return method == "sort" || method == "sort_by" || method == "sort_by_key" || method == "reverse" || method == "swap" || method == "fill"
+}
+
 /// The field `name` is written here: seen where a walk goes, lost elsewhere.
 fn fields_write(name: ref String, mut scan: FieldsScan) {
 	if scan.recording {
@@ -796,6 +832,50 @@ fn fields_write(name: ref String, mut scan: FieldsScan) {
 		scan.wrote = true
 	} else {
 		scan.live.insert(name.clone(), false)
+	}
+}
+
+/// The field `name` is changed otherwise than by a value written (`+=`, a
+/// method that may change its length): lost, and changed when recording.
+fn fields_change(base: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	fields_mark(base, name, words, scan)
+	fields_lose(name, scan)
+}
+
+/// Recording, the field `name` of `base` is changed: named with its type
+/// where `base` is `self` in an `impl`, by its name alone elsewhere.
+fn fields_mark(base: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	if !scan.recording {
+		return
+	}
+	match base {
+		Expr::Variable(v, _) => {
+			if words.resolve(v) == "self" && !scan.self_type.is_empty() {
+				scan.changed.insert(f"{scan.self_type}.{name}")
+				return
+			}
+			let ty = scan.typed.get(words.resolve(v))
+			if ty != null {
+				scan.changed.insert(f"{ty ?? ""}.{name}")
+				return
+			}
+		},
+		else => {},
+	}
+	scan.changed.insert(name.clone())
+}
+
+/// Recording, each field handed to a call as it is: a `mut` parameter
+/// may change it there.
+fn fields_handed(args: ref Vec[Expr], words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	if !scan.recording {
+		return
+	}
+	for arg in args {
+		match arg {
+			Expr::Field { base, name, .. } => fields_mark(base, words.resolve(name), words, scan),
+			else => {},
+		}
 	}
 }
 
@@ -818,7 +898,13 @@ fn fields_block(block: ref Block, words: ref winnow_grammar::InternerContext, mu
 
 fn fields_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
 	match stmt {
-		Stmt::Let { value, .. } => fields_expr(value, words, scan),
+		Stmt::Let { names, value, .. } => {
+			fields_expr(value, words, scan)
+			// A name bound again is no longer the parameter whose type it had.
+			for n in names {
+				scan.typed.remove(words.resolve(n))
+			}
+		},
 		Stmt::Comptime { value, .. } => fields_expr(value, words, scan),
 		Stmt::Assign { target, op, value } => {
 			fields_expr(value, words, scan)
@@ -827,8 +913,9 @@ fn fields_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, mut s
 					let text = words.resolve(name)
 					if op == null {
 						fields_write(text, scan)
+						fields_mark(base, text, words, scan)
 					} else {
-						fields_lose(text, scan)
+						fields_change(base, text, words, scan)
 					}
 					fields_expr(base, words, scan)
 				},
@@ -838,8 +925,9 @@ fn fields_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, mut s
 							let text = words.resolve(name)
 							if op == null {
 								fields_write(text, scan)
+								fields_mark(owner, text, words, scan)
 							} else {
-								fields_lose(text, scan)
+								fields_change(owner, text, words, scan)
 							}
 							fields_expr(owner, words, scan)
 						},
@@ -850,10 +938,13 @@ fn fields_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, mut s
 				else => fields_expr(target, words, scan),
 			}
 		},
-		Stmt::For { iter, body, .. } => {
+		Stmt::For { bindings, iter, body, .. } => {
 			match iter {
 				Expr::Field { base, .. } => fields_expr(base, words, scan),
 				else => fields_expr(iter, words, scan),
+			}
+			for n in bindings {
+				scan.typed.remove(words.resolve(n))
 			}
 			fields_block(body, words, scan)
 		},
@@ -885,9 +976,14 @@ fn fields_unwalked(block: ref Block, words: ref winnow_grammar::InternerContext,
 	scan.walked = was
 }
 
-fn fields_inits(fields: ref Vec[FieldInit], words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+/// The fields a literal of `of` gives (`""` where its type is not known).
+fn fields_inits(fields: ref Vec[FieldInit], of: ref String, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
 	for field in fields {
-		fields_write(words.resolve(field.name), scan)
+		let named = words.resolve(field.name)
+		fields_write(named, scan)
+		if scan.recording {
+			scan.changed.insert(if of.is_empty() { named.clone() } else { f"{of}.{named}" })
+		}
 		fields_maybe(field.value, words, scan)
 	}
 }
@@ -916,23 +1012,34 @@ fn fields_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut s
 					let text = words.resolve(name)
 					if writes_a_value(called, args.len()) != null {
 						fields_write(text, scan)
+						fields_mark(owner, text, words, scan)
 					} else if !keeps_length(called) && !only_removes(called) {
-						fields_lose(text, scan)
+						fields_change(owner, text, words, scan)
+					}
+					if only_removes(called) || fields_reorders(called) {
+						fields_mark(owner, text, words, scan)
 					}
 					fields_expr(owner, words, scan)
 				},
 				else => fields_expr(receiver, words, scan),
 			}
+			fields_handed(args, words, scan)
 			fields_all(args, words, scan)
 		},
 		Expr::SafeMethod { receiver, args, .. } => {
 			fields_expr(receiver, words, scan)
 			fields_all(args, words, scan)
 		},
-		Expr::StructLit { fields, .. } => fields_inits(fields, words, scan),
+		Expr::StructLit { name, fields, .. } => {
+			let mut of = rules_last_name(words.resolve(name))
+			if of == "Self" {
+				of = scan.self_type.clone()
+			}
+			fields_inits(fields, of, words, scan)
+		},
 		Expr::With { base, fields, .. } => {
 			fields_expr(base, words, scan)
-			fields_inits(fields, words, scan)
+			fields_inits(fields, "", words, scan)
 		},
 		Expr::Block(block, _) => fields_block(block, words, scan),
 		Expr::Unsafe(block, _) => fields_block(block, words, scan),
@@ -960,6 +1067,7 @@ fn fields_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut s
 		},
 		Expr::Call { func, args, .. } => {
 			fields_expr(func, words, scan)
+			fields_handed(args, words, scan)
 			fields_all(args, words, scan)
 		},
 		Expr::Match { value, arms, .. } => {

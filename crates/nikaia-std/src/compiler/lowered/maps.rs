@@ -167,7 +167,7 @@ impl<'a> MpBody<'a> {
         let mut at = start;
         while *nikaia_std::index::get(&self.parent, nikaia_std::index::at(at)) != at {
             let up = *unsafe { nikaia_std::proven::read(&self.parent, (at) as usize) };
-            { let __nikaia_stored = *nikaia_std::index::get(&self.parent, nikaia_std::index::at(up)); unsafe { nikaia_std::proven::write(&mut self.parent, (at) as usize, __nikaia_stored) }; }
+            { let __nikaia_stored = *unsafe { nikaia_std::proven::read(&self.parent, (up) as usize) }; unsafe { nikaia_std::proven::write(&mut self.parent, (at) as usize, __nikaia_stored) }; }
             at = *unsafe { nikaia_std::proven::read(&self.parent, (at) as usize) };
         }
         at

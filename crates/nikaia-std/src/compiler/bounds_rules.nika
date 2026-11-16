@@ -71,8 +71,9 @@ fn rules_candidates(
 ) -> Vec[BoundsRule] {
     // **A `pub` field is a candidate where every write to it is in the
     // build** (ADR-306 D22): its type is not `pub`, or the package is a
-    // program no other package imports; and no file beside writes it or
-    // hands it on (`BoundsBeside.lost`).
+    // program no other package imports. A field, `pub` or not, is a
+    // candidate only where no file beside writes, empties or reorders it, or
+    // hands it on (`BoundsBeside.changed`, #1755).
     let mut a_program = false
     for item in program.items {
         match item.node {
@@ -86,7 +87,7 @@ fn rules_candidates(
     let mut lost: collections::BTreeSet[String] = collections::BTreeSet()
     for other in beside {
         a_program = a_program || other.has_main
-        lost.extend(other.lost.clone())
+        lost.extend(other.changed.clone())
     }
     // The private list fields of each struct that is not generic, and of
     // those, the lists of whole numbers (`T.f`) and what a literal leaving
@@ -118,7 +119,7 @@ fn rules_candidates(
                 held.insert(owner.clone(), types)
                 for field in fields {
                     let ty = words.resolve(field.ty.name)
-                    let seen = !field.is_public || ((!is_public || a_program) && !lost.contains(words.resolve(field.name)))
+                    let seen = !lost.contains(words.resolve(field.name)) && !lost.contains(f"{owner}.{words.resolve(field.name)}") && (!field.is_public || !is_public || a_program)
                     if seen && field.ty.generics.is_empty() && is_whole_number(ty) {
                         let f = words.resolve(field.name).clone()
                         if field.default != null {
