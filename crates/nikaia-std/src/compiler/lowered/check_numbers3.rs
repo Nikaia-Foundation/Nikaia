@@ -7,7 +7,7 @@ pub(crate) fn check_finding_of(found: &Finding) -> CheckFinding {
     CheckFinding { severity, span: found.span.clone(), code: nikaia_std::block::Text::from(found.code.to_string()), message: nikaia_std::block::Text::from(found.message.to_string()), notes: found.notes.copy_owned(), help: match found.help.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    }, labels: vec![] }
+    }, labels: vec![], edit: None }
 }
 
 impl CheckState {
@@ -62,8 +62,8 @@ impl CheckState {
             receivers.push(receiver);
             sums.insert(head, receivers);
         }
-        self.flow.open_sums = collections::BTreeMap::new();
-        self.flow.open_numbers = collections::BTreeMap::new();
+        self.flow.open_sums.clear();
+        self.flow.open_numbers.clear();
         for (head_at, members) in groups.iter() {
             let head_at = nikaia_std::num::value(head_at);
             let mut head = nikaia_std::index::get(&members, 0).1.clone();

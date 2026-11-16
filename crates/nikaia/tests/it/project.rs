@@ -208,6 +208,11 @@ fn a_program_another_compiler_lowered_is_lowered_again() {
         .open(&switches)
         .and_then(|f| f.set_modified(modified))
         .expect("the old time");
+    // Another compiler's build would also have replaced the record of what
+    // Cargo was last handed (#1750), which names this compiler's identity.
+    for record in ["cargo-fresh", "cargo-fresh.messages"] {
+        std::fs::remove_file(dir.join("target/nikaia/build").join(record)).ok();
+    }
     assert!(
         lowered("third.log"),
         "a program another compiler lowered is lowered again"

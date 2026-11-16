@@ -177,8 +177,16 @@ pub fn option_at(contract: &FnContract, name: &str) -> Option<i64> {
 pub fn lends_option(contract: &FnContract, option: &ConfigContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if signature.takes_a_receiver() || nikaia_std::list::contains(&contract.keeps, &option.name) { return false; }
-    match &option.ty {
+    lends_option_type(&option.ty)
+}
+
+pub(crate) fn lends_option_type(ty: &Ty) -> bool {
+    match ty {
         Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
+            Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
+            _ => false,
+        } },
         _ => false,
     }
 }
@@ -186,7 +194,16 @@ pub fn lends_option(contract: &FnContract, option: &ConfigContract) -> bool {
 pub fn lowered_options(contract: &FnContract) -> Vec<ConfigContract> {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let mut out: Vec<ConfigContract> = vec![];
-    for option in signature.config.iter() { if lends_option(contract, option) { out.push(ConfigContract { name: nikaia_std::block::Text::from(option.name.to_string()), ty: Ty::Named { name: nikaia_std::block::Text::from(TEXT_VIEW.to_string()), args: vec![], view: true }, default: nikaia_std::block::Text::from(option.default.to_string()) }); } else { out.push(option.clone()); } }
+    for option in signature.config.iter() {
+        if lends_option(contract, option) {
+            let view = Ty::Named { name: nikaia_std::block::Text::from(TEXT_VIEW.to_string()), args: vec![], view: true };
+            let lent = match &option.ty {
+                Ty::Nullable(_) => Ty::Nullable(Box::new(view)),
+                _ => view,
+            };
+            out.push(ConfigContract { name: nikaia_std::block::Text::from(option.name.to_string()), ty: lent, default: nikaia_std::block::Text::from(option.default.to_string()) });
+        } else { out.push(option.clone()); }
+    }
     out
 }
 

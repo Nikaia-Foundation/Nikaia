@@ -139,7 +139,7 @@ impl CheckState {
             let mut under = false;
             for owned in viewed_from_type(found) { if owned.fits(want) || self.fits_through_deref(world, &owned, want) { under = true; } }
             if under {
-                self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: String::from("NK1137"), message: String::from("You don't need the `ref` here: the compiler lends where it's needed."), notes: vec![format!("`{}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call.", written)], help: Some(String::from("Remove the `ref`.")), labels: vec![] });
+                self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: String::from("NK1137"), message: String::from("You don't need the `ref` here: the compiler lends where it's needed."), notes: vec![format!("`{}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call.", written)], help: Some(String::from("Remove the `ref`.")), labels: vec![], edit: None });
                 return true;
             }
         }
@@ -239,7 +239,7 @@ impl CheckState {
                 _ => { },
             }
             if takes_a_receiver { return true; }
-            self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1137"), message: String::from("You don't need the `ref` here: the compiler lends where it's needed."), notes: vec![format!("`{}` only reads this argument, so it's lent already. Whether an argument is lent or handed over is decided by the function, not the call.", written)], help: Some(String::from("Remove the `ref`.")), labels: vec![] });
+            self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1137"), message: String::from("You don't need the `ref` here: the compiler lends where it's needed."), notes: vec![format!("`{}` only reads this argument, so it's lent already. Whether an argument is lent or handed over is decided by the function, not the call.", written)], help: Some(String::from("Remove the `ref`.")), labels: vec![], edit: None });
             return true;
         }
         let found_nullable = check_reference_nullable(found);

@@ -193,6 +193,7 @@ pub fn render_refusal(message: &str, at: usize, path: &str, source: &str) -> Str
         notes: Vec::new(),
         help: None,
         labels: Vec::new(),
+        edit: None,
     };
     render_finding(&finding, path, source)
 }
@@ -542,6 +543,7 @@ pub fn refusal_shown(message: &str, at: usize) -> nikaia_std::compiler::render::
         help: None,
         span: Span::new(at, at),
         labels: Vec::new(),
+        edit: None,
     }
 }
 
@@ -564,6 +566,7 @@ fn shown(finding: &crate::check::Finding) -> nikaia_std::compiler::render::Shown
                 main: label.main,
             })
             .collect(),
+        edit: finding.edit.clone(),
     }
 }
 

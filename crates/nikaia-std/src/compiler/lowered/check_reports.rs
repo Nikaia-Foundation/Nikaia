@@ -117,7 +117,7 @@ impl CheckState {
         self.said_mut.insert(declared);
         let there = CheckLabel { span: without_mut.at.clone(), word: nikaia_std::block::Text::from(name.to_string()), text: declared_text, main: false };
         let here = CheckLabel { span: changed_at.clone(), word: nikaia_std::block::Text::from(name.to_string()), text: nikaia_std::block::Text::from(how.to_string()), main: true };
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code, message, notes, help: Some(help), labels: vec![there, here] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code, message, notes, help: Some(help), labels: vec![there, here], edit: None });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -144,7 +144,7 @@ impl CheckState {
             label = String::from("marks a read-only view");
         }
         let there = CheckLabel { span: span.clone(), word: String::from("mut"), text: label, main: true };
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1306"), message, notes: vec![note], help: Some(help), labels: vec![there] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1306"), message, notes: vec![note], help: Some(help), labels: vec![there], edit: None });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -152,7 +152,7 @@ impl CheckState {
         let mut way_out: String = format!("Declare it `mut` where it's declared: `let mut {}`, or walk a copy of your own: `for mut {} in {}.clone()`.", list, head, list);
         if a_parameter { way_out = format!("Write `mut {}` in the parameter list, or walk a copy of your own: `for mut {} in {}.clone()`.", list, head, list); }
         let label = CheckLabel { span: span.clone(), word: nikaia_std::block::Text::from(list.to_string()), text: String::from("can't be changed here"), main: true };
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1139"), message: format!("`for mut {}` changes the elements of `{}`, but `{}` wasn't declared as mutable.", head, list, list), notes: vec![String::from("A `for mut` binding is the element of the list itself, so a change to it reaches the list.")], help: Some(way_out), labels: vec![label] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1139"), message: format!("`for mut {}` changes the elements of `{}`, but `{}` wasn't declared as mutable.", head, list, list), notes: vec![String::from("A `for mut` binding is the element of the list itself, so a change to it reaches the list.")], help: Some(way_out), labels: vec![label], edit: None });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -258,7 +258,7 @@ impl CheckState {
         notes.push(String::from("The code a `comptime` runs is the program's own, and it stops where the program would stop when it runs."));
         let mut help: String = String::from("Fix it as you would fix the program stopping there, or compute the value while the program runs, with `let` instead of `comptime`."); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
         if self.computing_default { help = String::from("Fix it as you would fix the program stopping there, or make the option a `T?` and compute the value in the body."); }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1244"), message: format!("`{}` stopped while the program was built: {}.", bound, why), notes, help: Some(help), labels });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1244"), message: format!("`{}` stopped while the program was built: {}.", bound, why), notes, help: Some(help), labels, edit: None });
     }
 }
 

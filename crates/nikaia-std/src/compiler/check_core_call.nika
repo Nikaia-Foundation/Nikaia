@@ -616,16 +616,22 @@ fn check_core_call_described[H: CheckHost](mut state: CheckState, world: ref Che
     }
     let mut options: Vec[i64] = []
     let mut literals: Vec[bool] = []
+    let mut texts: Vec[String] = []
     for option in config {
         options.push(id_of(option.value) as i64)
         literals.push(a_text_literal_expr(option.value))
+        texts.push(check_walked_written(option.value, world.words))
     }
     state.flow.option_values = options
     state.flow.option_literals = literals
+    state.flow.option_written = texts
+    state.flow.call_written = name.clone()
     let typed_options = check_core_call_option_texts(state, world, contract, config, passed)
     let result = check_crossings_arguments(state, world, host, key, name, contract, args, found, typed_options, span)
     state.flow.option_values = []
     state.flow.option_literals = []
+    state.flow.option_written = []
+    state.flow.call_written = ""
     check_core_call_options_handed_over(state, world, contract, name, config, typed_options, span)
     // **What the arguments tell the signature** (ADR-295 D2), and a bound
     // (D16).
@@ -1083,7 +1089,7 @@ fn check_core_call_filled[H: CheckHost](mut state: CheckState, world: ref CheckW
     }
     if !needed {
         let note: String = "Brackets after a function's name are allowed while their uses are collected; here the arguments already say the type."
-        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1233", message: f"`{name}[…]` names a type the arguments of the call already say.", notes: [note], help: f"Leave the brackets out, `{name}(…)`, or add your use case to https://github.com/Nikaia-Foundation/Nikaia/issues/514.", labels: [] })
+        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1233", message: f"`{name}[…]` names a type the arguments of the call already say.", notes: [note], help: f"Leave the brackets out, `{name}(…)`, or add your use case to https://github.com/Nikaia-Foundation/Nikaia/issues/514.", labels: [], edit: null })
         state.facts.plain_bracket_calls.insert(id_of(base) as i64)
     }
     // The type the function walks decides the copy, as a value of it would.

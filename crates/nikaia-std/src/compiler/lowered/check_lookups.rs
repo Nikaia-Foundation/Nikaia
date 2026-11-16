@@ -167,7 +167,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn warn_migration(&mut self, span: &Span, message: String, help: String) { self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1111"), message, notes: vec![String::from("Only `f\"…\"` strings fill in `{…}`; a plain string keeps the braces as they are.")], help: Some(help), labels: vec![] }); }
+    pub fn warn_migration(&mut self, span: &Span, message: String, help: String) { self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1111"), message, notes: vec![String::from("Only `f\"…\"` strings fill in `{…}`; a plain string keeps the braces as they are.")], help: Some(help), labels: vec![], edit: None }); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn spelling(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, span: &Span) {

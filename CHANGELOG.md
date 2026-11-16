@@ -8,6 +8,52 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1400] — 2026-11-16
+
+**Builders' changes (#1732, #1744, #1745, #1753, #1760, #1773, #1774, #1775, #1784, #1792, #1793, #1794, #1796, #1801, #1802)**
+- Builders' Found lines name the output a probe should give and the ADR, section or compiler message that says so (#1732)
+- The driver files a report's `Needs: supervisor decision: <gap>` that has no `Found:` line as a `decision` issue, instead of burying the question in the improvement issue.
+- The driver files a report's `Found:` line that says `no decision yet` as a `decision` issue, even when `Needs:` is none.
+- Driver: an `Issue: meets I1-I13` answer is no longer filed as an improvement issue; builder facts name the `text_tiers::` it tests for checker lending changes.
+- `nikaia test --filter 'a|b'` that matches nothing now also says that `--filter` matches plain text and is given once per name.
+- commit.nika warns when a commit changes a rules file and the report's Issue: holds an answer not marked (built), which the driver would file again.
+- nikaia test ends a test program's build after NIKAIA_TEST_BUILD_TIME_LIMIT seconds (default 1800) and fails it as "build timed out after N s", so a build stuck on a Cargo lock names its program instead of hanging the run; a batch build past it is dropped and its programs built alone.
+- nikaia test: a test program's build limit, NIKAIA_TEST_BUILD_TIME_LIMIT, now defaults to ten times NIKAIA_TEST_TIME_LIMIT (3000 s) and 0 sets none; a build that runs out of time says so with a hint to check for another cargo holding the build lock.
+- none (a test only; the fix shipped with 57de760b0)
+- scripts/commit.nika no longer refuses another agent's staged file: it commits only the report's Files:/Partial: through a private index and names the files it left staged
+- Rules: a Found on a lowered-file difference names the commit it ran on and is reproduced by an uncached lower-std of a HEAD copy (docs/issues.md I5, the driver's Found template, builder facts).
+- scripts/commit.nika recognises a report an earlier, interrupted attempt already committed (same subject, listed files unchanged and touched by that commit) and writes its sha into the report instead of refusing.
+- Driver: agent.nika refuses to start or resume a brief while a process still runs its recorded session (a killed driver's claude), rather than put two builders in one session and checkout.
+- Driver: each ESCALATE line ends with the commit of the drive.nika that ran, and docs/issues.md I4c has an issue from a script failure checked against develop before it is filed
+- commit.nika's NOTE about an Issue: answer not marked (built) now also fires when the commit changes a script under scripts/, not only a rules file.
+
+## [0.0.1399] — 2026-11-16
+
+**Builders' changes (#1677, #N[, #N, #1678, #1665, #N**", #1682, #1685, #1689, #1692, #1698, #1699, #1700, #1704, #1706, #1709, #1710, #1714, #1717, #1722)**
+- The driver files each `Found:` line of a report as its own issue, and a Found must name one defect with its probe (#1677).
+- Driver: issues filed from a Found no longer demand a probe.nika snippet and a new tests/compiler test for a docs or scripts defect, and the lane queue skips an issue a develop commit already Fixes (#1678).
+- Driver: a builder's prompt lists the develop commits that name its issue and says so when one already Fixes it, and a queued issue fixed since it was queued is dropped from the batch (#1682).
+- Specification: type lists and examples name `scalar` where they said `char`, which Nikaia does not have.
+- none (an issue rule)
+- Issue rules: an item that counts sites under a field rule lists each field as private or pub (ADR-306 D22, I8a)
+- Driver: a builder's report says what to tell another issue as `Comment: #N <text>`, and the driver posts it there instead of filing an improvement issue.
+- NK2506 no longer refuses a name rebound to a copy (`let items = items.clone()`, `x = x.clone()`): the follow reads the binding a use sees, not every binding of the name.
+- NK2506 no longer refuses a call to `b.put(items)` because some other own type also has a `put` that hands its list to Rust: where the syntax names the receiver's type, only that type's method is followed.
+- commit.nika takes `Partial: <paths>` for files shared with another agent: it commits only the hunks staged of them (#1704)
+- The driver's improvement issues name the run's report and commit; docs/issues.md I4a asks that a claim of today's behaviour be read in the code.
+- commit.nika commits a staged lowered set whole: it refuses an include! of a lowered file the commit lacks or a lowered change without its lowered.rs, and stages the LOWERED_DIGEST of the set as committed (#1709)
+- The driver's Found issues ask for the probe, expected and actual output and the cause, and their Done when names a check (#1710)
+- nikaia fix PATH makes the edits the checker's warnings suggest (first: NK1350's needless .clone() deleted) and names each one; --dry-run prints the diff and writes nothing.
+- nikaia fix PATH makes the edits the checker suggests (first: NK1350's needless .clone() deleted), naming each; --dry-run prints the diff.
+- The driver merges origin/develop before each issue and each suite, not only on a rejected push, and restarts when that merge brought scripts (#1717).
+- Driver: local script tests run on the driver's own copy of the compiler, and a run that loses the compiler to another lane's rebuild is rerun once instead of going red to QA.
+
+## [0.0.1398] — 2026-11-16
+
+**Bounds walk: a method's found facts through self; the driver accepts a cut itself (#1667, #1694)**
+- The bounds walk carries a method's found facts through self: a fact a method's body proves about its own fields is kept at its calls (#1667).
+- scripts/drive.nika, batch.nika, release.nika: a report with Result done or partial, a green gate, Needs: none and Owner: none no longer stops the driver; it is marked auto-accepted, listed in review.txt and released with the next version (#1694).
+
 ## [0.0.1397] — 2026-11-15
 
 **Builders' changes (#1441, #1459, #1464, #1505, #1509, #1512, #1515, #1516, #1517, #1519, #1520, #1523, #1535, #1539, #1546)**

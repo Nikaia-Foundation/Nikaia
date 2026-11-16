@@ -745,7 +745,7 @@ pub(crate) fn sharing_function(item: &Item, owner: &str, asked: &Asked<'_, '_, '
         Item::Fn { name, args, body, ret_type, is_public, .. } => {
             let is_public = *is_public; let name = *name;
             walk.function = key_of_function((name).as_ref(), owner, asked.names);
-            walk.scope = collections::BTreeMap::new();
+            walk.scope.clear();
             for arg in args.iter() {
                 let ty = ty_of(&arg.ty);
                 let named = nikaia_std::block::Text::from(asked.names.resolve(arg.name).to_string());
@@ -859,8 +859,15 @@ pub(crate) fn hull_written(func: &Expr, args: &[Expr], asked: &Asked<'_, '_, '_>
 pub(crate) fn plain_type(name: &str) -> Ty { Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: vec![], view: false } }
 
 pub(crate) fn hands_back(value: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) {
-    let source = match slot_of(value, asked, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
-    walk.slots.join(&slot(&walk.function, RESULT), &source);
+    let source = slot_of(value, asked, walk);
+    if source.is_none() {
+        let result = slot(&walk.function, RESULT);
+        let handle = match *nikaia_std::index::get(&walk.slots.handles, &result) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let ty = handle.ty.clone();
+        made_into(value, &ty, &result, asked, walk);
+        return;
+    }
+    walk.slots.join(&slot(&walk.function, RESULT), nikaia_std::index::or(source.as_deref(), || ""));
 }
 
 pub(crate) fn origin_unseen(function: &str, named: &str, value: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) {
@@ -1044,9 +1051,10 @@ pub(crate) fn struct_field(owner: &str, literal: i64, field: &FieldInit, asked: 
     } else {
         let declared = declared_field_type(owner, &field_name, asked);
         if declared.is_some() && holds_shared(nikaia_std::index::or(declared.as_ref(), || &Ty::Unknown)) {
-            walk.slots.note(FIELDS, &key, nikaia_std::index::or(declared, || Ty::Unknown), true, false);
+            let field_ty = nikaia_std::index::or(declared, || Ty::Unknown);
+            walk.slots.note(FIELDS, &key, field_ty.clone(), true, false);
             let source = slot_of(&value, asked, walk);
-            if source.is_none() { origin_unseen(FIELDS, &key, &value, asked, walk); } else { walk.slots.join(nikaia_std::index::or(source.as_deref(), || ""), &slot(FIELDS, &key)); }
+            if source.is_none() { if !made_into(&value, &field_ty, &slot(FIELDS, &key), asked, walk) { origin_unseen(FIELDS, &key, &value, asked, walk); } } else { walk.slots.join(nikaia_std::index::or(source.as_deref(), || ""), &slot(FIELDS, &key)); }
         }
     }
     sharing_expression(&value, asked, &holes_of, &ty_of, walk);
@@ -1148,10 +1156,37 @@ pub(crate) fn an_argument_that_is_not_a_handle(called: &SharingCall, described: 
     if at >= known.params.len() as i64 { return; }
     let param = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&known.params, (at) as usize) }.0.to_string());
     if !by_value_shared(&unsafe { nikaia_std::proven::read(&known.params, (at) as usize) }.1) { return; }
-    let source = match slot_of(arg, asked, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
-    let (owner, named) = split_slot(&source);
+    let source = slot_of(arg, asked, walk);
+    if source.is_none() {
+        made_into(arg, &unsafe { nikaia_std::proven::read(&known.params, (at) as usize) }.1, &slot(&known.key, &param), asked, walk);
+        return;
+    }
+    let found = match source { Some(__nikaia_value) => __nikaia_value, None => return };
+    let (owner, named) = split_slot(&found);
     walk.slots.duplicates(&owner, &named, handed_on_to(&known.key, &param));
-    walk.slots.join(&source, &slot(&known.key, &param));
+    walk.slots.join(&found, &slot(&known.key, &param));
+}
+
+pub fn made_slot(value: i64) -> String { format!("<made {}>", value) }
+
+pub(crate) fn made_into(value: &Expr, ty: &Ty, target: &str, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) -> bool {
+    let inside = match value {
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let named = match func {
+                Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(asked.names.resolve(name).to_string()) },
+                _ => return false,
+            };
+            if !is_hull(&named) || args.len() != 1 { return false; }
+            node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) })
+        },
+        _ => return false,
+    };
+    let function = nikaia_std::block::Text::from(walk.function.to_string());
+    let made = made_slot(inside);
+    walk.slots.note(&function, &made, ty.clone(), true, false);
+    walk.slots.join(&slot(&function, &made), target);
+    true
 }
 
 pub(crate) fn a_handle_handed_on(called: &SharingCall, described: Option<&Described>, at: i64, handle: &str, moved: bool, walk: &mut SharingWalk) {

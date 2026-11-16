@@ -57,7 +57,7 @@ pub trait ProjectMembersHost {
 /// nothing else names takes it in (`project_members_taken_in`); a name joins
 /// the list when its package is under `packages/` with this version.
 pub fn project_members_official() -> Vec[(String, String)] {
-    return [("json", "0.1.0")]
+    return [("db", "0.1.0"), ("json", "0.1.0")]
 }
 
 /// **The official packages `manifest`'s package takes in by its first `use`**

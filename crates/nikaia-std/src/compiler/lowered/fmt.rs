@@ -356,9 +356,9 @@ pub(crate) fn fmt_shape(toks: &[FmtToken]) -> FmtShape {
     for k in 0..toks.len() as i64 {
         let t = (*unsafe { nikaia_std::proven::read(&toks, (k) as usize) }).clone();
         let bar = t.kind == FmtKind::Punct && t.text == "|";
-        let top = nikaia_std::block::Text::from(nikaia_std::index::or(stack.last().map(|__nikaia_found| nikaia_std::block::Text::from(__nikaia_found.to_string())), || "".into()).to_string());
+        let top = nikaia_std::block::Text::from(nikaia_std::index::or(stack.last(), || "").to_string());
         if t.kind == FmtKind::Close {
-            while !stack.is_empty() && nikaia_std::index::or(stack.last().map(|__nikaia_found| nikaia_std::block::Text::from(__nikaia_found.to_string())), || "".into()) == "|" {
+            while !stack.is_empty() && nikaia_std::index::or(stack.last(), || "") == "|" {
                 stack.pop();
                 bars -= 1;
             }

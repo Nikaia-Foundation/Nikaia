@@ -1,5 +1,6 @@
 == next (exit 0)
 would run: a batch's suite that has finished (target/suite.lock/exit-<sha>): handle it (drive_settle) first; one still running: go on, CI runs it
+would run: git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)
 would run: df -m --output=avail /: under 6 GB free, the cleanup below; still under 3 GB after it, ESCALATE
 no issue for b1
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
@@ -8,7 +9,7 @@ would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (
 would run: append T/b1.md to T/unpushed.txt (no suite until the batch ends)
 DRY-RUN NEXT b1
 == batch done (exit 0)
-would run: rm -rf target/debug target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free
+would run: rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free
 would run: a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty T/unpushed.txt
@@ -17,10 +18,11 @@ would run: after the lock and before each suite: git fetch origin develop; git r
 would run: git push --force origin <sha>:refs/heads/ci/<last part of DIR> (the whole CI workflow runs on that push); in the background: target/fast/nikaia run scripts/drive.nika -- --ci-wait <sha> T/suite.log target/suite.lock/exit-<sha> (gh api every 30 s; Gate: green, or Gate: red <failed jobs> with their log tails)
 would run: builders go on meanwhile; once it has finished (or before a bump, the next suite, the end): handle it; green: git push origin <sha>:develop, drop the tested briefs from T/unpushed.txt, rm -rf target/suite.lock
 would run: red: write T/qa-input.txt, mkdir -p T/qa, copy docs/qa-task.md to T/qa/qa-task.md (its report path made T/qa/qa-task.md.report.md), rm -f T/qa/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- T/qa/qa-task.md --dir T, its report and run files stay untracked, the suite again and waited for (at most 2 QA rounds)
+would run: git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)
 would run: wait for the suite (drive_settle), then stop for the supervisor (exit 2)
 DRY-RUN STOP BATCH DONE
 == cut (exit 0)
-would run: rm -rf target/debug target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free
+would run: rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free
 would run: a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty T/unpushed.txt
@@ -29,10 +31,12 @@ would run: after the lock and before each suite: git fetch origin develop; git r
 would run: git push --force origin <sha>:refs/heads/ci/<last part of DIR> (the whole CI workflow runs on that push); in the background: target/fast/nikaia run scripts/drive.nika -- --ci-wait <sha> T/suite.log target/suite.lock/exit-<sha> (gh api every 30 s; Gate: green, or Gate: red <failed jobs> with their log tails)
 would run: builders go on meanwhile; once it has finished (or before a bump, the next suite, the end): handle it; green: git push origin <sha>:develop, drop the tested briefs from T/unpushed.txt, rm -rf target/suite.lock
 would run: red: write T/qa-input.txt, mkdir -p T/qa, copy docs/qa-task.md to T/qa/qa-task.md (its report path made T/qa/qa-task.md.report.md), rm -f T/qa/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- T/qa/qa-task.md --dir T, its report and run files stay untracked, the suite again and waited for (at most 2 QA rounds)
+would run: git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)
 would run: wait for the suite (drive_settle), then stop for the supervisor (exit 2)
 DRY-RUN STOP CUT b1: too big -> SUPERVISOR
 == red (exit 0)
 would run: a batch's suite that has finished (target/suite.lock/exit-<sha>): handle it (drive_settle) first; one still running: go on, CI runs it
+would run: git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)
 would run: df -m --output=avail /: under 6 GB free, the cleanup below; still under 3 GB after it, ESCALATE
 no issue for b1
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
@@ -41,7 +45,7 @@ would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (
 would run: append T/b1.md to T/unpushed.txt (no suite until the batch ends)
 DRY-RUN NEXT b1
 == red, nothing queued (exit 0)
-would run: rm -rf target/debug target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free
+would run: rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free
 would run: a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty T/unpushed.txt
@@ -50,10 +54,12 @@ would run: after the lock and before each suite: git fetch origin develop; git r
 would run: git push --force origin <sha>:refs/heads/ci/<last part of DIR> (the whole CI workflow runs on that push); in the background: target/fast/nikaia run scripts/drive.nika -- --ci-wait <sha> T/suite.log target/suite.lock/exit-<sha> (gh api every 30 s; Gate: green, or Gate: red <failed jobs> with their log tails)
 would run: builders go on meanwhile; once it has finished (or before a bump, the next suite, the end): handle it; green: git push origin <sha>:develop, drop the tested briefs from T/unpushed.txt, rm -rf target/suite.lock
 would run: red: write T/qa-input.txt, mkdir -p T/qa, copy docs/qa-task.md to T/qa/qa-task.md (its report path made T/qa/qa-task.md.report.md), rm -f T/qa/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- T/qa/qa-task.md --dir T, its report and run files stay untracked, the suite again and waited for (at most 2 QA rounds)
+would run: git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)
 would run: wait for the suite (drive_settle), then stop for the supervisor (exit 2)
 DRY-RUN STOP RED aaaa1111 test -> SUPERVISOR
 == red ignored (exit 0)
 would run: a batch's suite that has finished (target/suite.lock/exit-<sha>): handle it (drive_settle) first; one still running: go on, CI runs it
+would run: git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)
 would run: df -m --output=avail /: under 6 GB free, the cleanup below; still under 3 GB after it, ESCALATE
 no issue for b1
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
@@ -65,6 +71,8 @@ DRY-RUN NEXT b1
 would run: target/fast/nikaia run scripts/cycle.nika -- T --apply
 DRY-RUN BUMP
 == owner (exit 2)
-ESCALATE OWNER b0: which model?
+ESCALATE OWNER b0: which model? (drive.nika SHA)
+WAKE ESCALATE OWNER b0: which model? (drive.nika SHA)
 == unknown (exit 2)
-ESCALATE no action for: BATCH none (no batch.txt)
+ESCALATE no action for: BATCH none (no batch.txt) (drive.nika SHA)
+WAKE ESCALATE no action for: BATCH none (no batch.txt) (drive.nika SHA)

@@ -4,4 +4,6 @@ bounds in tests/a_range_over_a_for_elements_field_proves_its_index_on_outside_da
     24  n += f.lines[i].len()  checked: a counter the loop on line 23 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
     24  f.lines[i]             proved
   outside  14  `f.lines[i]`, `i` from `i`: proved
+  outside  14  `n + f.lines[i].len()`, `f.lines[i].len()` from `i`: checked: the prover states no bound of it, an NK1303 site (ADR-396 D8)
   outside  24  `f.lines[i]`, `i` from `i`: proved
+  outside  24  `n + f.lines[i].len()`, `f.lines[i].len()` from `i`: checked: the prover states no bound of it, an NK1303 site (ADR-396 D8)

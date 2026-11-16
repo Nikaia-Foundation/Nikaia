@@ -240,6 +240,14 @@ fn emit_arg_plain_option(ty: ref Ty) -> bool {
     }
 }
 
+/// Whether an option's type is a `T?`.
+fn emit_arg_nullable_option(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+}
+
 /// How an owned `T?` is opened into the `Option<&T>` of such a parameter.
 fn emit_arg_opening_plain(ty: ref Ty) -> String {
     return match ty {
@@ -1506,12 +1514,23 @@ impl EmitState {
     fn emit_call_option[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, option: ref ConfigContract, config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         for passed in config {
             if emit_text(world, passed.name) == option.name {
-                if self.facts.lent_options.contains(node_key(passed.value)) {
+                // **Lent inside its option** (#1729): `Some(&name)`, and a
+                // `String?` of its own handed to a lent `String?` is opened,
+                // `name.as_deref()`, as at a parameter (#1256).
+                let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(passed.value))
+                let lent = self.facts.lent_options.contains(node_key(passed.value))
+                let opened = lent && before == "" && emit_arg_nullable_option(option.ty)
+                out.push(before)
+                if lent && !opened {
                     out.push("&")
                 }
-                let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(passed.value))
-                out.push(before)
+                if opened {
+                    out.push("(")
+                }
                 self.emit_expr(world, walk, out, host, passed.value, depth, flow, scope)
+                if opened {
+                    out.push(").as_deref()")
+                }
                 out.push(after)
                 return
             }
@@ -2118,7 +2137,7 @@ impl EmitState {
         }
         if waits < 0 {
             // Named in another task alone (D8): that task waits for it.
-            walk.async_joining = collections::BTreeMap()
+            walk.async_joining.clear()
             if named != "" {
                 walk.async_handles.insert(named, inside[0].clone())
             }
@@ -2126,7 +2145,7 @@ impl EmitState {
         }
         let mut kept = EmitOut::empty()
         self.emit_stmt_written(world, walk, kept, host, node, span, depth, tail, here, scope)
-        walk.async_joining = collections::BTreeMap()
+        walk.async_joining.clear()
         walk.async_pending.push((kept.buf.clone(), named, waits))
         return true
     }
@@ -2432,10 +2451,16 @@ impl EmitState {
     }
 
     /// The count a hull's allocation is counted with: the one an enclosing
-    /// argument handed down, taken, or else the function's own answer.
-    fn emit_call_hull_count[H: EmitHost](ref self, host: ref H, mut walk: EmitWalk, scope: ref EmitScope) -> Count {
+    /// argument handed down, taken; else the one of the slot it is made into
+    /// (a parameter, the result, a field: #1638), by the value put into it;
+    /// or else the function's own answer.
+    fn emit_call_hull_count[H: EmitHost](ref self, host: ref H, mut walk: EmitWalk, scope: ref EmitScope, value: ref Expr) -> Count {
         let given = walk.hull_count
         walk.hull_count = null
+        let made = made_slot(node_key(value))
+        if given == null && self.shared.contains_key(f"{scope.function}::{made}") {
+            return self.count_at(host.crossings_are_possible(), scope.function, made)
+        }
         return given ?? self.count_at(host.crossings_are_possible(), scope.function, scope.bound)
     }
 
@@ -2449,7 +2474,7 @@ impl EmitState {
                 if emit_text(world, segments[0]) != "SharedMut" || emit_text(world, segments[1]) != "supervised" {
                     return false
                 }
-                let count = self.emit_call_hull_count(host, walk, scope)
+                let count = self.emit_call_hull_count(host, walk, scope, args[0])
                 let hulls = self.hull_new(world, host.crossings_are_possible(), walk.trusting, "SharedMut", count) ?? return false
                 if hulls.len() != 2 {
                     return false
@@ -2507,7 +2532,7 @@ impl EmitState {
         // shape `written_name` would give the *type* - so the constructor and the
         // annotation cannot disagree about a value.
         if args.len() == 1 {
-            let count = self.emit_call_hull_count(host, walk, scope)
+            let count = self.emit_call_hull_count(host, walk, scope, args[0])
             let hulls = self.hull_new(world, host.crossings_are_possible(), walk.trusting, text, count)
             if hulls != null {
                 let paths = hulls ?? return false

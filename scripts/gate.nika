@@ -318,7 +318,7 @@ fn gate_test_all(dry: bool) -> String throws {
     let exe = process::run("realpath", ["target/fast/nikaia"]).stdout.trim().clone()
     process::run("mkdir", ["-p", "target/nikaia-project-tests"])
     let cache = process::run("realpath", ["target/nikaia-project-tests"]).stdout.trim().clone()
-    let suite_exe = exe.clone()
+    let suite_exe = exe
     let package = spawn fn { gate_package_suite(suite_exe, cache) }
     let cargo = gate_cargo_failed(["test", "--workspace", "--profile", "fast", "--no-fail-fast", "--", "--skip", skip], "4G")
     if cargo != "" { red.push(cargo) }
@@ -382,10 +382,10 @@ fn gate_full(args: Vec[String]) throws {
         else if a == "--all" { all = true; into = "" }
         else if a == "--keep-going" { keep = true; into = "" }
         else if a == "--full" { into = "" }
-        else if a == "--files" || a == "--tests" { into = a.clone() }
+        else if a == "--files" || a == "--tests" { into = a }
         else if a == "--base" && i + 1 < args.len() { base = args[i + 1].clone(); i += 1; into = "" }
-        else if into == "--files" { gate_push_new(files, a.clone()) }
-        else if into == "--tests" { gate_push_new(tests, a.clone()) }
+        else if into == "--files" { gate_push_new(files, a) }
+        else if into == "--tests" { gate_push_new(tests, a) }
         else {
             println(f"gate: unknown argument {a}")
             process::exit(2)
@@ -399,7 +399,7 @@ fn gate_full(args: Vec[String]) throws {
     let mut tools = all
     let mut whole = false
     let mut names: Vec[String] = []
-    for path in changed.clone() {
+    for path in changed {
         if gate_is_tools_nika(path.clone()) { tools = true }
         if gate_needs_package(path.clone()) { whole = true }
         if path.starts_with("tests/compiler/tests/") { gate_push_new(names, gate_test_name(path.clone())) }

@@ -1,0 +1,10 @@
+error[NK2205]: This `set` stores a value that was read from `n` earlier, so the lock is taken twice.
+  --> tests/a_field_of_a_seen_value_given_to_set_is_refused.nika:8:2
+   |
+ 8 | 	n.set(k.get().size)
+   |  ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A value read from a lock is out of date as soon as the lock is released: anything can change between the read and the store.
+   = note: This is found wherever the value was read: on the line above, in another function, or in another request.
+   = help: Write `n.update fn(mut v) { … }`, which reads and changes the value while holding the lock.
+1 mistake with a lock

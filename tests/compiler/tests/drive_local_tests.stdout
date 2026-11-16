@@ -1,0 +1,17 @@
+== green
+LOCAL tests drive
+LOCAL green
+compiler runs: copy
+copies left: 0
+== compiler lost once
+LOCAL tests drive
+SUITE <sha8> local tests interrupted (compiler rebuilt)
+LOCAL green
+compiler runs: copy copy
+copies left: 0
+== a failing test
+LOCAL tests drive
+LOCAL red
+program "drive_x" ... FAILED
+compiler runs: copy
+copies left: 0

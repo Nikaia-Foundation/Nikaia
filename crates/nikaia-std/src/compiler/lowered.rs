@@ -1996,6 +1996,17 @@ mod findings_lowered {
 pub use findings_lowered::*;
 
 #[allow(unsafe_code)]
+mod fix_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/fix.rs");
+}
+#[allow(unused_imports)]
+pub use fix_lowered::*;
+
+#[allow(unsafe_code)]
 mod fixed_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -3482,7 +3493,7 @@ pub mod check_core_flow {
 }
 pub mod check_core_leaves {
     #[allow(unused_imports)]
-    pub use super::{check_core_field_of_self, check_core_a_field_of_a_borrowed_subject, check_core_a_field_of_a_borrowed_subject_given, check_core_a_field_of_a_lent_place_handed_back, check_core_lent_places_in_arms_handed_back, check_core_a_lent_place_passed, check_core_a_kept_lambda, check_core_literal_by_use, check_core_holes, check_core_lambda, check_core_lambda_enter, check_core_lambda_leave, check_core_a_field, check_core_a_nullable, check_core_returns, check_core_an_assert};
+    pub use super::{check_core_field_of_self, check_core_a_field_of_a_borrowed_subject, check_core_a_field_of_a_borrowed_subject_given, check_core_a_field_of_a_lent_place_handed_back, check_core_lent_places_in_arms_handed_back, check_core_a_lent_place_passed, check_core_a_kept_lambda, check_core_literal_by_use, check_core_holes, check_core_lambda, check_core_lambda_enter, check_core_lambda_leave, check_core_a_field, check_core_a_nullable, check_core_a_text_option_into_a_view, check_core_returns, check_core_an_assert};
 }
 pub mod check_core_method {
     #[allow(unused_imports)]
@@ -3680,7 +3691,7 @@ pub mod check_simd {
 }
 pub mod check_state {
     #[allow(unused_imports)]
-    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, CheckHeldTaking, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
+    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, CheckHeldTaking, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
 }
 pub mod check_takes {
     #[allow(unused_imports)]
@@ -3737,11 +3748,11 @@ pub mod cli_commands {
 }
 pub mod comptime_bundle {
     #[allow(unused_imports)]
-    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_artifacts, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
+    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_artifacts, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_host_deps, comptime_bundle_run, comptime_bundle_write_if_changed};
 }
 pub mod comptime_driver {
     #[allow(unused_imports)]
-    pub use super::{cr_bundle_source, cr_bundle_manifest, cr_with_driver};
+    pub use super::{cr_bundle_source, cr_bundle_manifest, CR_DEPENDENCY_PROFILE, cr_own_profile, cr_with_driver};
 }
 pub mod comptime_tree {
     #[allow(unused_imports)]
@@ -3932,6 +3943,10 @@ pub mod escapes {
 pub mod findings {
     #[allow(unused_imports)]
     pub use super::{Finding, refusal};
+}
+pub mod fix {
+    #[allow(unused_imports)]
+    pub use super::{FixPlan, fix_run, fix_planned, fix_diff};
 }
 pub mod fixed {
     #[allow(unused_imports)]
@@ -4127,7 +4142,7 @@ pub mod project_check {
 }
 pub mod project_drive {
     #[allow(unused_imports)]
-    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_no_std_for, project_drive_publish_stub, project_drive_publishable, project_drive_rust_crate, project_drive_splice_span, project_drive_spliced, project_drive_rust_manifest, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
+    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_fresh, project_drive_record, project_drive_no_std_for, project_drive_publish_stub, project_drive_publishable, project_drive_rust_crate, project_drive_splice_span, project_drive_spliced, project_drive_rust_manifest, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
 }
 pub mod project_features {
     #[allow(unused_imports)]
@@ -4147,7 +4162,7 @@ pub mod project_settings {
 }
 pub mod project_tests {
     #[allow(unused_imports)]
-    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, shown_path, output_tests, copy_into, project_tests_is_program, project_tests_program_manifest, program_tests, project_tests_stray_bounds, project_tests_bounds_report, project_tests_asserts_report, project_tests_bounds_outcome, project_tests_explain_bounds, is_refusal, does_not_compile, named_by, project_tests_difference, project_tests_agree, project_tests_verdict, project_tests_running, project_tests_result, project_tests_output_label, project_tests_program_label, project_tests_output_outcome, project_tests_stopped, project_tests_block_outcome, project_tests_refused_outcome, project_tests_ran_outcome, ProjectTestsRefusal, ProjectTestsRan, project_tests_time_limit, project_tests_timed_out_outcome, ProjectTestsProgramHost, ProjectTestsBatched, project_tests_times_file, project_tests_order, project_tests_remember, project_tests_batches, ProjectTestsReports, project_tests_reports, project_tests_program_test, ProjectTestsBlessed, project_tests_blessed_line, project_tests_bless_program, project_tests_explain_said, project_tests_explain_output, project_tests_bless, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
+    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, shown_path, output_tests, copy_into, project_tests_is_program, project_tests_program_manifest, program_tests, project_tests_stray_bounds, project_tests_bounds_report, project_tests_asserts_report, project_tests_bounds_outcome, project_tests_explain_bounds, is_refusal, does_not_compile, named_by, project_tests_difference, project_tests_agree, project_tests_verdict, project_tests_running, project_tests_result, project_tests_output_label, project_tests_program_label, project_tests_output_outcome, project_tests_stopped, project_tests_block_outcome, project_tests_refused_outcome, project_tests_ran_outcome, ProjectTestsRefusal, ProjectTestsRan, project_tests_time_limit, project_tests_build_time_limit, project_tests_timed_out_outcome, project_tests_build_timed_out_outcome, ProjectTestsProgramHost, ProjectTestsBatchBuilt, ProjectTestsBatched, project_tests_times_file, project_tests_places, project_tests_order, project_tests_remember, project_tests_batches, ProjectTestsReports, project_tests_reports, project_tests_program_test, ProjectTestsBlessed, project_tests_blessed_line, project_tests_bless_program, project_tests_explain_said, project_tests_explain_output, project_tests_bless, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
 }
 pub mod project_write {
     #[allow(unused_imports)]
@@ -4227,7 +4242,7 @@ pub mod rustc_words {
 }
 pub mod sharing {
     #[allow(unused_imports)]
-    pub use super::{Fallback, every_fallback, Decision, Sharing, every_count_plain, sharing_report, slot, split_slot, holds_a_word, held_that_does_not_copy, literal_type, published_reason, handed_on_to, unseen, by_value_shared, is_hull, holds_shared, shared_fields, declared_field_type, rust_name, lock_name, FIELDS, Handle, Forced, Slots, decided, declared_here, allocates_here, hands_back_a_plain_value, origin_reason, named_handle, named_type, walks_in_parallel, a_parallel_method, call_path, SharingWalk, SharingMoves, sharing_moves_unknown, sharing_moves_of, sharing_of};
+    pub use super::{Fallback, every_fallback, Decision, Sharing, every_count_plain, sharing_report, slot, split_slot, holds_a_word, held_that_does_not_copy, literal_type, published_reason, handed_on_to, unseen, by_value_shared, is_hull, holds_shared, shared_fields, declared_field_type, rust_name, lock_name, FIELDS, Handle, Forced, Slots, decided, declared_here, allocates_here, hands_back_a_plain_value, origin_reason, named_handle, named_type, walks_in_parallel, a_parallel_method, call_path, SharingWalk, SharingMoves, sharing_moves_unknown, sharing_moves_of, sharing_of, made_slot};
 }
 pub mod signature {
     #[allow(unused_imports)]
@@ -4408,4 +4423,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "4aeb0beaba4f76b0e452198946c5db88afa60e380f1be85423971fba0882e84f";
+pub const LOWERED_DIGEST: &str = "89f0ab9ae6690fdcd4a11be088f858bf2ed2ffd161e48ea5291ce9a866139c0d";

@@ -1,0 +1,60 @@
+use std::collections
+
+/// A text read out of a map, handed back where `ref String?` is declared
+/// (#1666): the map's read is the option of a view of the map's own text, and
+/// the result the option of a text view, so it is lowered as one, whether it
+/// is handed back by `return`, as the tail, through a `let`, through `get`,
+/// or as a text field's option.
+struct Named {
+	name: String?,
+}
+
+fn by_brackets(m: ref collections::BTreeMap[i64, String], k: i64) -> ref String? sync {
+	return m[k]
+}
+
+fn by_tail(m: ref collections::BTreeMap[i64, String], k: i64) -> ref String? sync {
+	m[k]
+}
+
+fn by_let(m: ref collections::BTreeMap[i64, String], k: i64) -> ref String? sync {
+	let v = m[k]
+	return v
+}
+
+fn by_get(m: ref collections::BTreeMap[i64, String], k: i64) -> ref String? sync {
+	return m.get(k)
+}
+
+fn by_text_key(m: ref collections::HashMap[String, String], k: String) -> ref String? sync {
+	if k == "" {
+		return null
+	}
+	return m[k]
+}
+
+fn by_field(n: ref Named) -> ref String? sync {
+	return n.name
+}
+
+fn made(text: String) -> String {
+	let mut out = String()
+	out.push_str(text)
+	return out
+}
+
+fn main() throws {
+	let mut m: collections::BTreeMap[i64, String] = collections::BTreeMap()
+	m.insert(1, made("one"))
+	let mut h: collections::HashMap[String, String] = collections::HashMap()
+	h.insert(made("a"), made("alpha"))
+	let n = Named { name: made("named") }
+	println(by_brackets(m, 1) ?? "none")
+	println(by_brackets(m, 2) ?? "none")
+	println(by_tail(m, 1) ?? "none")
+	println(by_let(m, 1) ?? "none")
+	println(by_get(m, 1) ?? "none")
+	println(by_text_key(h, made("a")) ?? "none")
+	println(by_text_key(h, made("")) ?? "none")
+	println(by_field(n) ?? "none")
+}

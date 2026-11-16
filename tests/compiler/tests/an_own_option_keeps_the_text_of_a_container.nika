@@ -1,0 +1,38 @@
+// A list or a map of text handed to an option of the program's own function
+// keeps text of its own: an option is never lent unless it is a `String`
+// (`lends_option`), so a `let` filled with literals and handed to
+// `m: collections::HashMap[String, i64]?` was refused with NK1106 ("you're
+// passing `collections::HashMap[ref String, i64]`"), where the same map handed
+// to a parameter passed. Found building `packages/db` (#116).
+use std::collections
+
+struct Holder { l: Vec[String], m: collections::HashMap[String, i64] }
+
+fn opt(x: i64; l: Vec[String]? = null, m: collections::HashMap[String, i64]? = null) -> Holder {
+    return Holder { l: l ?? [], m: m ?? collections::HashMap() }
+}
+
+struct Query { text: String }
+
+impl Query {
+    fn run(self; values: collections::HashMap[String, i64]? = null) -> i64 {
+        let held = values ?? collections::HashMap()
+        return held.len()
+    }
+}
+
+fn main() throws {
+    let l = ["a", "b"]
+    println(opt(1; l: l).l.len())
+    let mut l2: Vec[String] = []
+    l2.push("c")
+    println(opt(1; l: l2).l.len())
+    println(opt(1; l: ["d", "e", "f"]).l.len())
+    let mut m: collections::HashMap[String, i64] = collections::HashMap()
+    m.insert("a", 1)
+    println(opt(1; m: m).m.len())
+    let mut v: collections::HashMap[String, i64] = collections::HashMap()
+    v.insert("x", 1)
+    v.insert("y", 2)
+    println(Query { text: "q" }.run(values: v))
+}

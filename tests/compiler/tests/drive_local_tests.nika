@@ -1,0 +1,53 @@
+// scripts/drive.nika --local-tests FILE: the tests named after the changed
+// scripts run with the driver's own copy of the compiler, and a run that
+// loses its compiler to another lane's rebuild runs once more instead of
+// going red (#1722). The compiler here is a stub script in a temp repo.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// MODE: `lost` loses the compiler on the first run only, `red` fails a test.
+fn case(nikaia: String, repo: String, name: String, mode: String) throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/target/fast", f"{tmp}/tests/compiler/tests"])
+    fs::write(f"{tmp}/tests/compiler/tests/drive_x.nika", fs::Root::Anywhere, "fn main() {}\n")
+    fs::write(f"{tmp}/paths", fs::Root::Anywhere, "scripts/drive.nika\n")
+    let stub = "#!/bin/sh\n"
+        + f"case \"$0\" in */target/drive-*/nikaia) echo copy >> {tmp}/ran ;; *) echo shared >> {tmp}/ran ;; esac\n"
+        + f"if [ {mode} = lost ] && [ ! -e {tmp}/once ]; then touch {tmp}/once; echo \"Error: running $0 (deleted)\"; echo 'Caused by:'; echo '    No such file or directory (os error 2)'; exit 1; fi\n"
+        + f"if [ {mode} = red ]; then echo 'program \"drive_x\" ... FAILED'; exit 1; fi\n"
+        + "echo ok\n"
+    fs::write(f"{tmp}/target/fast/nikaia", fs::Root::Anywhere, stub)
+    process::run("chmod", ["+x", f"{tmp}/target/fast/nikaia"])
+    process::run("sh", ["-c", "git init -q && git -c user.name=t -c user.email=t@t commit -q --allow-empty -m x"]; dir: tmp.clone())
+    let sha = process::run("git", ["rev-parse", "--short=8", "HEAD"]; dir: tmp.clone()).stdout.trim().clone()
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--local-tests", f"{tmp}/paths"]; dir: tmp.clone())
+    println(f"== {name}")
+    println(out.stdout.trim().replace(sha, "<sha8>"))
+    let ran = process::run("sh", ["-c", f"cat {tmp}/ran | tr '\\n' ' '"]).stdout.trim().clone()
+    println(f"compiler runs: {ran}")
+    let left = process::run("sh", ["-c", f"ls -d {tmp}/target/drive-* 2>/dev/null | wc -l"]).stdout.trim().clone()
+    println(f"copies left: {left}")
+    process::run("rm", ["-rf", tmp])
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain()
+    case(nikaia.clone(), repo.clone(), "green", "green")
+    case(nikaia.clone(), repo.clone(), "compiler lost once", "lost")
+    case(nikaia.clone(), repo.clone(), "a failing test", "red")
+}

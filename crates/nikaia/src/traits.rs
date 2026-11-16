@@ -52,5 +52,6 @@ pub fn from_nikaia(found: nikaia_std::compiler::findings::Finding) -> Finding {
         notes: found.notes,
         help: found.help,
         labels: found.labels,
+        edit: None,
     }
 }

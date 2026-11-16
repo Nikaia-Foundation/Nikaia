@@ -1,0 +1,17 @@
+// SQL's `NULL` arrives as `db::Value::Null` (ADR-299 D4): read as a value,
+// compared, and printed; D18's error names the field and the column.
+use db
+
+fn main() throws {
+    let bytes: Vec[u8] = [10, 255]
+    let row = db::Row { columns: ["name", "email", "photo", "score", "admin"], values: [db::Value::Text("it's"), db::Value::Null, db::Value::Bytes(Bytes(bytes)), db::Value::Float(1.5), db::Value::Bool(false)] }
+    println(row.text())
+    let email = row.get("email") ?? db::Value::Int(0)
+    println(email.is_null())
+    println(email == db::Value::Null)
+    println(db::Value::Text("Ada") == db::Value::Text("Ada"))
+    println(db::Value::Int(1) == db::Value::Float(1.0))
+    println(row.get("missing") == null)
+    let error = db::NullInField { field: "email", column: "email", table: "users" }
+    println(error.message())
+}

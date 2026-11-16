@@ -10,6 +10,9 @@ program "beta" (tests/beta.nika) ... ok
 test result: ok. 2 passed; 0 failed
 -- no test matches: exit 1
 no tests: no test's name holds any of the `--filter` texts gamma
+-- a pattern matches no name: exit 1
+no tests: no test's name holds any of the `--filter` texts alpha|beta
+`--filter` matches plain text, not a pattern: give one `--filter` per name
 -- loud blessed: exit 0
 program "loud" (tests/loud.nika) ... ok
 test result: ok. 1 passed; 0 failed

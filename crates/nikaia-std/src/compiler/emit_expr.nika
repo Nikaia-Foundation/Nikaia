@@ -263,6 +263,22 @@ impl EmitState {
     /// own bytes kept beyond the text are copied** into a `Bytes` of their own
     /// (ADR-320 D11, `kept_text_bytes`).
     pub fn emit_expr_as_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **A `String?` handed back into a `ref String?`** (#1666): the
+        // option of a view of the map's text, `Option<&String>`, is made the
+        // option of a text view the result is.
+        if self.facts.text_option_results.contains(node_key(node)) {
+            // The option is handed back as it is, not lent: a map's read
+            // takes the `&` in front of it, and the `(` would hide it.
+            out.take_lend()
+            out.push("(")
+            self.emit_expr_as_written_plain(world, walk, out, host, node, depth, flow, scope)
+            out.push(").map(|v| ::core::convert::AsRef::<str>::as_ref(v))")
+            return
+        }
+        self.emit_expr_as_written_plain(world, walk, out, host, node, depth, flow, scope)
+    }
+
+    fn emit_expr_as_written_plain[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         if self.facts.kept_text_bytes.contains(node_key(node)) {
             out.push("nikaia_std::bytes::Bytes::from(")
             self.emit_expr_written(world, walk, out, host, node, depth, flow, scope)
@@ -292,8 +308,10 @@ impl EmitState {
     /// `emit_expr_as_written`, past the copy of a text's bytes: the dispatch.
     fn emit_expr_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let at = node_key(node)
-        // **An arm read off a place under a `ref T` is lent** (ADR-views-3 D5).
-        if self.facts.lent_reads.contains(at) {
+        // **An arm read off a place under a `ref T` is lent** (ADR-views-3 D5),
+        // but a name whose buffer a keep holds is a reference already, handed
+        // as it is (#99): `either(a)`, not `either(&a)` (#1658).
+        if self.facts.lent_reads.contains(at) && !self.emit_stmt_a_kept_name(world, walk, node) {
             out.push("&")
         }
         match node {

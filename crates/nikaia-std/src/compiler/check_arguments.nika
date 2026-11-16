@@ -45,6 +45,14 @@ fn check_arguments_nullable(ty: ref Ty) -> bool sync {
     }
 }
 
+/// A `String?` written plain.
+fn check_arguments_a_plain_string_option(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Nullable(inner) => a_plain_string(inner),
+        else => false,
+    }
+}
+
 fn check_arguments_a_path(ty: ref Ty) -> bool sync {
     return match ty {
         Ty::Named { name, .. } => name == "fs::Path",
@@ -128,6 +136,58 @@ fn check_arguments_named(world: ref CheckWorld, value: ref Expr?) -> String? syn
     }
 }
 
+/// **`NK1101` for a call that names what it should pass by position**
+/// (#1696): the count says how many were named, never "you passed 0" where
+/// arguments were written. Where the names are the positional parameters
+/// the call misses, the subject was written as options (Part I 5.1: the
+/// subject goes by position, only what follows the `;` is named), and the
+/// help shows the call with them in place.
+fn check_arguments_named_for_positional(state: ref CheckState, world: ref CheckWorld, key: ref String, signature: ref Signature, wanted: ref Vec[(String, Ty)], given: ref Vec[Expr], passed: ref Vec[(String, Ty)], help: String, span: ref Span) -> CheckFinding sync {
+    let mut names: Vec[String] = []
+    for (n, _) in wanted {
+        names.push(n.clone())
+    }
+    let mut takes: String = "no arguments"
+    if names.len() > 0 {
+        takes = names_listed(names)
+    }
+    let message = f"`{key}` takes {takes} by position, but you passed {counted(passed.len() as i64, "named argument")} and {given.len()} by position."
+    let declared = f"It's declared as `{key}{signature.text()}`."
+    if given.len() + passed.len() != wanted.len() {
+        return check_refusal("NK1101", span, message, [declared], help)
+    }
+    let mut texts: Vec[String] = []
+    for value in given {
+        texts.push(check_walked_written(value, world.words))
+    }
+    let mut at = given.len() as i64
+    while at < wanted.len() as i64 {
+        let mut found = -1
+        let mut index = 0
+        while index < passed.len() as i64 {
+            if passed[index].0 == wanted[at].0 {
+                found = index
+            }
+            index += 1
+        }
+        if found < 0 {
+            return check_refusal("NK1101", span, message, [declared], help)
+        }
+        if found < state.flow.option_written.len() as i64 {
+            texts.push(state.flow.option_written[found].clone())
+        } else {
+            texts.push("…")
+        }
+        at += 1
+    }
+    let mut call: String = key.clone()
+    if state.flow.call_written != "" {
+        call = state.flow.call_written.clone()
+    }
+    let reason: String = "The subject of a call is passed by position; only the options after the `;` are named (Part I 5.1)."
+    return check_refusal("NK1101", span, message, [declared, reason], f"Write `{call}({texts.join(", ")})`.")
+}
+
 /// **The count and the types of what a call passes, against what it takes.**
 ///
 /// `given` is the argument expressions, for the one diagnostic that has to
@@ -150,6 +210,10 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 takes.push(f"`{n}: {t.text()}`")
             }
             help = f"It takes {takes.join(", ")}{a_root_is_one_of_two(wanted)}."
+        }
+        if passed.len() > 0 {
+            state.findings.push(check_arguments_named_for_positional(state, world, key, signature, wanted, given, passed, help, span))
+            return signature.result_or_unit()
         }
         state.findings.push(check_refusal("NK1101", span, f"`{key}` takes {counted(wanted.len() as i64, "argument")}, but you passed {found.len()}.", [f"It's declared as `{key}{signature.text()}`."], help))
         return signature.result_or_unit()
@@ -176,6 +240,28 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 continue
             }
             known = true
+            // **Text of its own handed to a lent `String?` option is lent
+            // inside it** (#1729), as at a `T?` parameter the body only reads
+            // (#1256): `Some(&name)`, and a `String?` of its own opened,
+            // `name.as_deref()`.
+            if at < state.flow.option_values.len() && check_arguments_nullable(option.ty) && option.ty.is_a_view() && !found_option.is_a_view() {
+                let value = state.flow.option_values[at]
+                let wanted_inner = match option.ty {
+                    Ty::Nullable(held) => held.owned(),
+                    else => option.ty.owned(),
+                }
+                let found_inner = match found_option {
+                    Ty::Nullable(held) => held.clone(),
+                    else => found_option.clone(),
+                }
+                if !found_inner.is_unknown() && found_inner.fits(wanted_inner) {
+                    state.facts.lent_options.insert(value)
+                    if !check_arguments_nullable(found_option) {
+                        state.facts.nullable_args.insert(value, FactWrap::Constructor)
+                    }
+                    continue
+                }
+            }
             // **A plain value handed to a nullable option goes inside it**
             // (Part I 2.3), as at a parameter: `Some(value)`.
             if at < state.flow.option_values.len() && check_arguments_nullable(option.ty) && !check_arguments_nullable(found_option) {
@@ -195,6 +281,12 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             // D4), as it is at a parameter: it is constructed there.
             if at < state.flow.option_literals.len() && state.flow.option_literals[at] && a_plain_string(option.ty) {
                 state.facts.owned_texts.insert(state.flow.option_values[at])
+                continue
+            }
+            // ...and inside a kept `String?` option, `Some(…)` of one (#1729).
+            if at < state.flow.option_literals.len() && state.flow.option_literals[at] && check_arguments_a_plain_string_option(option.ty) {
+                state.facts.owned_texts.insert(state.flow.option_values[at])
+                state.facts.nullable_args.insert(state.flow.option_values[at], FactWrap::Constructor)
                 continue
             }
             // **An option of a `ref` type lends what it is passed** (#455),

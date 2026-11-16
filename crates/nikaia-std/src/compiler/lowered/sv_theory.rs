@@ -69,7 +69,7 @@ pub(crate) fn sv_spelled_sum(a: i64, x: &SvSpelled, b: i64, y: &SvSpelled) -> Op
         let mut i: i64 = 0;
         while ((i) as usize) < out.sources.len() {
             if sv_src_same(unsafe { nikaia_std::proven::read(&out.sources, (i) as usize) }, src) {
-                { let __nikaia_stored = match (*nikaia_std::index::get(&out.multipliers, (i) as usize)).checked_add(add) { Some(__nikaia_value) => __nikaia_value, None => return None }; unsafe { nikaia_std::proven::write(&mut out.multipliers, (i) as usize, __nikaia_stored) }; }
+                { let __nikaia_stored = match (*unsafe { nikaia_std::proven::read(&out.multipliers, (i) as usize) }).checked_add(add) { Some(__nikaia_value) => __nikaia_value, None => return None }; unsafe { nikaia_std::proven::write(&mut out.multipliers, (i) as usize, __nikaia_stored) }; }
                 found = true;
                 break;
             }

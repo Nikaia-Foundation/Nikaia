@@ -133,7 +133,7 @@ pub fn lost_sync(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledg
         let mut notes: Vec<String> = vec![];
         if pause.chain.len() > 1 { notes.push(format!("{}, which pauses here.", pause_path(&pause.chain))); }
         notes.push(format!("{} can pause.", site.what));
-        let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: site.span.start, end: site.span.end }, code: String::from("NK2211"), message, notes, help: Some(help), labels: vec![] };
+        let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: site.span.start, end: site.span.end }, code: String::from("NK2211"), message, notes, help: Some(help), labels: vec![], edit: None };
         out.push_str(&render(&finding, pause.unit));
     }
     out
@@ -831,6 +831,7 @@ pub(crate) fn modules_is_file(path: &std::path::Path) -> bool {
 
 pub trait ModulesLedgerHost {
     fn read_beside(&self, path: &std::path::Path) -> Option<Ledger>;
+    fn this_compiler(&self) -> Ledger;
 }
 
 pub fn modules_sources_of<H: ModulesLedgerHost>(paths: &[fs::Path], texts: &[String], host: &H) -> collections::BTreeMap<String, String> {
@@ -849,6 +850,8 @@ pub fn modules_sources_of<H: ModulesLedgerHost>(paths: &[fs::Path], texts: &[Str
 pub fn modules_believed<H: ModulesLedgerHost>(dependency: &ProjectMembersDependency, sources: &collections::BTreeMap<String, String>, host: &H) -> Option<Ledger> {
     let shipped = match modules_shipped_ledger(&dependency.root, host) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if !stale_units(&shipped, sources).is_empty() { return None; }
+    let ours = host.this_compiler();
+    if shipped.version != ours.version || shipped.inference != ours.inference { return None; }
     Some(published_entries(&shipped, &dependency.reachable))
 }
 

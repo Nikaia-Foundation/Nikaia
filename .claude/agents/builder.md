@@ -56,10 +56,45 @@ You build one small slice of an issue in the Nikaia repository and end.
   view or slice defect) that fits the run is fixed in the same run, with a
   `tests/compiler/tests/` test, as its own commit, and named in `Body:`. `Found:`
   holds only what lies outside the area, does not fit the run or needs a
-  decision; the driver files each `Found:` as an issue for the bug lane, and
+  decision. One defect per `Found:` line, with its probe (the snippet and the
+  output it gives today, the output it should give and what says so, the ADR
+  decision, the Part I-III section or the compiler's own message, #1732:
+  #1720's builder read its expected result out of NK1261's help; and the
+  command as run: the package built and its
+  setting, the consumer where the library alone builds, #1716; the
+  snippet copied whole from the file that ran, its `use` lines and
+  manifest table with it, never retyped, #1726; a probe of a missing
+  method stops at that name, so run its rest once with a method that
+  exists in its place and write Nikaia's names, `compare` not Rust's
+  `cmp`, #1749); the part your run can
+  fix is fixed, and the line keeps only the part that needs the
+  decision, with the result it expects, and says `no decision yet` in the
+  line, which makes the driver file it as a `decision` issue, not `ready`
+  (docs/issues.md I6, #1745); a second defect is a second `Found:` line, and a
+  behaviour some function or ADR does on purpose is no Found (#1677: one line
+  merged two claims without a probe, and the second was by design). Each
+  shape the line names (a `for` and a `while` form) was run today and fails;
+  a shape that works is left out, and the line names the suspected file and
+  function, or says the cause is unknown (#1695: #1654's Found named the
+  `while` forms, already proved, and no cause: `bounding_for` lacked the pair
+  bounds `bounding_while` asks). A traced cause is run in its other
+  forms too (a closure, a `std` method taking one, the `Array` twin), and
+  each that fails is named in the line (#1761, `docs/issues.md` I7). A correct program your own change
+  refuses (a fail-closed check's false refusal) is a defect too: one
+  `Found:` line per shape, with its probe, never a `Deviation:`, which
+  goes to the improvement lane without a probe (#1680, #1701). The
+  driver files each `Found:` line as an issue for the bug lane, and
   `Issue:`, `Deviation:`, `Needs:` and `Friction:` (what cost you turns for
   nothing: a tool, a rule, a red check that was not yours) as one issue for the
-  improvement lane. Say friction there, not in `Body:`.
+  improvement lane. Say friction there, not in `Body:`. Each line stands
+  alone, since each becomes another issue: it says its point, never "see
+  Found" or "see Body" (the improvement issue quotes the Found lines, but
+  not which one is meant, #1783). Any of these lines
+  that says the compiler refuses or lacks something ("every way draws
+  NK2105", "cannot be written") carries, in the line, each shape tried as
+  its snippet and the code it drew (`` `x = y; y = [2]` NK2105; ... ``):
+  without them the next run checks the claim again from scratch (#1728:
+  #1699's friction named no shape, and #1713 found one that works).
 * **A missing form stops the slice too** (owner, 2026-10-29; CLAUDE.md, *A
   missing form stops the work*). A `std` entry, a method, a syntax or a
   conversion Nikaia lacks is not written around (no get-clone-insert for
@@ -113,7 +148,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   `match` shape had its own cause, found only after a build). Then
   implement all of them and build once. Catch slips without a build:
   Catch Rust slips with `cargo check --release -p nikaia --message-format
-  short` (under a minute). Then **the cycle, as one tool call**, exactly:
+  short` (under a minute). Then **the cycle, as one tool call**, with
+  `run_in_background` and `timeout: 3600000` (the background default ends a
+  cold cycle, one with a re-proving `lower-std` or after a deleted `target/`,
+  before it is done, #1800), exactly:
 
       target/fast/nikaia lower-std 2>&1 | grep -E '^(error|Error)|-->' | head -30; cargo build --profile fast -p nikaia --message-format short 2>&1 | grep -E '^error' | head; target/fast/nikaia lower-std 2>&1 | grep -E '^(error|Error)|-->' | head; git status --short crates/nikaia-std/src/compiler/lowered crates/nikaia-std/src/compiler/lowered.rs
 
@@ -126,7 +164,7 @@ You build one small slice of an issue in the Nikaia repository and end.
   change means another session rewrote it; run `lower-std` again first (m3a,
   2026-10-28: one 8-minute round lost on a reset tree). Never `git reset`,
   `git stash`, `git checkout .` or `git restore .` in the shared checkout (they
-  throw away the other agents' work). Never reset `lowered/` by hand (`git checkout ...lowered/`), never
+  throw away the other agents' work). Never reset `lowered/` by hand (`git checkout ...lowered/`; the one exception: a rustc error in another agent's lowered file, `docs/builder-facts.md` #1794), never
   `git clone` or a second `target/` (a cold build is about 10 minutes of 4
   cores), never `sleep`/`pgrep` loops. A build only to try one case is a
   wasted cycle.
@@ -184,16 +222,23 @@ You build one small slice of an issue in the Nikaia repository and end.
   it into the message as `Fixes none`, y2c 2026-10-31; leave the line out or
   write `Part: #N`); then run `target/fast/nikaia run
   scripts/commit.nika -- REPORT` (`--dry-run` shows the message). It refuses an
-  unchanged listed file or a staged file not listed, adds exactly the listed
+  unchanged listed file, commits through a private index (a file another
+  agent staged stays staged and is named, never committed, #1792), adds exactly the listed
   files, writes the message (subject, `Changelog:`, `Fixes`, the trailer
   lines under the report's last field `Attribution:`), commits without
   pushing, writes `Pushed: local <sha>`
-  into the report and prints `committed <sha8> local`. Several commits: one report
+  into the report and prints `committed <sha8> local`. A file another agent
+  also edits goes under `Partial: <paths>` instead of `Files:`: stage only
+  your hunks (`git diff F > p.diff`, drop theirs, `git apply --cached
+  p.diff`) and the script commits what is staged of it, never `git add`s it
+  (#1704). Several commits: one report
   `<brief>.step<N>.report.md` per step, only if needed.
 * **Do not delete branches.** You cannot, and need not: leave a `wip/*` branch where it is; the owner deletes it.
 * **You have no GitHub access.** The issues your brief names are in your
   prompt, with their comments; put what an issue comment should say in your
-  report.
+  report: on another issue, as `Comment: #N <text>` (one line each), which
+  the driver posts there; never as `Needs:`, which files an improvement
+  issue nobody without GitHub can do (#1698).
 * **Report** in at most 30 lines: the commits, what the change decided (a
   CHANGELOG title and entry for the supervisor), the tests run, what is
   still open, and any error found in another agent's file.

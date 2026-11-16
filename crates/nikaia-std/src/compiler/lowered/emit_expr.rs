@@ -177,6 +177,20 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_expr_as_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        if self.facts.text_option_results.contains(&node_key(node)) {
+            out.take_lend();
+            out.push("(");
+            self.emit_expr_as_written_plain(world, walk, out, host, node, depth, flow, scope)?;
+            out.push(").map(|v| ::core::convert::AsRef::<str>::as_ref(v))");
+            return Ok(());
+        }
+        self.emit_expr_as_written_plain(world, walk, out, host, node, depth, flow, scope)?;
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_expr_as_written_plain<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if self.facts.kept_text_bytes.contains(&node_key(node)) {
             out.push("nikaia_std::bytes::Bytes::from(");
             self.emit_expr_written(world, walk, out, host, node, depth, flow, scope)?;
@@ -196,7 +210,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_expr_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let at = node_key(node);
-        if self.facts.lent_reads.contains(&at) { out.push("&"); }
+        if self.facts.lent_reads.contains(&at) && !self.emit_stmt_a_kept_name(world, &walk, node) { out.push("&"); }
         match node {
             Expr::LitInt { value, negative, .. } => {
                 let negative = *negative; let value = *value;

@@ -247,7 +247,10 @@ What the owner expects from such a round:
   round - not left to whoever builds it. An ADR states the reasons and the
   rejected alternatives, not how the question was found or what was broken
   before; that is the issue's. The specification states the rule and nothing
-  else: no status, no history, no reasons, no padding.
+  else: no status, no history, no reasons, no padding. Every code example in
+  both is run through `scripts/probe.nika --check` (on stubs for what is not
+  built yet) before the build is ordered: syntax the language refuses is
+  fixed in the text, not left for the builder to decide (#1687, I6).
 * **The issue gets the history and the build order**: how the question came up,
   what was checked, the decision in short with links to the ADR and the
   specification, and a numbered *To build* list with tests that another session
@@ -290,6 +293,12 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   the owner, and starts again once that is handled. A watcher in the
   background wakes the main session when the driver ends, and the hourly
   check-in restarts a driver it finds stopped.
+* **Woken only for what matters** (owner, 2026-11-15). The driver prints
+  every `ESCALATE`, `STOP` and `PUSHED` line a second time as `WAKE <line>`
+  (`drive_wake`). A watcher the main session puts on the driver's log greps
+  `^WAKE ` and nothing else; builder runs, `FOUND`, `FILED`, `IMPROVE` and
+  `SUITE` lines wake nobody and are read when the driver ends (its background
+  task's end wakes the session in any case).
 * **The cycle of one DIR.** `nikaia run scripts/drive.nika -- DIR` with
   `run_in_background` (`--max N` agent runs, default 8; `--dry-run` shows the
   next step; the bug lane with `--no-bump`). It loops on `cycle.nika`: runs
@@ -667,7 +676,8 @@ The builder writes exactly `<full brief path>.report.md`, these fields only:
     Needs: none | <NK code, supervisor decision, owner decision>
     Changelog: none | <one sentence for the version heading>
     Owner: none | <one question for the owner, never a role>   (batch.nika: `OWNER <brief>: <text>`; cycle.nika writes the first to DIR/QUESTION, a second while it exists prints `OWNER second: ...`)
-    Friction: none | <one sentence: what cost turns or tokens needlessly (a tool, a rule, noise such as a red check that was not the run's)>
+    Friction: none | <one sentence: what cost turns or tokens needlessly (a tool, a rule, noise such as a red check that was not the run's); a claim that the compiler refuses or lacks something names each shape tried, its snippet and the code it drew, #1728>
+    Comment: #N <text>   (optional, one line each: what to say on issue N, which the run is not about; drive.nika posts it there, #1698)
     Cache: none | <large entries newly created, MB>
     Disk freed: <GB>
     Measure: <builds=.. clippy_with_tests=.. ...>   (never under Found)
@@ -682,7 +692,10 @@ is not `none`.
 The driver files issues from the report itself (owner, 2026-11-15): each
 `Found:` as an issue labelled `bugs` for the bug lane, and, once per report, an
 `Issue:` that is not `complete`, a `Deviation:`, `Needs:` or `Friction:` other
-than `none` as one issue labelled `improve` for the improvement lane (*Lanes*).
+than `none` as one issue labelled `improve` for the improvement lane (*Lanes*),
+and posts each `Comment: #N <text>` as a comment on issue N (#1698: a `Needs:
+supervisor: comment on #N` became an improvement issue no builder could do,
+having no GitHub). A `Comment:` without its `#N` goes to the improvement issue.
 Nobody has to ask a builder what went badly. The supervisor reads the reports'
 fields before the next batch, writes the `Supervisor:` line, comments on or
 reopens an issue a `Deviation` leaves open, lists

@@ -94,7 +94,7 @@ impl CheckState {
         let list = nikaia_std::block::Text::from(errors.join(", "));
         let mut help: String = format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function);
         if self.inside_a_drop && function.ends_with("::drop") { help = drop_help(&nikaia_std::block::Text::from(nikaia_std::index::or(function.strip_suffix("::drop"), || "").to_string())); }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK2605"), message: format!("This function can fail, because `{}` can fail.", key), notes: vec![format!("`{}` can fail with {}.", key, list), String::from("A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.")], help: Some(help), labels: vec![] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK2605"), message: format!("This function can fail, because `{}` can fail.", key), notes: vec![format!("`{}` can fail with {}.", key, list), String::from("A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.")], help: Some(help), labels: vec![], edit: None });
     }
 }
 

@@ -120,6 +120,7 @@ impl CheckState {
             notes: notes,
             help: "Check that the handler does the right thing for it. Adding an arm and leaving it as it is are both fine; `nikaia build` without `--locked` records the change.",
             labels: [],
+            edit: null,
         })
     }
 
@@ -155,6 +156,7 @@ impl CheckState {
             notes: notes,
             help: help,
             labels: [],
+            edit: null,
         })
     }
 

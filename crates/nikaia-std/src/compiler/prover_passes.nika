@@ -35,10 +35,10 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
     for _ in 0..<bound {
         walk.state.known = preconditions
         walk.state.known_unwritten = unwritten
-        walk.state.preconditions = collections::BTreeMap()
-        walk.state.candidates = collections::BTreeMap()
-        walk.state.unwritten = collections::BTreeMap()
-        walk.state.unstated = collections::BTreeMap()
+        walk.state.preconditions.clear()
+        walk.state.candidates.clear()
+        walk.state.unwritten.clear()
+        walk.state.unstated.clear()
         prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
         preconditions = walk.state.preconditions.clone()
         unwritten = walk.state.unwritten.clone()
@@ -46,8 +46,8 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
             break
         }
     }
-    walk.state.known_unwritten = collections::BTreeMap()
-    walk.state.known = collections::BTreeMap()
+    walk.state.known_unwritten.clear()
+    walk.state.known.clear()
     walk.state.collecting = false
     walk.state.preconditions = preconditions
     // **Pass 2, until nothing changes: every claim and every call**, with the
@@ -57,15 +57,15 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
     // candidate falls. The last walk is the answer: it ran with exactly the
     // postconditions that hold.
     walk.state.postconditions = walk.state.candidates.clone()
-    walk.state.candidates = collections::BTreeMap()
+    walk.state.candidates.clear()
     let mut settled = false
     while !settled {
-        walk.held = collections::BTreeMap()
-        walk.std_claims = collections::BTreeMap()
-        walk.reaches = collections::BTreeMap()
+        walk.held.clear()
+        walk.std_claims.clear()
+        walk.reaches.clear()
         walk.findings = []
-        walk.outside = collections::BTreeMap()
-        walk.state.broken = collections::BTreeSet()
+        walk.outside.clear()
+        walk.state.broken.clear()
         prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
         settled = walk.state.broken.is_empty()
         if !settled {
@@ -113,7 +113,7 @@ fn strike_broken(mut state: ProverState) {
         posts.remove(index)
         state.postconditions.insert(function.clone(), posts)
     }
-    state.broken = collections::BTreeSet()
+    state.broken.clear()
 }
 
 /// Whether two walks found the same preconditions, claim by claim.

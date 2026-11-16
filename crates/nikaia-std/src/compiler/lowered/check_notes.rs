@@ -77,7 +77,7 @@ impl CheckState {
         if self.flow.guarded.is_none() || gained.is_empty() { return; }
         let named = names_listed(gained);
         let notes: Vec<String> = vec![format!("`{}` couldn't throw {} when this handler was written. A `catch` takes everything that reaches it, so it handles the new error the same way as the others.", key, named), String::from("Nothing is wrong: this is just to let you know. Once the updated `nikaia.contracts` is committed, you won't see this note again.")];
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK2402"), message: format!("This `catch` now also receives {} from `{}`.", named, key), notes, help: Some(String::from("Check that the handler does the right thing for it. Adding an arm and leaving it as it is are both fine; `nikaia build` without `--locked` records the change.")), labels: vec![] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK2402"), message: format!("This `catch` now also receives {} from `{}`.", named, key), notes, help: Some(String::from("Check that the handler does the right thing for it. Adding an arm and leaving it as it is are both fine; `nikaia build` without `--locked` records the change.")), labels: vec![], edit: None });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -102,7 +102,7 @@ impl CheckState {
             help = format!("If the cleanup belongs inside `{}`, change it back to keeping what it's given. Otherwise there's nothing to do.", key);
         }
         let notes: Vec<String> = vec![format!("{}, and a `{}` does something when it's cleaned up ({}).", capitalised(&before), moved_ty, how), String::from("Nothing is wrong: this is just to let you know, since the call itself doesn't show it. Once the updated `nikaia.contracts` is committed, you won't see this note again.")];
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK2403"), message, notes, help: Some(help), labels: vec![] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK2403"), message, notes, help: Some(help), labels: vec![], edit: None });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

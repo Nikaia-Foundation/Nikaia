@@ -771,6 +771,13 @@ pub(crate) fn keeps_text_as_is(expr: &Expr, interner: &winnow_grammar::InternerC
     }
 }
 
+pub(crate) fn keeps_a_tier_wrap(expr: &Expr, interner: &winnow_grammar::InternerContext) -> bool {
+    match expr {
+        Expr::MethodCall { method, args, .. } => { let method = *method; args.is_empty() && nikaia_std::list::contains(&vec!["into_either", "into_either_maybe"], &interner.resolve(method)) },
+        _ => false,
+    }
+}
+
 pub(crate) fn keeps_a_scalar_literal(expr: &Expr) -> bool {
     match expr {
         Expr::LitInt { .. } => true,
@@ -844,7 +851,7 @@ pub(crate) fn keeps_handed(expr: &Expr, interner: &winnow_grammar::InternerConte
     match expr {
         Expr::MethodCall { receiver, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
-            if keeps_text_as_is(expr, interner, context) { return keeps_handed(receiver, interner, context, own, library, walk); }
+            if keeps_text_as_is(expr, interner, context) || keeps_a_tier_wrap(expr, interner) { return keeps_handed(receiver, interner, context, own, library, walk); }
         },
         _ => { },
     }
@@ -1199,7 +1206,9 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let owner = view.text(name);
                     for method in methods.iter() {
                         let called = view.text(method.node.name);
-                        graph.insert(format!("{}::{}", owner, called), no_uses());
+                        let mut marked = no_uses();
+                        for arg in method.node.args.iter() { if arg.keep { marked.kept.insert(view.text(arg.name)); } }
+                        graph.insert(format!("{}::{}", owner, called), marked);
                     }
                 },
                 Item::Grammar(def) => {
@@ -1524,7 +1533,7 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
                 let mut found = false;
                 for held in declared.iter() {
                     if held.name == arg.ty.name {
-                        of = collections::BTreeMap::new();
+                        of.clear();
                         for (field, ty) in held.fields.iter() { of.insert(nikaia_std::block::Text::from(field.to_string()), written_ty(view.words, view.aliases, ty)); }
                         found = true;
                     }

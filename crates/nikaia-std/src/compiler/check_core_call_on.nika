@@ -883,7 +883,7 @@ fn check_core_call_on_given[H: CheckHost](mut state: CheckState, world: ref Chec
         }
         if !is_a_literal(given) && an_integer_that_does_not_widen(have, want) {
             let at = check_span_at(world, given, span)
-            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [] })
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [], edit: null })
         }
     }
 }
@@ -914,7 +914,7 @@ fn check_core_call_on_extended(mut state: CheckState, world: ref CheckWorld, key
         return
     }
     let at = check_span_at(world, args[0], span)
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: f"`{key}` expects elements of `{want.text()}` here, but you're passing elements of `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [] })
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1102", message: f"`{key}` expects elements of `{want.text()}` here, but you're passing elements of `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [], edit: null })
 }
 
 /// A type with every view dropped and a text literal's `str` called `String`,
@@ -1058,7 +1058,7 @@ fn check_core_call_on_member_one(mut state: CheckState, world: ref CheckWorld, k
         return
     }
     let at_span = check_span_at(world, args[at], span)
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: "NK1102", message: f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [] })
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: "NK1102", message: f"`{key}` expects `{want.text()}` here, but you're passing `{have.text()}`.", notes: [], help: way_out_of_a_mismatch(have, want), labels: [], edit: null })
 }
 
 /// **A list literal handed to `extend` is a list of the receiver's elements**
@@ -1295,6 +1295,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     let items: i64? = state.open_items_of(world, receiver)
     let outer_params = state.flow.open_params.clone()
     state.flow.open_params = state.open_walk_params(world, contract, args, items)
+    state.open_walk_copied_params(contract, args, items)
     // **And a lambda handed a lent item is lent it** (#626).
     let outer_lent = state.flow.lent_params.clone()
     state.flow.lent_params = state.lent_walk_params(world, contract, entry, receiver, args)
@@ -1318,10 +1319,15 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
             }
         }
     }
+    // **`retain` takes out an item that copies** (ADR-231 D2): its lambda's
+    // parameter is the item the pattern `&a` copies out, not a view of it.
+    if key == "Vec::retain" && args.len() == 1 && expected.len() == 1 && check_core_call_on_retain_copies(on, args[0]) {
+        expected[0] = check_core_call_on_unviewed_fn(expected[0])
+    }
     let callee: FnContract? = contract.clone()
     state.call_keepers = world.keepers.get(key)?.clone() ?? collections::BTreeMap()
     let found = check_core_arguments_bound(state, world, host, args, patterns, bound, expected, world.own.functions.contains_key(key), callee, span)
-    state.call_keepers = collections::BTreeMap()
+    state.call_keepers.clear()
     // **A fold's step and merge return the accumulator or change it in
     // place** (ADR-372 D9): the result type says which.
     if key == "Par::fold" && args.len() >= 3 && found.len() >= 3 {
@@ -1395,16 +1401,22 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     let mut passed: Vec[(String, Ty)] = []
     let mut values: Vec[i64] = []
     let mut literals: Vec[bool] = []
-    for (name, ty, value, literal) in state.flow.method_passed.remove(node) ?? [] {
+    let mut texts: Vec[String] = []
+    for (name, ty, value, literal, text) in state.flow.method_passed.remove(node) ?? [] {
         passed.push((name, ty))
         values.push(value)
         literals.push(literal)
+        texts.push(text)
     }
     state.flow.option_values = values
     state.flow.option_literals = literals
+    state.flow.option_written = texts
+    state.flow.call_written = f"{check_walked_written(receiver, world.words)}.{written}"
     let result = check_crossings_arguments(state, world, host, key, written, contract, args, found, passed, span)
     state.flow.option_values = []
     state.flow.option_literals = []
+    state.flow.option_written = []
+    state.flow.call_written = ""
     // **What an option keeps, it is given** (#1595): the walk that holds
     // the values hands them over (`check_core_method`).
     let moving = check_core_call_moving_options(state, contract, written, passed)
@@ -1489,7 +1501,7 @@ pub fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckW
             return check_core_call_on_named("String")
         }
         let listed = members_named(members)
-        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1171", message: f"This is an error, one of {listed}, and an error has no method called `{entry}`.", notes: ["What every error has is `message()` and `full()`; what one of them has is reached once a `match` has said which it is."], help: f"Take it apart first: `match error {{ … }}`, and call `{entry}` in the arm of the type that has it.", labels: [] })
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1171", message: f"This is an error, one of {listed}, and an error has no method called `{entry}`.", notes: ["What every error has is `message()` and `full()`; what one of them has is reached once a `match` has said which it is."], help: f"Take it apart first: `match error {{ … }}`, and call `{entry}` in the arm of the type that has it.", labels: [], edit: null })
         return Ty::Unknown
     }
     // **A produced sequence answers under its own word** (ADR-105 D1), and a
@@ -1689,6 +1701,27 @@ fn check_core_call_on_one_param(world: ref CheckWorld, arg: ref Expr) -> String?
 }
 
 /// A `fn` type whose parameter is no view: the slot copied in.
+/// Whether `retain`'s lambda takes out a list's item that copies and is
+/// not a view: the pattern `&a` of `check_core_method_called`, by the same
+/// test, so the parameter is the item (#1748).
+fn check_core_call_on_retain_copies(on: ref Ty, arg: ref Expr) -> bool {
+    let item: Ty = match on {
+        Ty::Named { name, args, .. } => {
+            if (name == "Vec" || name == "List") && args.len() == 1 {
+                args[0].clone()
+            } else {
+                return false
+            }
+        },
+        else => return false,
+    }
+    let one = match arg {
+        Expr::Closure { params, .. } => params.len() == 1,
+        else => false,
+    }
+    return one && !item.is_unknown() && !item.is_a_view() && !moves(item)
+}
+
 fn check_core_call_on_unviewed_fn(want: ref Ty) -> Ty {
     return match want {
         Ty::Fn { params, result, is_sync, can_throw } => {
@@ -1761,7 +1794,8 @@ fn check_core_call_on_parameters_in(state: ref CheckState, ty: ref Ty) -> collec
 }
 
 /// **A std operation that weighs what it is handed** (ADR-327 D9, #1559):
-/// every method of a channel's sender, and a shared value's `set`, whose Rust
+/// every method of a channel's sender, and a shared value's `set` (with or
+/// without `after:`, #1554), whose Rust
 /// is bounded by `DeepSize` (`channel.rs`, `lock.rs`). A type parameter the
 /// receiver holds is weighed in the function being walked; the emitter
 /// writes the bound, since the weight is the language's and no Nikaia bound
@@ -1772,7 +1806,7 @@ fn check_core_call_on_weighs(mut state: CheckState, on: ref Ty, entry: ref Strin
         Ty::Named { name, .. } => type_last_segment(name),
         else => return,
     }
-    if base != "Sender" && !(base == "SharedMut" && entry == "set") {
+    if base != "Sender" && !(base == "SharedMut" && (entry == "set" || entry == "set(after)")) {
         return
     }
     let found = check_core_call_on_parameters_in(state, on.unseen())

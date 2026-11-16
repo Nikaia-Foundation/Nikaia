@@ -1,0 +1,173 @@
+use std::collections
+
+// The official `db` package (ADR-299 D4-D8, ADR-338 D2): what two database
+// drivers must agree on without depending on one another, and nothing else.
+// No SQL, no grammar, no dialect, no binding to a database library: a driver
+// package brings those, implements `Connection`, and a program runs
+// statements on it.
+//
+//     use db
+//     let rows = db::raw("SELECT name FROM users").execute(conn)
+//
+// A row carries `Value`s by column (D4). A `dsl` block's checked statement
+// is a `Statement` whose `execute` the compiler writes with its derived row
+// type (D2, D8); `raw(text)` is the statement with untyped rows (D5). Rows read
+// back across `Connection::run` are Untrusted, as every row read back from a
+// database is (Part III 17.1, ADR-010 D2): the language marks them, the
+// package does not.
+
+/// **A value a row may carry** (ADR-299 D4): the language's numbers, `bool`,
+/// `String`, `Bytes`, and `Null` for SQL's `NULL`, which a derived row type
+/// reads into a `T?` field (D18).
+pub enum Value {
+    Null,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Text(String),
+    Bytes(Bytes),
+}
+
+impl Value {
+    /// The value as SQL writes it: `NULL`, `true`, `42`, `1.5`, text in
+    /// single quotes with a quote doubled (`'it''s'`), bytes as `x'0aff'`.
+    pub fn text(self) -> String {
+        return match self {
+            Value::Null => "NULL",
+            Value::Bool(b) => f"{b}",
+            Value::Int(n) => f"{n}",
+            Value::Float(x) => f"{x}",
+            Value::Text(s) => {
+                let mut out = String()
+                out.push_str("'")
+                out.push_str(s.replace("'", "''"))
+                out.push_str("'")
+                out
+            }
+            Value::Bytes(b) => {
+                let mut out = String()
+                out.push_str("x'")
+                for byte in b.iter() {
+                    out.push_str(f"{byte:02x}")
+                }
+                out.push_str("'")
+                out
+            }
+        }
+    }
+
+    /// Whether the value is SQL's `NULL`.
+    pub fn is_null(self) -> bool {
+        return match self {
+            Value::Null => true,
+            else => false,
+        }
+    }
+}
+
+/// **A row as a connection hands it back** (ADR-299 D8): the column names and
+/// the values, in the order the statement names its columns.
+pub struct Row {
+    pub columns: Vec[String],
+    pub values: Vec[Value],
+}
+
+impl Row {
+    /// The value of the column named `column`; null where the row has none.
+    pub fn get(self, column: String) -> Value? {
+        let mut at = 0
+        while at < self.columns.len() && at < self.values.len() {
+            if self.columns[at] == column {
+                return self.values[at].clone()
+            }
+            at += 1
+        }
+        return null
+    }
+
+    /// The row as `name = 'Ada', age = 36`.
+    pub fn text(self) -> String {
+        let mut parts: Vec[String] = []
+        let mut at = 0
+        while at < self.columns.len() && at < self.values.len() {
+            parts.push(f"{self.columns[at]} = {self.values[at].text()}")
+            at += 1
+        }
+        return parts.join(", ")
+    }
+}
+
+/// **A connection to a database** (ADR-299 D8), the one method a driver
+/// implements: run this text with these named values, and hand back the rows.
+/// The compiler turns each row into the row type a checked statement derived
+/// (D2); a driver never names a per-statement type.
+///
+/// The rows come back as a `Vec`: a program does not write `Seq[T]` (ADR-105
+/// D4).
+pub trait Connection {
+    fn run(mut self, keep text: String, keep parameters: collections::HashMap[String, Value]) -> Vec[Row] throws
+}
+
+/// **A transaction a connection began** (ADR-299 D4): it ends by `commit` or
+/// by `rollback`. A connection that offers transactions hands one out with
+/// `begin(mut self) -> T throws`, where `T` is the driver's own type that
+/// implements this trait.
+pub trait Transaction {
+    fn commit(mut self) throws
+    fn rollback(mut self) throws
+}
+
+/// **The protocol a statement speaks** (ADR-299 D4, D7): the text it hands a
+/// connection. A statement is the receiver of its own `execute`, with the
+/// connection as its subject and its parameters after the `;`:
+/// `statement.execute(conn; min_age: 18)`. A checked statement's `execute` and
+/// its parameters are the compiler's to write from the block (D2, D8); a
+/// trait method has no default body (Part I), so the trait asks only for the
+/// text.
+pub trait Statement {
+    fn text(self) -> String
+}
+
+/// **A statement written at run time** (ADR-299 D5): its rows are untyped.
+pub struct Raw {
+    text: String,
+}
+
+/// **Dynamic SQL** (ADR-299 D5): a statement of `text` whose rows are the
+/// untyped `Row`s the connection hands back.
+pub fn raw(text: String) -> Raw {
+    return Raw { text: text }
+}
+
+impl Statement for Raw {
+    fn text(self) -> String {
+        return self.text.clone()
+    }
+}
+
+impl Raw {
+    /// Run the statement on `connection` (ADR-299 D7) with the named values
+    /// its text's holes take, and hand back the rows as they come.
+    pub fn execute[C: Connection](self, mut connection: C; parameters: collections::HashMap[String, Value]? = null) -> Vec[Row] throws {
+        return connection.run(self.text.clone(), parameters ?? collections::HashMap())
+    }
+}
+
+/// **A `NULL` that arrived in a field that is not a `T?`** (ADR-299 D18): the
+/// conversion of a row into a derived row type fails with the field, the
+/// column, and the column's table (empty where the column is no table's).
+pub struct NullInField {
+    pub field: String,
+    pub column: String,
+    pub table: String,
+}
+
+impl Error for NullInField {
+    fn message(self) -> String {
+        let mut from = self.column.clone()
+        if !self.table.is_empty() {
+            from = f"{self.table}.{self.column}"
+        }
+        return f"a NULL arrived from the column `{from}` in the field `{self.field}`, which is not a `T?`"
+    }
+}

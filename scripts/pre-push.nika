@@ -22,6 +22,12 @@
 // staged is what the next commit holds; with nothing staged it is HEAD.
 // `bump.py check` runs there too: it read the working tree, so another agent's
 // unstaged `.nika` move turned `version` red for every committer (#1187).
+//
+// `page-examples` (owner, 2026-11-15): when what is staged touches guide/,
+// website/ or tests/page-examples/, the examples of those pages go through
+// `nikaia test` in tests/page-examples, as CI's `examples` job does (about a
+// minute; the package's built `target/` is copied in first). Nothing of those
+// staged: the line says `page-examples skipped`.
 
 use std::cli
 use std::process
@@ -36,6 +42,24 @@ fn check(name: String, cmd: String, args: Vec[String], dir: String) -> bool thro
     println(out.stdout.trim_end())
     println(out.stderr.trim_end())
     return false
+}
+
+// The pages' examples, only when a staged path can change them.
+fn page_examples(copy: String) -> bool throws {
+    let staged = process::run("git", ["diff", "--cached", "--name-only"]).stdout.clone()
+    let mut touched = false
+    for line in staged.lines() {
+        if line.starts_with("guide/") || line.starts_with("website/") || line.starts_with("tests/page-examples/") {
+            touched = true
+        }
+    }
+    if !touched {
+        println("page-examples skipped")
+        return true
+    }
+    let dir = f"{copy}/tests/page-examples"
+    process::run("cp", ["-r", "tests/page-examples/target", f"{dir}/"])
+    return check("page-examples", "nikaia", ["test"], dir)
 }
 
 fn main() throws {
@@ -55,6 +79,7 @@ fn main() throws {
             println("badges stale (the driver's)")
         }
         ok = check("version", "python3", ["scripts/bump.py", "check"], copy.clone()) && ok
+        ok = page_examples(copy.clone()) && ok
     }
     process::run("rm", ["-rf", copy])
     if !ok { process::exit(1) }

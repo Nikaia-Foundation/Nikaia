@@ -31,6 +31,7 @@ fn check_program_extern_convention(mut state: CheckState, abi: ref String, span:
         notes: [note],
         help: "Write `extern { … }`, or `extern(library: \"name\") { … }` for a block whose functions come from a system library.",
         labels: [],
+        edit: null,
     })
 }
 
@@ -56,7 +57,7 @@ fn check_program_impl[H: CheckHost](mut state: CheckState, world: ref CheckWorld
         state.subject_arguments = arguments.clone()
         check_function_function(state, world, host, method.node, method.span, named)
     }
-    state.enclosing = collections::BTreeMap()
+    state.enclosing.clear()
     state.subject_arguments = []
 }
 

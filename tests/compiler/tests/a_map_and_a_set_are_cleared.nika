@@ -1,0 +1,23 @@
+// `clear` empties a map or a set in place (#1674): a `BTreeMap` and the
+// sets had no `clear`, so the compiler's own code emptied them by
+// assigning a new one.
+use std::collections
+
+fn main() throws {
+    let mut m: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+    m.insert(1, 2)
+    m.clear()
+    println(m.len())
+    let mut h: collections::HashMap[i64, i64] = collections::HashMap()
+    h.insert(1, 2)
+    h.clear()
+    println(h.len())
+    let mut s: collections::BTreeSet[i64] = collections::BTreeSet()
+    s.insert(3)
+    s.clear()
+    println(s.len())
+    let mut u: collections::HashSet[i64] = collections::HashSet()
+    u.insert(3)
+    u.clear()
+    println(u.len())
+}

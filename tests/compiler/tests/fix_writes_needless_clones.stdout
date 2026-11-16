@@ -1,0 +1,55 @@
+dry run: TMP/main.nika:15: NK1350: deleted `.clone()`
+TMP/main.nika:18: NK1350: deleted `.clone()`
+TMP/main.nika:20: NK1350: deleted `.clone()`
+--- TMP/main.nika
++++ TMP/main.nika
+@@ -15,1 +15,1 @@
+-    let q = p.clone()
++    let q = p
+@@ -18,1 +18,1 @@
+-    println(take(s.clone()))
++    println(take(s))
+@@ -20,1 +20,1 @@
+-    for x in xs.clone() {
++    for x in xs {
+unchanged after the dry run: true
+fix: TMP/main.nika:15: NK1350: deleted `.clone()`
+TMP/main.nika:18: NK1350: deleted `.clone()`
+TMP/main.nika:20: NK1350: deleted `.clone()`
+struct P { x: i64, y: i64 }
+
+fn take(s: String) -> i64 {
+    return s.len() as i64
+}
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("abc")
+    return g
+}
+
+fn main() throws {
+    let p = P { x: 1, y: 2 }
+    let q = p
+    println(q.x + p.y)
+    let s = make()
+    println(take(s))
+    let xs = [1, 2, 3]
+    for x in xs {
+        println(x)
+    }
+    println(xs.len())
+    let t = make()
+    println(take(t.clone()))
+    println(t)
+}
+check: Checked TMP/main.nika
+same output: true
+3
+3
+1
+2
+3
+3
+3
+abc

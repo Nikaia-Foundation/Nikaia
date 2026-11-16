@@ -184,6 +184,8 @@ pub(crate) fn emit_arg_plain_option(ty: &Ty) -> bool {
     }
 }
 
+pub(crate) fn emit_arg_nullable_option(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
+
 pub(crate) fn emit_arg_opening_plain(ty: &Ty) -> String {
     match ty {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
@@ -939,10 +941,14 @@ impl EmitState {
     pub(crate) fn emit_call_option<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, option: &ConfigContract, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         for passed in config.iter() {
             if emit_text(world, passed.name) == option.name {
-                if self.facts.lent_options.contains(&node_key(&passed.value)) { out.push("&"); }
                 let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(&passed.value))?;
+                let lent = self.facts.lent_options.contains(&node_key(&passed.value));
+                let opened = lent && before == "" && emit_arg_nullable_option(&option.ty);
                 out.push(&before);
+                if lent && !opened { out.push("&"); }
+                if opened { out.push("("); }
                 self.emit_expr(world, walk, out, host, &passed.value, depth, flow, scope)?;
+                if opened { out.push(").as_deref()"); }
                 out.push(&after);
                 return Ok(());
             }
@@ -1342,13 +1348,13 @@ impl EmitState {
         }
         if waits < 0 && fallback { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate the fallback of `async e` yet where nothing names its binding or only another task does (#986): name it in a statement of this group."), at: Some(span.start as i64) }, &"emit_async_binding")); }
         if waits < 0 {
-            walk.async_joining = collections::BTreeMap::new();
+            walk.async_joining.clear();
             if named != "" { walk.async_handles.insert(named, nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&inside, (0) as usize) }).to_string())); }
             return Ok(true);
         }
         let mut kept = EmitOut::empty();
         self.emit_stmt_written(world, walk, &mut kept, host, node, span, depth, &tail, here, scope)?;
-        walk.async_joining = collections::BTreeMap::new();
+        walk.async_joining.clear();
         walk.async_pending.push((nikaia_std::block::Text::from(kept.buf.to_string()), named, waits));
         Ok(true)
     }
@@ -1598,9 +1604,11 @@ impl EmitState {
             _ => false,
         }
     }
-    pub(crate) fn emit_call_hull_count<H: EmitHost>(&self, host: &H, walk: &mut EmitWalk, scope: &EmitScope) -> Count {
+    pub(crate) fn emit_call_hull_count<H: EmitHost>(&self, host: &H, walk: &mut EmitWalk, scope: &EmitScope, value: &Expr) -> Count {
         let given = walk.hull_count;
         walk.hull_count = None;
+        let made = made_slot(node_key(value));
+        if given.is_none() && self.shared.contains_key(&format!("{}::{}", scope.function, made)) { return self.count_at(host.crossings_are_possible(), &scope.function, &made); }
         nikaia_std::index::or(given, || self.count_at(host.crossings_are_possible(), &scope.function, &scope.bound).into())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -1611,7 +1619,7 @@ impl EmitState {
             Expr::Path(segments, _) => {
                 if segments.len() != 2 || args.len() != 1 { return Ok(false); }
                 if emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) != "SharedMut" || emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) != "supervised" { return Ok(false); }
-                let count = self.emit_call_hull_count(host, walk, scope);
+                let count = self.emit_call_hull_count(host, walk, scope, unsafe { nikaia_std::proven::read(&args, (0) as usize) });
                 let hulls = match self.hull_new(world, host.crossings_are_possible(), walk.trusting, "SharedMut", &count) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                 if hulls.len() != 2 { return Ok(false); }
                 out.push(&format!("{}::new({}::supervised_kept(", *unsafe { nikaia_std::proven::read(&hulls, (0) as usize) }, *unsafe { nikaia_std::proven::read(&hulls, (1) as usize) }));
@@ -1652,7 +1660,7 @@ impl EmitState {
             return Ok(true);
         }
         if args.len() == 1 {
-            let count = self.emit_call_hull_count(host, walk, scope);
+            let count = self.emit_call_hull_count(host, walk, scope, unsafe { nikaia_std::proven::read(&args, (0) as usize) });
             let hulls = self.hull_new(world, host.crossings_are_possible(), walk.trusting, text, &count);
             if hulls.is_some() {
                 let paths = match hulls { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };

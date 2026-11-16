@@ -334,6 +334,10 @@ impl EmitState {
                 }
                 let joined = nikaia_std::block::Text::from(segments.join("::"));
                 if alias.is_some() { out.push(&format!("// use {} as {}\n", joined, emit_item_text_of(world, std::convert::identity(alias)))); } else { out.push(&format!("// use {}\n", joined)); }
+                if segments.len() == 1 && *unsafe { nikaia_std::proven::read(&segments, (0) as usize) } != "std" {
+                    let traits = emit_item_package_traits(world, &self.own_contracts, unsafe { nikaia_std::proven::read(&segments, (0) as usize) });
+                    if !traits.is_empty() { out.push(&format!("#[allow(unused_imports)]\nuse {}::{{{}}};\n", *unsafe { nikaia_std::proven::read(&segments, (0) as usize) }, nikaia_std::block::Text::from(traits.join(", ")))); }
+                }
             },
             Item::Comptime { name, public, .. } => {
                 let name = *name; let public = *public;
@@ -624,5 +628,19 @@ impl EmitState {
         out.push(&format!("{} {{ {} }}\n", signature, body));
         Ok(())
     }
+}
+
+pub(crate) fn emit_item_package_traits(world: &EmitWorld<'_, '_, '_, '_>, own: &Ledger, package: &str) -> Vec<String> {
+    let prefix = format!("{}::", package);
+    let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (key, _) in own.traits.iter() {
+        let name = nikaia_std::index::or(key.strip_prefix(&*prefix), || "");
+        if !name.contains("::") && !name.is_empty() { names.insert(format!("{} as _", name)); }
+    }
+    for (key, _) in world.library.traits.iter() {
+        let name = nikaia_std::index::or(key.strip_prefix(&*prefix), || "");
+        if !name.contains("::") && !name.is_empty() { names.insert(format!("{} as _", name)); }
+    }
+    names.iter().cloned().collect::<Vec<_>>()
 }
 

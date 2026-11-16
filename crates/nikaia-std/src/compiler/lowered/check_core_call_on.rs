@@ -700,7 +700,7 @@ pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, wor
         if !lent_here && state.a_view_copied_out(world, &have, &want, Some(given)) { continue; }
         if !is_a_literal(given) && an_integer_that_does_not_widen(&have, &want) {
             let at = check_span_at(world, given, span);
-            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![] });
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![], edit: None });
         }
     }
 }
@@ -725,7 +725,7 @@ pub(crate) fn check_core_call_on_extended(state: &mut CheckState, world: &CheckW
     };
     if numbers || have.fits(&want) { return; }
     let at = check_span_at(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span);
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: format!("`{}` expects elements of `{}` here, but you're passing elements of `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![] });
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: format!("`{}` expects elements of `{}` here, but you're passing elements of `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![], edit: None });
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -831,7 +831,7 @@ pub(crate) fn check_core_call_on_member_one(state: &mut CheckState, world: &Chec
     }
     if check_core_call_on_may_fit(&have, &want) { return; }
     let at_span = check_span_at(world, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, span);
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![] });
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![], edit: None });
 }
 
 pub(crate) fn check_core_call_on_extend_literal(key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], expected: &mut Vec<Ty>) {
@@ -992,6 +992,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let items: Option<i64> = state.open_items_of(world, receiver);
     let outer_params = state.flow.open_params.copy_owned();
     state.flow.open_params = state.open_walk_params(world, contract, args, items);
+    state.open_walk_copied_params(contract, args, items);
     let outer_lent = state.flow.lent_params.copy_owned();
     state.flow.lent_params = state.lent_walk_params(world, contract, entry, receiver, args);
     if key == "Entry::and_modify" && args.len() == 1 && expected.len() == 1 {
@@ -1009,13 +1010,14 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
             }
         }
     }
+    if key == "Vec::retain" && args.len() == 1 && expected.len() == 1 && check_core_call_on_retain_copies(on, unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { { let __nikaia_stored = check_core_call_on_unviewed_fn(unsafe { nikaia_std::proven::read(&expected, (0) as usize) }); unsafe { nikaia_std::proven::write(&mut expected, (0) as usize, __nikaia_stored) }; } }
     let callee: Option<FnContract> = Some(contract.clone());
     state.call_keepers = nikaia_std::index::or(match world.keepers.get(key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || collections::BTreeMap::new().into());
     let found = check_core_arguments_bound(state, world, host, args, &patterns, &mut bound, &mut expected, world.own.functions.contains_key(key), (callee).as_ref(), span);
-    state.call_keepers = collections::BTreeMap::new();
+    state.call_keepers.clear();
     if key == "Par::fold" && args.len() >= 3 && found.len() >= 3 {
         let acc: Ty = nikaia_std::index::or(match *nikaia_std::index::get(&bound, "A") {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1066,16 +1068,22 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let mut passed: Vec<(String, Ty)> = vec![];
     let mut values: Vec<i64> = vec![];
     let mut literals: Vec<bool> = vec![];
-    for (name, ty, value, literal) in nikaia_std::index::or(state.flow.method_passed.remove(&node), || vec![].into()) {
+    let mut texts: Vec<String> = vec![];
+    for (name, ty, value, literal, text) in nikaia_std::index::or(state.flow.method_passed.remove(&node), || vec![].into()) {
         passed.push((name, ty));
         values.push(value);
         literals.push(literal);
+        texts.push(text);
     }
     state.flow.option_values = values;
     state.flow.option_literals = literals;
+    state.flow.option_written = texts;
+    state.flow.call_written = format!("{}.{}", check_walked_written(receiver, world.words), written);
     let result = check_crossings_arguments(state, world, host, key, &written, contract, args, &found, &passed, span);
     state.flow.option_values = vec![];
     state.flow.option_literals = vec![];
+    state.flow.option_written = vec![];
+    state.flow.call_written = String::from("");
     let moving = check_core_call_moving_options(&state, contract, &written, &passed);
     if !moving.is_empty() {
         let mut told: Vec<(String, Ty, String)> = vec![];
@@ -1140,7 +1148,7 @@ pub fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         check_core_call_on_quiet(state, receiver);
         if (entry == "message" || entry == "full") && args.is_empty() { return check_core_call_on_named("String"); }
         let listed = members_named(&members);
-        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1171"), message: format!("This is an error, one of {}, and an error has no method called `{}`.", listed, entry), notes: vec![String::from("What every error has is `message()` and `full()`; what one of them has is reached once a `match` has said which it is.")], help: Some(format!("Take it apart first: `match error {{ … }}`, and call `{}` in the arm of the type that has it.", entry)), labels: vec![] });
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1171"), message: format!("This is an error, one of {}, and an error has no method called `{}`.", listed, entry), notes: vec![String::from("What every error has is `message()` and `full()`; what one of them has is reached once a `match` has said which it is.")], help: Some(format!("Take it apart first: `match error {{ … }}`, and call `{}` in the arm of the type that has it.", entry)), labels: vec![], edit: None });
         return Ty::Unknown;
     }
     let has_name = check_core_call_on_has_name(&on);
@@ -1282,6 +1290,18 @@ pub(crate) fn check_core_call_on_one_param(world: &CheckWorld<'_, '_, '_, '_, '_
     }
 }
 
+pub(crate) fn check_core_call_on_retain_copies(on: &Ty, arg: &Expr) -> bool {
+    let item: Ty = match on {
+        Ty::Named { name, args, .. } => { if (name == "Vec" || name == "List") && args.len() == 1 { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { return false; } },
+        _ => return false,
+    };
+    let one = match arg {
+        Expr::Closure { params, .. } => params.len() == 1,
+        _ => false,
+    };
+    one && !item.is_unknown() && !item.is_a_view() && !moves(&item)
+}
+
 pub(crate) fn check_core_call_on_unviewed_fn(want: &Ty) -> Ty {
     match want {
         Ty::Fn { params, result, is_sync, can_throw } => {
@@ -1350,7 +1370,7 @@ pub(crate) fn check_core_call_on_weighs(state: &mut CheckState, on: &Ty, entry: 
         Ty::Named { ref name, .. } => type_last_segment(name),
         _ => return,
     };
-    if base != "Sender" && !(base == "SharedMut" && entry == "set") { return; }
+    if base != "Sender" && !(base == "SharedMut" && (entry == "set" || entry == "set(after)")) { return; }
     let found = check_core_call_on_parameters_in(&state, &on.unseen());
     if found.is_empty() { return; }
     let mut held: collections::BTreeSet<String> = nikaia_std::index::or(match state.facts.weighed.get(&current) {

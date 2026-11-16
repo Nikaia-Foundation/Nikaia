@@ -945,6 +945,15 @@ impl<T> Housed<T> {
     pub fn get(&self) -> &T {
         &self.value
     }
+
+    /// The value, without its block in place, for a door that leaves it
+    /// whole or puts back a copy (`access`, `get`, `update` of a value that
+    /// copies): what it builds leaves the door, so it is the task's that
+    /// opened it and counts there (D9, #1554).
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut T {
+        &mut self.value
+    }
 }
 
 impl<T> Drop for Housed<T> {

@@ -103,7 +103,7 @@ impl CheckState {
             Expr::Field { .. } => nikaia_std::block::Text::from(written.to_string()),
             _ => format!("({})", written),
         };
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1201"), message: format!("You can't put the file name `{}` in an `f\"…\"` that is text.", written), notes: vec![String::from("A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f\"…\"` is used as text.")], help: Some(format!("Write `{{{}.to_text()}}` to use it as text where it is text, or `{{{}.display()}}` to show it.", shown, shown)), labels: vec![] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1201"), message: format!("You can't put the file name `{}` in an `f\"…\"` that is text.", written), notes: vec![String::from("A hole is written as its value's text, and a file name holds the platform's bytes, which need not be text. Here the `f\"…\"` is used as text.")], help: Some(format!("Write `{{{}.to_text()}}` to use it as text where it is text, or `{{{}.display()}}` to show it.", shown, shown)), labels: vec![], edit: None });
     }
 }
 

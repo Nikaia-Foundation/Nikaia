@@ -91,7 +91,7 @@ pub(crate) fn check_core_places_tuple_part(state: &mut CheckState, parts: &[Ty],
         if last < 0 { last = 0; }
         let mut help: String = String::from("There's nothing in it to read.");
         if count > 0 { help = format!("Use one of `.0` to `.{}`.", last); }
-        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1107"), message: format!("This tuple has no part `.{}`.", at), notes: vec![format!("A tuple's parts are counted from 0, and this one has {}.", count)], help: Some(help), labels: vec![] });
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1107"), message: format!("This tuple has no part `.{}`.", at), notes: vec![format!("A tuple's parts are counted from 0, and this one has {}.", count)], help: Some(help), labels: vec![], edit: None });
         return Ty::Unknown;
     }
     if at < 0 { return Ty::Unknown; }
@@ -171,9 +171,18 @@ pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn stamped_if(seen: bool, got: Ty) -> Ty {
+    if !seen || got.is_unknown() || got.is_seen() { return got; }
+    Ty::Named { name: nikaia_std::block::Text::from(SEEN.to_string()), args: vec![got], view: false }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, base: &Expr, name: winnow_grammar::Symbol, span: &Span) -> Ty {
-    let on = check_core_expr(state, world, host, base, span);
+    let read = check_core_expr(state, world, host, base, span);
+    let seen_base = read.is_seen();
+    let on = read.unseen();
     let owned_result = match on {
         Ty::Named { view, .. } => !view,
         _ => false,
@@ -205,11 +214,11 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
                     Ty::Tuple(ref parts) => {
                         let part = check_core_places_tuple_part(state, parts, &field, span);
                         if part.is_unknown() { return Ty::Unknown; }
-                        return state.a_safe_reach(world, base, &part, inner.is_a_view());
+                        return stamped_if(seen_base, state.a_safe_reach(world, base, &part, inner.is_a_view()));
                     },
                     _ => { },
                 }
-                return state.a_safe_field(world, inner, base, &field, expr, span);
+                return stamped_if(seen_base, state.a_safe_field(world, inner, base, &field, expr, span));
             },
             Ty::Unknown => { return Ty::Unknown; },
             _ => { state.reaches_through_a_plain_value(world, &on, base, &field, false, expr, span); },
@@ -228,11 +237,11 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
     let members = several_errors_of(&on);
     if !members.is_empty() {
         let named = members_named(&members);
-        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1107"), message: format!("This is an error, one of {}, and an error has no field `{}`.", named, field), notes: vec![String::from("A field belongs to one of them, and which one it is is said by a `match`.")], help: Some(format!("Take it apart first: `match error {{ … }}`, and read `{}` in the arm of the type that has it.", field)), labels: vec![] });
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1107"), message: format!("This is an error, one of {}, and an error has no field `{}`.", named, field), notes: vec![String::from("A field belongs to one of them, and which one it is is said by a `match`.")], help: Some(format!("Take it apart first: `match error {{ … }}`, and read `{}` in the arm of the type that has it.", field)), labels: vec![], edit: None });
         return Ty::Unknown;
     }
     match on {
-        Ty::Tuple(ref parts) => { return check_core_places_tuple_part(state, parts, &field, span); },
+        Ty::Tuple(ref parts) => { return stamped_if(seen_base, check_core_places_tuple_part(state, parts, &field, span)); },
         _ => { },
     }
     let mut seen: Ty = on.clone();
@@ -255,7 +264,7 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
         _ => { },
     }
     check_core_places_array_length(state, id_of(expr) as i64, &got);
-    got
+    stamped_if(seen_base, got)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

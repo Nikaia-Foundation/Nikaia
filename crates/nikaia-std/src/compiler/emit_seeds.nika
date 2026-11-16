@@ -135,7 +135,7 @@ impl EmitSeedsTables {
     /// The hidden parameters of each `pub` struct, until the counts stop
     /// growing (a struct holds another one that holds a map).
     pub fn count_types(ref mut self, declared: ref Vec[EmitSeedsDeclared]) {
-        self.types = collections::BTreeMap()
+        self.types.clear()
         for d in declared {
             if !self.excluded.contains(d.name) {
                 self.types.insert(d.name.clone(), 0)
@@ -475,7 +475,7 @@ fn emit_seeds_read_barriers(mut tables: EmitSeedsTables, units: ref Vec[ParsedVi
     // that hands it a map it was given cannot say that the two are one
     // type, so its positions are the keyed map, as a trait method's are
     // (the package writes the keyed map in its own bodies, `seeded()`).
-    tables.private = collections::BTreeSet()
+    tables.private.clear()
     for unit in units {
         for item in unit.items {
             match item.node {

@@ -22,6 +22,7 @@
 #[allow(unused_imports)]
 use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -179,6 +180,11 @@ pub fn standalone_programs(dir: &Path) -> Vec<PathBuf> {
 /// (`project::lower_reading`). Alone it would meet `http::listen` as an unknown
 /// callee, which keeps what it is handed (ADR-094 D2 fails closed), and refuse
 /// a lambda's `serve(at)` the build accepts. Every other file is checked alone.
+///
+/// **With a workshop, as the build has one** (ADR-321 D19, #1530): an option
+/// default such as `examples/http`'s `head_timeout: time::Duration =
+/// 10.seconds()` is computed by compiling it, and a check handed no place to
+/// compile refuses it with `NK1127` although `nikaia build` accepts it.
 #[allow(dead_code)]
 pub fn corpus_findings(
     path: &Path,
@@ -186,15 +192,30 @@ pub fn corpus_findings(
     library: &nikaia::contracts::Ledger,
 ) -> Vec<nikaia::check::Finding> {
     use nikaia::contracts::LedgerOps;
+    let workshop = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("corpus-workshop");
+    let root = path.parent().unwrap_or(Path::new("."));
+    let reads = nikaia::assets::Reads::at(root).building_in(workshop);
+    let checked = |own: &nikaia::contracts::Ledger, modules: &BTreeSet<String>| {
+        nikaia::check::check_against(
+            parsed,
+            &[],
+            own,
+            library,
+            modules,
+            &nikaia::check::Newly::new(),
+            &reads,
+        )
+        .findings
+    };
     if let Ok((program, packages)) = nikaia::project::read_file(path)
         && !packages.is_empty()
     {
         let own = program.contracts_as_promised();
         let modules = program.package_names();
-        return nikaia::check::check_program(parsed, &own, library, &modules).findings;
+        return checked(&own, &modules);
     }
     let own = nikaia::contracts::Ledger::infer(parsed);
-    nikaia::check::check(parsed, &own, library).findings
+    checked(&own, &BTreeSet::new())
 }
 
 /// A scratch directory of this test's own. The tests run in parallel threads

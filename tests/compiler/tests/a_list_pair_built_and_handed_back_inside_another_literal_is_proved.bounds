@@ -1,0 +1,3 @@
+bounds in tests/a_list_pair_built_and_handed_back_inside_another_literal_is_proved.nika: 1 indexes, 1 proved; 1 operations, 0 proved
+    21  row.ks[0]  proved
+    33  k / scale  checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)

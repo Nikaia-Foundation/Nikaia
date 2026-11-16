@@ -130,8 +130,6 @@ goes into the section of its topic, in one line, with the run that paid for it.
 
 ### Lowering and lower-std
 
-* `commit.nika` stages whole files: a defect fix that shares a file with a step is split by putting HEAD's version plus the fix hunks (in the `.nika` and its lowered `.rs`) in place, committing, then restoring the step. Plan the fix as its own commit before starting the step in that file. (issue-1470)
-
 * **Check lowered tools code with `cargo check --profile fast -p nikaia-std
   --features compiler --message-format short`** right after the first
   `lower-std`; without the feature the check is a false green (k3a2).
@@ -284,7 +282,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **The walk gets no fact from `let end = a.min(n)`** (`end <= n`), so `s.bytes[0..<end]` stays checked whatever `n` is, until #1514. (issue-1496)
 * `lower-std --bounds` writes nothing and reads no cache, so the old and new binaries can measure the same tree in parallel and be diffed site by site. (issue-1500)
 * Code that runs for every question of the bounds walk must not loop over string-keyed maps; give the names integer ids first, or `lower-std` grows from minutes to tens of minutes. (issue-1500)
-* **Before adding debug prints to `bounds_*.nika`, run `nikaia check --bounds --bounds-trace LINE F.nika`** (`lower-std --bounds --bounds-trace FILE:LINE` for a tools file): for each goal of a statement starting on that line it prints the goal, every fact it was asked with (rule facts and ledger facts included), how many the 48-fact cap evicted, and the type's field rules. (issue-1495)
+* **Before adding debug prints to `bounds_*.nika`, run `nikaia check --bounds --bounds-trace LINE F.nika`** (`lower-std --bounds --bounds-trace fixed.nika:95` for a toolchain file: the bare name, matched against the end of the path; one that matches no file prints nothing, #1780): for each goal of a statement starting on that line it prints the goal, every fact it was asked with (rule facts and ledger facts included), how many the 48-fact cap evicted, and the type's field rules. (issue-1495)
 * **A rule's fact over every element of a list is guarded by the list's emptiness**: `bounding_each_guarded` turns it into `len(xs) <= 0 || fact`, and `bounding_each_present` gives `len(xs) >= 1` where an element is actually read. A new kind of rule (as D28's `inner`) states its element facts through these, or it proves anything under an empty list. (issue-1483)
 * **A list field that a free function such as `main` writes is dropped from the rule candidates**, so a rule test fills its lists only through `ref mut self` methods. (issue-1483)
 * **Derived entry claims (ADR-391) key on the first non-`self` parameter**, so a method that takes only `self` gets none. (issue-1483)
@@ -297,6 +295,13 @@ goes into the section of its topic, in one line, with the run that paid for it.
   The two can differ: `check --bounds FILE` proved a site D23 reaches that
   `lower-std --bounds` did not (#1465); a figure is claimed only from
   `lower-std`. (issue-1414)
+* **`--asserts` lists `assert` claims only (ADR-361 D7)**; an index or
+  counter the walk leaves checked, with the loop its reason names, shows in
+  `--bounds`. An issue that asks for it under `--asserts` means `--bounds`. (issue-1634)
+* **A `--bounds` reason's wording is quoted verbatim by the `.bounds` files**
+  (23 for the loop reasons): before changing one, `grep -l 'PHRASE'
+  tests/compiler/tests/*.bounds` and bless them all in one `nikaia test` run
+  (one `--filter` per test). (issue-1634)
 * **A `for` binding is a number of the walk** (`CheckFacts.whole_loops`):
   check it before blaming the prover when a guard on `for k in ks` is lost.
   (issue-1414)
@@ -393,6 +398,10 @@ build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
   ?? ...` first; a `String?` field is matched as it is (`null => .., x => ..`);
 * [works] a `ref String?` parameter takes a bare `String` (`ref String?` is
   `NK1261`, write `String?`);
+* [works: ADR-331 D5] a struct field may have a default (`pub edit: Edit? =
+  null,`), and a literal in any file of the package leaves it out: a field
+  added to a struct with many literals (`CheckFinding`) gets one, not an
+  `edit: null` in each; literals in hand-written Rust still name it;
 * [gap: ADR-views-2 §6] `mut` on one name of a tuple (`for (k, mut v) in m`),
   and so `values_mut()` / `iter_mut()`, is `NK1307`: stops the slice;
 * [design: Part I 3.3, 3.4] `a..b` includes `b`, half-open is `a..<b`; the

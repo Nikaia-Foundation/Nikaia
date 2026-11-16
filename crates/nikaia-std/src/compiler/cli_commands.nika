@@ -53,6 +53,11 @@ pub trait CliTestHost {
 pub fn cli_commands_test[H: CliTestHost](host: ref H, root: ref fs::Path, user_parallelism: String, blocks: bool, outputs: bool, own: bool, both_settings: bool, bless: bool, stderr: bool, filters: ref Vec[String]) -> i32 sync throws {
     if !blocks && !outputs && !own && !filters.is_empty() {
         println(f"no tests: no test's name holds any of the `--filter` texts {filters.join(", ")}")
+        // **A pattern is said to be one** (#1760): `a|b` matched nothing and
+        // read as a silent run; `--filter` holds plain text.
+        if filters.iter().any(fn(text) { text.contains("|") || text.contains("*") || text.contains("^") || text.contains("$") }) {
+            println("`--filter` matches plain text, not a pattern: give one `--filter` per name")
+        }
         return 1
     }
     if !blocks && !outputs && !own {

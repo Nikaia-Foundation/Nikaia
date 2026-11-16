@@ -1,0 +1,9 @@
+// A field read out of a `Seen[T]` is seen too (ADR-281 D22, #1638): a `set`
+// given it is refused like a `set` given the whole value.
+struct Noisy { name: String, size: i64 }
+
+fn main() throws {
+	let k = SharedMut(Noisy { name: "x", size: 3 })
+	let n = SharedMut(0)
+	n.set(k.get().size)
+}

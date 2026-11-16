@@ -1076,7 +1076,7 @@ fn sharing_function(item: ref Item, owner: ref String, asked: ref Asked, holes_o
     match item {
         Item::Fn { name, args, body, ret_type, is_public, .. } => {
             walk.function = key_of_function(name, owner, asked.names)
-            walk.scope = collections::BTreeMap()
+            walk.scope.clear()
             for arg in args {
                 let ty = ty_of(arg.ty)
                 let named = asked.names.resolve(arg.name).clone()
@@ -1235,8 +1235,15 @@ fn plain_type(name: ref String) -> Ty {
 
 // What a function hands back is the same allocation as whatever it names.
 fn hands_back(value: ref Expr, asked: ref Asked, mut walk: SharingWalk) {
-    let source = slot_of(value, asked, walk) ?? return
-    walk.slots.join(slot(walk.function, RESULT), source)
+    let source = slot_of(value, asked, walk)
+    if source == null {
+        let result = slot(walk.function, RESULT)
+        let handle = walk.slots.handles[result] ?? return
+        let ty = handle.ty.clone()
+        made_into(value, ty, result, asked, walk)
+        return
+    }
+    walk.slots.join(slot(walk.function, RESULT), source ?? "")
 }
 
 // A handle whose allocation this analysis did not watch being made: the floor
@@ -1462,10 +1469,13 @@ fn struct_field(owner: ref String, literal: i64, field: ref FieldInit, asked: re
     } else {
         let declared = declared_field_type(owner, field_name, asked)
         if declared != null && holds_shared(declared ?? Ty::Unknown) {
-            walk.slots.note(FIELDS, key, declared ?? Ty::Unknown, true, false)
+            let field_ty = declared ?? Ty::Unknown
+            walk.slots.note(FIELDS, key, field_ty.clone(), true, false)
             let source = slot_of(value, asked, walk)
             if source == null {
-                origin_unseen(FIELDS, key, value, asked, walk)
+                if !made_into(value, field_ty, slot(FIELDS, key), asked, walk) {
+                    origin_unseen(FIELDS, key, value, asked, walk)
+                }
             } else {
                 walk.slots.join(source ?? "", slot(FIELDS, key))
             }
@@ -1618,10 +1628,49 @@ fn an_argument_that_is_not_a_handle(called: ref SharingCall, described: ref Desc
     if !by_value_shared(known.params[at].1) {
         return
     }
-    let source = slot_of(arg, asked, walk) ?? return
-    let (owner, named) = split_slot(source)
+    let source = slot_of(arg, asked, walk)
+    if source == null {
+        // A hull made in the argument is the parameter's allocation (#1638).
+        made_into(arg, known.params[at].1, slot(known.key, param), asked, walk)
+        return
+    }
+    let found = source ?? return
+    let (owner, named) = split_slot(found)
     walk.slots.duplicates(owner, named, handed_on_to(known.key, param))
-    walk.slots.join(source, slot(known.key, param))
+    walk.slots.join(found, slot(known.key, param))
+}
+
+/// The internal slot of the hull a constructor call makes in place, by the
+/// node of the value put into it: the emitter asks it for the count the
+/// constructor is written with (#1638).
+pub fn made_slot(value: i64) -> String {
+    return f"<made {value}>"
+}
+
+// **A hull made where a slot takes it is that slot's allocation** (ADR-281
+// D2, #1638): `take(SharedMut(x))`, `return SharedMut(x)` and a field of a
+// literal. It has one handle, the slot's, so it joins the slot's class and
+// the constructor is written with the count the slot's type is. False where
+// the expression is not a hull's constructor.
+fn made_into(value: ref Expr, ty: ref Ty, target: ref String, asked: ref Asked, mut walk: SharingWalk) -> bool {
+    let inside = match value {
+        Expr::Call { func, args, .. } => {
+            let named = match func {
+                Expr::Variable(name, _) => asked.names.resolve(name).clone(),
+                else => return false,
+            }
+            if !is_hull(named) || args.len() != 1 {
+                return false
+            }
+            node_key(args[0])
+        }
+        else => return false,
+    }
+    let function = walk.function.clone()
+    let made = made_slot(inside)
+    walk.slots.note(function, made, ty.clone(), true, false)
+    walk.slots.join(slot(function, made), target)
+    return true
 }
 
 // A handle handed on: into the parameter's class where a contract describes

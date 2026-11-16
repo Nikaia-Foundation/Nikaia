@@ -20,7 +20,7 @@ pub(crate) fn check_program_body<H: CheckHost>(state: &mut CheckState, world: &C
 pub(crate) fn check_program_extern_convention(state: &mut CheckState, abi: &str, span: &Span) {
     let shown = format!("\"{}\"", abi);
     let note: String = String::from("`extern` is the C calling convention, the only one on every target, so it is not written.");
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1227"), message: format!("`extern` takes no convention, and this names `{}`.", shown), notes: vec![note], help: Some(String::from("Write `extern { … }`, or `extern(library: \"name\") { … }` for a block whose functions come from a system library.")), labels: vec![] });
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1227"), message: format!("`extern` takes no convention, and this names `{}`.", shown), notes: vec![note], help: Some(String::from("Write `extern { … }`, or `extern(library: \"name\") { … }` for a block whose functions come from a system library.")), labels: vec![], edit: None });
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -36,7 +36,7 @@ pub(crate) fn check_program_impl<H: CheckHost>(state: &mut CheckState, world: &C
         state.subject_arguments = arguments.copy_owned();
         check_function_function(state, world, host, &method.node, &method.span, (named).as_deref());
     }
-    state.enclosing = collections::BTreeMap::new();
+    state.enclosing.clear();
     state.subject_arguments = vec![];
 }
 

@@ -10,10 +10,12 @@ crates/nikaia-std/src/compiler/lowered/a.rs
 crates/nikaia-std/src/compiler/lowered/new.rs
 base
 theirs-side
+index
 a.nika b.nika 
 local
 == also a nika
 ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs crates/src/a.nika, merge aborted
+WAKE ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs crates/src/a.nika, merge aborted
 exit ok: false
 ours
 1
@@ -22,11 +24,13 @@ no merge open
 crates/nikaia-std/src/compiler/lowered/a.rs
 crates/src/a.nika
 ours
+index
 old
 
 local
 == lowering fails
 ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs, re-lowering failed (lower-std), merge aborted
+WAKE ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs, re-lowering failed (lower-std), merge aborted
 exit ok: false
 ours
 1
@@ -35,6 +39,7 @@ no merge open
 crates/nikaia-std/src/compiler/lowered/a.rs
 ours.txt
 ours
+index
 old
 
 local
@@ -50,6 +55,7 @@ crates/nikaia-std/src/compiler/lowered/a.rs
 crates/nikaia-std/src/compiler/lowered/new.rs
 base
 theirs-side
+index
 a.nika b.nika 
 local
 == clean, docs only
@@ -60,11 +66,13 @@ Merge branch 'develop' of ../origin into develop
 no merge open
  M notes.txt
 base
+index
 old
 
 local
 == clean, lowering fails
 ESCALATE drive: push rejected, merge clean, re-lowering failed (lower-std), merge aborted
+WAKE ESCALATE drive: push rejected, merge clean, re-lowering failed (lower-std), merge aborted
 exit ok: false
 ours
 1
@@ -72,6 +80,7 @@ no merge open
  M notes.txt
 ours.txt
 base
+index
 old
 
 local
@@ -86,6 +95,23 @@ assets/badges/self-hosted.svg
 crates/nikaia-std/src/compiler/lowered/new.rs
 examples/a/nikaia.contracts
 base
+index
 a.nika 
 local
 refreshed
+== index only
+MERGE SHA re-lowered crates/nikaia-std/src/compiler/lowered.rs
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+2
+no merge open
+ M notes.txt
+assets/badges/self-hosted.svg
+crates/nikaia-std/src/compiler/lowered.rs
+crates/nikaia-std/src/compiler/lowered/a.rs
+crates/nikaia-std/src/compiler/lowered/new.rs
+base
+theirs-side
+2
+a.nika b.nika 
+local

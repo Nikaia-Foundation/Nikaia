@@ -715,7 +715,7 @@ impl CheckState {
         let mut help: String = format!("Assign `{}` (or the part) before the function is left{}, or build the value by value with `fn f({}: T) -> T`.", subject, tail, subject);
         if of_self { help = format!("Assign {} before the method is left{}, or take `keep self` and hand the value back.", part, tail); }
         if a_view { help = format!("Assign {} (or the whole `{}`) before its block is left{}.", part, subject, tail); }
-        CheckFinding { severity: CheckSeverity::Error, span, code: String::from("NK2108"), message, notes: vec![kept], help: Some(help), labels }
+        CheckFinding { severity: CheckSeverity::Error, span, code: String::from("NK2108"), message, notes: vec![kept], help: Some(help), labels, edit: None }
     }
 }
 
@@ -813,7 +813,7 @@ impl CheckState {
         let at = check_span_at(world, expr, span);
         if self.a_clone_that_copies(world, copy) {
             let what: String = nikaia_std::index::or(dotted_path(world, receiver), || "the value".into());
-            self.a_needless_clone(&at, format!("`{}` is a `{}`, which copies by itself: `.clone()` makes nothing new.", what, copy.text()), vec![String::from("A number, a `bool`, a `char` and a type whose every part copies are copied wherever they are read (ADR-294 D9.1).")], String::from("Delete `.clone()`."));
+            self.a_needless_clone(&at, format!("`{}` is a `{}`, which copies by itself: `.clone()` makes nothing new.", what, copy.text()), vec![String::from("A number, a `bool`, a `char` and a type whose every part copies are copied wherever they are read (ADR-294 D9.1).")], String::from("Delete `.clone()`."), clone_deleted(world, expr, receiver));
             return;
         }
         let name = match receiver {
@@ -826,7 +826,7 @@ impl CheckState {
         for repeat in self.repeats.iter() { if repeat.frame > bound { return; } }
         let node = id_of(expr) as i64;
         for held in self.flow.clones.iter() { if held.node == node { return; } }
-        self.flow.clones.push(CheckClone { name, binding: Some(local.id), seq: self.read_seq, choices: self.branch.copy_owned(), node, span: at });
+        self.flow.clones.push(CheckClone { name, binding: Some(local.id), seq: self.read_seq, choices: self.branch.copy_owned(), node, span: at, edit: clone_deleted(world, expr, receiver) });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -899,7 +899,7 @@ impl CheckState {
         }
         let node = id_of(iter) as i64;
         self.flow.clones.retain(|held| { held.node != node });
-        self.a_needless_clone(&check_span_at(world, iter, span), format!("`{}` is copied only to be walked: nothing in the loop changes it or takes it.", path), vec![String::from("A `for` over a place lends its elements (ADR-094 D4), so the loop can walk the place itself.")], String::from("Delete `.clone()`."));
+        self.a_needless_clone(&check_span_at(world, iter, span), format!("`{}` is copied only to be walked: nothing in the loop changes it or takes it.", path), vec![String::from("A `for` over a place lends its elements (ADR-094 D4), so the loop can walk the place itself.")], String::from("Delete `.clone()`."), clone_deleted(world, iter, &receiver));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -908,13 +908,16 @@ impl CheckState {
         let loans = self.flow.clone_loans.copy_owned();
         self.flow.clones = vec![];
         self.flow.clone_loans = vec![];
-        self.flow.clone_owners = collections::BTreeSet::new();
+        self.flow.clone_owners.clear();
         for one in clones.iter() {
             if self.a_clone_read_after(one) { continue; }
             let mut lent = false;
             for loan in loans.iter() { if loan.1 == one.binding && self.a_view_read_after(&loan.0, one) { lent = true; } }
             if lent { continue; }
-            self.a_needless_clone(&one.span, format!("This `.clone()` is the last use of `{}`: it copies `{}` only to drop it.", one.name, one.name), vec![format!("Nothing reads `{}` after it, so it can be handed over itself.", one.name)], format!("Hand `{}` itself: write `{}` for `{}.clone()`.", one.name, one.name, one.name));
+            self.a_needless_clone(&one.span, format!("This `.clone()` is the last use of `{}`: it copies `{}` only to drop it.", one.name, one.name), vec![format!("Nothing reads `{}` after it, so it can be handed over itself.", one.name)], format!("Hand `{}` itself: write `{}` for `{}.clone()`.", one.name, one.name, one.name), match one.edit.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            });
         }
     }
     pub(crate) fn a_clone_read_after(&self, one: &CheckClone) -> bool {
@@ -927,12 +930,22 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_needless_clone(&mut self, at: &Span, message: String, notes: Vec<String>, help: String) {
+    pub(crate) fn a_needless_clone(&mut self, at: &Span, message: String, notes: Vec<String>, help: String, edit: Option<CheckEdit>) {
         for said in self.findings.iter() { if said.code == "NK1350" && said.span.start == at.start { return; } }
         let mut warned = check_refusal("NK1350", &at, message, notes, Some(help));
         warned.severity = CheckSeverity::Warning;
+        warned.edit = edit;
         self.findings.push(warned);
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn clone_deleted(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr) -> Option<CheckEdit> {
+    let whole = match world.here.spans.get(&id_of(call)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let of = match world.here.spans.get(&id_of(receiver)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if of.start != whole.start || of.end >= whole.end { return None; }
+    Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: String::from("") })
 }
 
 pub(crate) fn clone_of_a_let(local: &CheckLocal) -> bool {

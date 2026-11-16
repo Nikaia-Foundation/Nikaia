@@ -1,0 +1,22 @@
+use compiler_tests
+
+/// A trait method's written `keep` is its `keeps` column for every caller
+/// (ADR-views-3 D2): `src/trait_keep_beside.nika` calls
+/// `TraitKeepBesideSink::put(keep text)` through a bound, with no impl in its
+/// own package, and the ledger said the method kept nothing, so the library
+/// lent `text` and rustc refused the code (NK1343, #116).
+struct Held {
+	texts: Vec[String],
+}
+
+impl compiler_tests::TraitKeepBesideSink for Held {
+	fn put(mut self, keep text: String) -> i64 {
+		self.texts.push(text)
+		return self.texts.len()
+	}
+}
+
+fn main() throws {
+	let mut held = Held { texts: [] }
+	println(compiler_tests::trait_keep_beside_send(held, "a"))
+}

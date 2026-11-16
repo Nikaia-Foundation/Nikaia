@@ -343,7 +343,7 @@ impl CheckState {
                 if *nikaia_std::index::get(&self.changed, nikaia_std::index::at(at)) == *name { taken = true; }
                 at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
-            if taken || check_gives_back(body, name, world.words) || self.gives_back_a_moving_field(world, body, name, ty) { continue; }
+            if taken || check_gives_back(body, name, world.words) || self.gives_back_a_moving_field(world, body, name, ty) || compare_wrapped_by_the_tiers(body, name, world.words) { continue; }
             lent.insert(nikaia_std::block::Text::from(name.to_string()));
         }
         lent
@@ -370,6 +370,27 @@ impl CheckState {
         }
         false
     }
+}
+
+pub(crate) fn compare_wrapped_by_the_tiers(body: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> bool {
+    for expr in visited_in_expr(body) {
+        match expr {
+            Expr::MethodCall { receiver, method, args, config, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                let called = words.resolve(method);
+                if !args.is_empty() || !config.is_empty() || called != "into_either" && called != "into_either_maybe" { continue; }
+                match receiver {
+                    Expr::Variable(read, _) => {
+                        let read = *read;
+                        if words.resolve(read) == name { return true; }
+                    },
+                    _ => { },
+                }
+            },
+            _ => { },
+        }
+    }
+    false
 }
 
 pub(crate) fn compare_base(name: &str) -> String {

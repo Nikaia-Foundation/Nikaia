@@ -168,7 +168,7 @@ keeps = ["body_bytes_per_second", "body_cap", "connections", "handler", "head_ca
 locks = true
 panics = true
 views = ["at: borrowed"]
-signature = "(at: String, handler: fn(Request) -> Response; body_cap: i64 = 1048576, head_cap: i64 = 16384, head_timeout: time::Duration? = None, body_bytes_per_second: i64 = 500, idle_timeout: time::Duration? = None, connections: i64 = 0)"
+signature = "(at: String, handler: fn(Request) -> Response; body_cap: i64 = 1048576, head_cap: i64 = 16384, head_timeout: time::Duration = time::Duration::new(10, 0), body_bytes_per_second: i64 = 500, idle_timeout: time::Duration = time::Duration::new(75, 0), connections: i64 = 0, tls: net::Tls? = None)"
 
 [fn."refuse"]
 locks = true
@@ -191,11 +191,11 @@ touches = []
 signature = "(response: Response) -> String"
 
 [fn."request"]
-keeps = ["handler"]
+keeps = ["handler", "idle_timeout"]
 locks = true
 panics = true
 provenance = "untrusted"
-signature = "(mut connection: net::Connection, mut buffer: http1::Buffer, handler: fn(Request) -> Response, head_timeout: time::Duration; body_cap: i64 = 1048576, head_cap: i64 = 16384, body_bytes_per_second: i64 = 500) -> bool"
+signature = "(mut connection: net::Connection, mut buffer: http1::Buffer, handler: fn(Request) -> Response, head_timeout: time::Duration, idle_timeout: time::Duration; body_cap: i64 = 1048576, head_cap: i64 = 16384, body_bytes_per_second: i64 = 500) -> bool"
 
 [fn."send"]
 throws = ["io::IoError"]

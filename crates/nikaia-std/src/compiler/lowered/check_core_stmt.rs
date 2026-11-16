@@ -1050,7 +1050,7 @@ pub(crate) fn check_core_stmt_an_immutable_that_changes(state: &mut CheckState, 
     let note: String = String::from("`immutable` promises that nothing reachable from the value ever changes (ADR-389). A `SharedMut`, a `Locked` and a channel end are changed through every other owner of the same storage.");
     let help: String = String::from("Bind it with `let`, or hold a value that can't change: a copy, or a `Shared[T]` of a `T` that can't change.");
     let label = CheckLabel { span: at.clone(), word: String::from(""), text: String::from("can change through another owner"), main: true };
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1331"), message, notes: vec![note], help: Some(help), labels: vec![label] });
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1331"), message, notes: vec![note], help: Some(help), labels: vec![label], edit: None });
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

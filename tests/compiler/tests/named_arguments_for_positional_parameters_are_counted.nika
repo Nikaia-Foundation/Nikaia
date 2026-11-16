@@ -1,0 +1,28 @@
+// #1696 (Part I 5.1): a call that names the arguments its callee takes by
+// position is refused with NK1101, which counts the named arguments instead
+// of saying "you passed 0", names the positional parameters and shows the
+// call written by position, for a function and for a method. A named
+// argument the callee has no positional parameter for is counted too.
+
+struct Tls {
+	n: i64
+}
+
+impl Tls {
+	fn files(self, certificate: String, key: String) -> String {
+		return certificate + key
+	}
+}
+
+fn files(certificate: String, key: String; verbose: bool = false) -> String {
+	return certificate + key
+}
+
+fn main() throws {
+	println(files(certificate: "a", key: "b"))
+	println(files("a"; key: "b"))
+	println(files(verbose: true))
+	let t = Tls { n: 1 }
+	let c = "x"
+	println(t.files(key: "b", certificate: c))
+}

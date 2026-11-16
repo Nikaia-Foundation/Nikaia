@@ -142,7 +142,7 @@ pub fn check_walked_unsigned_slots(mut state: CheckState, proven: fn(ref CheckFa
             slots.push(slot.clone())
         }
     }
-    state.flow.unsigned_slots = collections::BTreeMap()
+    state.flow.unsigned_slots.clear()
     if slots.len() == 0 {
         return
     }

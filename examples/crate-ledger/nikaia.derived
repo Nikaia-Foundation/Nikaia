@@ -4,7 +4,7 @@
 # as recorded here. Part III, 13.5.
 version = 3
 toolchain = "nikaia 0.1.0"
-inference = "stage0-signatures+sync-bodies+throws-bodies+sharing-bodies"
+inference = "stage0-signatures+sync-bodies+throws-bodies+sharing-bodies+provenance-bodies"
 
 [sources]
 "main.nika" = "e409101a6f1c5a4d787be56ca52150158ff916a05259335b63e457cf059c7f60"

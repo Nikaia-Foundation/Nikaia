@@ -27,8 +27,9 @@ pub struct BoundsReportFacts {
 	/// The derived preconditions, each with the call sites that prove it
 	/// (ADR-391 D4, `derived_rows`).
 	pub derived: Vec[String],
-	/// **Each index data from outside reaches** (ADR-396 D5), as the
-	/// prover's walk left it (`CheckFacts::outside_indices`).
+	/// **Each index data from outside reaches** (ADR-396 D5), and each
+	/// `/`, `%`, `+`, `-` and `*` (D7), as the prover's walk left it
+	/// (`CheckFacts::outside_indices`).
 	pub outside: collections::BTreeMap[(i64, String), OutsideIndex],
 	/// Whether the build lets an unproved claim through with a check
 	/// (`unproved-claims = "warn"`, ADR-396 D3).
@@ -177,12 +178,13 @@ pub fn bounds_report_checked(
 	return out
 }
 
-/// **Each index data from outside reaches, as `--bounds` writes it**
-/// (ADR-396 D5), in the order of the file: the line it stands at (the call
+/// **Each index and operation data from outside reaches, as `--bounds`
+/// writes it** (ADR-396 D5, D7), in the order of the file: the line it stands at (the call
 /// that hands it the value, where a call does), the index, the name and its
 /// source, and the verdict - `proved by the guard on line 14
 /// (`!(0 <= m && m < 12)`)`, `refused NK1302`, or `checked (unproved-claims =
-/// warn)`.
+/// warn)`; an operation not proved is `checked: not proved, an NK1303
+/// site`, since `NK1303` is not switched on yet (D8).
 fn bounds_report_outside(facts: ref BoundsReportFacts, source: ref String) -> Vec[String] {
 	let mut rows: Vec[String] = []
 	for (_, found) in facts.outside {
@@ -191,7 +193,14 @@ fn bounds_report_outside(facts: ref BoundsReportFacts, source: ref String) -> Ve
 			from = f"from `{found.source}`"
 		}
 		let mut verdict = "refused NK1302"
-		if found.proved {
+		if found.operation && !found.proved {
+			// **Not refused yet** (ADR-396 D7, D8 step 3): the site
+			// `NK1303` will refuse, and whether the walk stated its goal.
+			verdict = "checked: not proved, an NK1303 site (ADR-396 D8)"
+			if !found.stated {
+				verdict = "checked: the prover states no bound of it, an NK1303 site (ADR-396 D8)"
+			}
+		} else if found.proved {
 			verdict = "proved"
 			if found.guard_at >= 0 {
 				verdict = f"proved by the guard on line {bounds_report_line(source, found.guard_at)} (`{found.guard}`)"

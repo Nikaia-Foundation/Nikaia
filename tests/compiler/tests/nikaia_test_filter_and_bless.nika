@@ -15,7 +15,7 @@ fn run_test(nikaia: String, tmp: String, label: String, args: Vec[String]) throw
     let out = process::run(nikaia, args; dir: tmp.clone())
     println(f"-- {label}: exit {out.code}")
     for line in f"{out.stdout}{out.stderr}".lines() {
-        if line.starts_with("program ") || line.starts_with("no tests") || line.starts_with("test result") {
+        if line.starts_with("program ") || line.starts_with("no tests") || line.starts_with("`--filter`") || line.starts_with("test result") {
             println(line)
         }
     }
@@ -35,6 +35,7 @@ fn main() throws {
     println(f"alpha.stderr made: {fs::exists(f"{tmp}/tests/alpha.stderr", fs::Root::Anywhere)}")
     run_test(nikaia, tmp, "two filters", ["test", "--filter", "alp", "--filter", "bet"])
     run_test(nikaia, tmp, "no test matches", ["test", "--filter", "gamma"])
+    run_test(nikaia, tmp, "a pattern matches no name", ["test", "--filter", "alpha|beta"])
     fs::write(f"{tmp}/tests/loud.nika", fs::Root::Anywhere, "fn main() throws {\n    eprintln(\"loud\")\n}\n")
     run_test(nikaia, tmp, "loud blessed", ["test", "--filter", "loud", "--bless"])
     println(f"loud.stderr made: {fs::exists(f"{tmp}/tests/loud.stderr", fs::Root::Anywhere)}")

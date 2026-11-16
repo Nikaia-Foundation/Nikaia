@@ -1017,7 +1017,9 @@ fn formats_local(name: ref String, ask: ref BufferAsk, walk: ref BufferWalk) -> 
 // Whether an expression **is** a buffer rather than a view of one: a name
 // bound to one, or its copy, or an `if` (with an `else`), a `match` or a block
 // each of whose tails is one (#1602): `let h = if c { guard } else { guard }`
-// moves `guard`, as `let h = guard` does.
+// moves `guard`, as `let h = guard` does. A tail the text tiers took as a
+// view of its name (`ask.viewed`, a name still read after its choice, ADR-282
+// D13, #712) is no move but a view, which the keep must hold (#1658).
 fn is_the_buffer(expr: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
     return match expr {
         Expr::Variable(name, _) => a_buffer_local(ask.names.resolve(name), walk),
@@ -1031,7 +1033,7 @@ fn is_the_buffer(expr: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bo
         }
         Expr::Match { arms, .. } => {
             for arm in arms {
-                if !is_the_buffer(arm.body, ask, walk) {
+                if ask.viewed.contains(node_key(arm.body)) || !is_the_buffer(arm.body, ask, walk) {
                     return false
                 }
             }
@@ -1044,7 +1046,7 @@ fn is_the_buffer(expr: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bo
 
 fn ends_in_the_buffer(block: ref Block, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
     let tail = ending_of(block) ?? return false
-    return is_the_buffer(tail, ask, walk)
+    return !ask.viewed.contains(node_key(tail)) && is_the_buffer(tail, ask, walk)
 }
 
 // The struct of views an expression is a value of, where this walk can see it

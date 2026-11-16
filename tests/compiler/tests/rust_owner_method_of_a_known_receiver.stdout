@@ -1,0 +1,24 @@
+2 1 1 1 1
+exit 0
+error[NK2506]: `keeper::owns_list` takes `items` as its own, but the compiler can't follow it back to where it was built.
+   --> src/main.nika:13:28
+    |
+ 13 | 		return keeper::owns_list(items)
+    |                            ^^^^^
+    |
+    = note: `keeper::owns_list` takes its `items` as Rust's `Vec`, and a list crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.
+    = note: `items` holds what `pub fn a_put` was handed, so it was built by a caller the compiler does not see.
+    = help: Write `items.clone()` to hand `keeper::owns_list` a copy.
+1 value handed to Rust that the compiler can't follow back
+exit 1
+error[NK2506]: `keeper::owns_list` takes `items` as its own, but the compiler can't follow it back to where it was built.
+   --> src/main.nika:13:28
+    |
+ 13 | 		return keeper::owns_list(items)
+    |                            ^^^^^
+    |
+    = note: `keeper::owns_list` takes its `items` as Rust's `Vec`, and a list crosses to it as it is, with no copy, only where the compiler can follow it back to where it was built.
+    = note: `items` holds what `pub fn picked_put` was handed, so it was built by a caller the compiler does not see.
+    = help: Write `items.clone()` to hand `keeper::owns_list` a copy.
+1 value handed to Rust that the compiler can't follow back
+exit 1

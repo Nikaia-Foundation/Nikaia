@@ -1,0 +1,69 @@
+// scripts/drive.nika --pull LOWER BUILD BADGES (#1717): the merge of
+// `origin/develop` the driver makes before each issue and each suite, in a
+// temp repository with a bare remote. Nothing new prints nothing. A remote
+// change with no local commits is a fast-forward (no merge commit for the
+// suite to test) and names the `scripts/*.nika` it brought, so the driver
+// restarts with them; with local commits it is a merge commit, the
+// uncommitted local change back after it; a conflict aborts the merge and
+// escalates, naming the merge, with no merge left open.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn sh(dir: String, script: String) -> String throws {
+    let out = process::run("sh", ["-c", f"set -e; {script}"]; dir: dir)
+    if !out.ok { println(f"setup failed: {script}\n{out.stderr}") }
+    return out.stdout.trim().clone()
+}
+
+// A repository `work` and a clone `other`, both from the bare `origin`;
+// `other` pushes THEIRS (shell, may be empty), `work` runs OURS and keeps an
+// uncommitted change.
+fn setup(tmp: String, name: String, theirs: String, ours: String) -> String throws {
+    let base = f"{tmp}/{name}"
+    let id = "git config user.email t@t; git config user.name t; git config commit.gpgsign false"
+    sh(tmp.clone(), f"mkdir -p {name}; cd {name}; git init -q --bare origin.git; git init -q -b develop work")
+    let work = f"{base}/work"
+    sh(work.clone(), f"{id}; mkdir -p scripts; echo base > scripts/batch.nika; echo notes > notes.txt; echo base > shared.txt; git add -A; git commit -q -m base; git remote add origin ../origin.git; git push -q origin develop")
+    sh(base.clone(), "git clone -q -b develop origin.git other")
+    if theirs != "" {
+        sh(f"{base}/other", f"{id}; {theirs}; git add -A; git commit -q -m theirs; git push -q origin develop")
+    }
+    if ours != "" { sh(work.clone(), f"{ours}; git add -A; git commit -q -m ours") }
+    sh(work.clone(), "echo local > notes.txt")
+    return work
+}
+
+fn case(nikaia: String, repo: String, tmp: String, name: String, theirs: String, ours: String) throws {
+    let work = setup(tmp, name.replace(" ", "-").replace(",", ""), theirs, ours)
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--pull", "false", "true", "true"]; dir: work.clone())
+    let head = sh(work.clone(), "git rev-parse HEAD").bytes[0..<8].text().clone()
+    println(f"== {name}")
+    println(out.stdout.trim().replace(head, "SHA"))
+    println(f"exit ok: {out.ok}")
+    println(sh(work, "git log --format=%s -1; git log --format=%p -1 | wc -w; test -f .git/MERGE_HEAD && echo merge open || echo no merge open; git status --porcelain --untracked-files=all; cat scripts/batch.nika shared.txt"))
+}
+
+fn main() throws {
+    let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "nothing new", "", "")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "no local commits, a script", "echo theirs > scripts/batch.nika", "")
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "local commits, a script and a note", "echo theirs > scripts/batch.nika; mkdir -p docs; echo theirs > docs/x.md", "echo ours > ours.txt")
+    case(nikaia, repo, tmp.clone(), "conflict", "echo theirs > shared.txt", "echo ours > shared.txt")
+    process::run("rm", ["-rf", tmp])
+}

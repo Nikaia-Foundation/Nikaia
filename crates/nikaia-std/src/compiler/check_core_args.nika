@@ -635,7 +635,7 @@ fn check_core_args_door_block[H: CheckHost](mut state: CheckState, world: ref Ch
             held.push(Ty::Unknown)
         } else {
             let door = check_core_args_door(writing)
-            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1124", message: f"`{door}` takes locks, but this is a `{found.text()}`.", notes: ["Taking several locks together keeps them in one order, and only a lock can be taken."], help: "Pass `SharedMut[T]` values or `Locked[T]` fields.", labels: [] })
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1124", message: f"`{door}` takes locks, but this is a `{found.text()}`.", notes: ["Taking several locks together keeps them in one order, and only a lock can be taken."], help: "Pass `SharedMut[T]` values or `Locked[T]` fields.", labels: [], edit: null })
             held.push(Ty::Unknown)
         }
         at += 1

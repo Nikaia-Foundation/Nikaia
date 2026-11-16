@@ -53,25 +53,53 @@ static HEAP: Heap = Heap;
 }
 
 /// The bundle's manifest, with the dependencies a generated program gets.
-pub fn cr_bundle_manifest(dependencies: ref Vec[(String, String)]) -> String {
+///
+/// **Named `name`**, since the two bundles share one target directory
+/// (#1705), and a dynamic library's file there carries no hash: two crates
+/// of one name would each overwrite the other's library. Its dependencies get
+/// the profile a program gives them (`CR_DEPENDENCY_PROFILE`).
+pub fn cr_bundle_manifest(name: ref String, dependencies: ref Vec[(String, String)]) -> String {
     let mut manifest: String = "# GENERATED. The library build-time code links against (ADR-321 D3).
 
 [workspace]
 
 [package]
-name = \"nikaia_bundle\"
-version = \"0.0.0\"
-edition = \"2024\"
-
-[lib]
-path = \"src/lib.rs\"
-
-[dependencies]
 "
-    for (name, value) in dependencies {
-        manifest.push_str(f"{name} = {value}\n")
+    manifest.push_str(f"name = \"{name}\"\n")
+    manifest.push_str("version = \"0.0.0\"\nedition = \"2024\"\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\n")
+    for (dependency, value) in dependencies {
+        manifest.push_str(f"{dependency} = {value}\n")
     }
+    manifest.push_str(CR_DEPENDENCY_PROFILE)
     return manifest
+}
+
+/// **The profile a generated workspace gives a crate that is not the
+/// program's** (the root `Cargo.toml` of `orchestrator::project`), which the
+/// compiler's own sub-builds give their dependencies too (#1705). Cargo
+/// builds `std` once for every tree that asks for it alike, so the bundles,
+/// a grammar run's parser and the programs share one compile of it in one
+/// target directory; and a `std` function behaves at build time as it does
+/// when the program runs (ADR-321 D1), its debug assertions off in both.
+pub comptime CR_DEPENDENCY_PROFILE: ref String = "
+[profile.dev]
+overflow-checks = false
+debug-assertions = false
+debug = 0
+panic = \"unwind\"
+"
+
+/// **Cargo's own `dev` profile for the crate `name`**, over
+/// `CR_DEPENDENCY_PROFILE`: a sub-build's own code - a parser, the
+/// build-time bundle's allocator - is checked as it was before its
+/// dependencies took the program's profile.
+pub fn cr_own_profile(name: ref String) -> String {
+    return f"
+[profile.dev.package.{name}]
+overflow-checks = true
+debug-assertions = true
+debug = 2
+"
 }
 
 /// The sub-program's `main`: the value is computed on a thread of its own, with
