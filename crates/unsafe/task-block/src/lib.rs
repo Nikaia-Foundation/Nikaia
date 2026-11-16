@@ -914,6 +914,27 @@ impl<T> Housed<T> {
         }
     }
 
+    /// **A value built already, outside, whose weight moves in with it** (D9,
+    /// #1751): its `size` bytes on the heap leave the running task and count
+    /// against the value's block from its creation, as a `set` moves them, so
+    /// what the value frees inside its block was counted there. The block holds
+    /// the value's segments and the one a shared value always had, so a value
+    /// bigger than a segment fits, and a `set` that fitted a one-segment block
+    /// still fits beside it.
+    pub fn moved_in(value: T, size: usize) -> Housed<T> {
+        let segments = size.div_ceil(BLOCK).saturating_add(1);
+        let housed = Housed {
+            value: std::mem::ManuallyDrop::new(value),
+            block: Block::with_budget(segments.saturating_mul(BLOCK)),
+        };
+        hand_over(size);
+        {
+            let _in = enter(&housed.block);
+            count(isize::try_from(size).unwrap_or(isize::MAX));
+        }
+        housed
+    }
+
     /// A value built inside its own block (D5: the construction is the
     /// value's).
     #[track_caller]

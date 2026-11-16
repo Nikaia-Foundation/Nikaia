@@ -137,7 +137,7 @@ fn commit_copy_entry(index: String, path: String, stage: bool) -> bool throws {
 // "" when fine, else the refusal.
 // The `NOTE:` line for an `Issue:` answer not marked `(built)` when FILES
 // change a rules file or a script; "" otherwise. The answers are split as the driver's
-// `drive_issue_open` splits them.
+// `drive_issue_answers` splits them.
 fn commit_unmarked_rules(report: String, files: Vec[String]) -> String {
     let mut rules = false
     for f in files {

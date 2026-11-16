@@ -6729,12 +6729,13 @@ sync = true
 touches = []
 signature = "(mut self: ref Buffer, more: ?)"
 
-# How many bytes have arrived.
+# How many bytes have arrived: a count, so never negative (#1811).
 [fn."http1::Buffer::len"]
 pub = true
 panics = false
 sync = true
 touches = []
+ensures = ["0 <= result"]
 signature = "(self: ref Buffer) -> i64"
 
 # **`0` is *not yet*** rather than a missing value, and the shape was chosen for
@@ -6875,21 +6876,25 @@ sync = true
 touches = []
 signature = "(self: ref Head) -> i64"
 
-# What `Content-Length` said, or `0` where it said nothing.
+# What `Content-Length` said, or `0` where it said nothing. Never negative:
+# `read_head` refuses a length that is not a count (#1811).
 [fn."http1::Head::length"]
 pub = true
 panics = false
 sync = true
 touches = []
+ensures = ["0 <= result"]
 signature = "(self: ref Head) -> i64"
 
 # How many bytes of the buffer the head took, so a caller knows where the body
-# starts.
+# starts. At least `4`: the head runs to the blank line `\r\n\r\n` that ends
+# it (#1811).
 [fn."http1::Head::size"]
 pub = true
 panics = false
 sync = true
 touches = []
+ensures = ["4 <= result"]
 signature = "(self: ref Head) -> i64"
 
 # Whether the connection stays open after this request (ADR-326 D9): HTTP/1.1

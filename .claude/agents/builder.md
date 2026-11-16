@@ -21,6 +21,19 @@ You build one small slice of an issue in the Nikaia repository and end.
   locally: the driver tests and pushes, below), and end when its *Done when*
   holds or the budget runs low (`Result: partial`, the items left). Judge the
   issue against `docs/issues.md` in the `Issue:` field.
+* **Blocked shows in the first turns, and ends the run there** (owner,
+  2026-11-16, #1819: #1628 ran twice while it waited for open issues; #116
+  took 228 turns to report blocked). Before the first edit, and before any
+  further reading: run the issue's probe (`scripts/probe.nika`), and check
+  that each issue it depends on (`Needs #N`, `After #N`, `Blocked by #N`,
+  `waits for #N`, `Depends on #N`, in the issue or its comments) is closed
+  (the prompt holds its state; one not there is closed only when `git log
+  -400 --grep='Fixes #N'` finds its fix). A dependency still open, or a probe that shows a gap of kind 2 (CLAUDE.md, *Moving Rust
+  into Nikaia*: not decided yet, no ADR refuses it), ends the run at once:
+  `Result: blocked`, `Found:` the gap with the probe (or the open
+  dependency), `Needs:` the decision or the issue it waits for, nothing
+  committed, no further reading or building. The driver does not run the
+  issue again while a `#N` named under `Needs:`/`Found:` is open.
 * **The report file has exactly the brief's fields** (`Result:`, `Pushed:`,
   `Tests:`, `Deviation:`, `Found:`, `Needs:`, `Changelog:`, `Issue:`, `Friction:`, ...), one line
   each, no prose: `scripts/release.nika` parses them. `Gate:` is the bare

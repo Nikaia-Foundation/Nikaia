@@ -79,9 +79,9 @@ fn a_crossing_word_is_a_word_and_the_rest_keep_their_lock() {
         assert!(rust.contains(word), "{word}\n{rust}");
     }
     for kept in [
-        "let a = std::sync::Arc::new(nikaia_std::lock::Crossing::new(10))",
+        "let a = std::sync::Arc::new(nikaia_std::lock::Crossing::weighed(10, ",
         "pub fn published(c: std::sync::Arc<nikaia_std::lock::Crossing<i64>>",
-        "let big = std::sync::Arc::new(nikaia_std::lock::Crossing::new(",
+        "let big = std::sync::Arc::new(nikaia_std::lock::Crossing::weighed(",
     ] {
         assert!(rust.contains(kept), "{kept}\n{rust}");
     }

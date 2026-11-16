@@ -1723,7 +1723,8 @@ pub(crate) fn bounding_lin(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFac
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             if args.is_empty() && words.resolve(method) == "len" {
                 let path = match path_of(receiver, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                return bounding_length(walk, receiver, &path, context);
+                let counted = bounding_length(walk, receiver, &path, context);
+                if counted.is_some() { return std::convert::identity(counted); }
             }
             let picked = words.resolve(method);
             if args.len() == 1 && (picked == "min" || picked == "max") {

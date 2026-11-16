@@ -3034,9 +3034,15 @@ fn bounding_lin(
 			}
 		},
 		Expr::MethodCall { receiver, method, args, .. } => {
+			// **A `len()` of no list the walk counts** (`http1::Buffer`'s,
+			// #1811) is no length of the walk: it falls through to what the
+			// ledger ensures of it below, as a `let` of it already did.
 			if args.is_empty() && words.resolve(method) == "len" {
 				let path = path_of(receiver, words) ?? return null
-				return bounding_length(walk, receiver, path, context)
+				let counted = bounding_length(walk, receiver, path, context)
+				if counted != null {
+					return counted
+				}
 			}
 			// **`a.min(b)` is at most each of the two, `a.max(b)` at least
 			// each** (#1516), of whole numbers: `let mut i = at.min(n)`
