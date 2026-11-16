@@ -96,7 +96,7 @@ implementation.
 | [397](adr-397.md) | Every value read from the environment is untrusted (`env::var`, `env::vars`), as standard input and files are: an `assert` about it is `NK1202`, its maps get the keyed hash; `trusted: true` at the source; it goes where untrusted data goes, escaped where that consumer escapes | Accepted | no |
 | [398](adr-398.md) | Untrusted text that reaches the log (`eprint`, `eprintln`, `panic`, `assert`, an uncaught error) is escaped: control characters, line separators, bidirectional controls and the backslash, in string-literal form; per value by provenance, never refused; `text::escape_control` for a log the program writes itself | Accepted | no |
 | [399](adr-399.md) | Every word of the command line is untrusted (`cli::args`, `main`'s parameters), as standard input, files and the environment are: an `assert` about a `cli::args()` value is `NK1202`, `main`'s preconditions stay checked where the words arrive; its maps get the keyed hash, the log escapes it; `trusted: true` at the source | Accepted | no |
-| [400](adr-400.md) | Data from outside the program at a raw sink (`process::shell`, `db::raw`, `html::Raw`, a path under `fs::Root::Anywhere`) is proved from its type or a guard, or the manifest's `[allow]` admits it, else `NK1308`; every boundary escapes by default; a dependency's exception builds only where the application allows it for that package (`NK1309`); `raw-sinks = "warn"` checks at run time | Accepted | no |
+| [raw-sinks-1](adr-raw-sinks-1.md) | Data from outside the program at a raw sink (`process::shell`, `db::raw`, `html::Raw`, a path under `fs::Root::Anywhere`) is proved from its type or a guard, or the manifest's `[allow]` admits it, else `NK1308`; every boundary escapes by default; a dependency's exception builds only where the application allows it for that package (`NK1309`); `raw-sinks = "warn"` checks at run time | Accepted | no |
 | [grammar-1](adr-grammar-1.md) | A grammar takes values: a rule declares them as a function does (Subject ; Config), an argument, a bound (`" "{m}`) and a guard `if(cond)` are Nikaia expressions over the values in scope, `count(p)` is an `i64` (no `usize`), an entry takes values after its input; an action stands after `->` and a brace after a pattern is a bound (ADR-296 D33 changed); `{ p }` as a delimiter is withdrawn | Accepted | yes |
 | [grammar-2](adr-grammar-2.md) | A grammar entry may take a type from its caller (`Json::read[Contact](bytes)`) and is emitted once per type; a `match` on `T::kind` chooses the pattern; `members[S]` fills a struct by one mapping rule shared with SQL, the compiler matching keys and building the value; attributes read in the format's `name:` function; `@stream` entries; `write[T]` stays a function; `json::read` forwards to the grammar (ADR-344 D3 changed); a type argument in brackets is not warned where nothing else names the type (ADR-330 D9 narrowed); an enum variant without payload by its name | Accepted | no |
 | [338](adr-338.md) | `std` is the core the language stands on; JSON, TOML, CSV, HTML, HTTP/1.1's text half and the database protocol are official packages (`nikaia_json` …), versioned on their own, shipped with the toolchain, listed in `std` and taken in by their first `use`. | Accepted | no |
@@ -349,8 +349,8 @@ either finds the other. Records replaced as a whole are not here: they are in
 | [010](adr-010.md) D8 | [398](adr-398.md) D1-D3 | the log-injection consumer: untrusted text reaches the log escaped |
 | [010](adr-010.md) D2 | [399](adr-399.md) D1-D3 | command-line arguments are untrusted; `trusted: true` at the source |
 | [360](adr-360.md) (Related) | [399](adr-399.md) D1, D2 | `main`'s parameters are untrusted; their preconditions are still checked where they arrive |
-| [010](adr-010.md) D8 | [400](adr-400.md) D2-D5 | the raw sinks are consumers of provenance; outside data there is proved or allowed in the manifest |
-| [108](adr-108.md) D5 | [400](adr-400.md) D2 | an `Untrusted` part of a path under `Anywhere` or `Dir("/")` is refused while building unless allowed |
+| [010](adr-010.md) D8 | [raw-sinks-1](adr-raw-sinks-1.md) D2-D5 | the raw sinks are consumers of provenance; outside data there is proved or allowed in the manifest |
+| [108](adr-108.md) D5 | [raw-sinks-1](adr-raw-sinks-1.md) D2 | an `Untrusted` part of a path under `Anywhere` or `Dir("/")` is refused while building unless allowed |
 | [278](adr-278.md) D1 | [364](adr-364.md) D1-D3 | a tuple may be nullable, `(A, B)?`; `NK1254` retired |
 | [351](adr-351.md) D3 | [error-sets-1](adr-error-sets-1.md) D1, D2 | the arguments every caller hands a parameter meet only where it is kept; otherwise each call sees what it handed |
 | [023](adr-023.md) D4, [280](adr-280.md) D18, [308](adr-308.md) D11 | [357](adr-357.md) D1-D3 | the set of error types at a `catch` is closed; a `match` naming every type needs no `else`, and a grown set refuses it |
@@ -386,7 +386,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 ## Topics in use
 
-`async`, `catch`, `collections`, `decision-records`, `lambdas`, `regex`, `registry`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
+`async`, `catch`, `collections`, `decision-records`, `lambdas`, `raw-sinks`, `regex`, `registry`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
 
 ## Reserved numbers
 

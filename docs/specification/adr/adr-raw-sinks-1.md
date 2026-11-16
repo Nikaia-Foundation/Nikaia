@@ -1,4 +1,4 @@
-# ADR-400: Data From Outside the Program at a Raw Sink Is Proved, or Allowed in the Manifest
+# ADR-raw-sinks-1: Data From Outside the Program at a Raw Sink Is Proved, or Allowed in the Manifest
 
 **Status:** Accepted
 **Date:** November 16, 2026 (owner's decision on #1253: alternative C)

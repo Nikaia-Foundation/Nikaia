@@ -114,7 +114,7 @@ Data from outside the program reaches a shell, an SQL text, markup written as
 it is or a path with no root to keep it in (`process::shell`, `db::raw`,
 `html::Raw`, `fs::Root::Anywhere`) only where the compiler proves it harmless,
 from its type or a guard, or the manifest's `[allow]` admits it; otherwise the
-program is refused (Part III 14.2, [ADR-400](adr/adr-400.md)).
+program is refused (Part III 14.2, [ADR-raw-sinks-1](adr/adr-raw-sinks-1.md)).
 
 ---
 
