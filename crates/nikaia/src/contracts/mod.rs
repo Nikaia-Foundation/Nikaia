@@ -88,9 +88,16 @@ pub const STD: &str = include_str!("../../../nikaia-std/std.contracts");
 /// `throws`; since ADR-288 it reads **bodies** for `sync`, since ADR-023 D1 for
 /// the *errors* a `throws` names, and since ADR-037 D7 for `sharing` - the name
 /// says which half is which.
+/// Since ADR-396 D1 it reads them for a result's `provenance` too.
 /// The whole-program analysis of ADR-005 D3 will read bodies for the borrow
 /// contract too and will write a different name again.
-pub const INFERENCE: &str = "stage0-signatures+sync-bodies+throws-bodies+sharing-bodies";
+///
+/// **Whoever changes what the inference answers changes this name in the same
+/// commit** (#1621): a path dependency's ledger is believed only while it
+/// names this inference (ADR-100 D3), so a name left as it was would have a
+/// consumer believe the older answer for unchanged sources.
+pub const INFERENCE: &str =
+    "stage0-signatures+sync-bodies+throws-bodies+sharing-bodies+provenance-bodies";
 
 /// The format version of the file itself.
 ///
