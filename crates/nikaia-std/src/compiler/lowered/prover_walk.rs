@@ -209,7 +209,7 @@ pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner
             let at = ProverWhere { function: claim_text_of((key).as_deref()), params, no_precondition, top: true, free, posts: !was_a_test && !of_a_trait, lambda: false, throws_out: can_throw };
             walk.state.in_test = was_a_test;
             walk.state.summing = vec![];
-            walk.state.unsummed = !free || key.is_none() || !prover_summable(body);
+            walk.state.unsummed = was_a_test || of_a_trait || key.is_none() || !prover_summable(body);
             let leaves = prover_block(walk, body, &mut scope, &at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
             walk.state.in_test = false;
             let summed_key = nikaia_std::index::or(match key.as_ref() {
@@ -493,6 +493,20 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
                     called_whole = prover_returns_whole(walk, &c, program, words, own, &condition);
                     called_summed = prover_summed(walk, &c, args, config, &bound, &scope, program, words, &written_of(value));
                     called = true;
+                }
+            },
+            Expr::MethodCall { receiver, method, args, config, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                let callee = prover_own_method_callee(receiver, method, nested, words);
+                if callee.is_some() {
+                    let c = nikaia_std::index::or(callee, || "".into());
+                    let target = prover_summed_function(program, words, &c);
+                    if target.is_some() {
+                        let bound = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string());
+                        called_whole = nikaia_std::index::or(target.as_ref().map(|__nikaia_it| __nikaia_it.whole_result), || false);
+                        called_summed = prover_summed(walk, &c, args, config, &bound, &scope, program, words, &written_of(value));
+                        called = true;
+                    }
                 }
             },
             _ => { },
@@ -831,36 +845,53 @@ pub(crate) fn prover_pinned_value(arena: &mut TermArena, facts: &[i64], d: i64, 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_summed(walk: &mut ProverWalk, callee: &str, written: &[Expr], config: &[ConfigArg], bound: &str, scope: &ProverScope, program: &Program, words: &winnow_grammar::InternerContext, call: &str) -> Option<Vec<SummaryAlt>> {
     let exits = match *nikaia_std::index::get(&walk.state.summaries, callee) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let function = match free_function(program, words, callee) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let function = match prover_summed_function(program, words, callee) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let args = arguments_in_order(&function, written, config, words);
     if (function.params.len() as i64) != args.len() as i64 { return None; }
     let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for k in 0..args.len() as i64 {
-        let term = match lin_term(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        if walk.arena.mentions(term, bound) { return None; }
-        given.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&function.params, (k) as usize) }).to_string()), term);
+        let term = lin_term(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes);
+        if term.is_some() && !walk.arena.mentions(nikaia_std::index::or(term, || 0), bound) { given.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&function.params, (k) as usize) }).to_string()), nikaia_std::index::or(term, || 0)); }
+        let length = length_given(&mut walk.arena, words, unsafe { nikaia_std::proven::read(&args, (k) as usize) }, scope, &walk.state.pinned);
+        if length.is_some() && !walk.arena.mentions(nikaia_std::index::or(length, || 0), bound) { given.insert(length_of(unsafe { nikaia_std::proven::read(&function.params, (k) as usize) }), nikaia_std::index::or(length, || 0)); }
     }
     let mut alts: Vec<SummaryAlt> = vec![];
     for exit in exits.iter() {
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
         walk.arena.variables(exit.guard, &mut read);
         walk.arena.variables(exit.value, &mut read);
-        for name in read.iter() { if !given.contains_key(name) { return None; } }
+        let mut readable = true;
+        for name in read.iter() { if !given.contains_key(name) { readable = false; } }
+        if !readable { continue; }
         let guard = walk.arena.substitute(exit.guard, &given);
         let value = walk.arena.substitute(exit.value, &given);
         alts.push(SummaryAlt { guard, value, callee: nikaia_std::block::Text::from(callee.to_string()), call: nikaia_std::block::Text::from(call.to_string()), why: nikaia_std::block::Text::from(exit.written.to_string()) });
     }
+    if alts.is_empty() { return None; }
     Some(alts)
+}
+
+pub(crate) fn prover_summed_function(program: &Program, words: &winnow_grammar::InternerContext, callee: &str) -> Option<FreeFunction> {
+    let free = free_function(program, words, callee);
+    if free.is_some() { return std::convert::identity(free); }
+    let cut = match nikaia_std::search::rfind(&callee, &"::") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&callee, nikaia_std::index::at(0..cut)).to_string());
+    let name = nikaia_std::block::Text::from(nikaia_std::index::get(&callee, nikaia_std::index::at(cut + 2..)).to_string());
+    own_method(program, words, &owner, &name)
+}
+
+pub(crate) fn prover_own_method_callee(receiver: &Expr, method: winnow_grammar::Symbol, at: &ProverWhere, words: &winnow_grammar::InternerContext) -> Option<String> {
+    if nikaia_std::index::or(prover_variable_named(Some(receiver), words), || "".into()) != "self" { return None; }
+    let function = match carrying_function((at.function).as_deref()) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let cut = match nikaia_std::search::rfind(&function, &"::") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&function, nikaia_std::index::at(0..cut)).to_string());
+    Some(format!("{}::{}", owner, words.resolve(method)))
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_sum_exit(walk: &mut ProverWalk, value: &Expr, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, unaliased: &impl Fn(&str) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>, written_of: &impl Fn(&Expr) -> String) {
     if walk.state.unsummed { return; }
     let made = prover_summary_exits(walk, value, scope, at, program, words, own, unaliased, condition, written_of);
-    if made.is_none() {
-        walk.state.unsummed = true;
-        return;
-    }
     for exit in nikaia_std::index::or(made, || vec![].into()) { walk.state.summing.push(exit.clone()); }
 }
 
@@ -1115,7 +1146,7 @@ pub(crate) fn prover_return(walk: &mut ProverWalk, value: Option<&Expr>, span: S
     let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return };
     prover_expr(walk, returned, span, scope, nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
     walk.state.exit(&mut walk.arena, returned, words, scope, (at.function).as_deref(), !at.lambda && at.posts, &at.params, &ask);
-    if !at.lambda && at.free { prover_sum_exit(walk, returned, scope, at, program, words, own, &unaliased, &condition, &written_of); }
+    if !at.lambda { prover_sum_exit(walk, returned, scope, at, program, words, own, &unaliased, &condition, &written_of); }
 }
 
 #[allow(clippy::too_many_arguments)]
