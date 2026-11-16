@@ -142,7 +142,7 @@ You build one small slice of an issue in the Nikaia repository and end.
   filter; with an `it` filter such as `package` add `--skip
   nikaia_test::the_compiler_test_package`, ten minutes of `--both-settings`).
   Before committing: the build (`cargo build --profile fast -p nikaia`),
-  `lower-std` and its fixpoint when a `tools/*.nika` changed, `cargo fmt`,
+  `lower-std` and its fixpoint when a `tools/*.nika` changed, `cargo fmt --all`,
   `cargo clippy --all-targets -- -D warnings` when Rust changed, and
   `nikaia run scripts/pre-push.nika`. No `gate.nika`, no push: after your commit the
   driver runs the complete suite (`gate.nika --all`); green, it pushes; red,

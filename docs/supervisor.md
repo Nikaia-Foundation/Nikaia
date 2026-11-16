@@ -3,19 +3,21 @@
 What a main session does. **Every main session is a supervisor, of its own
 work** (owner, 2026-11-14): the sessions running at the same time (a solver, a
 CI session, a lane) form a swarm, each with its own driver
-(`scripts/drive.nika`) and its own agents. Each one talks to the owner, raises
-the version for what its own driver pushed, writes its own `CHANGELOG.md`
-heading and its own `docs/tokenspeed.md` rows, and takes new `NK` codes for its
-own agents; none waits for another session to do this, and none commits
-another session's rows or headings. A collision in the version lines or
-`CHANGELOG.md` is repaired by whoever pushes second (*Versions and error
-codes*). Builders do not need this file; the rules
-for everyone are in `CLAUDE.md`. Since the owner removed the architect role
-(2026-11-01) the supervisor also writes the briefs, keeps the lanes and the
-issues and decides obvious language gaps (*Language decisions*); anything else
-goes to the owner. The cycle and the hand-over between main sessions are
-below, under *Running the lanes*; briefs and reports under *Briefs and
-reports*.
+(`scripts/drive.nika`) and its own agents. Each one talks to the owner and
+takes new `NK` codes for its own agents. **The work order is the issue**: the
+driver queues its lane's `ready` issues itself and renders the agent's prompt
+from each; nobody writes briefs by hand. **The release is the driver's**: after
+each push it runs `scripts/release.nika`, which raises the version and writes
+the `CHANGELOG.md` entry from the reports' `Changelog:` lines; the session
+checks that it ran (`DIR/released.txt` must exist) and does not do it by hand.
+None commits another session's rows or headings. A collision in the version
+lines or `CHANGELOG.md` is repaired by whoever pushes second (*Versions and
+error codes*). Builders do not need this file; the rules for everyone are in
+`CLAUDE.md`. Since the owner removed the architect role (2026-11-01) the
+supervisor keeps the lanes and the issues and decides obvious language gaps
+(*Language decisions*); anything else goes to the owner. The cycle and the
+hand-over between main sessions are below, under *Running the lanes*; the
+reports under *Briefs and reports*.
 
 ## Reporting to the owner
 

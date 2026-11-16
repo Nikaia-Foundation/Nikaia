@@ -24,7 +24,7 @@ you too where this file says nothing else.
   changed only when the change was meant to alter that output, and the brief
   says so.
 * **Cheap checks, as a builder's**: rerun exactly the failing tests and the
-  ones your fix touches, `cargo fmt`, clippy when Rust changed,
+  ones your fix touches, `cargo fmt --all`, clippy when Rust changed,
   `nikaia run scripts/pre-push.nika`. Do not run the full suite: the driver runs it
   again after you.
 * **Commit locally with the script, no push**, as a builder (`Files:`,
