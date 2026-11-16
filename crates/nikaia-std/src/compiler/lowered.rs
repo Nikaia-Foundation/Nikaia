@@ -4127,7 +4127,7 @@ pub mod project_check {
 }
 pub mod project_drive {
     #[allow(unused_imports)]
-    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_no_std_for, project_drive_publish_stub, project_drive_publishable, project_drive_rust_crate, project_drive_splice_span, project_drive_spliced, project_drive_rust_manifest, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
+    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_fresh, project_drive_record, project_drive_no_std_for, project_drive_publish_stub, project_drive_publishable, project_drive_rust_crate, project_drive_splice_span, project_drive_spliced, project_drive_rust_manifest, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
 }
 pub mod project_features {
     #[allow(unused_imports)]
@@ -4147,7 +4147,7 @@ pub mod project_settings {
 }
 pub mod project_tests {
     #[allow(unused_imports)]
-    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, shown_path, output_tests, copy_into, project_tests_is_program, project_tests_program_manifest, program_tests, project_tests_stray_bounds, project_tests_bounds_report, project_tests_asserts_report, project_tests_bounds_outcome, project_tests_explain_bounds, is_refusal, does_not_compile, named_by, project_tests_difference, project_tests_agree, project_tests_verdict, project_tests_running, project_tests_result, project_tests_output_label, project_tests_program_label, project_tests_output_outcome, project_tests_stopped, project_tests_block_outcome, project_tests_refused_outcome, project_tests_ran_outcome, ProjectTestsRefusal, ProjectTestsRan, project_tests_time_limit, project_tests_timed_out_outcome, ProjectTestsProgramHost, ProjectTestsBatched, project_tests_times_file, project_tests_order, project_tests_remember, project_tests_batches, ProjectTestsReports, project_tests_reports, project_tests_program_test, ProjectTestsBlessed, project_tests_blessed_line, project_tests_bless_program, project_tests_explain_said, project_tests_explain_output, project_tests_bless, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
+    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, shown_path, output_tests, copy_into, project_tests_is_program, project_tests_program_manifest, program_tests, project_tests_stray_bounds, project_tests_bounds_report, project_tests_asserts_report, project_tests_bounds_outcome, project_tests_explain_bounds, is_refusal, does_not_compile, named_by, project_tests_difference, project_tests_agree, project_tests_verdict, project_tests_running, project_tests_result, project_tests_output_label, project_tests_program_label, project_tests_output_outcome, project_tests_stopped, project_tests_block_outcome, project_tests_refused_outcome, project_tests_ran_outcome, ProjectTestsRefusal, ProjectTestsRan, project_tests_time_limit, project_tests_timed_out_outcome, ProjectTestsProgramHost, ProjectTestsBatched, project_tests_times_file, project_tests_places, project_tests_order, project_tests_remember, project_tests_batches, ProjectTestsReports, project_tests_reports, project_tests_program_test, ProjectTestsBlessed, project_tests_blessed_line, project_tests_bless_program, project_tests_explain_said, project_tests_explain_output, project_tests_bless, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
 }
 pub mod project_write {
     #[allow(unused_imports)]
@@ -4408,4 +4408,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "40feaca8ef76c14b246f1c3b8e4dddeaa27dfc18e2cf8f4bb39ce634d8cc9f0f";
+pub const LOWERED_DIGEST: &str = "24f707afc0041da0718783638106462a9b77bd12f72a90930a7f11bf2ca9dd4a";

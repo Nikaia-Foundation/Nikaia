@@ -99,6 +99,9 @@ pub trait ProjectDriveHost {
     fn choices(&self) -> (String, String);
     fn compiler(&self) -> String;
     fn toolchain_is_new_enough(&self) -> Option<String>;
+    fn rustc_version(&self) -> String;
+    fn cargo_fresh(&self, record: &std::path::Path, handed: &str) -> Option<String>;
+    fn record_cargo(&self, record: &std::path::Path, handed: &str, messages: &str, generated: &std::path::Path);
     fn target_triple(&self) -> String;
     fn host_triple(&self) -> Option<String>;
     fn toolchain_can_build_for(&self, triple: &str) -> bool;
@@ -239,14 +242,15 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
         Some(ref dir) => { project_drive_make_dir(dir)?; },
     }
     let (build, backend) = host.choices(); #[allow(unused_mut, clippy::redundant_locals)] let mut link_flags = link_flags;
-    host.write_if_changed(&switches, &format!("{}\n{}\n{}\n{}\n", build, backend, nikaia_std::block::Text::from(link_flags.join(" ")), host.compiler()))?;
+    let switched = format!("{}\n{}\n{}\n{}\n", build, backend, nikaia_std::block::Text::from(link_flags.join(" ")), host.compiler()); #[allow(unused_mut, clippy::redundant_locals)] let mut rust = rust;
+    host.write_if_changed(&switches, &switched)?;
     match host.toolchain_is_new_enough() {
         None => { },
         Some(why) => { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Failed(why), &"project_drive_drive_to")); },
     }
     let triple = host.target_triple();
     if nikaia_std::index::or(host.host_triple(), || "".into()) != triple && !host.toolchain_can_build_for(&triple) { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Failed(project_drive_no_std_for(&triple)), &"project_drive_drive_to")); }
-    #[allow(unused_mut)] let mut build_args: Vec<String> = vec![String::from("--target"), triple];
+    #[allow(unused_mut)] let mut build_args: Vec<String> = vec![String::from("--target"), triple]; #[allow(unused_mut, clippy::redundant_locals)] let mut rust = rust;
     let manifest = host.write_workspace(&rust)?;
     if subcommand == "run" && host.runs_without_cargo(&link_flags) {
         match host.compile_fast(nikaia_std::index::get(&rust, 0))? {
@@ -261,9 +265,9 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
         }
     }
     let shared = nikaia_std::index::or(env::var("CARGO_TARGET_DIR"), || "".into()) == "";
-    let env = project_drive_cargo_env(host, &link_flags, no_cache, shared, project_members_fetched_text(&members))?;
-    #[allow(unused_mut)] let mut unset: Vec<String> = vec![];
-    let mut env = env; #[allow(unused_mut, clippy::redundant_locals)] let mut unset = unset;
+    let env = project_drive_cargo_env(host, &link_flags, no_cache, shared, project_members_fetched_text(&members))?; #[allow(unused_mut, clippy::redundant_locals)] let mut build_args = build_args;
+    #[allow(unused_mut)] let mut unset: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut build_args = build_args;
+    let mut env = env; #[allow(unused_mut, clippy::redundant_locals)] let mut build_args = build_args; #[allow(unused_mut, clippy::redundant_locals)] let mut unset = unset;
     match host.cpu_rustflags()? {
         None => { },
         Some(flags) => {
@@ -276,8 +280,25 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     if library && subcommand == "run" { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Refused(String::from("This package is built as a library (`artifact = \"c-library\"`), and a library has nothing to run: `nikaia build` makes it, and a C program calls it.")), &"project_drive_drive_to")); }
     if library && header.is_none() { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Failed(cx_nothing_exported()), &"project_drive_drive_to")); }
     if subcommand == "run" || subcommand == "check" { build_args.push(String::from("--quiet")); }
-    let verb = if subcommand == "check" { "check" } else { "build" }; #[allow(unused_mut, clippy::redundant_locals)] let mut build_args = build_args;
-    let (built_code, messages) = host.cargo_messages(verb, &build_args)?;
+    let verb = if subcommand == "check" { "check" } else { "build" }; #[allow(unused_mut, clippy::redundant_locals)] let mut build_args = build_args; #[allow(unused_mut, clippy::redundant_locals)] let mut unset = unset;
+    let record = nikaia_std::index::or(match nikaia_std::fs::path::parent(&(manifest)) {
+        Some(__nikaia_it) => Some(nikaia_std::fs::path::join(&(__nikaia_it), std::path::Path::new(&("cargo-fresh")))),
+        None => None,
+    }, || nikaia_std::fs::path::join(&(host.gen_dir()), std::path::Path::new(&("cargo-fresh"))).into());
+    let recorded = verb == "build" && !no_cache;
+    let handed = project_drive_handed(host, verb, &build_args, &env, &unset, shared, &manifest, &rust, &switched);
+    let fresh: Option<String> = match recorded {
+        true => host.cargo_fresh(&record, &handed),
+        false => None,
+    };
+    let (built_code, messages) = match fresh {
+        None => host.cargo_messages(verb, &build_args)?,
+        Some(ref said) => (0, nikaia_std::block::Text::from(said.to_string())),
+    };
+    if fresh.is_none() {
+        let said = if recorded && built_code == 0 { nikaia_std::block::Text::from(messages.to_string()) } else { String::from("") };
+        host.record_cargo(&record, &handed, &said, &host.gen_dir());
+    }
     let mut code = built_code;
     host.settle();
     host.report(&messages)?;
@@ -315,6 +336,125 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
         };
     }
     Ok((code, binary))
+}
+
+pub(crate) const PROJECT_DRIVE_CARGO_READS: [&str; 10] = ["NIKAIA_TEST_BATCH", "CARGO", "CARGO_HOME", "CARGO_TARGET_DIR", "CARGO_BUILD_RUSTFLAGS", "RUSTC", "RUSTC_WRAPPER", "RUSTFLAGS", "RUSTUP_TOOLCHAIN", "RUSTUP_HOME"];
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn project_drive_handed<H: ProjectDriveHost>(host: &H, verb: &str, args: &[String], env: &[(String, String)], unset: &[String], shared: bool, manifest: &std::path::Path, rust: &[String], switched: &str) -> String {
+    let mut text = format!("{}\n{}\n{}\n{}\n{}", verb, shared, nikaia_std::fs::path::display(&(manifest)), host.rustc_version(), switched);
+    for arg in args.iter() { if arg != "--quiet" { text.push_str(&format!("arg {}\n", arg)); } }
+    for (name, value) in env.iter() { text.push_str(&format!("env {}={}\n", name, value)); }
+    for name in unset.iter() { text.push_str(&format!("unset {}\n", name)); }
+    for name in PROJECT_DRIVE_CARGO_READS.iter() {
+        let name = *name;
+        let value = nikaia_std::index::or(env::var(name), || "".into());
+        text.push_str(&format!("var {}={}\n", name, value));
+    }
+    for code in rust.iter() { text.push_str(&format!("rust {}\n", hash::sha256_hex(&code.bytes().collect::<Vec<_>>()))); }
+    hash::sha256_hex(&text.bytes().collect::<Vec<_>>())
+}
+
+pub(crate) async fn project_drive_cargo_key(record: &std::path::Path, handed: &str) -> String {
+    let mut text = format!("{}\n", handed);
+    let dir = match nikaia_std::fs::path::parent(&(record)) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(handed.to_string()) };
+    text.push_str(&match fs::read_to_string(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("Cargo.toml"))), &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { String::from("") },
+    });
+    text.push_str(&match fs::read_to_string(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("Cargo.lock"))), &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { String::from("") },
+    });
+    let mut names: Vec<String> = (match fs::read_dir(&dir, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(_error) => { vec![] },
+    }).iter().map(|name| { nikaia_std::fs::path::display(&(name)) }).collect::<Vec<_>>();
+    names.sort();
+    for name in names.iter() {
+        let member = match fs::read_to_string(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name)))), std::path::Path::new(&("Cargo.toml"))), &fs::Root::Anywhere).await {
+            Ok(value) => value,
+            Err(_error) => { continue; },
+        };
+        text.push_str(&format!("member {}\n{}", name, member));
+    }
+    hash::sha256_hex(&text.bytes().collect::<Vec<_>>())
+}
+
+pub async fn project_drive_fresh(record: &std::path::Path, handed: &str) -> Option<String> {
+    let key = project_drive_cargo_key(record, handed).await;
+    let held = match fs::read_to_string(record, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { return None; },
+    };
+    let lines: Vec<String> = held.lines().map(|line| { nikaia_std::block::Text::from(line.to_string()) }).collect::<Vec<_>>();
+    if lines.len() < 2 || *unsafe { nikaia_std::proven::read(&lines, (0) as usize) } != key { return None; }
+    let binary: fs::Path = std::path::PathBuf::from(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&lines, (1) as usize) }).to_string()));
+    if !(match fs::metadata(&binary, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(_error) => { return None; },
+    }).is_file() { return None; }
+    for line in lines.iter().skip(2) {
+        let parts: Vec<String> = line.splitn(4, ':').map(|part| { nikaia_std::block::Text::from(part.to_string()) }).collect::<Vec<_>>();
+        if parts.len() != 4 { return None; }
+        let path: fs::Path = std::path::PathBuf::from(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (3) as usize) }).to_string()));
+        let meta = match fs::metadata(&path, &fs::Root::Anywhere) {
+            Ok(value) => value,
+            Err(_error) => { return None; },
+        };
+        if format!("{}", meta.len() as i64) == *unsafe { nikaia_std::proven::read(&parts, (0) as usize) } && format!("{}", meta.modified().in_nanos()) == *unsafe { nikaia_std::proven::read(&parts, (1) as usize) } { continue; }
+        let bytes = match fs::read(&path, &fs::Root::Anywhere).await {
+            Ok(value) => value,
+            Err(_error) => { return None; },
+        };
+        if hash::sha256_hex(&bytes.iter().copied().collect::<Vec<_>>()) != *unsafe { nikaia_std::proven::read(&parts, (2) as usize) } { return None; }
+    }
+    match fs::read_to_string(&nikaia_std::fs::path::with_extension(&(record), std::path::Path::new(&("messages"))), &fs::Root::Anywhere).await {
+        Ok(value) => Some(value),
+        Err(_error) => { None },
+    }
+}
+
+pub async fn project_drive_record(record: &std::path::Path, handed: &str, messages: &str, generated: &std::path::Path) {
+    match fs::remove(record, &fs::Root::Anywhere, false) {
+        Ok(_) => {},
+        Err(_error) => { },
+    };
+    let binary = match diagnostics_executable_in(&nikaia_std::block::Text::from(messages.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let key = project_drive_cargo_key(record, handed).await;
+    let named = nikaia_std::fs::path::display(&(binary));
+    let dep_info: fs::Path = std::path::PathBuf::from(format!("{}.d", named));
+    let depends = match fs::read_to_string(&dep_info, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { return; },
+    };
+    let first = match depends.lines().next() { Some(__nikaia_value) => __nikaia_value, None => return };
+    let listed = nikaia_std::block::Text::from(match first.strip_prefix(&*format!("{}:", named)) { Some(__nikaia_value) => __nikaia_value, None => return }.replace("\\ ", "\u{1f}"));
+    let mut text = format!("{}\n{}\n", key, named);
+    let within = format!("{}/", nikaia_std::fs::path::display(&(generated)));
+    for word in listed.split(' ') {
+        if word.is_empty() || word.starts_with(&*within) && word.ends_with(".rs") { continue; }
+        let path: fs::Path = std::path::PathBuf::from(nikaia_std::block::Text::from(word.replace("\u{1f}", " ")));
+        let meta = match fs::metadata(&path, &fs::Root::Anywhere) {
+            Ok(value) => value,
+            Err(_error) => { return; },
+        };
+        let bytes = match fs::read(&path, &fs::Root::Anywhere).await {
+            Ok(value) => value,
+            Err(_error) => { return; },
+        };
+        text.push_str(&format!("{}:{}:{}:{}\n", meta.len() as i64, meta.modified().in_nanos(), hash::sha256_hex(&bytes.iter().copied().collect::<Vec<_>>()), nikaia_std::fs::path::display(&(path))));
+    }
+    match fs::write(&nikaia_std::fs::path::with_extension(&(record), std::path::Path::new(&("messages"))), &fs::Root::Anywhere, nikaia_std::block::Text::from(messages.to_string()), false, true).await {
+        Ok(_) => {},
+        Err(_error) => { return; },
+    };
+    match fs::write(record, &fs::Root::Anywhere, text, false, true).await {
+        Ok(_) => {},
+        Err(_error) => { },
+    };
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -799,8 +939,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple59611| {
-        let (a, b) = __nikaia_tuple59611;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple67519| {
+        let (a, b) = __nikaia_tuple67519;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {
