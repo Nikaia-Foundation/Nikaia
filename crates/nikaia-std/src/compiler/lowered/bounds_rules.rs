@@ -12,6 +12,13 @@ pub struct BoundsRule {
 
 pub(crate) fn rules_last_name(name: &str) -> String { nikaia_std::block::Text::from(nikaia_std::index::or(name.split("::").last(), || "").to_string()) }
 
+pub(crate) fn rules_changed_name(name: &str, returns: &collections::BTreeMap<String, String>) -> String {
+    let parts: Vec<&str> = name.split("().").collect::<Vec<_>>();
+    if parts.len() != 2 { return nikaia_std::block::Text::from(name.to_string()); }
+    let ty = match returns.get(*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).to_string()) };
+    format!("{}.{}", ty, *unsafe { nikaia_std::proven::read(&parts, (1) as usize) })
+}
+
 pub(crate) fn rules_rounds() -> i64 { 8 }
 
 pub(crate) fn rules_candidates(program: &Program, beside: &[&BoundsBeside], context: &BoundsContext, words: &winnow_grammar::InternerContext) -> Vec<BoundsRule> {
@@ -26,11 +33,16 @@ pub(crate) fn rules_candidates(program: &Program, beside: &[&BoundsBeside], cont
             _ => { },
         }
     }
+    let mut returns = fields_returns(program, words);
+    for other in beside.iter() {
+        let other = *other;
+        for (f, ty) in other.returns.iter() { returns.insert(nikaia_std::block::Text::from(f.to_string()), nikaia_std::block::Text::from(ty.to_string())); }
+    }
     let mut lost: collections::BTreeSet<String> = collections::BTreeSet::new();
     for other in beside.iter() {
         let other = *other;
         a_program = a_program || other.has_main;
-        lost.extend(other.changed.iter().cloned());
+        for name in other.changed.iter() { lost.insert(rules_changed_name(name, &returns)); }
     }
     let mut lists: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     let mut whole: collections::BTreeSet<String> = collections::BTreeSet::new();

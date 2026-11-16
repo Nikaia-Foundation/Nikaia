@@ -599,7 +599,12 @@ struct FieldsScan {
 	self_type: String,
 	/// Each parameter of the function scanned, with the last name of its
 	/// type: a write through `mut plan: BufferPlan` is named `BufferPlan.holds`.
+	/// A local whose `let` declares its type or binds a literal of one too.
 	typed: collections::BTreeMap[String, String],
+	/// Each local bound to a call of a function by its name, with that name:
+	/// a write through `let mut out = bag()` is named `bag().values`, which
+	/// [`rules_candidates`] reads with the declared result of `bag` (#1930).
+	calls: collections::BTreeMap[String, String],
 }
 
 /// **What a file beside the one proved says to its walks**, read once per
@@ -616,8 +621,12 @@ pub struct BoundsBeside {
 	pub has_main: bool,
 	pub lost: collections::BTreeSet[String],
 	/// Each field it writes, grows, empties or reorders, or hands to a call
-	/// (#1755): a found rule over that field no longer holds of it.
+	/// (#1755): a found rule over that field no longer holds of it. One
+	/// written through a local bound to a call is `f().field` (#1930).
 	pub changed: collections::BTreeSet[String],
+	/// The last name of the type each function of the file declares as its
+	/// result, where that is one plain type ([`fields_returns`]).
+	pub returns: collections::BTreeMap[String, String],
 }
 
 /// [`BoundsBeside`] of one file, `words` its words.
@@ -636,6 +645,7 @@ pub fn bounds_beside(program: ref Program, words: ref winnow_grammar::InternerCo
 		changed: collections::BTreeSet(),
 		self_type: "",
 		typed: collections::BTreeMap(),
+		calls: collections::BTreeMap(),
 	}
 	let mut reached: collections::BTreeSet[String] = collections::BTreeSet()
 	let has_main = fields_declared(program, words, false, scan, reached)
@@ -647,7 +657,70 @@ pub fn bounds_beside(program: ref Program, words: ref winnow_grammar::InternerCo
 	for item in program.items {
 		fields_item(item, words, scan, ignored)
 	}
-	return BoundsBeside { names, declared, reached, has_main, lost: scan.lost, changed: scan.changed }
+	return BoundsBeside { names, declared, reached, has_main, lost: scan.lost, changed: scan.changed, returns: fields_returns(program, words) }
+}
+
+/// The last name of `ty` where it is one plain type, not generic, optional
+/// or a tuple; `""` otherwise.
+fn fields_plain(ty: ref Type, words: ref winnow_grammar::InternerContext) -> String {
+	if !ty.generics.is_empty() || ty.is_nullable || ty.is_tuple {
+		return ""
+	}
+	return rules_last_name(words.resolve(ty.name))
+}
+
+/// The result each function of `program` declares, by the function's
+/// name, where it is one plain type ([`fields_plain`]) and the function is
+/// not generic: what a local bound to a call of it holds (#1930).
+fn fields_returns(program: ref Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeMap[String, String] {
+	let mut out: collections::BTreeMap[String, String] = collections::BTreeMap()
+	for item in program.items {
+		match item.node {
+			Item::Fn { name, generics, ret_type, .. } => {
+				let named = name ?? continue
+				let ty = ret_type ?? continue
+				let plain = fields_plain(ty, words)
+				if generics.is_empty() && !plain.is_empty() {
+					out.insert(words.resolve(named).clone(), plain)
+				}
+			},
+			else => {},
+		}
+	}
+	return out
+}
+
+/// What the local `name` of a `let` holds, where the scan can tell: the
+/// type the `let` declares, a struct literal's type, or the function a call
+/// names (`calls`).
+fn fields_let(name: ref String, ty: ref Type?, value: ref Expr, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	if ty != null {
+		let plain = fields_plain(ty ?? return, words)
+		if !plain.is_empty() {
+			scan.typed.insert(name.clone(), plain)
+		}
+		return
+	}
+	match value {
+		Expr::StructLit { name: of, .. } => {
+			let mut t = rules_last_name(words.resolve(of))
+			if t == "Self" {
+				t = scan.self_type.clone()
+			}
+			if !t.is_empty() {
+				scan.typed.insert(name.clone(), t)
+			}
+		},
+		Expr::Call { func, .. } => {
+			match func {
+				Expr::Variable(f, _) => {
+					scan.calls.insert(name.clone(), words.resolve(f).clone())
+				},
+				else => {},
+			}
+		},
+		else => {},
+	}
 }
 
 fn fields_seen(
@@ -665,6 +738,7 @@ fn fields_seen(
 		changed: collections::BTreeSet(),
 		self_type: "",
 		typed: collections::BTreeMap(),
+		calls: collections::BTreeMap(),
 	}
 	let mut reached: collections::BTreeSet[String] = collections::BTreeSet()
 	let mut a_program = fields_declared(program, words, true, scan, reached)
@@ -763,7 +837,9 @@ fn fields_item(
 	match item.node {
 		Item::Fn { args, config, body, .. } => {
 			let had = scan.typed.clone()
+			let had_calls = scan.calls.clone()
 			for arg in args {
+				scan.calls.remove(words.resolve(arg.name))
 				if arg.ty.generics.is_empty() {
 					scan.typed.insert(words.resolve(arg.name).clone(), rules_last_name(words.resolve(arg.ty.name)))
 				} else {
@@ -782,6 +858,7 @@ fn fields_item(
 			}
 			scan.walked = false
 			scan.typed = had
+			scan.calls = had_calls
 		},
 		Item::Impl { target, methods, .. } => {
 			let was = scan.self_type.clone()
@@ -859,6 +936,11 @@ fn fields_mark(base: ref Expr, name: ref String, words: ref winnow_grammar::Inte
 				scan.changed.insert(f"{ty ?? ""}.{name}")
 				return
 			}
+			let called = scan.calls.get(words.resolve(v))
+			if called != null {
+				scan.changed.insert(f"{called ?? ""}().{name}")
+				return
+			}
 		},
 		else => {},
 	}
@@ -898,11 +980,15 @@ fn fields_block(block: ref Block, words: ref winnow_grammar::InternerContext, mu
 
 fn fields_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
 	match stmt {
-		Stmt::Let { names, value, .. } => {
+		Stmt::Let { names, ty, value, .. } => {
 			fields_expr(value, words, scan)
 			// A name bound again is no longer the parameter whose type it had.
 			for n in names {
 				scan.typed.remove(words.resolve(n))
+				scan.calls.remove(words.resolve(n))
+			}
+			if names.len() == 1 {
+				fields_let(words.resolve(names[0]), ty, value, words, scan)
 			}
 		},
 		Stmt::Comptime { value, .. } => fields_expr(value, words, scan),
@@ -945,6 +1031,7 @@ fn fields_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, mut s
 			}
 			for n in bindings {
 				scan.typed.remove(words.resolve(n))
+				scan.calls.remove(words.resolve(n))
 			}
 			fields_block(body, words, scan)
 		},

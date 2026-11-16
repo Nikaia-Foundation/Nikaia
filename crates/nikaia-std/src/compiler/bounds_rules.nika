@@ -53,6 +53,18 @@ fn rules_last_name(name: ref String) -> String {
     return (name.split("::").last() ?? "").clone()
 }
 
+/// A field a file beside changes (`BoundsBeside.changed`), with a local
+/// bound to a call `f().field` named by the type `f` returns, or by the
+/// field alone where `returns` does not know `f` (#1930).
+fn rules_changed_name(name: ref String, returns: ref collections::BTreeMap[String, String]) -> String {
+    let parts: Vec[ref String] = name.split("().").collect()
+    if parts.len() != 2 {
+        return name.clone()
+    }
+    let ty = returns.get(parts[0]) ?? return parts[1].clone()
+    return f"{ty}.{parts[1]}"
+}
+
 /// The most rounds a type's candidates are checked: each drops at least
 /// one, so this bounds only a type with many.
 fn rules_rounds() -> i64 {
@@ -84,10 +96,21 @@ fn rules_candidates(
             else => {},
         }
     }
+    // A field written through a local bound to a call (`f().field`) is
+    // named with the type `f` declares as its result, in whichever file of
+    // the package `f` is; bare where none is known (#1930).
+    let mut returns = fields_returns(program, words)
+    for other in beside {
+        for (f, ty) in other.returns {
+            returns.insert(f.clone(), ty.clone())
+        }
+    }
     let mut lost: collections::BTreeSet[String] = collections::BTreeSet()
     for other in beside {
         a_program = a_program || other.has_main
-        lost.extend(other.changed.clone())
+        for name in other.changed {
+            lost.insert(rules_changed_name(name, returns))
+        }
     }
     // The private list fields of each struct that is not generic, and of
     // those, the lists of whole numbers (`T.f`) and what a literal leaving

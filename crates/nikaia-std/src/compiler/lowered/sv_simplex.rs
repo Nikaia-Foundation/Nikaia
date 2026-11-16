@@ -661,7 +661,7 @@ impl SvTh for SvSimplex {
             let u = match self.undo.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
             if u.upper { { let __nikaia_stored = u.old; nikaia_std::index::set(&mut self.upper, nikaia_std::index::at(u.var), __nikaia_stored); } } else { { let __nikaia_stored = u.old; nikaia_std::index::set(&mut self.lower, nikaia_std::index::at(u.var), __nikaia_stored); } }
         }
-        self.trail.truncate(nikaia_std::count::of(*nikaia_std::index::get(&self.marks, nikaia_std::index::at(level))));
+        self.trail.truncate(nikaia_std::count::of(*unsafe { nikaia_std::proven::read(&self.marks, (level) as usize) }));
         self.levels.truncate(nikaia_std::count::of(level));
         self.marks.truncate(nikaia_std::count::of(level));
         let mut kept: Vec<SvImplied> = vec![];
