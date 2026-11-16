@@ -486,8 +486,10 @@ pub fn comptime_without_foreign(items: &mut Vec<Spanned<Item>>, words: &winnow_g
             Item::Extern { .. } => { },
             Item::Impl { trait_name, target, methods } => {
                 let owner = format!("{}::", a_symbols_text(words, Some(target.name)));
+                let whole = methods.len() as i64;
                 let mut left = methods;
                 left.retain(|method| { comptime_runs(&method.node, words, &owner, runs) });
+                if trait_name.is_some() && (left.len() as i64) != whole { continue; }
                 let node = Item::Impl { trait_name, target, methods: left };
                 kept.push(Spanned { node, span: item.span, doc: item.doc, attributes: item.attributes });
             },
