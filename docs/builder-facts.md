@@ -104,6 +104,11 @@ together with the specification section and an example test.
 * **A file another agent also edits** goes under the report's `Partial:`,
   not `Files:`: stage only your hunks (`git apply --cached`), and
   `commit.nika` commits what is staged of it without `git add` (#1704).
+* **Your change is a sweep** (it rewrites many files other lanes edit, e.g.
+  a visibility pass over every compiler `.nika`): make it your run's last
+  step and commit it in one go (edit, `lower-std`, build, commit), never left
+  uncommitted across probes or test runs; every other run meanwhile has to
+  stage its own files hunk by hunk around it (#1808, #1850).
 * **A defect fix and a step in the same file are two commits**, but
   `commit.nika` stages whole `Files:` (or list it under `Partial:` with only
   the fix hunks staged): commit the fix (the `.nika` and its
