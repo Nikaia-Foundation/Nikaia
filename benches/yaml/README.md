@@ -81,10 +81,10 @@ inputs at a tenth, checks off:
   times.
 * **Properties tried twice**: fixed (#1548). `Props` is read once and the
   alternatives after it share the read; large went from 2.5 to 2.2 times.
-* **The directives cloned at each rule**: open. The grammar threads
-  `ds: Vec[Dir]` through every node rule and a rule value is passed by value,
-  so it is cloned per call (4 % of large, though it is empty there); lending
-  it waits for a decision on rule values.
+* **The directives cloned at each rule**: fixed (#1560). The grammar threads
+  `ds: Vec[Dir]` through every node rule; a rule value is now lent
+  (ADR-grammar-1 D6) and lowered as `&Vec<Dir>`, so no rule value is cloned
+  per call (the clone was 4 % of large). The table above is measured with it.
 * **Allocation and copying**: open (with #1518). `malloc`, `free` and
   `memcpy` are about 15 % of large: the parser builds a `Node` tree with a
   `String` per scalar and the events are made from that tree, and `text()`
@@ -92,8 +92,9 @@ inputs at a tenth, checks off:
   straight into events with spans.
 * **Per character**: open. Plain scalars go through `parse_PlainChar` and
   `list::chars` a character at a time (7 % of large), where saphyr scans a run
-  of bytes; a guarded repetition over a run waits for a fix in the grammar
-  macro (a label in a repeated group is not in scope of its guard).
+  of bytes; the grammar macro now scopes a label in a repeated
+  group for its guard (#1561), so a guarded repetition over a run can be
+  written; the package does not use it yet.
 
 The typed row is the tree row: `nikaia_yaml::from_str` counts 5,699 million
 against `yaml::load`'s 6,961 million on the same input, so the gap is the
