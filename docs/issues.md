@@ -122,6 +122,11 @@ it, like the checks in `docs/supervisor.md`.
 
 * **I8. Done when**: one sentence saying what is true when the issue is
   finished, checkable without the author.
+  The result it names is written out (the action the program then takes,
+  or the NK code and the gist of the refusal), never pointed at: "gives the
+  specified result" leaves the builder to choose between them (#1747:
+  #1736's *Done when* left open whether the action or ADR-296 D25's refusal
+  was meant; its probe broke I5 too, not copied from a file that ran).
   When the last item may end in filed issues instead of code, the issue
   says which code step carries `Fixes #N` (#1453).
 * **I8a. Measured sizes** (2026-11-08, #1397, #1414): an item that promises to
