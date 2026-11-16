@@ -125,6 +125,13 @@ it, like the checks in `docs/supervisor.md`.
   A named function is one `scripts/where.nika -- NAME` finds today; a cause
   without one says `unknown`, never a guessed name (#1741: #1729 suspected
   `own_option_containers`, which does not exist).
+  A traced cause is followed outward before filing: the other forms that
+  reach the same function (a closure, a `std` method that takes one, the
+  same call on a fixed-size `Array`) are run on the binary of the day,
+  and each that fails is named as a shape of this defect, with its probe
+  line; a `Found:` line does the same (#1761: #1754's `Found:` named only
+  the `if`-arm refusal, and the same cause made `fn(a) { a }`, `sort_by`
+  on typed lists and `Array::sort_by_key` rustc errors).
   A probe that mixes several conditions (outside input, a guard, a call) is
   also run with each one taken away, and the issue says which variant still
   fails: #1571 blamed the outside input, and the guard alone did not prove.
@@ -299,7 +306,8 @@ that changes its result without saying the builder chooses is I9 (#1735: #1527's
 and `wrong I4` for an I5/I6 and an I9 point; #1708 the same slip; #1741:
 #1729's run answered `wrong I3` for a probe that did not parse, I5, and a
 suspected function that does not exist, I7; #1745: #1731's run answered
-`broke I3` for an issue filed `ready` without its decision, I6; #1746:
+`broke I3` for an issue filed `ready` without its decision, I6; #1761:
+#1754's run answered `broke I3` for shapes of the cause left unnamed, I7; #1746:
 #1533's run answered `rules-gap` for an item that left open what bounds the
 wait before a body's first byte, `broke I9`).
 

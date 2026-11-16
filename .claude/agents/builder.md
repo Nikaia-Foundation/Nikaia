@@ -77,7 +77,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   a shape that works is left out, and the line names the suspected file and
   function, or says the cause is unknown (#1695: #1654's Found named the
   `while` forms, already proved, and no cause: `bounding_for` lacked the pair
-  bounds `bounding_while` asks). A correct program your own change
+  bounds `bounding_while` asks). A traced cause is run in its other
+  forms too (a closure, a `std` method taking one, the `Array` twin), and
+  each that fails is named in the line (#1761, `docs/issues.md` I7). A correct program your own change
   refuses (a fail-closed check's false refusal) is a defect too: one
   `Found:` line per shape, with its probe, never a `Deviation:`, which
   goes to the improvement lane without a probe (#1680, #1701). The
