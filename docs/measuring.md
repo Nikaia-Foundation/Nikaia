@@ -7,6 +7,14 @@ quotes a figure.
   (`valgrind --tool=callgrind --branch-sim=yes`). On these shared machines the
   same binary moves by 1.4-1.9x from one day to the next; a count does not. No
   figure in seconds goes into a document.
+* **A Nikaia program runs under callgrind with `io-method = "blocking"`**
+  (`NIKAIA_RUNTIME_CONFIG` naming a file that holds that line, Part III
+  13.3b). valgrind 3.22 runs the executor's `io_uring_enter` wait as a call
+  that does not block, under its one-thread lock, so a program that reads
+  standard input waits for ever, silently, and a plain `timeout` does not
+  end it (`timeout -s KILL` does; #1874: two hung runs before
+  `--trace-syscalls` showed it). `benches/game/game.nika` sets it for every
+  Nikaia row; a program counted by hand needs it too.
 * **Against tuned Rust**, `unsafe` allowed, never against a loop this project
   wrote to lose. Each Rust program is a binary of its own: two programs in one
   binary change what LLVM inlines (it cost `tuned` 40 instructions a row).
