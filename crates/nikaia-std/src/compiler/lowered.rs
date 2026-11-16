@@ -3477,7 +3477,7 @@ pub mod check_core_call {
 }
 pub mod check_core_call_on {
     #[allow(unused_imports)]
-    pub use super::{check_core_call_on_reached, check_core_call_on_map_written, check_core_call_on_key_read, check_core_call_on_retyped, check_core_call_on_entry_values, check_core_call_on, check_core_a_safe_call, check_core_call_on_weighed_through};
+    pub use super::{check_core_call_on_reached, check_core_call_on_map_written, check_core_call_on_key_read, check_core_call_on_retyped, check_core_call_on_entry_values, check_core_call_on, check_core_a_safe_call, check_core_call_on_weighs, check_core_call_on_weighed_through};
 }
 pub mod check_core_comptime {
     #[allow(unused_imports)]
@@ -4423,4 +4423,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "44705ecb2b0012aa8b53e420da43c7d2f797d423110176df85dc9fb63d1ef249";
+pub const LOWERED_DIGEST: &str = "f7a8898c637d0d8525d5c9e7fedf1731062beedd04e55a12379e1e63819d2f54";

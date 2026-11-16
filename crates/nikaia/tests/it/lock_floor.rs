@@ -200,9 +200,9 @@ fn at_one_user_thread_a_lock_is_the_cheap_shape() {
     );
     // The constructor is what writes the shape now
     // ([ADR-281](../../../docs/specification/adr/adr-281.md) D2), so the shape is
-    // read off the `::new` rather than off an annotation the line no longer needs.
+    // read off the constructor rather than off an annotation the line no longer needs.
     assert!(
-        rust.contains("nikaia_std::lock::Local::new"),
+        rust.contains("nikaia_std::lock::Local::weighed"),
         "the cheap shape:\n{rust}"
     );
     assert!(
@@ -249,7 +249,7 @@ fn one_call_allocates_the_lock_as_well_as_the_handle() {
         false,
     );
     assert!(
-        rust.contains("::new(nikaia_std::lock::Local::new(n))"),
+        rust.contains("::new(nikaia_std::lock::Local::weighed(n, "),
         "one line, two hulls:\n{rust}"
     );
 }

@@ -1664,8 +1664,13 @@ impl EmitState {
             let hulls = self.hull_new(world, host.crossings_are_possible(), walk.trusting, text, &count);
             if hulls.is_some() {
                 let paths = match hulls { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
-                for path in paths.iter() { out.push(&format!("{}::new(", path)); }
+                let mut weighed = false;
+                for path in paths.iter() {
+                    weighed = path == "nikaia_std::lock::Local" || path == "nikaia_std::lock::Crossing";
+                    if weighed { out.push(&format!("{}::weighed(", path)); } else { out.push(&format!("{}::new(", path)); }
+                }
                 self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
+                if weighed { out.push(", |value| nikaia_std::__nikaia_deep_size!(*value)"); }
                 for _ in paths.iter() { out.push(")"); }
                 return Ok(true);
             }

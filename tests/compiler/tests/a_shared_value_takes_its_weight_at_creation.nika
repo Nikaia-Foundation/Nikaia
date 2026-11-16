@@ -1,0 +1,80 @@
+// ADR-327 D9 (#1751): a value put into `SharedMut(…)` moves its deep size from its creator to the shared value at its creation, as `set` does, so what the value frees when it is dropped inside its own block was counted there. A tight task that creates and drops far more than its budget in total runs on, and a value bigger than one segment fits a task whose budget holds it.
+struct Tight {}
+
+impl task::Admission for Tight {
+	fn decide(mut self, _load: task::Load) -> task::Decision sync {
+		return task::Decision { start: 1, budget: 262144 }
+	}
+}
+
+fn make(t: i64, n: i64) -> SharedMut[Vec[i64]] {
+	let mut items: Vec[i64] = []
+	for i in 0..<n {
+		items.push(i + t)
+	}
+	return SharedMut(items)
+}
+
+fn wrap[T](value: T) -> SharedMut[T] {
+	return SharedMut(value)
+}
+
+fn churn() -> i64 {
+	let mut done = 0
+	for t in 0..<400 {
+		let c = make(t, 1000)
+		let n = c.access(fn(v) { v.len() })
+		// placed in the task's own block, so its budget is asked each turn
+		let mut scratch: Vec[i64] = []
+		for i in 0..<9000 {
+			scratch.push(i)
+		}
+		done += n / 1000 + scratch.len() / 9000 - 1
+	}
+	return done
+}
+
+fn churn_generic() -> i64 {
+	let mut done = 0
+	for t in 0..<400 {
+		let mut items: Vec[i64] = []
+		for i in 0..<1000 {
+			items.push(i + t)
+		}
+		let c = wrap(items)
+		let n = c.access(fn(v) { v.len() })
+		let mut scratch: Vec[i64] = []
+		for i in 0..<9000 {
+			scratch.push(i)
+		}
+		done += n / 1000 + scratch.len() / 9000 - 1
+	}
+	return done
+}
+
+fn large() -> i64 {
+	// 20000 items, 160000 bytes: more than one 64 KiB segment
+	let c = make(0, 20000)
+	return c.access(fn(v) { v.len() })
+}
+
+fn main() throws {
+	let a = async(detached, admission: Tight {}) fn { churn() }
+	let n = a.join() catch {
+		println(f"failed: {error}")
+		0
+	}
+	println(f"churn: {n}")
+	let g = async(detached, admission: Tight {}) fn { churn_generic() }
+	let m = g.join() catch {
+		println(f"failed: {error}")
+		0
+	}
+	println(f"generic: {m}")
+	let b = async(detached, admission: Tight {}) fn { large() }
+	let k = b.join() catch {
+		println(f"failed: {error}")
+		0
+	}
+	println(f"large: {k}")
+}

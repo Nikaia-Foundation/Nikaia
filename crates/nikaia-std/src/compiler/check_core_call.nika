@@ -868,7 +868,9 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
     }
     // **A hull you can observe, you write** (ADR-281 D2).
     if is_hull(name) {
-        return state.hull(name, args.len() as i64, found, span)
+        let built = state.hull(name, args.len() as i64, found, span)
+        check_core_call_on_weighs(state, built, "new")
+        return built
     }
     if !have {
         return check_core_call_unresolved(state, world, host, func, name, args, found, config, passed, shadowed, span)
