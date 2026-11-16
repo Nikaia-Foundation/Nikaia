@@ -51,8 +51,9 @@ wherever it can, and says for each where its checks stop.
   `throws` and not a list of every error. A task that can panic ends alone, and whoever waits
   for it handles the crash. An index past the end, an overflow or a division by zero that the
   compiler can show happens is refused.
-- A claim about data from outside waits for a guard where the data
-  arrives, a path from outside stays in the directory the call names, and formats are read by
+- A claim about data from outside (a request, a file, standard input, the command line, the
+  environment) waits for a guard where the data arrives, a path from outside stays in the
+  directory the call names, text from outside reaches the log escaped, and formats are read by
   parsers built from a grammar.
 - An `assert` is a contract, and the compiler checks it at
   every call (below).

@@ -154,6 +154,14 @@ it, like the checks in `docs/supervisor.md`.
   #1654 named the `while` forms, proved on develop; only the `for` form
   failed, because `bounding_for` never asked the pair bounds
   `bounding_while` asks).
+  A probe of ownership (a move, a copy, a view handed out, a result
+  taken out of a block or a `ref` parameter) holds owned text made by a
+  call (`fn make() -> String { let mut g = String(); g.push_str("hi");
+  return g }`), never a literal: the text-tier pass (ADR-282) lowers
+  literal-filled text to `&str`, which is `Copy`, so the probe passes and
+  the premise drawn from it is wrong (#1908: #1651's item 1 rested on
+  probe h, `access` handing out a literal field; with owned text the
+  block moves out of `&T` and rustc refuses it, #1905).
 * **I6. The governing decision**: the ADR and its decision (`ADR-282 D7`) or
   the section of Part I-III that says what is right. Without one, the issue
   says "no decision yet" and is a `decision` issue, not a bug
@@ -365,6 +373,16 @@ it, like the checks in `docs/supervisor.md`.
   left to the builder (#1902: #1849's F asked the bounds walk to use
   summaries, and `bounds::proven`'s four Rust callers, emit among them,
   hold no prover state).
+  An item that records, intercepts or caches what a pass reads ("record
+  each entry read", "key on what it looked up") names the function every
+  such read goes through today, read in the code (I4a), and the files
+  that call it. A pass handed whole values (a parsed tree, a ledger, a
+  graph) that it walks itself has no such function: the item then counts
+  the read sites (the search, files per kind), names how each whole value
+  is keyed, and says `no decision yet` (a `decision`, I6), not left to the
+  builder (#1910: #1307's item 1 asked `lower-std` to record each package
+  entry a file reads, and every check and emit pass walks `beside`, `own`,
+  the call graphs and `provenance` directly).
   An item settles each choice that changes what its result does, or says
   the builder chooses (#1733: #1717 left open whether a merge with no local
   commits fast-forwards, and a merge commit alone would have made the suite
@@ -402,6 +420,22 @@ it, like the checks in `docs/supervisor.md`.
   the figure measured before (#1470: "1.2 times its time" without a
   baseline cost a run its measuring), and names any recomputation the
   pass already does per body that the change would multiply.
+  A time figure names the commit it was measured on (subject and date,
+  as I8a asks of a count). An issue that makes `lower-std` faster gives
+  the split by pass from one `NIKAIA_LOWER_TIMES=1 lower-std` run (the
+  phase totals of `Phases` in `sysroot.rs` and the ledger's per-pass
+  times of `InferHost::timed` in `contracts/mod.rs`), and its items cover the largest passes or
+  say why one is left out (#1914: #1308 gave the ledger 11.0 s; its run
+  measured 47.7 s at 7293a57a, 28.6 s of it the `panics` pass no item
+  named).
+  An item that adds or changes Rust names what allows it under
+  CLAUDE.md's *no new Rust*: the exception it falls under (the
+  specification lanes, a clap flag in `main.rs`), the owner's or the
+  supervisor's decision by date and issue, or a move of that Rust into
+  Nikaia ordered first. Without one it says `no decision yet` and is a
+  `decision` (I6) (#1914: #1308 ordered per-function entry points in the
+  Rust passes of `contracts/*.rs` and an on-disk form of the Rust
+  `Checked`, and its run stopped for the decision, #1913).
   Several steps in one pass get one limit on the whole run, or a per-step
   limit only where that step's own cost was measured or estimated (#1470: a
   1.2 times limit per probe could not hold the cost of D25's own checks).

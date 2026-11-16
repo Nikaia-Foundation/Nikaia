@@ -96,7 +96,7 @@ sort(v, 0, v.len())</code></pre></div><div class="home-code markdown-body"><pre 
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Caught at compile time</span>
         <h3><a href="{{ "/safe/#outside" | relative_url }}">The compiler knows where the data comes from</a></h3>
-        <p>A claim about data from outside waits for a guard where the data arrives, a path from outside stays in the directory the call names, and formats are read by parsers built from a grammar.</p>
+        <p>A claim about data from outside (a request, a file, standard input, the command line, the environment) waits for a guard where the data arrives, a path from outside stays in the directory the call names, text from outside reaches the log escaped, and formats are read by parsers built from a grammar.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">let out = process::run("git", ["rev-parse", "HEAD"])
 let n: int = out.stdout.len()
 assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: `n == 41` is a claim about data from outside the program.</b></code></pre></div>

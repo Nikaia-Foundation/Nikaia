@@ -3,7 +3,7 @@
 
 pub(crate) const COMPARE_PLAIN: [&str; 11] = ["i32", "i64", "u8", "u32", "u64", "bool", "char", "scalar", "String", "str", "Bytes"];
 
-pub(crate) const COMPARE_CONTAINERS: [&str; 14] = ["Vec", "List", "Array", "Option", "Set", "collections::HashMap", "collections::HashSet", "collections::BTreeMap", "collections::BTreeSet", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Shared"];
+pub(crate) const COMPARE_CONTAINERS: [&str; 15] = ["Vec", "List", "Array", "Option", "Set", "collections::HashMap", "collections::HashSet", "collections::BTreeMap", "collections::BTreeSet", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Shared", "Seen"];
 
 pub(crate) const COMPARE_UNCOPIED: [&str; 4] = ["TaskHandle", "task::ChildHandle", "Locked", "SharedMut"];
 
@@ -130,7 +130,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         if (*how == CompareStrength::Orders || *how == CompareStrength::Hashes) && nikaia_std::list::contains(&COMPARE_UNORDERED, &name) { return false; }
         if name == "f32" || name == "f64" { return *how == CompareStrength::Compares; }
         if nikaia_std::list::contains(&COMPARE_PLAIN, &name) { return true; }
-        if nikaia_std::list::contains(&COMPARE_CONTAINERS, &name) { return self.all_of(args, &how, seen); }
+        if nikaia_std::list::contains(&COMPARE_CONTAINERS, &name) && !self.structs.contains_key(name) && !self.enums.contains_key(name) { return self.all_of(args, &how, seen); }
         let mut key = nikaia_std::block::Text::from(name.to_string());
         if !args.is_empty() {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);

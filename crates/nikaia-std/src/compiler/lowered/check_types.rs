@@ -193,6 +193,7 @@ pub(crate) fn becomes_shared(found: &Ty, want: &Ty) -> bool {
 }
 
 pub(crate) fn way_out_of_a_mismatch(found: &Ty, want: &Ty) -> String {
+    if found.is_seen() || want.is_seen() { return way_out_of_a_mismatch(&found.unseen(), &want.unseen()); }
     if becomes_shared(found, want) {
         let hull = match want {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),

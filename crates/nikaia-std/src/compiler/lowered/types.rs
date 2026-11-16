@@ -5,7 +5,7 @@ pub(crate) const SHAPE_BOUNDS: [&str; 2] = ["Struct", "Enum"];
 
 pub(crate) const STANDARD_BOUNDS: [&str; 4] = ["Eq", "Ord", "Hash", "Clone"];
 
-pub(crate) const BUILT_IN: [&str; 28] = ["int", "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64", "bool", "char", "scalar", "String", "str", "Self", "Vec", "Shared", "SharedMut", "Locked", "TaskHandle", "Array", "Bytes"];
+pub(crate) const BUILT_IN: [&str; 29] = ["int", "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64", "bool", "char", "scalar", "String", "str", "Self", "Vec", "Shared", "SharedMut", "Locked", "Seen", "TaskHandle", "Array", "Bytes"];
 
 pub(crate) const UNOFFERED_WIDTHS: [&str; 7] = ["usize", "isize", "i8", "i16", "u16", "i128", "u128"];
 

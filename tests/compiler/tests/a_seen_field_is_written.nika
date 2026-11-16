@@ -1,0 +1,10 @@
+// `Seen[T]` is a type a person writes at a struct's field (ADR-281 D24,
+// #1651): the field keeps the stamp of the value a lock handed out, and the
+// value reads as the `T` under it. Before, `Seen` was "no type" (`NK1135`).
+struct Row { seen: Seen[i64] }
+
+fn main() throws {
+	let k = SharedMut(5)
+	let r = Row { seen: k.get() }
+	println(r.seen)
+}
