@@ -230,6 +230,7 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
     if state.a_text_bytes_view(world, value) { return; }
     let notes: Vec<String> = vec![format!("`{}` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `{}` is a `{}`. Giving it away would take a piece out of something this function doesn't own.", root, path, ty.text())];
     let mut help: String = format!("Write `{}.clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark.", path); #[allow(clippy::redundant_locals)] let notes = notes;
+    if handed_back && !state.flow.lambda_returns.is_empty() { help = format!("Write `{}.clone()` for a copy: a lambda hands back a value of its own.", path); }
     if !handed_back { help = format!("Write `{}.clone()` to pass a copy, or take the parameter without `keep` if the function called only reads it.", path); }
     state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: `{}` is only borrowed.", path, root), notes, Some(help)));
 }
@@ -453,6 +454,7 @@ pub(crate) fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
     let outer = check_core_lambda_enter(state);
     let walked = check_core_block(state, world, host, body);
     state.a_map_read_handed_back(world, &walked, body);
+    check_core_lambda_parts_handed_back(state, world, host, body, span);
     let tail = check_core_lambda_leave(state, (outer).as_ref(), &walked, body);
     let seen: Option<CheckHanded> = match state.handed_over.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -470,6 +472,25 @@ pub(crate) fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
         state.a_handler_that_does_more_than_the_type_allows(promised, &handed, span);
     }
     (tail, paused)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_lambda_parts_handed_back<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, span: &Span) {
+    if a_body_never_ends(body) { return; }
+    for value in block_tail(body) {
+        let chosen = is_a_choice(value) || check_arm_leaves_a_block(value);
+        for leaf in state.value_leaves(world, value) {
+            let at = check_span_at(world, leaf, span);
+            if chosen {
+                if !state.a_place_of_a_lent_parameter(world, leaf) { continue; }
+                let ty = check_core_expr(state, world, host, leaf, &at);
+                if is_text_type(&ty) { continue; }
+            }
+            check_core_a_field_of_a_borrowed_subject(state, world, host, leaf, &at, "handed back");
+            check_core_a_field_of_a_lent_place_handed_back(state, world, host, leaf, &at);
+        }
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

@@ -1026,6 +1026,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     }, || collections::BTreeMap::new().into());
     let found = check_core_arguments_bound(state, world, host, args, &patterns, &mut bound, &mut expected, world.own.functions.contains_key(key), (callee).as_ref(), span);
     state.call_keepers.clear();
+    if keyed && args.len() == 1 && found.len() == 1 { check_core_call_on_a_viewed_key(state, world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, unsafe { nikaia_std::proven::read(&found, (0) as usize) }, span); }
     if key == "Par::fold" && args.len() >= 3 && found.len() >= 3 {
         let acc: Ty = nikaia_std::index::or(match *nikaia_std::index::get(&bound, "A") {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1308,6 +1309,38 @@ pub(crate) fn check_core_call_on_item_copies(on: &Ty, arg: &Expr, handed: i64) -
         _ => false,
     };
     one && !item.is_unknown() && !item.is_a_view() && !moves(&item)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_a_viewed_key(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr, lambda: &Ty, span: &Span) {
+    let key: Ty = match lambda {
+        Ty::Fn { result, .. } => { let result = nikaia_std::boxed::open(result); match match result {
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return } },
+        _ => return,
+    };
+    if !check_core_call_on_holds_a_view(&key) { return; }
+    let mut at: Span = check_span_at(world, arg, span);
+    match arg {
+        Expr::Closure { body, .. } => {
+            let last = tail_value_of(body);
+            if last.is_some() { at = check_span_at(world, match last { Some(__nikaia_value) => __nikaia_value, None => return }, span); }
+        },
+        _ => { },
+    }
+    state.findings.push(check_refusal("NK1104", &at, format!("This lambda returns `{}`, a view, but `sort_by_key` wants a key of its own.", key.text()), vec![String::from("`sort_by_key` moves the items while it compares their keys, so a key may not point into an item.")], Some(String::from("Hand back a copy with `.clone()`."))));
+}
+
+pub(crate) fn check_core_call_on_holds_a_view(ty: &Ty) -> bool {
+    match ty {
+        Ty::Tuple(parts) => {
+            for part in parts.iter() { if check_core_call_on_holds_a_view(part) { return true; } }
+            false
+        },
+        _ => ty.is_a_view(),
+    }
 }
 
 pub(crate) fn check_core_call_on_unviewed_fn(want: &Ty) -> Ty {

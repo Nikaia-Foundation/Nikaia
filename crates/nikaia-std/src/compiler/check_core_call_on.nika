@@ -1342,6 +1342,9 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.call_keepers = world.keepers.get(key)?.clone() ?? collections::BTreeMap()
     let found = check_core_arguments_bound(state, world, host, args, patterns, bound, expected, world.own.functions.contains_key(key), callee, span)
     state.call_keepers.clear()
+    if keyed && args.len() == 1 && found.len() == 1 {
+        check_core_call_on_a_viewed_key(state, world, args[0], found[0], span)
+    }
     // **A fold's step and merge return the accumulator or change it in
     // place** (ADR-372 D9): the result type says which.
     if key == "Par::fold" && args.len() >= 3 && found.len() >= 3 {
@@ -1735,6 +1738,47 @@ fn check_core_call_on_item_copies(on: ref Ty, arg: ref Expr, handed: i64) -> boo
         else => false,
     }
     return one && !item.is_unknown() && !item.is_a_view() && !moves(item)
+}
+
+/// **`NK1104`: `sort_by_key`'s key is a value of its own** (#1872, ADR-282
+/// D8): the sort moves the items while it compares their keys, so a key that
+/// points into its item, `fn(row) { row }` over a list of text or
+/// `row.name.trim()`, is refused here with the copy to write, not by `rustc`
+/// (*lifetime may not live long enough*).
+fn check_core_call_on_a_viewed_key(mut state: CheckState, world: ref CheckWorld, arg: ref Expr, lambda: ref Ty, span: ref Span) sync {
+    let key: Ty = match lambda {
+        Ty::Fn { result, .. } => result?.clone() ?? return,
+        else => return,
+    }
+    if !check_core_call_on_holds_a_view(key) {
+        return
+    }
+    let mut at: Span = check_span_at(world, arg, span)
+    match arg {
+        Expr::Closure { body, .. } => {
+            let last = tail_value_of(body)
+            if last != null {
+                at = check_span_at(world, last ?? return, span)
+            }
+        },
+        else => {},
+    }
+    state.findings.push(check_refusal("NK1104", at, f"This lambda returns `{key.text()}`, a view, but `sort_by_key` wants a key of its own.", ["`sort_by_key` moves the items while it compares their keys, so a key may not point into an item."], "Hand back a copy with `.clone()`."))
+}
+
+/// Whether a type is a view or a tuple with one among its parts.
+fn check_core_call_on_holds_a_view(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Tuple(parts) => {
+            for part in parts {
+                if check_core_call_on_holds_a_view(part) {
+                    return true
+                }
+            }
+            false
+        },
+        else => ty.is_a_view(),
+    }
 }
 
 fn check_core_call_on_unviewed_fn(want: ref Ty) -> Ty {

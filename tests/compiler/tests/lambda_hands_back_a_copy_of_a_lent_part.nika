@@ -1,0 +1,36 @@
+// A lambda that hands back a copy of a part of a lent item, or a part that
+// copies, is accepted, and sorts (#1872).
+
+struct P {
+    name: String,
+    n: i64,
+}
+
+fn name(i: i64) -> String {
+    let mut s = String()
+    s.push_str("x")
+    s.push_str(f"{i}")
+    return s
+}
+
+fn main() throws {
+    let mut rows: Vec[P] = []
+    rows.push(P { name: name(2), n: 1 })
+    rows.push(P { name: name(1), n: 2 })
+    rows.sort_by_key fn (row) { row.name.clone() }
+    println(f"{rows[0].name}")
+    rows.sort_by_key fn (row) { 0 - row.n }
+    println(f"{rows[0].name}")
+    let mut pairs: Vec[(String, i64)] = []
+    pairs.push((name(2), 1))
+    pairs.push((name(1), 2))
+    pairs.sort_by_key fn (row) { row.0.clone() }
+    println(f"{pairs[0].0}")
+    let mut texts: Vec[String] = []
+    texts.push(name(3))
+    texts.push(name(1))
+    texts.sort_by_key fn (row) { row.clone() }
+    println(f"{texts[0]}")
+    let firsts: Vec[String] = rows.iter().map(fn (row) { row.name.clone() }).collect()
+    println(f"{firsts.len()}")
+}
