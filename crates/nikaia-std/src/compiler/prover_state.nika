@@ -683,6 +683,22 @@ impl ProverState {
                     continue
                 }
             }
+            // **Asked once more with what the callees' bodies return**
+            // (ADR-359 D2, D14), as an `assert` is, where the goal reads a
+            // call with a result summary.
+            if goal != null && !scope.summed.is_empty() {
+                let summed = summed_read(arena, scope, goal ?? 0)
+                if !summed.is_empty() {
+                    let facts = summed_facts(arena, scope, summed)
+                    self.second_queries += 1
+                    if is_proved(ask(arena, facts, goal ?? 0)) {
+                        if of_std {
+                            outcome.held.push(ClaimHeld::Proved)
+                        }
+                        continue
+                    }
+                }
+            }
             // **And through the loops before it** (ADR-361 D2, D15), as an
             // `assert` is, where it reads what one of them changes.
             if goal != null && (!scope.loops.is_empty() || !scope.around.is_empty()) {
@@ -1098,7 +1114,10 @@ fn postconditions_for(mut arena: TermArena, posts: ref Vec[PostClaim], params: r
 
 /// **The calls with a result summary a claim reads** (ADR-359 D2): the names
 /// their results are bound to, which the claim reads directly or through the
-/// facts that tie them to its names.
+/// facts that tie them to its names. The tie runs both ways (ADR-359 D14): a
+/// summary is pulled in where the claim reads its bound name or where its
+/// exits read a name the claim does, and what it reads is followed in turn,
+/// until nothing more is added.
 fn summed_read(arena: ref TermArena, scope: ref ProverScope, claim: i64) -> Vec[String] {
     let mut names: collections::BTreeSet[String] = collections::BTreeSet()
     arena.variables(claim, names)
@@ -1113,13 +1132,16 @@ fn summed_read(arena: ref TermArena, scope: ref ProverScope, claim: i64) -> Vec[
             }
         }
         for (bound, alts) in scope.summed {
-            if !names.contains(bound) {
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            for alt in alts {
+                arena.variables(alt.guard, read)
+                arena.variables(alt.value, read)
+            }
+            if !names.contains(bound) && !summed_ties(read, names) {
                 continue
             }
-            for alt in alts {
-                arena.variables(alt.guard, names)
-                arena.variables(alt.value, names)
-            }
+            names.insert(bound.clone())
+            names.extend(read)
         }
         grown = names.len() != before
     }

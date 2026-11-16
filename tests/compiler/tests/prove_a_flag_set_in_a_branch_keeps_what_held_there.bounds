@@ -1,13 +1,15 @@
-bounds in tests/prove_a_flag_set_in_a_branch_keeps_what_held_there.nika: 5 indexes, 4 proved; 6 operations, 3 proved
-    18  (…) - 1                                   proved
-    20  was[a]                                    proved
-    27  was[a]                                    proved
-    30  a += 1                                    proved
-    34  was[a]                                    proved
-    46  a += 1                                    proved
-    50  was[a]                                    proved
-    53  was[a]                                    checked: a counter the loop on line 42 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
-    59  pick([4, 5], 1, 1) + pick([4, 5], 1, 0) + find([1, 5, 7]) + scan([1, 2, 3])  checked: a call's result, which the walk knows nothing of (#382)
-    59  pick([4, 5], 1, 1) + pick([4, 5], 1, 0) + find([1, 5, 7])  checked: a call's result, which the walk knows nothing of (#382)
-    59  pick([4, 5], 1, 1) + pick([4, 5], 1, 0)   checked: a call's result, which the walk knows nothing of (#382)
-  derived  pick: 0 <= a0, 0 <= x, x <= a0, proved at the calls on lines 59, 59
+bounds in tests/prove_a_flag_set_in_a_branch_keeps_what_held_there.nika: 5 indexes, 4 proved; 8 operations, 4 proved
+    20  (…) - 1                                   proved
+    22  was[a]                                    proved
+    29  was[a]                                    proved
+    32  a += 1                                    proved
+    36  was[a]                                    proved
+    48  a += 1                                    proved
+    52  was[a]                                    proved
+    64  a += 1                                    proved
+    68  was[a]                                    checked: a counter the loop on line 60 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+    74  pick([4, 5], 1, 1) + pick([4, 5], 1, 0) + find([1, 5, 7]) + scan([1, 2, 3]) + scan_found([1, 2, 3])  checked: a call's result, which the walk knows nothing of (#382)
+    74  pick([4, 5], 1, 1) + pick([4, 5], 1, 0) + find([1, 5, 7]) + scan([1, 2, 3])  checked: a call's result, which the walk knows nothing of (#382)
+    74  pick([4, 5], 1, 1) + pick([4, 5], 1, 0) + find([1, 5, 7])  checked: a call's result, which the walk knows nothing of (#382)
+    74  pick([4, 5], 1, 1) + pick([4, 5], 1, 0)   checked: a call's result, which the walk knows nothing of (#382)
+  derived  pick: 0 <= a0, 0 <= x, x <= a0, proved at the calls on lines 74, 74

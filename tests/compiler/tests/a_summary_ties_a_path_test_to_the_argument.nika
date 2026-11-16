@@ -1,0 +1,24 @@
+// The tie through a result summary runs both ways (ADR-359 D14, #1849): the
+// claim reads `m`, the path test reads `k`, and `k`'s summary over `m` joins
+// them, so past `if k == 0` the claim `m >= 1` is proved.
+
+fn kind(n: i64) -> i64 {
+    if n == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn past_the_test(m: i64) -> i64 {
+    let k = kind(m)
+    if k == 0 {
+        return 0
+    }
+    assert(m >= 1)
+    return m
+}
+
+fn main() throws {
+    println(past_the_test(1))
+    println(past_the_test(5))
+}

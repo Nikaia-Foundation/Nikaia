@@ -620,16 +620,43 @@ fn drive_fields(body: String, key: String) -> Vec[String] {
 // decision: <gap>`) gives that gap (drive_needs_gap) as its one Found, so it
 // is filed as a `decision` issue (drive_found_labels), not buried in the
 // improvement issue (#1744: #1557's run put its ADR-306 question there).
+// A blocked report's Found that only says the issue waits for issues its
+// `Needs:` names is a dependency, not a defect, and is not filed
+// (drive_found_dependency; #1898 was filed from #1857's `Found: #1857 waits
+// for #1848 and #1849`, `Needs: #1848, #1849`).
 fn drive_founds(text: String) -> Vec[String] {
 	let mut out: Vec[String] = []
 	for f in drive_fields(text.clone(), "Found") {
-		if f != "" && drive_word(f.clone()) != "none" { out.push(f) }
+		if f != "" && drive_word(f.clone()) != "none" && !drive_found_dependency(text.clone(), f.clone()) { out.push(f) }
 	}
 	if out.len() == 0 {
 		let gap = drive_needs_gap(text)
 		if gap != "" { out.push(gap) }
 	}
 	return out
+}
+
+// Whether FOUND, a `Found:` value of a report TEXT that ended `Result:
+// blocked`, says only that the issue waits for others: it says `waits for`,
+// `blocked by` or `depends on`, and every `#M` after those words is named
+// under `Needs:` too.
+fn drive_found_dependency(text: String, found: String) -> bool {
+	if !drive_field(text.clone(), "Result").to_lowercase().starts_with("blocked") { return false }
+	let needs = drive_hash_numbers(drive_field(text, "Needs"))
+	if needs.len() == 0 { return false }
+	let low = found.to_lowercase()
+	let mut named: Vec[String] = []
+	for word in ["waits for", "waiting for", "blocked by", "depends on"] {
+		let parts: Vec[String] = low.split(word).collect()
+		for i in 1..<parts.len() {
+			for n in drive_hash_numbers(parts[i].split("(").collect()[0].clone()) { named.push(n) }
+		}
+	}
+	if named.len() == 0 { return false }
+	for n in named {
+		if !needs.contains(n.clone()) { return false }
+	}
+	return true
 }
 
 // The gap a report's `Needs: supervisor decision: <gap>` names, without the
@@ -2979,6 +3006,10 @@ fn drive_improve_points(text: String) -> Vec[String] {
 		if value == "" || word == "none" || word == "-" { continue }
 		// A gap filed as the report's Found (drive_founds, #1744).
 		if key == "Needs" && drive_founds(text.clone()) == [drive_needs_gap(text.clone())] { continue }
+		// A `Needs:` that is only a `#N` list is what the issue waits for;
+		// drive_blocked_on holds it until those close (#1899 was filed from
+		// #1857's `Needs: #1848, #1849`).
+		if key == "Needs" && drive_only_hashes(value.clone()) { continue }
 		items.push(f"{key}: {value}")
 	}
 	for c in drive_fields(text, "Comment") {
@@ -4046,6 +4077,20 @@ fn drive_hash_list(text: String) -> Vec[String] {
 		list = list + " " + t
 	}
 	return drive_hash_numbers(list)
+}
+
+// Whether TEXT names issues and nothing else: every word (after `,`, `:`,
+// `` ` `` and `*`) is a `#N` or `and`, and there is at least one `#N`.
+fn drive_only_hashes(text: String) -> bool {
+	let rest = text.replace(":", " ").replace("`", " ").replace("*", " ").replace(",", " ")
+	let mut any = false
+	for w in rest.split(" ") {
+		let t = w.trim()
+		if t == "" || t == "and" { continue }
+		if !t.starts_with("#") { return false }
+		any = true
+	}
+	return any
 }
 
 // The issues an issue BODY says it waits for (#1819): on a line starting

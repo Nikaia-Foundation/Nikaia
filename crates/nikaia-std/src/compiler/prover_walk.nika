@@ -2212,7 +2212,7 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
         Expr::Call { func, args, config, .. } => {
             let callee = prover_called(func, words, unaliased)
             if callee != null {
-                prover_a_call(walk, callee ?? "", node_key(expr), args, config, span, scope, at, program, words, own, library, ask, model, escape, written_of, condition)
+                prover_a_call(walk, callee ?? "", node_key(expr), args, config, span, scope, at, program, words, own, library, ask, model, escape, unaliased, written_of, condition)
             }
         },
         else => {},
@@ -2838,7 +2838,7 @@ fn prover_nested(mut walk: ProverWalk, block: ref Block, lambda: Vec[String]?, s
 /// **A call by name**: an edge of the call graph, what the call shows of
 /// the callee's precondition, and where that shows nothing broken, of the
 /// checks nobody writes in its body (ADR-395 D1): one diagnostic per call.
-fn prover_a_call(mut walk: ProverWalk, callee: ref String, call: i64, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
+fn prover_a_call(mut walk: ProverWalk, callee: ref String, call: i64, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     if scope.locals.contains(callee) {
         return
     }
@@ -2847,7 +2847,19 @@ fn prover_a_call(mut walk: ProverWalk, callee: ref String, call: i64, args: ref 
         walk.state.edges.insert((caller ?? "", callee.clone()))
     }
     let told = walk.findings.len()
-    prover_call_precondition(walk, callee, call, args, config, span, scope, at, program, words, own, library, ask, model, escape, written_of, condition)
+    // **A call inside an argument is a whole number of its own**, as inside
+    // an `assert` (ADR-314 D3): what its callee ensures holds of it, and its
+    // summary answers a precondition what is known leaves open (ADR-359 D2,
+    // D14) - `need(kind(m) + 1)`.
+    if !walk.state.in_test && prover_an_argument_calls(args) {
+        let mut here = scope.clone()
+        for arg in args {
+            prover_call_results(walk, arg, false, here, program, words, own, unaliased, condition, written_of)
+        }
+        prover_call_precondition(walk, callee, call, args, config, span, here, at, program, words, own, library, ask, model, escape, written_of, condition)
+    } else {
+        prover_call_precondition(walk, callee, call, args, config, span, scope, at, program, words, own, library, ask, model, escape, written_of, condition)
+    }
     if walk.state.collecting && walk.state.known_unwritten.contains_key(callee) {
         let function = free_function(program, words, callee) ?? return
         let all = arguments_in_order(function, args, config, words)
@@ -2858,6 +2870,26 @@ fn prover_a_call(mut walk: ProverWalk, callee: ref String, call: i64, args: ref 
         let function = free_function(program, words, callee) ?? return
         let all = arguments_in_order(function, args, config, words)
         prover_unwritten_call(walk, callee, function.params, all, span, scope, words, ask, model)
+    }
+}
+
+/// Whether an argument holds a call, in the arithmetic the prover reads.
+fn prover_an_argument_calls(args: ref Vec[Expr]) -> bool {
+    for arg in args {
+        if prover_reads_a_call(arg) {
+            return true
+        }
+    }
+    return false
+}
+
+fn prover_reads_a_call(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Call { .. } => true,
+        Expr::Binary { lhs, rhs, .. } => prover_reads_a_call(lhs) || prover_reads_a_call(rhs),
+        Expr::Unary { expr, .. } => prover_reads_a_call(expr),
+        Expr::Cast { expr, .. } => prover_reads_a_call(expr),
+        else => false,
     }
 }
 
