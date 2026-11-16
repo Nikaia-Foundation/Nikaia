@@ -234,18 +234,16 @@ fn a_string_option_the_body_only_reads_is_lent() {
                    \x20   println(dash)\n\
                    }\n";
     let plain = program.replace("TEXT", "String");
-    // The function is lent its option either way; only the literal `dash`
-    // handed to a `String` option is text of its own (#1740, ADR-282 D17, D29).
+    // The function is lent its option either way, and `dash`, made by an
+    // interpolated string, is text of its own in both programs.
     let with_ref = lowered("string_option_ref", &program.replace("TEXT", "ref String"));
     let without = lowered("string_option_plain", &plain);
     let signature = "fn join(words: &[String], sep: &str) -> String";
+    let dash = "let dash = nikaia_std::block::Text::from(\"-\");";
     assert!(with_ref.contains(signature), "ref: the option is lent");
     assert!(without.contains(signature), "plain: the option is lent");
-    assert!(
-        with_ref.contains("let dash = \"-\";"),
-        "ref: dash is a view"
-    );
-    assert!(without.contains("let dash: String = String::from(\"-\");"));
+    assert!(with_ref.contains(dash), "ref: dash is text of its own");
+    assert!(without.contains(dash), "plain: dash is text of its own");
     assert_eq!(ran("string_option", &plain), "a b\na+b\na-b\n-\n");
 }
 
