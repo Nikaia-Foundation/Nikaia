@@ -1,0 +1,2 @@
+exit 1
+in TMP/nikaia.toml: `user-parallelism` is a `[build]` key, and `[package]` does not read it: move it under `[build]`.
