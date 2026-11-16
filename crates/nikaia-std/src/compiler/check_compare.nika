@@ -213,7 +213,9 @@ impl CheckComparable {
         if COMPARE_PLAIN.contains(name) {
             return true
         }
-        if COMPARE_CONTAINERS.contains(name) {
+        // A struct or enum the program declares under a container's name
+        // (`struct Seen`) is asked by its fields, not as the container.
+        if COMPARE_CONTAINERS.contains(name) && !self.structs.contains_key(name) && !self.enums.contains_key(name) {
             return self.all_of(args, how, seen)
         }
         // Keyed by the whole type: `Spanned[Stmt]` and `Spanned[Item]` are two
