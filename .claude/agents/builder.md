@@ -63,7 +63,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   command as run: the package built and its
   setting, the consumer where the library alone builds, #1716; the
   snippet copied whole from the file that ran, its `use` lines and
-  manifest table with it, never retyped, #1726); the part your run can
+  manifest table with it, never retyped, #1726; a probe of a missing
+  method stops at that name, so run its rest once with a method that
+  exists in its place and write Nikaia's names, `compare` not Rust's
+  `cmp`, #1749); the part your run can
   fix is fixed, and the line keeps only the part that needs the
   decision, with the result it expects, and says `no decision yet` in the
   line, which makes the driver file it as a `decision` issue, not `ready`

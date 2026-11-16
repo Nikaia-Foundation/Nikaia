@@ -72,6 +72,12 @@ it, like the checks in `docs/supervisor.md`.
   (#1726: #1715's probe threw text, lacked `use std::time` and put
   `user-parallelism` under `[package]`, where it is ignored, not under
   `[build]`; it did not compile as written and cost three probe rounds).
+  A probe of a missing method or `std` entry stops at that name, so the
+  rest of it is never checked: it is run once more with a method that
+  exists in its place (`sort_by_key` for `sort_by`), and it writes
+  Nikaia's names, not Rust's (#1749: #1738's `sort_by` probe compared with
+  `b.cmp(a)`, where Nikaia's method is `compare`, ADR-341 D2, so it could
+  not give its expected output even once the entry was built).
   A `Found:` whose case is half in the run's reach and half a decision is
   split: the run fixes its part, the issue keeps the other, with its
   expected result (#1726).
