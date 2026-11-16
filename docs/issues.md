@@ -193,6 +193,12 @@ it, like the checks in `docs/supervisor.md`.
   An item that promises every listed site proved has traced each site
   (`--bounds-trace`) for all the facts it needs; a site that also needs a
   fact the walk lacks (`a.min(n)`) is listed under that gap (#1496).
+  A *Done when* that promises the issue's own probe proved is held to
+  the same: the probe is traced for every fact it needs, and a fact no
+  item builds is named as a gap (a `decision`, I6) or the promise is
+  narrowed to what the items reach (#1782: #1688 promised its probe
+  proved by an "ascending" rule alone; the probe also needed each element
+  of `limits` capped by `len(trail)`, which no rule gives).
   A site in a method of a type with field rules (ADR-306 D21, D28) has a
   probe reduced from the real code: the function and every `ref mut self`
   method of its type, with stub types, kept as the acceptance check; a
