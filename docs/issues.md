@@ -54,6 +54,9 @@ it, like the checks in `docs/supervisor.md`.
   the command, the **expected** output and the **actual** output (the error
   with its code and message, or the `rustc` error on the emitted Rust). It was
   run on the binary of the day the issue was written; the issue says so.
+  The expected output is written out (the text it prints, or the NK code and
+  the gist of its message), never pointed at: "the specified result" or "what
+  the spec says" leaves the builder to find it (#1737: #1550's issue).
   A proof that differs between two runs (`check` and `lower-std`, one file
   and a package) is reduced to a probe of at most two files, and says whether
   the function is called from more than one file (ADR-391 D1) (#1465).
@@ -88,6 +91,14 @@ it, like the checks in `docs/supervisor.md`.
   the section of Part I-III that says what is right. Without one, the issue
   says "no decision yet" and is a `decision` issue, not a bug
   (`CLAUDE.md`, *A missing form stops the work*).
+  "Unclear whether by design" is neither: before filing, the author reads
+  the refusal's code in the code table of `30-nikaia-tooling.md`, the form's section
+  (`scripts/syntax.nika -- KEYWORD`) and the ADRs that name it, and either
+  cites the one that settles it or says "no decision yet". Where the decision
+  requires what the program got (the refusal or the action), the defect is
+  what does not match it, often the message, and the issue orders that fix,
+  not accepting the form (#1737: #1550 hedged, though Part II 10.1 and
+  ADR-296 D33 require the action; the fix was the message).
   A step that rests on a decision says whether it is built (the function
   that does it) or text only; text only is a dependency, named by its issue
   (I4) and built first (#1453).
