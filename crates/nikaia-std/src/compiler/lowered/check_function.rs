@@ -432,7 +432,7 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
         let plain_option = arg.ty.is_nullable && !arg.ty.is_view && !arg.ty.is_slice && (*arg.ty.code).is_none() && !arg.mutable;
         let type_parameter = arg.ty.generics.is_empty() && !arg.ty.is_view && !arg.ty.is_nullable && !arg.ty.is_slice && (*arg.ty.code).is_none() && !arg.mutable && state.type_parameters.contains_key(world.words.resolve(arg.ty.name));
         let mut ty = Ty::Unknown;
-        if (plain_text || plain_option || type_parameter) && check_function_lends(world, key, at + offset) {
+        if (plain_text || plain_option || type_parameter) && check_function_lends(world, key, unsafe { nikaia_std::proven::add::<i64>(at, offset) }) {
             let mut viewed = arg.ty.clone();
             viewed.is_view = true;
             viewed.either = false;

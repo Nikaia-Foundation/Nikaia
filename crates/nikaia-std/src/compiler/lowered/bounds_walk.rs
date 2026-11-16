@@ -4246,6 +4246,7 @@ pub(crate) fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbo
         if value_range.is_some() { bounding_bounded(walk, facts, &name, &nikaia_std::index::or(value_range, || Range::open())); }
     }
     bounding_built(walk, facts, &name, value, words);
+    bounding_built_choice(walk, facts, &name, value, context, program, words, &ask);
     if bounding_declared_list(ty, words) { bounding_collected(walk, facts, &name, value, context, program, words); }
     if walk.shape.roots.contains(&name) {
         match value {
@@ -4255,6 +4256,39 @@ pub(crate) fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbo
             _ => { },
         }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn bounding_built_choice(walk: &mut BoundsWalk, facts: &mut BoundsFacts, name: &str, value: &Expr, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+    match value {
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let cond = nikaia_std::boxed::open(cond);
+            let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
+            let first = match bounding_arm_value(then_branch) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let second = match bounding_arm_value(otherwise) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let length = length_of(name);
+            let mut taken = facts.clone();
+            bounding_assume(walk, &mut taken, cond, context, program, words);
+            bounding_built(walk, &mut taken, name, first, words);
+            let mut passed = facts.clone();
+            bounding_assume_not(walk, &mut passed, cond, context, program, words);
+            bounding_built(walk, &mut passed, name, second, words);
+            if !bounding_reads_name(&walk, &taken, &length) || !bounding_reads_name(&walk, &passed, &length) { return; }
+            let mut changed = nothing_changed();
+            changed.values.insert(nikaia_std::block::Text::from(name.to_string()));
+            bounding_if_join(walk, facts, &changed, &taken, &passed, ask);
+            bounding_flag_join(walk, facts, &changed, &taken, &passed, ask);
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn bounding_reads_name(walk: &BoundsWalk, facts: &BoundsFacts, name: &str) -> bool {
+    for fact in facts.facts.iter() {
+        let fact = nikaia_std::num::value(fact);
+        if walk.arena.mentions(fact, name) { return true; }
+    }
+    false
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -5111,7 +5145,10 @@ pub(crate) fn bounding_flag_names(walk: &BoundsWalk, branch: &BoundsFacts, flags
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
         walk.arena.variables(fact, &mut read);
         if read.len() != 1 { continue; }
-        for name in read.iter() { if !name.contains('.') && !name.contains('#') && !name.contains('[') && !name.contains('(') { flags.insert(nikaia_std::block::Text::from(name.to_string())); } }
+        for name in read.iter() {
+            let list = nikaia_std::index::or(name.strip_suffix(".len()"), || std::convert::AsRef::<str>::as_ref(name));
+            if !list.contains('.') && !list.contains('#') && !list.contains('[') && !list.contains('(') { flags.insert(nikaia_std::block::Text::from(name.to_string())); }
+        }
     }
 }
 
@@ -5161,6 +5198,8 @@ pub(crate) fn bounding_expr(walk: &mut BoundsWalk, expr: &Expr, facts: &mut Boun
             let value = nikaia_std::boxed::open(value);
             bounding_expr(walk, value, facts, context, program, words, ask);
             let mut changed = nothing_changed();
+            let mut ends: Vec<BoundsFacts> = vec![];
+            let mut bound: Vec<Vec<String>> = vec![];
             for arm in arms.iter() {
                 let mut inner = facts.clone();
                 let mut hidden: Vec<String> = vec![];
@@ -5170,10 +5209,19 @@ pub(crate) fn bounding_expr(walk: &mut BoundsWalk, expr: &Expr, facts: &mut Boun
                     inner.ints.remove(name);
                 }
                 bounding_maybe_expr(walk, (arm.guard).as_ref(), &mut inner, context, program, words, &ask);
-                bounding_expr(walk, &arm.body, &mut inner, context, program, words, ask);
+                let mut leaves = false;
+                match &arm.body {
+                    Expr::Block(block, _) => { leaves = bounding_block(walk, block, &mut inner, context, program, words, &ask); },
+                    _ => { bounding_expr(walk, &arm.body, &mut inner, context, program, words, ask); },
+                }
                 bounding_extend(&mut changed, &bounding_changed_in_expr(&arm.body, context, words));
+                if !leaves {
+                    ends.push(inner);
+                    bound.push(hidden);
+                }
             }
             bounding_after_change(walk, facts, &changed);
+            bounding_match_join(walk, facts, &changed, &ends, &bound, &ask);
         },
         Expr::Closure { .. } => { },
         Expr::Spawn { .. } => { },
@@ -5252,13 +5300,88 @@ pub(crate) fn bounding_else(walk: &mut BoundsWalk, else_branch: Option<&Block>, 
 
 pub(crate) fn bounding_if_join(walk: &mut BoundsWalk, facts: &mut BoundsFacts, changed: &BoundsChanged, then_facts: &BoundsFacts, else_facts: &BoundsFacts, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
     if changed.values.is_empty() { return; }
-    let mut kept: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut kept: Vec<i64> = vec![];
     for fact in bounding_join_candidates(walk, &facts, changed, then_facts) { if else_facts.facts.contains(&fact) || bounding_proves(&walk, else_facts, fact, ask) { kept.push(fact); } }
     for fact in bounding_join_candidates(walk, &facts, changed, else_facts) { if !kept.contains(&fact) && bounding_proves(&walk, then_facts, fact, ask) { kept.push(fact); } }
+    bounding_emptied_join(walk, &facts, changed, then_facts, else_facts, &mut kept);
+    bounding_emptied_join(walk, &facts, changed, else_facts, then_facts, &mut kept);
     for fact in kept.iter() {
         let fact = nikaia_std::num::value(fact);
         bounding_push(&walk, facts, fact);
     }
+}
+
+pub(crate) fn bounding_match_join(walk: &mut BoundsWalk, facts: &mut BoundsFacts, changed: &BoundsChanged, ends: &[BoundsFacts], bound: &[Vec<String>], ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+    if changed.values.is_empty() || ends.len() < 2 { return; }
+    let mut kept: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for k in 0..ends.len() as i64 {
+        for fact in bounding_join_candidates(walk, &facts, changed, unsafe { nikaia_std::proven::read(&ends, (k) as usize) }) {
+            if kept.contains(&fact) { continue; }
+            let mut own = false;
+            for name in (*nikaia_std::index::get(&bound, (k) as usize)).iter() { if bounding_touches(&walk, fact, name) { own = true; } }
+            let mut every = !own;
+            for j in 0..ends.len() as i64 {
+                if !every || j == k || unsafe { nikaia_std::proven::read(&ends, (j) as usize) }.facts.contains(&fact) { continue; }
+                every = bounding_proves(&walk, unsafe { nikaia_std::proven::read(&ends, (j) as usize) }, fact, ask);
+            }
+            if every { kept.push(fact); }
+        }
+    }
+    for fact in kept.iter() {
+        let fact = nikaia_std::num::value(fact);
+        bounding_push(&walk, facts, fact);
+    }
+}
+
+pub(crate) fn bounding_emptied_join(walk: &mut BoundsWalk, facts: &BoundsFacts, changed: &BoundsChanged, pinning: &BoundsFacts, other: &BoundsFacts, kept: &mut Vec<i64>) {
+    let pins = bounding_pinned_lengths(&walk, facts, changed, pinning);
+    if pins.is_empty() { return; }
+    let mut own: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for fact in bounding_join_candidates(walk, facts, changed, other) { if !kept.contains(&fact) && !pins.contains(&fact) { own.push(fact); } }
+    while (own.len() as i64) > most_flagged() { own.remove(0); }
+    for pin in pins.iter() {
+        let pin = nikaia_std::num::value(pin);
+        for fact in own.iter() {
+            let fact = nikaia_std::num::value(fact);
+            let either = walk.arena.or(vec![pin, fact]);
+            if !kept.contains(&either) && !facts.facts.contains(&either) { kept.push(either); }
+        }
+    }
+}
+
+pub(crate) fn bounding_pinned_lengths(walk: &BoundsWalk, facts: &BoundsFacts, changed: &BoundsChanged, branch: &BoundsFacts) -> Vec<i64> {
+    let mut out: Vec<i64> = vec![];
+    for fact in branch.facts.iter() {
+        let fact = nikaia_std::num::value(fact);
+        if facts.facts.contains(&fact) { continue; }
+        match walk.arena.at(fact) {
+            SolverTerm::Eq(a, b) => {
+                let mut name: Option<String> = None;
+                let mut value: Option<i64> = None;
+                match walk.arena.at(a) {
+                    SolverTerm::Var(ref v) => {
+                        name = Some(nikaia_std::block::Text::from(v.to_string()));
+                        value = walk.arena.constant(b);
+                    },
+                    _ => {
+                        match walk.arena.at(b) {
+                            SolverTerm::Var(ref v) => {
+                                name = Some(nikaia_std::block::Text::from(v.to_string()));
+                                value = walk.arena.constant(a);
+                            },
+                            _ => { },
+                        }
+                    },
+                }
+                let n = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if value.is_none() { continue; }
+                let list = match n.strip_suffix(".len()") { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if changed.values.contains(list) || changed.lengths.contains(list) { out.push(fact); }
+            },
+            _ => { },
+        }
+    }
+    out
 }
 
 pub(crate) fn bounding_join_candidates(walk: &mut BoundsWalk, facts: &BoundsFacts, changed: &BoundsChanged, branch: &BoundsFacts) -> Vec<i64> {

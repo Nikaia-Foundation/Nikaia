@@ -1,0 +1,7 @@
+bounds in tests/a_list_pair_emptied_in_one_branch_is_proved.nika: 1 indexes, 1 proved; 4 operations, 3 proved
+    16  row.ks[0]  proved
+    40  k / d      proved
+    46  c + 1      checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    48  c % d      proved
+    52  c / d      proved
+  derived  divided: d != 0, 0 <= d, proved at the calls on lines 64, 65, 66
