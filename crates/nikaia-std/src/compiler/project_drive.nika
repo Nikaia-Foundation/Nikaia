@@ -610,6 +610,45 @@ fn project_drive_cargo_key(record: ref fs::Path, handed: ref String) -> String {
     return hash::sha256_hex(text.bytes().collect())
 }
 
+/// **The directories a crate's `.nika` sources sit in**, each once (#1861).
+/// Cargo hears of a source only through the dependency file, so a file added
+/// beside the others, which no listed source names, left the crate fresh:
+/// a test calling a `pub fn` of a new `src/*.nika` met the old library and
+/// rustc's *cannot find function*. A directory's time moves when a file in
+/// it comes or goes, and Cargo reads it as it reads a file's.
+fn project_drive_source_dirs(sources: ref Vec[fs::Path]) -> Vec[fs::Path] {
+    let mut dirs: Vec[fs::Path] = []
+    for source in sources {
+        if (source.extension()?.text_of() ?? "") != "nika" {
+            continue
+        }
+        let dir = source.parent() ?? continue
+        if !dirs.contains(dir) {
+            dirs.push(dir)
+        }
+    }
+    return dirs
+}
+
+/// **What a directory holds, as a digest**: the names in it, sorted, so a
+/// listed directory (`project_drive_source_dirs`) counts as changed only
+/// where a file came or went, not where one was written again.
+fn project_drive_listing(dir: ref fs::Path) -> String? {
+    let mut names: Vec[String] = (fs::read_dir(dir, fs::Root::Anywhere) catch { return null }).iter().map(fn(name) { name.display() }).collect()
+    names.sort()
+    return hash::sha256_hex(names.join("\n").bytes().collect())
+}
+
+/// The digest `project_drive_record` keeps of a listed `path`: a file's
+/// bytes, a directory's names.
+fn project_drive_digest(path: ref fs::Path, a_dir: bool) -> String? {
+    if a_dir {
+        return project_drive_listing(path)
+    }
+    let bytes = fs::read(path, fs::Root::Anywhere) catch { return null }
+    return hash::sha256_hex(bytes.iter().collect())
+}
+
 /// **What the last build of this key said, where it would build nothing
 /// now** (#1750): the record names the key, the program Cargo made, and each
 /// file Cargo's dependency file lists for it (the sources of every path
@@ -638,8 +677,7 @@ pub fn project_drive_fresh(record: ref fs::Path, handed: ref String) -> String? 
         if f"{meta.len()}" == parts[0] && f"{meta.modified().in_nanos()}" == parts[1] {
             continue
         }
-        let bytes = fs::read(path, fs::Root::Anywhere) catch { return null }
-        if hash::sha256_hex(bytes.iter().collect()) != parts[2] {
+        if (project_drive_digest(path, meta.is_dir()) ?? return null) != parts[2] {
             return null
         }
     }
@@ -669,8 +707,8 @@ pub fn project_drive_record(record: ref fs::Path, handed: ref String, messages: 
         }
         let path: fs::Path = word.replace("\u{1f}", " ")
         let meta = fs::metadata(path, fs::Root::Anywhere) catch { return }
-        let bytes = fs::read(path, fs::Root::Anywhere) catch { return }
-        text.push_str(f"{meta.len()}:{meta.modified().in_nanos()}:{hash::sha256_hex(bytes.iter().collect())}:{path.display()}\n")
+        let digest = project_drive_digest(path, meta.is_dir()) ?? return
+        text.push_str(f"{meta.len()}:{meta.modified().in_nanos()}:{digest}:{path.display()}\n")
     }
     fs::write(record.with_extension("messages"), fs::Root::Anywhere, messages.clone()) catch { return }
     fs::write(record, fs::Root::Anywhere, text) catch {}
@@ -1311,6 +1349,9 @@ pub fn project_drive_wrapper[H: ProjectDriveWrapperHost](host: ref H) -> i32 thr
     // it was built at.
     if code == 0 {
         let mut inputs = sources
+        for dir in project_drive_source_dirs(inputs) {
+            inputs.push(dir)
+        }
         match project_settings_switches_beside(gen_dir) {
             null => {},
             switches => inputs.push(switches),

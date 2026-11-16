@@ -383,6 +383,37 @@ pub(crate) async fn project_drive_cargo_key(record: &std::path::Path, handed: &s
     hash::sha256_hex(&text.bytes().collect::<Vec<_>>())
 }
 
+pub(crate) fn project_drive_source_dirs(sources: &[fs::Path]) -> Vec<fs::Path> {
+    let mut dirs: Vec<fs::Path> = vec![];
+    for source in sources.iter() {
+        if nikaia_std::index::or(match nikaia_std::fs::path::extension(&(source)).as_ref() {
+            Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
+            None => None,
+        }, || "".into()) != "nika" { continue; }
+        let dir = match nikaia_std::fs::path::parent(&(source)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !dirs.contains(&dir) { dirs.push(dir); }
+    }
+    dirs
+}
+
+pub(crate) fn project_drive_listing(dir: &std::path::Path) -> Option<String> {
+    let mut names: Vec<String> = (match fs::read_dir(dir, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(_error) => { return None; },
+    }).iter().map(|name| { nikaia_std::fs::path::display(&(name)) }).collect::<Vec<_>>();
+    names.sort();
+    Some(hash::sha256_hex(&nikaia_std::block::Text::from(names.join("\n")).bytes().collect::<Vec<_>>()))
+}
+
+pub(crate) async fn project_drive_digest(path: &std::path::Path, a_dir: bool) -> Option<String> {
+    if a_dir { return project_drive_listing(path); }
+    let bytes = match fs::read(path, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { return None; },
+    };
+    Some(hash::sha256_hex(&bytes.iter().copied().collect::<Vec<_>>()))
+}
+
 pub async fn project_drive_fresh(record: &std::path::Path, handed: &str) -> Option<String> {
     let key = project_drive_cargo_key(record, handed).await;
     let held = match fs::read_to_string(record, &fs::Root::Anywhere).await {
@@ -405,11 +436,7 @@ pub async fn project_drive_fresh(record: &std::path::Path, handed: &str) -> Opti
             Err(_error) => { return None; },
         };
         if format!("{}", meta.len() as i64) == *unsafe { nikaia_std::proven::read(&parts, (0) as usize) } && format!("{}", meta.modified().in_nanos()) == *unsafe { nikaia_std::proven::read(&parts, (1) as usize) } { continue; }
-        let bytes = match fs::read(&path, &fs::Root::Anywhere).await {
-            Ok(value) => value,
-            Err(_error) => { return None; },
-        };
-        if hash::sha256_hex(&bytes.iter().copied().collect::<Vec<_>>()) != *unsafe { nikaia_std::proven::read(&parts, (2) as usize) } { return None; }
+        if (match project_drive_digest(&path, meta.is_dir()).await { Some(__nikaia_value) => __nikaia_value, None => return None }) != *unsafe { nikaia_std::proven::read(&parts, (2) as usize) } { return None; }
     }
     match fs::read_to_string(&nikaia_std::fs::path::with_extension(&(record), std::path::Path::new(&("messages"))), &fs::Root::Anywhere).await {
         Ok(value) => Some(value),
@@ -441,11 +468,8 @@ pub async fn project_drive_record(record: &std::path::Path, handed: &str, messag
             Ok(value) => value,
             Err(_error) => { return; },
         };
-        let bytes = match fs::read(&path, &fs::Root::Anywhere).await {
-            Ok(value) => value,
-            Err(_error) => { return; },
-        };
-        text.push_str(&format!("{}:{}:{}:{}\n", meta.len() as i64, meta.modified().in_nanos(), hash::sha256_hex(&bytes.iter().copied().collect::<Vec<_>>()), nikaia_std::fs::path::display(&(path))));
+        let digest = match project_drive_digest(&path, meta.is_dir()).await { Some(__nikaia_value) => __nikaia_value, None => return };
+        text.push_str(&format!("{}:{}:{}:{}\n", meta.len() as i64, meta.modified().in_nanos(), digest, nikaia_std::fs::path::display(&(path))));
     }
     match fs::write(&nikaia_std::fs::path::with_extension(&(record), std::path::Path::new(&("messages"))), &fs::Root::Anywhere, nikaia_std::block::Text::from(messages.to_string()), false, true).await {
         Ok(_) => {},
@@ -939,8 +963,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple67539| {
-        let (a, b) = __nikaia_tuple67539;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple69132| {
+        let (a, b) = __nikaia_tuple69132;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {
@@ -985,6 +1009,7 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     let code = host.run()?;
     if code == 0 {
         let mut inputs = sources;
+        for dir in project_drive_source_dirs(&inputs) { inputs.push(dir); }
         match project_settings_switches_beside(&gen_dir) {
             None => { },
             Some(switches) => { inputs.push(switches); },

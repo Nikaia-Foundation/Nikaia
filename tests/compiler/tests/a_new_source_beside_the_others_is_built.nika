@@ -1,0 +1,116 @@
+// #1861: a `pub fn` in a `src/*.nika` added to a package with test
+// programs drew rustc's *cannot find function* (NK1343) from `nikaia test`
+// until another source of the package was touched: Cargo hears of a source
+// only through the dependency file the build writes, which named the files
+// there were, so it kept the library built before the new one came. The
+// build now lists the directories the sources sit in as well
+// (`project_drive_source_dirs`). One program first, built alone; then the
+// new source and eight more programs, so `nikaia test` builds them as one
+// batch, as it does in `tests/compiler`, against the library the first run
+// left; then a run with nothing changed, which still starts no Cargo (#1750).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
+		],
+	).stdout.trim().clone()
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+/// How many times Cargo was started since the last call, and the log emptied.
+fn calls(log: String) -> String throws {
+	let counted = process::run(
+		"sh",
+		["-c", f"cat {log} 2>/dev/null | wc -l; rm -f {log}"],
+	).stdout.trim().clone()
+	return counted
+}
+
+/// The summary line of a `nikaia test` run.
+fn summary(said: String) -> String {
+	for line in said.lines() {
+		if line.starts_with("test result") {
+			return line.clone()
+		}
+	}
+	return "no summary"
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let nikaia = toolchain()
+	let real = process::run(
+		"sh",
+		["-c", "echo ${CARGO:-$(command -v cargo)}"],
+	).stdout.trim().clone()
+	let path = process::run("sh", ["-c", "echo $PATH"]).stdout.trim().clone()
+	process::run("mkdir", ["-p", f"{tmp}/lib/src", f"{tmp}/lib/tests", f"{tmp}/bin"])
+	let shim = f"{tmp}/bin/cargo"
+	fs::write(shim, fs::Root::Anywhere, SHIM)
+	process::run("chmod", ["+x", shim.clone()])
+	let log = f"{tmp}/cargo.log"
+	let env = [
+		("RUST_BACKTRACE", "0"),
+		("CARGO_TERM_COLOR", "never"),
+		("NIKAIA_CACHE_DIR", f"{tmp}/cache"),
+		("CARGO", shim.clone()),
+		("REAL_CARGO", real),
+		("SHIM_LOG", log.clone()),
+		("PATH", f"{tmp}/bin:{path}"),
+	]
+
+	let lib = f"{tmp}/lib"
+	fs::write(
+		f"{lib}/nikaia.toml",
+		fs::Root::Anywhere,
+		"[package]\nname = \"grown\"\nversion = \"0.1.0\"\n",
+	)
+	fs::write(f"{lib}/src/main.nika", fs::Root::Anywhere, "pub fn one() -> i64 {\n\treturn 1\n}\n")
+	fs::write(
+		f"{lib}/tests/b1.nika",
+		fs::Root::Anywhere,
+		"fn main() throws {\n\tprintln(f\"{grown::one() + 1}\")\n}\n",
+	)
+	fs::write(f"{lib}/tests/b1.stdout", fs::Root::Anywhere, "2\n")
+	let first = process::run(nikaia, ["test"]; dir: lib.clone(), env: env.clone())
+	println(f"test: {first.code}, {summary(first.stdout)}")
+	calls(log)
+
+	fs::write(f"{lib}/src/more.nika", fs::Root::Anywhere, "pub fn five() -> i64 {\n\treturn 5\n}\n")
+	for k in 2..8 {
+		fs::write(
+			f"{lib}/tests/b{k}.nika",
+			fs::Root::Anywhere,
+			f"fn main() throws {{\n\tprintln(f\"{{grown::one() + {k}}}\")\n}}\n",
+		)
+		fs::write(f"{lib}/tests/b{k}.stdout", fs::Root::Anywhere, f"{k + 1}\n")
+	}
+	fs::write(
+		f"{lib}/tests/five.nika",
+		fs::Root::Anywhere,
+		"fn main() throws {\n\tprintln(f\"{grown::five()}\")\n}\n",
+	)
+	fs::write(f"{lib}/tests/five.stdout", fs::Root::Anywhere, "5\n")
+	let grown = process::run(nikaia, ["test"]; dir: lib.clone(), env: env.clone())
+	println(f"test with a new source: {grown.code}, {summary(grown.stdout)}")
+	if grown.code != 0 {
+		eprintln(grown.stdout)
+		eprintln(grown.stderr)
+	}
+	calls(log)
+
+	let again = process::run(nikaia, ["test"]; dir: lib, env: env)
+	println(f"test again: {again.code}, {summary(again.stdout)}, Cargo started: {calls(log)}")
+	process::run("rm", ["-rf", tmp])
+}
+
+comptime SHIM: ref String = "#!/bin/bash\n# Cargo, with each start counted.\necho \"$1\" >> \"$SHIM_LOG\"\nexec \"$REAL_CARGO\" \"$@\"\n"
