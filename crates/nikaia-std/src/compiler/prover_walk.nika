@@ -723,6 +723,7 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         return
     }
     let name = words.resolve(names[0]).clone()
+    prover_bind_condition(walk, name, value, scope, words)
     match value {
         Expr::StructLit { fields, .. } => prover_literal_fields(walk, scope, name, fields, words),
         // **A call's result is read through its fields** (supervisor
@@ -1673,7 +1674,73 @@ fn prover_branch_facts(mut walk: ProverWalk, cond: ref Expr, scope: ref ProverSc
     if whole != null {
         return [whole ?? 0]
     }
+    return prover_condition_parts(walk, cond, holds, scope, words)
+}
+
+/// **What the prover reads of a condition's parts** (`claim_parts`, #1576),
+/// where it holds (`holds`) or fails: a name a `let` bound to a condition
+/// stands for what that condition made known (#1664).
+fn prover_condition_parts(mut walk: ProverWalk, cond: ref Expr, holds: bool, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> Vec[i64] {
+    match cond {
+        Expr::Unary { op, expr, .. } => {
+            if op == UnaryOp::Not {
+                return prover_condition_parts(walk, expr, !holds, scope, words)
+            }
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            if (op == BinaryOp::And && holds) || (op == BinaryOp::Or && !holds) {
+                let mut parts = prover_condition_parts(walk, lhs, holds, scope, words)
+                parts.extend(prover_condition_parts(walk, rhs, holds, scope, words))
+                return parts
+            }
+        },
+        Expr::Variable(name, _) => {
+            let n = words.resolve(name)
+            if holds {
+                return scope.held[n]?.clone() ?? []
+            }
+            return scope.failed[n]?.clone() ?? []
+        },
+        else => {},
+    }
     return claim_parts(cond, holds, words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+}
+
+/// **A condition bound by a `let`** (#1664): `let ok = xs.len() == 1 &&
+/// f(x)` keeps what `ok` makes known where it holds and where it fails, so
+/// that `if ok` knows `xs.len() == 1`. Only over names no assignment changes
+/// (not the walk's mutable whole numbers), so the facts stay true while the
+/// name stands; one the facts read bound again drops them (`rebind`).
+fn prover_bind_condition(mut walk: ProverWalk, n: ref String, value: ref Expr, mut scope: ProverScope, words: ref winnow_grammar::InternerContext) {
+    let a_condition = match value {
+        Expr::Unary { op, .. } => op == UnaryOp::Not,
+        Expr::Binary { op, .. } => op == BinaryOp::And || op == BinaryOp::Or || op == BinaryOp::Eq || op == BinaryOp::Ne || op == BinaryOp::Lt || op == BinaryOp::Le || op == BinaryOp::Gt || op == BinaryOp::Ge,
+        else => false,
+    }
+    if !a_condition {
+        return
+    }
+    let held = prover_condition_parts(walk, value, true, scope, words)
+    let failed = prover_condition_parts(walk, value, false, scope, words)
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    for fact in held {
+        walk.arena.variables(fact, read)
+    }
+    for fact in failed {
+        walk.arena.variables(fact, read)
+    }
+    let length = length_of(n)
+    for name in read {
+        if scope.mutables.contains(name) || name == n || name == length {
+            return
+        }
+    }
+    if !held.is_empty() {
+        scope.held.insert(n.clone(), held)
+    }
+    if !failed.is_empty() {
+        scope.failed.insert(n.clone(), failed)
+    }
 }
 
 /// An `else` branch, walked knowing its condition failed (`known`, what the
@@ -3467,6 +3534,9 @@ fn prover_follow_lengths(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut s
         }
     }
     for list in lists {
+        if prover_list_given(walk, stmt, list, scope, words) {
+            continue
+        }
         if !changes_length_in_statement(stmt, list, walk.state.readers, words) {
             continue
         }
@@ -3474,6 +3544,46 @@ fn prover_follow_lengths(mut walk: ProverWalk, stmt: ref Stmt, span: Span, mut s
             prover_forget_length(walk, list, scope)
         }
     }
+}
+
+/// **A followed list given a new value, `list = value`** (#1664), is
+/// followed on: its length is the new value's, as `let mut` gives it
+/// (`prover_mutable_list`), or unknown but not negative. The assignment
+/// bound the name again (`rebind`), which dropped what was known of the old
+/// length, and an `if` around it joins the two (`prover_join`). False for
+/// any other statement.
+fn prover_list_given(mut walk: ProverWalk, stmt: ref Stmt, list: ref String, mut scope: ProverScope, words: ref winnow_grammar::InternerContext) -> bool {
+    let value = match stmt {
+        Stmt::Assign { target, op, value } => {
+            if op != null {
+                return false
+            }
+            match target {
+                Expr::Variable(name, _) => {
+                    if words.resolve(name) != list {
+                        return false
+                    }
+                },
+                else => return false,
+            }
+            value
+        },
+        else => return false,
+    }
+    let length = length_of(list)
+    scope.rebind(walk.arena, length)
+    match value {
+        Expr::ListLit { items, .. } => {
+            let known: i64? = items.len()
+            scope.has_length(walk.arena, list, known)
+        },
+        else => {
+            if !prover_list_length(walk, list, value, scope, words) {
+                scope.has_length(walk.arena, list, null)
+            }
+        },
+    }
+    return true
 }
 
 /// **The followed lists an `if`'s condition or a `match`'s value may

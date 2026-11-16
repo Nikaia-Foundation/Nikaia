@@ -22,6 +22,8 @@ pub struct ProverScope {
     pub bits: collections::BTreeMap<String, ProverBits>,
     pub maps: collections::BTreeSet<String>,
     pub guards: collections::BTreeMap<i64, (i64, String)>,
+    pub held: collections::BTreeMap<String, Vec<i64>>,
+    pub failed: collections::BTreeMap<String, Vec<i64>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -31,7 +33,7 @@ pub struct ProverBits {
 }
 
 impl ProverScope {
-    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), sources: collections::BTreeMap::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new(), maps: collections::BTreeSet::new(), guards: collections::BTreeMap::new() } }
+    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), sources: collections::BTreeMap::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new(), maps: collections::BTreeSet::new(), guards: collections::BTreeMap::new(), held: collections::BTreeMap::new(), failed: collections::BTreeMap::new() } }
     pub fn at_the_entry() -> ProverScope {
         let mut scope = ProverScope::unknown();
         scope.path = Some(vec![]);
@@ -74,6 +76,17 @@ impl ProverScope {
             }
         }
         for bound in gone.iter() { self.summed.remove(bound); }
+        self.held.remove(name);
+        self.failed.remove(name);
+        if !self.held.is_empty() || !self.failed.is_empty() {
+            let mut stale: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            for (bound, facts) in self.held.iter() { if mentions_any(arena, facts, name, &length) { stale.push(nikaia_std::block::Text::from(bound.to_string())); } }
+            for (bound, facts) in self.failed.iter() { if mentions_any(arena, facts, name, &length) { stale.push(nikaia_std::block::Text::from(bound.to_string())); } }
+            for bound in stale.iter() {
+                self.held.remove(bound);
+                self.failed.remove(bound);
+            }
+        }
         let mut kept: Vec<i64> = vec![];
         for fact in self.facts.iter() {
             let fact = nikaia_std::num::value(fact);
@@ -274,6 +287,14 @@ impl ProverScope {
         scope.maps = self.maps.copy_owned();
         scope
     }
+}
+
+pub(crate) fn mentions_any(arena: &TermArena, facts: &[i64], name: &str, length: &str) -> bool {
+    for fact in facts.iter() {
+        let fact = nikaia_std::num::value(fact);
+        if arena.mentions(fact, name) || arena.mentions(fact, length) { return true; }
+    }
+    false
 }
 
 pub fn length_of(name: &str) -> String { format!("{}.len()", name) }

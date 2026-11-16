@@ -1,0 +1,73 @@
+// #1664: the walk follows a relation between two values. A condition bound
+// by a `let` keeps what it makes known where it is tested: after `let place
+// = names.len() == 1 && open`, `if place` knows `names.len() == 1`, as an
+// `else if place`, a `place && more` and an `if !place { return }` do. A
+// list given a new value by `=` inside an `if` stays followed, so after `if
+// open && args.len() > 0 { keys = make() }` a test `keys.len() > 0` knows
+// `args.len() > 0`. Before, each call of `need` was refused (NK1300).
+
+fn need(n: i64) -> i64 {
+	assert(n >= 1)
+	return n
+}
+
+fn make(n: i64) -> Vec[i64] {
+	let mut out: Vec[i64] = []
+	for i in 0..<n {
+		out.push(i)
+	}
+	return out
+}
+
+fn tested(names: ref Vec[i64], open: bool) -> i64 {
+	let place = names.len() == 1 && open
+	if place {
+		return need(names.len() as i64)
+	}
+	return 0
+}
+
+fn tested_again(names: ref Vec[i64], open: bool, more: bool) -> i64 {
+	let place = names.len() == 1 && open
+	if place && more {
+		return 10
+	} else if place {
+		return need(names.len() as i64) + 20
+	}
+	return 0
+}
+
+fn left_early(names: ref Vec[i64]) -> i64 {
+	let empty = names.len() == 0
+	if empty {
+		return 0
+	}
+	return need(names.len() as i64)
+}
+
+fn negated(names: ref Vec[i64], open: bool) -> i64 {
+	let none = names.is_empty() || !open
+	if !none {
+		return need(names.len() as i64)
+	}
+	return 0
+}
+
+fn given_in_a_branch(args: ref Vec[i64], open: bool) -> i64 {
+	let mut keys: Vec[i64] = []
+	if open && args.len() > 0 {
+		keys = make(args.len() as i64)
+	}
+	if keys.len() > 0 {
+		return need(args.len() as i64)
+	}
+	return 0
+}
+
+fn main() throws {
+	println(f"{tested([4], true)} {tested([4], false)} {tested([], true)}")
+	println(f"{tested_again([4], true, true)} {tested_again([4], true, false)} {tested_again([], true, false)}")
+	println(f"{left_early([1, 2])} {left_early([])}")
+	println(f"{negated([1, 2, 3], true)} {negated([1], false)} {negated([], true)}")
+	println(f"{given_in_a_branch([5, 6], true)} {given_in_a_branch([5, 6], false)} {given_in_a_branch([], true)}")
+}

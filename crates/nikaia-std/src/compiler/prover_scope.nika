@@ -84,6 +84,13 @@ pub struct ProverScope {
     /// the byte of the guard and its condition, written, for `--bounds` to
     /// name the guard that proves an index data from outside reaches.
     pub guards: collections::BTreeMap[i64, (i64, String)],
+    /// **What a condition bound by a `let` makes known where it is tested**
+    /// (#1664): after `let ok = xs.len() == 1 && f(x)`, `if ok` knows
+    /// `xs.len() == 1`. By the name, the facts where it holds (`held`) and
+    /// where it fails (`failed`), over names no assignment changes; dropped
+    /// with any name they read.
+    pub held: collections::BTreeMap[String, Vec[i64]],
+    pub failed: collections::BTreeMap[String, Vec[i64]],
 }
 
 /// The bounds `lo <= x <= hi` a mask or a shift gives a whole number.
@@ -115,6 +122,8 @@ impl ProverScope {
             bits: collections::BTreeMap(),
             maps: collections::BTreeSet(),
             guards: collections::BTreeMap(),
+            held: collections::BTreeMap(),
+            failed: collections::BTreeMap(),
         }
     }
 
@@ -176,6 +185,25 @@ impl ProverScope {
         }
         for bound in gone {
             self.summed.remove(bound)
+        }
+        self.held.remove(name)
+        self.failed.remove(name)
+        if !self.held.is_empty() || !self.failed.is_empty() {
+            let mut stale: Vec[String] = []
+            for (bound, facts) in self.held {
+                if mentions_any(arena, facts, name, length) {
+                    stale.push(bound.clone())
+                }
+            }
+            for (bound, facts) in self.failed {
+                if mentions_any(arena, facts, name, length) {
+                    stale.push(bound.clone())
+                }
+            }
+            for bound in stale {
+                self.held.remove(bound)
+                self.failed.remove(bound)
+            }
         }
         let mut kept: Vec[i64] = []
         for fact in self.facts {
@@ -475,6 +503,16 @@ impl ProverScope {
         scope.maps = self.maps.clone()
         return scope
     }
+}
+
+/// Whether one of `facts` reads `name` or `length`.
+fn mentions_any(arena: ref TermArena, facts: ref Vec[i64], name: ref String, length: ref String) -> bool {
+    for fact in facts {
+        if arena.mentions(fact, name) || arena.mentions(fact, length) {
+            return true
+        }
+    }
+    return false
 }
 
 /// The variable `name.len()` stands for.
