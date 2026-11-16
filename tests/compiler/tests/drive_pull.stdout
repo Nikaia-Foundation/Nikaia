@@ -29,7 +29,7 @@ theirs
 base
 == conflict
 ESCALATE drive: merging origin/develop, merge conflicted in shared.txt, merge aborted
-WAKE ESCALATE drive: merging origin/develop, merge conflicted in shared.txt, merge aborted
+WAKE MERGE read=- do=merge origin/develop by hand and resolve the sources it names, then restart the driver: ESCALATE drive: merging origin/develop, merge conflicted in shared.txt, merge aborted
 exit ok: false
 ours
 1

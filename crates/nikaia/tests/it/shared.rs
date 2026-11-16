@@ -487,7 +487,7 @@ fn the_counter_of_part_ii_12_2_lowers_at_both_settings() {
         let (count, lock) = ("std::rc::Rc", "lock::Local");
         let _ = setting;
         assert!(
-            rust.contains(&*format!("{count}::new(nikaia_std::{lock}::weighed(")),
+            rust.contains(&*format!("{count}::new(nikaia_std::{lock}::weighed(0, ")),
             "the constructor writes both hulls at `{setting}`:\n{rust}"
         );
         assert!(

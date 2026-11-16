@@ -293,12 +293,27 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   the owner, and starts again once that is handled. A watcher in the
   background wakes the main session when the driver ends, and the hourly
   check-in restarts a driver it finds stopped.
-* **Woken only for what matters** (owner, 2026-11-15). The driver prints
-  every `ESCALATE`, `STOP` and `PUSHED` line a second time as `WAKE <line>`
-  (`drive_wake`). A watcher the main session puts on the driver's log greps
-  `^WAKE ` and nothing else; builder runs, `FOUND`, `FILED`, `IMPROVE*` and
-  `SUITE` lines wake nobody and are read when the driver ends (its background
-  task's end wakes the session in any case).
+* **Woken only for what matters** (owner, 2026-11-15 and 2026-11-16, #1821).
+  The driver prints every `ESCALATE`, `STOP` and `PUSHED` line a second time
+  as one self-contained line `WAKE <KIND> read=<path or -> do=<action>:
+  <line>` (`drive_wake_line`; `nikaia run scripts/drive.nika -- --wake DIR
+  LINE` shows it). A watcher the main session puts on the driver's log greps
+  `^WAKE ` and nothing else, and on a wake the session reads only the file
+  `read=` names and does what `do=` says: not the log, not the other
+  reports, not CI. Every other line (`FOUND`, `FILED`, `IMPROVE*`, `SUITE`,
+  `RELEASE`, builder runs, `MERGE ... pulled`, `CLEANUP`) is for the log
+  only (the background task's end wakes the session in any case).
+
+  | WAKE kind | read | do |
+  | :--- | :--- | :--- |
+  | `PUSHED` | - | nothing: the driver ran `release.nika` itself (not under `--no-bump`, nor while HEAD holds untested commits: then the next push releases) |
+  | `STOP` | - | restart the driver (time limit, `--max` reached) |
+  | `CUT` | the report | accept it with a `Supervisor:` line, or file what it names; restart (`brief missing`: `DIR/batch.txt`, write or drop the brief) |
+  | `OWNER` | the report (`DIR/owner.txt` for the open questions) | tell the owner the question; restart |
+  | `RED` | `DIR/qa-input.txt` (suite red after two QA rounds); - (CI red on `develop`: the line names the jobs) | write the fix-forward brief, queued first; restart |
+  | `MERGE` | - | merge `origin/develop` by hand and resolve the sources the line names (`merge left open`: finish or abort it now); restart |
+  | `BATCH` | - | write the next briefs (every focus area empty); restart |
+  | `ESCALATE` | - | fix the cause the line names; restart |
 * **The cycle of one DIR.** `nikaia run scripts/drive.nika -- DIR` with
   `run_in_background` (`--max N` agent runs, default 8; `--dry-run` shows the
   next step; the bug lane with `--no-bump`). It loops on `cycle.nika`: runs
