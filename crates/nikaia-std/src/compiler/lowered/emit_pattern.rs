@@ -247,11 +247,11 @@ impl EmitState {
             return Ok(());
         }
         if called == "here" && generics.is_empty() && args.is_empty() && !walk.grammar_rules.contains(&called) {
-            out.push(emit_here_rule());
+            out.push(&emit_here_rule());
             return Ok(());
         }
         if called == "same_line" && generics.is_empty() && args.is_empty() && !walk.grammar_rules.contains(&called) {
-            out.push(emit_same_line_rule());
+            out.push(&emit_same_line_rule());
             return Ok(());
         }
         if called == "span" && generics.is_empty() && args.len() == 1 && !walk.grammar_rules.contains(&called) {
@@ -375,7 +375,7 @@ pub(crate) fn emit_reads_a_text_in_a_guard(world: &EmitWorld<'_, '_, '_, '_>, wa
     names.iter().any(|name| { emit_guard_reads(world, &pattern.node, name) })
 }
 
-pub(crate) fn emit_covered_rule() -> &'static str { "__nikaia_covered" }
+pub(crate) fn emit_covered_rule() -> String { String::from("__nikaia_covered") }
 
 pub(crate) fn emit_binds_a_name(pattern: &Pattern) -> bool {
     match pattern {

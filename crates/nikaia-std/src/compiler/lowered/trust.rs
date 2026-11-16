@@ -205,7 +205,7 @@ pub fn render(untrusted: bool, reasons: &[Reason], places: &[Place], path: &str)
     out
 }
 
-pub(crate) fn provenance(untrusted: bool) -> &'static str { if untrusted { "untrusted" } else { "trusted" } }
+pub(crate) fn provenance(untrusted: bool) -> String { if untrusted { String::from("untrusted") } else { String::from("trusted") } }
 
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

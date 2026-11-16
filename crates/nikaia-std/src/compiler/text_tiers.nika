@@ -204,6 +204,71 @@ pub struct TierAsk {
     /// where a field of a struct another file declares holds a `String`
     /// (ADR-282 D17, #956).
     pub beside: ref collections::BTreeMap[String, Vec[FieldContract]],
+    /// **The functions and methods of a file that another file of the
+    /// package calls**, by their bare names (`tier_beside_calls`): their
+    /// positions are decided as published ones, since the callers this file
+    /// cannot see hold them to what they declare (ADR-282 D22, D23; #1831).
+    pub beside_calls: ref collections::BTreeSet[String],
+}
+
+/// **The functions and methods one file declares and another file of the
+/// package calls or names** (ADR-282 D17, #1831), by their bare names: a
+/// file's tiers are decided alone, so a private function's text result that
+/// only literals reach would become a view the caller beside it cannot keep.
+/// Read before any file is decided, as the fields beside are.
+pub fn tier_beside_calls(files: ref Vec[ParsedView]) -> collections::BTreeSet[String] {
+    let mut declared: Vec[collections::BTreeSet[String]] = []
+    let mut called: Vec[collections::BTreeSet[String]] = []
+    for file in files {
+        let mut own: collections::BTreeSet[String] = collections::BTreeSet()
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        for item in file.items {
+            bc_item(item.node, file.words, own, names)
+        }
+        declared.push(own)
+        called.push(names)
+    }
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for (at, own) in declared.iter().enumerate() {
+        for name in own {
+            if called.iter().enumerate().any(fn(other) { other.0 != at && other.1.contains(name) }) {
+                out.insert(name.clone())
+            }
+        }
+    }
+    return out
+}
+
+/// What `item` declares into `own`, and every name its bodies call or read
+/// into `names`.
+fn bc_item(item: ref Item, words: ref winnow_grammar::InternerContext, mut own: collections::BTreeSet[String], mut names: collections::BTreeSet[String]) {
+    match item {
+        Item::Fn { name, body, .. } => {
+            own.insert(own_name(name, words))
+            for expr in visited_in_block(body) {
+                match expr {
+                    Expr::Variable(symbol, _) => {
+                        names.insert(words.resolve(symbol).clone())
+                    },
+                    Expr::Path(segments, _) => {
+                        for symbol in segments {
+                            names.insert(words.resolve(symbol).clone())
+                        }
+                    },
+                    Expr::MethodCall { method, .. } => {
+                        names.insert(words.resolve(method).clone())
+                    },
+                    else => {},
+                }
+            }
+        },
+        Item::Impl { methods, .. } => {
+            for method in methods {
+                bc_item(method.node, words, own, names)
+            }
+        },
+        else => {},
+    }
 }
 
 /// **What the package's files publish of their structs' fields** (ADR-282
@@ -368,7 +433,7 @@ struct TextDeclared {
     private_structs: collections::BTreeSet[String],
 }
 
-fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext) -> TextDeclared {
+fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext, beside_calls: ref collections::BTreeSet[String]) -> TextDeclared {
     let mut declared = TextDeclared { fields: collections::BTreeMap(), variants: collections::BTreeMap(), variant_fields: collections::BTreeMap(), public_enums: collections::BTreeSet(), fns: collections::BTreeMap(), types: collections::BTreeSet(), methods: collections::BTreeMap(), rules: collections::BTreeSet(), comptime_texts: collections::BTreeSet(), private_structs: collections::BTreeSet() }
     for item in program.items {
         match item.node {
@@ -409,14 +474,14 @@ fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext)
                     }
                 }
             }
-            Item::Fn { .. } => declare_function(item.node, null, names, declared, false),
+            Item::Fn { .. } => declare_function(item.node, null, names, declared, false, beside_calls),
             // **A trait's method has the trait's signature** (ADR-282 D29):
             // every type that implements it answers one type, so its
             // positions are published ones.
             Item::Impl { trait_name, target, methods } => {
                 let owner = names.resolve(target.name).clone()
                 for method in methods {
-                    declare_function(method.node, owner.clone(), names, declared, trait_name != null)
+                    declare_function(method.node, owner.clone(), names, declared, trait_name != null, beside_calls)
                 }
             }
             Item::Grammar(def) => declare_rules(def, names, declared),
@@ -452,7 +517,7 @@ fn declare_rules(def: ref GrammarDef, names: ref winnow_grammar::InternerContext
     }
 }
 
-fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::InternerContext, mut declared: TextDeclared, of_a_trait: bool) {
+fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::InternerContext, mut declared: TextDeclared, of_a_trait: bool, beside_calls: ref collections::BTreeSet[String]) {
     let (name, receiver, args, config, ret_type, is_public) = match item {
         Item::Fn { name, receiver, args, config, ret_type, is_public, .. } => (name, receiver, args, config, ret_type, is_public),
         else => return,
@@ -481,7 +546,7 @@ fn declare_function(item: ref Item, target: String?, names: ref winnow_grammar::
             text_options.insert(names.resolve(option.name).clone())
         }
     }
-    declared.fns.insert(key, FnDecl { params: params, changes: changes, keeps: keeps, options: options, text_options: text_options, result: ret_type?.clone(), published: is_public || of_a_trait, of_a_trait: of_a_trait, changes_self: changes_self })
+    declared.fns.insert(key, FnDecl { params: params, changes: changes, keeps: keeps, options: options, text_options: text_options, result: ret_type?.clone(), published: is_public || of_a_trait || beside_calls.contains(own), of_a_trait: of_a_trait, changes_self: changes_self })
 }
 
 fn own_name(name: ref winnow_grammar::Symbol?, names: ref winnow_grammar::InternerContext) -> String {
@@ -7757,7 +7822,7 @@ fn tier_word(tier: Tier) -> String {
 /// **Decide the tiers of a program** - a fixpoint over walks of every
 /// function - and what the rewrite needs besides.
 pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
-    let declared = declared_of(program, ask.names)
+    let declared = declared_of(program, ask.names, ask.beside_calls)
     let text = string_type(declared, ask.names)
     let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), late_lent: collections::BTreeSet(), keeping: collections::BTreeSet(), kept_into: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads(), function: "", stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap(), closure_owns: false }
     let found = late_arms(program, walk.declared, ask)

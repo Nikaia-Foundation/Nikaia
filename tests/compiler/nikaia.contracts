@@ -319,6 +319,26 @@ panics = false
 touches = []
 signature = "(theory: String) -> String"
 
+[fn."tier_private_name"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "() -> String"
+
+[fn."tier_private_names"]
+pub = true
+sync = "inferred"
+panics = false
+touches = []
+signature = "() -> Vec[String]"
+
+[fn."tier_private_note"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["found: borrowed"]
+signature = "(found: String) -> String?"
+
 [fn."trait_keep_beside_send"]
 pub = true
 locks = "?"

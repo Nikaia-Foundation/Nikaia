@@ -55,11 +55,11 @@ pub(crate) fn emit_flow_is_whole(ty: &str) -> bool {
     signed || ty == "u8" || ty == "u16" || ty == "u32" || ty == "u64" || ty == "u128" || ty == "usize"
 }
 
-pub(crate) fn emit_flow_proven(op: &BinaryOp) -> &'static str {
+pub(crate) fn emit_flow_proven(op: &BinaryOp) -> String {
     match op {
-        BinaryOp::Add => "nikaia_std::proven::add",
-        BinaryOp::Sub => "nikaia_std::proven::sub",
-        _ => "nikaia_std::proven::mul",
+        BinaryOp::Add => String::from("nikaia_std::proven::add"),
+        BinaryOp::Sub => String::from("nikaia_std::proven::sub"),
+        _ => String::from("nikaia_std::proven::mul"),
     }
 }
 

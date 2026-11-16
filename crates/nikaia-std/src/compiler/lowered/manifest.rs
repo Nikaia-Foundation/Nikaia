@@ -14,9 +14,9 @@ pub(crate) fn withdrawn(key: &str) -> &'static str {
     ""
 }
 
-pub(crate) fn moved(key: &str) -> &'static str {
-    if key == "cleanup-deadline" { return "the runtime configuration file `nikaia-runtime.toml`, which is read when the program starts. How long a program waits at exit is set by whoever runs it, and the compiler no longer reads this key"; }
-    ""
+pub(crate) fn moved(key: &str) -> String {
+    if key == "cleanup-deadline" { return String::from("the runtime configuration file `nikaia-runtime.toml`, which is read when the program starts. How long a program waits at exit is set by whoever runs it, and the compiler no longer reads this key"); }
+    String::from("")
 }
 
 pub fn build_key(key: &str) -> Result<Switch, nikaia_std::error::Thrown<Refused>> {

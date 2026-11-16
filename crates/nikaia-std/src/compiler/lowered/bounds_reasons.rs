@@ -233,7 +233,7 @@ pub(crate) fn holds_site(block: &Block, site: u32) -> bool {
 
 pub(crate) fn choice() -> String { String::from("an `if` or `match` value, which the walk does not read (#1053)") }
 
-pub(crate) fn element() -> &'static str { "a value read out of a list, of which the walk knows no fact (#797, #798)" }
+pub(crate) fn element() -> String { String::from("a value read out of a list, of which the walk knows no fact (#797, #798)") }
 
 pub(crate) fn reason_element_from(value: &Expr, top: &Block, words: &winnow_grammar::InternerContext) -> String {
     match value {

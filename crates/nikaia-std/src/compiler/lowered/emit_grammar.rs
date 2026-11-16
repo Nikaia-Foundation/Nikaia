@@ -25,13 +25,13 @@ pub(crate) fn emit_any_writes_a_list(world: &EmitWorld<'_, '_, '_, '_>, parts: &
     false
 }
 
-pub(crate) fn emit_span_rule() -> &'static str { "__nikaia_span" }
+pub(crate) fn emit_span_rule() -> String { String::from("__nikaia_span") }
 
-pub(crate) fn emit_count_rule() -> &'static str { "__nikaia_count" }
+pub(crate) fn emit_count_rule() -> String { String::from("__nikaia_count") }
 
-pub(crate) fn emit_here_rule() -> &'static str { "__nikaia_here" }
+pub(crate) fn emit_here_rule() -> String { String::from("__nikaia_here") }
 
-pub(crate) fn emit_same_line_rule() -> &'static str { "__nikaia_same_line" }
+pub(crate) fn emit_same_line_rule() -> String { String::from("__nikaia_same_line") }
 
 pub(crate) fn emit_own_ws_rule() -> &'static str { "NIKAIA_OWN_WS" }
 
