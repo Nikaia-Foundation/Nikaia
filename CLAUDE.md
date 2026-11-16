@@ -10,7 +10,7 @@ The rules every session and agent needs. What only the main session does
   trunk.** A session starts on `main` or a branch made from it, so it switches
   first: `git fetch origin develop && git checkout -B develop origin/develop`.
   Nobody pushes to `main`.
-* **Before each commit, the cheap checks**: build, `cargo fmt`, the tests the
+* **Before each commit, the cheap checks**: build, `cargo fmt --all`, the tests the
   change touches, `cargo clippy --all-targets -- -D warnings` (a lint in a
   lowered file is allowed on the `tools` module in
   `crates/nikaia-std/src/lib.rs`, not fixed in the file) and

@@ -24,4 +24,12 @@ quotes a figure.
 * **Understand a result before publishing it**: if a number moves, find out why
   (callgrind_annotate) before anything quotes it. `benches/brc/brc.sh` is the
   pattern: it builds, compares the outputs, counts and prints the table.
+* **A loss against another entry is split by a control before it is blamed**
+  (#1847): write the Nikaia program's own algorithm in plain Rust (scratch, not
+  committed) and count it too. Nikaia near the control: the gap is the other
+  entry's algorithm, and the loss names the form Nikaia lacks for it (a
+  `Found:`, e.g. a run-time byte shuffle, #1845). Nikaia well above the
+  control: the cost is Nikaia's own, a defect to trace with
+  callgrind_annotate. Quote the control's count beside the loss (#1614:
+  fannkuch-redux 516 against a control of 499 a permutation, Rust #6 81.5).
 
