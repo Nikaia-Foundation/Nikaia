@@ -23,7 +23,7 @@ impl SvRandom {
     pub(crate) fn below(&mut self, n: i64) -> i64 {
         let hi = self.draw();
         let lo = self.draw();
-        (hi * 32768 + lo) % n
+        (unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::mul::<i64>(hi, 32768), lo) }) % n
     }
 }
 

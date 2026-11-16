@@ -270,6 +270,13 @@ fn becomes_shared(found: ref Ty, want: ref Ty) -> bool {
 /// declare a part of a list as one, clone a view, lend text, convert a number
 /// - or the two declarations, either of which may be the wrong one.
 fn way_out_of_a_mismatch(found: ref Ty, want: ref Ty) -> String {
+    // **The stamp is no part of the way out** (ADR-281 D22, D24, #1651): a
+    // plain declaration takes a stamped value as it is, so the help is the
+    // one for the value under the stamp, and never names a `ref` inside
+    // `Seen[...]`.
+    if found.is_seen() || want.is_seen() {
+        return way_out_of_a_mismatch(found.unseen(), want.unseen())
+    }
     if becomes_shared(found, want) {
         let hull = match want {
             Ty::Named { name, .. } => name.clone(),

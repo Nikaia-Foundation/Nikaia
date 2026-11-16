@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1410] — 2026-11-16
+
+**Builders' changes (#1550, #1920)**
+- A grammar rule written without its action is now refused as "This rule's body ends without an action" at the next rule, instead of a misleading error about `->` in a pattern.
+- Bounds: a whole-number field of a call's struct result (`let e = error_of(...); e.offset - 1`) carries what the callee is found to return in it at every return that builds the struct as a literal, for functions and methods (ADR-306 D35). A method call with no argument now reads its found range too.
+
 ## [0.0.1409] — 2026-11-16
 
 **Builders' changes (#1843, #1853, #1857, #1862, #1866, #1874, #1881, #1883, #1885, #1886, #1887, #1895, #1896, #, #1903)**

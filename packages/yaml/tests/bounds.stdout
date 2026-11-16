@@ -1,8 +1,7 @@
-bounds in src/main.nika: 66 indexes, 66 proved; 101 operations, 78 proved
+bounds in src/main.nika: 66 indexes, 66 proved; 101 operations, 79 proved
   1421  depth_of(x) + 1                       justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
   1427  depth_of(e.key) + 1                   justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
   1427  depth_of(e.value) + 1                 justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
-  1761  e.offset - 1                          justified: a byte offset into the input, never negative (the walk does not follow `error_of`'s result into its field)
   2016  10 * nodes_in(d.root) + alias_nodes   justified: a count of nodes, which the memory holding them bounds
   2016  10 * nodes_in(d.root)                 justified: a count of nodes, which the memory holding them bounds
   2028  1 + items.iter().map(…).sum()         justified: a count of nodes, which the memory holding them bounds

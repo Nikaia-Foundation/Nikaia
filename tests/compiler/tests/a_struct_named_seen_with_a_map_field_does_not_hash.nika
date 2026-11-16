@@ -1,0 +1,14 @@
+// A struct the program declares under the name `Seen` is asked by its
+// fields: a map field keeps it from hashing, as for any other struct.
+
+use std::collections
+
+struct Seen {
+    m: collections::HashMap[String, i64],
+}
+
+fn main() throws {
+    let mut s = Seen { m: collections::HashMap() }
+    s.m.insert("a", 1)
+    println(f"{s.m.len()}")
+}

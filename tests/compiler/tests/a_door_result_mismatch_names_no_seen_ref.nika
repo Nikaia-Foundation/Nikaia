@@ -1,0 +1,11 @@
+// The help of a mismatch never names a `ref` inside `Seen[...]` (ADR-281
+// D22, D24, #1651): the stamp is no part of the way out, so the help is the
+// one for the value under it. Before, it said "change the declaration to
+// `Seen[ref String]`", a type no declaration can hold.
+struct N { t: String }
+
+fn main() throws {
+	let m = SharedMut(N { t: "hi" })
+	let got: i64 = m.access fn(open) { open.t }
+	println(got)
+}
