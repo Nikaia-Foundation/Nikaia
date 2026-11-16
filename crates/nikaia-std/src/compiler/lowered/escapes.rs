@@ -95,8 +95,8 @@ pub(crate) fn a_byte(c: &[scalar], from: i64, so_far: &str, char_of: &impl Fn(i6
         end = unsafe { nikaia_std::proven::add::<i64>(end, 1) };
     }
     if end < unsafe { nikaia_std::proven::add::<i64>(from, 2) } { return not_an_escape(&written, "`\\x` takes exactly two hexadecimal digits"); }
-    let high = nikaia_std::index::or(hex_digit(*nikaia_std::index::get(&c, nikaia_std::index::at(from))), || 128);
-    let low = nikaia_std::index::or(hex_digit(*nikaia_std::index::get(&c, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(from, 1) }))), || 128);
+    let high = nikaia_std::index::or(hex_digit(*unsafe { nikaia_std::proven::read(&c, (from) as usize) }), || 128);
+    let low = nikaia_std::index::or(hex_digit(*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(from, 1)) as usize) }), || 128);
     let why = "`\\x` takes two hexadecimal digits naming a byte below `\\x80`";
     let value = high * 16 + low;
     if value >= 128 { return not_an_escape(&written, why); }

@@ -472,7 +472,7 @@ pub(crate) fn check_core_call_on_now_expected(state: &CheckState, world: &CheckW
     };
     if parts.len() != 2 { return expected; }
     if entry == "or_insert_with" {
-        let wrapped: Ty = match *nikaia_std::index::get(&expected, 0) {
+        let wrapped: Ty = match *unsafe { nikaia_std::proven::read(&expected, (0) as usize) } {
             Ty::Fn { ref params, ref result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); if result.is_none() && !(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).is_unknown() { Ty::Fn { params: params.copy_owned(), result: Box::new(Some((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).clone())), is_sync, can_throw } } else { (*unsafe { nikaia_std::proven::read(&expected, (0) as usize) }).clone() } },
             _ => (*unsafe { nikaia_std::proven::read(&expected, (0) as usize) }).clone(),
         };

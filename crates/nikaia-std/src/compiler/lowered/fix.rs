@@ -116,9 +116,9 @@ pub fn fix_diff(path: &str, old: &str, new: &str) -> String {
             a = was.len() as i64;
             b = now.len() as i64;
         }
-        out.push_str(&format!("@@ -{},{} +{},{} @@\n", unsafe { nikaia_std::proven::add::<i64>(i, 1) }, unsafe { nikaia_std::proven::sub::<i64>(a, i) }, unsafe { nikaia_std::proven::add::<i64>(j, 1) }, b - j));
-        for k in i..a { out.push_str(&format!("-{}\n", *nikaia_std::index::get(&was, nikaia_std::index::at(k)))); }
-        for k in j..b { out.push_str(&format!("+{}\n", *nikaia_std::index::get(&now, nikaia_std::index::at(k)))); }
+        out.push_str(&format!("@@ -{},{} +{},{} @@\n", unsafe { nikaia_std::proven::add::<i64>(i, 1) }, unsafe { nikaia_std::proven::sub::<i64>(a, i) }, unsafe { nikaia_std::proven::add::<i64>(j, 1) }, unsafe { nikaia_std::proven::sub::<i64>(b, j) }));
+        for k in i..a { out.push_str(&format!("-{}\n", *unsafe { nikaia_std::proven::read(&was, (k) as usize) })); }
+        for k in j..b { out.push_str(&format!("+{}\n", *unsafe { nikaia_std::proven::read(&now, (k) as usize) })); }
         i = a;
         j = b;
     }
