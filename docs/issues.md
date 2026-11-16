@@ -373,6 +373,16 @@ it, like the checks in `docs/supervisor.md`.
   left to the builder (#1902: #1849's F asked the bounds walk to use
   summaries, and `bounds::proven`'s four Rust callers, emit among them,
   hold no prover state).
+  An item that records, intercepts or caches what a pass reads ("record
+  each entry read", "key on what it looked up") names the function every
+  such read goes through today, read in the code (I4a), and the files
+  that call it. A pass handed whole values (a parsed tree, a ledger, a
+  graph) that it walks itself has no such function: the item then counts
+  the read sites (the search, files per kind), names how each whole value
+  is keyed, and says `no decision yet` (a `decision`, I6), not left to the
+  builder (#1910: #1307's item 1 asked `lower-std` to record each package
+  entry a file reads, and every check and emit pass walks `beside`, `own`,
+  the call graphs and `provenance` directly).
   An item settles each choice that changes what its result does, or says
   the builder chooses (#1733: #1717 left open whether a merge with no local
   commits fast-forwards, and a merge commit alone would have made the suite
