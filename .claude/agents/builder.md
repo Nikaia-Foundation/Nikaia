@@ -57,7 +57,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   `tests/compiler/tests/` test, as its own commit, and named in `Body:`. `Found:`
   holds only what lies outside the area, does not fit the run or needs a
   decision. One defect per `Found:` line, with its probe (the snippet and the
-  output it gives today, and the command as run: the package built and its
+  output it gives today, the output it should give and what says so, the ADR
+  decision, the Part I-III section or the compiler's own message, #1732:
+  #1720's builder read its expected result out of NK1261's help; and the
+  command as run: the package built and its
   setting, the consumer where the library alone builds, #1716; the
   snippet copied whole from the file that ran, its `use` lines and
   manifest table with it, never retyped, #1726); the part your run can
