@@ -79,6 +79,14 @@ panics = false
 touches = []
 signature = "(ref self) -> String"
 
+[fn."is_identifier"]
+pub = true
+sync = true
+panics = false
+touches = []
+views = ["part: borrowed"]
+signature = "(part: ref String) -> bool"
+
 [fn."raw"]
 pub = true
 sync = "inferred"
