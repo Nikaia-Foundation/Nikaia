@@ -3525,7 +3525,9 @@ fn bounding_derived_call(
 			if left_reads.iter().any(fn(name) { right_reads.contains(name) }) {
 				continue
 			}
-			let side = if claim.strict { walk.arena.lt(left, right) } else {
+			let side = if claim.apart { walk.arena.unequal(left, right) } else if claim.strict {
+				walk.arena.lt(left, right)
+			} else {
 				walk.arena.le(left, right)
 			}
 			// Of every value of a list: as the callee knows it (#1483).
@@ -3600,6 +3602,26 @@ fn bounding_derived_side(
 			return null
 		}
 		return bounding_length_named(walk, path, true)
+	}
+	// **A path of fields from a parameter** (ADR-391 D1, #1832): the same
+	// path from the argument handed for it, `w.walked` for `p.walked`.
+	let root = path_root(param)
+	if root != param {
+		for k in 0..<params.len() {
+			if params[k] != root {
+				continue
+			}
+			let handed = path_of(args[k], words) ?? return null
+			if walk.pinned.contains(path_root(handed)) {
+				return null
+			}
+			let path = f"{handed}{param.strip_prefix(root) ?? ""}"
+			if length {
+				return bounding_length_named(walk, path, true)
+			}
+			return walk.arena.var(path)
+		}
+		return null
 	}
 	for k in 0..<params.len() {
 		if params[k] != param {
@@ -3719,7 +3741,9 @@ fn bounding_derived_entry(
 		} else {
 			walk.arena.var(claim.right)
 		}
-		let side = if claim.strict { walk.arena.lt(left, right) } else {
+		let side = if claim.apart { walk.arena.unequal(left, right) } else if claim.strict {
+			walk.arena.lt(left, right)
+		} else {
 			walk.arena.le(left, right)
 		}
 		// A claim over every value says nothing of an empty list (#1483).

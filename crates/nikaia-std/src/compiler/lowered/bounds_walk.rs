@@ -2002,7 +2002,7 @@ pub(crate) fn bounding_derived_call(walk: &mut BoundsWalk, expr: &Expr, name: &s
             let right = if claim.fixed.is_some() { walk.arena.int(nikaia_std::index::or(claim.fixed, || 0)) } else { match bounding_derived_side(walk, &callee.params, &claim.right, claim.length, claim.each, args, on, facts, &mut given, &mut right_reads, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue } };
             let right = if claim.length { bounding_scaled(walk, &claim, right) } else { right };
             if left_reads.iter().any(|name| { right_reads.contains(nikaia_std::index::as_text(&name)) }) { continue; }
-            let side = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
+            let side = if claim.apart { walk.arena.unequal(left, right) } else if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
             let goal = bounding_each_guarded(walk, side);
             if given.is_empty() { if bounding_proves(&walk, facts, goal, ask) { proved.insert(k); } } else {
                 let mut known = facts.clone();
@@ -2039,6 +2039,18 @@ pub(crate) fn bounding_derived_side(walk: &mut BoundsWalk, params: &[String], pa
         let path = format!("{}.{}", match on { Some(__nikaia_value) => __nikaia_value, None => return None }, nikaia_std::index::or(field, || ""));
         if walk.pinned.contains(&path_root(&path)) { return None; }
         return Some(bounding_length_named(walk, &path, true));
+    }
+    let root = path_root(param);
+    if root != param {
+        for k in 0..params.len() as i64 {
+            if *unsafe { nikaia_std::proven::read(&params, (k) as usize) } != root { continue; }
+            let handed = match path_of(nikaia_std::index::get(&args, (k) as usize), words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if walk.pinned.contains(&path_root(&handed)) { return None; }
+            let path = format!("{}{}", handed, nikaia_std::index::or(param.strip_prefix(&*root), || ""));
+            if length { return Some(bounding_length_named(walk, &path, true)); }
+            return Some(walk.arena.var(&path));
+        }
+        return None;
     }
     for k in 0..params.len() as i64 {
         if *unsafe { nikaia_std::proven::read(&params, (k) as usize) } != param { continue; }
@@ -2114,7 +2126,7 @@ pub(crate) fn bounding_derived_entry(walk: &mut BoundsWalk, facts: &mut BoundsFa
             let length = walk.arena.var(&length_of(&claim.right));
             bounding_scaled(walk, claim, length)
         } else if claim.each { walk.arena.var(&bounding_element_of(&claim.right)) } else { walk.arena.var(&claim.right) };
-        let side = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
+        let side = if claim.apart { walk.arena.unequal(left, right) } else if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
         let fact = bounding_each_guarded(walk, side);
         bounding_push(&walk, facts, fact);
     }

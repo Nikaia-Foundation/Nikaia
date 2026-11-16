@@ -1,9 +1,12 @@
-bounds in tests/a_divisor_is_listed_proved_or_checked.nika: 0 indexes, 0 proved; 7 operations, 4 proved
+bounds in tests/a_divisor_is_listed_proved_or_checked.nika: 0 indexes, 0 proved; 7 operations, 6 proved
      6  n / d        proved
-    13  n % d        checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    13  n % d        proved
     20  n / d        proved
-    26  n % d        checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    26  n % d        proved
     32  x /= d       proved
     34  x %= d       checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
     41  100 / parts  proved
-  derived  halves: 0 <= d, proved at the calls on lines 41
+  derived  guarded: d != 0, 0 <= d, proved at the calls on lines 41
+  derived  halves: 0 <= d, d != 0, proved at the calls on lines 41
+  derived  signed_rest: d != 0, 0 <= d, proved at the calls on lines 41
+  derived  unsigned_rest: d != 0, proved at the calls on lines 41

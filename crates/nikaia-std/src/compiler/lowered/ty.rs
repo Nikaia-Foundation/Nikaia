@@ -1002,7 +1002,7 @@ pub(crate) fn an_array_of_any_length(ty: &Ty) -> bool {
 
 pub(crate) fn array_fits(given: &[Ty], expected: &Ty) -> bool {
     match expected {
-        Ty::Named { args, .. } => (*nikaia_std::index::get(&given, 0)).fits(nikaia_std::index::get(&args, 0)),
+        Ty::Named { args, .. } => (*unsafe { nikaia_std::proven::read(&given, (0) as usize) }).fits(nikaia_std::index::get(&args, 0)),
         _ => false,
     }
 }

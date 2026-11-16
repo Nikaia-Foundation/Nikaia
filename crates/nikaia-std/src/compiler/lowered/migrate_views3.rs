@@ -318,7 +318,7 @@ pub(crate) fn migrate_a_ref_code(tokens: &[MigrateToken], k: i64, in_brackets: b
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn migrate_name_a_code(tokens: &[MigrateToken], k: i64, prefix: &mut Vec<String>, suffix: &mut Vec<String>) {
-    let open = k + 1;
+    let open = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
     let close = migrate_closing(tokens, open);
     #[allow(unused_mut)] let mut sources: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut start = open + 1;
@@ -326,11 +326,11 @@ pub(crate) fn migrate_name_a_code(tokens: &[MigrateToken], k: i64, prefix: &mut 
     let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
     let mut j = open + 1;
     while j <= close {
-        let ends = j == close || depth == 0 && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == ",";
+        let ends = j == close || depth == 0 && unsafe { nikaia_std::proven::read(&tokens, (j) as usize) }.text == ",";
         if ends && j > start {
             let mut name: String = String::from("");
             let mut type_at = start;
-            if nikaia_std::index::get(&tokens, nikaia_std::index::at(start)).kind == MigrateKind::Word && migrate_text_at(tokens, unsafe { nikaia_std::proven::add::<i64>(start, 1) }) == ":" {
+            if unsafe { nikaia_std::proven::read(&tokens, (start) as usize) }.kind == MigrateKind::Word && migrate_text_at(tokens, unsafe { nikaia_std::proven::add::<i64>(start, 1) }) == ":" {
                 name = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&tokens, (start) as usize) }.text.to_string());
                 type_at = unsafe { nikaia_std::proven::add::<i64>(start, 2) };
             } else {
@@ -338,7 +338,7 @@ pub(crate) fn migrate_name_a_code(tokens: &[MigrateToken], k: i64, prefix: &mut 
                 { let __nikaia_stored = format!("{}: ", name); nikaia_std::index::set(&mut *prefix, nikaia_std::index::at(start), __nikaia_stored); }
             }
             if migrate_text_at(tokens, type_at) == "ref" && migrate_text_at(tokens, type_at + 1) != "mut" { sources.push(name); }
-            position += 1;
+            position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
         }
         if ends { start = unsafe { nikaia_std::proven::add::<i64>(j, 1) }; }
         match nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind {

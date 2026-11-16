@@ -524,7 +524,7 @@ pub(crate) fn first_refused(operations: &[Operation], present: &[bool]) -> Vec<i
 }
 
 pub(crate) fn refused_header(key: &str, count: i64, operations: &[Operation], pair: &[i64]) -> String {
-    let first = *nikaia_std::index::get(&pair, 0) + 1;
+    let first = *unsafe { nikaia_std::proven::read(&pair, (0) as usize) } + 1;
     let second = *nikaia_std::index::get(&pair, 1) + 1;
     let why = verdict(nikaia_std::index::get(&operations, nikaia_std::index::at(*unsafe { nikaia_std::proven::read(&pair, (0) as usize) })), nikaia_std::index::get(&operations, nikaia_std::index::at(*unsafe { nikaia_std::proven::read(&pair, (1) as usize) }))).why();
     format!("{}: an `overlap` of {} branches, and branches {} and {} may not run together - {}\n", key, count, first, second, why)

@@ -292,7 +292,7 @@ pub(crate) fn expression_blocks(expr: &Expr, names: &winnow_grammar::InternerCon
 pub(crate) fn maybe_expression_blocks(expr: Option<&Expr>, names: &winnow_grammar::InternerContext, unaliased: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, root_at: &dyn Fn(&str) -> i64, found: &mut Walked) { expression_blocks(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, names, &unaliased, &holes_of, &root_at, found); }
 
 pub(crate) fn path_name(segments: &[winnow_grammar::Symbol], names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String) -> String {
-    let mut name = unaliased(names.resolve(*nikaia_std::index::get(&segments, 0)));
+    let mut name = unaliased(names.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }));
     for k in 1..segments.len() as i64 {
         let segment = names.resolve(*unsafe { nikaia_std::proven::read(&segments, (k) as usize) });
         name = format!("{}::{}", name, segment);

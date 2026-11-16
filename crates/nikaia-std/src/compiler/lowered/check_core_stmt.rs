@@ -1780,7 +1780,7 @@ pub(crate) fn check_core_stmt_lambda_by_use<H: CheckHost>(world: &CheckWorld<'_,
         },
         _ => return None,
     };
-    let mut i = at + 1;
+    let mut i = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     while i < block.stmts.len() as i64 {
         let found: Option<Ty> = check_core_stmt_handed_to(world, host, &name, &unsafe { nikaia_std::proven::read(&block.stmts, (i) as usize) }.node);
         if found.is_some() { return std::convert::identity(found); }
@@ -1955,15 +1955,15 @@ pub(crate) fn check_core_view_lists_end(state: &mut CheckState, world: &CheckWor
 pub(crate) fn check_core_view_list_rebound(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, name: &str, at: i64, last: i64, start: i64, viewed_ty: &str) {
     if viewed_ty == "" { return; }
     let mut together: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut later = at + 1;
+    let mut later = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     while later <= last {
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
         names_in_statement(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(later)).node, world.words, &mut read);
         if read.contains(name) { for one in read.iter() { together.insert(nikaia_std::block::Text::from(one.to_string())); } }
-        later += 1;
+        later = unsafe { nikaia_std::proven::add::<i64>(later, 1) };
     }
     let changing = nikaia_std::index::or(state.binding(name).as_ref().map(|__nikaia_it| __nikaia_it.written_mut), || false);
-    later = at + 1;
+    later = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     while later < last {
         match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(later)).node {
             Stmt::Let { names, value, .. } => {
@@ -2467,7 +2467,7 @@ pub(crate) fn check_async_binding(state: &mut CheckState, world: &CheckWorld<'_,
         return count;
     }
     state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::BeforeStatement(nikaia_std::index::get(&block.stmts, nikaia_std::index::at(named)).span.start as i64), group });
-    if named == at + 1 && others == 0 { state.a_task_with_nothing_beside_it(span, "its binding is named in the very next statement, which waits for it"); }
+    if named == unsafe { nikaia_std::proven::add::<i64>(at, 1) } && others == 0 { state.a_task_with_nothing_beside_it(span, "its binding is named in the very next statement, which waits for it"); }
     named
 }
 

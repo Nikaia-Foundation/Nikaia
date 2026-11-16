@@ -1,0 +1,28 @@
+/// A precondition derived from the callers (ADR-391 D1) may be over a path
+/// of fields of a parameter (#1832): every caller of `step` hands a walk
+/// whose `walked` is a place in its `order`, so `around.order[around.walked]`
+/// needs no check. `peek`'s caller hands a `walked` no fact bounds, and its
+/// read stays checked.
+struct Walk {
+	order: Vec[i64],
+	walked: i64,
+}
+
+fn step(around: ref Walk) -> i64 sync {
+	return around.order[around.walked]
+}
+
+fn peek(around: ref Walk) -> i64 sync {
+	return around.order[around.walked]
+}
+
+fn main() throws {
+	let mut w = Walk { order: [4, 5, 6], walked: 0 }
+	while w.walked < w.order.len() {
+		print(step(w))
+		w.walked += 1
+	}
+	println("")
+	w.walked = w.order[0] - 3
+	println(peek(w))
+}

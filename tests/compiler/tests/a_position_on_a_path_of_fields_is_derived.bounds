@@ -1,0 +1,8 @@
+bounds in tests/a_position_on_a_path_of_fields_is_derived.nika: 3 indexes, 2 proved; 2 operations, 2 proved
+    12  around.order[around.walked]  proved
+    16  around.order[around.walked]  checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+    23  w.walked += 1                proved
+    26  w.order[0] - 3               proved
+    26  w.order[0]                   proved
+  derived  peek: 0 <= around.walked, proved at the calls on lines 27
+  derived  step: 0 <= around.walked, around.walked < around.order.len(), proved at the calls on lines 22
