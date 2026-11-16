@@ -270,7 +270,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_fallback_beside_what_a_map_holds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, read: &Expr, held: &Ty, fallback: &Ty, span: &Span) {
-        if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) { return; }
+        if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) || self.a_word_by_its_kind(world, held) { return; }
         let name = match held {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return,

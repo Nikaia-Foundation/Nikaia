@@ -148,11 +148,12 @@ impl CheckState {
     /// **A type whose value is one machine word or less by what kind of type
     /// it is** ([ADR-279](../../docs/specification/adr/adr-279.md) D8): a
     /// number, a `bool`, a `char`, an enum of this program whose variants hold
-    /// nothing, and a type the library's ledger says copies. No size is
-    /// computed: a type made of parts is never one.
+    /// nothing, and a type the library's ledger says copies, with its type
+    /// arguments too (`simd::Fixed[f64, 4]`, #1842). No size is computed: a
+    /// type made of parts the program declares is never one.
     fn a_word_by_its_kind(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
         return match ty {
-            Ty::Named { name, args, view } => !view && args.len() == 0 && (a_number_name(name) || name == "bool" || name == "char" || name == "scalar" || self.a_payloadless_enum(name) || a_ledger_copies(ty, [world.library])),
+            Ty::Named { name, args, view } => !view && (args.len() == 0 && (a_number_name(name) || name == "bool" || name == "char" || name == "scalar" || self.a_payloadless_enum(name)) || a_ledger_copies(ty, [world.library])),
             else => false,
         }
     }

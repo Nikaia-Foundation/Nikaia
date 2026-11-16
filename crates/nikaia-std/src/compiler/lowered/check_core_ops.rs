@@ -652,7 +652,9 @@ pub(crate) fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, worl
         let shown = arith_shown(&written_expression(world.words, value));
         state.findings.push(check_refusal("NK1342", span, format!("The compiler can't tell what type `{}` holds, so it can't tell what the fallback of this `??` becomes.", shown), vec![String::from("What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).")], Some(String::from("Write the type down where the value is made, such as `let x: T? = …`."))));
     }
-    if from_a_map && nullable && moves(&inner) && state.jumps(world, fallback) { state.facts.map_read_views.insert(id_of(expr) as i64); }
+    let a_word_held = state.a_word_by_its_kind(world, &unviewed_type(&inner));
+    if from_a_map && nullable && moves(&inner) && !a_word_held && state.jumps(world, fallback) { state.facts.map_read_views.insert(id_of(expr) as i64); }
+    if from_a_map && nullable && a_word_held && !a_copy_by_value(&unviewed_type(&inner)) && check_core_stmt_an_index(value) { state.facts.copied_reads.insert(id_of(value) as i64); }
     if nullable && leaves && check_core_ops_a_word(&inner) && (check_core_stmt_an_index(value) || check_core_stmt_a_get(world, value)) { state.facts.copied_jump_reads.insert(id_of(expr) as i64); }
     if lending && !from_a_map && check_core_ops_index(value) && (state.jumps(world, fallback) || state.facts.lent_coalesces.contains_key(&(id_of(fallback) as i64))) && nullable && state.takes_away(world, &inner.unseen()) {
         if check_core_ops_plain_text(&inner) { state.facts.lent_coalesces.insert(id_of(expr) as i64, String::from(".as_deref()")); } else { state.facts.lent_coalesces.insert(id_of(expr) as i64, String::from(".as_ref()")); }
@@ -710,7 +712,7 @@ pub(crate) fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, worl
     }
     if nullable && inner == check_core_ops_view("str") && !from_a_map && !check_core_ops_index(value) && check_core_ops_variable(fallback) && other.is_a_view() && check_core_ops_text_base(&other) { state.facts.text_view_fallbacks.insert(id_of(expr) as i64); }
     if nullable && !place && inner == check_core_ops_named("String") && !from_a_map && !check_core_ops_index(value) && check_core_ops_variable(fallback) && other.is_a_view() && check_core_ops_text_base(&other) { state.facts.text_owned_fallbacks.insert(id_of(expr) as i64); }
-    if nullable && from_a_map && check_core_ops_variable(fallback) && !other.is_a_view() && check_core_ops_held_matches(&inner, &other) && moves(&other) {
+    if nullable && from_a_map && check_core_ops_variable(fallback) && !other.is_a_view() && check_core_ops_held_matches(&inner, &other) && moves(&other) && !a_word_held {
         state.facts.lent_map_fallbacks.insert(id_of(expr) as i64);
         return view_of_type(&other);
     }
@@ -719,7 +721,7 @@ pub(crate) fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, worl
         return check_core_ops_view("str");
     }
     let held_word = unviewed_type(&inner);
-    if nullable && check_core_ops_variable(fallback) && a_copy_by_value(&held_word) && (held_word == other || other.is_unknown() && check_core_ops_a_number(&held_word)) { state.facts.word_fallbacks.insert(id_of(expr) as i64); }
+    if nullable && check_core_ops_variable(fallback) && (a_copy_by_value(&held_word) || a_word_held) && (held_word == other || other.is_unknown() && check_core_ops_a_number(&held_word)) { state.facts.word_fallbacks.insert(id_of(expr) as i64); }
     if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && state.a_package_copy(world, &unviewed_type(&inner)) && state.a_value_written_out(world, fallback) { return unviewed_type(&inner); }
     if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && check_core_ops_not_plain(&inner) && state.a_value_written_out(world, fallback) {
         if made_in_the_call(fallback) { state.facts.slot_fallbacks.insert(id_of(expr) as i64, false); } else { Some(state.facts.lent_map_fallbacks.insert(id_of(expr) as i64)); }

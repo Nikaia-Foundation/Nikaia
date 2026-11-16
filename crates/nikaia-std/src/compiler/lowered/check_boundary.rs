@@ -101,7 +101,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_word_by_its_kind(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
         match ty {
-            Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && (a_number_name(name) || name == "bool" || name == "char" || name == "scalar" || self.a_payloadless_enum(name) || a_ledger_copies(ty, &vec![world.library])) },
+            Ty::Named { name, args, view } => { let view = *view; !view && (args.is_empty() && (a_number_name(name) || name == "bool" || name == "char" || name == "scalar" || self.a_payloadless_enum(name)) || a_ledger_copies(ty, &vec![world.library])) },
             _ => false,
         }
     }

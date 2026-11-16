@@ -1,0 +1,32 @@
+// A `??` over a map or an option of a type the ledger says copies is a copy
+// (ADR-279 D8, #1842): `simd::Fixed[f64, 4]` and `time::Duration` are words by
+// their kind, as a number is. `m[7] ?? simd::splat(0.0)` drew NK1185 with a
+// `?.clone()` help that `simd::Fixed` has no method for; `m[8] ?? zero`
+// followed by a change to `m` drew NK2305; `m.get(7) ?? zero`, `x ?? zero` of
+// a declared `Fixed?` and the `Duration` map ended in NK1343.
+use std::collections
+use std::simd
+use std::time
+
+fn main() throws {
+    let mut m: collections::HashMap[i64, simd::Fixed[f64, 4]] = collections::HashMap()
+    m.insert(7, simd::splat(0.5))
+    let got = m[7] ?? simd::splat(0.0)
+    println(f"{got.sum()}")
+    let zero: simd::Fixed[f64, 4] = simd::splat(0.0)
+    let missing = m[8] ?? zero
+    let seven = m.get(7) ?? zero
+    let held: simd::Fixed[f64, 4]? = m[7]
+    m.insert(7, zero)
+    println(f"{missing.sum()} {seven.sum()} {(held ?? zero).sum()}")
+    let jumped = m[7] ?? return
+    m.insert(9, simd::splat(1.0))
+    println(f"{jumped.sum()}")
+    let mut d: collections::HashMap[i64, time::Duration] = collections::HashMap()
+    let none = 0.seconds()
+    d.insert(1, 60.seconds())
+    let a = d[2] ?? none
+    let b = d.get(1) ?? none
+    d.insert(3, none)
+    println(f"{a.in_minutes()} {b.in_minutes()}")
+}

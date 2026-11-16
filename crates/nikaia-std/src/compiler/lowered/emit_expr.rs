@@ -262,7 +262,7 @@ impl EmitState {
                     out.push(&format!("{{ const __NIKAIA_DSL: {} = {}; __NIKAIA_DSL }}", below, written));
                     return Ok(());
                 }
-                let name = if package.is_some() { format!("{}::{}", emit_text(world, nikaia_std::index::or(package, || target.into())), target_text) } else { nikaia_std::block::Text::from(target_text.to_string()) };
+                let name = if package.is_some() { format!("{}::{}", emit_text(world, nikaia_std::index::or(package, || target)), target_text) } else { nikaia_std::block::Text::from(target_text.to_string()) };
                 self.emit_core_template(world, walk, out, host, &name, context, content, at, depth, flow, scope)?;
             },
             Expr::Block(block, _) => { self.emit_core_block(world, walk, out, host, block, depth, flow, scope, &EmitTail::Value)?; },

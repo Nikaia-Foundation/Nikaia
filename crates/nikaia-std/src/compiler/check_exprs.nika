@@ -378,9 +378,10 @@ impl CheckState {
 
     /// `NK1185`: a `??` whose left side is a view of what a map keeps and whose
     /// fallback is a value of its own. Fail-open: only where the held type is a
-    /// declared one that moves.
+    /// declared one that moves. A word by its kind is copied out (ADR-279 D8,
+    /// #1842): a type the ledger says copies is no view of the map.
     fn a_fallback_beside_what_a_map_holds(ref mut self, world: ref CheckWorld, read: ref Expr, held: ref Ty, fallback: ref Ty, span: ref Span) sync {
-        if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) {
+        if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) || self.a_word_by_its_kind(world, held) {
             return
         }
         let name = match held {

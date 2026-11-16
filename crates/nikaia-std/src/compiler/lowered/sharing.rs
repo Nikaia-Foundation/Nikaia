@@ -64,7 +64,7 @@ pub struct Sharing {
 }
 
 impl Sharing {
-    pub fn count_of(&self, function: &str, value: &str) -> Count { nikaia_std::index::or(*nikaia_std::index::get(&self.counts, &(slot(function, value))), || Count::Atomic) }
+    pub fn count_of(&self, function: &str, value: &str) -> Count { nikaia_std::index::or((*nikaia_std::index::get(&self.counts, &(slot(function, value)))).copied(), || Count::Atomic) }
 }
 
 pub(crate) fn every_count_plain(sharing: &mut Sharing) {
@@ -427,7 +427,7 @@ pub fn decided(slots: &mut Slots) -> Sharing {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             };
-            fallback = nikaia_std::index::or_maybe(*nikaia_std::index::get(&fallback_of, &root), || None);
+            fallback = nikaia_std::index::or_maybe((*nikaia_std::index::get(&fallback_of, &root)).copied(), || None);
             count = Count::Atomic;
             if fallback.is_none() && a_word && !floor.contains(&root) && !held.contains(&root) { count = Count::Word; }
         }
