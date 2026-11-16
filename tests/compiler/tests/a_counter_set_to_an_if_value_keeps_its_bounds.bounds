@@ -1,0 +1,28 @@
+bounds in tests/a_counter_set_to_an_if_value_keeps_its_bounds.nika: 13 indexes, 13 proved; 12 operations, 10 proved
+    12  2 * i + 1         proved
+    12  2 * i             proved
+    13  2 * i + 1         proved
+    13  2 * i             proved
+    14  l + 1             proved
+    14  xs[l + 1]         proved
+    14  l + 1             proved
+    14  xs[l]             proved
+    14  l + 1             proved
+    15  s + xs[i]         checked: a counter the loop on line 12 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+    15  xs[i]             proved
+    18  s + xs[i]         checked: a counter the loop on line 12 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+    18  xs[i]             proved
+    28  self.heap[i]      proved
+    31  2 * i + 1         proved
+    31  2 * i             proved
+    35  left + 1          proved
+    36  self.heap[right]  proved
+    36  self.heap[left]   proved
+    41  self.heap[child]  proved
+    45  self.heap[i]      proved
+    48  self.heap[i]      proved
+    57  h.heap[0]         proved
+    57  h.heap[1]         proved
+    57  h.heap[3]         proved
+  derived  down: 0 <= start, start <= self.heap.len(), start < self.heap.len(), proved at the calls on lines 56
+  derived  sift: 0 <= start, start <= xs.len(), start < xs.len(), proved at the calls on lines 54

@@ -179,7 +179,7 @@ pub fn articles(text: &str) -> String {
     let mut before: Vec<scalar> = vec![];
     let mut at: i64 = 0;
     while at < c.len() as i64 {
-        if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) != '`' {
+        if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } != '`' {
             before.push(*unsafe { nikaia_std::proven::read(&c, (at) as usize) });
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
@@ -207,7 +207,7 @@ pub fn articles(text: &str) -> String {
         before = vec![];
         let mut j: i64 = at;
         while j < close {
-            out.push(*nikaia_std::index::get(&c, nikaia_std::index::at(j)));
+            out.push(*unsafe { nikaia_std::proven::read(&c, (j) as usize) });
             j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
         }
         at = close;

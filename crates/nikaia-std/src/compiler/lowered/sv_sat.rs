@@ -675,7 +675,7 @@ impl SvSat {
             { let __nikaia_stored = i; nikaia_std::index::set(&mut self.place, nikaia_std::index::at(u as i64), __nikaia_stored); }
             i = parent;
         }
-        { let __nikaia_stored = v; nikaia_std::index::set(&mut self.heap, nikaia_std::index::at(i), __nikaia_stored); }
+        { let __nikaia_stored = v; unsafe { nikaia_std::proven::write(&mut self.heap, (i) as usize, __nikaia_stored) }; }
         { let __nikaia_stored = i; nikaia_std::index::set(&mut self.place, nikaia_std::index::at(v as i64), __nikaia_stored); }
     }
     pub(crate) fn heap_down(&mut self, start: i64) {
@@ -683,17 +683,17 @@ impl SvSat {
         let v = *unsafe { nikaia_std::proven::read(&self.heap, (i) as usize) };
         let n = self.heap.len() as i64;
         loop {
-            let left = 2 * i + 1;
+            let left = unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::mul::<i64>(2, i), 1) };
             if left >= n { break; }
             let right = unsafe { nikaia_std::proven::add::<i64>(left, 1) };
-            let child = if right < n && self.above(*nikaia_std::index::get(&self.heap, nikaia_std::index::at(right)), *nikaia_std::index::get(&self.heap, nikaia_std::index::at(left))) { right } else { left };
-            let u = *nikaia_std::index::get(&self.heap, nikaia_std::index::at(child));
+            let child = if right < n && self.above(*unsafe { nikaia_std::proven::read(&self.heap, (right) as usize) }, *unsafe { nikaia_std::proven::read(&self.heap, (left) as usize) }) { right } else { left };
+            let u = *unsafe { nikaia_std::proven::read(&self.heap, (child) as usize) };
             if !self.above(u, v) { break; }
-            { let __nikaia_stored = u; nikaia_std::index::set(&mut self.heap, nikaia_std::index::at(i), __nikaia_stored); }
+            { let __nikaia_stored = u; unsafe { nikaia_std::proven::write(&mut self.heap, (i) as usize, __nikaia_stored) }; }
             { let __nikaia_stored = i; nikaia_std::index::set(&mut self.place, nikaia_std::index::at(u as i64), __nikaia_stored); }
             i = child;
         }
-        { let __nikaia_stored = v; nikaia_std::index::set(&mut self.heap, nikaia_std::index::at(i), __nikaia_stored); }
+        { let __nikaia_stored = v; unsafe { nikaia_std::proven::write(&mut self.heap, (i) as usize, __nikaia_stored) }; }
         { let __nikaia_stored = i; nikaia_std::index::set(&mut self.place, nikaia_std::index::at(v as i64), __nikaia_stored); }
     }
 }
