@@ -44,8 +44,15 @@ fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref Check
             for i in 1..<args.len() {
                 if i < signature.params.len() {
                     let named = signature.params[i].0.clone()
-                    let given = check_core_expr(state, world, host, args[i], span)
-                    state.expect_type(world, given, signature.params[i].1, span, "argument", fn(was, wanted) { f"The value for `{named}` is `{was}`, but `{key}` takes `{wanted}`." })
+                    let mut given = check_core_expr(state, world, host, args[i], span)
+                    let mut wanted = signature.params[i].1.clone()
+                    // **A value the entry does not change is lent**
+                    // (ADR-grammar-1 D6): a view is handed as the value is.
+                    if !signature.mutable.contains(named) {
+                        given = given.owned()
+                        wanted = wanted.owned()
+                    }
+                    state.expect_type(world, given, wanted, span, "argument", fn(was, wanted) { f"The value for `{named}` is `{was}`, but `{key}` takes `{wanted}`." })
                 }
             }
             for c in config {

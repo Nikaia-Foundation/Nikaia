@@ -22,8 +22,13 @@ pub(crate) fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, worl
             for i in 1..args.len() as i64 {
                 if ((i) as usize) < signature.params.len() {
                     let named = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0.to_string());
-                    let given = check_core_expr(state, world, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, span);
-                    state.expect_type(world, &given, &unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.1, span, "argument", &|was, wanted| { format!("The value for `{}` is `{}`, but `{}` takes `{}`.", named, was, key, wanted) });
+                    let mut given = check_core_expr(state, world, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, span);
+                    let mut wanted = unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.1.clone();
+                    if !nikaia_std::list::contains(&signature.mutable, &named) {
+                        given = given.owned();
+                        wanted = wanted.owned();
+                    }
+                    state.expect_type(world, &given, &wanted, span, "argument", &|was, wanted| { format!("The value for `{}` is `{}`, but `{}` takes `{}`.", named, was, key, wanted) });
                 }
             }
             for c in config.iter() {

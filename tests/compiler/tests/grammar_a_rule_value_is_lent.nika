@@ -1,0 +1,20 @@
+// A rule's value written plain is lent, not cloned per call (ADR-grammar-1
+// D6, #1560): the rule takes a reference, a call hands one, and a value made
+// at the call, `Two([])`, lives in a temporary for the call.
+
+struct D { h: String }
+
+grammar G {
+	rule WS = "" -> { }
+	entry rule top -> i64 =
+		ds:Dir+ ";" v:Two(ds) -> { v }
+		| ";" v:Two([]) -> { v }
+	rule Dir -> D = "%" s:text("a"+) -> { D { h: s } }
+	rule Two(ds: Vec[D]) -> i64 = a:Item(ds) b:Item(ds) -> { a + b }
+	rule Item(ds: Vec[D]) -> i64 = "x" -> { ds.len() }
+}
+
+fn main() throws {
+	println(G::top("%a%aa;xx") catch { return })
+	println(G::top(";xx") catch { return })
+}

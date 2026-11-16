@@ -191,7 +191,11 @@ impl EmitState {
             if !first { out.push(", "); }
             first = false;
             out.push(&format!("{} = ", emit_text(world, unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.name)));
-            if ((i) as usize) < args.len() { self.emit_grammar_value(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) })?; }
+            if ((i) as usize) < args.len() && unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.ty.is_view {
+                out.push("&(");
+                self.emit_grammar_value(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) })?;
+                out.push(")");
+            } else if ((i) as usize) < args.len() { self.emit_grammar_value(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) })?; }
         }
         for option in rule.config.iter() {
             if !first { out.push(", "); }
