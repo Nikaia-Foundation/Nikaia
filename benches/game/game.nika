@@ -31,8 +31,10 @@ struct Game {
 	// What the counts are divided by, and its name in the table.
 	units: i64,
 	unit: String,
-	// The Nikaia program, from the repository's root.
+	// The Nikaia program, from the repository's root, as a Nikaia programmer
+	// writes it first, and written for speed (empty where it is the same).
 	nikaia: String,
+	speed: String,
 	// The Rust entry: its source and the `target-cpu` the game builds it for.
 	rust: String,
 	label: String,
@@ -47,6 +49,7 @@ fn games() -> Vec[Game] {
 			units: 1000000,
 			unit: "step",
 			nikaia: "examples/n-body/src/main.nika",
+			speed: "benches/game/n-body/speed.nika",
 			rust: "benches/game/n-body/rust-9.rs",
 			label: "Rust #9",
 			cpu: "ivybridge",
@@ -107,17 +110,21 @@ fn build_rust(repo: String, work: String, game: Game) -> Program throws {
 	}
 }
 
-// The Nikaia program as a project of its own at the CPU level `cpu`; the
-// binaries are copied out to `{work}/bin/{name}.{cpu}.on` and `.off`.
+// The Nikaia program `source` (`game.nikaia` or `game.speed`, `kind` the
+// row's name for it) as a project of its own at the CPU level `cpu`; the
+// binaries are copied out to `{work}/bin/{name}{kind}.{cpu}.on` and `.off`.
 fn build_nikaia(
 	nikaia: String,
 	repo: String,
 	work: String,
 	game: Game,
+	source_file: String,
+	kind: String,
 	cpu: String,
 ) -> Program throws {
-	let dir = f"{work}/{game.name}"
-	must(f"mkdir -p {dir}/src {work}/bin && cp {repo}/{game.nikaia} {dir}/src/main.nika", "copy")
+	let dir = f"{work}/{game.name}{kind}"
+	let bin = f"{work}/bin/{game.name}{kind}.{cpu}"
+	must(f"mkdir -p {dir}/src {work}/bin && cp {repo}/{source_file} {dir}/src/main.nika", "copy")
 	fs::write(
 		f"{dir}/nikaia.toml",
 		fs::Root::Anywhere,
@@ -133,18 +140,22 @@ incremental = false
 	)
 	for setting in ["on", "off"] {
 		must(
-			f"cd {dir} && RUSTFLAGS='-C overflow-checks={setting}' {nikaia} build --cpu={cpu} >build.log 2>&1 && cp target/nikaia/bin/game {work}/bin/{game.name}.{cpu}.{setting}",
-			f"nikaia build of {game.name} ({cpu}, {setting}, log in {dir}/build.log)",
+			f"cd {dir} && RUSTFLAGS='-C overflow-checks={setting}' {nikaia} build --cpu={cpu} >build.log 2>&1 && cp target/nikaia/bin/game {bin}.{setting}",
+			f"nikaia build of {game.name}{kind} ({cpu}, {setting}, log in {dir}/build.log)",
 		)
 	}
 	let mut source = String()
 	if cpu == "x86-64" {
-		source.push_str(game.nikaia)
+		source.push_str(source_file)
+	}
+	let mut name: String = f"Nikaia, `--cpu={cpu}`"
+	if kind.len() > 0 {
+		name = f"Nikaia for speed, `--cpu={cpu}`"
 	}
 	return Program {
-		name: f"Nikaia, `--cpu={cpu}`",
-		on: f"{work}/bin/{game.name}.{cpu}.on",
-		off: f"{work}/bin/{game.name}.{cpu}.off",
+		name: name,
+		on: f"{bin}.on",
+		off: f"{bin}.off",
 		source: source,
 	}
 }
@@ -212,11 +223,15 @@ fn tokens(repo: String, nikaia: String, source: String) -> String throws {
 // One problem's rows: each program counted at both settings, the last column
 // its instructions with checks off against the Rust entry's.
 fn measure(nikaia: String, repo: String, work: String, game: Game) -> String throws {
-	let programs: Vec[Program] = [
+	let mut programs: Vec[Program] = [
 		build_rust(repo, work, game),
-		build_nikaia(nikaia, repo, work, game, "x86-64"),
-		build_nikaia(nikaia, repo, work, game, "x86-64-v3"),
+		build_nikaia(nikaia, repo, work, game, game.nikaia, "", "x86-64"),
+		build_nikaia(nikaia, repo, work, game, game.nikaia, "", "x86-64-v3"),
 	]
+	if game.speed.len() > 0 {
+		programs.push(build_nikaia(nikaia, repo, work, game, game.speed, "-speed", "x86-64"))
+		programs.push(build_nikaia(nikaia, repo, work, game, game.speed, "-speed", "x86-64-v3"))
+	}
 	same_output(work, programs, game.args)
 	let mut out = String()
 	let mut rust = 0
