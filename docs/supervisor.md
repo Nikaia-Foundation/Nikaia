@@ -358,7 +358,11 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   naming an open `#M` under `Needs:`/`Found:`, or ended partial naming one
   under `Needs:` (#1827), is dropped from the batch
   again, `ready` swapped for `blocked` (`DROPPED #N waits for #M`, #1819):
-  re-queue it once #M is closed.
+  re-queue it once #M is closed. A renamed `run<k>` report holds only
+  through its `Needs:` and the Founds the driver filed (#1881): write there
+  what the re-queued brief still waits for. An issue never waits for the
+  issue it is `Part of`, nor for a `#M` in quoted text (a backtick span, a
+  fenced or `<details>` block).
 * **By hand**: `nikaia run scripts/batch.nika -- DIR` after a hand-back
   (`--tokens BRIEF TOKENS CALLS` records the harness figures in
   `DIR/tokens.txt`); `nikaia run scripts/status.nika -- DIR` (CI, batch and

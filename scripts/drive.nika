@@ -33,7 +33,8 @@
 // `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add),
 // `--fixed-in LOG N...` (drive_fixed_in), `--queue-plan LIST [OPEN...]`
 // (drive_queue_plan: LIST in drive_queue's `=== #N ===` record form, OPEN the
-// dependencies taken as open),
+// dependencies taken as open), `--report-aside DIR NAME [HELD...]`
+// (drive_report_aside),
 // `--wip-after RESULT FIXES N`, `--found-issue NAME N FOUND NEEDS`,
 // `--improve-issue NAME N REPORT [DIR]`, `--improve-plan NAME N REPORT EXISTING`, `--time-up` (drive_time_up: `up` or `not up`), `--time-up DIR` (drive_time_check: `up`, `starts` or why not), `--pickup DIR` (drive_pickup).
 //
@@ -3937,11 +3938,23 @@ fn drive_queue_add(batch: String, numbers: Vec[String]) -> String {
 
 // Moves the report of brief NAME in DIR aside, to the first free
 // `NAME.run<k>.report.md` (the name drive_last_report reads), so the brief
-// runs again once queued again, and its waits still hold it until then.
-fn drive_report_aside(dir: String, name: String) throws {
+// runs again once queued again, and its waits still hold it until then: the
+// open issues HELD it waits for are added as a `Needs:` line, the only field
+// a renamed report holds by (drive_blocked_on, #1881).
+fn drive_report_aside(dir: String, name: String, held: Vec[String]) throws {
 	let mut k = 1
 	while fs::exists(f"{dir}/{name}.run{k}.report.md", fs::Root::Anywhere) { k += 1 }
-	process::run("mv", [f"{dir}/{name}.report.md", f"{dir}/{name}.run{k}.report.md"])
+	let from = f"{dir}/{name}.report.md"
+	let to = f"{dir}/{name}.run{k}.report.md"
+	process::run("mv", [from, to.clone()])
+	if held.len() == 0 { return }
+	let mut tags: Vec[String] = []
+	for m in held { tags.push(f"#{m}") }
+	let list = tags.join(", ")
+	let mut text = drive_read(to.clone())
+	if text != "" && !text.ends_with("\n") { text.push_str("\n") }
+	text.push_str(f"Needs: {list}\n")
+	fs::write(to, fs::Root::Anywhere, text)
 }
 
 // BATCH without the `#N` lines whose N is in CLOSED (the first word of a
@@ -3995,12 +4008,12 @@ fn drive_queue_prune(dir: String) throws {
 		if fs::exists(report.clone(), fs::Root::Anywhere) {
 			// A run ended blocked on open issues (#1857): dropped, not cut.
 			let mut held: Vec[String] = []
-			for m in drive_report_waits(dir.clone(), f"{name}.md", drive_read(report)) {
+			for m in drive_report_waits(dir.clone(), f"{name}.md", drive_read(report), false) {
 				if m != n && drive_issue_open(m.clone()) { held.push(m) }
 			}
-			let line = drive_waits_line(n.clone(), held.clone(), held)
+			let line = drive_waits_line(n.clone(), held.clone(), held.clone())
 			if line != "" {
-				drive_report_aside(dir.clone(), f"{name}.md")
+				drive_report_aside(dir.clone(), f"{name}.md", held)
 				blocked.push(tag)
 				blocked_lines.push(line)
 			}
@@ -4127,11 +4140,12 @@ fn drive_only_hashes(text: String) -> bool {
 // allowed), and elsewhere in a line after `blocked by`, `waits for`,
 // `waiting for` or `depends on`, the `#N` list right after the words
 // (drive_hash_list). `Needs: supervisor decision` and a prose `after #N` name none.
+// Quoted text names none either (drive_unquoted, #1881).
 fn drive_depends_on(body: String) -> Vec[String] {
 	let mut out: Vec[String] = []
 	let starts = ["needs", "after", "blocked by", "waits for", "waiting for", "depends on"]
 	let inside = ["blocked by", "waits for", "waiting for", "depends on"]
-	for raw in body.split("\n") {
+	for raw in drive_unquoted(body).split("\n") {
 		let mut line = raw.trim().to_lowercase()
 		let mut stripping = true
 		while stripping {
@@ -4160,12 +4174,69 @@ fn drive_depends_on(body: String) -> Vec[String] {
 	return out
 }
 
+// BODY without what it quotes (#1881: this issue, #1857 and #1880 were held
+// by the driver lines and the report they quote): the lines of a fenced
+// block (between two ``` lines) and of a `<details>` block are dropped, and
+// so is a backtick span holding a `#` (a span without one, `` `Needs:` ``,
+// keeps its words).
+fn drive_unquoted(body: String) -> String {
+	let mut out: Vec[String] = []
+	let mut fenced = false
+	let mut details = 0
+	for raw in body.split("\n") {
+		let t = raw.trim().to_lowercase()
+		if t.starts_with("```") {
+			fenced = !fenced
+			continue
+		}
+		if fenced { continue }
+		let open_parts: Vec[String] = t.split("<details").collect()
+		let close_parts: Vec[String] = t.split("</details>").collect()
+		let opens = open_parts.len() as i64 - 1
+		let closes = close_parts.len() as i64 - 1
+		let inside = details > 0 || opens > 0
+		details = details + opens - closes
+		if details < 0 { details = 0 }
+		if inside { continue }
+		let pieces: Vec[String] = raw.split("`").collect()
+		let mut line = String()
+		for i in 0..<pieces.len() {
+			let piece = pieces[i].clone()
+			// An odd piece is inside a span, unless it is the last (an unclosed `).
+			if i % 2 == 1 && i + 1 < pieces.len() && piece.contains("#") { continue }
+			line.push_str(piece)
+		}
+		out.push(line)
+	}
+	return out.join("\n")
+}
+
+// The issues a BODY says it is part of: the `#N` list after `part of` (any
+// case, quoted text left out, drive_unquoted). An issue never waits for its
+// parent (#1881: mandelbrot #1616 was held by its umbrella #1611).
+fn drive_part_of(body: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	for line in drive_unquoted(body).to_lowercase().split("\n") {
+		let parts: Vec[String] = line.split("part of").collect()
+		for i in 1..<parts.len() {
+			for n in drive_hash_list(parts[i].clone()) {
+				if !out.contains(n.clone()) { out.push(n) }
+			}
+		}
+	}
+	return out
+}
+
 // The issues a REPORT that ended `Result: blocked` names under `Needs:` and
 // `Found:` (#1819: #1628 ran again while #1786 and #1634 were open), and
 // those a `Result: partial` names under `Needs:` (#1827: #1628's last run
 // ended partial, waiting for #1634; a partial's `Found:` cites issues as
-// context, so only its `Needs:` holds it up); none for another result.
-fn drive_blocked_on(report: String) -> Vec[String] {
+// context, so only its `Needs:` holds it up); none for another result. A
+// HANDLED report (one renamed `NAME.run<k>.report.md`, by the supervisor to
+// re-queue it or by drive_report_aside, which writes what held it under
+// `Needs:`) holds only through its `Needs:` too (#1881: #1616's renamed
+// report cited its parent #1611 in a `Found:` and held it for ever).
+fn drive_blocked_on(report: String, handled: bool) -> Vec[String] {
 	let mut blocked = false
 	let mut partial = false
 	let mut needs: Vec[String] = []
@@ -4180,7 +4251,7 @@ fn drive_blocked_on(report: String) -> Vec[String] {
 		if l.starts_with("Needs:") { needs.push(l.clone()) }
 		if l.starts_with("Found:") { found.push(l) }
 	}
-	if partial { return drive_hash_numbers(needs.join(" ")) }
+	if partial || (blocked && handled) { return drive_hash_numbers(needs.join(" ")) }
 	if !blocked { return [] }
 	for l in found { needs.push(l.clone()) }
 	return drive_hash_numbers(needs.join(" "))
@@ -4206,9 +4277,10 @@ fn drive_last_report(dir: String, name: String) -> String throws {
 // `Result: blocked`, those the driver filed from its Founds (`<stem>: filed
 // #M` in DIR/found.txt, drive_found_file, drive_filed_numbers; #1857: #1664's
 // gaps were filed as #1848 and #1849 after the report was written, so it
-// named none, and the driver cut on it again after each restart).
-fn drive_report_waits(dir: String, name: String, report: String) -> Vec[String] throws {
-	let mut out = drive_blocked_on(report.clone())
+// named none, and the driver cut on it again after each restart). HANDLED
+// as in drive_blocked_on.
+fn drive_report_waits(dir: String, name: String, report: String, handled: bool) -> Vec[String] throws {
+	let mut out = drive_blocked_on(report.clone(), handled)
 	if !drive_field(report.clone(), "Result").to_lowercase().starts_with("blocked") { return out }
 	let founds = drive_founds(report)
 	if founds.len() == 0 { return out }
@@ -4220,18 +4292,22 @@ fn drive_report_waits(dir: String, name: String, report: String) -> Vec[String] 
 
 // What issue N waits for (#1819): the dependencies its BODY names
 // (drive_depends_on) and those its brief's last run in DIR waits for
-// (drive_report_waits), without N itself.
+// (drive_report_waits, a renamed `run<k>` report as handled), without N
+// itself and the issues the body says it is part of (drive_part_of, #1881).
 fn drive_waits_of(dir: String, n: String, body: String) -> Vec[String] throws {
-	let mut out = drive_depends_on(body)
-	let report = drive_last_report(dir.clone(), f"issue-{n}.md")
+	let mut out = drive_depends_on(body.clone())
+	let name = f"issue-{n}.md"
+	let report = drive_last_report(dir.clone(), name.clone())
 	if report != "" {
-		for m in drive_report_waits(dir, f"issue-{n}.md", drive_read(report)) {
+		let handled = report != f"{dir}/{name}.report.md"
+		for m in drive_report_waits(dir, name, drive_read(report), handled) {
 			if !out.contains(m.clone()) { out.push(m) }
 		}
 	}
+	let parents = drive_part_of(body)
 	let mut kept: Vec[String] = []
 	for m in out {
-		if m != n { kept.push(m.clone()) }
+		if m != n && !parents.contains(m.clone()) { kept.push(m.clone()) }
 	}
 	return kept
 }
@@ -4610,6 +4686,12 @@ fn main() throws {
 		for k in 3..<args.len() { open.push(args[k].clone()) }
 		let dir = process::run("dirname", [args[2].clone()]).stdout.trim().clone()
 		for line in drive_queue_plan(dir, drive_read(args[2]), open) { println(line) }
+		return
+	}
+	if args.len() >= 4 && args[1] == "--report-aside" {
+		let mut held: Vec[String] = []
+		for k in 4..<args.len() { held.push(args[k].clone()) }
+		drive_report_aside(args[2].clone(), args[3].clone(), held)
 		return
 	}
 	if args.len() == 5 && args[1] == "--wip-after" {
