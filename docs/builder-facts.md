@@ -83,6 +83,13 @@ together with the specification section and an example test.
   `develop` already: one run of `ledgers.nika -- --check --tree HEAD --exe
   $S/old/nikaia` (HEAD's ledgers, the before binary) settles it; stale there
   too, it is not yours, say so under `Tests:` and do not refresh it (#1712).
+  `ledgers.nika --check` and `--refresh` build every ledger directory
+  (`-- --list` names them, 19 today) cold, in a fresh `NIKAIA_CACHE_DIR`:
+  many minutes, past the tool's foreground limit. Run it with
+  `run_in_background` and its output in a file (`> $S/ledgers.txt 2>&1`),
+  never piped through `head`: its output is already short (a line per
+  directory, 40 per failure, `ledgers_head`), and a foreground run piped
+  through `head` was killed (exit 144) and ended the session (#1777).
 * **A file another agent also edits** goes under the report's `Partial:`,
   not `Files:`: stage only your hunks (`git apply --cached`), and
   `commit.nika` commits what is staged of it without `git add` (#1704).
