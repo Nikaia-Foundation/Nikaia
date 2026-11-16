@@ -15,6 +15,7 @@
 
 use std::text
 use std::collections
+use std::node_id
 
 /// **What the program around every body says**, read once per program.
 pub struct BoundsContext {
@@ -135,6 +136,11 @@ pub struct BoundsReturns {
 	/// list fields of `self` a position past the last argument names, the
 	/// first of them at `args.len()`; empty for a free function.
 	pub fields: Vec[String],
+	/// **The whole-number field of a struct result this entry reads**
+	/// (ADR-306 D35), keyed `callee#field`: what the field holds at every
+	/// return that builds the struct by a literal; empty for the result
+	/// itself.
+	pub projected: String,
 }
 
 /// **What a callee's ledger entry ensures** (ADR-314 D3): each condition read
@@ -402,6 +408,15 @@ struct BoundsWalk {
 	return_lens: Vec[String],
 	return_at_least: collections::BTreeSet[i64]?,
 	return_within: collections::BTreeSet[i64]?,
+	/// **The field of a struct result the walk reads at each return**
+	/// (ADR-306 D35), empty for the value itself: a return that builds the
+	/// struct otherwise than by a literal is lost.
+	return_field: String,
+	/// **A call read for one field of its struct result** (ADR-306 D35):
+	/// the call's node and the field, so that [`bounding_found_key`] names
+	/// the entry `callee#field` of that call alone; -1 and empty otherwise.
+	found_at: i64,
+	found_field: String,
 	/// The context's `trace`: the bytes `--bounds-trace` asks about.
 	trace: Vec[i64],
 	/// **What a number of its own the statement being walked named is**
@@ -810,6 +825,9 @@ fn bounding_new(
 		return_lens: [],
 		return_at_least: null,
 		return_within: null,
+		return_field: "",
+		found_at: -1,
+		found_field: "",
 		trace: context.trace.clone(),
 		defining: collections::BTreeMap(),
 		turn_rows: [],
@@ -1930,19 +1948,21 @@ fn bounding_range_shaped(
 				}
 				// `bits_as_` too (ADR-285 D42): a value the destination holds
 				// keeps it, any other is somewhere in the destination's range.
-				let mut dropped = 11
-				if name.starts_with("bits_as_") {
-					dropped = 8
-				} else if !name.starts_with("truncating_") {
-					return null
+				// Any other method of no argument is read for its found
+				// returns below (ADR-306 D34, #1920).
+				if name.starts_with("bits_as_") || name.starts_with("truncating_") {
+					let mut dropped = 11
+					if name.starts_with("bits_as_") {
+						dropped = 8
+					}
+					let into = Range::held_by_type(bounding_dropped(name, dropped)) ?? return null
+					let got = bounding_range(walk, receiver, facts, context, program, words, ask)
+						?? return into
+					if into.holds(got) {
+						return got
+					}
+					return into
 				}
-				let into = Range::held_by_type(bounding_dropped(name, dropped)) ?? return null
-				let got = bounding_range(walk, receiver, facts, context, program, words, ask)
-					?? return into
-				if into.holds(got) {
-					return got
-				}
-				return into
 			}
 			// **A value read out of a map lies where every value put into it
 			// does** (ADR-306 D24), as one read out of a list.
@@ -1971,10 +1991,7 @@ fn bounding_range_shaped(
 			if !config.is_empty() {
 				return null
 			}
-			let callee = bounding_callee(func, words) ?? return null
-			if walk.shape.bound.contains(callee) {
-				return null
-			}
+			let callee = bounding_found_key(walk, expr, context, words) ?? return null
 			let found = context.returns.get(callee) ?? return null
 			if found.each || found.pending {
 				return null
@@ -7419,6 +7436,13 @@ fn bounding_let(
 	if names.len() == 1 && value_lin == null {
 		relations = bounding_relations_of(walk, facts, words.resolve(names[0]), value, context, program, words, ask)
 	}
+	// Of a struct result's fields (ADR-306 D35), stated before the name
+	// moves, as the relations are.
+	let mut field_paths: Vec[String] = []
+	let mut field_facts: Vec[i64] = []
+	if names.len() == 1 {
+		field_facts = bounding_fields_found(walk, facts, words.resolve(names[0]), value, field_paths, context, program, words, ask)
+	}
 	for symbol in names {
 		let name = words.resolve(symbol)
 		bounding_forget(walk, facts, name)
@@ -7458,6 +7482,14 @@ fn bounding_let(
 	bounding_returned_facts(walk, facts, name, value, context, words)
 	// **What the callee is found to hold of its arguments** (ADR-306 D31).
 	bounding_relations_push(walk, facts, name, relations)
+	// **What each field of its struct result is found to hold** (ADR-306
+	// D35), as facts of the path.
+	for fact in field_facts {
+		bounding_push(walk, facts, fact)
+	}
+	for path in field_paths {
+		facts.ints.insert(path.clone())
+	}
 	let read_from = bounding_read_out_of(value, words)
 	if read_from != null {
 		let key = elements_key(walk.shape, read_from ?? value, words)
@@ -10413,6 +10445,9 @@ fn bounds_returns(
 	// **Each type's list fields** (ADR-306 D34): a method's `self.X`
 	// counts as the list parameters do.
 	let mut list_fields: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+	// **Each type's whole-number fields** (ADR-306 D35): a function
+	// returning the type is walked once for each.
+	let mut whole_fields: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
 	for item in program.items {
 		match item.node {
 			Item::Struct { name, generics, fields, .. } => {
@@ -10420,12 +10455,16 @@ fn bounds_returns(
 					continue
 				}
 				let mut lists: Vec[String] = []
+				let mut wholes: Vec[String] = []
 				for field in fields {
 					if bounding_is_list_type(field.ty, words) {
 						lists.push(words.resolve(field.name).clone())
+					} else if !(bounding_returns_each(field.ty, words) ?? true) {
+						wholes.push(words.resolve(field.name).clone())
 					}
 				}
 				list_fields.insert(words.resolve(name).clone(), lists)
+				whole_fields.insert(words.resolve(name).clone(), wholes)
 			},
 			else => {},
 		}
@@ -10455,7 +10494,12 @@ fn bounds_returns(
 				if twice.contains(words.resolve(symbol)) {
 					continue
 				}
-				let each = bounding_returns_each(ret_type ?? continue, words) ?? continue
+				let returned = ret_type ?? continue
+				let found_each = bounding_returns_each(returned, words)
+				// **A struct's whole-number fields, each its own entry**
+				// (ADR-306 D35).
+				let projections = if found_each == null { bounding_struct_wholes(returned, whole_fields, words) } else { [String()] }
+				let each = found_each ?? false
 				let mut below: collections::BTreeSet[i64] = collections::BTreeSet()
 				let mut at_least: collections::BTreeSet[i64] = collections::BTreeSet()
 				for k in 0..<args.len() {
@@ -10470,18 +10514,22 @@ fn bounds_returns(
 				let within = if each { collections::BTreeSet() } else { below.clone() }
 				// A list of numbers may be bounded by its values alone (D24),
 				// a whole number by its interval (D32).
-				assumed.insert(words.resolve(symbol).clone(), BoundsReturns {
-					each: each,
-					below: below,
-					sized: collections::BTreeSet(),
-					range: null,
-					pending: true,
-					at_least: at_least,
-					within: within,
-					fields: [],
-				})
-				bodies.push(item)
-				keys.push(words.resolve(symbol).clone())
+				for projected in projections {
+					let key = bounding_projected_key(words.resolve(symbol), projected)
+					assumed.insert(key.clone(), BoundsReturns {
+						each: each,
+						below: below.clone(),
+						sized: collections::BTreeSet(),
+						range: null,
+						pending: true,
+						at_least: at_least.clone(),
+						within: within.clone(),
+						fields: [],
+						projected: projected.clone(),
+					})
+					bodies.push(item)
+					keys.push(key)
+				}
 			},
 			// **A method, read as a free function with `self` as one more
 			// argument** (ADR-306 D34): of an inherent `impl` of a type
@@ -10500,7 +10548,10 @@ fn bounds_returns(
 								continue
 							}
 							let symbol = name ?? continue
-							let each = bounding_returns_each(ret_type ?? continue, words) ?? continue
+							let returned = ret_type ?? continue
+							let found_each = bounding_returns_each(returned, words)
+							let projections = if found_each == null { bounding_struct_wholes(returned, whole_fields, words) } else { [String()] }
+							let each = found_each ?? false
 							let mut below: collections::BTreeSet[i64] = collections::BTreeSet()
 							let mut at_least: collections::BTreeSet[i64] = collections::BTreeSet()
 							for k in 0..<args.len() {
@@ -10519,19 +10570,22 @@ fn bounds_returns(
 									within.insert(args.len() + j)
 								}
 							}
-							let key = f"{owner}.{words.resolve(symbol)}"
-							assumed.insert(key.clone(), BoundsReturns {
-								each: each,
-								below: below,
-								sized: collections::BTreeSet(),
-								range: null,
-								pending: true,
-								at_least: at_least,
-								within: within,
-								fields: lists.clone(),
-							})
-							bodies.push(method)
-							keys.push(key)
+							for projected in projections {
+								let key = bounding_projected_key(f"{owner}.{words.resolve(symbol)}", projected)
+								assumed.insert(key.clone(), BoundsReturns {
+									each: each,
+									below: below.clone(),
+									sized: collections::BTreeSet(),
+									range: null,
+									pending: true,
+									at_least: at_least.clone(),
+									within: within.clone(),
+									fields: lists.clone(),
+									projected: projected.clone(),
+								})
+								bodies.push(method)
+								keys.push(key)
+							}
 						},
 						else => {},
 					}
@@ -10651,6 +10705,7 @@ fn bounding_returns_round(
 				}
 				walk.return_each = wanted.each
 				walk.return_ranging = !wanted.each
+				walk.return_field = wanted.projected.clone()
 				// **The relations looked for** (D31), of a parameter the body
 				// does not bind again and a list whose length it keeps.
 				for k in 0..<args.len() {
@@ -10729,6 +10784,7 @@ fn bounding_returns_round(
 						at_least: at_least,
 						within: within,
 						fields: wanted.fields.clone(),
+						projected: wanted.projected.clone(),
 					})
 				}
 			},
@@ -10822,6 +10878,38 @@ fn bounding_returned(
 	if throwing {
 		return
 	}
+	if !walk.return_field.is_empty() {
+		// **One field of the struct handed back** (ADR-306 D35): its value
+		// in the literal; any other return gives the field nothing.
+		let built = returned ?? {
+			walk.return_lost = true
+			walk.return_unranged = true
+			return
+		}
+		walk.return_seen.insert(node_key(built))
+		let field = walk.return_field.clone()
+		let picked = bounding_field_built(built, field, words) ?? {
+			walk.return_lost = true
+			walk.return_unranged = true
+			return
+		}
+		bounding_returned_value(walk, facts, picked, context, program, words, ask)
+		return
+	}
+	bounding_returned_value(walk, facts, returned, context, program, words, ask)
+}
+
+/// **A value handed back, against what the walk looks for** (ADR-306 D23,
+/// D31, D32): the value itself, or one field of the struct handed back.
+fn bounding_returned_value(
+	mut walk: BoundsWalk,
+	facts: ref BoundsFacts,
+	returned: ref Expr?,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) {
 	if walk.return_ranging {
 		bounding_return_range(walk, facts, returned, context, program, words, ask)
 		bounding_return_relations(walk, facts, returned, context, program, words, ask)
@@ -10963,6 +11051,22 @@ fn bounding_returned_below(
 /// name the walk does not bind again, or `Type.method` of a method, the type
 /// as `std_receivers` names the receiver's.
 fn bounding_found_key(
+	walk: ref BoundsWalk,
+	value: ref Expr,
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+) -> String? {
+	let callee = bounding_found_callee(walk, value, context, words) ?? return null
+	// **The entry of one field of its struct result** (ADR-306 D35), for
+	// the call being read for it.
+	if !walk.found_field.is_empty() && node_key(value) == walk.found_at {
+		return bounding_projected_key(callee, walk.found_field)
+	}
+	return callee
+}
+
+/// The callee of [`bounding_found_key`], before a field is named.
+fn bounding_found_callee(
 	walk: ref BoundsWalk,
 	value: ref Expr,
 	context: ref BoundsContext,
@@ -11153,4 +11257,119 @@ fn bounding_returned_facts(
 		let high = walk.arena.lt(n, len)
 		bounding_push(walk, facts, high)
 	}
+}
+
+/// **The key of one field of a struct result** (ADR-306 D35): `callee#field`,
+/// or the callee's own where no field is named.
+fn bounding_projected_key(callee: ref String, field: ref String) -> String {
+	if field.is_empty() {
+		return callee.clone()
+	}
+	return f"{callee}#{field}"
+}
+
+/// **The whole-number fields of a struct type declared here** (ADR-306
+/// D35), each a result D23, D31 and D32 read; none of any other type.
+fn bounding_struct_wholes(
+	ty: ref Type,
+	whole_fields: ref collections::BTreeMap[String, Vec[String]],
+	words: ref winnow_grammar::InternerContext,
+) -> Vec[String] {
+	if ty.is_nullable || ty.is_tuple || !ty.generics.is_empty() {
+		return []
+	}
+	return whole_fields.get(words.resolve(ty.name))?.clone() ?? []
+}
+
+/// **The value a struct literal gives `field`** (ADR-306 D35): written, or
+/// the name of the shorthand `E { offset }`; nothing of any other value.
+fn bounding_field_built(built: ref Expr, field: ref String, words: ref winnow_grammar::InternerContext) -> Expr? {
+	return match built {
+		Expr::StructLit { fields, .. } => {
+			for each in fields {
+				if words.resolve(each.name) != field {
+					continue
+				}
+				return match each.value {
+					null => Expr::Variable(each.name, node_id::NodeId::fresh()),
+					written => written.clone(),
+				}
+			}
+			null
+		},
+		else => null,
+	}
+}
+
+/// **What a call's struct result is found to hold in each whole-number
+/// field** (ADR-306 D35): of `name.field`, what a `let` of the field alone
+/// would give (D23, D31, D32), each path pushed onto `paths`. A fact that
+/// reads another part of `name` reads its old value, and is left out.
+fn bounding_fields_found(
+	mut walk: BoundsWalk,
+	facts: ref BoundsFacts,
+	name: ref String,
+	value: ref Expr,
+	mut paths: Vec[String],
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> Vec[i64] {
+	let mut out: Vec[i64] = []
+	let call = match value {
+		Expr::Call { .. } => true,
+		Expr::MethodCall { .. } => true,
+		else => false,
+	}
+	if !call || bounding_found_options(value) {
+		return out
+	}
+	let callee = bounding_found_key(walk, value, context, words) ?? return out
+	let prefix = f"{callee}#"
+	let mut projected: Vec[String] = []
+	for (key, found) in context.returns {
+		if key.starts_with(prefix) && !found.each && !found.pending {
+			projected.push(found.projected.clone())
+		}
+	}
+	for field in projected {
+		let path = f"{name}.{field}"
+		walk.found_at = node_key(value)
+		walk.found_field = field.clone()
+		let relations = bounding_relations_of(walk, facts, path, value, context, program, words, ask)
+		let mut given = facts.clone()
+		given.facts = []
+		bounding_returned_facts(walk, given, path, value, context, words)
+		bounding_relations_push(walk, given, path, relations)
+		let range = bounding_range(walk, value, facts, context, program, words, ask) ?? Range::open()
+		walk.found_at = -1
+		walk.found_field = ""
+		let n = walk.arena.var(path)
+		if range.lo != null {
+			let least = walk.arena.int(range.lo ?? 0)
+			let low = walk.arena.ge(n, least)
+			bounding_push(walk, given, low)
+		}
+		if range.hi != null {
+			let most = walk.arena.int(range.hi ?? 0)
+			let high = walk.arena.le(n, most)
+			bounding_push(walk, given, high)
+		}
+		for fact in given.facts {
+			let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+			walk.arena.variables(fact, read)
+			let mut stale = false
+			for v in read {
+				if v != path && path_within(v, name) {
+					stale = true
+				}
+			}
+			if !stale {
+				out.push(fact)
+			}
+		}
+		paths.push(path)
+	}
+	return out
 }
