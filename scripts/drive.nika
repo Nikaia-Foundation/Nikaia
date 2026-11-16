@@ -4177,8 +4177,8 @@ fn drive_depends_on(body: String) -> Vec[String] {
 // BODY without what it quotes (#1881: this issue, #1857 and #1880 were held
 // by the driver lines and the report they quote): the lines of a fenced
 // block (between two ``` lines) and of a `<details>` block are dropped, and
-// so is a backtick span holding a `#` (a span without one, `` `Needs:` ``,
-// keeps its words).
+// so is a backtick span or a "..." span on one line holding a `#` (a span
+// without one, `` `Needs:` ``, keeps its words).
 fn drive_unquoted(body: String) -> String {
 	let mut out: Vec[String] = []
 	let mut fenced = false
@@ -4206,7 +4206,16 @@ fn drive_unquoted(body: String) -> String {
 			if i % 2 == 1 && i + 1 < pieces.len() && piece.contains("#") { continue }
 			line.push_str(piece)
 		}
-		out.push(line)
+		// So is a "..." span holding a `#` (#1903: a quoted driver line,
+		// ("waits for #1611"), held the issue quoting it).
+		let quoted: Vec[String] = line.split("\"").collect()
+		let mut kept = String()
+		for i in 0..<quoted.len() {
+			let piece = quoted[i].clone()
+			if i % 2 == 1 && i + 1 < quoted.len() && piece.contains("#") { continue }
+			kept.push_str(piece)
+		}
+		out.push(kept)
 	}
 	return out.join("\n")
 }

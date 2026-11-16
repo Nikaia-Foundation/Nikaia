@@ -13,7 +13,8 @@
 // cited in a `Found:`), and `--report-aside` writes what held a report under
 // its `Needs:`. A closed dependency, a `Needs: supervisor decision`, a prose
 // `after #N`, the issue the body is `Part of`, and quoted text (a backtick
-// span with a `#`, a fenced block, a `<details>` block) hold up nothing.
+// or double-quoted span with a `#`, a fenced block, a `<details>` block)
+// hold up nothing (#1881, #1903).
 use std::fs
 use std::process
 
@@ -36,7 +37,7 @@ fn main() throws {
     let nikaia = toolchain()
     let dir = process::run("mktemp", ["-d"]).stdout.trim().clone()
     let list = f"{dir}/issues.txt"
-    fs::write(list.clone(), fs::Root::Anywhere, "=== #10 ===\nNo dependency.\nNeeds: supervisor decision\n=== #11 ===\n## Found\n\nNeeds #900\n=== #12 ===\n- [ ] **Blocked by** #901, #902\n=== #13 ===\nThis waits for #903 and #900 to land.\n=== #14 ===\nDepends on: #904\n=== #15 ===\nAfter #905, plain --bless no longer works; after #900 too.\n=== #18 ===\nNeeds #901; see also #900.\n=== #16 ===\nA run ended blocked.\n=== #17 ===\nA run ended partial.\n=== #19 ===\nA run ended partial, waiting.\n=== #20 ===\nA run ended blocked, its gaps filed by the driver.\n=== #21 ===\nA run ended blocked, its filed gap closed.\n=== #22 ===\nA renamed run ended blocked, waiting.\n=== #23 ===\nA run ended blocked, citing an issue.\n=== #24 ===\nPart of #900.\nNeeds #900, #901\n=== #25 ===\nPart of #903; a renamed run waits for it.\n=== #26 ===\nThe driver printed `SKIPPED #26 waits for #900`.\n```\nNeeds: #901\n```\n<details><summary>report</summary>\n\nNeeds: #903\nwaits for #906\n</details>\n`Needs:` #907\n=== #27 ===\nA run ended blocked on a cited issue, moved aside.\n")
+    fs::write(list.clone(), fs::Root::Anywhere, "=== #10 ===\nNo dependency.\nNeeds: supervisor decision\n=== #11 ===\n## Found\n\nNeeds #900\n=== #12 ===\n- [ ] **Blocked by** #901, #902\n=== #13 ===\nThis waits for #903 and #900 to land.\n=== #14 ===\nDepends on: #904\n=== #15 ===\nAfter #905, plain --bless no longer works; after #900 too.\n=== #18 ===\nNeeds #901; see also #900.\n=== #16 ===\nA run ended blocked.\n=== #17 ===\nA run ended partial.\n=== #19 ===\nA run ended partial, waiting.\n=== #20 ===\nA run ended blocked, its gaps filed by the driver.\n=== #21 ===\nA run ended blocked, its filed gap closed.\n=== #22 ===\nA renamed run ended blocked, waiting.\n=== #23 ===\nA run ended blocked, citing an issue.\n=== #24 ===\nPart of #900.\nNeeds #900, #901\n=== #25 ===\nPart of #903; a renamed run waits for it.\n=== #26 ===\nThe driver printed `SKIPPED #26 waits for #900`.\n```\nNeeds: #901\n```\n<details><summary>report</summary>\n\nNeeds: #903\nwaits for #906\n</details>\n`Needs:` #907\n=== #27 ===\nA run ended blocked on a cited issue, moved aside.\n=== #28 ===\n- Friction: the driver's comment (\"waits for #903\") claimed a dependency.\n=== #29 ===\nWaits for #903, as \"a quote\" says.\n")
     fs::write(f"{dir}/issue-16.md.run1.report.md", fs::Root::Anywhere, "Result: blocked\nFound: the walk lacks a term (#906)\nNeeds: supervisor decision\n")
     fs::write(f"{dir}/issue-17.md.report.md", fs::Root::Anywhere, "Result: partial\nFound: a gap (#900)\n")
     fs::write(f"{dir}/issue-19.md.report.md", fs::Root::Anywhere, "Result: partial - built, kept as a draft\nFound: a walk gap (#900); blocks the draft\nNeeds: #907 for the draft's last site\n")
