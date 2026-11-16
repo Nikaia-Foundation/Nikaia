@@ -1,0 +1,5 @@
+bounds in tests/simd_made_in_a_method_argument.nika: 4 indexes, 4 proved; 0 operations, 0 proved
+    19  vs[0]     proved
+    19  vs[1]     proved
+    19  vs[2]     proved
+    19  bytes[0]  proved
