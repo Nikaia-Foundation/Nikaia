@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1411] — 2026-11-16
+
+**Builders' changes (#1812, #1844, #1905, #1907)**
+- Seen[T] can be written at a field or a parameter; a mismatch's help never suggests `Seen[ref T]`; `--sharing` names where a `let`, a tuple or a variant duplicates or moves a handle
+- examples/report refuses a stock file whose counts add up past an i64, with a message naming the file, instead of stopping with an overflow (#1812).
+- nikaia run counts what std builds inside a task — a set, map or other std collection a task builds under `nikaia run` now counts against its memory budget (ADR-327 D9) as under Cargo builds; before, the dynamically linked std allocated it uncounted and a sent set left a debt in the count (#1844).
+- Result summaries reach further (ADR-359 D14): a callee's precondition at a call is asked with the summaries of the calls it reads, a summary carries a list parameter's length, keeps the exits it can read, and exists for a method that is not a trait's.
+- A field that does not copy, handed out as a lambda's or a door block's last value (`m.access fn(open) { open.t }`, `map(fn(x) { x.t })`), is refused by the checker (NK1131, help `open.t.clone()`) instead of an internal compiler error.
+- A test program can pin its `nikaia check --sharing` report in `NAME.sharing`, compared and blessed like `NAME.bounds`
+
 ## [0.0.1410] — 2026-11-16
 
 **Builders' changes (#1550, #1920)**
