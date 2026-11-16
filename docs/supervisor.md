@@ -535,7 +535,7 @@ own driver run:
 * **Solver lane** (owner, 2026-11-16): the issues labelled `solver`: proving.
   The solver (ADR-270), the bounds walk and the prover behind `--bounds`
   (indexes, divisors, overflow, relations between values, summaries), the
-  ledger's facts, and the verification of the backend.
+  ledger's facts.
 * **At least one active session runs the improvement lane and at least one the
   bug lane** (owner, 2026-11-15). A session that starts while neither runs takes
   one of them first.
