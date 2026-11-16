@@ -1,0 +1,46 @@
+// #1690: a name each turn sets to `e % m`, `m` a constant, lies in
+// `0..<m` at every head of the loop where `e` is never negative there: the
+// walk guesses `0 <= state` and `state <= m - 1` and keeps them through each
+// turn. `lcg`: the generator's `state * 1103515245 + 12345` is proved, since
+// `state < 2^31`. `lcg_for`: the same in a `for`, and `state * 1000` past it.
+// `drift`: `state - 100` can be negative, so its remainder may be too, and
+// `state * 4611686018427387` stays checked. `widen`: the cast of a `u8`
+// carries its range, so `c * 1000` is proved.
+fn lcg(n: i64) -> i64 {
+	let mut state: i64 = 42
+	let mut i: i64 = 0
+	while i < n {
+		state = (state * 1103515245 + 12345) % 2147483648
+		i += 1
+	}
+	return state
+}
+
+fn lcg_for(n: i64) -> i64 {
+	let mut state: i64 = 7
+	for _ in 0..<n {
+		if state > 5 {
+			state = (state * 1103515245 + 12345) % 2147483648
+		}
+	}
+	return state * 1000
+}
+
+fn drift(n: i64) -> i64 {
+	let mut state: i64 = 3
+	let mut i: i64 = 0
+	while i < n {
+		state = (state - 100) % 2000
+		i += 1
+	}
+	return state * 4611686018427387
+}
+
+fn widen(start: u8) -> i64 {
+	let c: i64 = start as i64
+	return c * 1000
+}
+
+fn main() throws {
+	println(f"{lcg(5)} {lcg_for(3)} {drift(2)} {widen(200)}")
+}

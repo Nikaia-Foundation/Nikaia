@@ -5680,6 +5680,25 @@ fn bounding_loop_guesses(
 			}
 		}
 	}
+	// **A name a turn sets to a remainder lies inside what its divisor
+	// leaves** (#1690): `state = (state * a + c) % m`, `m` a constant, offers
+	// `0 <= state` and `state <= m - 1`, asked where the loop is reached and
+	// kept through each turn as any other.
+	let mut remainders: Vec[(String, i64)] = []
+	bounding_remainders_set(walk, body, entry, changed, context, program, words, remainders)
+	for (name, most) in remainders {
+		if bound.contains(name) {
+			continue
+		}
+		let n = walk.arena.var(name)
+		let zero = walk.arena.int(0)
+		let top = walk.arena.int(most)
+		for guess in [walk.arena.ge(n, zero), walk.arena.le(n, top)] {
+			if !out.contains(guess) {
+				out.push(guess)
+			}
+		}
+	}
 	for each in body.stmts {
 		let guard = bounding_break_guard(each.node) ?? continue
 		let denied = bounding_denial(walk, guard, entry, context, program, words) ?? continue
@@ -5695,6 +5714,59 @@ fn bounding_loop_guesses(
 		}
 	}
 	return out
+}
+
+/// The whole-number names of `changed` that `block` sets to `e % m` or by
+/// `x %= m`, at any depth of its `if`s, with `m - 1` for `m` a constant of at
+/// least one (#1690).
+fn bounding_remainders_set(
+	mut walk: BoundsWalk,
+	block: ref Block,
+	entry: ref BoundsFacts,
+	changed: ref BoundsChanged,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	mut out: Vec[(String, i64)],
+) {
+	for each in block.stmts {
+		match each.node {
+			Stmt::Assign { target, op, value } => {
+				let place = path_of(target, words) ?? continue
+				if place.contains(".") || !entry.ints.contains(place) || !bounding_changes_name(changed, place) {
+					continue
+				}
+				let mut divisor: Expr? = null
+				if bounding_is_op(op, BinaryOp::Rem) {
+					divisor = value.clone()
+				} else if op == null {
+					match value {
+						Expr::Binary { op, rhs, .. } => {
+							if op == BinaryOp::Rem {
+								divisor = rhs.clone()
+							}
+						},
+						else => {},
+					}
+				}
+				let d = divisor ?? continue
+				let term = bounding_lin(walk, d, entry, context, program, words) ?? continue
+				let m = walk.arena.constant(term) ?? continue
+				if m >= 1 {
+					out.push((place.clone(), m - 1))
+				}
+			},
+			Stmt::Expr(expr) => match expr {
+				Expr::If { then_branch, else_branch, .. } => {
+					bounding_remainders_set(walk, then_branch, entry, changed, context, program, words, out)
+					let other = else_branch ?? continue
+					bounding_remainders_set(walk, other, entry, changed, context, program, words, out)
+				},
+				else => {},
+			},
+			else => {},
+		}
+	}
 }
 
 /// **What held of the value a changed name starts with, said of the name**
@@ -7394,6 +7466,7 @@ fn bounding_let(
 		}
 	}
 	bounding_built(walk, facts, name, value, words)
+	bounding_built_choice(walk, facts, name, value, context, program, words, ask)
 	if bounding_declared_list(ty, words) {
 		bounding_collected(walk, facts, name, value, context, program, words)
 	}
@@ -7418,6 +7491,57 @@ fn bounding_let(
 			else => {},
 		}
 	}
+}
+
+/// **The length of a list chosen by an `if`** (#1702): `let cols = if
+/// ks.len() == 0 { [] } else { r.cols.clone() }` holds of `cols` what
+/// `if … { cols = [] } else { cols = r.cols.clone() }` does: each arm's
+/// length (`bounding_built`) under its condition or its denial, joined as
+/// past an `if` (`bounding_if_join`, `bounding_flag_join`). Nothing where an
+/// arm is more than a value or its length is not known. `facts` hold
+/// nothing of `name`.
+fn bounding_built_choice(
+	mut walk: BoundsWalk,
+	mut facts: BoundsFacts,
+	name: ref String,
+	value: ref Expr,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) {
+	match value {
+		Expr::If { cond, then_branch, else_branch, .. } => {
+			let otherwise = else_branch ?? return
+			let first = bounding_arm_value(then_branch) ?? return
+			let second = bounding_arm_value(otherwise) ?? return
+			let length = length_of(name)
+			let mut taken = facts.clone()
+			bounding_assume(walk, taken, cond, context, program, words)
+			bounding_built(walk, taken, name, first, words)
+			let mut passed = facts.clone()
+			bounding_assume_not(walk, passed, cond, context, program, words)
+			bounding_built(walk, passed, name, second, words)
+			if !bounding_reads_name(walk, taken, length) || !bounding_reads_name(walk, passed, length) {
+				return
+			}
+			let mut changed = nothing_changed()
+			changed.values.insert(name.clone())
+			bounding_if_join(walk, facts, changed, taken, passed, ask)
+			bounding_flag_join(walk, facts, changed, taken, passed, ask)
+		},
+		else => {},
+	}
+}
+
+/// Whether a fact among `facts` reads the name `name`.
+fn bounding_reads_name(walk: ref BoundsWalk, facts: ref BoundsFacts, name: ref String) -> bool {
+	for fact in facts.facts {
+		if walk.arena.mentions(fact, name) {
+			return true
+		}
+	}
+	return false
 }
 
 /// **What every arm of a choice holds of `name`** (#1516): `let b = match
@@ -8773,8 +8897,14 @@ fn bounding_flag_join(
 }
 
 /// The names a fact of `branch` about one name alone reads (`found >= 1`,
-/// `found == 0`): the flags `bounding_flag_join` asks about. A length, a
-/// field path or a name the walk made is none.
+/// `found == 0`): the flags `bounding_flag_join` asks about. A field path
+/// or a name the walk made is none.
+///
+/// **The length of a plain name is a flag too** (#1702): past `if
+/// ks.len() == 0 { cols = [] } else { cols = r.cols.clone() }` the first
+/// branch's end holds `ks.len() <= 0` and the second's `ks.len() >= 1`, so
+/// `ks.len() >= 1 || cols.len() == 0` and `ks.len() <= 0 || cols.len() ==
+/// r.cols.len()` are kept.
 fn bounding_flag_names(walk: ref BoundsWalk, branch: ref BoundsFacts, mut flags: collections::BTreeSet[String]) {
 	for fact in branch.facts {
 		let mut read: collections::BTreeSet[String] = collections::BTreeSet()
@@ -8783,7 +8913,8 @@ fn bounding_flag_names(walk: ref BoundsWalk, branch: ref BoundsFacts, mut flags:
 			continue
 		}
 		for name in read {
-			if !name.contains(".") && !name.contains("#") && !name.contains("[") && !name.contains("(") {
+			let list = name.strip_suffix(".len()") ?? name
+			if !list.contains(".") && !list.contains("#") && !list.contains("[") && !list.contains("(") {
 				flags.insert(name.clone())
 			}
 		}
@@ -8885,6 +9016,8 @@ fn bounding_expr(
 		Expr::Match { value, arms, .. } => {
 			bounding_expr(walk, value, facts, context, program, words, ask)
 			let mut changed = nothing_changed()
+			let mut ends: Vec[BoundsFacts] = []
+			let mut bound: Vec[Vec[String]] = []
 			for arm in arms {
 				// What is known outside holds in an arm, but of the names
 				// its pattern binds: such a name hides an outer one, so
@@ -8897,10 +9030,26 @@ fn bounding_expr(
 					inner.ints.remove(name)
 				}
 				bounding_maybe_expr(walk, arm.guard, inner, context, program, words, ask)
-				bounding_expr(walk, arm.body, inner, context, program, words, ask)
+				// **An arm's block ends with what it changed** (#1702), as an
+				// `if`'s branch does: walked as a block of the arm, not as a
+				// block inside an expression, which forgets what it changed
+				// before the join could read it. An arm that leaves does not
+				// reach the join.
+				let mut leaves = false
+				match arm.body {
+					Expr::Block(block, _) => {
+						leaves = bounding_block(walk, block, inner, context, program, words, ask)
+					},
+					else => bounding_expr(walk, arm.body, inner, context, program, words, ask),
+				}
 				bounding_extend(changed, bounding_changed_in_expr(arm.body, context, words))
+				if !leaves {
+					ends.push(inner)
+					bound.push(hidden)
+				}
 			}
 			bounding_after_change(walk, facts, changed)
+			bounding_match_join(walk, facts, changed, ends, bound, ask)
 		},
 		// Not entered: a lambda or a task may run at any later moment.
 		Expr::Closure { .. } => {},
@@ -9153,9 +9302,143 @@ fn bounding_if_join(
 			kept.push(fact)
 		}
 	}
+	bounding_emptied_join(walk, facts, changed, then_facts, else_facts, kept)
+	bounding_emptied_join(walk, facts, changed, else_facts, then_facts, kept)
 	for fact in kept {
 		bounding_push(walk, facts, fact)
 	}
+}
+
+/// **What holds past a `match`, of what its arms changed** (#1702), as
+/// `bounding_if_join` keeps it past an `if`: a fact of one arm's end that
+/// reads a changed name holds past the `match` where every other arm's end
+/// holds or proves it. A fact that reads a name the arm's pattern binds is
+/// that arm's own. So `match rel { Le => { c = 1 }, Eq => { if odd { ks =
+/// [] } } }` keeps `ks.len() == 0 || ks.len() == r.ks.len()`, which the
+/// first arm proves of its `ks.len() == r.ks.len()`.
+fn bounding_match_join(
+	mut walk: BoundsWalk,
+	mut facts: BoundsFacts,
+	changed: ref BoundsChanged,
+	ends: ref Vec[BoundsFacts],
+	bound: ref Vec[Vec[String]],
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) {
+	if changed.values.is_empty() || ends.len() < 2 {
+		return
+	}
+	let mut kept: Vec[i64] = []
+	for k in 0..<ends.len() {
+		for fact in bounding_join_candidates(walk, facts, changed, ends[k]) {
+			if kept.contains(fact) {
+				continue
+			}
+			let mut own = false
+			for name in bound[k] {
+				if bounding_touches(walk, fact, name) {
+					own = true
+				}
+			}
+			let mut every = !own
+			for j in 0..<ends.len() {
+				if !every || j == k || ends[j].facts.contains(fact) {
+					continue
+				}
+				every = bounding_proves(walk, ends[j], fact, ask)
+			}
+			if every {
+				kept.push(fact)
+			}
+		}
+	}
+	for fact in kept {
+		bounding_push(walk, facts, fact)
+	}
+}
+
+/// **A list one branch empties keeps the other branch's facts beside its
+/// length** (#1702): where `pinning`'s end holds a changed list's length at
+/// a number (`ks.len() == 0` after `ks = []`), each fact of `other`'s end
+/// over a changed name that the join did not keep is kept as `ks.len() == 0
+/// || fact`, true at either end: so `if c % d != 0 { ks = [] }` keeps
+/// `ks.len() == 0 || ks.len() == r.ks.len()`, and a later `ks.len() >= 1`
+/// reads the second. The newest few of `other`'s facts.
+fn bounding_emptied_join(
+	mut walk: BoundsWalk,
+	facts: ref BoundsFacts,
+	changed: ref BoundsChanged,
+	pinning: ref BoundsFacts,
+	other: ref BoundsFacts,
+	mut kept: Vec[i64],
+) {
+	let pins = bounding_pinned_lengths(walk, facts, changed, pinning)
+	if pins.is_empty() {
+		return
+	}
+	let mut own: Vec[i64] = []
+	for fact in bounding_join_candidates(walk, facts, changed, other) {
+		if !kept.contains(fact) && !pins.contains(fact) {
+			own.push(fact)
+		}
+	}
+	while own.len() > most_flagged() {
+		own.remove(0)
+	}
+	for pin in pins {
+		for fact in own {
+			let either = walk.arena.or([pin, fact])
+			if !kept.contains(either) && !facts.facts.contains(either) {
+				kept.push(either)
+			}
+		}
+	}
+}
+
+/// The facts of `branch` that pin the length of a name the `if` changed to
+/// a number (`ks.len() == 0`), and do not hold past it already.
+fn bounding_pinned_lengths(
+	walk: ref BoundsWalk,
+	facts: ref BoundsFacts,
+	changed: ref BoundsChanged,
+	branch: ref BoundsFacts,
+) -> Vec[i64] {
+	let mut out: Vec[i64] = []
+	for fact in branch.facts {
+		if facts.facts.contains(fact) {
+			continue
+		}
+		match walk.arena.at(fact) {
+			SolverTerm::Eq(a, b) => {
+				let mut name: String? = null
+				let mut value: i64? = null
+				match walk.arena.at(a) {
+					SolverTerm::Var(v) => {
+						name = v.clone()
+						value = walk.arena.constant(b)
+					},
+					else => {
+						match walk.arena.at(b) {
+							SolverTerm::Var(v) => {
+								name = v.clone()
+								value = walk.arena.constant(a)
+							},
+							else => {},
+						}
+					},
+				}
+				let n = name ?? continue
+				if value == null {
+					continue
+				}
+				let list = n.strip_suffix(".len()") ?? continue
+				if changed.values.contains(list) || changed.lengths.contains(list) {
+					out.push(fact)
+				}
+			},
+			else => {},
+		}
+	}
+	return out
 }
 
 /// The facts of a branch's end that read a name the `if` changed and do

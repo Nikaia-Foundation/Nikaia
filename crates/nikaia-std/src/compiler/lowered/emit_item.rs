@@ -539,7 +539,7 @@ impl EmitState {
                 written = format!("&[{}]", element);
             }
             params.push(format!("{}: {}{}", escaped_name(&emit_text(world, arg.name)), reference, written));
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         for option in method.config.iter() { params.push(format!("{}: {}", escaped_name(&emit_text(world, option.name)), self.emit_item_ty(world, walk, host, &option.ty, &EmitLifetimes::Elided))); }
         let mut returned = self.emit_trait_returned(world, walk, host, (method.ret_type).as_ref(), foreign); #[allow(unused_mut, clippy::redundant_locals)] let mut from_names = from_names;

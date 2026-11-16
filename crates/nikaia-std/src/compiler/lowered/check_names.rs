@@ -29,7 +29,7 @@ impl CheckState {
         let at = match nikaia_std::search::find(&name, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
         let module = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string());
         if !self.std_modules.contains(&module) || self.std_in_scope.contains(&module) { return; }
-        if is_a_hull(&module) { return; }
+        if is_a_hull(&module) || starts_with_a_capital(&module) { return; }
         if self.modules.contains(&module) { return; }
         self.findings.push(check_refusal("NK1117", span, format!("You're using `{}` without a `use` line for it.", module), vec![String::from("A file lists the modules it uses at the top, `std`'s included.")], Some(format!("Write `use std::{}` at the top of the file.", module))));
     }

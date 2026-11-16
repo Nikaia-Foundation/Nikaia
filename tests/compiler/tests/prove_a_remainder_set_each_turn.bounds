@@ -1,0 +1,13 @@
+bounds in tests/prove_a_remainder_set_each_turn.nika: 0 indexes, 0 proved; 10 operations, 8 proved
+    13  state * 1103515245 + 12345  proved
+    13  state * 1103515245          proved
+    14  i += 1                      proved
+    23  state * 1103515245 + 12345  proved
+    23  state * 1103515245          proved
+    26  state * 1000                proved
+    33  state - 100                 checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    34  i += 1                      proved
+    36  state * 4611686018427387    checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    41  c * 1000                    proved
+  derived  drift: 0 <= n, proved at the calls on lines 45
+  derived  lcg: 0 <= n, proved at the calls on lines 45

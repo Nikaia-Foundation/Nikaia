@@ -1,0 +1,67 @@
+// #1702 (ADR-306 D23, ADR-369 D4): `ks` pushed once per element of a row's
+// `ks`, set to `[]` in one branch of an `if` or of a `match` arm, and
+// `cols = if ks.len() == 0 { [] } else { row.cols.clone() }` after it: the
+// list `ks` empties keeps `ks.len() == 0 || ks.len() == r.ks.len()`, so
+// each construction of `Row` keeps `cols.len() == ks.len()` and
+// `row.ks[0]` under `row.cols.len() == 1` is proved.
+struct Row {
+	cols: Vec[u32],
+	ks: Vec[i64],
+	constant: i64,
+}
+
+enum Rel { Le, Lt, Eq }
+
+fn first_k(row: ref Row) -> i64 {
+	if row.cols.len() == 1 && row.ks[0] == 1 {
+		return 1
+	}
+	return 0
+}
+
+// The issue's probe: the flag `e` empties `ks`.
+fn emptied(r: ref Row, e: bool) -> Row {
+	let mut ks: Vec[i64] = []
+	for k in r.ks {
+		ks.push(k)
+	}
+	if e {
+		ks = []
+	}
+	let cols = if ks.len() == 0 { [] } else { r.cols.clone() }
+	return Row { cols: cols, ks: ks, constant: 0 }
+}
+
+// The shape of `sv_check.nika` and `sv_proof.nika`: one arm of a `match`
+// empties `ks` under a test of no name.
+fn divided(r: ref Row, rel: Rel, d: i64) -> Row {
+	let mut ks: Vec[i64] = []
+	for k in r.ks {
+		ks.push(k / d)
+	}
+	let c = r.constant
+	let mut constant = c
+	match rel {
+		Rel::Le => {},
+		Rel::Lt => { constant = c + 1 },
+		Rel::Eq => {
+			if c % d != 0 {
+				ks = []
+				constant = 1
+			} else {
+				constant = c / d
+			}
+		},
+	}
+	let cols = if ks.len() == 0 { [] } else { r.cols.clone() }
+	return Row { cols: cols, ks: ks, constant: constant }
+}
+
+fn main() throws {
+	let r = Row { cols: [1], ks: [1], constant: 3 }
+	println(first_k(emptied(r, false)))
+	println(first_k(emptied(r, true)))
+	println(first_k(divided(r, Rel::Le, 1)))
+	println(first_k(divided(r, Rel::Lt, 1)))
+	println(first_k(divided(r, Rel::Eq, 2)))
+}
