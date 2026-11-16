@@ -12,7 +12,7 @@ use std::collections
 comptime COMPARE_PLAIN: Array[ref String, 11] = ["i32", "i64", "u8", "u32", "u64", "bool", "char", "scalar", "String", "str", "Bytes"]
 
 /// The containers, which compare when what they hold does.
-comptime COMPARE_CONTAINERS: Array[ref String, 14] = ["Vec", "List", "Array", "Option", "Set", "collections::HashMap", "collections::HashSet", "collections::BTreeMap", "collections::BTreeSet", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Shared"]
+comptime COMPARE_CONTAINERS: Array[ref String, 15] = ["Vec", "List", "Array", "Option", "Set", "collections::HashMap", "collections::HashSet", "collections::BTreeMap", "collections::BTreeSet", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Shared", "Seen"]
 
 /// The maps and sets not kept in order, which have no order.
 // What `.clone()` does not reach: a task's handle and a lock (#1245).

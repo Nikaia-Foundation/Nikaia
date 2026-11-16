@@ -3,7 +3,7 @@
 
 pub(crate) const COMPARE_PLAIN: [&str; 11] = ["i32", "i64", "u8", "u32", "u64", "bool", "char", "scalar", "String", "str", "Bytes"];
 
-pub(crate) const COMPARE_CONTAINERS: [&str; 14] = ["Vec", "List", "Array", "Option", "Set", "collections::HashMap", "collections::HashSet", "collections::BTreeMap", "collections::BTreeSet", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Shared"];
+pub(crate) const COMPARE_CONTAINERS: [&str; 15] = ["Vec", "List", "Array", "Option", "Set", "collections::HashMap", "collections::HashSet", "collections::BTreeMap", "collections::BTreeSet", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Shared", "Seen"];
 
 pub(crate) const COMPARE_UNCOPIED: [&str; 4] = ["TaskHandle", "task::ChildHandle", "Locked", "SharedMut"];
 
