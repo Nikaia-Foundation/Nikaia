@@ -3687,7 +3687,7 @@ pub mod check_shapes {
 }
 pub mod check_simd {
     #[allow(unused_imports)]
-    pub use super::{check_simd_kind, check_simd_bits_of, check_simd_count_of, check_simd_bytes, check_simd_method_result, check_simd_a_call, check_simd_made, simd_written};
+    pub use super::{check_simd_kind, check_simd_bits_of, check_simd_float, check_simd_float_vector, check_simd_lane_bits, check_simd_count_of, check_simd_bytes, check_simd_method_result, check_simd_a_call, check_simd_made, simd_written};
 }
 pub mod check_state {
     #[allow(unused_imports)]
@@ -4423,4 +4423,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "b5f2e2a5200c8e054198df1864b9b9ad400fd6af4d7457c6a8b778dabdb5bf43";
+pub const LOWERED_DIGEST: &str = "8acaa6a928e137499cab75f6bd4525115029522961302df259648c6fbc4185b4";

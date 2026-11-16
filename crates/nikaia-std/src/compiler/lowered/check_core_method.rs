@@ -629,6 +629,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     }
     if name == "access" && locked_content_of(&on).is_some() { return Ty::Named { name: nikaia_std::block::Text::from(SEEN.to_string()), args: vec![walked.unseen()], view: false }; }
     let lanes = value_of_a_copy(&on.unseen());
+    state.a_lane_method_not_offered(&lanes, &name, span);
     state.a_shuffle_out_of_lanes(world, &lanes, &name, args, span);
     let changed: Option<Ty> = check_simd_method_result(&lanes, &name);
     if changed.is_some() { return nikaia_std::index::or(changed, || Ty::Unknown); }

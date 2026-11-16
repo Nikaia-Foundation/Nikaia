@@ -407,11 +407,16 @@ impl CheckState {
         if negation && is_a_bool_type(seen) {
             wrong = true
         }
+        // **A vector has no `-`, and float lanes no `!`** (ADR-377 D3, D9).
+        let vector = value_of_a_copy(seen)
+        if (negation && check_simd_kind(vector).len() > 0) || (!negation && check_simd_float_vector(vector)) {
+            wrong = true
+        }
         if !wrong {
             return
         }
         let mut symbol: String = "!"
-        let mut note: String = "`!` flips a `bool`, the bits of an integer or the lanes of a vector or a mask."
+        let mut note: String = "`!` flips a `bool`, the bits of an integer or the lanes of an integer vector or a mask."
         if negation {
             symbol = "-"
             note = "`-` negates a number."
