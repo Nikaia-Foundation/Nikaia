@@ -1,0 +1,113 @@
+// The Benchmarks Game's `fasta`: three DNA sequences in FASTA format, lines
+// of 60 letters. The first repeats the Alu sequence for 2n letters; the second
+// (3n letters) and the third (5n) draw each letter from a table of
+// probabilities with the game's linear congruential generator, one generator
+// for both, seeded with 42.
+//
+//     nikaia run main.nika -- 1000
+//     >ONE Homo sapiens alu
+//     GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGA
+//     ...
+//
+// The argument is n (1000 if left out); the output for 1000 is the game's
+// published one. Written as a Nikaia programmer writes it first: a line of
+// text built letter by letter and printed, the letter of a draw found by
+// walking the cumulative probabilities.
+use std::cli
+use std::text
+
+// The game's generator: each draw a number in [0, 1).
+struct Random {
+	seed: i64,
+}
+
+impl Random {
+	fn next(mut self) -> f64 sync {
+		self.seed = (self.seed * 3877 + 29573) % 139968
+		return (self.seed as f64) / 139968.0
+	}
+}
+
+// A letter and the probability of drawing it.
+struct Weighted {
+	letter: scalar,
+	p: f64,
+}
+
+// `n` letters of `sequence`, repeated from its start as often as needed.
+fn repeat(sequence: String, n: i64) throws {
+	let letters: Vec[scalar] = sequence.scalars.collect()
+	let mut at = 0
+	let mut left = n
+	while left > 0 {
+		let width = left.min(60)
+		let mut line = String()
+		for _ in 0..<width {
+			line.push(letters[at])
+			at = (at + 1) % letters.len()
+		}
+		println(line)
+		left = left - width
+	}
+}
+
+// `n` letters drawn from `table` with `random`.
+fn draw(table: Vec[Weighted], n: i64, mut random: Random) throws {
+	let mut cumulative: Vec[f64] = []
+	let mut sum = 0.0
+	for w in table {
+		sum = sum + w.p
+		cumulative.push(sum)
+	}
+	let last = table.len() - 1
+	let mut left = n
+	while left > 0 {
+		let width = left.min(60)
+		let mut line = String()
+		for _ in 0..<width {
+			let r = random.next()
+			let mut i = 0
+			while i < last && r >= cumulative[i] {
+				i = i + 1
+			}
+			line.push(table[i].letter)
+		}
+		println(line)
+		left = left - width
+	}
+}
+
+fn main() throws {
+	let n = text::parse_i64(cli::args().nth(1) ?? "1000") ?? 1000
+	let iub: Vec[Weighted] = [
+		Weighted { letter: 'a', p: 0.27 },
+		Weighted { letter: 'c', p: 0.12 },
+		Weighted { letter: 'g', p: 0.12 },
+		Weighted { letter: 't', p: 0.27 },
+		Weighted { letter: 'B', p: 0.02 },
+		Weighted { letter: 'D', p: 0.02 },
+		Weighted { letter: 'H', p: 0.02 },
+		Weighted { letter: 'K', p: 0.02 },
+		Weighted { letter: 'M', p: 0.02 },
+		Weighted { letter: 'N', p: 0.02 },
+		Weighted { letter: 'R', p: 0.02 },
+		Weighted { letter: 'S', p: 0.02 },
+		Weighted { letter: 'V', p: 0.02 },
+		Weighted { letter: 'W', p: 0.02 },
+		Weighted { letter: 'Y', p: 0.02 },
+	]
+	let homo_sapiens: Vec[Weighted] = [
+		Weighted { letter: 'a', p: 0.3029549426680 },
+		Weighted { letter: 'c', p: 0.1979883004921 },
+		Weighted { letter: 'g', p: 0.1975473066391 },
+		Weighted { letter: 't', p: 0.3015094502008 },
+	]
+	let alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
+	let mut random = Random { seed: 42 }
+	println(">ONE Homo sapiens alu")
+	repeat(alu, n * 2)
+	println(">TWO IUB ambiguity codes")
+	draw(iub, n * 3, random)
+	println(">THREE Homo sapiens frequency")
+	draw(homo_sapiens, n * 5, random)
+}

@@ -42,6 +42,14 @@ struct Game {
 	// Where the entry runs on threads: the environment that holds it to one,
 	// for a second row (callgrind serialises threads and counts them all).
 	one_thread: String,
+	// The environment the entry's own row runs in (`VAR=value`, a command
+	// before it), else empty: where its threads wait for each other by
+	// spinning, callgrind's serialised threads count the spinning, not the
+	// work, so it is held to one there.
+	rust_env: String,
+	// A shell filter the output is passed through for the table's head,
+	// where it is too long to show (empty: shown whole).
+	shown: String,
 }
 
 fn games() -> Vec[Game] {
@@ -57,6 +65,8 @@ fn games() -> Vec[Game] {
 			label: "Rust #9",
 			cpu: "ivybridge",
 			one_thread: "",
+			rust_env: "",
+			shown: "",
 		},
 		Game {
 			name: "spectral-norm",
@@ -69,6 +79,8 @@ fn games() -> Vec[Game] {
 			label: "Rust #6",
 			cpu: "ivybridge",
 			one_thread: "RAYON_NUM_THREADS=1",
+			rust_env: "",
+			shown: "",
 		},
 		Game {
 			name: "fannkuch-redux",
@@ -81,6 +93,8 @@ fn games() -> Vec[Game] {
 			label: "Rust #6",
 			cpu: "ivybridge",
 			one_thread: "RAYON_NUM_THREADS=1",
+			rust_env: "",
+			shown: "",
 		},
 		Game {
 			name: "binary-trees",
@@ -93,6 +107,27 @@ fn games() -> Vec[Game] {
 			label: "Rust #5",
 			cpu: "ivybridge",
 			one_thread: "RAYON_NUM_THREADS=1",
+			rust_env: "",
+			shown: "",
+		},
+		// 10n letters, the output also the input of k-nucleotide and
+		// reverse-complement. The entry takes min(CPUs, 2) threads that wait
+		// for their turn by spinning, which under callgrind never ends in
+		// reasonable time (ten minutes, unfinished): it is counted on one CPU,
+		// which holds it to one thread.
+		Game {
+			name: "fasta",
+			args: "2500000",
+			units: 25000000,
+			unit: "letter",
+			nikaia: "benches/game/fasta/main.nika",
+			speed: "benches/game/fasta/speed.nika",
+			rust: "benches/game/fasta/rust-7.rs",
+			label: "Rust entry 7",
+			cpu: "ivybridge",
+			one_thread: "",
+			rust_env: "taskset -c 0",
+			shown: "md5sum | cut -c1-32",
 		},
 	]
 }
@@ -144,11 +179,17 @@ fn build_rust(repo: String, work: String, game: Game) -> Program throws {
 			f"cargo build of {game.name} ({setting})",
 		)
 	}
+	let mut env = String()
+	let mut held = ""
+	if game.rust_env.len() > 0 {
+		env.push_str(f"{game.rust_env} ")
+		held = f", `{game.rust_env}`"
+	}
 	return Program {
-		name: f"{game.label}, `target-cpu={game.cpu}`",
+		name: f"{game.label}{held}, `target-cpu={game.cpu}`",
 		on: f"{work}/rust-{game.cpu}-on/release/{game.name}",
 		off: f"{work}/rust-{game.cpu}-off/release/{game.name}",
-		env: String(),
+		env: env,
 		source: game.rust.clone(),
 	}
 }
@@ -209,7 +250,7 @@ incremental = false
 // Every program at both settings prints the first one's output.
 fn same_output(work: String, programs: Vec[Program], args: String) throws {
 	let want = f"{work}/out/want"
-	must(f"{programs[0].on} {args} > {want}", f"{programs[0].on} {args}")
+	must(f"{programs[0].env}{programs[0].on} {args} > {want}", f"{programs[0].on} {args}")
 	for p in programs {
 		for bin in [p.on.clone(), p.off.clone()] {
 			let r = sh(f"{p.env}{bin} {args} | cmp -s - {want}")
@@ -323,7 +364,13 @@ fn main() throws {
 			continue
 		}
 		table.push_str(measure(nikaia, repo, work, game))
-		said.push_str(f"{game.name}: per {game.unit}, `{game.name} {game.args}`, output `{sh(f"{work}/bin/{game.name}.x86-64.on {game.args}").stdout.trim().replace("\n", " ")}`\n")
+		let mut run = f"{work}/bin/{game.name}.x86-64.on {game.args}"
+		let mut what = "output"
+		if game.shown.len() > 0 {
+			run = f"{run} | {game.shown}"
+			what = f"output through `{game.shown}`"
+		}
+		said.push_str(f"{game.name}: per {game.unit}, `{game.name} {game.args}`, {what} `{sh(run).stdout.trim().replace("\n", " ")}`\n")
 	}
 	let spec = f"{repo}/docs/specification/10-nikaia-light.md"
 	let version = sh(f"sed -n 's/^\\*\\*Version:\\*\\* \\([0-9.]*\\).*/\\1/p' {spec}").stdout

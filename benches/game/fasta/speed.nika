@@ -1,0 +1,134 @@
+// The Benchmarks Game's `fasta`, written for speed: the same output as
+// `main.nika`, bytes put into one buffer and printed a block at a time. The
+// generator takes 139968 values, so the letter each value draws is found once,
+// into a table, and a draw is the generator's step and one read of it. The
+// repeated sequence is laid out once as whole lines, as many as bring it back
+// to its start, and printed as often as it fits.
+//
+//     nikaia run speed.nika -- 1000
+//
+// The argument is n (1000 if left out).
+use std::cli
+use std::text
+
+// A letter and the probability of drawing it.
+struct Weighted {
+	letter: scalar,
+	p: f64,
+}
+
+// For each value of the generator, the letter `table` draws for it: the first
+// whose cumulative probability is above the value over the modulus, 139968.
+fn letters_by_value(table: Vec[Weighted]) -> Vec[u8] sync {
+	let mut cumulative: Vec[f64] = []
+	let mut sum = 0.0
+	for w in table {
+		sum = sum + w.p
+		cumulative.push(sum)
+	}
+	let last = table.len() - 1
+	let mut letters: Vec[u8] = []
+	for value in 0..<139968 {
+		let r = (value as f64) / 139968.0
+		let mut i = 0
+		while i < last && r >= cumulative[i] {
+			i = i + 1
+		}
+		letters.push(table[i].letter as u8)
+	}
+	return letters
+}
+
+// `n` letters of `sequence` in lines of 60, repeated from its start.
+fn repeat(sequence: String, n: i64) throws {
+	let period = sequence.bytes.len()
+	// Lines until the sequence starts a line again: period / gcd(period, 60).
+	let mut a = period
+	let mut b = 60
+	while b != 0 {
+		let t = a % b
+		a = b
+		b = t
+	}
+	let lines = period / a
+	let mut laid: Vec[u8] = []
+	let mut at = 0
+	for _ in 0..<lines {
+		for _ in 0..<60 {
+			laid.push(sequence.bytes[at])
+			at = (at + 1) % period
+		}
+		laid.push(10)
+	}
+	let block = Bytes(laid)
+	let whole = lines * 60
+	let mut left = n
+	while left >= whole {
+		print(block)
+		left = left - whole
+	}
+	if left > 0 {
+		// The rest: whole lines and a last one, cut short.
+		let full = left / 60
+		print(block[0..<full * 61 + left % 60])
+		if left % 60 != 0 {
+			println("")
+		}
+	}
+}
+
+// `n` letters drawn with `letters` (by `letters_by_value`) from `seed`, the
+// generator's state, which is left where the last draw put it.
+fn draw(letters: Vec[u8], n: i64, mut seed: i64) throws {
+	let mut buffer: Vec[u8] = []
+	let mut left = n
+	while left > 0 {
+		let width = left.min(60)
+		for _ in 0..<width {
+			seed = (seed * 3877 + 29573) % 139968
+			buffer.push(letters[seed])
+		}
+		buffer.push(10)
+		left = left - width
+		if buffer.len() >= 61 * 1024 {
+			print(Bytes(buffer))
+			buffer = []
+		}
+	}
+	print(Bytes(buffer))
+}
+
+fn main() throws {
+	let n = text::parse_i64(cli::args().nth(1) ?? "1000") ?? 1000
+	let iub: Vec[Weighted] = [
+		Weighted { letter: 'a', p: 0.27 },
+		Weighted { letter: 'c', p: 0.12 },
+		Weighted { letter: 'g', p: 0.12 },
+		Weighted { letter: 't', p: 0.27 },
+		Weighted { letter: 'B', p: 0.02 },
+		Weighted { letter: 'D', p: 0.02 },
+		Weighted { letter: 'H', p: 0.02 },
+		Weighted { letter: 'K', p: 0.02 },
+		Weighted { letter: 'M', p: 0.02 },
+		Weighted { letter: 'N', p: 0.02 },
+		Weighted { letter: 'R', p: 0.02 },
+		Weighted { letter: 'S', p: 0.02 },
+		Weighted { letter: 'V', p: 0.02 },
+		Weighted { letter: 'W', p: 0.02 },
+		Weighted { letter: 'Y', p: 0.02 },
+	]
+	let homo_sapiens: Vec[Weighted] = [
+		Weighted { letter: 'a', p: 0.3029549426680 },
+		Weighted { letter: 'c', p: 0.1979883004921 },
+		Weighted { letter: 'g', p: 0.1975473066391 },
+		Weighted { letter: 't', p: 0.3015094502008 },
+	]
+	let alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
+	let mut seed = 42
+	println(">ONE Homo sapiens alu")
+	repeat(alu, n * 2)
+	println(">TWO IUB ambiguity codes")
+	draw(letters_by_value(iub), n * 3, seed)
+	println(">THREE Homo sapiens frequency")
+	draw(letters_by_value(homo_sapiens), n * 5, seed)
+}
