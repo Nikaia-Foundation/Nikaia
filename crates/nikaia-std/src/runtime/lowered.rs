@@ -21,7 +21,11 @@ use nikaia_std::text::TextNormalized as _;
 #[allow(unused_imports)]
 use nikaia_std::env;
 #[allow(unused_imports)]
+use nikaia_std::process;
+#[allow(unused_imports)]
 use nikaia_std::text;
+#[allow(unused_imports)]
+use nikaia_std::time;
 
 #[allow(unsafe_code)]
 mod env_lowered {
@@ -67,6 +71,17 @@ mod raw_sinks_lowered {
 #[allow(unused_imports)]
 pub use raw_sinks_lowered::*;
 
+#[allow(unsafe_code)]
+mod shell_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/shell.rs");
+}
+#[allow(unused_imports)]
+pub use shell_lowered::*;
+
 pub mod http1 {
     #[allow(unused_imports)]
     pub use super::{Field, Line, Written, Header, Read, Http1, read_head, written};
@@ -79,8 +94,12 @@ pub mod raw_sinks {
     #[allow(unused_imports)]
     pub use super::{is_word, is_plain};
 }
+pub mod shell {
+    #[allow(unused_imports)]
+    pub use super::{shell};
+}
 
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "07e606e01ba7a0cf45d41b09eb6de90a500321d06dd1ea611463062777b461bf";
+pub const LOWERED_DIGEST: &str = "07b1e1262c423ca9c4cb7059233db0cfac57287f84fa531faac32ff38877c1b1";
