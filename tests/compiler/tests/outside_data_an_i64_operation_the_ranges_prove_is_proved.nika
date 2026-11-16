@@ -1,0 +1,14 @@
+// An `i64` operation outside data reaches, which the prover states no goal
+// of but the bounds walk proves by ranges after a guard, is marked `proved`
+// by `--bounds`, not an NK1303 site (ADR-395 D2, ADR-396 D7, #1660).
+use std::io
+use std::text
+
+fn main() throws {
+	let n = text::parse_i64(io::read_to_string().trim()) ?? 4
+	if n < 0 || n > 1000 {
+		return
+	}
+	print(f"{n + 1}")
+	print(f"{n * 2 - 3}")
+}

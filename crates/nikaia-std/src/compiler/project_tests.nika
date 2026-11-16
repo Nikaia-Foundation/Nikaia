@@ -588,11 +588,13 @@ pub fn project_tests_time_limit() -> i64 {
 /// with every process it started, and its program fails with its name, so
 /// the run goes on and names it. Ten runs' time leaves a cold build, which
 /// compiles `std` in minutes, room to end. A batch build that runs past it
-/// is dropped, and its programs are built alone.
+/// is dropped, and its programs are built alone. Ten times a run's limit set
+/// past what an `i64` holds is the most it holds, not an overflow (ADR-396
+/// D7, #1660).
 pub fn project_tests_build_time_limit() -> i64 {
     let given = text::parse_i64((env::var("NIKAIA_TEST_BUILD_TIME_LIMIT") ?? "").trim())
     return match given {
-        null => 10 * project_tests_time_limit(),
+        null => project_tests_time_limit().saturating_mul(10),
         seconds => match seconds > 0 {
             true => seconds,
             false => 0,

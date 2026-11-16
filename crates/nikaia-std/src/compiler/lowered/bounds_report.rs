@@ -108,7 +108,7 @@ pub(crate) fn bounds_report_outside(facts: &BoundsReportFacts, source: &str) -> 
         let mut from = String::from("from outside");
         if found.source != "" { from = format!("from `{}`", found.source); }
         let mut verdict = String::from("refused NK1302");
-        if found.operation && !found.proved {
+        if found.operation && !found.proved && found.site >= 0 && facts.proven_arithmetic.contains(&found.site) { verdict = String::from("proved by the bounds walk's ranges"); } else if found.operation && !found.proved {
             verdict = String::from("checked: not proved, an NK1303 site (ADR-396 D8)");
             if !found.stated { verdict = String::from("checked: the prover states no bound of it, an NK1303 site (ADR-396 D8)"); }
         } else if found.proved {

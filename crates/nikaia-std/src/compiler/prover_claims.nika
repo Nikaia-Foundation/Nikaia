@@ -61,6 +61,10 @@ pub struct OutsideIndex {
     /// Whether the walk could state the bound as a goal: an `i64`'s `+`,
     /// `-` and `*` it cannot, nor an operand it reads no whole number of.
     pub stated: bool,
+    /// The byte of the operator, where the operation stands in this
+    /// function: the bounds walk may prove what the prover leaves open (an
+    /// `i64`'s by ranges, ADR-395 D2). -1 for an index or a call.
+    pub site: i64,
 }
 
 /// One claim of a precondition (ADR-269 D15).
