@@ -894,6 +894,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     // **A vector's shuffle and the operations that change its lanes' width**
     // (ADR-377 D3).
     let lanes = value_of_a_copy(on.unseen())
+    state.a_lane_method_not_offered(lanes, name, span)
     state.a_shuffle_out_of_lanes(world, lanes, name, args, span)
     let changed: Ty? = check_simd_method_result(lanes, name)
     if changed != null {

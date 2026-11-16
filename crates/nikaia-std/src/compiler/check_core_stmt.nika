@@ -1806,6 +1806,10 @@ fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckW
     if op == null && check_core_stmt_expects_a_lambda(value) && check_core_stmt_a_fn_type(into) {
         state.flow.lambda_expected = into.clone()
     }
+    // **A vector assigned is made of the place's type** (ADR-377 D3).
+    if op == null && check_simd_wanted(world, value, into) != null {
+        state.flow.lambda_expected = into.clone()
+    }
     let mut found = check_core_expr(state, world, host, value, span)
     state.flow.lambda_expected = null
     if a_child_handle(found) {

@@ -893,7 +893,11 @@ fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref Check
     // **A fallback that jumps takes its takings with it** (ADR-293 D30).
     let from = state.taken_so_far()
     state.flow.lending_let = lending
+    // **A vector made for the fallback is of the type the left side holds**
+    // (ADR-377 D3): `m[k] ?? simd::splat(0.0)`.
+    state.flow.lambda_expected = check_simd_wanted(world, fallback, check_core_ops_inside(left))
     let other = check_core_expr(state, world, host, fallback, span)
+    state.flow.lambda_expected = null
     state.flow.lending_let = false
     let leaves = state.leaves(world, fallback)
     state.a_branch_that_leaves(from, leaves, span)

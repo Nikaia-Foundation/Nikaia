@@ -1,0 +1,15 @@
+bounds in tests/list_clone_copies_each_item.nika: 13 indexes, 13 proved; 1 operations, 1 proved
+    20  i * i       proved
+    23  copy[3]     proved
+    25  numbers[3]  proved
+    25  copy[3]     proved
+    25  copy[19]    proved
+    25  copy[20]    proved
+    32  other[0]    proved
+    33  words[0]    proved
+    33  other[0]    proved
+    33  other[4]    proved
+    40  cards[1]    proved
+    41  more[1]     proved
+    41  more[1]     proved
+    41  cards[1]    proved

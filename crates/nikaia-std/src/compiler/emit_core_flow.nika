@@ -113,6 +113,18 @@ fn emit_flow_a_struct_written(node: ref Expr) -> bool {
     }
 }
 
+/// Whether the fallback of a `??` is a call of `std::simd`'s (`simd::splat`,
+/// `simd::load`, `simd::Fixed::from`), whose type the option decides.
+fn emit_flow_a_simd_call(world: ref EmitWorld, node: ref Expr) -> bool {
+    return match node {
+        Expr::Call { func, .. } => match func {
+            Expr::Path(segments, _) => segments.len() > 1 && emit_text(world, segments[0]) == "simd",
+            else => false,
+        },
+        else => false,
+    }
+}
+
 /// Whether a struct literal stands at the head of `node` (D39): Rust refuses one
 /// unbracketed in a `match` scrutinee, so the guarded half of a `catch` is then
 /// written in brackets.
@@ -910,8 +922,10 @@ impl EmitState {
         // the left of a `??` may be a view into a container. **And except for text
         // where the left side is a view of text** (ADR-283), **a variant of an enum
         // this file declares**, **a constructor of a type this file declares**, and
-        // **a struct written out**, or a `bool`.
-        let bare = a_number(fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || (emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(node_key(fallback))) || self.facts.view_coalesces.contains(node_key(node))
+        // **a struct written out**, or a `bool`; **and a vector of
+        // `std::simd`'s made there**, which takes the option's type from
+        // `index::or` (ADR-377 D3) and has none of its own for `into()`.
+        let bare = a_number(fallback) || emit_flow_a_simd_call(world, fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || (emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(node_key(fallback))) || self.facts.view_coalesces.contains(node_key(node))
         // **A fallback that may be `null` too** (Part I 3.5): the first option that
         // has a value, which is the language below's `or_else`, and the answer is
         // an option still.

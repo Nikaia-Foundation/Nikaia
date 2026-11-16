@@ -196,6 +196,10 @@ impl CheckState {
             help = "Compare with `null`: `value != null`."
         } else if member == "is_none" {
             help = "Compare with `null`: `value == null`."
+        } else if head == "simd::Lanes" && member == "sum" {
+            // **A float sum's order depends on the lane count** (ADR-377 D9),
+            // and a `Lanes`' count is the build's.
+            help = "Write the lanes as a `simd::Fixed[T, N]`, whose `sum()` adds in the same order on every target, or `wrapping_sum()` on integer lanes."
         } else {
             help = mem_nearest_help(head, member, method, members, shown)
         }

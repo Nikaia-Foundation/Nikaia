@@ -795,6 +795,11 @@ fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckWorld
             }
             else => {}
         }
+        // **A vector made for the result is of the result's type** (ADR-377
+        // D3), as a lambda handed back is.
+        if check_simd_wanted(world, given, state.expected) != null {
+            closure = true
+        }
         if !lending {
             check_core_a_field_of_a_borrowed_subject(state, world, host, given, span, "handed back")
             // An element read bound past a jump is a view (#1107): its

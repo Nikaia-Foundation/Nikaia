@@ -7148,8 +7148,8 @@ keeps = ["history"]
 #
 # **`simd::Lanes[T]` holds as many lanes as the build's widest integer
 # register** (D1): 16 bytes at x86-64's baseline and on aarch64, 32 at
-# `--cpu=x86-64-v3`. `T` is `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64` or
-# `i64`; another is `NK1297`.
+# `--cpu=x86-64-v3`. `T` is `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`,
+# `i64`, or the float lanes `f32` and `f64` (D9); another is `NK1297`.
 [type."simd::Lanes"]
 pub = true
 crosses = true
@@ -7340,6 +7340,22 @@ sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T]) -> i64"
 
+# Each lane's square root, as the scalar's `sqrt`; float lanes only (D9).
+[fn."simd::Lanes::sqrt"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T]) -> simd::Lanes[T]"
+
+# Each lane's absolute value; float lanes only (D9).
+[fn."simd::Lanes::abs"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: simd::Lanes[T]) -> simd::Lanes[T]"
+
 # Lane by lane `+`, wrapping (D4).
 [fn."simd::Fixed::wrapping_add"]
 pub = true
@@ -7483,6 +7499,32 @@ panics = true
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], i: i64) -> T"
+
+# Each lane's square root, as the scalar's `sqrt`; float lanes only (D9).
+[fn."simd::Fixed::sqrt"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
+
+# Each lane's absolute value; float lanes only (D9).
+[fn."simd::Fixed::abs"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
+
+# The lanes added in a fixed tree, neighbouring pairs first, the same on every
+# target; float lanes only, and `Fixed` only, since `Lanes`' count is the
+# build's (D9).
+[fn."simd::Fixed::sum"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T, N](self: simd::Fixed[T, N]) -> T"
 
 # The lanes in the order `of` names them; `of` is a `simd::Fixed::from([…])` of
 # literals below `N` (`NK1298`).

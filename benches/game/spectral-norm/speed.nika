@@ -1,0 +1,84 @@
+// The Benchmarks Game's `spectral-norm` written for speed: `main.nika`'s
+// power method with two neighbouring entries of a vector in one
+// `simd::Fixed[f64, 2]`, as the fastest Rust entry holds them, so each step of
+// the inner loop divides two lanes at once for each of two rows. The matrix
+// entry is kept as its denominator and divided by, which saves the reciprocal.
+//
+//     nikaia run speed.nika -- 100
+//     1.274219991
+//
+// The argument is n (100 if left out), an even number, as the Rust entry asks.
+use std::cli
+use std::simd
+use std::text
+
+// The denominator of A's entry at row `i`, column `j`, counted from 0.
+fn den(i: i64, j: i64) -> f64 sync {
+	return ((i + j) * (i + j + 1) / 2 + i + 1) as f64
+}
+
+// `out = A v`, both held in pairs: rows `2k` and `2k + 1` go to `out[k]`.
+fn times(v: Vec[simd::Fixed[f64, 2]], mut out: Vec[simd::Fixed[f64, 2]]) sync {
+	for k in 0..<out.len() {
+		let i = 2 * k
+		let mut s0: simd::Fixed[f64, 2] = simd::splat(0.0)
+		let mut s1: simd::Fixed[f64, 2] = simd::splat(0.0)
+		for m in 0..<v.len() {
+			let j = 2 * m
+			let d0: simd::Fixed[f64, 2] = simd::Fixed::from([den(i, j), den(i, j + 1)])
+			let d1: simd::Fixed[f64, 2] = simd::Fixed::from([den(i + 1, j), den(i + 1, j + 1)])
+			s0 = s0 + v[m] / d0
+			s1 = s1 + v[m] / d1
+		}
+		out[k] = simd::Fixed::from([s0.sum(), s1.sum()])
+	}
+}
+
+// `out = Aᵀ v`, the same with row and column swapped.
+fn times_transposed(v: Vec[simd::Fixed[f64, 2]], mut out: Vec[simd::Fixed[f64, 2]]) sync {
+	for k in 0..<out.len() {
+		let i = 2 * k
+		let mut s0: simd::Fixed[f64, 2] = simd::splat(0.0)
+		let mut s1: simd::Fixed[f64, 2] = simd::splat(0.0)
+		for m in 0..<v.len() {
+			let j = 2 * m
+			let d0: simd::Fixed[f64, 2] = simd::Fixed::from([den(j, i), den(j + 1, i)])
+			let d1: simd::Fixed[f64, 2] = simd::Fixed::from([den(j, i + 1), den(j + 1, i + 1)])
+			s0 = s0 + v[m] / d0
+			s1 = s1 + v[m] / d1
+		}
+		out[k] = simd::Fixed::from([s0.sum(), s1.sum()])
+	}
+}
+
+// `v · u`, two lanes at a time, then the two lanes added.
+fn dot(v: Vec[simd::Fixed[f64, 2]], u: Vec[simd::Fixed[f64, 2]]) -> f64 sync {
+	let mut s: simd::Fixed[f64, 2] = simd::splat(0.0)
+	for k in 0..<v.len() {
+		s = s + v[k] * u[k]
+	}
+	return s.sum()
+}
+
+fn spectral_norm(n: i64) -> f64 sync {
+	let mut u: Vec[simd::Fixed[f64, 2]] = []
+	let mut v: Vec[simd::Fixed[f64, 2]] = []
+	let mut tmp: Vec[simd::Fixed[f64, 2]] = []
+	for _ in 0..<n / 2 {
+		u.push(simd::splat(1.0))
+		v.push(simd::splat(0.0))
+		tmp.push(simd::splat(0.0))
+	}
+	for _ in 0..<10 {
+		times(u, tmp)
+		times_transposed(tmp, v)
+		times(v, tmp)
+		times_transposed(tmp, u)
+	}
+	return (dot(u, v) / dot(v, v)).sqrt()
+}
+
+fn main() throws {
+	let n = text::parse_i64(cli::args().nth(1) ?? "100") ?? 100
+	println(f"{spectral_norm(n):.9}")
+}

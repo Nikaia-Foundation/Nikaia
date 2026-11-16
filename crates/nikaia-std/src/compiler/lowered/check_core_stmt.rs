@@ -1310,6 +1310,7 @@ pub(crate) fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world
     state.flow.writing_index = false;
     if !code_keys.is_empty() { state.stored_frames.push(CheckStoredCode::empty()); }
     if op.is_none() && check_core_stmt_expects_a_lambda(value) && check_core_stmt_a_fn_type(&into) { state.flow.lambda_expected = Some(into.clone()); }
+    if op.is_none() && check_simd_wanted(world, value, Some(&into)).is_some() { state.flow.lambda_expected = Some(into.clone()); }
     let mut found = check_core_expr(state, world, host, value, span);
     state.flow.lambda_expected = None;
     if a_child_handle(&found) { state.a_child_handle_leaving_its_group(span, "it is assigned to a place, which may outlive its group"); }

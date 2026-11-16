@@ -1,0 +1,3 @@
+bounds in tests/simd_float_lanes.nika: 2 indexes, 2 proved; 0 operations, 0 proved
+    27  xs[i]  proved
+    28  ys[i]  proved

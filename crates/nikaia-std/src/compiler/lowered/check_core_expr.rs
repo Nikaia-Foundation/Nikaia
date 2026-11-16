@@ -577,7 +577,7 @@ pub(crate) fn check_core_expr_unary<H: CheckHost>(state: &mut CheckState, world:
         UnaryOp::Not => {
             let boolean = check_core_expr_named("bool");
             let value = value_of_a_copy(&found.unseen());
-            if integer_named(&value).is_some() || !check_simd_kind(&value).is_empty() { value } else if found.fits(&boolean) { boolean } else { Ty::Unknown }
+            if integer_named(&value).is_some() || !check_simd_kind(&value).is_empty() && !check_simd_float_vector(&value) { value } else if found.fits(&boolean) { boolean } else { Ty::Unknown }
         },
         UnaryOp::Ref => view_of_type(&found),
     }

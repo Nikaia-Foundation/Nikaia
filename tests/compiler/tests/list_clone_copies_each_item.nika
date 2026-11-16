@@ -1,0 +1,46 @@
+// A list's clone is a list of its own (#1614): `List::extend_from_slice`
+// writes each item's clone into the room it reserved and sets the length
+// once, so a list of numbers is copied whole. Numbers, text and structs that
+// hold text, an empty list, and a clone changed after it was made.
+struct Card {
+	name: String,
+	rank: i64,
+}
+
+fn named(word: String, n: i64) -> String {
+	let mut s = String()
+	s.push_str(word)
+	s.push_str(f"{n}")
+	return s
+}
+
+fn main() throws {
+	let mut numbers: Vec[i64] = []
+	for i in 0..<20 {
+		numbers.push(i * i)
+	}
+	let mut copy = numbers.clone()
+	copy[3] = -1
+	copy.push(400)
+	println(f"{numbers.len()} {copy.len()} {numbers[3]} {copy[3]} {copy[19]} {copy[20]}")
+
+	let mut words: Vec[String] = []
+	for i in 0..<5 {
+		words.push(named("w", i))
+	}
+	let mut other = words.clone()
+	other[0] = named("x", 9)
+	println(f"{words[0]} {other[0]} {other[4]} {other.len()}")
+
+	let mut cards: Vec[Card] = []
+	for i in 0..<3 {
+		cards.push(Card { name: named("c", i), rank: i })
+	}
+	let more = cards.clone()
+	cards[1].rank = 7
+	println(f"{more[1].name} {more[1].rank} {cards[1].rank} {more.len()}")
+
+	let empty: Vec[i64] = []
+	let none = empty.clone()
+	println(f"{none.len()}")
+}
