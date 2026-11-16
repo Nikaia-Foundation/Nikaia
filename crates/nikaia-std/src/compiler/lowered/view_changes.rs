@@ -148,7 +148,7 @@ pub(crate) fn vc_through(root: &str, part: String, outer: &[VcView]) -> (collect
     parts.insert(part);
     let at = vc_last_named(outer, root);
     if at >= 0 {
-        roots.extend(nikaia_std::index::get(&outer, nikaia_std::index::at(at)).roots.iter().cloned());
+        roots.extend(unsafe { nikaia_std::proven::read(&outer, (at) as usize) }.roots.iter().cloned());
         parts.extend(unsafe { nikaia_std::proven::read(&outer, (at) as usize) }.parts.iter().cloned());
     }
     (roots, parts)
@@ -460,7 +460,7 @@ pub(crate) fn vc_view_of(at: &Span, name: &str, value: &Expr, outer: &[VcView], 
                 if ask.lent.contains(&(at.start as i64)) { return vc_place_view(at, name, value, outer, ask); }
                 return None;
             }
-            let mut view = (*nikaia_std::index::get(&outer, nikaia_std::index::at(held))).clone();
+            let mut view = (*unsafe { nikaia_std::proven::read(&outer, (held) as usize) }).clone();
             view.name = nikaia_std::block::Text::from(name.to_string());
             view.made = at.clone();
             return Some(view);
@@ -518,7 +518,7 @@ pub(crate) fn vc_view_of(at: &Span, name: &str, value: &Expr, outer: &[VcView], 
                     None => {
                         let named = vc_last_named(outer, ask.names.resolve(field.name));
                         if named < 0 { continue; }
-                        (*nikaia_std::index::get(&outer, nikaia_std::index::at(named))).clone()
+                        (*unsafe { nikaia_std::proven::read(&outer, (named) as usize) }).clone()
                     },
                     Some(given) => match vc_view_of(at, name, given, outer, ask) { Some(__nikaia_value) => __nikaia_value, None => continue },
                 };
@@ -774,7 +774,7 @@ pub(crate) fn vc_assign(block: &Block, j: i64, target: &Expr, whole: bool, at: &
         walk.give_ups.rebound.insert(at.start as i64, changed);
     } else if whole && viewer >= 0 && walk.lets.contains_key(&root) {
         let bound = nikaia_std::index::or(*nikaia_std::index::get(&walk.lets, &root), || 0);
-        walk.give_ups.kept.insert(bound, nikaia_std::block::Text::from(nikaia_std::index::get(&views, nikaia_std::index::at(viewer)).name.to_string()));
+        walk.give_ups.kept.insert(bound, nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&views, (viewer) as usize) }.name.to_string()));
     }
     if whole { for view in views.iter_mut() { (*view).roots.remove(&root); } }
 }
@@ -879,7 +879,7 @@ pub(crate) fn vc_literal_moves(value: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_,
 pub(crate) fn vc_refuse_move(root: &str, name: &str, head: &str, refusal: &TierRefusal, at: &Span, views: &[VcView], walk: &mut VcWalk) -> bool {
     let held = vc_last_viewing(views, root);
     if held < 0 { return false; }
-    let view = nikaia_std::index::get(&views, nikaia_std::index::at(held));
+    let view = unsafe { nikaia_std::proven::read(&views, (held) as usize) };
     if view.used.is_none() { return false; }
     let viewer = nikaia_std::block::Text::from(view.name.to_string());
     let position = nikaia_std::block::Text::from(refusal.position.to_string());
@@ -931,7 +931,7 @@ pub(crate) fn vc_label(span: Span, word: &str, text: String, main: bool) -> Chec
 pub(crate) fn vc_refuse_hand_over(root: &str, callee: &str, at: &Span, views: &[VcView], walk: &mut VcWalk) {
     let held = vc_last_viewing(views, root);
     if held < 0 { return; }
-    let view = nikaia_std::index::get(&views, nikaia_std::index::at(held));
+    let view = unsafe { nikaia_std::proven::read(&views, (held) as usize) };
     let name = nikaia_std::block::Text::from(view.name.to_string());
     let mut labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` keeps `{}` and may change or discard it", callee, root), true), vc_label(view.made.clone(), &name, format!("`{}` may be the text of `{}`", name, root), false)];
     match view.used {
@@ -954,7 +954,7 @@ pub(crate) fn vc_refuse_hand_over(root: &str, callee: &str, at: &Span, views: &[
 pub(crate) fn vc_refuse(root: &str, at: &Span, views: &[VcView], walk: &mut VcWalk) {
     let held = vc_last_viewing(views, root);
     if held < 0 { return; }
-    let view = nikaia_std::index::get(&views, nikaia_std::index::at(held));
+    let view = unsafe { nikaia_std::proven::read(&views, (held) as usize) };
     let name = nikaia_std::block::Text::from(view.name.to_string());
     let mut labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` changes here", root), true), vc_label(view.made.clone(), &name, nikaia_std::block::Text::from(view.from.to_string()), false)];
     if view.looped {

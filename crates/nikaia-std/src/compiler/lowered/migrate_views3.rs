@@ -341,7 +341,7 @@ pub(crate) fn migrate_name_a_code(tokens: &[MigrateToken], k: i64, prefix: &mut 
             position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
         }
         if ends { start = unsafe { nikaia_std::proven::add::<i64>(j, 1) }; }
-        match nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind {
+        match unsafe { nikaia_std::proven::read(&tokens, (j) as usize) }.kind {
             MigrateKind::Open => { depth += 1; },
             MigrateKind::Close => { depth -= 1; },
             _ => { },
@@ -440,7 +440,7 @@ pub(crate) fn migrate_trait_end(tokens: &[MigrateToken], k: i64) -> i64 {
     let mut j = unsafe { nikaia_std::proven::add::<i64>(k, 2) };
     while j < tokens.len() as i64 && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != "{" && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != ";" {
         if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind == MigrateKind::Open { j = migrate_closing(tokens, j); }
-        j += 1;
+        j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
     }
     if j >= tokens.len() as i64 || nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != "{" { return -1; }
     migrate_closing(tokens, j)

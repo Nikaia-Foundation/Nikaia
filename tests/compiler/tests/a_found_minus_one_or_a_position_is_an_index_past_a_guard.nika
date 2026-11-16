@@ -1,0 +1,65 @@
+// #1757: a search that hands back a position below `xs.len()` or `-1` is
+// found `result < xs.len()` (ADR-306 D23, D31), its floor `-1` with it
+// (D32); a caller's `r >= 0` then makes `r` an index of `xs`. `find` is
+// guarded by an `if`, `Table::first_odd` by an early `return`. `find_or_len`
+// hands back `xs.len()` when nothing is found, so its read stays checked.
+fn find(xs: ref Vec[i64], v: i64) -> i64 {
+	let mut i = 0
+	while i < xs.len() {
+		if xs[i] == v {
+			return i
+		}
+		i += 1
+	}
+	return -1
+}
+
+fn find_or_len(xs: ref Vec[i64], v: i64) -> i64 {
+	let mut i = 0
+	while i < xs.len() {
+		if xs[i] == v {
+			return i
+		}
+		i += 1
+	}
+	return xs.len()
+}
+
+struct Table {
+	cells: Vec[i64],
+}
+
+impl Table {
+	fn first_odd(ref self) -> i64 {
+		let mut i = 0
+		while i < self.cells.len() {
+			if self.cells[i] % 2 != 0 {
+				return i
+			}
+			i += 1
+		}
+		return -1
+	}
+
+	fn odd_cell(ref self) -> i64 {
+		let r = self.first_odd()
+		if r < 0 {
+			return 0
+		}
+		return self.cells[r]
+	}
+}
+
+fn main() throws {
+	let xs = [4, 5, 6]
+	let r = find(xs, 6)
+	if r >= 0 {
+		println(xs[r])
+	}
+	let s = find_or_len(xs, 5)
+	if s >= 0 {
+		println(xs[s])
+	}
+	let t = Table { cells: [2, 7, 8] }
+	println(t.odd_cell())
+}

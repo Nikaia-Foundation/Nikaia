@@ -131,6 +131,10 @@ pub struct BoundsReturns {
 	/// lists it is at most as long as.
 	pub at_least: collections::BTreeSet[i64],
 	pub within: collections::BTreeSet[i64],
+	/// Of `within`, the lists it is below the length of, `result <
+	/// p.len()` (#1757): a search's `-1` or a position found, the floor of
+	/// `range` with it; a caller's `r >= 0` makes it an index of `p`.
+	pub under: collections::BTreeSet[i64],
 	/// **A method's receiver, as one more argument** (ADR-306 D34): the
 	/// list fields of `self` a position past the last argument names, the
 	/// first of them at `args.len()`; empty for a free function.
@@ -421,6 +425,7 @@ struct BoundsWalk {
 	return_lens: Vec[String],
 	return_at_least: collections::BTreeSet[i64]?,
 	return_within: collections::BTreeSet[i64]?,
+	return_under: collections::BTreeSet[i64]?,
 	/// **The lengths of what is handed back looked for** (ADR-306 D23,
 	/// #1756, `BoundsReturns.lengths`): by measure, the positions asked; the
 	/// parameter each position names (empty for none) and those that are
@@ -845,6 +850,7 @@ fn bounding_new(
 		return_lens: [],
 		return_at_least: null,
 		return_within: null,
+		return_under: null,
 		return_wanted: collections::BTreeMap(),
 		return_wanted_alike: collections::BTreeSet(),
 		return_sources: [],
@@ -927,6 +933,7 @@ fn bounding_pass(
 	walk.return_unranged = false
 	walk.return_at_least = null
 	walk.return_within = null
+	walk.return_under = null
 	walk.return_lengths = null
 	walk.return_reaches = null
 	walk.return_alike = null
@@ -1030,6 +1037,7 @@ fn bounding_return_relations(
 	}
 	let mut at_least: collections::BTreeSet[i64] = collections::BTreeSet()
 	let mut within: collections::BTreeSet[i64] = collections::BTreeSet()
+	let mut under: collections::BTreeSet[i64] = collections::BTreeSet()
 	let term = match returned {
 		null => null,
 		value => bounding_lin(walk, value, facts, context, program, words),
@@ -1056,6 +1064,12 @@ fn bounding_return_relations(
 			let goal = walk.arena.le(v, len)
 			if bounding_proves(walk, facts, goal, ask) {
 				within.insert(k)
+				// Below it too (#1757): `return -1` as `return i` of an
+				// `i < xs.len()`.
+				let strict = walk.arena.lt(v, len)
+				if bounding_proves(walk, facts, strict, ask) {
+					under.insert(k)
+				}
 			}
 		}
 	}
@@ -1087,6 +1101,11 @@ fn bounding_return_relations(
 						at_least.insert(k)
 					} else {
 						within.insert(k)
+						let len = walk.arena.var(length_of(names[k]))
+						let strict = walk.arena.lt(bound, len)
+						if bounding_proves(walk, facts, strict, ask) {
+							under.insert(k)
+						}
 					}
 				}
 			}
@@ -1098,8 +1117,12 @@ fn bounding_return_relations(
 	if walk.return_within != null {
 		within = bounding_kept(walk.return_within ?? collections::BTreeSet(), within)
 	}
+	if walk.return_under != null {
+		under = bounding_kept(walk.return_under ?? collections::BTreeSet(), under)
+	}
 	walk.return_at_least = at_least
 	walk.return_within = within
+	walk.return_under = under
 }
 
 /// The positions both sets hold.
@@ -1152,7 +1175,14 @@ fn bounding_relations_of(
 		if walk.pinned.contains(path_root(path)) || path_within(path, name) || path_within(name, path) {
 			continue
 		}
-		out.push((false, bounding_length_named(walk, path, false)))
+		let len = bounding_length_named(walk, path, false)
+		// Below the length (#1757): at most one less.
+		if found.under.contains(k) {
+			let one = walk.arena.int(1)
+			out.push((false, walk.arena.sub(len, one)))
+		} else {
+			out.push((false, len))
+		}
 	}
 	return out
 }
@@ -4588,7 +4618,7 @@ fn bounding_name_call(
 			continue
 		}
 		let len = bounding_length_named(walk, path, false)
-		held.push(walk.arena.le(n, len))
+		held.push(if found.under.contains(k) { walk.arena.lt(n, len) } else { walk.arena.le(n, len) })
 	}
 	if held.is_empty() {
 		return
@@ -10563,7 +10593,8 @@ fn bounds_returns(
 					range: null,
 					pending: true,
 					at_least: at_least,
-					within: within,
+					within: within.clone(),
+					under: within,
 					fields: [],
 					plain: kind != null,
 					measures: [],
@@ -10631,7 +10662,8 @@ fn bounds_returns(
 								range: null,
 								pending: true,
 								at_least: at_least,
-								within: within,
+								within: within.clone(),
+								under: within,
 								fields: lists.clone(),
 								plain: kind != null,
 								measures: [],
@@ -10819,10 +10851,13 @@ fn bounding_returns_round(
 				}
 				let mut at_least: collections::BTreeSet[i64] = collections::BTreeSet()
 				let mut within: collections::BTreeSet[i64] = collections::BTreeSet()
+				let mut under: collections::BTreeSet[i64] = collections::BTreeSet()
 				if !wanted.each && !walk.return_lost
 					&& !seek_block(body, Seek::Unvisited(walk.return_seen.clone()), words) {
 					at_least = walk.return_at_least?.clone() ?? collections::BTreeSet()
 					within = walk.return_within?.clone() ?? collections::BTreeSet()
+					// Only below what was assumed below (#1757).
+					under = bounding_kept(wanted.under, walk.return_under?.clone() ?? collections::BTreeSet())
 				}
 				if range != null && !wanted.pending {
 					let seen = range ?? Range::open()
@@ -10877,6 +10912,7 @@ fn bounding_returns_round(
 						pending: false,
 						at_least: at_least,
 						within: within,
+						under: under,
 						fields: wanted.fields.clone(),
 						plain: wanted.plain,
 						measures: wanted.measures.clone(),
@@ -10953,7 +10989,7 @@ fn bounding_returns_ranged(returns: ref collections::BTreeMap[String, BoundsRetu
 fn bounding_returns_count(returns: ref collections::BTreeMap[String, BoundsReturns]) -> i64 {
 	let mut out = 0
 	for (_name, found) in returns {
-		out += found.below.len() + found.at_least.len() + found.within.len() + found.alike.len()
+		out += found.below.len() + found.at_least.len() + found.within.len() + found.under.len() + found.alike.len()
 		for (_m, positions) in found.lengths {
 			out += positions.len()
 		}
