@@ -1042,6 +1042,7 @@ fn drive_pull(cause: String, lower: String, build: String, badges: String) -> St
 			let why = (forward.stderr + forward.stdout).trim().split("\n").collect()[0].clone()
 			drive_escalate(f"{cause}, the fast-forward failed ({why})")
 		}
+		drive_autostash_settle(cause)
 	} else {
 		drive_merge_fetched(cause, lower, build, badges)
 	}
@@ -1086,7 +1087,48 @@ fn drive_suite_done() -> bool throws {
 // the way moves them aside and is tried once more (#1820); any other conflict,
 // or a failed resolution, aborts and escalates.
 fn drive_merge_fetched(cause: String, lower: String, build: String, badges: String) throws {
-	drive_merge_try(cause, lower, build, badges, true)
+	drive_merge_try(cause.clone(), lower, build, badges, true)
+	drive_autostash_settle(cause)
+}
+
+// After a merge (drive_pull's fast-forward, drive_merge_fetched): git puts
+// the autostash (the other agents' unfinished files) back once the merge is
+// committed, and where one of theirs changed a file the merge changed too
+// that conflicts, yet `git commit` and `git merge --ff-only` still exit 0
+// (#1862: a builder found a conflict marker in its uncommitted `lowered.rs`
+// and its files staged). git then stages each file of the stash it put back
+// cleanly, leaves the conflicted ones unmerged and keeps the stash. A
+// conflict only in lowered files is settled: they take HEAD's copy (the
+// agent's next `lower-std` writes theirs again from its `.nika`, which came
+// back) and the staged files are unstaged, so the tree is as before the merge
+// but for those lowered files; prints `MERGE autostash conflicted in PATHS,
+// took HEAD's copy, stash SHA keeps theirs`. A conflict in sources escalates
+// naming them and the stash.
+fn drive_autostash_settle(cause: String) throws {
+	let unmerged = process::run("git", ["diff", "--name-only", "--diff-filter=U"]).stdout.trim().clone()
+	if unmerged == "" { return }
+	let mut sources: Vec[String] = []
+	let mut lowered: Vec[String] = []
+	for p in unmerged.split("\n") {
+		if drive_is_lowered(p.clone()) { lowered.push(p.clone()) } else { sources.push(p.clone()) }
+	}
+	let stash = process::run("git", ["stash", "list", "-1", "--format=%h"]).stdout.trim().clone()
+	if sources.len() > 0 {
+		drive_escalate(f"{cause}, the merge is committed, but putting the uncommitted files back conflicted in {sources.join(" ")}: resolve them by hand, stash {stash} keeps the uncommitted side")
+	}
+	let mut take: Vec[String] = ["checkout", "HEAD", "--"]
+	for p in lowered.clone() { take.push(p) }
+	let taken = process::run("git", take)
+	if !taken.ok {
+		drive_escalate(f"{cause}, putting the uncommitted files back conflicted in {lowered.join(" ")}, and taking HEAD's copy failed")
+	}
+	let staged = process::run("git", ["diff", "--cached", "--name-only"]).stdout.trim().clone()
+	if staged != "" {
+		let mut unstage: Vec[String] = ["restore", "--staged", "--"]
+		for p in staged.split("\n") { unstage.push(p.clone()) }
+		process::run("git", unstage)
+	}
+	println(f"MERGE autostash conflicted in {lowered.join(" ")}, took HEAD's copy, stash {stash} keeps theirs")
 }
 
 // drive_merge_fetched once; RETRY says whether generated files in the way may

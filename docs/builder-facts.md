@@ -74,6 +74,11 @@ together with the specification section and an example test.
   autostash. Never type the edit again (the autostash pop then conflicts);
   wait in one call for the merge to end (Monitor until `.git/MERGE_HEAD`
   is gone), check the edit is back, then run the cycle again. (#1830)
+  Where the merge also changed a lowered file of yours, putting the edit
+  back conflicts there: the driver gives that file HEAD's copy, unstages
+  what git staged, and prints `MERGE autostash conflicted in ...`; run
+  `lower-std` again. A conflict in a source escalates instead, and the stash
+  keeps your side (#1862).
 * **Long runs go in the background** with `run_in_background` and `timeout:
   3600000`, and you wait for the wake-up, never a `sleep` or `pgrep` loop. A
   `lower-std` and build cycle takes 10-15 minutes: find every change it needs
