@@ -49,6 +49,10 @@ fn main() throws {
     drive(repo.clone(), nikaia.clone(), ["--improve-plan", "issue-1701", "1701", seen.clone(), existing.clone()])
     let settled = report("Result: done\nIssue: rules-gap: the issue named no driver test, closed, only information for #1750, nothing to build\nDeviation: closed, the Rust added falls under the spec-first exception\nNeeds: none\nFriction: none\n")
     drive(repo.clone(), nikaia.clone(), ["--improve-plan", "issue-1760", "1760", settled.clone(), existing.clone()])
-    drive(repo, nikaia, ["--improve-issue", "issue-1760", "1760", settled.clone()])
-    process::run("rm", ["-f", existing, each, seen, settled])
+    drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1760", "1760", settled.clone()])
+    // A `;` inside one answer's prose does not cut it in two (#1827): the
+    // built answer stays dropped whole, the next kind starts a new one.
+    let cut = report("Result: done\nIssue: rules-gap (built): I4 named no form a script reads; the example run named its dependency only in prose; rules-gap: no rule names the cut\nNeeds: none\nFriction: none\n")
+    drive(repo, nikaia, ["--improve-plan", "issue-1819", "1819", cut.clone(), existing.clone()])
+    process::run("rm", ["-f", existing, each, seen, settled, cut])
 }

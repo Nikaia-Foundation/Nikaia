@@ -33,7 +33,11 @@ You build one small slice of an issue in the Nikaia repository and end.
   `Result: blocked`, `Found:` the gap with the probe (or the open
   dependency), `Needs:` the decision or the issue it waits for, nothing
   committed, no further reading or building. The driver does not run the
-  issue again while a `#N` named under `Needs:`/`Found:` is open.
+  issue again while a `#N` named under `Needs:`/`Found:` is open. A
+  `Result: partial` whose items left wait for an open issue names it as
+  `#N` under `Needs:`, not only in `Found:` prose: a partial's `Needs:` is
+  the only field the driver reads for it (#1827: #1628's partial run named
+  #1634 only in a `Found:` and ran again).
 * **The report file has exactly the brief's fields** (`Result:`, `Pushed:`,
   `Tests:`, `Deviation:`, `Found:`, `Needs:`, `Changelog:`, `Issue:`, `Friction:`, ...), one line
   each, no prose: `scripts/release.nika` parses them. `Gate:` is the bare

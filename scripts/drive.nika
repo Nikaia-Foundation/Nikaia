@@ -3074,10 +3074,29 @@ fn drive_improve_existing() -> String throws {
 // open: an answer whose kind before its first `: ` ends in `(built)` is
 // left out, and so is one that says nothing was missing in other words than
 // `complete` (`meets I1-I13`, #1753: #1740's run wrote it and it was filed);
-// empty when none is left.
+// empty when none is left. A part that does not open with a kind
+// (`complete`, `meets`, `none`, `broke`, `rules-gap`, `wrong`, `I<n>`) is the
+// previous answer's prose cut at its own `;` and stays with it (#1827: the
+// second half of #1819's `rules-gap (built)` answer was filed alone).
 fn drive_issue_answers(value: String) -> Vec[String] {
+	let mut parts: Vec[String] = []
+	for raw in value.split(";") {
+		let t = raw.trim()
+		let low = t.to_lowercase()
+		let cs: Vec[scalar] = low.chars().collect()
+		let mut kind = cs.len() > 1 && cs[0] == 'i' && cs[1] >= '0' && cs[1] <= '9'
+		for word in ["complete", "meets", "none", "broke", "rules-gap", "wrong", "-"] {
+			if low.starts_with(word) { kind = true }
+		}
+		if !kind && parts.len() > 0 {
+			let last = parts.len() - 1
+			parts[last] = f"{parts[last]}; {t}"
+		} else {
+			parts.push(f"{t}")
+		}
+	}
 	let mut open: Vec[String] = []
-	for part in value.split(";") {
+	for part in parts {
 		let t = part.trim()
 		let colon = t.find(": ") ?? t.len()
 		if f"{t[0..<colon]}".trim().ends_with("(built)") { continue }
@@ -3891,21 +3910,29 @@ fn drive_depends_on(body: String) -> Vec[String] {
 }
 
 // The issues a REPORT that ended `Result: blocked` names under `Needs:` and
-// `Found:` (#1819: #1628 ran again while #1786 and #1634 were open); none
-// for another result.
+// `Found:` (#1819: #1628 ran again while #1786 and #1634 were open), and
+// those a `Result: partial` names under `Needs:` (#1827: #1628's last run
+// ended partial, waiting for #1634; a partial's `Found:` cites issues as
+// context, so only its `Needs:` holds it up); none for another result.
 fn drive_blocked_on(report: String) -> Vec[String] {
 	let mut blocked = false
-	let mut lines: Vec[String] = []
+	let mut partial = false
+	let mut needs: Vec[String] = []
+	let mut found: Vec[String] = []
 	for raw in report.split("\n") {
 		let l = raw.trim().clone()
 		if l.starts_with("Result:") {
 			let word = (l.strip_prefix("Result:") ?? "").trim().to_lowercase()
 			blocked = word.starts_with("blocked")
+			partial = word.starts_with("partial")
 		}
-		if l.starts_with("Needs:") || l.starts_with("Found:") { lines.push(l) }
+		if l.starts_with("Needs:") { needs.push(l.clone()) }
+		if l.starts_with("Found:") { found.push(l) }
 	}
+	if partial { return drive_hash_numbers(needs.join(" ")) }
 	if !blocked { return [] }
-	return drive_hash_numbers(lines.join(" "))
+	for l in found { needs.push(l.clone()) }
+	return drive_hash_numbers(needs.join(" "))
 }
 
 // The last report of brief NAME in DIR: `NAME.report.md`, else the highest
