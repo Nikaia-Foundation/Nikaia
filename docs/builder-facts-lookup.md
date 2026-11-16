@@ -85,6 +85,10 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **To see a refusal of the prover**, put the call in a loop body or behind an
   input it cannot pin: a pure call with literal arguments is run at build time
   and proved (y4b).
+* **A `simd` probe reads ADR-377 D3 first** (`nikaia run scripts/syntax.nika
+  -- simd`): `Lanes[T]` offers only what keeps the output the same at every
+  width, so `lane(i)`, a lane's index, is on `Fixed[T, N]` only, and a probe
+  that calls it on `Lanes` stops at that name. (issue-1806, #1835)
 
 ### Checker and views
 
@@ -311,6 +315,15 @@ goes into the section of its topic, in one line, with the run that paid for it.
   of a body. After a precondition change run the `grep -rln 'assert('
   crates/nikaia/tests/it/` modules, not the whole `it` binary.
 * Nikaia has no `i8`; widening is `i64::from`. Valgrind needs `x86-64-v3`.
+* **A program written for speed (a `benches` row) is checked with `nikaia
+  check --bounds FILE` until every index proves, before it is counted**: one
+  checked index in the inner loop costs more than the lanes save (#1806's
+  first shapes counted 938 and 451 instructions a step against the plain
+  program's 326), and a harness run takes about 4 minutes. What proves:
+  `Array[T, N]` fields, not `Vec`; indexes written as linear terms of `for`
+  bindings (`4 * i + j - 1`); a counter that grows in a loop proves only by
+  ADR-361 D13's turn bound, so read its `--bounds` row before relying on it.
+  (issue-1806, #1835)
 * **Bless bounds expectations**: `nikaia test --bless` writes `NAME.bounds` and `NAME.loops.bounds` only when they exist, a new test's included: create an empty `NAME.bounds` first. (issue-1397, issue-1414)
 * **A `.bounds` test checks a private function's body only through its callers**: private functions get derived preconditions (ADR-391 D1), so make the tested functions `pub` for the expectation to read the body. (issue-1414)
 * **A length in a solver fact goes through `bounding_length_named`** (typed `i64`, capped at 2^60 when its elements take space, ADR-385 D1); a bare variable as a length proves nothing past `+ 1`. (issue-1465)

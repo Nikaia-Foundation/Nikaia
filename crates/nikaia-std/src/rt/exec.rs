@@ -515,16 +515,49 @@ struct Inner<T> {
     size: usize,
 }
 
+/// **A handle to the runtime's own bookkeeping** (ADR-327 D9): a task's
+/// slot or its cancel flag, made outside every block (`TaskHandle::start`)
+/// and freed outside every block too, so the task, its starter or its joiner,
+/// whichever lets go last, takes no weight of it.
+pub struct Uncounted<A>(Option<A>);
+
+impl<A> Uncounted<A> {
+    pub fn new(held: A) -> Uncounted<A> {
+        Uncounted(Some(held))
+    }
+}
+
+impl<A> std::ops::Deref for Uncounted<A> {
+    type Target = A;
+
+    fn deref(&self) -> &A {
+        self.0.as_ref().expect("held until dropped")
+    }
+}
+
+impl<A: Clone> Clone for Uncounted<A> {
+    fn clone(&self) -> Uncounted<A> {
+        Uncounted(self.0.clone())
+    }
+}
+
+impl<A> Drop for Uncounted<A> {
+    fn drop(&mut self) {
+        let _outside = crate::block::outside();
+        drop(self.0.take());
+    }
+}
+
 impl<T> Slot<T> {
-    pub fn empty() -> Arc<Slot<T>> {
-        Arc::new(Slot {
+    pub fn empty() -> Uncounted<Arc<Slot<T>>> {
+        Uncounted::new(Arc::new(Slot {
             inner: Mutex::new(Inner {
                 value: None,
                 waiting: None,
                 panicked: None,
                 size: 0,
             }),
-        })
+        }))
     }
 
     /// Put the value in and wake whoever is waiting for it.
@@ -598,11 +631,11 @@ impl<T> Slot<T> {
 
 /// Awaiting a [`Slot`].
 pub struct Waiting<T> {
-    slot: Arc<Slot<T>>,
+    slot: Uncounted<Arc<Slot<T>>>,
 }
 
 impl<T> Waiting<T> {
-    pub fn on(slot: Arc<Slot<T>>) -> Waiting<T> {
+    pub fn on(slot: Uncounted<Arc<Slot<T>>>) -> Waiting<T> {
         Waiting { slot }
     }
 }

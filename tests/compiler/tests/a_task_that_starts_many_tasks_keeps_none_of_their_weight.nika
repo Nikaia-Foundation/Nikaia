@@ -1,0 +1,39 @@
+// ADR-327 D9 (#1554): the runtime's bookkeeping for a started task (its slot,
+// its body's box) counts against no task, so a tight task that starts and
+// joins 20000 tasks keeps none of their weight.
+struct Tight {}
+
+impl task::Admission for Tight {
+	fn decide(mut self, _load: task::Load) -> task::Decision sync {
+		return task::Decision { start: 1, budget: 262144 }
+	}
+}
+
+fn small(i: i64) -> i64 {
+	return i
+}
+
+fn one(i: i64) -> i64 throws {
+	let c = async(detached) fn { small(i) }
+	return c.join() catch {
+		println(f"child failed: {error}")
+		0
+	}
+}
+
+fn spawner(n: i64) -> i64 throws {
+	let mut sum = 0
+	for i in 0..<n {
+		sum += one(i)
+	}
+	return sum
+}
+
+fn main() throws {
+	let j = async(detached, admission: Tight {}) fn { spawner(20000) }
+	let got = j.join() catch {
+		println(f"spawner failed: {error}")
+		0
+	}
+	println(f"got {got}")
+}

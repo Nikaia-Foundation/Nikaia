@@ -14,8 +14,8 @@ index
 a.nika b.nika 
 local
 == also a nika
-ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs crates/src/a.nika, merge aborted
-WAKE MERGE read=- do=merge origin/develop by hand and resolve the sources it names, then restart the driver: ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/compiler/lowered/a.rs crates/src/a.nika, merge aborted
+ESCALATE drive: push rejected, merge conflicted in crates/src/a.nika (lowered files re-lowered after), merge aborted
+WAKE MERGE read=- do=merge origin/develop by hand and resolve the sources it names, then restart the driver: ESCALATE drive: push rejected, merge conflicted in crates/src/a.nika (lowered files re-lowered after), merge aborted
 exit ok: false
 ours
 1

@@ -33,7 +33,11 @@ You build one small slice of an issue in the Nikaia repository and end.
   `Result: blocked`, `Found:` the gap with the probe (or the open
   dependency), `Needs:` the decision or the issue it waits for, nothing
   committed, no further reading or building. The driver does not run the
-  issue again while a `#N` named under `Needs:`/`Found:` is open.
+  issue again while a `#N` named under `Needs:`/`Found:` is open. A
+  `Result: partial` whose items left wait for an open issue names it as
+  `#N` under `Needs:`, not only in `Found:` prose: a partial's `Needs:` is
+  the only field the driver reads for it (#1827: #1628's partial run named
+  #1634 only in a `Found:` and ran again).
 * **The report file has exactly the brief's fields** (`Result:`, `Pushed:`,
   `Tests:`, `Deviation:`, `Found:`, `Needs:`, `Changelog:`, `Issue:`, `Friction:`, ...), one line
   each, no prose: `scripts/release.nika` parses them. `Gate:` is the bare
@@ -76,7 +80,9 @@ You build one small slice of an issue in the Nikaia repository and end.
   command as run: the package built and its
   setting, the consumer where the library alone builds, #1716; the
   snippet copied whole from the file that ran, its `use` lines and
-  manifest table with it, never retyped, #1726; a probe of a missing
+  manifest table with it, never retyped, #1726, and written out in the
+  line, never a path to it: your scratchpad is gone or unreadable when
+  the issue is built, #1824; a probe of a missing
   method stops at that name, so run its rest once with a method that
   exists in its place and write Nikaia's names, `compare` not Rust's
   `cmp`, #1749); the part your run can
@@ -86,8 +92,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   (docs/issues.md I6, #1745); a second defect is a second `Found:` line, and a
   behaviour some function or ADR does on purpose is no Found (#1677: one line
   merged two claims without a probe, and the second was by design). Each
-  shape the line names (a `for` and a `while` form) was run today and fails;
-  a shape that works is left out, and the line names the suspected file and
+  shape the line names (a `for` and a `while` form) was run today and fails,
+  on a binary built from HEAD (your run's own build, not `$S/old/nikaia`,
+  which may predate a fix: #1788 was filed from a probe a fix under #1754
+  had already made pass, #1822); a shape that works is left out, and the line names the suspected file and
   function, or says the cause is unknown (#1695: #1654's Found named the
   `while` forms, already proved, and no cause: `bounding_for` lacked the pair
   bounds `bounding_while` asks). A traced cause is run in its other

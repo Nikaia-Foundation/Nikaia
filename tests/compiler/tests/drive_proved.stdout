@@ -1,0 +1,13 @@
+PROVED 0.0.10 aaaaaaaa: indexes 1500/2000 75.00 %, operations 900/1000 90.00 %, left 605 (first measurement in T/proved.log)
+PROVED 0.0.11 bbbbbbbb: indexes 1510/2000 75.50 % (+0.50), operations 901/1000 90.10 % (+0.10), left 605; since 0.0.10 aaaaaaaa
+PROVED 0.0.12 cccccccc: indexes 1506/2000 75.30 % (-0.20), operations 899/1000 89.90 % (-0.20), left 605; since 0.0.11 bbbbbbbb
+PROVED 0.0.13 dddddddd: indexes 1490/2000 74.50 % (-0.80), operations 880/1000 88.00 % (-1.90), left 605; since 0.0.12 cccccccc
+PROVED FELL dddddddd: indexes -0.80 points, operations -1.90 points since 0.0.12 cccccccc, in cccccccc..dddddddd
+0.0.10 aaaaaaaa indexes 1500/2000 75.00 % operations 900/1000 90.00 % left 605 reasons 300 no fact for the length | 120 the index comes from a call | 50 a | 20 b | 10 c
+0.0.11 bbbbbbbb indexes 1510/2000 75.50 % operations 901/1000 90.10 % left 605 reasons 300 no fact for the length | 120 the index comes from a call | 50 a | 20 b | 10 c
+0.0.12 cccccccc indexes 1506/2000 75.30 % operations 899/1000 89.90 % left 605 reasons 300 no fact for the length | 120 the index comes from a call | 50 a | 20 b | 10 c
+0.0.13 dddddddd indexes 1490/2000 74.50 % operations 880/1000 88.00 % left 605 reasons 300 no fact for the length | 120 the index comes from a call | 50 a | 20 b | 10 c
+PROVED 0.0.13 dddddddd: indexes 1490/2000 74.50 % (-0.80), left 605; since 0.0.12 cccccccc
+PROVED FELL dddddddd: indexes -0.80 points since 0.0.12 cccccccc, in cccccccc..dddddddd
+WAKE PROVED read=T/proved.log do=find the commit of the range that lowered the proof figure and file it for the prover lane: PROVED FELL dddddddd: indexes -0.80 points since 0.0.12 cccccccc, in cccccccc..dddddddd
+proved.out left: false

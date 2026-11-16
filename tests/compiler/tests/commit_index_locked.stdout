@@ -1,0 +1,15 @@
+== lock brief
+committed SHA8 local
+status:
+?? X.md.report.md
+== lock held
+NOTE: could not update the shared index (another git holds .git/index.lock?); run `git restore --staged -- a.txt tests/new.nika tests/new.stdout`, or `git status` shows these files staged (a new file as a staged deletion)
+committed SHA8 local
+status:
+MM a.txt
+D  tests/new.nika
+D  tests/new.stdout
+?? X.md.report.md
+?? tests/
+status after the NOTE's command:
+?? X.md.report.md

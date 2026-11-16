@@ -100,6 +100,11 @@ it, like the checks in `docs/supervisor.md`.
   (#1726: #1715's probe threw text, lacked `use std::time` and put
   `user-parallelism` under `[package]`, where it is ignored, not under
   `[build]`; it did not compile as written and cost three probe rounds).
+  It is written out in the issue (or the `Found:` line), never pointed at
+  by a path: a file in a run's scratchpad is gone, or in another session's
+  scratchpad and unreadable, when the issue is built (#1824: #1751's Found
+  named `/tmp/claude-…/scratchpad/…` and left out the expected result
+  ADR-327 D9 gives; the supervisor's comment had to supply both).
   A probe of a missing method or `std` entry stops at that name, so the
   rest of it is never checked: it is run once more with a method that
   exists in its place (`sort_by_key` for `sort_by`), and it writes
@@ -183,6 +188,13 @@ it, like the checks in `docs/supervisor.md`.
   (#1792: #1786 suspected `lin_term` in `prove_terms.nika` lacked `/` and
   `%`; the walk's quotient rule existed, and the missing fact was the `u8`
   type's upper bound).
+  A refusal at a call of a `std` function is checked against that
+  function's entry in `crates/nikaia-std/std.contracts` (its `keeps`,
+  `borrows` columns) before a walk is blamed, and every option and
+  argument of the call is run as a shape, not only the one the probe used
+  (#1830: #1797 blamed `keeps_expression` for `process::run`'s `env`;
+  `keep_option` already walked options, the ledger said `keeps = ["args"]`,
+  and `env_remove` and `stdin` failed the same way).
   A probe that mixes several conditions (outside input, a guard, a call) is
   also run with each one taken away, and the issue says which variant still
   fails: #1571 blamed the outside input, and the guard alone did not prove.
@@ -224,6 +236,16 @@ it, like the checks in `docs/supervisor.md`.
   narrowed to what the items reach (#1782: #1688 promised its probe
   proved by an "ascending" rule alone; the probe also needed each element
   of `limits` capped by `len(trail)`, which no rule gives).
+  The trace names both sides of each site's goal: a sum or a product
+  needs an upper bound of every operand, which `0 <= x` facts never give,
+  and a difference a lower one; and each fact the issue proposes is
+  checked against the form that would say it: a ledger `ensures` reads
+  only the parameters and `result`, never `self` (`bm_ensured` in
+  `bounds_matched.nika`), and a function parameter is bounded only by a
+  precondition (ADR-269 D5). A fact no form can say is a gap (a
+  `decision`, I6), not an item (#1829: #1811 expected `size + length` and
+  `(buffer.len() - size) * 1000` proved from `0 <=` ensures and from
+  `size <= buffer.len()`, which no ensures can state).
   A site in a method of a type with field rules (ADR-306 D21, D28) has a
   probe reduced from the real code: the function and every `ref mut self`
   method of its type, with stub types, kept as the acceptance check; a
@@ -321,6 +343,12 @@ it, like the checks in `docs/supervisor.md`.
   item goes into the issue (a comment, or the *To build* list ticked), not
   only into a report or a commit. An item found wrong is corrected in the
   issue before the next run.
+  A group or item moved to another issue leaves this one in the same edit:
+  its *To build* item is struck with `moved to #N`, and the *Done when*
+  and its figures are narrowed to what is left, so no run is held to a
+  promise the plan no longer makes (#1826: #1634's *Done when* still named
+  the group-D counters the supervisor had moved to #1681, so its run could
+  only end `partial`).
   A section that says where the work stands (a branch, uncommitted files)
   is checked against `git log` and `git branch -r` before each run (#1470:
   it named a stale branch and files already committed).

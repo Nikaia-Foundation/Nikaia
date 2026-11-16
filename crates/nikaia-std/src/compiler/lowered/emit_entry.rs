@@ -134,8 +134,17 @@ impl EmitState {
         (text, nikaia_std::block::Text::from(passed.join(", ")))
     }
     pub(crate) fn fatal_registrations(&self, world: &EmitWorld<'_, '_, '_, '_>) -> String {
-        let fatal = match self.own_contracts.implementations.get("Fatal") { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         let mut text: String = String::from("");
+        for (members, name) in self.sums.iter() {
+            let mut fatal_member = false;
+            let mut borrows = false;
+            for member in members.iter() {
+                if emit_is_fatal(&self.own_contracts, member) || emit_is_fatal(world.library, member) { fatal_member = true; }
+                if self.borrows_named(world, member) { borrows = true; }
+            }
+            if fatal_member && !borrows { text = format!("{}    nikaia_std::process::fatal::<{}{}>();\n", text, self.sum_root(), name); }
+        }
+        let fatal = match self.own_contracts.implementations.get("Fatal") { Some(__nikaia_value) => __nikaia_value, None => return text };
         for item in world.items.iter() {
             match &item.node {
                 Item::Struct { name, generics, .. } => {
@@ -150,15 +159,6 @@ impl EmitState {
                 },
                 _ => { },
             }
-        }
-        for (members, name) in self.sums.iter() {
-            let mut fatal_member = false;
-            let mut borrows = false;
-            for member in members.iter() {
-                if emit_is_fatal(&self.own_contracts, member) { fatal_member = true; }
-                if self.borrows_named(world, member) { borrows = true; }
-            }
-            if fatal_member && !borrows { text = format!("{}    nikaia_std::process::fatal::<{}{}>();\n", text, self.sum_root(), name); }
         }
         text
     }

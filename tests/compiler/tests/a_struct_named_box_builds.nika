@@ -1,0 +1,33 @@
+// A program's own `Box` is its own type: the boxed error channel, a
+// recursive type's boxed part and a shared value of it build beside it (#1638).
+struct Box {
+    name: String,
+}
+
+impl Drop for Box {
+    fn drop(mut self) {
+        println(f"goes {self.name}") catch { }
+    }
+}
+
+enum Expr {
+    Num(i64),
+    Neg(Expr),
+}
+
+fn eval(e: Expr) -> i64 {
+    return match e {
+        Expr::Num(n) => n,
+        Expr::Neg(inner) => 0 - eval(inner),
+    }
+}
+
+fn take(_s: SharedMut[Box], said: String) throws {
+    println(f"took it {said}")
+}
+
+fn main() throws {
+    let s = SharedMut(Box { name: "the value" })
+    take(s, "first")
+    println(f"{eval(Expr::Neg(Expr::Num(4)))}")
+}

@@ -224,8 +224,30 @@ impl EmitState {
     /// error arrives there (ADR-346 D6, D7). A type with parameters or a view
     /// is not registered.
     fn fatal_registrations(ref self, world: ref EmitWorld) -> String {
-        let fatal = self.own_contracts.implementations.get("Fatal") ?? return ""
         let mut text: String = ""
+        // **A sum with a fatal member is registered too** (#1360): a function
+        // that throws its own fatal type and prints fails in a sum, and the
+        // box a child or a detached task hands on holds that sum, not the
+        // member. Only a sum without lifetime parameters can be asked. A sum
+        // holding `std`'s `Exit` is one too (#1820): boxed by a caller whose
+        // set has an unnamed member, its `Exit` still ends `main` with the
+        // code.
+        for (members, name) in self.sums {
+            let mut fatal_member = false
+            let mut borrows = false
+            for member in members {
+                if emit_is_fatal(self.own_contracts, member) || emit_is_fatal(world.library, member) {
+                    fatal_member = true
+                }
+                if self.borrows_named(world, member) {
+                    borrows = true
+                }
+            }
+            if fatal_member && !borrows {
+                text = f"{text}    nikaia_std::process::fatal::<{self.sum_root()}{name}>();\n"
+            }
+        }
+        let fatal = self.own_contracts.implementations.get("Fatal") ?? return text
         for item in world.items {
             match item.node {
                 Item::Struct { name, generics, .. } => {
@@ -241,25 +263,6 @@ impl EmitState {
                     }
                 },
                 else => {},
-            }
-        }
-        // **A sum with a fatal member is registered too** (#1360): a function
-        // that throws its own fatal type and prints fails in a sum, and the
-        // box a child or a detached task hands on holds that sum, not the
-        // member. Only a sum without lifetime parameters can be asked.
-        for (members, name) in self.sums {
-            let mut fatal_member = false
-            let mut borrows = false
-            for member in members {
-                if emit_is_fatal(self.own_contracts, member) {
-                    fatal_member = true
-                }
-                if self.borrows_named(world, member) {
-                    borrows = true
-                }
-            }
-            if fatal_member && !borrows {
-                text = f"{text}    nikaia_std::process::fatal::<{self.sum_root()}{name}>();\n"
             }
         }
         return text
