@@ -21,9 +21,9 @@ pub fn parameters(body: &str) -> Vec<String> {
         let start: i64 = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         let mut end: i64 = start;
         while end < c.len() as i64 && a_name_goes_on(*unsafe { nikaia_std::proven::read(&c, (end) as usize) }) { end = unsafe { nikaia_std::proven::add::<i64>(end, 1) }; }
-        if end > start && a_name_begins(*nikaia_std::index::get(&c, nikaia_std::index::at(start))) {
+        if end > start && a_name_begins(*unsafe { nikaia_std::proven::read(&c, (start) as usize) }) {
             let mut name: String = String::new();
-            for k in start..end { name.push(*nikaia_std::index::get(&c, nikaia_std::index::at(k))); }
+            for k in start..end { name.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }
             if !nikaia_std::list::contains(&found, &name) { found.push(name); }
             i = end;
         } else { i = unsafe { nikaia_std::proven::add::<i64>(i, 1) }; }

@@ -1,0 +1,14 @@
+bounds in tests/a_counter_returned_past_a_conjunct_lies_within_its_list.nika: 6 indexes, 6 proved; 6 operations, 6 proved
+    11  cs[i]      proved
+    12  i += 1     proved
+    20  cs[k - 1]  proved
+    20  k - 1      proved
+    31  cs[i]      proved
+    34  i += 1     proved
+    42  cs[k - 1]  proved
+    42  k - 1      proved
+    49  cs[i]      proved
+    50  i += 1     proved
+    53  cs[i - 1]  proved
+    53  i - 1      proved
+  derived  first_blank: 0 <= from, from <= cs.len(), proved at the calls on lines 40

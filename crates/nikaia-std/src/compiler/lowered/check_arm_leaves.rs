@@ -520,7 +520,7 @@ impl CheckState {
         let offset: i64 = if signature.takes_a_receiver() { 1 } else { 0 };
         let own = world.own.functions.contains_key(key);
         let mut at: i64 = 0;
-        while at + offset < signature.params.len() as i64 && ((at) as usize) < expected.len() {
+        while unsafe { nikaia_std::proven::add::<i64>(at, offset) } < signature.params.len() as i64 && ((at) as usize) < expected.len() {
             let i: i64 = at;
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             let name = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&signature.params, (nikaia_std::proven::add::<i64>(i, offset)) as usize) }.0.to_string());

@@ -1,0 +1,10 @@
+// #1550: the last rule of a grammar without its action is refused for the
+// missing action at the grammar's closing brace.
+grammar G {
+    rule name -> String = w:until(";") ";" -> { w.clone() }
+    entry rule all -> Vec[String] = name*
+}
+
+fn main() throws {
+    println(G::parse("a;b;")?)
+}

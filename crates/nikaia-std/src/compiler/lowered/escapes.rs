@@ -125,12 +125,12 @@ pub(crate) fn a_character(c: &[scalar], from: i64, so_far: &str, char_of: &impl 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn code_point(c: &[scalar], from: i64, to: i64) -> Option<i64> {
-    if from >= to || *nikaia_std::index::get(&c, nikaia_std::index::at(from)) == '_' { return None; }
+    if from >= to || *unsafe { nikaia_std::proven::read(&c, (from) as usize) } == '_' { return None; }
     let mut value: i64 = 0;
     let mut digits = 0;
     let mut at = from;
     while at < to {
-        if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) != '_' {
+        if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } != '_' {
             let digit = match hex_digit(*unsafe { nikaia_std::proven::read(&c, (at) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
             value = value * 16 + digit;
             digits += 1;
