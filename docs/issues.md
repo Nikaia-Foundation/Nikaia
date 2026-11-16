@@ -49,6 +49,14 @@ it, like the checks in `docs/supervisor.md`.
   uses it fails, the probe is that program (#1716: #1686's http failure
   showed only when hello-http was built at "yes", the http library alone
   built).
+  The probe is copied whole from the file that ran, never retyped: its
+  `use` lines, its error type, and the manifest table each key sits in
+  (#1726: #1715's probe threw text, lacked `use std::time` and put
+  `user-parallelism` under `[package]`, where it is ignored, not under
+  `[build]`; it did not compile as written and cost three probe rounds).
+  A `Found:` whose case is half in the run's reach and half a decision is
+  split: the run fixes its part, the issue keeps the other, with its
+  expected result (#1726).
   One defect per bug issue, each with its own probe: two claims are two
   issues, and a claim no probe shows is checked against the code first, since
   a behaviour a function does on purpose is no bug (#1677: a `Found:` merged
