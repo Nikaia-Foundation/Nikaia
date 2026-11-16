@@ -1,0 +1,30 @@
+// #1888 (ADR-306 D23): a literal that gives both lists of a `Row` by a
+// clone of another `Row`'s fields (or by its fields themselves) builds them
+// as long as each other, since that `Row`'s lists are, so `row.ks[0]` under
+// `row.cols.len() == 1` is proved.
+struct Row {
+	cols: Vec[u32],
+	ks: Vec[i64],
+	constant: i64,
+}
+
+fn first_k(row: ref Row) -> i64 {
+	if row.cols.len() == 1 && row.ks[0] == 1 {
+		return 1
+	}
+	return 0
+}
+
+fn copied(r: ref Row) -> Row {
+	return Row { cols: r.cols.clone(), ks: r.ks.clone(), constant: 0 }
+}
+
+fn moved(r: Row) -> Row {
+	return Row { cols: r.cols, ks: r.ks, constant: 1 }
+}
+
+fn main() throws {
+	let row = Row { cols: [7], ks: [1], constant: 0 }
+	println(first_k(copied(row)))
+	println(first_k(moved(copied(row))))
+}

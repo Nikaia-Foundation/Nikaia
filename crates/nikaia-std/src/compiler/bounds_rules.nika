@@ -48,6 +48,11 @@ pub struct BoundsRule {
     pub times: i64,
 }
 
+/// The last segment of a type's name: `BTreeMap` of `collections::BTreeMap`.
+fn rules_last_name(name: ref String) -> String {
+    return (name.split("::").last() ?? "").clone()
+}
+
 /// The most rounds a type's candidates are checked: each drops at least
 /// one, so this bounds only a type with many.
 fn rules_rounds() -> i64 {
@@ -58,7 +63,31 @@ fn rules_rounds() -> i64 {
 
 /// **Every candidate of the program**, read with the frames `context`
 /// holds.
-fn rules_candidates(program: ref Program, context: ref BoundsContext, words: ref winnow_grammar::InternerContext) -> Vec[BoundsRule] {
+fn rules_candidates(
+    program: ref Program,
+    beside: ref Vec[ref BoundsBeside],
+    context: ref BoundsContext,
+    words: ref winnow_grammar::InternerContext,
+) -> Vec[BoundsRule] {
+    // **A `pub` field is a candidate where every write to it is in the
+    // build** (ADR-306 D22): its type is not `pub`, or the package is a
+    // program no other package imports; and no file beside writes it or
+    // hands it on (`BoundsBeside.lost`).
+    let mut a_program = false
+    for item in program.items {
+        match item.node {
+            Item::Fn { name, .. } => {
+                let named = name ?? continue
+                a_program = a_program || words.resolve(named) == "main"
+            },
+            else => {},
+        }
+    }
+    let mut lost: collections::BTreeSet[String] = collections::BTreeSet()
+    for other in beside {
+        a_program = a_program || other.has_main
+        lost.extend(other.lost.clone())
+    }
     // The private list fields of each struct that is not generic, and of
     // those, the lists of whole numbers (`T.f`) and what a literal leaving
     // a field out builds.
@@ -70,18 +99,27 @@ fn rules_candidates(program: ref Program, context: ref BoundsContext, words: ref
     // The private whole-number fields of each such struct, the candidates
     // of `cap` and `floor` (#1642).
     let mut scalars: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    // The type of each field of each such struct, by its last name: what a
+    // `mut` parameter of a method may be handed out of another value.
+    let mut held: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     for item in program.items {
         match item.node {
-            Item::Struct { name, generics, fields, is_extern, .. } => {
+            Item::Struct { name, generics, fields, is_extern, is_public, .. } => {
                 if !generics.is_empty() || is_extern {
                     continue
                 }
                 let owner = words.resolve(name).clone()
                 let mut found: Vec[String] = []
                 let mut numbers: Vec[String] = []
+                let mut types: collections::BTreeSet[String] = collections::BTreeSet()
+                for field in fields {
+                    types.insert(rules_last_name(words.resolve(field.ty.name)))
+                }
+                held.insert(owner.clone(), types)
                 for field in fields {
                     let ty = words.resolve(field.ty.name)
-                    if !field.is_public && field.ty.generics.is_empty() && is_whole_number(ty) {
+                    let seen = !field.is_public || ((!is_public || a_program) && !lost.contains(words.resolve(field.name)))
+                    if seen && field.ty.generics.is_empty() && is_whole_number(ty) {
                         let f = words.resolve(field.name).clone()
                         if field.default != null {
                             defaults.insert(f"{owner}.{f}", rules_scalar_shape(field.default?.value))
@@ -89,7 +127,7 @@ fn rules_candidates(program: ref Program, context: ref BoundsContext, words: ref
                         numbers.push(f)
                         continue
                     }
-                    if field.is_public || field.ty.generics.len() != 1 || (ty != "Vec" && ty != "List") {
+                    if !seen || field.ty.generics.len() != 1 || (ty != "Vec" && ty != "List") {
                         continue
                     }
                     let f = words.resolve(field.name).clone()
@@ -149,14 +187,20 @@ fn rules_candidates(program: ref Program, context: ref BoundsContext, words: ref
                 }
                 for method in methods {
                     match method.node {
-                        Item::Fn { name, receiver, args, ret_type, .. } => {
+                        Item::Fn { name, generics, receiver, args, ret_type, .. } => {
                             let written = name ?? continue
                             let m = words.resolve(written).clone()
                             quiet.around.frames.insert(f"{owner}::{m}", nothing_changed())
                             // A method that takes a parameter `mut` may be
-                            // handed a field of another value of the type.
-                            if args.iter().any(fn(a) { a.mutable }) {
-                                dropped.insert(f"{owner}.")
+                            // handed a field of another value of the type:
+                            // one of a field's type, the type itself or a
+                            // type parameter.
+                            let types = held.get(owner)?.clone() ?? collections::BTreeSet()
+                            for a in args {
+                                let last = rules_last_name(words.resolve(a.ty.name))
+                                if a.mutable && (!generics.is_empty() || last == owner || types.contains(last)) {
+                                    dropped.insert(f"{owner}.")
+                                }
                             }
                             let ty = ret_type ?? continue
                             if receiver != null && ty.generics.is_empty() && is_whole_number(words.resolve(ty.name)) {
@@ -1094,15 +1138,33 @@ fn rules_literal(name: ref String, fields: ref Vec[FieldInit], lists: ref collec
 }
 
 /// **The name a literal gives a list field by** (#1652): the local or
-/// parameter of `Row { cols: cols }` and of `Row { cols }`; null for any
-/// other value, `self` too.
+/// parameter of `Row { cols: cols }` and of `Row { cols }`, the field path
+/// of `Row { cols: r.cols }`, each also through a `.clone()`, which keeps
+/// its length (`Row { cols: r.cols.clone() }`, #1888); null for any other
+/// value, a path from `self` too.
 fn rules_named_list(value: ref Expr?, field: ref String, words: ref winnow_grammar::InternerContext) -> String? {
     let given = value ?? return field.clone()
+    return rules_list_path(given, words)
+}
+
+/// The written path of a local, a parameter or a field of one, seen
+/// through `.clone()`; null for any other value and for `self`.
+fn rules_list_path(given: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
     match given {
         Expr::Variable(name, _) => {
             let written = words.resolve(name)
             if written != "self" {
                 return written.clone()
+            }
+        },
+        Expr::Field { base, .. } => {
+            if rules_list_path(base, words) != null {
+                return written_expression(words, given)
+            }
+        },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if words.resolve(method) == "clone" && args.is_empty() {
+                return rules_list_path(receiver, words)
             }
         },
         else => {},
