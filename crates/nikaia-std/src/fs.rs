@@ -65,11 +65,14 @@ pub mod path {
     /// Windows the prefix, then the root) first where there is one, `..` as
     /// written, a `.` only where it leads; empty parts and a `.` inside are
     /// dropped. Joined again they give a name [`same`] as `p`. It reads no
-    /// file system.
-    pub fn parts(p: &FilePath) -> Vec<PathBuf> {
-        p.components()
+    /// file system. A block's list, as a program's `Vec[fs::Path]` is: a
+    /// plain `Vec` was a rustc error where the result met one (#1619).
+    pub fn parts(p: &FilePath) -> crate::block::List<PathBuf> {
+        let parts: Vec<PathBuf> = p
+            .components()
             .map(|part| PathBuf::from(part.as_os_str()))
-            .collect()
+            .collect();
+        crate::block::List::from(parts)
     }
 
     /// A copy of the name, owned by whoever asked for it: how a lent name is

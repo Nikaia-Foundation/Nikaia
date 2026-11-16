@@ -262,9 +262,15 @@ pub async fn read_to_string() -> Result<crate::block::Text, IoError> {
 ///
 /// The half for input that is not text - and the one that says what
 /// `read_to_string` is doing, since the only difference is the check.
-pub async fn read() -> Result<Vec<u8>, IoError> {
+///
+/// A program's `Vec[u8]` is a block's list ([`crate::block::List`]), so the
+/// bytes are handed over as one, the same memory: a plain `Vec` here was a
+/// rustc error wherever the result met a `Vec[u8]` the program declared
+/// (#1619).
+pub async fn read() -> Result<crate::block::List<u8>, IoError> {
     crate::rt::io::stdin_whole()
         .await
+        .map(crate::block::List::from)
         .map_err(|e| IoError::of(e, STDIN))
 }
 
