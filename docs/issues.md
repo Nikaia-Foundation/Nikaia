@@ -57,6 +57,11 @@ it, like the checks in `docs/supervisor.md`.
   the command, the **expected** output and the **actual** output (the error
   with its code and message, or the `rustc` error on the emitted Rust). It was
   run on the binary of the day the issue was written; the issue says so.
+  A lowering or proof difference names the commit it was seen on (subject
+  and sha, the binary built from it), and its probe is an uncached
+  `lower-std` of a `git archive HEAD` copy, not a `probe.nika` snippet:
+  without the commit nobody can bisect it once the tree moves on (#1793:
+  #1763's `Found:` named neither).
   The expected output is written out (the text it prints, or the NK code and
   the gist of its message), never pointed at: "the specified result" or "what
   the spec says" leaves the builder to find it (#1737: #1550's issue).
