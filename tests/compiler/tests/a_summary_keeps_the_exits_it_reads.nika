@@ -1,0 +1,31 @@
+// ADR-359 D14: an exit the prover cannot read (`other(n)`, a product of
+// two names) gives no fact on its own path, and the other exits keep
+// theirs: `kind(m) != 0` still tells the caller `m >= 1` (#1849).
+fn need(n: i64) -> i64 {
+    assert(n >= 1)
+    return n
+}
+
+fn other(n: i64) -> i64 {
+    return n * n
+}
+
+fn kind(n: i64) -> i64 {
+    if n < 1 {
+        return 0
+    }
+    return other(n)
+}
+
+fn past_the_test(m: i64) -> i64 {
+    let k = kind(m)
+    if k == 0 {
+        return 0
+    }
+    return need(m)
+}
+
+fn main() throws {
+    println(f"{past_the_test(3)}")
+    println(f"{past_the_test(-2)}")
+}

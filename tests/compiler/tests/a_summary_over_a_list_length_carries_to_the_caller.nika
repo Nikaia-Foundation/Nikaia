@@ -1,0 +1,30 @@
+// ADR-359 D14: a summary is over the callee's parameters, and a list
+// parameter's `.len()` is one of them: at the call it is the argument's
+// length, so `k != 0` tells the caller `t.len() == 1` (#1849).
+fn need(n: i64) -> i64 {
+    assert(n >= 1)
+    return n
+}
+
+fn kind(t: ref Vec[i64]) -> i64 {
+    if t.len() != 1 {
+        return 0
+    }
+    return 7
+}
+
+fn one_long(t: ref Vec[i64]) -> i64 {
+    let k = kind(t)
+    if k == 0 {
+        return 0
+    }
+    assert(t.len() >= 1)
+    return need(t.len() as i64)
+}
+
+fn main() throws {
+    let one: Vec[i64] = [4]
+    let two: Vec[i64] = [4, 5]
+    println(f"{one_long(one)}")
+    println(f"{one_long(two)}")
+}

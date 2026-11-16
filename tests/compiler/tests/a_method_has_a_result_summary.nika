@@ -1,0 +1,36 @@
+// ADR-359 D14: a method that is not a trait method is resolved statically
+// (ADR-269 D5) and has a summary like a function: `self.kind(t) != 0` tells
+// the caller `t.len() == 1` (#1849).
+fn need(n: i64) -> i64 {
+    assert(n >= 1)
+    return n
+}
+
+struct Reader {
+    base: i64,
+}
+
+impl Reader {
+    fn kind(ref self, t: ref Vec[i64]) -> i64 {
+        if t.len() != 1 {
+            return 0
+        }
+        return 7
+    }
+
+    fn first(ref self, t: ref Vec[i64]) -> i64 {
+        let k = self.kind(t)
+        if k == 0 {
+            return self.base
+        }
+        return need(t.len() as i64)
+    }
+}
+
+fn main() throws {
+    let r = Reader { base: 9 }
+    let one: Vec[i64] = [4]
+    let none: Vec[i64] = []
+    println(f"{r.first(one)}")
+    println(f"{r.first(none)}")
+}

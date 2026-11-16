@@ -56,6 +56,11 @@
 // commits has the report's `Commit:` subject and touches every listed path,
 // the script commits nothing, writes `Pushed: local <that sha>` and prints
 // `already committed <sha8> local`; otherwise it refuses as before.
+//
+// **No commit inside a merge** (#1901): while `.git/MERGE_HEAD` (or a
+// cherry-pick's or revert's head) exists, as during the driver's `git merge
+// --no-commit --autostash`, the script refuses: a commit then would be a
+// merge commit with the private index's tree, which drops the merged side.
 
 use std::cli
 use std::fs
@@ -287,6 +292,15 @@ fn commit_put_pushed(path: String, text: String, sha: String) throws {
     fs::write(path, fs::Root::Anywhere, out.join("\n") + "\n")
 }
 
+// The ref of a merge, cherry-pick or revert in progress (`MERGE_HEAD`, ...),
+// or "" when there is none.
+fn commit_merging() -> String throws {
+    for r in ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"] {
+        if process::run("git", ["rev-parse", "-q", "--verify", r.clone()]).ok { return r.clone() }
+    }
+    return ""
+}
+
 fn main() throws {
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
@@ -342,6 +356,15 @@ fn main() throws {
         if others.len() > 0 { println(f"left staged, not committed: {others.join(" ")}") }
         println(msg)
         return
+    }
+    // A merge in progress (#1901): the driver's `git merge --no-commit
+    // --autostash` holds the other agents' files in its stash until it
+    // commits; a `git commit` now would record a merge commit whose tree is
+    // HEAD plus the listed files, dropping the merged side's changes.
+    let merging = commit_merging()
+    if merging != "" {
+        println(f"REFUSED: a merge is in progress (.git/{merging} exists): wait until it is gone, check your edits are back, then run this again")
+        process::exit(1)
     }
     // The private index: HEAD, the listed files whole, the staged hunks of
     // the Partial: files (#1792).

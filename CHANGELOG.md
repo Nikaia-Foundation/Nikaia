@@ -8,6 +8,30 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1409] — 2026-11-16
+
+**Builders' changes (#1843, #1853, #1857, #1862, #1866, #1874, #1881, #1883, #1885, #1886, #1887, #1895, #1896, #, #1903)**
+- docs/issues.md: an issue's Done when asks for a Found line per finding, not for issue numbers the run cannot know; a file a preceding issue will create is named as that issue's output.
+- docs/issues.md: I4 asks an issue item that rests on a part another issue builds (a harness, a README) to name that part's own issue, or to say the builder makes it
+- The driver drops a brief that ended blocked on an issue it filed from that run's Found (or one the report names) instead of cutting the batch, and labels the issue blocked until that issue is closed.
+- Driver: when git puts the agents' uncommitted files back after a merge and that conflicts, a lowered file now takes HEAD's copy with nothing left staged, and a conflict in a source escalates
+- Changed: `scripts/probe.nika` warns in a first `note:` line when `target/fast/nikaia` is older than a compiler source in the tree, so a probe on a binary that predates HEAD is not read as a defect.
+- benches/game: Nikaia programs are counted with `io-method = "blocking"`, so a program that reads standard input no longer hangs under valgrind 3.22; docs/measuring.md says so for programs counted by hand
+- A text a function makes and hands to `strip_prefix`, `strip_suffix` or `trim_start_matches`, whose result it returns, no longer fails with an internal error.
+- The driver no longer holds a re-queued issue by an issue its earlier report only cited in `Found:`, by the issue it is `Part of`, or by numbers inside quoted text (backticks, fenced or `<details>` blocks).
+- scripts/pre-push.nika: the page-examples step runs the repository's own built compiler, so it no longer needs `nikaia` on PATH
+- The driver starts a builder or QA only where the lane's longest recent run still fits before the 2 h end of its task, and a builder run cut off after writing its report gets its follow-up (posted run, labels, Found filing, suite) at the next start.
+- The release commit after a driver push now carries the rows the agents added to docs/tokenspeed.md, and leaves the file out when anything else in it changed.
+- Driver: the ESCALATE and WAKE lines at a stop now say what to do with the issues (file or decide the waiting ones, block an issue on what a blocked run found), not "write the next briefs".
+- Driver: at a red suite or CI the ESCALATE and WAKE lines ask for the fix-forward as a `ready` issue queued first in batch.txt, and a missing brief for an issue's `#N` line, not a hand-written brief.
+- The release no longer stops while another lane has an uncommitted paragraph in a specification part: it commits only that part's version and date lines and leaves the paragraph in the working tree.
+- The driver no longer holds an issue by a `#N` inside double-quoted text, such as a quoted driver comment.
+
+## [0.0.1408] — 2026-11-16
+
+**prover: a list grown and a bool raised in a loop are flags; what held where they rose is kept, the loop's names projected out (ADR-361 D15)**
+- Prover: a list a loop grows and a flag it raises carry what held where they rose (ADR-361 D15): past `while … { if i < args.len() as i64 { at.push(i) } … }`, a non-empty `at` proves `args.len() >= 1`, also as a call's precondition.
+
 ## [0.0.1407] — 2026-11-16
 
 **Builders' changes (#1690, #1702, #1861, #1864, #1865)**

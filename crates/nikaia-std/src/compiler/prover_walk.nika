@@ -305,10 +305,11 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
             let free = !has_owner && !was_a_test
             let at = ProverWhere { function: claim_text_of(key), params: params, no_precondition: no_precondition, top: true, free: free, posts: !was_a_test && !of_a_trait, lambda: false, throws_out: can_throw }
             walk.state.in_test = was_a_test
-            // **A result summary** (ADR-359 D1): every exit of a free
-            // function's body the walk reads in full.
+            // **A result summary** (ADR-359 D1, D14): every exit of the body
+            // of a free function, or of a method no trait's call can reach,
+            // that the walk reads in full.
             walk.state.summing = []
-            walk.state.unsummed = !free || key == null || !prover_summable(body)
+            walk.state.unsummed = was_a_test || of_a_trait || key == null || !prover_summable(body)
             let leaves = prover_block(walk, body, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             walk.state.in_test = false
             let summed_key = key?.clone() ?? ""
@@ -671,6 +672,22 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
                     called_whole = prover_returns_whole(walk, c, program, words, own, condition)
                     called_summed = prover_summed(walk, c, args, config, bound, scope, program, words, written_of(value))
                     called = true
+                }
+            },
+            // **A call `self.m(…)` to the type's own method has its summary**
+            // (ADR-359 D14), as a call by name has: the method is resolved
+            // statically (ADR-269 D5).
+            Expr::MethodCall { receiver, method, args, config, .. } => {
+                let callee = prover_own_method_callee(receiver, method, nested, words)
+                if callee != null {
+                    let c = callee ?? ""
+                    let target = prover_summed_function(program, words, c)
+                    if target != null {
+                        let bound = words.resolve(names[0]).clone()
+                        called_whole = target?.whole_result ?? false
+                        called_summed = prover_summed(walk, c, args, config, bound, scope, program, words, written_of(value))
+                        called = true
+                    }
                 }
             },
             else => {},
@@ -1104,57 +1121,91 @@ fn prover_pinned_value(mut arena: TermArena, facts: ref Vec[i64], d: i64, ask: f
     }
 }
 
-/// **A call's summary at this call** (ADR-359 D2): each exit of the callee's
-/// result summary with the call's arguments in place of its parameters.
-/// Nothing where the callee has none, an argument is not a term the prover
-/// reads, or one reads the name the result is bound to.
+/// **A call's summary at this call** (ADR-359 D2, D14): each exit of the
+/// callee's result summary with the call's arguments in place of its
+/// parameters, and a list parameter's length with the argument's. An exit
+/// that reads a parameter whose argument the prover does not read (or that
+/// reads the name the result is bound to) gives no fact; the others keep
+/// theirs. Nothing where the callee has no summary.
 fn prover_summed(mut walk: ProverWalk, callee: ref String, written: ref Vec[Expr], config: ref Vec[ConfigArg], bound: ref String, scope: ref ProverScope, program: ref Program, words: ref winnow_grammar::InternerContext, call: String) -> Vec[SummaryAlt]? {
     let exits = walk.state.summaries[callee] ?? return null
-    let function = free_function(program, words, callee) ?? return null
+    let function = prover_summed_function(program, words, callee) ?? return null
     let args = arguments_in_order(function, written, config, words)
     if function.params.len() != args.len() {
         return null
     }
     let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
     for k in 0..<args.len() {
-        let term = lin_term(args[k], words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes) ?? return null
-        if walk.arena.mentions(term, bound) {
-            return null
+        let term = lin_term(args[k], words, fn(name) { scope.ints.contains(name) }, fn(name) { prover_pinned(walk.state.pinned, scope, name) }, walk.arena.nodes)
+        if term != null && !walk.arena.mentions(term ?? 0, bound) {
+            given.insert(function.params[k].clone(), term ?? 0)
         }
-        given.insert(function.params[k].clone(), term)
+        let length = length_given(walk.arena, words, args[k], scope, walk.state.pinned)
+        if length != null && !walk.arena.mentions(length ?? 0, bound) {
+            given.insert(length_of(function.params[k]), length ?? 0)
+        }
     }
     let mut alts: Vec[SummaryAlt] = []
     for exit in exits {
         let mut read: collections::BTreeSet[String] = collections::BTreeSet()
         walk.arena.variables(exit.guard, read)
         walk.arena.variables(exit.value, read)
+        let mut readable = true
         for name in read {
             if !given.contains_key(name) {
-                return null
+                readable = false
             }
+        }
+        if !readable {
+            continue
         }
         let guard = walk.arena.substitute(exit.guard, given)
         let value = walk.arena.substitute(exit.value, given)
         alts.push(SummaryAlt { guard: guard, value: value, callee: callee.clone(), call: call.clone(), why: exit.written.clone() })
     }
+    if alts.is_empty() {
+        return null
+    }
     return alts
 }
 
-/// **An exit of the function walked, as a summary's exit** (ADR-359 D1):
-/// the value handed back, each call in it read by its callee's summary,
-/// carried to the entry with the path to it. Where that cannot be done - a
-/// call without a summary or one that can come back here, a name whose value
-/// at the entry is not known, more than the fixed term bound - the function
-/// has no summary.
+/// **The function a summary's key names**: a free function, or `T::m`, the
+/// method `m` of `T`'s own `impl` (ADR-359 D14).
+fn prover_summed_function(program: ref Program, words: ref winnow_grammar::InternerContext, callee: ref String) -> FreeFunction? {
+    let free = free_function(program, words, callee)
+    if free != null {
+        return free
+    }
+    let cut = callee.rfind("::") ?? return null
+    let owner = callee[0..<cut].clone()
+    let name = callee[cut + 2..<callee.len()].clone()
+    return own_method(program, words, owner, name)
+}
+
+/// **`T::m` for a call `self.m(…)` in a method of `T`** (ADR-269 D5, #776),
+/// the key of `T`'s own method; null for any other receiver.
+fn prover_own_method_callee(receiver: ref Expr, method: winnow_grammar::Symbol, at: ref ProverWhere, words: ref winnow_grammar::InternerContext) -> String? {
+    if (prover_variable_named(receiver, words) ?? "") != "self" {
+        return null
+    }
+    let function = carrying_function(at.function) ?? return null
+    let cut = function.rfind("::") ?? return null
+    let owner = function[0..<cut].clone()
+    return f"{owner}::{words.resolve(method)}"
+}
+
+/// **An exit of the function walked, as a summary's exit** (ADR-359 D1,
+/// D14): the value handed back, each call in it read by its callee's
+/// summary, carried to the entry with the path to it. Where that cannot be
+/// done - a call without a summary or one that can come back here, a name
+/// whose value at the entry is not known, more than the fixed term bound -
+/// this exit gives no fact, and the function's other exits keep theirs:
+/// each exit is a fact on its own path.
 fn prover_sum_exit(mut walk: ProverWalk, value: ref Expr, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, unaliased: fn(ref String) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync, written_of: fn(ref Expr) -> String sync) {
     if walk.state.unsummed {
         return
     }
     let made = prover_summary_exits(walk, value, scope, at, program, words, own, unaliased, condition, written_of)
-    if made == null {
-        walk.state.unsummed = true
-        return
-    }
     for exit in made ?? [] {
         walk.state.summing.push(exit.clone())
     }
@@ -1488,7 +1539,9 @@ fn prover_return(mut walk: ProverWalk, value: ref Expr?, span: Span, scope: ref 
     let returned = value ?? return
     prover_expr(walk, returned, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     walk.state.exit(walk.arena, returned, words, scope, at.function, !at.lambda && at.posts, at.params, ask)
-    if !at.lambda && at.free {
+    // `walk.state.unsummed` says which bodies are summed (ADR-359 D14): a
+    // method's too, unless a trait's call can reach it.
+    if !at.lambda {
         prover_sum_exit(walk, returned, scope, at, program, words, own, unaliased, condition, written_of)
     }
 }

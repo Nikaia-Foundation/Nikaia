@@ -1,0 +1,27 @@
+// ADR-359 D1, D14: a summary gives what its exits say, nothing more. The
+// exit of `kind` for `n < 1` returns 5, not 0, so `k != 0` says nothing of
+// `m`, and the call of `need` stays unproved (#1849). Nothing calls
+// `past_the_test`, so no caller's argument proves the claim for it.
+fn need(n: i64) -> i64 {
+    assert(n >= 1)
+    return n
+}
+
+fn kind(n: i64) -> i64 {
+    if n < 1 {
+        return 5
+    }
+    return 7
+}
+
+pub fn past_the_test(m: i64) -> i64 {
+    let k = kind(m)
+    if k == 0 {
+        return 0
+    }
+    return need(m)
+}
+
+fn main() throws {
+    println("unreached")
+}
