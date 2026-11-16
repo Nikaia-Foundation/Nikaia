@@ -3891,7 +3891,7 @@ pub mod emit_needs {
 }
 pub mod emit_ops {
     #[allow(unused_imports)]
-    pub use super::{precedence, binary_op, unary_op, repeat_suffix, pointing, jumps, jumps_at_the_end, never_a_value, a_number, only_literals, a_negation_inside, is_length, is_count, a_list_read_as_a_slice, frame_attribute, is_a_place, binds_a_part};
+    pub use super::{precedence, binary_op, unary_op, repeat_suffix, pointing, jumps, jumps_at_the_end, never_a_value, a_number, only_literals, a_negation_inside, is_length, a_list_read_as_a_slice, frame_attribute, is_a_place, binds_a_part};
 }
 pub mod emit_order {
     #[allow(unused_imports)]
@@ -4423,4 +4423,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "69cbd48e0e1f9851850609077421db966be436648cdbf3283cc96090a65aec70";
+pub const LOWERED_DIGEST: &str = "20e62fa61db4b6e0eb29bb2f4c86338123a807968b269338a01a191ad98192c0";

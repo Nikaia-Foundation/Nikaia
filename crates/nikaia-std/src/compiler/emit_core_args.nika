@@ -626,10 +626,12 @@ impl EmitState {
         let hands_on_kept = emit_arg_is_variable(arg) && !self.facts.named_fn_values.contains_key(node) && self.keeps_code_at(method_callee?.clone() ?? callee.clone(), i)
         // Part I 2.3: a plain value in a parameter the callee declares nullable.
         let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node)
-        // **A count the language below wants in `usize`** (ADR-285 D15), not
+        // **A count the language below wants in `usize`** (ADR-285 D15), as
+        // the checker found it by the entry the call resolved to (`str::repeat`,
+        // never a function of the program's own that is called `repeat`), not
         // where the argument is written only in literals, and a `usize` a C
         // declaration names is one too (ADR-302 D6).
-        let wants_a_size = is_count(callee, i) || self.takes_a_size(world, callee, i) || self.facts.count_args.contains(node)
+        let wants_a_size = self.takes_a_size(world, callee, i) || self.facts.count_args.contains(node)
         let count = wants_a_size && !only_literals(arg)
         // **The caller writes no `&`** (ADR-094 D1): where the callee reads this
         // argument rather than keeping it, the reference is the compiler's. A

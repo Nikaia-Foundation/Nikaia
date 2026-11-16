@@ -438,7 +438,7 @@ impl EmitState {
             None => None,
         }, || nikaia_std::block::Text::from(callee.to_string()).into()), i);
         let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node)?;
-        let wants_a_size = is_count(callee, i) || self.takes_a_size(world, callee, i) || self.facts.count_args.contains(&node);
+        let wants_a_size = self.takes_a_size(world, callee, i) || self.facts.count_args.contains(&node);
         let count = wants_a_size && !only_literals(arg);
         let lent_path = self.facts.lent_args.contains(&node) && emit_arg_made_a_path(&self.facts.nullable_args, node);
         let mut lend = self.facts.lent_args.contains(&node) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(&node)) || self.facts.lent_literals.contains(&node));
@@ -450,7 +450,7 @@ impl EmitState {
         if self.foreign_params.contains_key(callee) {
             let params = match self.foreign_params.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if i < params.len() as i64 {
-                let ty = (*nikaia_std::index::get(&params, nikaia_std::index::at(i))).clone();
+                let ty = (*unsafe { nikaia_std::proven::read(&params, (i) as usize) }).clone();
                 pointer = emit_arg_pointer_code((self.pointer_for(world, callee, &ty)).as_ref());
             }
         }

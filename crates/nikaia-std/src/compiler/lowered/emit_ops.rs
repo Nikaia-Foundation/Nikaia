@@ -153,8 +153,6 @@ pub(crate) fn a_negation_or_inside(op: &UnaryOp, inner: &Expr) -> bool {
 
 pub fn is_length(method: &str, args: &[Expr]) -> bool { method == "len" && args.is_empty() }
 
-pub fn is_count(callee: &str, at: i64) -> bool { callee == "repeat" && at == 0 }
-
 pub fn a_list_read_as_a_slice(written: String) -> String {
     if !written.starts_with('&') || !written.ends_with('>') { return written; }
     let after = nikaia_std::index::or(written.strip_prefix('&'), || "");
