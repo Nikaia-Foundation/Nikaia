@@ -1645,7 +1645,7 @@ pub(crate) fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, sc
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             let callee = prover_called(func, words, &unaliased);
-            if callee.is_some() { prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), node_key(expr), args, config, span, scope, at, program, words, own, library, &ask, &model, &escape, &written_of, &condition); }
+            if callee.is_some() { prover_a_call(walk, nikaia_std::index::or(callee.as_deref(), || ""), node_key(expr), args, config, span, scope, at, program, words, own, library, &ask, &model, &escape, &unaliased, &written_of, &condition); }
         },
         _ => { },
     }
@@ -2121,12 +2121,16 @@ pub(crate) fn prover_nested(walk: &mut ProverWalk, block: &Block, lambda: Option
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn prover_a_call(walk: &mut ProverWalk, callee: &str, call: i64, args: &[Expr], config: &[ConfigArg], span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+pub(crate) fn prover_a_call(walk: &mut ProverWalk, callee: &str, call: i64, args: &[Expr], config: &[ConfigArg], span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     if scope.locals.contains(callee) { return; }
     let caller = carrying_function((at.function).as_deref());
     if caller.is_some() { walk.state.edges.insert((nikaia_std::index::or(caller, || "".into()), nikaia_std::block::Text::from(callee.to_string()))); }
     let told = walk.findings.len() as i64;
-    prover_call_precondition(walk, callee, call, args, config, span, scope, at, program, words, own, library, ask, model, escape, written_of, condition);
+    if !walk.state.in_test && prover_an_argument_calls(args) {
+        let mut here = scope.clone();
+        for arg in args.iter() { prover_call_results(walk, arg, false, &mut here, program, words, own, unaliased, condition, written_of); }
+        prover_call_precondition(walk, callee, call, args, config, span, &here, at, program, words, own, library, ask, model, escape, written_of, condition);
+    } else { prover_call_precondition(walk, callee, call, args, config, span, scope, at, program, words, own, library, ask, model, escape, written_of, condition); }
     if walk.state.collecting && walk.state.known_unwritten.contains_key(callee) {
         let function = match free_function(program, words, callee) { Some(__nikaia_value) => __nikaia_value, None => return };
         let all = arguments_in_order(&function, args, config, words);
@@ -2137,6 +2141,21 @@ pub(crate) fn prover_a_call(walk: &mut ProverWalk, callee: &str, call: i64, args
         let function = match free_function(program, words, callee) { Some(__nikaia_value) => __nikaia_value, None => return };
         let all = arguments_in_order(&function, args, config, words);
         prover_unwritten_call(walk, callee, &function.params, &all, span, scope, words, ask, model);
+    }
+}
+
+pub(crate) fn prover_an_argument_calls(args: &[Expr]) -> bool {
+    for arg in args.iter() { if prover_reads_a_call(arg) { return true; } }
+    false
+}
+
+pub(crate) fn prover_reads_a_call(expr: &Expr) -> bool {
+    match expr {
+        Expr::Call { .. } => true,
+        Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); prover_reads_a_call(lhs) || prover_reads_a_call(rhs) },
+        Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); prover_reads_a_call(expr) },
+        Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); prover_reads_a_call(expr) },
+        _ => false,
     }
 }
 

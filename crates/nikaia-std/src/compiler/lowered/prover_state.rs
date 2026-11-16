@@ -339,6 +339,17 @@ impl ProverState {
                     continue;
                 }
             }
+            if goal.is_some() && !scope.summed.is_empty() {
+                let summed = summed_read(&arena, scope, nikaia_std::index::or(goal, || 0));
+                if !summed.is_empty() {
+                    let facts = summed_facts(arena, scope, &summed);
+                    self.second_queries += 1;
+                    if is_proved(&ask(&arena, &facts, nikaia_std::index::or(goal, || 0))) {
+                        if of_std { outcome.held.push(ClaimHeld::Proved); }
+                        continue;
+                    }
+                }
+            }
             if goal.is_some() && (!scope.loops.is_empty() || !scope.around.is_empty()) {
                 let base = scope.with_history();
                 let mut asked_through = scope.loops.copy_owned();
@@ -621,11 +632,14 @@ pub(crate) fn summed_read(arena: &TermArena, scope: &ProverScope, claim: i64) ->
             if summed_ties(&read, &names) { names.extend(read.iter().cloned()); }
         }
         for (bound, alts) in scope.summed.iter() {
-            if !names.contains(bound) { continue; }
+            let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
             for alt in alts.iter() {
-                arena.variables(alt.guard, &mut names);
-                arena.variables(alt.value, &mut names);
+                arena.variables(alt.guard, &mut read);
+                arena.variables(alt.value, &mut read);
             }
+            if !names.contains(bound) && !summed_ties(&read, &names) { continue; }
+            names.insert(nikaia_std::block::Text::from(bound.to_string()));
+            names.extend(read);
         }
         grown = (names.len() as i64) != before;
     }
