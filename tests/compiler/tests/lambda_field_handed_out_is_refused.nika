@@ -1,0 +1,16 @@
+// A non-Copy field handed out of a lambda over a list's items is given away
+// from an item the lambda is only lent: the checker refuses it with the
+// `.clone()` help (ADR-282 D10, #1905, #1906), not rustc.
+struct N { t: String }
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("hi")
+    return g
+}
+
+fn main() throws {
+    let m = [N { t: make() }]
+    let v: Vec[String] = m.iter().map(fn(x) { x.t }).collect()
+    println(v[0])
+}
