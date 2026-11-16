@@ -88,6 +88,13 @@ it, like the checks in `docs/supervisor.md`.
   Nikaia's names, not Rust's (#1749: #1738's `sort_by` probe compared with
   `b.cmp(a)`, where Nikaia's method is `compare`, ADR-341 D2, so it could
   not give its expected output even once the entry was built).
+  A site the bounds walk leaves checked in the toolchain is named by its
+  `.nika` file and line, never by the lowered `.rs` it became, and its
+  probe is `lower-std --bounds --bounds-trace FILE.nika:LINE` with the
+  rows it printed (the goal and the facts asked), or a reduction that
+  `check --bounds` shows on a scratch file; a probe that needs a whole
+  `lower-std --bounds` to show the line costs every reader minutes and
+  shows no cause (#1780: #1776's `Found:` named lines of `fixed.rs`).
   A `Found:` whose case is half in the run's reach and half a decision is
   split: the run fixes its part, the issue keeps the other, with its
   expected result (#1726).
@@ -332,7 +339,9 @@ suspected function that does not exist, I7; #1745: #1731's run answered
 I4a, and `rules-gap` for a fix of what an ADR specifies, I6; #1779:
 #1628's run answered `broke I4` for a probe that was a fragment without
 its `fn`, `main` and `use` lines, I5 (copied whole), and `wrong I5` for a
-blamed cause and a wrong file, I7; #1746:
+blamed cause and a wrong file, I7; #1780: #1776's run answered `broke
+I3` for a `Found:` that named no cause, I7 (`unknown` at least), and
+whose probe was a whole `lower-std --bounds`, I5; #1746:
 #1533's run answered `rules-gap` for an item that left open what bounds the
 wait before a body's first byte, `broke I9`).
 
