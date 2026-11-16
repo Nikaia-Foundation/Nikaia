@@ -218,6 +218,12 @@
 // A builder's `Pushed: rejected` (or `none`) is rewritten when its commit is found in the log.
 // `--rewrite REPORT LOGFILE` prints the rewritten report (for tests).
 // `--wake DIR LINE...` prints each LINE's WAKE line (drive_wake_line).
+// After each push the proof figure of the commit on develop is measured
+// beside the next batch and logged to DIR/proved.log (#1823, drive_proved_start:
+// `PROVED ...` lines, a WAKE where it fell); `--proved DIR SHA` measures one
+// commit, `--proved-lines DIR VERSION SHA SUMMARY` logs a `scripts/proved.nika`
+// output and prints its lines, `--proved-report DIR` prints DIR/proved.out
+// (for tests).
 // `--issue NAME...` prints each brief's issue number (drive_issue) or `none`;
 // `--post-body BRIEF` prints the comment that posts BRIEF, `--run-body DIR
 // BRIEF` the comment of BRIEF's run from its files in DIR (for tests).
@@ -251,7 +257,7 @@ fn drive_exe() -> String throws {
 // names its kind, the one file to read and what to do, so the session reads
 // nothing else on a wake (#1821). The session's watcher on the log greps
 // `^WAKE ` and nothing else; the end of the background task wakes it anyway.
-// Only ESCALATE, STOP and PUSHED go through here; DIR is the lane the line
+// Only ESCALATE, STOP, PUSHED and PROVED FELL go through here; DIR is the lane the line
 // comes from ("" where none is known).
 // An ESCALATE line ends with the commit of the scripts/drive.nika this run
 // loaded, ` (drive.nika <sha8>)` (`+edited` where the tree's copy differs
@@ -279,6 +285,7 @@ fn drive_wake(dir: String, line: String) throws {
 //     RED       read=DIR/qa-input.txt do=write the fix-forward (read=- for CI red on develop)
 //     MERGE     read=-                do=resolve the named sources, restart
 //     BATCH     read=-                do=write the next briefs, restart
+//     PROVED    read=DIR/proved.log   do=find and file the commit that lowered the proof figure
 //     ESCALATE  read=-                do=fix the cause it names, restart
 //
 // The action holds no `: `, so the first one after `do=` ends it.
@@ -328,6 +335,10 @@ fn drive_wake_line(dir: String, said: String) -> String throws {
 	} else if body.contains("merge aborted") || body.contains("the fast-forward failed") {
 		kind = "MERGE"
 		act = "merge origin/develop by hand and resolve the sources it names, then restart the driver"
+	} else if body.starts_with("PROVED FELL ") {
+		kind = "PROVED"
+		read = drive_wake_in(dir, "proved.log")
+		act = "find the commit of the range that lowered the proof figure and file it for the prover lane"
 	} else if body.starts_with("BATCH DONE") || body.starts_with("focus: every area empty") {
 		kind = "BATCH"
 		act = "write the next briefs, then restart the driver"
@@ -689,6 +700,7 @@ fn drive_push(dir: String, sha: String) -> String throws {
 	let note = drive_release(dir, pushed.clone())
 	drive_wake(dir, f"PUSHED {drive_short(pushed)}, {note}")
 	if note.contains("PUSH REJECTED") { drive_escalate("the release's push was rejected") }
+	drive_proved_start(dir, pushed)
 	return head
 }
 
@@ -718,6 +730,248 @@ fn drive_no_bump() -> bool throws {
 		if a == "--no-bump" { return true }
 	}
 	return false
+}
+
+// The proof figure after each push (#1823): the share of index and
+// arithmetic checks the prover proves, measured on the commit now on
+// develop (the release's commit where drive_release pushed one, else the
+// pushed one) without stopping the driver. drive_proved_start starts
+// `drive.nika -- --proved DIR SHA` detached, beside the next batch; that run
+// (drive_proved) makes a detached worktree of SHA in `target/proved-<sha8>/tree`,
+// takes the compiler of SHA (the ledger step's binary, copied here at once
+// where it was built from the same `crates/` tree, drive_tree_exe; else built
+// in `target/proved-<sha8>/target`), runs `lower-std --bounds --asserts
+// --sysroot <worktree>/crates` and `scripts/proved.nika` on the report in the
+// worktree, appends one line to DIR/proved.log (drive_proved_lines) and its
+// lines to DIR/proved.out, and removes `target/proved-<sha8>` with the
+// worktree. The driver prints DIR/proved.out at each round and while it waits
+// for a suite (drive_proved_report): `PROVED <version> <sha8>: ...` with the
+// change since the last line of the log, and `PROVED FELL ...` (a WAKE,
+// drive_wake_line) where the share of indexes or of operations fell by more
+// than 0.2 points, naming the commit range. A measurement that fails says
+// `PROVED <sha8> not measured: <why>`. A `target/proved-*` left by a run that
+// died is removed after 6 hours.
+fn drive_proved_start(dir: String, pushed: String) throws {
+	let mut sha = pushed.clone()
+	let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+	if head != pushed
+		&& process::run("git", ["merge-base", "--is-ancestor", pushed.clone(), head.clone()]).ok
+		&& process::run("git", ["merge-base", "--is-ancestor", head.clone(), "refs/remotes/origin/develop"]).ok {
+		sha = head
+	}
+	process::run("sh", ["-c", "find target -maxdepth 1 -name 'proved-*' -mmin +360 -exec rm -rf {} + 2>/dev/null; git worktree prune"])
+	let base = drive_proved_dir(sha.clone())
+	process::run("rm", ["-rf", base.clone()])
+	process::run("mkdir", ["-p", f"{base}/bin"])
+	let built = f"{drive_tree_target()}/fast/nikaia"
+	let stamp = drive_read(f"{built}.crates").trim()
+	let crates = process::run("git", ["rev-parse", f"{sha}:crates"]).stdout.trim().clone()
+	let mut from = "built from its sources"
+	if stamp != "" && stamp == crates && process::run("cp", [built, f"{base}/bin/nikaia"]).ok {
+		from = "with the ledger step's compiler"
+	}
+	let exe = process::run("realpath", [drive_exe()]).stdout.trim().clone()
+	let script = process::run("realpath", ["scripts/drive.nika"]).stdout.trim().clone()
+	let lane = process::run("realpath", ["-m", dir.clone()]).stdout.trim().clone()
+	let run = f"'{exe}' run '{script}' -- --proved '{lane}' {sha}"
+	let started = process::run("sh", ["-c", f"( {run} ) < /dev/null > /dev/null 2>&1 &"])
+	if !started.ok {
+		println(f"PROVED {drive_short(sha)} not measured: the measurement did not start: {started.stderr.trim()}")
+		return
+	}
+	println(f"PROVED {drive_short(sha)} measuring beside the next batch, {from}")
+}
+
+// The directory one measurement of the proof figure works in.
+fn drive_proved_dir(sha: String) -> String throws {
+	return f"target/proved-{drive_short(sha)}"
+}
+
+// `--proved DIR SHA`: measures the proof figure of SHA (drive_proved_start)
+// and appends its lines to DIR/proved.out.
+fn drive_proved(dir: String, sha: String) throws {
+	let out = f"{dir}/proved.out"
+	let short = drive_short(sha)
+	let base = process::run("realpath", ["-m", drive_proved_dir(sha.clone())]).stdout.trim().clone()
+	let tree = f"{base}/tree"
+	process::run("mkdir", ["-p", base.clone()])
+	let made = process::run("git", ["worktree", "add", "--detach", "-f", tree.clone(), sha.clone()])
+	if !made.ok {
+		drive_append(out, f"PROVED {short} not measured: no worktree: {made.stderr.trim()}")
+		drive_proved_clean(base)
+		return
+	}
+	let cache = f"NIKAIA_CACHE_DIR='{base}/cache'"
+	let mut exe = f"{base}/bin/nikaia"
+	if !fs::exists(exe, fs::Root::Anywhere) {
+		let built = process::run(
+			"sh",
+			["-c", f"cd '{tree}' && CARGO_TARGET_DIR='{base}/target' cargo build -q --profile fast -p nikaia 2>&1"],
+		)
+		if !built.ok {
+			drive_append(out, f"PROVED {short} not measured: the compiler did not build: {drive_tail(built.stdout, 1)}")
+			drive_proved_clean(base)
+			return
+		}
+		exe = f"{base}/target/fast/nikaia"
+	}
+	let report = f"{base}/report.txt"
+	process::run(
+		"sh",
+		["-c", f"cd '{tree}' && {cache} '{exe}' lower-std --bounds --asserts --sysroot '{tree}/crates' > '{report}' 2> '{base}/lower.err'"],
+	)
+	if !drive_read(report).contains("bounds in ") {
+		drive_append(out, f"PROVED {short} not measured: lower-std --bounds gave no report: {drive_tail(drive_read(f"{base}/lower.err"), 1)}")
+		drive_proved_clean(base)
+		return
+	}
+	let summed = process::run("sh", ["-c", f"cd '{tree}' && {cache} '{exe}' run scripts/proved.nika -- '{report}' 2>&1"])
+	if !summed.ok || !summed.stdout.starts_with("proved: ") {
+		drive_append(out, f"PROVED {short} not measured: scripts/proved.nika failed: {drive_tail(summed.stdout, 1)}")
+		drive_proved_clean(base)
+		return
+	}
+	let version = drive_proved_version(drive_read(f"{tree}/CHANGELOG.md"))
+	for l in drive_proved_lines(dir, version, sha, summed.stdout) { drive_append(out, l) }
+	drive_proved_clean(base)
+}
+
+// Removes a measurement's worktree and directory, its target too.
+fn drive_proved_clean(base: String) throws {
+	process::run("git", ["worktree", "remove", "--force", f"{base}/tree"])
+	process::run("rm", ["-rf", base])
+	process::run("git", ["worktree", "prune"])
+}
+
+// The version at the top of a CHANGELOG.md (`## [0.0.1400] ...`), "?" where none.
+fn drive_proved_version(changelog: String) -> String throws {
+	for line in changelog.split("\n") {
+		if line.starts_with("## [") { return (line.strip_prefix("## [") ?? "").split("]").collect()[0].clone() }
+	}
+	return "?"
+}
+
+// `n` of `total` in hundredths of a percent, rounded: 8227 for 82.27 %.
+fn drive_proved_hundredths(n: i64, total: i64) -> i64 {
+	if total <= 0 { return 0 }
+	return (n * 10000 + total / 2) / total
+}
+
+// Hundredths written as a number with two decimals, `82.27`; `signed` puts
+// `+` before a positive one.
+fn drive_proved_decimal(h: i64, signed: bool) -> String throws {
+	let mut sign: String = ""
+	let mut a = h
+	if h < 0 {
+		sign = "-"
+		a = 0 - h
+	} else if signed {
+		sign = "+"
+	}
+	let cents = a % 100
+	let pad = if cents < 10 { "0" } else { "" }
+	return f"{sign}{a / 100}.{pad}{cents}"
+}
+
+// `(proved, total)` of a `P/T` word, `(0, 0)` where it is not one.
+fn drive_proved_pair(word: String) -> (i64, i64) {
+	let (p, t) = word.split_once("/") ?? return (0, 0)
+	return (text::parse_i64(p) ?? 0, text::parse_i64(t) ?? 0)
+}
+
+// The word before `word` in `line`, "" where `word` is not there.
+fn drive_proved_before(line: String, word: String) -> String {
+	let mut previous: String = ""
+	for each in line.split(" ") {
+		if each == word { return previous }
+		previous = each.clone()
+	}
+	return ""
+}
+
+// From the output of `scripts/proved.nika` (SUMMARY) of the commit SHA at
+// VERSION: appends its line to DIR/proved.log,
+//
+//     <version> <sha8> indexes P/T <pct> % operations P/T <pct> % left <n> reasons <count> <reason> | ...
+//
+// (the five largest buckets of unproved sites by reason), and gives back the
+// PROVED line with the change since the log's last line and, where the share
+// of indexes or of operations fell by more than 0.2 points, a `PROVED FELL`
+// line naming the commit range.
+fn drive_proved_lines(dir: String, version: String, sha: String, summary: String) -> Vec[String] throws {
+	let short = drive_short(sha)
+	let mut indexes = (0, 0)
+	let mut operations = (0, 0)
+	let mut left: String = "?"
+	let mut reasons: Vec[String] = []
+	let mut in_reasons = false
+	for line in summary.split("\n") {
+		if line.starts_with("proved: ") {
+			indexes = drive_proved_pair(drive_proved_before(line, "indexes"))
+			operations = drive_proved_pair(drive_proved_before(line, "operations"))
+		} else if line.starts_with("left at run time: ") {
+			left = (line.strip_prefix("left at run time: ") ?? "").split(" ").collect()[0].clone()
+		} else if line.starts_with("unproved sites by reason:") {
+			in_reasons = true
+		} else if in_reasons {
+			if line.trim() == "" {
+				in_reasons = false
+			} else if reasons.len() < 5 {
+				let (count, reason) = line.trim().split_once("  ") ?? (line.trim(), "")
+				reasons.push(f"{count} {reason.trim()}")
+			}
+		}
+	}
+	let (ip, itot) = indexes
+	let (op, ot) = operations
+	let ih = drive_proved_hundredths(ip, itot)
+	let oh = drive_proved_hundredths(op, ot)
+	let log = f"{dir}/proved.log"
+	let mut last: String = ""
+	for l in drive_read(log).split("\n") {
+		if l.trim() != "" { last = l.trim().clone() }
+	}
+	let entry = f"{version} {short} indexes {ip}/{itot} {drive_proved_decimal(ih, false)} % operations {op}/{ot} {drive_proved_decimal(oh, false)} % left {left} reasons {reasons.join(" | ")}"
+	drive_append(log, entry)
+	let figure = f"indexes {ip}/{itot} {drive_proved_decimal(ih, false)} %"
+	let ops = f"operations {op}/{ot} {drive_proved_decimal(oh, false)} %"
+	let words: Vec[String] = last.split(" ").collect()
+	if words.len() < 8 {
+		return [f"PROVED {version} {short}: {figure}, {ops}, left {left} (first measurement in {log})"]
+	}
+	let (pip, pit) = drive_proved_pair(words[3])
+	let (pop, pot) = drive_proved_pair(words[7])
+	let di = ih - drive_proved_hundredths(pip, pit)
+	let d_o = oh - drive_proved_hundredths(pop, pot)
+	let since = f"{words[0]} {words[1]}"
+	let mut lines: Vec[String] = [
+		f"PROVED {version} {short}: {figure} ({drive_proved_decimal(di, true)}), {ops} ({drive_proved_decimal(d_o, true)}), left {left}; since {since}",
+	]
+	let mut fell: Vec[String] = []
+	if di < -20 { fell.push(f"indexes {drive_proved_decimal(di, true)} points") }
+	if d_o < -20 { fell.push(f"operations {drive_proved_decimal(d_o, true)} points") }
+	if fell.len() > 0 {
+		lines.push(f"PROVED FELL {short}: {fell.join(", ")} since {since}, in {words[1]}..{short}")
+	}
+	return lines
+}
+
+// Prints the lines a measurement of the proof figure left in DIR/proved.out
+// (drive_proved), a `PROVED FELL` line through drive_wake.
+fn drive_proved_report(dir: String) throws {
+	let out = f"{dir}/proved.out"
+	if !fs::exists(out, fs::Root::Anywhere) { return }
+	let taken = f"{out}.taken"
+	if !process::run("mv", [out, taken.clone()]).ok { return }
+	for l in drive_read(taken).split("\n") {
+		if l.trim() == "" { continue }
+		if l.trim().starts_with("PROVED FELL ") {
+			drive_wake(dir, l.trim().clone())
+		} else {
+			println(l.trim())
+		}
+	}
+	process::run("rm", ["-f", taken])
 }
 
 // The short checks on a merge of `origin/develop` before it is pushed (owner,
@@ -1406,7 +1660,11 @@ fn drive_tree_exe(tree: String) -> String throws {
 		println(f"LEDGERS not refreshed: the worktree did not take {tree}: {moved.stderr.trim()}")
 		return ""
 	}
-	let target = process::run("realpath", ["-m", "target/ledger-target"]).stdout.trim().clone()
+	let target = process::run("realpath", ["-m", drive_tree_target()]).stdout.trim().clone()
+	// The `crates/` tree the binary was built from, for drive_proved_start;
+	// gone while a build runs, so a failed one is never taken for the tree.
+	let stamp = f"{target}/fast/nikaia.crates"
+	process::run("rm", ["-f", stamp.clone()])
 	let built = process::run(
 		"sh",
 		["-c", f"cd '{want}' && CARGO_TARGET_DIR='{target}' cargo build -q --profile fast -p nikaia 2>&1"],
@@ -1416,8 +1674,13 @@ fn drive_tree_exe(tree: String) -> String throws {
 		println(drive_tail(built.stdout, 20))
 		return ""
 	}
+	let crates = process::run("git", ["rev-parse", f"{tree}:crates"]).stdout.trim().clone()
+	if crates != "" { fs::write(stamp, fs::Root::Anywhere, crates + "\n") }
 	return f"{target}/fast/nikaia"
 }
+
+// The target directory the compiler of a git tree is built in (drive_tree_exe).
+fn drive_tree_target() -> String { return "target/ledger-target" }
 
 // Runs `scripts/ledgers.nika -- --refresh` on the git tree NAME (a commit or
 // tree of this checkout) with the compiler of that tree, in its worktree (drive_tree_exe), and copies the ledger
@@ -1698,6 +1961,7 @@ fn drive_settle(exe: String, dir: String) throws {
 	let qa = drive_qa_brief(dir)
 	let mut rounds: i64 = 0
 	while true {
+		drive_proved_report(dir)
 		let testing = drive_testing()
 		if testing == "" { return }
 		let parts = testing.split(" ").collect()
@@ -1707,7 +1971,10 @@ fn drive_settle(exe: String, dir: String) throws {
 		let exit = f"{drive_lock_dir()}/exit-{sha}"
 		if !fs::exists(exit, fs::Root::Anywhere) {
 			println(f"SUITE {drive_short(sha)} waiting")
-			while !fs::exists(exit, fs::Root::Anywhere) { process::run("sleep", ["10"]) }
+			while !fs::exists(exit, fs::Root::Anywhere) {
+				drive_proved_report(dir)
+				process::run("sleep", ["10"])
+			}
 		}
 		let out = drive_read(f"{dir}/suite.log")
 		let steps = drive_red_steps(out)
@@ -3807,6 +4074,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 		let area = drive_focus_current(file)
 		let dir = drive_focus_dir(file, area)
 		if dir == "" { drive_escalate(f"focus: {path} names no area {area}") }
+		if !dry { drive_proved_report(dir) }
 		if !dry && drive_read("scripts/drive.nika") != own {
 			drive_settle(exe, dir)
 			drive_restart(exe.clone(), "RESTART drive: scripts/drive.nika changed")
@@ -4153,6 +4421,18 @@ fn main() throws {
 		println(drive_rewrite(drive_read(args[2]), drive_read(args[3])))
 		return
 	}
+	if args.len() == 4 && args[1] == "--proved" {
+		drive_proved(args[2], args[3].clone())
+		return
+	}
+	if args.len() == 6 && args[1] == "--proved-lines" {
+		for l in drive_proved_lines(args[2], args[3], args[4], drive_read(args[5])) { println(l) }
+		return
+	}
+	if args.len() == 3 && args[1] == "--proved-report" {
+		drive_proved_report(args[2])
+		return
+	}
 	if args.len() == 5 && args[1] == "--ci-wait" {
 		drive_ci_wait(args[2], args[3], args[4].clone())
 		return
@@ -4203,6 +4483,7 @@ fn main() throws {
 	let mut bumps: i64 = 0
 	let own = drive_read("scripts/drive.nika")
 	while runs <= max {
+		if !dry { drive_proved_report(dir) }
 		if !dry && drive_read("scripts/drive.nika") != own {
 			drive_settle(exe.clone(), dir)
 			drive_restart(exe.clone(), "RESTART drive: scripts/drive.nika changed")

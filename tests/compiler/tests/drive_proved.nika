@@ -1,0 +1,57 @@
+// scripts/drive.nika --proved-lines and --proved-report: the proof figure
+// measured after a push is logged per lane, one line per measurement, its
+// change since the last one printed, and a fall of more than 0.2 points
+// wakes the session with the commit range (#1823).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// The output of scripts/proved.nika with these figures.
+fn summary(indexes: String, operations: String) -> String {
+    let mut s = String()
+    s.push_str(f"proved: {indexes} indexes (75.0 %), {operations} operations (90.0 %), 120 files, 0 refused\n")
+    s.push_str("claims: 10 asserts, 8 proved (1 through a loop), 0 preconditions proved at every call, 2 not proved\n")
+    s.push_str("panics: 3 in 2 files\nleft at run time: 605\n\nunproved sites by reason:\n")
+    s.push_str("   300  no fact for the length\n   120  the index comes from a call\n    50  a\n    20  b\n    10  c\n     5  d\n\n")
+    s.push_str("files with the most unproved sites:\n    40  x.nika\n")
+    return s
+}
+
+fn measure(nikaia: String, repo: String, tmp: String, version: String, sha: String, indexes: String, operations: String) throws {
+    fs::write(f"{tmp}/summary.txt", fs::Root::Anywhere, summary(indexes, operations))
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--proved-lines", tmp.clone(), version, sha, f"{tmp}/summary.txt"]; dir: repo)
+    println(out.stdout.trim().replace(tmp, "T"))
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain()
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    measure(nikaia.clone(), repo.clone(), tmp.clone(), "0.0.10", "aaaaaaaa1111", "1500/2000", "900/1000")
+    // Up: no wake.
+    measure(nikaia.clone(), repo.clone(), tmp.clone(), "0.0.11", "bbbbbbbb2222", "1510/2000", "901/1000")
+    // Down by 0.2 points exactly: no wake.
+    measure(nikaia.clone(), repo.clone(), tmp.clone(), "0.0.12", "cccccccc3333", "1506/2000", "899/1000")
+    // Down by more: the wake names the range.
+    measure(nikaia.clone(), repo.clone(), tmp.clone(), "0.0.13", "dddddddd4444", "1490/2000", "880/1000")
+    println(fs::read_to_string(f"{tmp}/proved.log", fs::Root::Anywhere).trim())
+    // The driver prints what a measurement left, a fall as a WAKE line.
+    fs::write(f"{tmp}/proved.out", fs::Root::Anywhere, "PROVED 0.0.13 dddddddd: indexes 1490/2000 74.50 % (-0.80), left 605; since 0.0.12 cccccccc\nPROVED FELL dddddddd: indexes -0.80 points since 0.0.12 cccccccc, in cccccccc..dddddddd\n")
+    let shown = process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--proved-report", tmp.clone()]; dir: repo)
+    println(shown.stdout.trim().replace(tmp.clone(), "T"))
+    println(f"proved.out left: {fs::exists(f"{tmp}/proved.out", fs::Root::Anywhere)}")
+    process::run("rm", ["-rf", tmp])
+}
