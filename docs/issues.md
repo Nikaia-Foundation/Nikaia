@@ -158,6 +158,13 @@ it, like the checks in `docs/supervisor.md`.
   line; a `Found:` line does the same (#1761: #1754's `Found:` named only
   the `if`-arm refusal, and the same cause made `fn(a) { a }`, `sort_by`
   on typed lists and `Array::sort_by_key` rustc errors).
+  A cause that says a function *lacks* a case is checked against every other
+  place that handles that case (grep the case: `Div`, `quotient`), and for
+  a bounds refusal against the site's goal and facts from `lower-std
+  --bounds --bounds-trace FILE.nika:LINE`, which name the missing fact
+  (#1792: #1786 suspected `lin_term` in `prove_terms.nika` lacked `/` and
+  `%`; the walk's quotient rule existed, and the missing fact was the `u8`
+  type's upper bound).
   A probe that mixes several conditions (outside input, a guard, a call) is
   also run with each one taken away, and the issue says which variant still
   fails: #1571 blamed the outside input, and the guard alone did not prove.

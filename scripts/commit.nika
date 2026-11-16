@@ -4,8 +4,8 @@
 //
 // REPORT is `<brief>.report.md` with `Files:` (paths, space-separated) and
 // `Commit:` (subject), plus `Changelog:`, and optionally `Body:` (one paragraph after the subject), `Fixes: #N[, #M]` or
-// `Part: #N`. Refuses when a listed file is unchanged or when a staged file is
-// not listed. Adds exactly the listed files, commits with the subject,
+// `Part: #N`. Refuses when a listed file is unchanged. Adds exactly the listed
+// files, commits with the subject,
 // `Changelog:`, `Fixes #N` / `Part of #N` and the lines under `Attribution:` at
 // the end of the report (the agent's own trailer lines),
 // and leaves the commit local: it writes `Pushed: local <sha>` into the report
@@ -16,10 +16,17 @@
 // a rejected push prints `PUSH REJECTED <sha>` first. `--dry-run` prints the
 // message only.
 //
+// **Only the listed files** (#1792): the commit is made through a private
+// index read from HEAD (`GIT_INDEX_FILE`), so a file another agent staged is
+// neither committed nor refused: it stays staged in the shared index, and the
+// script names it on a `left staged, not committed:` line. Afterwards the
+// shared index holds HEAD's version of each committed path.
+//
 // `Partial: <paths>` names files of which only the agent's own hunks go in,
 // because another agent edits the same file (#1704): the agent stages its
 // hunks first (`git diff F > p.diff`, drop the others' hunks, `git apply
-// --cached p.diff`); the script commits what is staged of them and never
+// --cached p.diff`); the script commits what is staged of them (copied from
+// the shared index into the private one) and never
 // `git add`s them. It refuses a `Partial:` file with nothing staged.
 //
 // **The lowered index as committed** (#1709): `lowered.rs` of
@@ -93,6 +100,31 @@ fn commit_git(args: Vec[String]) -> String throws {
     return out.stdout.trim().clone()
 }
 
+// `git` on the private index INDEX (#1792): "" on failure, else its stdout.
+fn commit_git_in(index: String, args: Vec[String]) -> String throws {
+    let out = process::run("git", args; env: [("GIT_INDEX_FILE", index)])
+    if !out.ok { return "" }
+    return out.stdout.trim().clone()
+}
+
+// `git ARGS` on INDEX, the shared index when INDEX is "" (#1792).
+fn commit_git_ok(index: String, args: Vec[String]) -> bool throws {
+    if index == "" { return process::run("git", args).ok }
+    return process::run("git", args; env: [("GIT_INDEX_FILE", index)]).ok
+}
+
+// Sets PATH in INDEX (the shared index when "") to its entry in the shared
+// index (STAGE true) or in HEAD, or drops it where there is none; false when
+// git fails.
+fn commit_copy_entry(index: String, path: String, stage: bool) -> bool throws {
+    let line = if stage { commit_git(["ls-files", "-s", "--", path.clone()]) } else { commit_git(["ls-tree", "HEAD", "--", path.clone()]) }
+    if line == "" { return commit_git_ok(index, ["update-index", "--force-remove", "--", path]) }
+    let (head, _) = line.split_once("\t") ?? return false
+    let parts: Vec[String] = head.split(" ").map(fn(w) { w.clone() }).collect()
+    let blob = if stage { parts[1].clone() } else { parts[2].clone() }
+    return commit_git_ok(index, ["update-index", "--add", "--cacheinfo", f"{parts[0]},{blob},{path}"])
+}
+
 // "" when fine, else the refusal.
 // The `NOTE:` line for an `Issue:` answer not marked `(built)` when FILES
 // change a rules file; "" otherwise. The answers are split as the driver's
@@ -116,6 +148,15 @@ fn commit_unmarked_rules(report: String, files: Vec[String]) -> String {
     return f"NOTE: this commit changes a rules file and Issue: has {open.join(", ")} without (built); mark each point this commit built `(built)` (docs/issues.md), or the driver files it again"
 }
 
+// The staged paths not listed: another agent's, left staged (#1792).
+fn commit_others(files: Vec[String], partial: Vec[String]) -> Vec[String] throws {
+    let mut out: Vec[String] = []
+    for staged in commit_git(["diff", "--cached", "--name-only"]).split("\n") {
+        if staged != "" && !files.contains(staged.clone()) && !partial.contains(staged.clone()) { out.push(staged.clone()) }
+    }
+    return out
+}
+
 fn commit_check(files: Vec[String], partial: Vec[String]) -> String throws {
     for f in files.clone() {
         if commit_git(["status", "--porcelain", "--", f.clone()]) == "" { return f"REFUSED: {f} is unchanged" }
@@ -123,9 +164,6 @@ fn commit_check(files: Vec[String], partial: Vec[String]) -> String throws {
     for f in partial.clone() {
         if files.contains(f.clone()) { return f"REFUSED: {f} is under both Files: and Partial:" }
         if commit_git(["diff", "--cached", "--name-only", "--", f.clone()]) == "" { return f"REFUSED: {f} is listed under Partial: but nothing of it is staged" }
-    }
-    for staged in commit_git(["diff", "--cached", "--name-only"]).split("\n") {
-        if staged != "" && !files.contains(staged.clone()) && !partial.contains(staged.clone()) { return f"REFUSED: {staged} is staged but not listed" }
     }
     return ""
 }
@@ -139,19 +177,19 @@ fn commit_sha(text: String) -> String {
 // The digest `lower-std` writes into `DIR/lowered.rs` (#1610,
 // `sysroot_package_digest`), of the set as staged: the index above the digest
 // block, then each file under `DIR/lowered/` by its path from DIR, sorted.
-fn commit_staged_digest(dir: String, index: String) -> String throws {
+fn commit_staged_digest(private: String, dir: String, index: String) -> String throws {
     let mut all: String = ""
     all.push_str(commit_sha(index))
     all.push_str("\n")
     let mut paths: Vec[String] = []
-    for line in process::run("git", ["ls-files", "--", f"{dir}/lowered/"]).stdout.split("\n") {
+    for line in process::run("git", ["ls-files", "--", f"{dir}/lowered/"]; env: [("GIT_INDEX_FILE", private.clone())]).stdout.split("\n") {
         if line.trim() != "" { paths.push(line.trim().clone()) }
     }
     paths.sort()
     for p in paths {
         all.push_str(p.strip_prefix(f"{dir}/") ?? p)
         all.push_str("\n")
-        all.push_str(commit_sha(process::run("git", ["show", f":{p}"]).stdout))
+        all.push_str(commit_sha(process::run("git", ["show", f":{p}"]; env: [("GIT_INDEX_FILE", private.clone())]).stdout))
         all.push_str("\n")
     }
     return commit_sha(all)
@@ -159,28 +197,28 @@ fn commit_staged_digest(dir: String, index: String) -> String throws {
 
 // "" when the staged lowered sets are whole, else the refusal; a stale
 // staged digest is rewritten in the index and said on stdout (#1709).
-fn commit_lowered(listed: Vec[String]) -> String throws {
+fn commit_lowered(private: String, listed: Vec[String]) -> String throws {
     let marker = "\n/// **The digest of this lowered set**"
     for dir in ["crates/nikaia-std/src/compiler", "crates/nikaia-std/src/runtime"] {
         let index_path = f"{dir}/lowered.rs"
-        if commit_git(["diff", "--cached", "--name-only", "--", index_path.clone(), f"{dir}/lowered/"]) == "" { continue }
+        if commit_git_in(private.clone(), ["diff", "--cached", "--name-only", "--", index_path.clone(), f"{dir}/lowered/"]) == "" { continue }
         if !listed.contains(index_path.clone()) { return f"REFUSED: the staged change touches {dir}/lowered/ but {index_path} is not listed (its LOWERED_DIGEST names the set)" }
-        let text = process::run("git", ["show", f":{index_path}"]).stdout
+        let text = process::run("git", ["show", f":{index_path}"]; env: [("GIT_INDEX_FILE", private.clone())]).stdout
         for line in text.split("\n") {
             let (_, rest) = line.split_once("include!(\"lowered/") ?? continue
             let (file, _) = rest.split_once("\"") ?? continue
-            if !process::run("git", ["cat-file", "-e", f":{dir}/lowered/{file}"]).ok { return f"REFUSED: the staged {index_path} includes lowered/{file}, which the commit does not hold: list it under Partial: and stage only your lines" }
+            if !process::run("git", ["cat-file", "-e", f":{dir}/lowered/{file}"]; env: [("GIT_INDEX_FILE", private.clone())]).ok { return f"REFUSED: the staged {index_path} includes lowered/{file}, which the commit does not hold: list it under Partial: and stage only your lines" }
         }
         let (index, block) = text.split_once(marker) ?? return f"REFUSED: the staged {index_path} has no LOWERED_DIGEST"
         let (_, after) = block.split_once("LOWERED_DIGEST: &str = \"") ?? return f"REFUSED: the staged {index_path} has no LOWERED_DIGEST"
         let (old, _) = after.split_once("\"") ?? return f"REFUSED: the staged {index_path} has no LOWERED_DIGEST"
-        let digest = commit_staged_digest(dir, index)
+        let digest = commit_staged_digest(private.clone(), dir, index)
         if old == digest { continue }
         let tmp = process::run("mktemp", []).stdout.trim().clone()
         fs::write(tmp.clone(), fs::Root::Anywhere, index + marker + block.replace(f"LOWERED_DIGEST: &str = \"{old}\"", f"LOWERED_DIGEST: &str = \"{digest}\""))
         let blob = commit_git(["hash-object", "-w", tmp.clone()])
         process::run("rm", ["-f", tmp])
-        if blob == "" || !process::run("git", ["update-index", "--cacheinfo", f"100644,{blob},{index_path}"]).ok { return f"REFUSED: could not stage the digest of {index_path}" }
+        if blob == "" || !process::run("git", ["update-index", "--cacheinfo", f"100644,{blob},{index_path}"]; env: [("GIT_INDEX_FILE", private.clone())]).ok { return f"REFUSED: could not stage the digest of {index_path}" }
         println(f"staged LOWERED_DIGEST {digest} in {index_path}, the digest of the set as committed")
     }
     return ""
@@ -243,29 +281,51 @@ fn main() throws {
     let note = commit_unmarked_rules(report.clone(), changed)
     if note != "" { println(note) }
     let msg = commit_message(report.clone())
+    let others = commit_others(files.clone(), partial.clone())
     if dry {
         if files.len() > 0 { println(f"git add {files.join(" ")}") }
         if partial.len() > 0 { println(f"staged hunks of {partial.join(" ")}") }
+        if others.len() > 0 { println(f"left staged, not committed: {others.join(" ")}") }
         println(msg)
         return
     }
+    // The private index: HEAD, the listed files whole, the staged hunks of
+    // the Partial: files (#1792).
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let private = f"{tmp}/index"
+    let base = if process::run("git", ["rev-parse", "--verify", "-q", "HEAD"]).ok { "HEAD" } else { "--empty" }
+    let mut ready = process::run("git", ["read-tree", base]; env: [("GIT_INDEX_FILE", private.clone())]).ok
+    for f in partial {
+        if ready { ready = commit_copy_entry(private.clone(), f.clone(), true) }
+    }
     let mut add: Vec[String] = ["add", "--"]
     for f in files { add.push(f.clone()) }
-    if files.len() > 0 && !process::run("git", add).ok {
+    if ready && files.len() > 0 { ready = process::run("git", add; env: [("GIT_INDEX_FILE", private.clone())]).ok }
+    if !ready {
+        process::run("rm", ["-rf", tmp.clone()])
         println("REFUSED: git add failed")
         process::exit(1)
     }
     let mut listed = files
     listed.extend(partial)
-    let lowered = commit_lowered(listed)
+    let lowered = commit_lowered(private.clone(), listed.clone())
     if lowered != "" {
+        process::run("rm", ["-rf", tmp.clone()])
         println(lowered)
         process::exit(1)
     }
-    if !process::run("git", ["commit", "-m", msg]).ok {
+    let committed = process::run("git", ["commit", "-q", "-m", msg]; env: [("GIT_INDEX_FILE", private.clone())]).ok
+    process::run("rm", ["-rf", tmp])
+    if !committed {
         println("REFUSED: git commit failed")
         process::exit(1)
     }
+    // The shared index follows HEAD on the committed paths; the others'
+    // staged files stay as they were.
+    for f in listed {
+        if !commit_copy_entry("", f.clone(), false) { println(f"NOTE: could not update the shared index for {f}; `git status` may show it staged") }
+    }
+    if others.len() > 0 { println(f"left staged, not committed: {others.join(" ")}") }
     let sha = commit_git(["rev-parse", "HEAD"])
     let short = commit_git(["rev-parse", "--short=8", "HEAD"])
     if !push {

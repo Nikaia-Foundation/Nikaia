@@ -219,7 +219,8 @@ You build one small slice of an issue in the Nikaia repository and end.
   it into the message as `Fixes none`, y2c 2026-10-31; leave the line out or
   write `Part: #N`); then run `target/fast/nikaia run
   scripts/commit.nika -- REPORT` (`--dry-run` shows the message). It refuses an
-  unchanged listed file or a staged file not listed, adds exactly the listed
+  unchanged listed file, commits through a private index (a file another
+  agent staged stays staged and is named, never committed, #1792), adds exactly the listed
   files, writes the message (subject, `Changelog:`, `Fixes`, the trailer
   lines under the report's last field `Attribution:`), commits without
   pushing, writes `Pushed: local <sha>`
