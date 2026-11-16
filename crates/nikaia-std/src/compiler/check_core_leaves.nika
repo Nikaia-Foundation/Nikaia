@@ -575,6 +575,7 @@ fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     let outer = check_core_lambda_enter(state)
     let walked = check_core_block(state, world, host, body)
     state.a_map_read_handed_back(world, walked, body)
+    check_core_lambda_tail_handed_back(state, world, host, body)
     let tail = check_core_lambda_leave(state, outer, walked, body)
     let seen: CheckHanded? = state.handed_over?.clone()
     state.handed_over = outer_handed
@@ -589,6 +590,23 @@ fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
         state.a_handler_that_does_more_than_the_type_allows(promised, handed, span)
     }
     return (tail, paused)
+}
+
+/// **A lambda's last value is handed back as its `return` is** (ADR-282 D10,
+/// #1905): `m.access fn(open) { open.t }` or `xs.iter().map(fn(x) { x.t })`
+/// gives away a field of what the lambda is only lent, so it is `NK1131`
+/// with the `.clone()` help, as `return open.t` is (was an internal compiler
+/// error). A field that copies hands out as it is.
+fn check_core_lambda_tail_handed_back[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, body: ref Block) sync {
+    if body.stmts.len() == 0 || a_body_never_ends(body) {
+        return
+    }
+    let last = body.stmts[body.stmts.len() - 1]
+    let at = Span { start: last.span.start, end: last.span.end }
+    match last.node {
+        Stmt::Expr(value) => check_core_a_field_of_a_lent_place_handed_back(state, world, host, value, at),
+        else => {},
+    }
 }
 
 /// **Into a lambda's body** (#758): a `return` there is the lambda's, not
