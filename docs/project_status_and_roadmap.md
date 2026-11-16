@@ -137,6 +137,14 @@ direction, in short:
   SQL checked while building ([#116](https://github.com/Nikaia-Foundation/Nikaia/issues/116)). The server already takes many
   connections at once, times out slow clients and speaks TLS through `rustls`
   ([#118](https://github.com/Nikaia-Foundation/Nikaia/issues/118)).
+* **Safety against outside data** (safety lane): an index, a divisor or an
+  overflow that data from outside reaches is proved or refused, `NK1302` and
+  `NK1303` ([ADR-396](specification/adr/adr-396.md),
+  [#1572](https://github.com/Nikaia-Foundation/Nikaia/issues/1572)); how
+  outside data may reach a shell, SQL, the terminal or a path is open
+  ([#1253](https://github.com/Nikaia-Foundation/Nikaia/issues/1253)). Text
+  from outside already reaches the log escaped, and the command line counts as
+  outside data.
 * **Self-hosting after that** (owner, 2026-10-27): until the compiler holds no
   logic in Rust, every round moves code into Nikaia, largest files first. The
   road and what is left: [`bootstrap.md`](bootstrap.md),
