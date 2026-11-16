@@ -27,14 +27,24 @@ path = "binary-trees/rust-5.rs"
 name = "fasta"
 path = "fasta/rust-7.rs"
 
+[[bin]]
+name = "k-nucleotide"
+path = "k-nucleotide/rust-7.rs"
+
 # The game's Rust entries link against its `rust-libs`; spectral-norm's and
 # fannkuch-redux's need rayon, binary-trees' rayon and bumpalo, fasta's
-# num_cpus and spin.
+# num_cpus and spin, k-nucleotide's futures, tokio-threadpool, itertools, num
+# and hashbrown.
 [dependencies]
 rayon = "1"
 bumpalo = "3"
 num_cpus = "1"
 spin = "0.9"
+futures = "0.1"
+tokio-threadpool = "0.1"
+itertools = "0.14"
+num = "0.4"
+hashbrown = "0.15"
 
 # The game's `rustc -C opt-level=3 -C codegen-units=1`; its
 # `-C target-cpu=ivybridge` is passed by `game.nika` in `RUSTFLAGS`.
