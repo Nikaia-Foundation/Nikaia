@@ -248,6 +248,12 @@ it, like the checks in `docs/supervisor.md`.
   `git log --grep` on its topic. An item that another issue's work has already
   built is ticked, and the commit is named (#1730: #116's item 9 was
   already built when its run started).
+  A bug's probe (I5) is run again on today's `develop` before its run is
+  queued, and the search is by topic, not only by number, since a fix often
+  lands under another issue: a probe that passes goes into the issue with
+  that commit, and the rest of the issue (a pin test, the debt it names) is
+  what the run builds (#1742: #1530's probe passed when its run started,
+  fixed by 995d93f4 under #1507, the day #1530 was filed).
 
 ## How a run judges its issue
 
