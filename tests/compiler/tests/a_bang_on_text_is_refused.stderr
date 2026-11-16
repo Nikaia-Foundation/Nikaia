@@ -4,5 +4,5 @@ error[NK1191]: You can't use `!` on `String`.
  2 |     let a = !"x"
    |     ^^^^^^^^^^^^
    |
-   = note: `!` flips a `bool`, the bits of an integer or the lanes of a vector or a mask.
+   = note: `!` flips a `bool`, the bits of an integer or the lanes of an integer vector or a mask.
 1 type error

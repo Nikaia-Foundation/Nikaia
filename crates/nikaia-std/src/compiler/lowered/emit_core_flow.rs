@@ -75,6 +75,16 @@ pub(crate) fn emit_flow_never_returns(world: &EmitWorld<'_, '_, '_, '_>, node: &
 
 pub(crate) fn emit_flow_a_struct_written(node: &Expr) -> bool { matches!(node, Expr::StructLit { .. } | Expr::LitBool(_, _)) }
 
+pub(crate) fn emit_flow_a_simd_call(world: &EmitWorld<'_, '_, '_, '_>, node: &Expr) -> bool {
+    match node {
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
+            Expr::Path(segments, _) => segments.len() > 1 && emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == "simd",
+            _ => false,
+        } },
+        _ => false,
+    }
+}
+
 pub(crate) fn emit_flow_struct_headed(node: &Expr) -> bool {
     match node {
         Expr::StructLit { .. } => true,
@@ -610,7 +620,7 @@ impl EmitState {
             }
             return Ok(());
         }
-        let bare = a_number(fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(&node_key(fallback)) || self.facts.view_coalesces.contains(&node_key(node)) || self.facts.word_fallbacks.contains(&node_key(node));
+        let bare = a_number(fallback) || emit_flow_a_simd_call(world, fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(&node_key(fallback)) || self.facts.view_coalesces.contains(&node_key(node)) || self.facts.word_fallbacks.contains(&node_key(node));
         if self.facts.optional_fallbacks.contains(&node_key(node)) {
             out.push("nikaia_std::index::or_maybe(");
             self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;

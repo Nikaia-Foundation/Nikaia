@@ -289,9 +289,11 @@ impl CheckState {
         let seen = found.unseen();
         let mut wrong = is_text_type(&seen) || is_a_collection_type(&seen) || declared_with_no_arithmetic(&world.here, &seen).is_some();
         if negation && is_a_bool_type(&seen) { wrong = true; }
+        let vector = value_of_a_copy(&seen);
+        if negation && !check_simd_kind(&vector).is_empty() || !negation && check_simd_float_vector(&vector) { wrong = true; }
         if !wrong { return; }
         let mut symbol: &'static str = "!";
-        let mut note: String = String::from("`!` flips a `bool`, the bits of an integer or the lanes of a vector or a mask.");
+        let mut note: String = String::from("`!` flips a `bool`, the bits of an integer or the lanes of an integer vector or a mask.");
         if negation {
             symbol = "-";
             note = String::from("`-` negates a number.");

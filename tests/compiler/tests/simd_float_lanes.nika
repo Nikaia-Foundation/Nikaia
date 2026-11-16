@@ -1,0 +1,49 @@
+// Float lanes (ADR-377 D9, #1806): each operation gives every lane the bits
+// the scalar operation gives, and `sum()` adds neighbouring pairs first.
+use std::simd
+
+// The same bits, as the shortest text that reads back as them.
+fn same(lane: f64, scalar: f64) -> String {
+    if f"{lane}" == f"{scalar}" {
+        return "="
+    }
+    return f"{lane} is not {scalar}"
+}
+
+fn main() throws {
+    let xs = [1.0, 0.1, 9.0, 2.0e-300]
+    let ys = [3.0, 0.2, -0.0, 7.0]
+    let a: simd::Fixed[f64, 4] = simd::Fixed::from([1.0, 0.1, 9.0, 2.0e-300])
+    let b: simd::Fixed[f64, 4] = simd::Fixed::from([3.0, 0.2, -0.0, 7.0])
+    let s = a + b
+    let d = a - b
+    let m = a * b
+    let q = a / b
+    let r = a.sqrt()
+    let n = (d - b).abs()
+    let lo = a.min(b)
+    let hi = a.max(b)
+    for i in 0..<4 {
+        let x = xs[i]
+        let y = ys[i]
+        println(f"{i}: {same(s.lane(i), x + y)} {same(d.lane(i), x - y)} {same(m.lane(i), x * y)} {same(q.lane(i), x / y)} {same(r.lane(i), x.sqrt())} {same(n.lane(i), (x - y - y).abs())} {same(lo.lane(i), x.min(y))} {same(hi.lane(i), x.max(y))}")
+    }
+    println(f"{s.lane(1)} {q.lane(2)} {a.min_lane()} {a.max_lane()} {a.count()}")
+
+    // **`sum()`'s order** is `(a0 + a1) + (a2 + a3)`: in order the four
+    // lanes would add to 1.
+    let big: simd::Fixed[f64, 4] = simd::Fixed::from([1.0e16, 1.0, -1.0e16, 1.0])
+    println(f"pairwise {big.sum()}, in order {((1.0e16 + 1.0) + -1.0e16) + 1.0}")
+
+    // Comparisons answer a mask, and `select` picks by it.
+    let gt = a.gt(b)
+    let pick = simd::select(gt, a, b)
+    println(f"{gt.count()} {gt.first() ?? -1} {pick.lane(2)} {pick.lane(0)} {a.le(b).all()} {a.eq(a).all()} {a.ne(b).any()}")
+
+    // `f32` lanes, and `Lanes` at the build's width.
+    let f: simd::Fixed[f32, 8] = simd::splat(1.5)
+    let g = (f * f + f) / f
+    let l: simd::Lanes[f64] = simd::splat(2.5)
+    let w = (l * l - l).sqrt()
+    println(f"{g.lane(7)} {(f + f).sum()} {w.max_lane()} {w.min_lane()} {l.count() >= 2}")
+}

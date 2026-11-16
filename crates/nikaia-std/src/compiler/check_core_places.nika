@@ -734,7 +734,13 @@ fn check_core_places_a_literal_field[H: CheckHost](mut state: CheckState, world:
         check_core_a_mut_parameter_given_away(state, world, host, v, span, "put into a field")
     }
     let field_ty: Ty = expected?.clone() ?? Ty::Unknown
-    if check_core_places_a_closure(init.value) {
+    // **A vector made for a field is of the field's type** (ADR-377 D3).
+    let mut made_here = false
+    if init.value != null {
+        let made: ref Expr = init.value ?? return true
+        made_here = check_simd_wanted(world, made, expected) != null
+    }
+    if check_core_places_a_closure(init.value) || made_here {
         state.flow.lambda_expected = expected
     }
     let given = check_core_places_given(state, world, host, init.value, field, span)

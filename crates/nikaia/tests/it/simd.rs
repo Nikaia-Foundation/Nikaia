@@ -124,7 +124,7 @@ fn every_operation_at_every_cpu_level() {
 
 const REFUSED: &str = r#"use std::simd
 
-fn f(x: simd::Fixed[u8, 12], y: simd::Lanes[f64], z: simd::Fixed[u16, 128]) {}
+fn f(x: simd::Fixed[u8, 12], y: simd::Lanes[bool], z: simd::Fixed[u16, 128]) {}
 
 fn main() {
     let x: simd::Fixed[u64, 2] = simd::Fixed::from([7, 9])
@@ -149,7 +149,7 @@ fn each_code() {
         "{said}"
     );
     assert!(
-        said.contains("error[NK1297]: `simd::Lanes` can't hold lanes of `f64`."),
+        said.contains("error[NK1297]: `simd::Lanes` can't hold lanes of `bool`."),
         "{said}"
     );
     assert!(

@@ -28,6 +28,27 @@ pub(crate) fn check_simd_bits_of(name: &str) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub fn check_simd_float(name: &str) -> bool { name == "f32" || name == "f64" }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_simd_float_vector(ty: &Ty) -> bool {
+    let kind = check_simd_kind(ty);
+    (kind == "Fixed" || kind == "Lanes") && check_simd_float(&check_simd_lane_of(ty))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_simd_lane_bits(name: &str) -> i64 {
+    match name {
+        "f32" => 32,
+        "f64" => 64,
+        _ => check_simd_bits_of(name),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_simd_lane_of(ty: &Ty) -> String {
     match ty {
         Ty::Named { args, .. } => if !args.is_empty() {
@@ -57,7 +78,7 @@ pub(crate) fn check_simd_count_of(ty: &Ty) -> i64 {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_simd_bytes(ty: &Ty) -> i64 {
-    let bits = check_simd_bits_of(&check_simd_lane_of(ty));
+    let bits = check_simd_lane_bits(&check_simd_lane_of(ty));
     let kind = check_simd_kind(ty);
     if bits == 0 { return 0; }
     if kind == "Lanes" { return -32; }
@@ -175,6 +196,32 @@ pub(crate) fn check_simd_a_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub fn check_simd_wanted(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, want: Option<&Ty>) -> Option<Ty> {
+    let ty: Ty = match match want {
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let list = matches!(value, Expr::ListLit { .. });
+    if list && check_simd_element(Some(&ty)).is_some() { return Some(ty); }
+    if !check_simd_a_call(world, value) || check_simd_kind(&ty).is_empty() { return None; }
+    Some(ty)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_simd_element(declared: Option<&Ty>) -> Option<Ty> {
+    let ty: Ty = match match declared {
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    match ty {
+        Ty::Named { ref name, ref args, view } => if !view && (name == "Vec" || name == "Array") && !args.is_empty() && !check_simd_kind(unsafe { nikaia_std::proven::read(&args, (0) as usize) }).is_empty() { Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone()) } else { None },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_simd_made(wanted: Option<&Ty>, name: &str, args: &[Expr]) -> Ty {
     let given: Ty = nikaia_std::index::or(match wanted {
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
@@ -199,6 +246,30 @@ impl CheckState {
         let vector = if !kind.is_empty() { left.clone() } else { right.clone() };
         let shown = vector.text();
         let arithmetic = matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem);
+        let float = check_simd_float(&check_simd_lane_of(&vector)) && check_simd_kind(&vector) != "Mask";
+        if float {
+            let written = match op {
+                BinaryOp::Add => "+",
+                BinaryOp::Sub => "-",
+                BinaryOp::Mul => "*",
+                BinaryOp::Div => "/",
+                BinaryOp::Rem => "%",
+                BinaryOp::BitAnd => "&",
+                BinaryOp::BitOr => "|",
+                BinaryOp::BitXor => "^",
+                BinaryOp::Shl => "<<",
+                BinaryOp::Shr => ">>",
+                _ => "",
+            };
+            if written.is_empty() { return None; }
+            let lane_wise = arithmetic && *op != BinaryOp::Rem;
+            if lane_wise && !kind.is_empty() && (left.text() == right.text() || right.is_unknown()) { return Some(left.clone()); }
+            if lane_wise && !other.is_empty() && left.is_unknown() { return Some(right.clone()); }
+            let mut help: String = String::from("Write the operation lane by lane over `lane(i)`, or with the vector's own methods: `sqrt`, `abs`, `min`, `max`, `select`.");
+            if lane_wise { help = format!("Write both sides as `{}`: a number is made a vector with `simd::splat(x)`.", shown); }
+            self.findings.push(check_refusal("NK1296", at, format!("`{}` is not a lane operation between these, and this is a `{}`.", written, shown), vec![String::from("Float lanes have `+ - * /` between two vectors of one type, each lane the bits the scalar operation gives, and none of the integer operators (ADR-377 D9).")], Some(help)));
+            return Some(vector);
+        }
         if arithmetic {
             let (written, wrapping, saturating) = match op {
                 BinaryOp::Add => ("+", "wrapping_add", "saturating_add"),
@@ -247,16 +318,45 @@ impl CheckState {
     }
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_simd_integer_only(method: &str) -> bool { matches!(method, "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "saturating_add" | "saturating_sub" | "wrapping_sum" | "shuffle" | "dot_pairs" | "widen" | "narrow_saturating") }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_simd_float_only(method: &str) -> bool { method == "sqrt" || method == "abs" || method == "sum" }
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_lane_method_not_offered(&mut self, on: &Ty, method: &str, span: &Span) {
+        let kind = check_simd_kind(on);
+        if kind != "Fixed" && kind != "Lanes" { return; }
+        let lane = check_simd_lane_of(on);
+        if lane.is_empty() { return; }
+        let float = check_simd_float(&lane);
+        if float && check_simd_integer_only(method) {
+            self.findings.push(check_refusal("NK1171", span, format!("`{}` has no method called `{}`.", on.text(), method), vec![format!("`{}` is an integer lane's operation; float lanes round by IEEE 754 and neither wrap nor saturate (ADR-377 D9).", method)], Some(String::from("Write `+`, `-`, `*` or `/` between two float vectors, or `sum()` on a `simd::Fixed`."))));
+            return;
+        }
+        if !float && check_simd_float_only(method) {
+            let mut help: String = String::from("Write the operation lane by lane over `lane(i)`.");
+            if method == "sum" { help = String::from("Write `wrapping_sum()`, which names what a lane does where the sum does not fit."); }
+            self.findings.push(check_refusal("NK1171", span, format!("`{}` has no method called `{}`.", on.text(), method), vec![format!("`{}` is a float lane's operation (ADR-377 D9).", method)], Some(help)));
+        }
+    }
+}
+
 pub(crate) fn simd_written(names: &winnow_grammar::InternerContext, name: &str, ty: &Type, span: &Span, out: &mut Vec<Finding>) {
     if name != "simd::Fixed" && name != "simd::Lanes" && name != "simd::Mask" { return; }
-    let help: String = String::from("Write a lane type of `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64` or `i64`, and a `Fixed`'s count as a literal power of two from 2 to 64: `simd::Fixed[u8, 16]`.");
+    let help: String = String::from("Write a lane type of `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, `f32` or `f64`, and a `Fixed`'s count as a literal power of two from 2 to 64: `simd::Fixed[u8, 16]`.");
     if ty.generics.is_empty() {
-        out.push(refusal("NK1297", span.clone(), format!("`{}` needs its lane type.", name), vec![String::from("A vector holds lanes of one integer type (ADR-377 D1, D2).")], help));
+        out.push(refusal("NK1297", span.clone(), format!("`{}` needs its lane type.", name), vec![String::from("A vector holds lanes of one integer or float type (ADR-377 D1, D2, D9).")], help));
         return;
     }
     let lane = nikaia_std::block::Text::from(names.resolve(unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }.name).to_string());
-    if unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }.count.is_some() || check_simd_bits_of(&lane) == 0 {
-        out.push(refusal("NK1297", span.clone(), format!("`{}` can't hold lanes of `{}`.", name, lane), vec![String::from("A lane is an integer of 8, 16, 32 or 64 bits (ADR-377 D1).")], help));
+    if unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }.count.is_some() || check_simd_lane_bits(&lane) == 0 {
+        out.push(refusal("NK1297", span.clone(), format!("`{}` can't hold lanes of `{}`.", name, lane), vec![String::from("A lane is an integer of 8, 16, 32 or 64 bits, or an `f32` or `f64` (ADR-377 D1, D9).")], help));
         return;
     }
     let fixed = name == "simd::Fixed";

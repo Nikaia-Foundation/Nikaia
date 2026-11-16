@@ -1,0 +1,20 @@
+// A constructor of `std::simd` handed to a method of a `std` type takes its
+// type from the method's parameter (ADR-377 D3), as it does from a declared
+// function's: `push` and `insert` of a list of vectors, `insert` of a map; and
+// one made for the fallback of a `??` takes the type the left side holds.
+use std::collections
+use std::simd
+
+fn main() throws {
+    let mut vs: Vec[simd::Fixed[f64, 2]] = []
+    vs.push(simd::splat(1.5))
+    vs.push(simd::Fixed::from([1.0, 2.0]))
+    vs.insert(0, simd::splat(0.25))
+    let mut bytes: Vec[simd::Fixed[u8, 16]] = []
+    bytes.push(simd::splat(2))
+    let mut m: collections::HashMap[i64, simd::Fixed[f64, 4]] = collections::HashMap()
+    m.insert(7, simd::splat(0.5))
+    let none: simd::Fixed[f64, 4]? = null
+    let got = none ?? simd::splat(0.75)
+    println(f"{vs.len()} {vs[0].sum()} {vs[1].sum()} {vs[2].sum()} {bytes[0].wrapping_sum()} {m.len()} {got.sum()}")
+}

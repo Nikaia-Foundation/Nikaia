@@ -344,7 +344,11 @@ impl<T> List<T> {
         unsafe { self.items_mut().set_len(len) }
     }
 
-    /// The elements of `run`, one clone each, after one reservation.
+    /// The elements of `run`, one clone each, after one reservation: each
+    /// written into the room reserved, the length set once at the end, as
+    /// `std`'s `to_vec` does. A `push` each checked the room and stored the
+    /// length per element, so LLVM kept the loop and a clone of a list of
+    /// numbers was no `memcpy` (fannkuch-redux, #1614).
     #[inline]
     #[track_caller]
     pub fn extend_from_slice(&mut self, run: &[T])
@@ -352,8 +356,32 @@ impl<T> List<T> {
         T: Clone,
     {
         self.reserve(run.len());
+        // A clone that panics leaves the ones written before it owned by the
+        // list, never half-counted.
+        struct SetLen<T> {
+            items: *mut PlacedVec<T, Place>,
+            len: usize,
+        }
+        impl<T> Drop for SetLen<T> {
+            #[inline]
+            fn drop(&mut self) {
+                // SAFETY: the slots up to `len` are written, and `items` is
+                // the list borrowed for the whole call.
+                unsafe { (*self.items).set_len(self.len) }
+            }
+        }
+        let items: *mut PlacedVec<T, Place> = self.items_mut();
+        // SAFETY: `items` is the list, borrowed mutably for the call;
+        // `reserve` left room for `run.len()` more past its length.
+        let base = unsafe { (*items).as_mut_ptr() };
+        let mut guard = SetLen {
+            items,
+            len: unsafe { (*items).len() },
+        };
         for item in run {
-            self.items_mut().push(item.clone());
+            // SAFETY: `guard.len` stays below the length plus `run.len()`.
+            unsafe { base.add(guard.len).write(item.clone()) };
+            guard.len += 1;
         }
     }
 

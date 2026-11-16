@@ -284,7 +284,11 @@ pub(crate) fn check_core_arguments_given<H: CheckHost>(state: &mut CheckState, w
         if check_core_args_slot(callee, at) { out.push(Ty::Unknown); } else if check_core_args_is_lambda(arg, expected, at) {
             let wanted = if declared_here && !bound.is_empty() { substitute(nikaia_std::index::get(&expected, nikaia_std::index::at(at)), &bound) } else { (*nikaia_std::index::get(&expected, nikaia_std::index::at(at))).clone() };
             out.push(check_core_args_lambda(state, world, host, arg, &wanted, declared_here, callee, at, false, span));
-        } else { out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, false, span)); }
+        } else {
+            if at < expected.len() as i64 { state.flow.lambda_expected = check_simd_wanted(world, arg, Some(unsafe { nikaia_std::proven::read(&expected, (at) as usize) })); }
+            out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, false, span));
+            state.flow.lambda_expected = None;
+        }
         if declared_here && at < expected.len() as i64 { bind(unsafe { nikaia_std::proven::read(&expected, (at) as usize) }, nikaia_std::index::get(&out, nikaia_std::index::at(at)), &mut bound); }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
@@ -310,7 +314,11 @@ pub(crate) fn check_core_arguments_bound<H: CheckHost>(state: &mut CheckState, w
     let mut out: Vec<Ty> = vec![];
     let mut at: i64 = 0;
     for arg in args.iter() {
-        if check_core_args_slot(callee, at) { out.push(Ty::Unknown); } else if check_core_args_is_lambda(arg, &expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), declared_here, callee, at, false, span)); } else { out.push(check_core_args_other(state, world, host, arg, &expected, declared_here, callee, at, false, span)); }
+        if check_core_args_slot(callee, at) { out.push(Ty::Unknown); } else if check_core_args_is_lambda(arg, &expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), declared_here, callee, at, false, span)); } else {
+            if at < expected.len() as i64 { state.flow.lambda_expected = check_simd_wanted(world, arg, Some(unsafe { nikaia_std::proven::read(&expected, (at) as usize) })); }
+            out.push(check_core_args_other(state, world, host, arg, &expected, declared_here, callee, at, false, span));
+            state.flow.lambda_expected = None;
+        }
         if at < patterns.len() as i64 {
             let before = bound.len() as i64;
             bind(unsafe { nikaia_std::proven::read(&patterns, (at) as usize) }, nikaia_std::index::get(&out, nikaia_std::index::at(at)), bound);
@@ -541,7 +549,7 @@ pub(crate) fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, worl
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             };
-        }
+        } else { state.flow.lambda_expected = check_simd_wanted(world, item, (check_simd_element((declared).as_ref())).as_ref()); }
         let found = check_core_expr(state, world, host, item, span);
         state.flow.lambda_expected = None;
         walked.push(found);

@@ -635,7 +635,9 @@ pub(crate) fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, worl
     let from_a_map = check_core_ops_from_a_map(&state, world, value, read_now);
     let from = state.taken_so_far();
     state.flow.lending_let = lending;
+    state.flow.lambda_expected = check_simd_wanted(world, fallback, Some(&check_core_ops_inside(&left)));
     let other = check_core_expr(state, world, host, fallback, span);
+    state.flow.lambda_expected = None;
     state.flow.lending_let = false;
     let leaves = state.leaves(world, fallback);
     state.a_branch_that_leaves(from, leaves, span);

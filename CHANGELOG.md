@@ -8,6 +8,18 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1403] — 2026-11-16
+
+**Builders' changes (#1613, #1614, #1615, #1806)**
+- benches/game: spectral-norm against the Benchmarks Game's fastest Rust entry (Rust #6). `nikaia run benches/game/game.nika -- spectral-norm` counts it with callgrind: the program as first written 1.42x Rust's instructions at x86-64-v3, the one written for speed with simd::Fixed[f64, 2] 0.80x, at 41 % and 78 % of the tokens.
+- simd::splat, simd::load and simd::Fixed::from take their type from a std method's parameter (`vs.push(simd::splat(0.0))`) and from the left side of a `??`, NK1245 before.
+- benches/game: fannkuch-redux against the Benchmarks Game's fastest Rust entry (Rust #6). `nikaia run benches/game/game.nika -- fannkuch-redux` counts it: the program as first written 6.33x Rust's instructions, the one written for speed 2.65x, at 40 % and 48 % of the tokens; both cost what the same algorithm costs in plain Rust, and the gap is Rust #6's run-time byte shuffle
+- a clone of a list copies its items in one pass, a memcpy for numbers: a program cloning a list of 10 integers per turn counts 16 % fewer instructions (fannkuch-redux)
+- benches/game: binary-trees against the Benchmarks Game's fastest Rust entry (Rust #5). `nikaia run benches/game/game.nika -- binary-trees` counts it: the program as first written, a recursive enum, 5.75x Rust's instructions at 47 % of the tokens; the gap is one malloc and free per node against Rust #5's bump arena, and 1.26x of the same boxed tree in plain Rust
+- n-body written for speed with simd::Fixed[f64, 4] in benches/game (#1806): 249.5 instructions a step at x86-64-v3 against Rust #9's 196.4 (1.27x; the plain program 1.66x), the same output byte for byte.
+- Float lanes in std::simd (#1806): Lanes[f32/f64] and Fixed[f32/f64, N] with + - * / between two vectors, sqrt, abs, min, max, comparisons, select, min_lane, max_lane, and on Fixed a pairwise sum(), each lane the scalar's bits; integer operations on float lanes and sqrt/abs/sum on integer lanes are NK1171, bit operators and % on float lanes NK1296, - on any vector and ! on float lanes NK1191.
+- simd::splat, simd::load and simd::Fixed::from take their type from where they stand everywhere, not only from a typed let: a struct field, a Vec or Array of vectors, a parameter, an assigned place and a function's result (NK1245 before).
+
 ## [0.0.1402] — 2026-11-16
 
 **Prover and bugs lanes: derived preconditions widened, flags, narrow types, shrinking field bounds, NK2205 (#1669, #1673, #1681, #1688, #1767, #1785, #1786, #1787; #1754, #1759, #1772, #1788, #1797, #1798, #1799)**
