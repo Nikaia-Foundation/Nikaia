@@ -8,6 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1407] — 2026-11-16
+
+**Builders' changes (#1690, #1702, #1861, #1864, #1865)**
+- Loops: a name a loop sets to `e % m` (m a constant) is known to lie in 0..<m where e is never negative, so a linear-congruential generator's step is proved (#1690).
+- Bounds: a list that one branch of an `if` or one arm of a `match` empties (`ks = []`) keeps `ks.len() == 0 || ks.len() == r.ks.len()` past the join, so a struct's list-length rule survives `let cols = if ks.len() == 0 { [] } else { r.cols.clone() }`; a `match` keeps what all its arms prove of the names they change (#1702).
+- Builds: a `.nika` file added to a package is seen by the next build; `nikaia test` used the library built before it and rustc refused calls into the new file (NK1343) (#1861).
+- Faster text building: a block's `Text::push` of an ASCII character is inlined into the loop that calls it on every target, its wide-character and growth paths out of line (a fasta-like loop counts 16 % fewer instructions) (#1864).
+- NK1117 no longer tells you to write `use std::Bytes` (which NK1156 then refused) for a call on a prelude type such as `Bytes::from`: a capitalized prefix is a type, and types need no `use` (#1865).
+
 ## [0.0.1406] — 2026-11-16
 
 **Builders' changes (#1554, #1638, #1751, #1811)**
