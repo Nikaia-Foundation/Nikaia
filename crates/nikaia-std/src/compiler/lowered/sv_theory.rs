@@ -69,7 +69,7 @@ pub(crate) fn sv_spelled_sum(a: i64, x: &SvSpelled, b: i64, y: &SvSpelled) -> Op
         let mut i: i64 = 0;
         while ((i) as usize) < out.sources.len() {
             if sv_src_same(unsafe { nikaia_std::proven::read(&out.sources, (i) as usize) }, src) {
-                { let __nikaia_stored = match (*nikaia_std::index::get(&out.multipliers, (i) as usize)).checked_add(add) { Some(__nikaia_value) => __nikaia_value, None => return None }; unsafe { nikaia_std::proven::write(&mut out.multipliers, (i) as usize, __nikaia_stored) }; }
+                { let __nikaia_stored = match (*unsafe { nikaia_std::proven::read(&out.multipliers, (i) as usize) }).checked_add(add) { Some(__nikaia_value) => __nikaia_value, None => return None }; unsafe { nikaia_std::proven::write(&mut out.multipliers, (i) as usize, __nikaia_stored) }; }
                 found = true;
                 break;
             }
@@ -375,7 +375,7 @@ pub(crate) fn sv_theory_test_calls() -> String {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let out = sv_theory_test_calls();
     let expected = vec!["assert x <= 2: consistent", "propagate: [2, 5]", "explain x <= 5: [1, 2]", "check: consistent, model x = 0", "assert x >= 3 at level 2: consistent", "check: conflict [1, 5]", "backtrack to 1, check: consistent, shared []", "log of 5 steps: checked"];
     if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
@@ -383,7 +383,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files = nikaia_std::block::List::from_array_in([("refused-function.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["; An uninterpreted function: outside what the reader takes.", "(set-logic QF_UFLIA)", "(set-info :status sat)", "(declare-fun f (Int) Int)", "(assert (= (f 1) 2))", "(check-sat)"].join("\n")), "\n"))), ("sat-interval.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["; A model: 1 <= x <= 3 and x != 2.", "(set-logic QF_LIA)", "(set-info :status sat)", "(declare-const x Int)", "(assert (<= 1 x))", "(assert (<= x 3))", "(assert (distinct x 2))", "(check-sat)"].join("\n")), "\n"))), ("unsat-bounds.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["; The bounds check of ADR-270 D9: 0 <= i < n proves i < n + 1.", "(set-logic QF_LIA)", "(set-info :status unsat)", "(declare-const i Int)", "(declare-const n Int)", "(assert (<= 0 i))", "(assert (< i n))", "(assert (not (< i (+ n 1))))", "(check-sat)"].join("\n")), "\n"))), ("disjunctions-03.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["(set-logic QF_LIA)", "(set-info :status sat)", "(declare-const x1 Int)", "(declare-const x2 Int)", "(declare-const x3 Int)", "(declare-const i Int)", "(declare-const k Int)", "(assert (or (= x1 0) (= x1 1)))", "(assert (or (= x2 0) (= x2 1)))", "(assert (or (= x3 0) (= x3 1)))", "(assert (<= 0 i))", "(assert (< i k))", "(check-sat)", "(exit)"].join("\n")), "\n"))), ("disjunctions-04.smt2", nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(vec!["(set-logic QF_LIA)", "(set-info :status unsat)", "(declare-const x1 Int)", "(declare-const x2 Int)", "(declare-const x3 Int)", "(declare-const x4 Int)", "(declare-const i Int)", "(declare-const k Int)", "(assert (or (= x1 0) (= x1 1)))", "(assert (or (= x2 0) (= x2 1)))", "(assert (or (= x3 0) (= x3 1)))", "(assert (or (= x4 0) (= x4 1)))", "(assert (<= 0 i))", "(assert (< i k))", "(assert (not (< i (+ k 1))))", "(check-sat)", "(exit)"].join("\n")), "\n")))], nikaia_std::block::Place::Block);
     let mut out: String = String::from("");
     for (name, source) in files.iter() {

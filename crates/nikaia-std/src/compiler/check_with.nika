@@ -25,7 +25,7 @@ impl CheckState {
     /// built. Written anywhere else there is nothing to recognise it, and the
     /// message says what a file read **while the program runs** is called —
     /// because that is what a reader who wrote it here almost certainly meant.
-    pub fn an_asset_outside_a_comptime(ref mut self, span: ref Span) sync {
+    fn an_asset_outside_a_comptime(ref mut self, span: ref Span) sync {
         self.findings.push(check_refusal("NK1177", span, "`asset` reads a file while the program is built, so it only works in a `comptime`.", ["`comptime` says when, `asset(\"…\")` says where the bytes come from, and the call around it says what to do with them."], "Write `comptime NAME = …` to build the bytes into the program, or `fs::read(…, root)` to read the file while it runs."))
     }
 
@@ -37,7 +37,7 @@ impl CheckState {
     /// in the list. What it buys is that *named in the code* stays decidable by
     /// looking at the line — which is the whole of D3, and which a path assembled
     /// from a constant would quietly take away.
-    pub fn a_path_that_is_not_a_literal(ref mut self, span: ref Span) sync {
+    fn a_path_that_is_not_a_literal(ref mut self, span: ref Span) sync {
         self.findings.push(check_refusal("NK1176", span, "`asset` needs the path written out, not computed.", ["The list of files a build may read is checked against the path as written, so a reader can see from the line which file is read."], "Write the path out. For two files, write two `asset(\"…\")` calls."))
     }
 
@@ -49,7 +49,7 @@ impl CheckState {
     /// than syntax, so it is read here. The parser could refuse `{ }` and did
     /// for an afternoon; its caret landed on the line *after* the braces,
     /// because by then it had consumed them and the whitespace behind them.
-    pub fn a_with_that_changes_nothing(ref mut self, ty: ref String, span: ref Span) sync {
+    fn a_with_that_changes_nothing(ref mut self, ty: ref String, span: ref Span) sync {
         self.findings.push(check_refusal("NK1174", span, f"This `with` changes no field, so it's just a copy of the `{ty}`.", ["`with` means \"this value, with these fields different\", so one without fields makes a reader look for a change that isn't there."], "Name the fields that change, or remove the `with`."))
     }
 
@@ -62,7 +62,7 @@ impl CheckState {
     /// enum's is the one the record names by hand: `m with { x: 1 }` cannot be
     /// typed without knowing the variant, and `match` is where a variant is
     /// known.
-    pub fn a_with_over_something_else(ref mut self, ty: ref String, why: CheckCopyable, span: ref Span) sync {
+    fn a_with_over_something_else(ref mut self, ty: ref String, why: CheckCopyable, span: ref Span) sync {
         let mut message: String = ""
         let mut note: String = ""
         let mut way_out: String = ""
@@ -95,7 +95,7 @@ impl CheckState {
     }
 
     /// `NK1107`: a field a type does not have.
-    pub fn no_such_field(ref mut self, ty: ref String, field: ref String, declared: ref Vec[FieldContract], span: ref Span) sync {
+    fn no_such_field(ref mut self, ty: ref String, field: ref String, declared: ref Vec[FieldContract], span: ref Span) sync {
         let mut names: Vec[String] = []
         for one in declared {
             names.push(one.name.clone())
@@ -129,7 +129,7 @@ impl CheckState {
     /// contract **says** it can fail"; this is that standard read from the
     /// other end, and [`Guarded`] carries the two answers apart so that *could
     /// not look it up* never becomes *cannot fail*.
-    pub fn nothing_here_can_fail(ref mut self, guarded: ref CheckGuarded, span: ref Span) sync {
+    fn nothing_here_can_fail(ref mut self, guarded: ref CheckGuarded, span: ref Span) sync {
         if guarded.fallible || guarded.unanswered {
             return
         }
@@ -148,7 +148,7 @@ impl CheckState {
     /// resolve a receiver), and this one position the emitter is told about
     /// outright. Without the refusal a written `&` would come out `&&`, which
     /// is `rustc`'s words about a file nobody wrote (Part III C.1).
-    pub fn the_witness_takes_no_reference(ref mut self, seen: ref Expr, span: ref Span) sync {
+    fn the_witness_takes_no_reference(ref mut self, seen: ref Expr, span: ref Span) sync {
         let written = match seen {
             Expr::Unary { op, .. } => match op {
                 UnaryOp::Ref => true,
@@ -176,7 +176,7 @@ impl CheckState {
     /// statement is not reached. That covers `break i`, `continue x` and the
     /// line somebody left below a `break` while editing, in one sentence and
     /// with one caret.
-    pub fn nothing_follows_a_jump(ref mut self, jump: ref Stmt, span: ref Span) sync {
+    fn nothing_follows_a_jump(ref mut self, jump: ref Stmt, span: ref Span) sync {
         let word: String = match jump {
             Stmt::Break => "break",
             else => "continue",

@@ -1,0 +1,75 @@
+// #1634 (ADR-361 D5): a bool set to `true` keeps what held where it was set.
+// `pick` sets `found` only where `a < was.len()`, so after `if !found { a =
+// was.len() - 1 }` the read `was[a]` is proved. In `scan` the loop sets
+// `found` where only `a <= was.len()` holds: `was[a]` is proved under `a <
+// was.len()`; `scan_found` reads `was[a]` after `found` alone, which stays
+// checked: the flag carries no more than what held (`a == was.len()` is a
+// read that fails every time, and is refused, once `a < was.len()` is
+// ruled out as well).
+fn pick(was: Vec[i64], a0: i64, x: i64) -> i64 {
+	if a0 < 0 || was.len() == 0 {
+		return 0
+	}
+	let mut found = false
+	let mut a = 0
+	if x > 0 && a0 < was.len() as i64 {
+		a = a0
+		found = true
+	}
+	if !found {
+		a = was.len() as i64 - 1
+	}
+	return was[a]
+}
+
+fn find(was: Vec[i64]) -> i64 {
+	let mut a = 0
+	let mut found = false
+	while !found && a < was.len() as i64 {
+		if was[a] % 3 == 2 {
+			found = true
+		} else {
+			a += 1
+		}
+	}
+	if found {
+		return was[a]
+	}
+	return 0
+}
+
+fn scan(was: Vec[i64]) -> i64 {
+	let mut a = 0
+	let mut found = false
+	while !found && a <= was.len() as i64 {
+		if a % 3 == 2 {
+			found = true
+		} else {
+			a += 1
+		}
+	}
+	if found && a < was.len() as i64 {
+		return was[a]
+	}
+	return 0
+}
+
+fn scan_found(was: Vec[i64]) -> i64 {
+	let mut a = 0
+	let mut found = false
+	while !found && a <= was.len() as i64 {
+		if a % 3 == 2 {
+			found = true
+		} else {
+			a += 1
+		}
+	}
+	if found {
+		return was[a]
+	}
+	return 0
+}
+
+fn main() throws {
+	println(pick([4, 5], 1, 1) + pick([4, 5], 1, 0) + find([1, 5, 7]) + scan([1, 2, 3]) + scan_found([1, 2, 3]))
+}

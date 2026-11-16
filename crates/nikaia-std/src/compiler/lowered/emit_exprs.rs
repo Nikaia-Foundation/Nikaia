@@ -6,7 +6,7 @@ pub(crate) fn emit_candidates(ledger: &Ledger, method: &str) -> Vec<FnContract> 
     let mut out: Vec<FnContract> = vec![];
     for key in ledger.functions.keys() {
         if !key.ends_with(AsRef::<str>::as_ref(&suffix)) { continue; }
-        let contract = match ledger.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let contract = match ledger.functions.get(nikaia_std::index::as_text(&key)) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if emit_takes_self(contract) { out.push(contract.clone()); }
     }
     out
@@ -63,14 +63,14 @@ pub(crate) fn emit_two(before: &str, after: &str) -> (String, String) { (nikaia_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn emit_around(how: Option<&FactWrap>) -> Result<(String, String), nikaia_std::error::Thrown<EmitRefused>> {
+pub(crate) fn emit_around(how: Option<&FactWrap>) -> Result<(String, String), nikaia_std::error::Thrown<EmitRefused>> {
     let held = match how { Some(__nikaia_value) => __nikaia_value, None => return Ok(emit_two("", "")) };
     Ok(emit_around_held(held)?)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn emit_around_held(held: &FactWrap) -> Result<(String, String), nikaia_std::error::Thrown<EmitRefused>> {
+pub(crate) fn emit_around_held(held: &FactWrap) -> Result<(String, String), nikaia_std::error::Thrown<EmitRefused>> {
     Ok(match held {
         FactWrap::Constructor => emit_two("Some(", ")"),
         FactWrap::Path => emit_two("std::path::PathBuf::from(", ")"),
@@ -105,14 +105,14 @@ pub(crate) fn emit_unsigned(into: &str) -> Result<String, nikaia_std::error::Thr
 }
 
 impl EmitState {
-    pub fn keeps_code_at(&self, callee: &str, i: i64) -> bool {
+    pub(crate) fn keeps_code_at(&self, callee: &str, i: i64) -> bool {
         let contract = self.own_contracts.functions.get(callee);
         if contract.is_some() { return emit_keeps_code(match contract { Some(__nikaia_value) => __nikaia_value, None => return false }, i); }
         let candidates = emit_candidates(&self.own_contracts, callee);
         if candidates.is_empty() { return false; }
         candidates.iter().all(|candidate| { emit_keeps_code(candidate, i) })
     }
-    pub fn runs_code_at(&self, callee: &str, i: i64) -> bool {
+    pub(crate) fn runs_code_at(&self, callee: &str, i: i64) -> bool {
         let contract = self.own_contracts.functions.get(callee);
         if contract.is_some() { return emit_runs(match contract { Some(__nikaia_value) => __nikaia_value, None => return false }, i); }
         let candidates = emit_candidates(&self.own_contracts, callee);
@@ -120,7 +120,7 @@ impl EmitState {
         for candidate in candidates.iter() { if !emit_runs(candidate, i) { return false; } }
         true
     }
-    pub fn changes_at(&self, callee: &str, i: i64) -> bool {
+    pub(crate) fn changes_at(&self, callee: &str, i: i64) -> bool {
         let contract = self.own_contracts.functions.get(callee);
         if contract.is_some() { return emit_changes(match contract { Some(__nikaia_value) => __nikaia_value, None => return false }, i); }
         let candidates = emit_candidates(&self.own_contracts, callee);
@@ -128,7 +128,7 @@ impl EmitState {
         for candidate in candidates.iter() { if !emit_changes(candidate, i) { return false; } }
         true
     }
-    pub fn changes_in_place(&self, function: &str, name: &str) -> bool {
+    pub(crate) fn changes_in_place(&self, function: &str, name: &str) -> bool {
         let contract = match self.own_contracts.functions.get(function) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let signature = match match contract.signature.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -137,7 +137,7 @@ impl EmitState {
         for mutable in signature.mutable.iter() { if mutable == name { return true; } }
         false
     }
-    pub fn copied_in_place(&self, function: &str, name: &str) -> bool {
+    pub(crate) fn copied_in_place(&self, function: &str, name: &str) -> bool {
         if !self.changes_in_place(function, name) { return false; }
         let contract = match self.own_contracts.functions.get(function) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let signature = match match contract.signature.as_ref() {
@@ -151,7 +151,7 @@ impl EmitState {
         let range = matches!(index, Expr::Range { .. });
         range || self.facts.slice_indices.contains(&node_key(index))
     }
-    pub fn walked_parameter<'r>(&self, world: &EmitWorld<'r, 'r, 'r, 'r>, item: &Item) -> &'r str {
+    pub(crate) fn walked_parameter<'r>(&self, world: &EmitWorld<'r, 'r, 'r, 'r>, item: &Item) -> &'r str {
         match item {
             Item::Fn { generics, .. } => self.first_generic(world.words, generics),
             _ => "",
@@ -161,7 +161,7 @@ impl EmitState {
         if generics.is_empty() { return ""; }
         words.resolve(unsafe { nikaia_std::proven::read(&generics, (0) as usize) }.name)
     }
-    pub fn walks_a_shape(&self, world: &EmitWorld<'_, '_, '_, '_>, item: &Item) -> Option<String> {
+    pub(crate) fn walks_a_shape(&self, world: &EmitWorld<'_, '_, '_, '_>, item: &Item) -> Option<String> {
         match item {
             Item::Fn { name, .. } => {
                 let name = *name;
@@ -173,13 +173,13 @@ impl EmitState {
         }
         None
     }
-    pub fn constructs_by_name(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> bool {
+    pub(crate) fn constructs_by_name(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> bool {
         let constructor = format!("{}::new", name);
         if self.declares_a_struct(name) { return self.own_contracts.functions.contains_key(&constructor); }
         world.library.functions.contains_key(&constructor)
     }
-    pub fn is_counted(&self, receiver: &Expr, method: &str, args: &[Expr]) -> bool { method == "count" && args.is_empty() && self.facts.counted.contains(&node_key(receiver)) }
-    pub fn emits_as_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn is_counted(&self, receiver: &Expr, method: &str, args: &[Expr]) -> bool { method == "count" && args.is_empty() && self.facts.counted.contains(&node_key(receiver)) }
+    pub(crate) fn emits_as_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Cast { .. } => true,
             Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; self.method_emits_as_cast(world, receiver, method, args) },
@@ -190,7 +190,7 @@ impl EmitState {
         let name = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
         truncating(&name).is_some() || is_length(&name, args) || self.is_counted(receiver, &name, args)
     }
-    pub fn ends_in_a_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn ends_in_a_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Binary { op, rhs, .. } => { let rhs = nikaia_std::boxed::open(rhs); self.rhs_ends_in_a_cast(world, op, rhs) },
             _ => self.emits_as_cast(world, expr),
@@ -213,7 +213,7 @@ impl EmitState {
         }
         nikaia_std::block::Text::from(name.to_string())
     }
-    pub fn mapped_path(&self, trusting: bool, name: &str) -> String {
+    pub(crate) fn mapped_path(&self, trusting: bool, name: &str) -> String {
         let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
         if parts.len() < 2 { return self.map_name(trusting, name); }
         let last = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string());
@@ -224,7 +224,7 @@ impl EmitState {
 }
 
 impl EmitWalk {
-    pub fn never_negative(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, expr: &Expr) -> bool {
+    pub(crate) fn never_negative(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, expr: &Expr) -> bool {
         match expr {
             Expr::LitInt { negative, .. } => { let negative = *negative; !negative },
             Expr::Variable(name, _) => { let name = *name; self.local_never_negative(world, function, name) },

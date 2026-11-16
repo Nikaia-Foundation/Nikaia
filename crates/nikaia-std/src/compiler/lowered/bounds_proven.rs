@@ -9,12 +9,13 @@ pub struct BoundsAllProven {
     pub negations: collections::BTreeSet<i64>,
     pub calls: collections::BTreeMap<i64, String>,
     pub derived: Vec<String>,
+    pub gates: collections::BTreeMap<String, String>,
     pub trace: Vec<String>,
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext, beside: &[&BoundsBeside], facts: &CheckFacts, ledgers: &[&Ledger], nonnegative: &collections::BTreeSet<i64>, through_loops: bool, trace: &[i64], read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>, ask: &impl Fn(&TermArena, &[i64], i64) -> bool, ask_in: &impl Fn(&str, i64, &TermArena, &[i64], i64) -> bool, record: &impl Fn(&collections::BTreeMap<i64, String>), counted: &impl Fn(&Block, &[winnow_grammar::Symbol]), folded: &impl Fn() -> collections::BTreeSet<i64>) -> BoundsAllProven {
-    let mut out = BoundsAllProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), derived: vec![], trace: vec![] };
+    let mut out = BoundsAllProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), derived: vec![], gates: collections::BTreeMap::new(), trace: vec![] };
     let around = bounds_around(program, beside, ledgers, &facts.std_receivers, &facts.simd_loads, words);
     let mut context = BoundsContext { lengths: facts.std_lengths.copy_owned(), sized: facts.sized_lengths.copy_owned(), char_codes: facts.char_codes.copy_owned(), ensured: bm_ensured(ledgers, read), required: bm_required(ledgers, read), each: bm_each(ledgers, read), collected: bm_collected(ledgers, read), std_receivers: facts.std_receivers.copy_owned(), simd_loads: facts.simd_loads.copy_owned(), shifts: facts.shifts.copy_owned(), divisions: facts.divisions.copy_owned(), arithmetic: facts.arithmetic.copy_owned(), nonnegative: nonnegative.copy_owned(), given: collections::BTreeMap::new(), negations: facts.negations.copy_owned(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: facts.whole_fields.copy_owned(), whole_types: facts.whole_types.copy_owned(), whole_loops: facts.whole_loops.copy_owned(), whole_parts: facts.whole_parts.copy_owned(), array_lengths: facts.array_lengths.copy_owned(), through_loops, trace: trace.copy_owned(), decided: bp_decided(program, words, &facts.comptime_values), list_indices: facts.list_indices.copy_owned(), text_bytes: facts.text_bytes.copy_owned(), returns: collections::BTreeMap::new() };
     bounds_fields(&mut context, program, words, ask);
@@ -49,15 +50,16 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
                 for (of, holding) in walked.held.iter() { context.around.held.insert(nikaia_std::block::Text::from(of.to_string()), holding.copy_owned()); }
                 let entries = context.around.derived.entry.len() as i64;
                 derived_note(&mut context.around, &walked);
-                if (context.around.derived.entry.len() as i64) != entries { context.around.held = collections::BTreeMap::new(); }
+                if (context.around.derived.entry.len() as i64) != entries { context.around.held.clear(); }
                 bp_add(&mut out, &walked);
             },
             _ => { },
         }
     }
     out.derived = derived_rows(&context.around);
+    out.gates = derived_gates(&context.around.derived);
     let none: Vec<FnArg> = vec![];
-    context.around.held = collections::BTreeMap::new();
+    context.around.held.clear();
     for item in program.items.iter() {
         match &item.node {
             Item::Grammar(def) => {

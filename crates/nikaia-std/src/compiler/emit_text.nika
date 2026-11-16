@@ -9,7 +9,7 @@
 
 /// A string as a Rust literal: quotes, backslash and the three control
 /// characters escaped.
-pub fn rust_string(text: ref String) -> String {
+fn rust_string(text: ref String) -> String {
     let mut out: String = "\""
     for c in text.chars() {
         if c == '"' {
@@ -33,7 +33,7 @@ pub fn rust_string(text: ref String) -> String {
 /// Text written as it is read, as a Rust format string takes it: an escape
 /// stays two characters (`\u{..}` keeps its braces) and every other brace is
 /// doubled.
-pub fn rust_format_escape(text: ref String) -> String {
+fn rust_format_escape(text: ref String) -> String {
     let mut out: String = ""
     let chars: Vec[scalar] = text.chars().collect()
     let mut at = 0
@@ -71,7 +71,7 @@ pub fn rust_format_escape(text: ref String) -> String {
 
 /// The parts of `inside` separated by a comma that stands at depth zero,
 /// outside a string, each trimmed; a last empty part is left out.
-pub fn top_level_parts(inside: ref String) -> Vec[String] {
+fn top_level_parts(inside: ref String) -> Vec[String] {
     let mut parts: Vec[String] = []
     let mut current: String = ""
     let mut depth = 0
@@ -170,7 +170,7 @@ fn an_owned_text_name(name: ref String, view: bool) -> bool {
 
 /// A declared literal as it stands in a `const`/`static` of type `ty`: an
 /// owned `String` is made from it and a nullable holds it in a `Some`.
-pub fn held_literal(literal: ref String, ty: ref Ty) -> String {
+fn held_literal(literal: ref String, ty: ref Ty) -> String {
     if owned_text(ty) && literal.starts_with("\"") {
         return f"String::from({literal})"
     }
@@ -191,10 +191,10 @@ fn held_nullable(literal: ref String, inner: ref Ty) -> String {
 }
 
 /// A type as plain Rust spells it, `_` where it cannot be said.
-pub fn plain_rust_spelling(ty: ref Ty) -> String {
+fn plain_rust_spelling(ty: ref Ty) -> String {
     return match ty {
         Ty::Named { name, args, view } => plain_named(name, args, view),
-        Ty::Nullable(inner) => f"Option<{plain_rust_spelling(inner)}>",
+        Ty::Nullable(inner) => f"::core::option::Option<{plain_rust_spelling(inner)}>",
         else => "_",
     }
 }

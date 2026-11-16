@@ -145,7 +145,7 @@ impl CheckState {
     /// a path or a method call names, `method` whether it was a call on a
     /// value. Only where the compiler *knows* the head: a name it has never
     /// heard of is another question.
-    pub fn a_member_nothing_writes_down(ref mut self, world: ref CheckWorld, head: ref String, member: ref String, method: bool, span: ref Span) sync {
+    fn a_member_nothing_writes_down(ref mut self, world: ref CheckWorld, head: ref String, member: ref String, method: bool, span: ref Span) sync {
         // **Said already, in a sentence of its own**: one refusal a call.
         for found in self.findings {
             if found.span == span && mem_a_said_code(found.code) {
@@ -196,6 +196,10 @@ impl CheckState {
             help = "Compare with `null`: `value != null`."
         } else if member == "is_none" {
             help = "Compare with `null`: `value == null`."
+        } else if head == "simd::Lanes" && member == "sum" {
+            // **A float sum's order depends on the lane count** (ADR-377 D9),
+            // and a `Lanes`' count is the build's.
+            help = "Write the lanes as a `simd::Fixed[T, N]`, whose `sum()` adds in the same order on every target, or `wrapping_sum()` on integer lanes."
         } else {
             help = mem_nearest_help(head, member, method, members, shown)
         }
@@ -208,7 +212,7 @@ impl CheckState {
 
     /// **`NK1171`: `X::y`, where `X` is a type this program declares and `y` is
     /// nothing it has.** Only where the compiler *knows*.
-    pub fn a_member_this_type_does_not_have(ref mut self, world: ref CheckWorld, ty: ref String, member: ref String, span: ref Span) sync {
+    fn a_member_this_type_does_not_have(ref mut self, world: ref CheckWorld, ty: ref String, member: ref String, span: ref Span) sync {
         // Anything a ledger records under this exact key is a real item.
         if resolve_call(world, f"{ty}::{member}") != null {
             return
@@ -274,7 +278,7 @@ impl CheckState {
     /// One pattern's path, where it names a type and a member of it. One
     /// segment **binds a name** rather than naming a variant, and an empty one
     /// is the bare tuple `(0, 0)`.
-    pub fn a_path_in_a_pattern(ref mut self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], span: ref Span) sync {
+    fn a_path_in_a_pattern(ref mut self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], span: ref Span) sync {
         if path.len() != 2 {
             return
         }
@@ -336,7 +340,7 @@ impl CheckState {
 
     /// **`NK1258`: at most one `..` in a list, tuple or variant pattern**
     /// (ADR-355 D4): with two, which values each stands for is not said.
-    pub fn one_rest_at_most(ref mut self, parts: ref Vec[MatchPattern], span: ref Span) -> bool sync {
+    fn one_rest_at_most(ref mut self, parts: ref Vec[MatchPattern], span: ref Span) -> bool sync {
         let mut rests = 0
         for part in parts {
             if pattern_is_rest(part) {
@@ -353,7 +357,7 @@ impl CheckState {
     /// The same question asked of a `match` arm's pattern (ADR-291 D10's shapes),
     /// which is where a misspelled variant is most likely to be written. The
     /// parts are patterns, so the walk goes into them.
-    pub fn a_pattern_naming_a_member_a_type_does_not_have(ref mut self, world: ref CheckWorld, pattern: ref MatchPattern, span: ref Span) sync {
+    fn a_pattern_naming_a_member_a_type_does_not_have(ref mut self, world: ref CheckWorld, pattern: ref MatchPattern, span: ref Span) sync {
         match pattern {
             MatchPattern::Path(path) => self.a_path_in_a_pattern(world, path, span),
             MatchPattern::Named { path, .. } => self.a_path_in_a_pattern(world, path, span),

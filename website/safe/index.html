@@ -169,9 +169,9 @@ assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre clas
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-299.html" | relative_url }}">ADR-299 →</a>
       </div>
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-run">Specified, not built yet</span>
+        <span class="safe-chip safe-chip-build">Checked while the program runs</span>
         <h3>Encrypted connections</h3>
-        <p>The specification gives the HTTP server TLS through the Rust library <code>rustls</code>. It is not built yet, so today the server speaks plain HTTP.</p>
+        <p>The HTTP server and <code>net::connect</code> speak TLS through the Rust library <code>rustls</code>: <code>tls: net::Tls::files(certificate, key)</code> on the server, <code>tls: net::Tls::trusting(certificate)</code> on a client that trusts its own certificate besides the system's. The handshake runs in each connection's own task, so a client that fails it loses its connection and the server goes on answering the others.</p>
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-303.html" | relative_url }}">ADR-303, D2 →</a>
       </div>
     </div>

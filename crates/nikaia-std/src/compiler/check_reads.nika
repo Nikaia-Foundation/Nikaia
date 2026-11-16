@@ -21,7 +21,7 @@ fn check_counts_second(key: ref String) -> bool {
 }
 
 /// The integer and floating-point types a cast goes between.
-pub fn check_numeric(name: ref String) -> bool {
+fn check_numeric(name: ref String) -> bool {
     return name == "i32" || name == "i64" || name == "f32" || name == "f64" || name == "u8" || name == "u32" || name == "u64"
 }
 
@@ -76,7 +76,7 @@ impl CheckState {
     /// **A count the language below takes in `usize`** (ADR-293 D20), recorded
     /// for the emitter by the entry the call resolved to - so a method of the
     /// program's own that happens to be called `take` is not converted.
-    pub fn counts_in_usize(ref mut self, key: ref String, args: ref Vec[Expr]) sync {
+    fn counts_in_usize(ref mut self, key: ref String, args: ref Vec[Expr]) sync {
         if check_counts_first(key) && args.len() > 0 {
             let added = self.facts.count_args.insert(id_of(args[0]) as i64)
         }
@@ -88,7 +88,7 @@ impl CheckState {
     /// **A map's read kept where a `T?` of its own is wanted** (ADR-293 D15): the
     /// read is a view of what the map keeps, so a value that copies is copied out
     /// and one that does not is refused with the copy to write.
-    pub fn a_map_read_kept(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) sync {
+    fn a_map_read_kept(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) sync {
         // **Each branch of an `if` or a `match` hands the value over** (#1117's
         // round): a read an arm ends in is kept as the whole would be.
         match value {
@@ -158,7 +158,7 @@ impl CheckState {
     /// **A map's read a lambda hands back** (ADR-293 D15): the lambda's result
     /// is a `T?` of its own, so a value that copies is copied out, as a kept
     /// read is. One that does not copy stays the view it was.
-    pub fn a_map_read_handed_back(ref mut self, world: ref CheckWorld, found: ref Ty, body: ref Block) sync {
+    fn a_map_read_handed_back(ref mut self, world: ref CheckWorld, found: ref Ty, body: ref Block) sync {
         for value in block_tail(body) {
             let node = id_of(value) as i64
             if !self.flow.map_read_sites.contains(node) || self.facts.copied_walks.contains(node) {
@@ -180,7 +180,7 @@ impl CheckState {
     /// **A map's read, past a jump, assigned to a place that owns its value**
     /// (ADR-293 D15, #492): `x = m[k] ?? return …` reads a view of what the map
     /// keeps, as `let found = m[k] ?? return …` binds one.
-    pub fn a_map_read_assigned(ref mut self, world: ref CheckWorld, into: ref Ty, value: ref Expr, span: ref Span) sync {
+    fn a_map_read_assigned(ref mut self, world: ref CheckWorld, into: ref Ty, value: ref Expr, span: ref Span) sync {
         match value {
             Expr::Coalesce { value: read, fallback, .. } => {
                 let node = id_of(read) as i64
@@ -201,7 +201,7 @@ impl CheckState {
     /// is wanted (ADR-233 D4): a number, a `bool` or a `char`, and a type that is
     /// one by declaration - the unit's own that derive `Copy`, and a described
     /// Rust type whose ledger says `copies` (ADR-294 D9.3).
-    pub fn a_view_that_copies(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
+    fn a_view_that_copies(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
         if copies_as_a_view(ty) {
             return true
         }
@@ -222,7 +222,7 @@ impl CheckState {
 
     /// **A cast over a binding a `for` lends** (ADR-182 D5): the operand is a
     /// view below whatever its type says.
-    pub fn a_cast_over_a_lent_binding(ref mut self, world: ref CheckWorld, operand: ref Expr, span: ref Span) sync {
+    fn a_cast_over_a_lent_binding(ref mut self, world: ref CheckWorld, operand: ref Expr, span: ref Span) sync {
         match operand {
             Expr::Variable(name, _) => {
                 let written = world.words.resolve(name).clone()
@@ -299,7 +299,7 @@ impl CheckState {
     /// **A view compared with a value** (ADR-081 D1): `*op == UnaryOp::Neg` is
     /// `PartialEq::eq(&*op, …)` below and moves nothing, where `op ==
     /// UnaryOp::Neg` compared a `&UnaryOp` with a `UnaryOp`.
-    pub fn a_view_compared_with_a_value(ref mut self, world: ref CheckWorld, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) sync {
+    fn a_view_compared_with_a_value(ref mut self, world: ref CheckWorld, lhs: ref Expr, left: ref Ty, rhs: ref Expr, right: ref Ty, at: ref Span) sync {
         let read_left = self.a_side_is_a_view(world, lhs, left) && self.a_side_is_a_value(world, rhs, right)
         let read_right = self.a_side_is_a_view(world, rhs, right) && self.a_side_is_a_value(world, lhs, left)
         // **A lent name whose type is not known here, beside a number** (#531):
@@ -357,7 +357,7 @@ impl CheckState {
     /// by reference in the language below, and the `&` is recorded here for
     /// exactly these entries, where the key is a known value that is not already
     /// a view.
-    pub fn a_lookup_key_lent(ref mut self, world: ref CheckWorld, key: ref String, on: ref Ty, args: ref Vec[Expr], found: ref Vec[Ty]) sync {
+    fn a_lookup_key_lent(ref mut self, world: ref CheckWorld, key: ref String, on: ref Ty, args: ref Vec[Expr], found: ref Vec[Ty]) sync {
         if !is_a_lookup(key) || !world.library.functions.contains_key(key) {
             return
         }
@@ -380,6 +380,14 @@ impl CheckState {
         // **A name that copied a value the ledger copies** out of a place
         // (`Symbol`) holds the value, not a view, below: it is lent with `&`.
         let copied = (self.a_lent_let(world, given) || self.a_lent_name(world, given)) && a_ledger_copies(unviewed_type(ty), [world.library])
+        // **A text part of a tuple a walk lends is a reference already**
+        // (#688, #1190), `&String` or `&&str` below even where its type is a
+        // view: a map or a set keyed by text looks it up as the `str` it
+        // holds, where passing it as it is would be `&&str` (#1831).
+        if !a_string && names_text(ty) && check_reads_keyed_by_text(on) && check_core_ops_lent_text_item(self, world, given) {
+            self.facts.map_keys.insert((id_of(given) as i64, false), FactKeyForm::Viewed)
+            return
+        }
         // A cut of a `Bytes` is a `&[u8]` below already (#1345).
         if (ty.is_a_view() && !copied) || a_string || self.facts.bytes_cuts.contains(id_of(given) as i64) {
             return
@@ -430,7 +438,7 @@ impl CheckState {
     }
 
     /// A read of a name, recorded once per expression and statement.
-    pub fn a_read(ref mut self, expr: ref Expr, path: ref String, span: ref Span) sync {
+    fn a_read(ref mut self, expr: ref Expr, path: ref String, span: ref Span) sync {
         let key = (id_of(expr) as i64, span.start as i64)
         if self.flow.read_index.contains_key(key) {
             return
@@ -446,7 +454,7 @@ impl CheckState {
     /// handed it to something that keeps it. **And the arm that does is told to
     /// the emitter** (#576): it works on the value taken out of the place, and
     /// writes the whole back.
-    pub fn parts_taken_out_of_a_mut_parameter(ref mut self, world: ref CheckWorld, path: ref String, body: ref Expr, subject: ref Ty, parts: ref collections::BTreeMap[String, Ty], handed_from: i64, from: i64) sync {
+    fn parts_taken_out_of_a_mut_parameter(ref mut self, world: ref CheckWorld, path: ref String, body: ref Expr, subject: ref Ty, parts: ref collections::BTreeMap[String, Ty], handed_from: i64, from: i64) sync {
         for repeat in self.repeats {
             if repeat.what == "lambda" {
                 return
@@ -510,7 +518,7 @@ impl CheckState {
     /// **A cast's width** (ADR-233): a cast that always fits is a widening,
     /// every other between two numbers is recorded as narrowing, out of a
     /// floating-point number silent three ways and so of its own kind.
-    pub fn record_cast(ref mut self, from: ref Ty, into: ref Ty, operand: i64) sync {
+    fn record_cast(ref mut self, from: ref Ty, into: ref Ty, operand: i64) sync {
         let from_name = match from {
             Ty::Named { name, .. } => name.clone(),
             else => return,

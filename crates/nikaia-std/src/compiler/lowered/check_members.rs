@@ -85,7 +85,7 @@ pub(crate) fn mem_listed(names: &[String], before: &str) -> String {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_member_nothing_writes_down(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, head: &str, member: &str, method: bool, span: &Span) {
+    pub(crate) fn a_member_nothing_writes_down(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, head: &str, member: &str, method: bool, span: &Span) {
         for found in self.findings.iter() { if found.span == *span && mem_a_said_code(&found.code) { return; } }
         if method && resolve_method(world, &format!("{}::deref", head)).is_some() { return; }
         if self.type_parameters.contains_key(head) || self.foreign_names.contains(head) || self.opaque_handles.contains(head) || self.grammars.contains_key(head) || a_number_name(head) { return; }
@@ -106,14 +106,14 @@ impl CheckState {
         let mut written: String = format!("{}::{}", head, member);
         if method { written = format!(".{}()", member); }
         let mut help: String = String::from("");
-        if mem_text_from(head, member) { help = String::from("Write the text itself, `\"x\"`, or `f\"x\"` for text of its own."); } else if member == "as_str" { help = String::from("Leave it out: the text is already what is passed."); } else if member == "is_some" { help = String::from("Compare with `null`: `value != null`."); } else if member == "is_none" { help = String::from("Compare with `null`: `value == null`."); } else { help = mem_nearest_help(head, member, method, members, &shown); }
+        if mem_text_from(head, member) { help = String::from("Write the text itself, `\"x\"`, or `f\"x\"` for text of its own."); } else if member == "as_str" { help = String::from("Leave it out: the text is already what is passed."); } else if member == "is_some" { help = String::from("Compare with `null`: `value != null`."); } else if member == "is_none" { help = String::from("Compare with `null`: `value == null`."); } else if head == "simd::Lanes" && member == "sum" { help = String::from("Write the lanes as a `simd::Fixed[T, N]`, whose `sum()` adds in the same order on every target, or `wrapping_sum()` on integer lanes."); } else { help = mem_nearest_help(head, member, method, members, &shown); }
         let mut what: String = format!("`{}` has no function called `{}`.", shown, member);
         if method { what = format!("`{}` has no method called `{}`.", shown, member); }
         self.findings.push(check_refusal("NK1171", span, what, vec![format!("What can be called is what is written down: `{}` is in no declaration, ledger or description this program reads.", written)], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_member_this_type_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, member: &str, span: &Span) {
+    pub(crate) fn a_member_this_type_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, member: &str, span: &Span) {
         if resolve_call(world, &format!("{}::{}", ty, member)).is_some() { return; }
         if an_integer_limit(ty, member) { return; }
         if self.type_parameters.contains_key(ty) {
@@ -155,7 +155,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_path_in_a_pattern(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], span: &Span) {
+    pub(crate) fn a_path_in_a_pattern(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], span: &Span) {
         if path.len() != 2 { return; }
         let ty = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string());
         let member = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (1) as usize) }).to_string());
@@ -200,7 +200,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn one_rest_at_most(&mut self, parts: &[MatchPattern], span: &Span) -> bool {
+    pub(crate) fn one_rest_at_most(&mut self, parts: &[MatchPattern], span: &Span) -> bool {
         let mut rests = 0;
         for part in parts.iter() { if pattern_is_rest(part) { rests += 1; } }
         if rests > 1 {
@@ -211,7 +211,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_pattern_naming_a_member_a_type_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) {
+    pub(crate) fn a_pattern_naming_a_member_a_type_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) {
         match pattern {
             MatchPattern::Path(path) => { self.a_path_in_a_pattern(world, path, span); },
             MatchPattern::Named { path, .. } => { self.a_path_in_a_pattern(world, path, span); },

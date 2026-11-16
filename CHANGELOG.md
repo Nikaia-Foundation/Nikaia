@@ -8,6 +8,144 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1409] — 2026-11-16
+
+**Builders' changes (#1843, #1853, #1857, #1862, #1866, #1874, #1881, #1883, #1885, #1886, #1887, #1895, #1896, #, #1903)**
+- docs/issues.md: an issue's Done when asks for a Found line per finding, not for issue numbers the run cannot know; a file a preceding issue will create is named as that issue's output.
+- docs/issues.md: I4 asks an issue item that rests on a part another issue builds (a harness, a README) to name that part's own issue, or to say the builder makes it
+- The driver drops a brief that ended blocked on an issue it filed from that run's Found (or one the report names) instead of cutting the batch, and labels the issue blocked until that issue is closed.
+- Driver: when git puts the agents' uncommitted files back after a merge and that conflicts, a lowered file now takes HEAD's copy with nothing left staged, and a conflict in a source escalates
+- Changed: `scripts/probe.nika` warns in a first `note:` line when `target/fast/nikaia` is older than a compiler source in the tree, so a probe on a binary that predates HEAD is not read as a defect.
+- benches/game: Nikaia programs are counted with `io-method = "blocking"`, so a program that reads standard input no longer hangs under valgrind 3.22; docs/measuring.md says so for programs counted by hand
+- A text a function makes and hands to `strip_prefix`, `strip_suffix` or `trim_start_matches`, whose result it returns, no longer fails with an internal error.
+- The driver no longer holds a re-queued issue by an issue its earlier report only cited in `Found:`, by the issue it is `Part of`, or by numbers inside quoted text (backticks, fenced or `<details>` blocks).
+- scripts/pre-push.nika: the page-examples step runs the repository's own built compiler, so it no longer needs `nikaia` on PATH
+- The driver starts a builder or QA only where the lane's longest recent run still fits before the 2 h end of its task, and a builder run cut off after writing its report gets its follow-up (posted run, labels, Found filing, suite) at the next start.
+- The release commit after a driver push now carries the rows the agents added to docs/tokenspeed.md, and leaves the file out when anything else in it changed.
+- Driver: the ESCALATE and WAKE lines at a stop now say what to do with the issues (file or decide the waiting ones, block an issue on what a blocked run found), not "write the next briefs".
+- Driver: at a red suite or CI the ESCALATE and WAKE lines ask for the fix-forward as a `ready` issue queued first in batch.txt, and a missing brief for an issue's `#N` line, not a hand-written brief.
+- The release no longer stops while another lane has an uncommitted paragraph in a specification part: it commits only that part's version and date lines and leaves the paragraph in the working tree.
+- The driver no longer holds an issue by a `#N` inside double-quoted text, such as a quoted driver comment.
+
+## [0.0.1408] — 2026-11-16
+
+**prover: a list grown and a bool raised in a loop are flags; what held where they rose is kept, the loop's names projected out (ADR-361 D15)**
+- Prover: a list a loop grows and a flag it raises carry what held where they rose (ADR-361 D15): past `while … { if i < args.len() as i64 { at.push(i) } … }`, a non-empty `at` proves `args.len() >= 1`, also as a call's precondition.
+
+## [0.0.1407] — 2026-11-16
+
+**Builders' changes (#1690, #1702, #1861, #1864, #1865)**
+- Loops: a name a loop sets to `e % m` (m a constant) is known to lie in 0..<m where e is never negative, so a linear-congruential generator's step is proved (#1690).
+- Bounds: a list that one branch of an `if` or one arm of a `match` empties (`ks = []`) keeps `ks.len() == 0 || ks.len() == r.ks.len()` past the join, so a struct's list-length rule survives `let cols = if ks.len() == 0 { [] } else { r.cols.clone() }`; a `match` keeps what all its arms prove of the names they change (#1702).
+- Builds: a `.nika` file added to a package is seen by the next build; `nikaia test` used the library built before it and rustc refused calls into the new file (NK1343) (#1861).
+- Faster text building: a block's `Text::push` of an ASCII character is inlined into the loop that calls it on every target, its wide-character and growth paths out of line (a fasta-like loop counts 16 % fewer instructions) (#1864).
+- NK1117 no longer tells you to write `use std::Bytes` (which NK1156 then refused) for a call on a prelude type such as `Bytes::from`: a capitalized prefix is a type, and types need no `use` (#1865).
+
+## [0.0.1406] — 2026-11-16
+
+**Builders' changes (#1554, #1638, #1751, #1811)**
+- Memory budgets: a map sent between tasks now weighs its whole table, and starting tasks no longer charges the runtime's bookkeeping to the task that starts them (#1554).
+- A program can declare its own `Box` type: the compiler's generated code names Rust's box `std::boxed::Box` (#1638).
+- A value put into `SharedMut(…)` or `Locked(…)` counts against the shared value from its creation, not against the task that made it, so a task that creates and drops shared values no longer runs over its memory budget (ADR-327 D9).
+- The bounds walk knows that an HTTP head's `size()` is at least 4 and its `length()` and a buffer's `len()` are never negative, and reads a ledger's `ensures` for a `len()` of a type that is no list, so `buffer.len() - head.size()` is proved.
+
+## [0.0.1405] — 2026-11-16
+
+**Builders' changes (#1820, #1821, #1822, #1823, #1827, #1837)**
+- Driver: a merge git refuses names git's own message, a generated file in the way is moved aside and the merge retried, a conflict names only its sources; an Exit boxed in a sum now ends main with its code (the driver's restart no longer exits 1 with "Error:").
+- The driver's WAKE lines name their kind, the one file to read and the action, and the driver runs the release itself after each push.
+- Driver: an issue filed from a Found first runs its probe on today's develop, and a builder's Found is probed with a binary built from HEAD
+- Driver: the proof figure is measured after each push, beside the next batch, and logged to docs/briefs/<lane>/proved.log; a fall of more than 0.2 points wakes the session with the commit range.
+- The driver holds back an issue whose last run ended partial naming an open `#N` under `Needs:`, and keeps an `Issue:` answer whole when its prose holds a `;`.
+- Driver: a report's `Issue: fits docs/issues.md` (any case) counts as nothing missing and files no improvement issue.
+
+## [0.0.1404] — 2026-11-16
+
+**Builders' changes (#1805, #1808, #1832, #1836, #1839, #1841, #1842, #1846, #1863)**
+- Bounds: compiler functions no other package or Rust host calls are private, so the walk derives their preconditions; a private function another file calls keeps its published text tier (part of #1831).
+- Bounds: derived preconditions also over field paths of a parameter, non-zero divisors, non-empty lists and non-overflowing steps (ADR-391 D1 widened, #1832).
+- Bounds: --bounds names the gate of a parameter no precondition bounds, and the walk visits a range's ends (#1863).
+- Bounds: a capped bound stands past a loop that shortens the list only through methods of its own value (#1808).
+- A match on a part bound out of a lent parameter binds through the reference, without ref (#1805); a text item a walk lends is looked up as the str it holds.
+- Emitter: a function value failing in a sum hands each member on to its caller's channel (#1836); a program's own Result or Option no longer hides the prelude's (#1846).
+- Coalesce: m[k] ?? name over a map of a word takes the fallback as it is (#1841); a simd vector or time::Duration read out of a map with ?? is a copy (#1842).
+- nikaia run: the run bundle's fingerprint also walks std's path dependencies, so an edit there rebuilds the runtime (#1839).
+
+## [0.0.1403] — 2026-11-16
+
+**Builders' changes (#1613, #1614, #1615, #1806)**
+- benches/game: spectral-norm against the Benchmarks Game's fastest Rust entry (Rust #6). `nikaia run benches/game/game.nika -- spectral-norm` counts it with callgrind: the program as first written 1.42x Rust's instructions at x86-64-v3, the one written for speed with simd::Fixed[f64, 2] 0.80x, at 41 % and 78 % of the tokens.
+- simd::splat, simd::load and simd::Fixed::from take their type from a std method's parameter (`vs.push(simd::splat(0.0))`) and from the left side of a `??`, NK1245 before.
+- benches/game: fannkuch-redux against the Benchmarks Game's fastest Rust entry (Rust #6). `nikaia run benches/game/game.nika -- fannkuch-redux` counts it: the program as first written 6.33x Rust's instructions, the one written for speed 2.65x, at 40 % and 48 % of the tokens; both cost what the same algorithm costs in plain Rust, and the gap is Rust #6's run-time byte shuffle
+- a clone of a list copies its items in one pass, a memcpy for numbers: a program cloning a list of 10 integers per turn counts 16 % fewer instructions (fannkuch-redux)
+- benches/game: binary-trees against the Benchmarks Game's fastest Rust entry (Rust #5). `nikaia run benches/game/game.nika -- binary-trees` counts it: the program as first written, a recursive enum, 5.75x Rust's instructions at 47 % of the tokens; the gap is one malloc and free per node against Rust #5's bump arena, and 1.26x of the same boxed tree in plain Rust
+- n-body written for speed with simd::Fixed[f64, 4] in benches/game (#1806): 249.5 instructions a step at x86-64-v3 against Rust #9's 196.4 (1.27x; the plain program 1.66x), the same output byte for byte.
+- Float lanes in std::simd (#1806): Lanes[f32/f64] and Fixed[f32/f64, N] with + - * / between two vectors, sqrt, abs, min, max, comparisons, select, min_lane, max_lane, and on Fixed a pairwise sum(), each lane the scalar's bits; integer operations on float lanes and sqrt/abs/sum on integer lanes are NK1171, bit operators and % on float lanes NK1296, - on any vector and ! on float lanes NK1191.
+- simd::splat, simd::load and simd::Fixed::from take their type from where they stand everywhere, not only from a typed let: a struct field, a Vec or Array of vectors, a parameter, an assigned place and a function's result (NK1245 before).
+
+## [0.0.1402] — 2026-11-16
+
+**Prover and bugs lanes: derived preconditions widened, flags, narrow types, shrinking field bounds, NK2205 (#1669, #1673, #1681, #1688, #1767, #1785, #1786, #1787; #1754, #1759, #1772, #1788, #1797, #1798, #1799)**
+- bounds: a derived precondition bounds a parameter by a multiple of a length plus a number (l < 2 * xs.len()) and knows a length is an i64, so at < xs.len() - 1 proves at + 1 (#1673, #1767)
+- bounds: a counter set to an if-expression's value keeps its loop invariant (#1669); a found rule a <= b of two private fields is given at entry and checked at each write (#1681)
+- bounds: a list field's elements capped by another field's length that shrinks (ADR-306 D21; #1688, #1785); a narrow unsigned name and a for over whole numbers lie in their type's range (ADR-306 D34; #1786)
+- Prover: what held where a loop or branch set a flag is proved under that flag (#1787)
+- ADR-391 D1 widened: derived preconditions also over a parameter's field paths, a non-zero divisor, a non-empty list and a non-overflowing step (build: #1832)
+- NK2205 no longer names the receiver of set as the lock the value was read from (#1799); Rust's Box is emitted as std::boxed::Box (#1798)
+- std: process::run keeps env, env_remove and stdin (#1797); manifest refuses a [build] key under [package] (#1772); sort_by_key hands the lambda the item (#1754, #1788); a second nikaia test compiles neither build again (#1759)
+
+## [0.0.1401] — 2026-11-16
+
+**Builders' changes (#1818, #1819)**
+- The driver files an improvement issue only for new points: deviations stay in the report, a broke-rule answer becomes a comment on the run's issue, a point the run settled is dropped, and a point an improvement issue already has is added there as a comment.
+- The driver no longer queues an issue that waits for an open one (a `Needs #N`-style line, or a last run blocked on an open `#N`): it prints `SKIPPED #M waits for #N` and relabels it `blocked`; builders end a blocked run within their first turns.
+
+## [0.0.1400] — 2026-11-16
+
+**Builders' changes (#1732, #1744, #1745, #1753, #1760, #1773, #1774, #1775, #1784, #1792, #1793, #1794, #1796, #1801, #1802)**
+- Builders' Found lines name the output a probe should give and the ADR, section or compiler message that says so (#1732)
+- The driver files a report's `Needs: supervisor decision: <gap>` that has no `Found:` line as a `decision` issue, instead of burying the question in the improvement issue.
+- The driver files a report's `Found:` line that says `no decision yet` as a `decision` issue, even when `Needs:` is none.
+- Driver: an `Issue: meets I1-I13` answer is no longer filed as an improvement issue; builder facts name the `text_tiers::` it tests for checker lending changes.
+- `nikaia test --filter 'a|b'` that matches nothing now also says that `--filter` matches plain text and is given once per name.
+- commit.nika warns when a commit changes a rules file and the report's Issue: holds an answer not marked (built), which the driver would file again.
+- nikaia test ends a test program's build after NIKAIA_TEST_BUILD_TIME_LIMIT seconds (default 1800) and fails it as "build timed out after N s", so a build stuck on a Cargo lock names its program instead of hanging the run; a batch build past it is dropped and its programs built alone.
+- nikaia test: a test program's build limit, NIKAIA_TEST_BUILD_TIME_LIMIT, now defaults to ten times NIKAIA_TEST_TIME_LIMIT (3000 s) and 0 sets none; a build that runs out of time says so with a hint to check for another cargo holding the build lock.
+- none (a test only; the fix shipped with 57de760b0)
+- scripts/commit.nika no longer refuses another agent's staged file: it commits only the report's Files:/Partial: through a private index and names the files it left staged
+- Rules: a Found on a lowered-file difference names the commit it ran on and is reproduced by an uncached lower-std of a HEAD copy (docs/issues.md I5, the driver's Found template, builder facts).
+- scripts/commit.nika recognises a report an earlier, interrupted attempt already committed (same subject, listed files unchanged and touched by that commit) and writes its sha into the report instead of refusing.
+- Driver: agent.nika refuses to start or resume a brief while a process still runs its recorded session (a killed driver's claude), rather than put two builders in one session and checkout.
+- Driver: each ESCALATE line ends with the commit of the drive.nika that ran, and docs/issues.md I4c has an issue from a script failure checked against develop before it is filed
+- commit.nika's NOTE about an Issue: answer not marked (built) now also fires when the commit changes a script under scripts/, not only a rules file.
+
+## [0.0.1399] — 2026-11-16
+
+**Builders' changes (#1677, #N[, #N, #1678, #1665, #N**", #1682, #1685, #1689, #1692, #1698, #1699, #1700, #1704, #1706, #1709, #1710, #1714, #1717, #1722)**
+- The driver files each `Found:` line of a report as its own issue, and a Found must name one defect with its probe (#1677).
+- Driver: issues filed from a Found no longer demand a probe.nika snippet and a new tests/compiler test for a docs or scripts defect, and the lane queue skips an issue a develop commit already Fixes (#1678).
+- Driver: a builder's prompt lists the develop commits that name its issue and says so when one already Fixes it, and a queued issue fixed since it was queued is dropped from the batch (#1682).
+- Specification: type lists and examples name `scalar` where they said `char`, which Nikaia does not have.
+- none (an issue rule)
+- Issue rules: an item that counts sites under a field rule lists each field as private or pub (ADR-306 D22, I8a)
+- Driver: a builder's report says what to tell another issue as `Comment: #N <text>`, and the driver posts it there instead of filing an improvement issue.
+- NK2506 no longer refuses a name rebound to a copy (`let items = items.clone()`, `x = x.clone()`): the follow reads the binding a use sees, not every binding of the name.
+- NK2506 no longer refuses a call to `b.put(items)` because some other own type also has a `put` that hands its list to Rust: where the syntax names the receiver's type, only that type's method is followed.
+- commit.nika takes `Partial: <paths>` for files shared with another agent: it commits only the hunks staged of them (#1704)
+- The driver's improvement issues name the run's report and commit; docs/issues.md I4a asks that a claim of today's behaviour be read in the code.
+- commit.nika commits a staged lowered set whole: it refuses an include! of a lowered file the commit lacks or a lowered change without its lowered.rs, and stages the LOWERED_DIGEST of the set as committed (#1709)
+- The driver's Found issues ask for the probe, expected and actual output and the cause, and their Done when names a check (#1710)
+- nikaia fix PATH makes the edits the checker's warnings suggest (first: NK1350's needless .clone() deleted) and names each one; --dry-run prints the diff and writes nothing.
+- nikaia fix PATH makes the edits the checker suggests (first: NK1350's needless .clone() deleted), naming each; --dry-run prints the diff.
+- The driver merges origin/develop before each issue and each suite, not only on a rejected push, and restarts when that merge brought scripts (#1717).
+- Driver: local script tests run on the driver's own copy of the compiler, and a run that loses the compiler to another lane's rebuild is rerun once instead of going red to QA.
+
+## [0.0.1398] — 2026-11-16
+
+**Bounds walk: a method's found facts through self; the driver accepts a cut itself (#1667, #1694)**
+- The bounds walk carries a method's found facts through self: a fact a method's body proves about its own fields is kept at its calls (#1667).
+- scripts/drive.nika, batch.nika, release.nika: a report with Result done or partial, a green gate, Needs: none and Owner: none no longer stops the driver; it is marked auto-accepted, listed in review.txt and released with the next version (#1694).
+
 ## [0.0.1397] — 2026-11-15
 
 **Builders' changes (#1441, #1459, #1464, #1505, #1509, #1512, #1515, #1516, #1517, #1519, #1520, #1523, #1535, #1539, #1546)**

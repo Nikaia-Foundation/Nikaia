@@ -139,7 +139,7 @@ fn one_escape(c: ref Vec[scalar], at: i64, char_of: fn(i64) -> scalar? sync) -> 
 /// **The byte a `'\xNN'` above `\x7F` names**, or `null` where the literal is
 /// anything else (ADR-320 D8): in a `'…'` such an escape is a byte, and the
 /// literal is only a `u8`.
-pub fn a_high_byte(literal: ref String) -> i64? sync {
+fn a_high_byte(literal: ref String) -> i64? sync {
     let c: Vec[scalar] = literal.chars().collect()
     if c.len() != 4 || c[0] != '\\' || c[1] != 'x' {
         return null
@@ -256,7 +256,7 @@ fn hex_digit(c: scalar) -> i64? sync {
 }
 
 // A number in lowercase hexadecimal, without leading zeros.
-pub fn hex_of(n: i64) -> String {
+fn hex_of(n: i64) -> String {
     if n == 0 {
         return "0"
     }

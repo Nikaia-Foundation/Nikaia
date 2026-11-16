@@ -11,7 +11,7 @@ use std::collections
 
 /// The declared hidden parameters of an item, `n` of them from `first`
 /// (ADR-010 D9), with `Keyed` as their default where `defaulted`.
-pub fn emit_seeds_declared(first: i64, n: i64, defaulted: bool) -> Vec[String] {
+fn emit_seeds_declared(first: i64, n: i64, defaulted: bool) -> Vec[String] {
     let mut out: Vec[String] = []
     let mut at = first
     while at < first + n {
@@ -26,7 +26,7 @@ pub fn emit_seeds_declared(first: i64, n: i64, defaulted: bool) -> Vec[String] {
 }
 
 /// The same names, as arguments.
-pub fn emit_seeds_applied(first: i64, n: i64) -> Vec[String] {
+fn emit_seeds_applied(first: i64, n: i64) -> Vec[String] {
     let mut out: Vec[String] = []
     let mut at = first
     while at < first + n {
@@ -161,7 +161,7 @@ impl EmitState {
     fn emit_trait_returned[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, given: ref Type?, foreign: bool) -> String sync {
         let ty = given ?? return "()"
         if foreign && emit_base(emit_text(world, ty.name)) == "CStr" {
-            return "Option<nikaia_std::foreign::CText>"
+            return f"{self.rust_option()}<nikaia_std::foreign::CText>"
         }
         if foreign && self.handle_named(world, ty) != null {
             return f"*mut {self.pointed_at(world, ty)}"
@@ -192,7 +192,7 @@ impl EmitState {
     }
 
     /// An item of the unit (`emit/mod.rs` refuses the ones this does not write).
-    pub fn emit_item[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, written: ref Spanned[Item]) sync throws {
+    fn emit_item[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, written: ref Spanned[Item]) sync throws {
         let at = written.span.start
         // **A type only tests reach is built with them** (#1160,
         // `modules_only_tests_package`): its derives and impls too.
@@ -453,6 +453,15 @@ impl EmitState {
                 } else {
                     out.push(f"// use {joined}\n")
                 }
+                // **A package's traits come into Rust's scope with it** (#116):
+                // a method of `db::Statement` called on a `db::Raw` is Rust's
+                // trait method, found only where the trait is in scope.
+                if segments.len() == 1 && segments[0] != "std" {
+                    let traits = emit_item_package_traits(world, self.own_contracts, segments[0])
+                    if traits.len() > 0 {
+                        out.push(f"#[allow(unused_imports)]\nuse {segments[0]}::{{{traits.join(", ")}}};\n")
+                    }
+                }
             },
             // **The same `const` the body form writes, one level out**
             // (ADR-287): the spelling is the checker's, keyed by the item's
@@ -551,7 +560,7 @@ impl EmitState {
         // **`impl Fatal for T` is a marker** (ADR-345 D1); it answers `Ending`
         // for the status it sets (ADR-345 D4, ADR-346 D6).
         if has_trait && trait_text == "Fatal" && !emit_item_declares_trait(world, "Fatal") {
-            out.push(f"impl{declares} nikaia_std::process::Ending for {target_name}{applied} {{\n    fn exit_code(&self) -> Option<i32> {{\n        None\n    }}\n    fn fatal_code(&self) -> Option<i32> {{\n        Some(1)\n    }}\n}}\n\n")
+            out.push(f"impl{declares} nikaia_std::process::Ending for {target_name}{applied} {{\n    fn exit_code(&self) -> {self.rust_option()}<i32> {{\n        None\n    }}\n    fn fatal_code(&self) -> {self.rust_option()}<i32> {{\n        Some(1)\n    }}\n}}\n\n")
             return
         }
         // **`impl Cleanup for T` is the type's own `cleanup` and a one-line
@@ -569,7 +578,7 @@ impl EmitState {
                 bridge = "CleanupSend"
                 send = " + Send"
             }
-            out.push(f"impl{declares} nikaia_std::cleanup::{bridge} for {target_name}{applied} {{\n    fn cleanup(&mut self) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ::std::string::String>>{send} + '_>> {{\n        Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({target_name}::cleanup(self){awaited}) }})\n    }}\n}}\n")
+            out.push(f"impl{declares} nikaia_std::cleanup::{bridge} for {target_name}{applied} {{\n    fn cleanup(&mut self) -> std::pin::Pin<std::boxed::Box<dyn std::future::Future<Output = {self.rust_result()}<(), ::std::string::String>>{send} + '_>> {{\n        std::boxed::Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({target_name}::cleanup(self){awaited}) }})\n    }}\n}}\n")
             return
         }
         // **`impl Eq`, `impl Ord` and `impl Hash` are the language's**
@@ -587,7 +596,7 @@ impl EmitState {
             } else if trait_text == "Hash" {
                 out.push(f"impl{declares} std::hash::Hash for {me} {{\n    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {{ {target_name}::hash(self, state) }}\n}}\n")
             } else {
-                out.push(f"impl{declares} PartialOrd for {me} {{\n    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {{ Some(std::cmp::Ord::cmp(self, other)) }}\n}}\nimpl{declares} Ord for {me} {{\n    fn cmp(&self, other: &Self) -> std::cmp::Ordering {{ {target_name}::compare(self, other) }}\n}}\n")
+                out.push(f"impl{declares} PartialOrd for {me} {{\n    fn partial_cmp(&self, other: &Self) -> {self.rust_option()}<std::cmp::Ordering> {{ Some(std::cmp::Ord::cmp(self, other)) }}\n}}\nimpl{declares} Ord for {me} {{\n    fn cmp(&self, other: &Self) -> std::cmp::Ordering {{ {target_name}::compare(self, other) }}\n}}\n")
             }
             return
         }
@@ -748,7 +757,7 @@ impl EmitState {
         }
         let mut outcome = returned.clone()
         if method.can_throw {
-            outcome = f"Result<{returned}, Box<dyn std::error::Error>>"
+            outcome = f"{self.rust_result()}<{returned}, std::boxed::Box<dyn std::error::Error>>"
         }
         // **A method that may pause is declared in the return-position form**
         // (ADR-288 D26); `+ Send` follows the executor, not the type.
@@ -848,4 +857,26 @@ impl EmitState {
         }
         out.push(f"{signature} {{ {body} }}\n")
     }
+}
+
+/// The traits of the package `package`, each as `Name as _`: what brings
+/// their methods into Rust's scope. A dependency's ledger is absorbed under
+/// its name into the unit's own contracts `own` (`modules::absorb_into`);
+/// the library ledger is read too, for what `std` ships beside it.
+fn emit_item_package_traits(world: ref EmitWorld, own: ref Ledger, package: ref String) -> Vec[String] {
+    let prefix = f"{package}::"
+    let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+    for (key, _) in own.traits {
+        let name = key.strip_prefix(prefix) ?? ""
+        if !name.contains("::") && !name.is_empty() {
+            names.insert(f"{name} as _")
+        }
+    }
+    for (key, _) in world.library.traits {
+        let name = key.strip_prefix(prefix) ?? ""
+        if !name.contains("::") && !name.is_empty() {
+            names.insert(f"{name} as _")
+        }
+    }
+    return names.iter().cloned().collect()
 }

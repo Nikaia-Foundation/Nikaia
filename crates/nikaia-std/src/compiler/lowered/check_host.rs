@@ -322,7 +322,7 @@ pub(crate) fn host_ring_reach(graph: &collections::BTreeMap<String, Vec<String>>
         let mut ring: Vec<String> = vec![];
         let mut j = from;
         while j < path.len() as i64 {
-            if !(*nikaia_std::index::get(&path, nikaia_std::index::at(j))).starts_with("f:") { computed = true; }
+            if !(*unsafe { nikaia_std::proven::read(&path, (j) as usize) }).starts_with("f:") { computed = true; }
             ring.push(nikaia_std::index::or(match labels.get(unsafe { nikaia_std::proven::read(&path, (j) as usize) }) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
@@ -375,14 +375,14 @@ pub(crate) fn host_ring(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_file_this_build_may_not_read(&mut self, path: &str, why: &Denied, span: &Span) {
+    pub(crate) fn a_file_this_build_may_not_read(&mut self, path: &str, why: &Denied, span: &Span) {
         let note = why_not_read(why, path);
         let way_out = way_out_of_a_read(why, path);
         self.findings.push(check_refusal("NK1175", span, format!("This build isn't allowed to read `{}`.", path), vec![note], Some(way_out)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn unmarked_hole<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, text: &str, span: &Span) {
+    pub(crate) fn unmarked_hole<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, text: &str, span: &Span) {
         let collapsed = collapsed_doubled_braces(text);
         if collapsed.is_some() {
             let single = nikaia_std::index::or(collapsed, || "".into());
@@ -400,7 +400,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn build_time_value<H: CheckHost>(&mut self, host: &H, value: &Expr, bound: &str, span: &Span) -> (Option<BuildValue>, bool) {
+    pub(crate) fn build_time_value<H: CheckHost>(&mut self, host: &H, value: &Expr, bound: &str, span: &Span) -> (Option<BuildValue>, bool) {
         let mut held: collections::BTreeMap<String, BuildValue> = collections::BTreeMap::new();
         for frame in self.scope.iter() {
             for local in frame.iter() {
@@ -425,7 +425,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn compiled_build_time_value<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, found: &Ty, bound: &str, span: &Span) -> CheckCompiled {
+    pub(crate) fn compiled_build_time_value<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, found: &Ty, bound: &str, span: &Span) -> CheckCompiled {
         if !self.flow.computes { return CheckCompiled { answered: true, value: None, said: true }; }
         let nothing = CheckCompiled { answered: false, value: None, said: false };
         let ring = host_ring(world, value);
@@ -488,21 +488,21 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_build_time_value_with_nowhere_to_compile(&mut self, bound: &str, span: &Span) {
+    pub(crate) fn a_build_time_value_with_nowhere_to_compile(&mut self, bound: &str, span: &Span) {
         let mut help: String = format!("Check it with `nikaia check` or `nikaia build`, which have one, or write `let {} = …` to compute it while the program runs.", bound);
         if self.computing_default { help = format!("Check it with `nikaia check` or `nikaia build`, which have one, or make `{}` a `T?` and compute it in the body.", bound); }
         self.findings.push(check_refusal("NK1127", span, format!("`{}` can't be computed while the program is built.", bound), vec![String::from("This check has no place to compile build-time code in, and a value that runs code is computed only by compiling it and running it.")], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_build_time_value_not_compiled(&mut self, bound: &str, why: &str, span: &Span) {
+    pub(crate) fn a_build_time_value_not_compiled(&mut self, bound: &str, why: &str, span: &Span) {
         let mut help: String = format!("Write `let {} = …` to compute it while the program runs.", bound);
         if self.computing_default { help = format!("Make `{}` a `T?` and compute it in the body.", bound); }
         self.findings.push(check_refusal("NK1127", span, format!("`{}` can't be computed while the program is built.", bound), vec![format!("{}.", why)], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_build_time_run_that_stopped<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, bound: &str, said: &str, here: i64, span: &Span) {
+    pub(crate) fn a_build_time_run_that_stopped<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, bound: &str, said: &str, here: i64, span: &Span) {
         for line in said.lines() {
             if line.starts_with("nikaia-build-time: ") {
                 let over = nikaia_std::index::or(line.strip_prefix("nikaia-build-time: "), || "");
@@ -525,7 +525,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lent_part_is_handed_on_as_it_is<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Expr, lent: &collections::BTreeSet<String>) {
+    pub(crate) fn a_lent_part_is_handed_on_as_it_is<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Expr, lent: &collections::BTreeSet<String>) {
         let mut is_block = false;
         let mut empty = false;
         match body {

@@ -1,0 +1,140 @@
+// The Benchmarks Game's `n-body`, written for speed (#1806): each body's
+// position and velocity is one `simd::Fixed[f64, 4]` (x, y, z and a zero
+// lane), and the ten pairs' `sqrt` and `/` are taken four lanes at a time.
+// It prints what `examples/n-body` prints, byte for byte: every lane keeps
+// the scalar operation's bits (ADR-377 D9), and `sum()` adds `(x + y) + (z +
+// 0)`, which is the scalar `x + y + z`.
+//
+//     nikaia run benches/game/n-body/speed.nika -- 1000
+//     -0.169075164
+//     -0.169087605
+
+use std::cli
+use std::simd
+use std::text
+
+// The sun and four planets: positions, velocities and masses by body, and
+// the scratch of one step, by pair.
+struct System {
+	p: Array[simd::Fixed[f64, 4], 5],
+	v: Array[simd::Fixed[f64, 4], 5],
+	mass: Array[f64, 5],
+	// Each pair's distance and its square, pair `(i, j)` at `4 * i + j - 1`:
+	// four groups of four, the slots no pair takes holding ones.
+	d: Array[simd::Fixed[f64, 4], 16],
+	d2: Array[f64, 16],
+}
+
+impl System {
+	// The sun's velocity makes the total momentum zero.
+	fn offset_momentum(mut self) sync {
+		let mut momentum: simd::Fixed[f64, 4] = simd::splat(0.0)
+		for i in 0..<5 {
+			let mass: simd::Fixed[f64, 4] = simd::splat(self.mass[i])
+			momentum = momentum + self.v[i] * mass
+		}
+		let solar_mass: simd::Fixed[f64, 4] = simd::splat(4.0 * 3.141592653589793 * 3.141592653589793)
+		let zero: simd::Fixed[f64, 4] = simd::splat(0.0)
+		self.v[0] = (zero - momentum) / solar_mass
+	}
+
+	// One step: every pair pulls on both of its bodies, then every body moves.
+	fn advance(mut self, dt: f64) sync {
+		for i in 0..<4 {
+			for j in i + 1..<5 {
+				let d = self.p[i] - self.p[j]
+				self.d[4 * i + j - 1] = d
+				self.d2[4 * i + j - 1] = (d * d).sum()
+			}
+		}
+		let step: simd::Fixed[f64, 4] = simd::splat(dt)
+		for g in 0..<4 {
+			let at = 4 * g
+			let s: simd::Fixed[f64, 4] = simd::Fixed::from([self.d2[at], self.d2[at + 1], self.d2[at + 2], self.d2[at + 3]])
+			let mag = step / (s * s.sqrt())
+			self.d2[at] = mag.lane(0)
+			self.d2[at + 1] = mag.lane(1)
+			self.d2[at + 2] = mag.lane(2)
+			self.d2[at + 3] = mag.lane(3)
+		}
+		for i in 0..<4 {
+			for j in i + 1..<5 {
+				let k = 4 * i + j - 1
+				let mag: simd::Fixed[f64, 4] = simd::splat(self.d2[k])
+				let mi: simd::Fixed[f64, 4] = simd::splat(self.mass[i])
+				let mj: simd::Fixed[f64, 4] = simd::splat(self.mass[j])
+				self.v[i] = self.v[i] - self.d[k] * mj * mag
+				self.v[j] = self.v[j] + self.d[k] * mi * mag
+			}
+		}
+		for i in 0..<5 {
+			self.p[i] = self.p[i] + step * self.v[i]
+		}
+	}
+
+	// Kinetic energy of each body, less the potential energy of each pair.
+	fn energy(self) -> f64 sync {
+		let mut e = 0.0
+		for i in 0..<5 {
+			let v = self.v[i]
+			e = e + 0.5 * self.mass[i] * (v * v).sum()
+			for j in i + 1..<5 {
+				let d = self.p[i] - self.p[j]
+				e = e - (self.mass[i] * self.mass[j]) / (d * d).sum().sqrt()
+			}
+		}
+		return e
+	}
+}
+
+fn body(x: f64, y: f64, z: f64) -> simd::Fixed[f64, 4] sync {
+	return simd::Fixed::from([x, y, z, 0.0])
+}
+
+fn solar_system() -> System {
+	let days_per_year = 365.24
+	let solar_mass = 4.0 * 3.141592653589793 * 3.141592653589793
+	let p: Array[simd::Fixed[f64, 4], 5] = [
+		body(0.0, 0.0, 0.0),
+		body(4.84143144246472090e+00, -1.16032004402742839e+00, -1.03622044471123109e-01),
+		body(8.34336671824457987e+00, 4.12479856412430479e+00, -4.03523417114321381e-01),
+		body(1.28943695621391310e+01, -1.51111514016986312e+01, -2.23307578892655734e-01),
+		body(1.53796971148509165e+01, -2.59193146099879641e+01, 1.79258772950371181e-01),
+	]
+	let v: Array[simd::Fixed[f64, 4], 5] = [
+		body(0.0, 0.0, 0.0),
+		body(1.66007664274403694e-03 * days_per_year, 7.69901118419740425e-03 * days_per_year, -6.90460016972063023e-05 * days_per_year),
+		body(-2.76742510726862411e-03 * days_per_year, 4.99852801234917238e-03 * days_per_year, 2.30417297573763929e-05 * days_per_year),
+		body(2.96460137564761618e-03 * days_per_year, 2.37847173959480950e-03 * days_per_year, -2.96589568540237556e-05 * days_per_year),
+		body(2.68067772490389322e-03 * days_per_year, 1.62824170038242295e-03 * days_per_year, -9.51592254519715870e-05 * days_per_year),
+	]
+	let mass: Array[f64, 5] = [
+		solar_mass,
+		9.54791938424326609e-04 * solar_mass,
+		2.85885980666130812e-04 * solar_mass,
+		4.36624404335156298e-05 * solar_mass,
+		5.15138902046611451e-05 * solar_mass,
+	]
+	let zero = body(0.0, 0.0, 0.0)
+	return System {
+		p: p,
+		v: v,
+		mass: mass,
+		d: [zero, zero, zero, zero, zero, zero, zero, zero, zero, zero, zero, zero, zero, zero, zero, zero],
+		d2: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+	}
+}
+
+fn main() throws {
+	let steps = cli::args().nth(1) ?? "1000"
+	let n = text::parse_i32(steps) ?? 1000
+
+	let mut system = solar_system()
+	system.offset_momentum()
+
+	println(f"{system.energy():.9}")
+	for _step in 0..<n {
+		system.advance(0.01)
+	}
+	println(f"{system.energy():.9}")
+}

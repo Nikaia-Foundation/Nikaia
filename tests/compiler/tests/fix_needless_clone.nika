@@ -1,0 +1,32 @@
+// #1714: each `NK1350` warning carries an edit, the `.clone()` deleted, which
+// `nikaia fix` makes; the warning reads as before. Three needless clones (a
+// type that copies, a `let` at its last use, a list a `for` only walks) and
+// one still needed (`t` is read after it): three warnings, and the program
+// runs.
+struct P { x: i64, y: i64 }
+
+fn take(s: String) -> i64 {
+    return s.len() as i64
+}
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("abc")
+    return g
+}
+
+fn main() throws {
+    let p = P { x: 1, y: 2 }
+    let q = p.clone()
+    println(q.x + p.y)
+    let s = make()
+    println(take(s.clone()))
+    let xs = [1, 2, 3]
+    for x in xs.clone() {
+        println(x)
+    }
+    println(xs.len())
+    let t = make()
+    println(take(t.clone()))
+    println(t)
+}

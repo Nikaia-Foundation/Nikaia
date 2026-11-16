@@ -28,6 +28,10 @@ goes into the section of its topic, in one line, with the run that paid for it.
   (`project_tests_bless_program`, #1238, #1236; issue-1431). With `--filter` it blesses only that test. A new test is run
   through `nikaia test`, not only `nikaia run`: `print` writes no newline and
   the `.stdout` holds the bytes exactly (7c1643d).
+* **Only `.stdout` holds raw bytes**: `nikaia test` reads a program's
+  standard error lossily as UTF-8 (`project_tests_relocated`, #1182), so a
+  `.stderr` or `.stops` test cannot show non-UTF-8 bytes; test those on
+  standard output and keep standard error ASCII (issue-1859, #1860).
 * **`tests/compiler` runs `target/fast/nikaia`**: never run the `it` binary
   beside it, it relinks the binary (j2). Some tests spawn `target/fast/nikaia`
   by relative path and fail from a copy (`a_trait_column_*`,
@@ -85,6 +89,10 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **To see a refusal of the prover**, put the call in a loop body or behind an
   input it cannot pin: a pure call with literal arguments is run at build time
   and proved (y4b).
+* **A `simd` probe reads ADR-377 D3 first** (`nikaia run scripts/syntax.nika
+  -- simd`): `Lanes[T]` offers only what keeps the output the same at every
+  width, so `lane(i)`, a lane's index, is on `Fixed[T, N]` only, and a probe
+  that calls it on `Lanes` stops at that name. (issue-1806, #1835)
 
 ### Checker and views
 
@@ -127,10 +135,9 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * A nullable result written `from self` is still NK1131, and `-> ref U?` on a method is NK1343. (issue-1403)
 * A check run over `value_leaves` after the arms are checked must not re-type a leaf with `check_core_expr` unless its root is a parameter (`a_place_of_a_lent_parameter`), or names a `match` pattern bound give NK1117 in `ast.nika` during `lower-std`. (issue-1425)
 * A `pub fn` with a mixed `String` result keeps it owned (ADR-282 D22), so a borrowed-field arm needs the per-arm NK1131; probe both the tail form and the `return if` form. (issue-1425)
+* `CheckFacts.method_callees` holds the ledger key of **every** described method call, `std`'s too (`Bytes::text`, `str::trim`, `net::Connection::read(within)`), filled in `check_core_call_on_described`, not only the user's own methods its comment's `Holder::put` suggests; `!method_callees.contains_key(on_node)` therefore excludes `std` calls as well. Tell a user method from a `std` one by the key's type part (`starts_with("str::")`, `== "Bytes::text"`, as `emit_core_calls.nika` does) or by `std_receivers`. (issue-1870, #1900)
 
 ### Lowering and lower-std
-
-* `commit.nika` stages whole files: a defect fix that shares a file with a step is split by putting HEAD's version plus the fix hunks (in the `.nika` and its lowered `.rs`) in place, committing, then restoring the step. Plan the fix as its own commit before starting the step in that file. (issue-1470)
 
 * **Check lowered tools code with `cargo check --profile fast -p nikaia-std
   --features compiler --message-format short`** right after the first
@@ -284,10 +291,11 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **The walk gets no fact from `let end = a.min(n)`** (`end <= n`), so `s.bytes[0..<end]` stays checked whatever `n` is, until #1514. (issue-1496)
 * `lower-std --bounds` writes nothing and reads no cache, so the old and new binaries can measure the same tree in parallel and be diffed site by site. (issue-1500)
 * Code that runs for every question of the bounds walk must not loop over string-keyed maps; give the names integer ids first, or `lower-std` grows from minutes to tens of minutes. (issue-1500)
-* **Before adding debug prints to `bounds_*.nika`, run `nikaia check --bounds --bounds-trace LINE F.nika`** (`lower-std --bounds --bounds-trace FILE:LINE` for a tools file): for each goal of a statement starting on that line it prints the goal, every fact it was asked with (rule facts and ledger facts included), how many the 48-fact cap evicted, and the type's field rules. (issue-1495)
+* **Before adding debug prints to `bounds_*.nika`, run `nikaia check --bounds --bounds-trace LINE F.nika`** (`lower-std --bounds --bounds-trace fixed.nika:95` for a toolchain file: the bare name, matched against the end of the path; one that matches no file prints nothing, #1780): for each goal of a statement starting on that line it prints the goal, every fact it was asked with (rule facts and ledger facts included), how many the 48-fact cap evicted, and the type's field rules. (issue-1495)
 * **A rule's fact over every element of a list is guarded by the list's emptiness**: `bounding_each_guarded` turns it into `len(xs) <= 0 || fact`, and `bounding_each_present` gives `len(xs) >= 1` where an element is actually read. A new kind of rule (as D28's `inner`) states its element facts through these, or it proves anything under an empty list. (issue-1483)
 * **A list field that a free function such as `main` writes is dropped from the rule candidates**, so a rule test fills its lists only through `ref mut self` methods. (issue-1483)
 * **Derived entry claims (ADR-391) key on the first non-`self` parameter**, so a method that takes only `self` gets none. (issue-1483)
+* **A trace probe's goal must need the fact under test**: `if ks.len() >= 1 { let y = ks[0] }` proves from its own guard and shows nothing about a join or a rule; ask a goal over another list that only the tested fact reaches (`if ks.len() == 2 { let y = r.ks[1] }` for a kept `ks.len() == r.ks.len()`). (issue-1702, #1889)
 * **Derived claims are proposed in `derived_claims` (`bounds_derived.nika`) and only stated at the call by `bounding_derived_side` (`bounds_walk.nika`)**: a claim never proposed shows no row in `--bounds`, not even an unproved one. (issue-1571)
 * **A `let` whose value the walk cannot write as a linear term or a bounded range is a number only through the checker's `whole_fields`** (calls, fields, and `x ?? d`); a value outside it drops every guard fact on the name. (issue-1571)
 * **`nikaia check --bounds FILE`** checks a file alone; a tools file is
@@ -297,6 +305,13 @@ goes into the section of its topic, in one line, with the run that paid for it.
   The two can differ: `check --bounds FILE` proved a site D23 reaches that
   `lower-std --bounds` did not (#1465); a figure is claimed only from
   `lower-std`. (issue-1414)
+* **`--asserts` lists `assert` claims only (ADR-361 D7)**; an index or
+  counter the walk leaves checked, with the loop its reason names, shows in
+  `--bounds`. An issue that asks for it under `--asserts` means `--bounds`. (issue-1634)
+* **A `--bounds` reason's wording is quoted verbatim by the `.bounds` files**
+  (23 for the loop reasons): before changing one, `grep -l 'PHRASE'
+  tests/compiler/tests/*.bounds` and bless them all in one `nikaia test` run
+  (one `--filter` per test). (issue-1634)
 * **A `for` binding is a number of the walk** (`CheckFacts.whole_loops`):
   check it before blaming the prover when a guard on `for k in ks` is lost.
   (issue-1414)
@@ -306,6 +321,15 @@ goes into the section of its topic, in one line, with the run that paid for it.
   of a body. After a precondition change run the `grep -rln 'assert('
   crates/nikaia/tests/it/` modules, not the whole `it` binary.
 * Nikaia has no `i8`; widening is `i64::from`. Valgrind needs `x86-64-v3`.
+* **A program written for speed (a `benches` row) is checked with `nikaia
+  check --bounds FILE` until every index proves, before it is counted**: one
+  checked index in the inner loop costs more than the lanes save (#1806's
+  first shapes counted 938 and 451 instructions a step against the plain
+  program's 326), and a harness run takes about 4 minutes. What proves:
+  `Array[T, N]` fields, not `Vec`; indexes written as linear terms of `for`
+  bindings (`4 * i + j - 1`); a counter that grows in a loop proves only by
+  ADR-361 D13's turn bound, so read its `--bounds` row before relying on it.
+  (issue-1806, #1835)
 * **Bless bounds expectations**: `nikaia test --bless` writes `NAME.bounds` and `NAME.loops.bounds` only when they exist, a new test's included: create an empty `NAME.bounds` first. (issue-1397, issue-1414)
 * **A `.bounds` test checks a private function's body only through its callers**: private functions get derived preconditions (ADR-391 D1), so make the tested functions `pub` for the expectation to read the body. (issue-1414)
 * **A length in a solver fact goes through `bounding_length_named`** (typed `i64`, capped at 2^60 when its elements take space, ADR-385 D1); a bare variable as a length proves nothing past `+ 1`. (issue-1465)
@@ -393,6 +417,10 @@ build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
   ?? ...` first; a `String?` field is matched as it is (`null => .., x => ..`);
 * [works] a `ref String?` parameter takes a bare `String` (`ref String?` is
   `NK1261`, write `String?`);
+* [works: ADR-331 D5] a struct field may have a default (`pub edit: Edit? =
+  null,`), and a literal in any file of the package leaves it out: a field
+  added to a struct with many literals (`CheckFinding`) gets one, not an
+  `edit: null` in each; literals in hand-written Rust still name it;
 * [gap: ADR-views-2 §6] `mut` on one name of a tuple (`for (k, mut v) in m`),
   and so `values_mut()` / `iter_mut()`, is `NK1307`: stops the slice;
 * [design: Part I 3.3, 3.4] `a..b` includes `b`, half-open is `a..<b`; the

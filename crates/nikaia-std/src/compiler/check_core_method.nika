@@ -170,7 +170,7 @@ fn check_core_method_witness(world: ref CheckWorld, method: ref String, config: 
 
 /// Where `join`'s `on_timeout:` stands among the options, or -1: only beside
 /// a `within:` (ADR-async-5 D17).
-pub fn check_core_method_on_timeout(world: ref CheckWorld, method: ref String, config: ref Vec[ConfigArg], witness: i64) -> i64 sync {
+fn check_core_method_on_timeout(world: ref CheckWorld, method: ref String, config: ref Vec[ConfigArg], witness: i64) -> i64 sync {
     if method != "join" || witness < 0 {
         return -1
     }
@@ -214,7 +214,7 @@ fn check_core_method_literal(mut state: CheckState, receiver: ref Expr, on: Ty) 
 }
 
 /// **A length `std` counts**: of a list, a run, text, a `Bytes` or a map.
-pub fn check_core_method_counted(on: ref Ty) -> bool {
+fn check_core_method_counted(on: ref Ty) -> bool {
     return match on {
         Ty::Named { name, .. } => {
             let b = check_core_method_base(name)
@@ -377,7 +377,7 @@ fn check_core_method_task_handle(ty: ref Ty) -> bool {
 }
 
 /// `net::Connection`, whose `read(within: d)` waits at most `d` (ADR-326 D8).
-pub fn check_core_method_connection(ty: ref Ty) -> bool {
+fn check_core_method_connection(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, .. } => name == "net::Connection",
         else => false,
@@ -795,6 +795,8 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
                     let added = state.facts.copied_walks.insert(id_of(expr) as i64)
                 } else if check_core_method_a_tuple(inner) {
                     let lent = state.flow.lent_list_reads.insert(id_of(expr) as i64)
+                } else if key != "Vec::get" {
+                    let ended = state.flow.list_ends.insert(id_of(expr) as i64)
                 }
             },
             else => {}
@@ -892,6 +894,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     // **A vector's shuffle and the operations that change its lanes' width**
     // (ADR-377 D3).
     let lanes = value_of_a_copy(on.unseen())
+    state.a_lane_method_not_offered(lanes, name, span)
     state.a_shuffle_out_of_lanes(world, lanes, name, args, span)
     let changed: Ty? = check_simd_method_result(lanes, name)
     if changed != null {
@@ -989,7 +992,7 @@ fn check_core_method_one_item(name: ref String) -> bool {
 
 /// **`x.m(…)` and `x?.m(…)`**: the arm `MethodCall | SafeMethod`. `safe` is
 /// `?.`; `expr` is the whole call.
-pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, safe: bool, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, safe: bool, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
     let name: String = f"{world.words.resolve(method)}"
     // **Code put into a container meets what it holds** (ADR-351 D3): the
     // value a `push` or an `insert` adds, and what an `extend` or an `append`
@@ -1049,7 +1052,7 @@ fn check_core_method_deadline(state: ref CheckState, world: ref CheckWorld, rece
 }
 
 // A `let mut` name of code handed to a method: its place cannot be named.
-pub fn check_core_method_code_lent(mut state: CheckState, world: ref CheckWorld, arg: ref Expr) sync {
+fn check_core_method_code_lent(mut state: CheckState, world: ref CheckWorld, arg: ref Expr) sync {
     match arg {
         Expr::Variable(bound, _) => {
             let named: String = f"{world.words.resolve(bound)}"
@@ -1094,13 +1097,13 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     // The others are kept, typed, for the call to check against the entry
     // it resolves to (#1446).
     let driver = state.dsl_drivers.contains(name)
-    let mut passed: Vec[(String, Ty, i64, bool)] = []
+    let mut passed: Vec[(String, Ty, i64, bool, String)] = []
     let mut at = 0
     while at < config.len() as i64 {
         if at != witness && at != on_timeout {
             let ty = check_core_expr(state, world, host, config[at].value, span)
             if !driver {
-                passed.push((world.words.resolve(config[at].name).clone(), ty, id_of(config[at].value) as i64, a_text_literal_expr(config[at].value)))
+                passed.push((world.words.resolve(config[at].name).clone(), ty, id_of(config[at].value) as i64, a_text_literal_expr(config[at].value), check_walked_written(config[at].value, world.words)))
             }
         }
         at += 1

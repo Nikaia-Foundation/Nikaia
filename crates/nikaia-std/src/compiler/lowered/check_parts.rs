@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_read_of_a_part(&mut self, base: &Expr, expr: &Expr, field: &str, span: &Span) {
+    pub(crate) fn a_read_of_a_part(&mut self, base: &Expr, expr: &Expr, field: &str, span: &Span) {
         let own = (id_of(expr) as i64, span.start as i64);
         if self.flow.read_index.contains_key(&own) { return; }
         let under = (id_of(base) as i64, span.start as i64);
@@ -15,7 +15,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_named_fold_part_that_may_pause(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, part: &Expr, span: &Span) -> Option<Ty> {
+    pub(crate) fn a_named_fold_part_that_may_pause(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, part: &Expr, span: &Span) -> Option<Ty> {
         let mut name: String = String::from("");
         match part {
             Expr::Variable(written, _) => {
@@ -41,7 +41,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_field_that_is_code(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, method: winnow_grammar::Symbol) -> Option<Ty> {
+    pub(crate) fn a_field_that_is_code(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, method: winnow_grammar::Symbol) -> Option<Ty> {
         let mut name: String = String::from("");
         match on {
             Ty::Named { name: written, .. } => { name = nikaia_std::block::Text::from(written.to_string()); },
@@ -62,7 +62,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn literal_receivers_take(&mut self, want: &Ty) {
+    pub(crate) fn literal_receivers_take(&mut self, want: &Ty) {
         let mut wanted: Ty = want.clone();
         match want {
             Ty::Nullable(inner) => {

@@ -24,7 +24,7 @@ pub(crate) fn sv_row_of(terms: Vec<SvTerm>, constant: i64) -> Option<SvRow> {
     for t in sorted.iter() {
         let t = *t;
         let last = unsafe { nikaia_std::proven::sub::<i64>(cols.len() as i64, 1) };
-        if !cols.is_empty() && *unsafe { nikaia_std::proven::read(&cols, (last) as usize) } == t.col { { let __nikaia_stored = match (*nikaia_std::index::get(&ks, nikaia_std::index::at(last))).checked_add(t.k) { Some(__nikaia_value) => __nikaia_value, None => return None }; unsafe { nikaia_std::proven::write(&mut ks, (last) as usize, __nikaia_stored) }; } } else {
+        if !cols.is_empty() && *unsafe { nikaia_std::proven::read(&cols, (last) as usize) } == t.col { { let __nikaia_stored = match (*unsafe { nikaia_std::proven::read(&ks, (last) as usize) }).checked_add(t.k) { Some(__nikaia_value) => __nikaia_value, None => return None }; unsafe { nikaia_std::proven::write(&mut ks, (last) as usize, __nikaia_stored) }; } } else {
             cols.push(t.col);
             ks.push(t.k);
         }
@@ -32,7 +32,7 @@ pub(crate) fn sv_row_of(terms: Vec<SvTerm>, constant: i64) -> Option<SvRow> {
     let mut row = SvRow { cols: vec![], ks: vec![], constant };
     let mut i: i64 = 0;
     while ((i) as usize) < cols.len() {
-        if *nikaia_std::index::get(&ks, (i) as usize) != 0 {
+        if *unsafe { nikaia_std::proven::read(&ks, (i) as usize) } != 0 {
             row.cols.push(*unsafe { nikaia_std::proven::read(&cols, (i) as usize) });
             row.ks.push(*unsafe { nikaia_std::proven::read(&ks, (i) as usize) });
         }
@@ -118,7 +118,8 @@ pub(crate) fn sv_row_eliminate(r: &SvRow, s: &SvRow, col: u32) -> Option<SvRow> 
     sv_row_combine(*nikaia_std::index::get(&ab, 0), r, *nikaia_std::index::get(&ab, 1), s)
 }
 
-pub fn sv_row_pick(r: &SvRow, s: &SvRow, opposite: bool) -> Option<u32> {
+#[cfg(test)]
+pub(crate) fn sv_row_pick(r: &SvRow, s: &SvRow, opposite: bool) -> Option<u32> {
     let mut best: Option<u32> = None;
     let mut best_cost: i64 = 0;
     let mut i: i64 = 0;
@@ -141,7 +142,8 @@ pub fn sv_row_pick(r: &SvRow, s: &SvRow, opposite: bool) -> Option<u32> {
     best
 }
 
-pub fn sv_row_eval(r: &SvRow, values: &[SvRat]) -> Option<SvRat> {
+#[cfg(test)]
+pub(crate) fn sv_row_eval(r: &SvRow, values: &[SvRat]) -> Option<SvRat> {
     let mut sum = sv_int(r.constant);
     let mut i: i64 = 0;
     while ((i) as usize) < r.cols.len() {
@@ -210,7 +212,7 @@ pub(crate) fn sv_row_test_show(r: Option<&SvRow>) -> String {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== building\n"));
     let r = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(5u32, 2), sv_row_test_term(1u32, -3), sv_row_test_term(5u32, 4), sv_row_test_term(9u32, 0), sv_row_test_term(2u32, 7), sv_row_test_term(2u32, -7)], 4), || sv_row_constant(0).into());

@@ -16,7 +16,7 @@ pub struct LgWhy {
     pub quotients: Vec<i64>,
 }
 
-pub fn lg_why() -> LgWhy { LgWhy { unknown: LgUnknown::NoContradiction, quotients: vec![] } }
+pub(crate) fn lg_why() -> LgWhy { LgWhy { unknown: LgUnknown::NoContradiction, quotients: vec![] } }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LgBudget {
@@ -24,7 +24,7 @@ pub struct LgBudget {
     pub bounds: i64,
 }
 
-pub fn lg_budget() -> LgBudget { LgBudget { cases: 1024, bounds: 4096 } }
+pub(crate) fn lg_budget() -> LgBudget { LgBudget { cases: 1024, bounds: 4096 } }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LgStep {
@@ -95,7 +95,7 @@ pub(crate) fn lg_variable(name: &str) -> LgLin {
     LgLin { terms, constant: 0 }
 }
 
-pub fn lg_add(a: &LgLin, b: &LgLin) -> Option<LgLin> {
+pub(crate) fn lg_add(a: &LgLin, b: &LgLin) -> Option<LgLin> {
     let mut terms = a.terms.copy_owned();
     for (name, k) in b.terms.iter() {
         let k = nikaia_std::num::value(k);
@@ -107,7 +107,7 @@ pub fn lg_add(a: &LgLin, b: &LgLin) -> Option<LgLin> {
     Some(LgLin { terms, constant })
 }
 
-pub fn lg_scale(a: &LgLin, k: i64) -> Option<LgLin> {
+pub(crate) fn lg_scale(a: &LgLin, k: i64) -> Option<LgLin> {
     if k == 0 { return Some(lg_constant(0)); }
     let mut terms: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for (name, c) in a.terms.iter() {
@@ -130,7 +130,7 @@ pub(crate) fn lg_gcd(a: i64, b: i64) -> i64 {
     lg_gcd(b, a % b)
 }
 
-pub fn lg_tightened(a: &LgLin) -> LgLin {
+pub(crate) fn lg_tightened(a: &LgLin) -> LgLin {
     let mut g: i64 = 0;
     for (_, k) in a.terms.iter() {
         let k = nikaia_std::num::value(k);
@@ -147,7 +147,7 @@ pub fn lg_tightened(a: &LgLin) -> LgLin {
     LgLin { terms, constant }
 }
 
-pub fn lg_terms_cmp(a: &collections::BTreeMap<String, i64>, b: &collections::BTreeMap<String, i64>) -> i64 {
+pub(crate) fn lg_terms_cmp(a: &collections::BTreeMap<String, i64>, b: &collections::BTreeMap<String, i64>) -> i64 {
     #[allow(unused_mut)] let mut left_names: Vec<&str> = vec![];
     let mut left_ks: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (name, k) in a.iter() {
@@ -387,7 +387,7 @@ impl LgIndexed {
     }
 }
 
-pub fn lg_indexed(arena: &TermArena, facts: &[i64], goal: i64, why: &mut LgWhy) -> Option<LgIndexed> {
+pub(crate) fn lg_indexed(arena: &TermArena, facts: &[i64], goal: i64, why: &mut LgWhy) -> Option<LgIndexed> {
     let mut all: Vec<LgFormula> = vec![];
     for fact in facts.iter() {
         let fact = nikaia_std::num::value(fact);
@@ -499,7 +499,7 @@ pub(crate) fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
             { let __nikaia_stored = *unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(j, 1)) as usize) }; unsafe { nikaia_std::proven::write(&mut out, (j) as usize, __nikaia_stored) }; }
             j = unsafe { nikaia_std::proven::sub::<i64>(j, 1) };
         }
-        { let __nikaia_stored = x; nikaia_std::index::set(&mut out, nikaia_std::index::at(j), __nikaia_stored); }
+        { let __nikaia_stored = x; unsafe { nikaia_std::proven::write(&mut out, (j) as usize, __nikaia_stored) }; }
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     out
@@ -691,7 +691,7 @@ pub(crate) fn lg_consistent(names: &[String], bounds: &[Vec<LgLin>]) -> LgClosed
             if negated.is_none() { return LgClosed::Consistent { found: false, values: collections::BTreeMap::new() }; }
             if k > 0 {
                 let limit = nikaia_std::index::or(negated, || 0).div_euclid(k);
-                if high.is_none() || limit < nikaia_std::index::or(high, || limit.into()) { high = Some(limit); }
+                if high.is_none() || limit < nikaia_std::index::or(high, || limit) { high = Some(limit); }
             } else {
                 let flipped = k.checked_neg();
                 if flipped.is_none() { return LgClosed::Consistent { found: false, values: collections::BTreeMap::new() }; }

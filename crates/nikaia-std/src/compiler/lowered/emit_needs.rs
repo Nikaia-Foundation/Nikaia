@@ -2,32 +2,32 @@
 // Edit emit_needs.nika in the directory above, not this file.
 
 impl EmitState {
-    pub fn on_block_types(&self) -> bool { true }
+    pub(crate) fn on_block_types(&self) -> bool { true }
 }
 
-pub fn block_types_import(on: bool) -> String {
+pub(crate) fn block_types_import(on: bool) -> String {
     if on { return String::from("#[allow(unused_imports)]\npub use nikaia_std::block::names::{CopyOwned, String, Vec, format, vec};\n"); }
     String::from("")
 }
 
-pub fn block_text_open(on: bool) -> String {
+pub(crate) fn block_text_open(on: bool) -> String {
     if on { return String::from("nikaia_std::block::Text::from("); }
     String::from("")
 }
 
-pub fn block_text_close(on: bool) -> String {
+pub(crate) fn block_text_close(on: bool) -> String {
     if on { return String::from(")"); }
     String::from("")
 }
 
-pub fn emit_callee_is_std_text(callee: Option<&str>) -> bool {
+pub(crate) fn emit_callee_is_std_text(callee: Option<&str>) -> bool {
     let key = match callee { Some(__nikaia_value) => __nikaia_value, None => return true };
     if key.starts_with("str::") || key.starts_with("String::") || key.starts_with("Vec::") { return true; }
     for scalar in ["i64::", "i32::", "u8::", "u32::", "u64::", "int::", "f64::", "f32::", "bool::", "char::"] { if key.starts_with(AsRef::<str>::as_ref(scalar)) { return true; } }
     false
 }
 
-pub fn answers_rust_text(written: &str, args: i64) -> bool {
+pub(crate) fn answers_rust_text(written: &str, args: i64) -> bool {
     if args == 0 { return written == "to_string" || written == "to_uppercase" || written == "to_lowercase"; }
     if args == 1 { return written == "repeat" || written == "join"; }
     written == "replace" && args == 2 || written == "replacen" && args == 3
@@ -135,8 +135,8 @@ pub(crate) fn emit_needs_line_at(starts: &[i64], offset: i64) -> i64 {
     let mut low: i64 = 0;
     let mut high = starts.len() as i64;
     while low < high {
-        let middle = low + (high - low) / 2;
-        if *nikaia_std::index::get(&starts, nikaia_std::index::at(middle)) <= offset { low = unsafe { nikaia_std::proven::add::<i64>(middle, 1) }; } else { high = middle; }
+        let middle = unsafe { nikaia_std::proven::add::<i64>(low, (nikaia_std::proven::sub::<i64>(high, low)) / 2) };
+        if *unsafe { nikaia_std::proven::read(&starts, (middle) as usize) } <= offset { low = unsafe { nikaia_std::proven::add::<i64>(middle, 1) }; } else { high = middle; }
     }
     low
 }

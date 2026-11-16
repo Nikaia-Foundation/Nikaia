@@ -18,7 +18,7 @@ impl CheckState {
     /// **Only the shape, never the fields.** Whether a `Point`'s fields can be
     /// written into a `const` is [`Checker::unwritable_field`]'s question, and
     /// it asks the declaration.
-    pub fn declared_below(ref self, world: ref CheckWorld, ty: ref Ty) -> String? sync {
+    fn declared_below(ref self, world: ref CheckWorld, ty: ref Ty) -> String? sync {
         return match ty {
             Ty::Named { name, args, view } => self.a_declared_name(world, name, args, view),
             Ty::Pointed { item, slice, mutable } => if slice && !mutable { self.a_run_of(world, item, "&[", "]") } else { null },
@@ -59,7 +59,7 @@ impl CheckState {
     ///
     /// One level, deliberately: a struct inside a struct reports the outer
     /// field, which is the one the reader wrote on this line.
-    pub fn unwritable_field(ref self, world: ref CheckWorld, ty: ref Ty) -> Vec[String] sync {
+    fn unwritable_field(ref self, world: ref CheckWorld, ty: ref Ty) -> Vec[String] sync {
         let name = match ty {
             Ty::Named { name, .. } => name.clone(),
             else => return [],
@@ -103,7 +103,7 @@ impl CheckState {
     /// **Only a foreign declaration**, because only there does `usize` mean
     /// *the other language's word for this*. A `usize` anywhere else is a type
     /// like any other and is measured like one.
-    pub fn a_count_at_the_boundary(ref self, written: ref String, want: ref Ty, found: ref Ty) -> bool sync {
+    fn a_count_at_the_boundary(ref self, written: ref String, want: ref Ty, found: ref Ty) -> bool sync {
         if !self.foreign_names.contains(written) {
             return false
         }
@@ -122,7 +122,7 @@ impl CheckState {
     /// Whether every method this name may be takes its receiver as a view and
     /// changes nothing: a call that only reads what it is called on. A name
     /// nothing describes is claimed nothing about (Part III C.4).
-    pub fn only_reads_its_receiver(ref self, world: ref CheckWorld, method: ref String) -> bool sync {
+    fn only_reads_its_receiver(ref self, world: ref CheckWorld, method: ref String) -> bool sync {
         let mut candidates: Vec[FnContract] = []
         for key in ledger_candidates(world.own, world.own_methods, method) {
             candidates.push(world.own.functions[key]?.clone() ?? FnContract::empty())
@@ -148,11 +148,12 @@ impl CheckState {
     /// **A type whose value is one machine word or less by what kind of type
     /// it is** ([ADR-279](../../docs/specification/adr/adr-279.md) D8): a
     /// number, a `bool`, a `char`, an enum of this program whose variants hold
-    /// nothing, and a type the library's ledger says copies. No size is
-    /// computed: a type made of parts is never one.
-    pub fn a_word_by_its_kind(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
+    /// nothing, and a type the library's ledger says copies, with its type
+    /// arguments too (`simd::Fixed[f64, 4]`, #1842). No size is computed: a
+    /// type made of parts the program declares is never one.
+    fn a_word_by_its_kind(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
         return match ty {
-            Ty::Named { name, args, view } => !view && args.len() == 0 && (a_number_name(name) || name == "bool" || name == "char" || name == "scalar" || self.a_payloadless_enum(name) || a_ledger_copies(ty, [world.library])),
+            Ty::Named { name, args, view } => !view && (args.len() == 0 && (a_number_name(name) || name == "bool" || name == "char" || name == "scalar" || self.a_payloadless_enum(name)) || a_ledger_copies(ty, [world.library])),
             else => false,
         }
     }
@@ -184,7 +185,7 @@ impl CheckState {
     /// for as long as the answer does: a text literal (a view already), a
     /// name, or a variant of an enum this file declares. Anything else is
     /// taken as before, which is the direction that cannot be wrong below.
-    pub fn a_coalesce_that_may_lend(ref self, world: ref CheckWorld, left: ref Ty, fallback: ref Expr, other: ref Ty) -> String? sync {
+    fn a_coalesce_that_may_lend(ref self, world: ref CheckWorld, left: ref Ty, fallback: ref Expr, other: ref Ty) -> String? sync {
         let held = match left {
             Ty::Nullable(inner) => inner.clone(),
             else => return null,
@@ -248,7 +249,7 @@ impl CheckState {
     /// exactly as `return self.name` does of a borrowed subject. Only a
     /// parameter declared `ref T`: its buffer is the caller's. A `let` bound to
     /// a view of something this body owns is not one, and keeps its words.
-    pub fn hands_back_a_view_of_the_subject(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    fn hands_back_a_view_of_the_subject(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
         let expected = self.expected?.clone() ?? return false
         if !expected.is_a_view() {
             return false
@@ -261,7 +262,7 @@ impl CheckState {
     /// xs[0]`, where the text pass made the result a view. The list goes into
     /// the caller's keep (`untethered_returns` in `buffers.nika`), so the
     /// element is lent, as a place of a `ref` parameter is.
-    pub fn a_made_element_lent(ref self, world: ref CheckWorld, value: ref Expr, expected: ref Ty) -> bool sync {
+    fn a_made_element_lent(ref self, world: ref CheckWorld, value: ref Expr, expected: ref Ty) -> bool sync {
         let viewed = match expected {
             Ty::Named { name, args, view } => view && args.len() == 0 && (a_type_base(name) == "str" || a_type_base(name) == "String"),
             else => false,
@@ -274,7 +275,7 @@ impl CheckState {
 
     /// An element of a list of text a `let` of this body holds, read whole:
     /// `xs[0]`, not `xs[1..]`, nor an element of a parameter's list.
-    pub fn an_element_of_a_made_list(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    fn an_element_of_a_made_list(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
         let (base, index) = match value {
             Expr::Index { base, index, .. } => (base, index),
             else => return false,
@@ -312,15 +313,28 @@ impl CheckState {
     /// **An element a `get` reads off a `ref` parameter** (#1107): `return
     /// m.get(k)` hands back what `return m[k]` does, a view of the element,
     /// which `get` already is below. Asked by the parameter's own type.
-    pub fn a_get_off_a_lent_parameter(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    fn a_get_off_a_lent_parameter(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
         let expected = self.expected?.clone() ?? return false
         if !expected.is_a_view() {
             return false
         }
-        let (receiver, method, args) = match value {
-            Expr::MethodCall { receiver, method, args, .. } => (receiver, method, args),
-            else => return false,
+        return match value {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                let called = world.words.resolve(method)
+                let a_get = called == "get" && args.len() == 1
+                let an_end = (called == "first" || called == "last") && args.len() == 0
+                (a_get || an_end) && self.a_lent_container(world, receiver, a_get, true)
+            },
+            // `return m[k]` out of a map (#1711).
+            Expr::Index { base, .. } => self.a_lent_container(world, base, true, false),
+            else => false,
         }
+    }
+
+    /// A parameter that is a map (with `maps`) or a `Vec` (with `lists`),
+    /// written `ref`, or written with no mark and kept nowhere (ADR-views-3
+    /// D2, D12; #1711): the body only reads it, so it is lent.
+    fn a_lent_container(ref self, world: ref CheckWorld, receiver: ref Expr, maps: bool, lists: bool) -> bool sync {
         let name = match receiver {
             Expr::Variable(name, _) => world.words.resolve(name).clone(),
             else => return false,
@@ -331,10 +345,16 @@ impl CheckState {
             Ty::Named { name, view, .. } => (a_type_base(name), view),
             else => return false,
         }
-        let called = world.words.resolve(method)
-        let a_list = container == "Vec" && ((called == "get" && args.len() == 1) || ((called == "first" || called == "last") && args.len() == 0))
-        let a_map = (container == "BTreeMap" || container == "HashMap") && called == "get" && args.len() == 1
-        return held.kind == CheckKind::Parameter && a_view && (a_list || a_map)
+        let a_list = lists && container == "Vec"
+        let a_map = maps && (container == "BTreeMap" || container == "HashMap")
+        if held.kind != CheckKind::Parameter || !(a_list || a_map) {
+            return false
+        }
+        if a_view {
+            return true
+        }
+        let key = self.current?.clone() ?? return false
+        return !check_function_keeps(world, key).contains(name)
     }
 
     /// **A call through a function value whose type writes `from`**
@@ -344,7 +364,7 @@ impl CheckState {
     /// argument the type reads is a parameter this function's result points
     /// into (its `from`, written or inferred), the call is returned as the
     /// direct call's result would be.
-    pub fn a_from_call_of_a_parameter(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    fn a_from_call_of_a_parameter(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
         let expected = self.expected?.clone() ?? return false
         if expected.is_a_view() {
             return false
@@ -375,7 +395,7 @@ impl CheckState {
 
     /// **A place inside a borrowed `self` or a `ref` parameter**: a field or
     /// an element, whose buffer is the caller's (#96, #738).
-    pub fn a_place_of_a_lent_parameter(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    fn a_place_of_a_lent_parameter(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
         let a_place = match value {
             Expr::Field { .. } => true,
             Expr::Index { .. } => true,
@@ -402,13 +422,13 @@ impl CheckState {
     }
 
     /// A place as a path - `name`, `p.name`, `a.b.c` - where it is one.
-    pub fn place_path(ref self, world: ref CheckWorld, expr: ref Expr) -> String? sync {
+    fn place_path(ref self, world: ref CheckWorld, expr: ref Expr) -> String? sync {
         return dotted_path(world, expr)
     }
 
     /// The place a `match` is over where it is a `mut` parameter or a place in
     /// one, as a path: `e`, `e.kind` (ADR-094 D3).
-    pub fn a_mut_parameter_place(ref self, world: ref CheckWorld, subject: ref Expr) -> String? sync {
+    fn a_mut_parameter_place(ref self, world: ref CheckWorld, subject: ref Expr) -> String? sync {
         let path = dotted_path(world, subject) ?? return null
         let parts: Vec[ref String] = path.split(".").collect()
         let found = self.binding(parts[0]) ?? return null
@@ -423,7 +443,7 @@ impl CheckState {
 ///
 /// One step, because that is what the question above needs: whether the
 /// fields of what a field *holds* can be written.
-pub fn element_of(ty: ref Ty) -> Ty sync {
+fn element_of(ty: ref Ty) -> Ty sync {
     return match ty {
         Ty::Named { name, args, .. } => if name == "Array" && args.len() > 0 { args[0].clone() } else { ty.clone() },
         Ty::Pointed { item, slice, mutable } => if slice && !mutable { item.clone() } else { ty.clone() },

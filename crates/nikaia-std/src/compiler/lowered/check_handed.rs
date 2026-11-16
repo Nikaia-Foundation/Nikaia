@@ -7,7 +7,7 @@ pub(crate) fn check_handed_key(function: &str, name: &str) -> String { format!("
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_handed_follow(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeMap<String, String> {
+pub(crate) fn check_handed_follow(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeMap<String, String> {
     let alone = world.here_at < 0;
     let mut held: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     let mut closed: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -177,7 +177,21 @@ pub(crate) fn check_handed_round(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>,
         Item::Fn { name, body, .. } => {
             let name = *name;
             let key = check_handed_name(view, name, target);
-            return check_handed_block(world, view, &key, body, closed, held);
+            let mut changed = false;
+            let mut state: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+            for param in check_handed_params(view, item) {
+                let origin = match held.get(&check_handed_key(&key, &param)) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                };
+                if origin.is_some() {
+                    let from = nikaia_std::index::or(origin, || "".into());
+                    if check_handed_insert(held, &key, &format!("*{}", param), &from) { changed = true; }
+                    state.insert(param, from);
+                }
+            }
+            if check_handed_block(world, view, &key, body, closed, held, &mut state) { changed = true; }
+            return changed;
         },
         _ => { },
     }
@@ -188,47 +202,195 @@ pub(crate) fn check_handed_round(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>,
 // this was written - see `contracts::sync`.
 pub(crate) fn check_handed_insert(held: &mut collections::BTreeMap<String, String>, function: &str, name: &str, origin: &str) -> bool {
     let at = check_handed_key(function, name);
-    if held.contains_key(&at) { return false; }
+    let prior = match held.get(&at) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    if prior.is_some() { if origin == "" || nikaia_std::index::or(prior.as_deref(), || "") != "" { return false; } }
     held.insert(at, nikaia_std::block::Text::from(origin.to_string()));
-    true
+    origin != ""
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_handed_block(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, block: &Block, closed: &collections::BTreeSet<String>, held: &mut collections::BTreeMap<String, String>) -> bool {
+pub(crate) fn check_handed_holds(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, name: winnow_grammar::Symbol, number: u32, held: &collections::BTreeMap<String, String>) -> Option<String> {
+    let at = match held.get(&check_handed_key(key, &format!("@{}", number))) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    if at.is_some() {
+        let origin = nikaia_std::index::or(at, || "".into());
+        return if origin == "" { None } else { Some(origin) };
+    }
+    match held.get(&check_handed_key(key, &format!("*{}", view.text(name)))) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_mark(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, exprs: &[&Expr], state: &collections::BTreeMap<String, String>, held: &mut collections::BTreeMap<String, String>) -> bool {
     let mut changed = false;
+    for expr in exprs.iter() {
+        let expr = *expr;
+        match expr {
+            Expr::Variable(name, id) => {
+                let id = *id; let name = *name;
+                let origin = nikaia_std::index::or(match state.get(&view.text(name)) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || "".into());
+                if check_handed_insert(held, key, &format!("@{}", id.get()), &origin) { changed = true; }
+            },
+            _ => { },
+        }
+    }
+    changed
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_bind(state: &mut collections::BTreeMap<String, String>, name: &str, origin: Option<&str>) {
+    if origin.is_some() {
+        state.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::index::or(match origin {
+            Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
+            None => None,
+        }, || "".into()));
+    } else { state.remove(name); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_block(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, block: &Block, closed: &collections::BTreeSet<String>, held: &mut collections::BTreeMap<String, String>, state: &mut collections::BTreeMap<String, String>) -> bool {
+    let mut changed = false;
+    let outer = state.copy_owned();
+    let mut declared: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut escaped: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     for stmt in block.stmts.iter() {
+        let exprs = check_visit_stmt(&stmt.node);
+        if check_handed_mark(view, key, &exprs, &state, held) { changed = true; }
+        let before = state.copy_owned();
+        let mut scoped: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for expr in exprs.iter() {
+            let expr = *expr;
+            match expr {
+                Expr::Match { value, arms, .. } => {
+                    let value = nikaia_std::boxed::open(value);
+                    let origin = check_handed_carries(world, view, key, value, &held);
+                    for arm in arms.iter() {
+                        for bound in check_handed_pattern_names(view, &arm.pattern) {
+                            check_handed_bind(state, &bound, (origin).as_deref());
+                            scoped.push(bound);
+                        }
+                    }
+                },
+                Expr::MethodCall { receiver, args, .. } => {
+                    let receiver = nikaia_std::boxed::open(receiver);
+                    let origin = check_handed_carries(world, view, key, receiver, &held);
+                    for arg in args.iter() {
+                        match arg {
+                            Expr::Closure { params, .. } => {
+                                for param in params.iter() {
+                                    let param = *param;
+                                    let text = view.text(param);
+                                    check_handed_bind(state, &text, (origin).as_deref());
+                                    scoped.push(text);
+                                }
+                            },
+                            _ => { },
+                        }
+                    }
+                },
+                _ => { },
+            }
+        }
+        let mut looping = false;
+        match &stmt.node {
+            Stmt::For { bindings, iter, .. } => {
+                looping = true;
+                let origin = check_handed_carries(world, view, key, iter, &held);
+                for bound in bindings.iter() {
+                    let bound = *bound;
+                    let text = view.text(bound);
+                    check_handed_bind(state, &text, (origin).as_deref());
+                    scoped.push(text);
+                }
+            },
+            Stmt::While { .. } => { looping = true; },
+            _ => { },
+        }
+        for name in scoped.iter() {
+            let origin = match state.get(name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            if origin.is_some() && check_handed_insert(held, key, &format!("*{}", name), nikaia_std::index::or(origin.as_deref(), || "")) { changed = true; }
+        }
+        if !scoped.is_empty() && check_handed_mark(view, key, &exprs, &state, held) { changed = true; }
+        for inner in check_visit_stmt_blocks(&stmt.node) {
+            let mut again = true;
+            while again {
+                let entry = state.len() as i64;
+                if check_handed_block(world, view, key, inner, closed, held, state) { changed = true; }
+                again = looping && (state.len() as i64) > entry;
+            }
+        }
+        if looping && check_handed_mark(view, key, &exprs, &state, held) { changed = true; }
+        for name in scoped.iter() {
+            check_handed_bind(state, name, (match before.get(name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }).as_deref());
+        }
+        for expr in exprs.iter() {
+            let expr = *expr;
+            if check_handed_expr(world, view, key, expr, closed, held) { changed = true; }
+        } ::core::mem::drop(exprs);
         match &stmt.node {
             Stmt::Let { names, value, .. } => {
                 let origin = check_handed_carries(world, view, key, value, &held);
-                if origin.is_some() {
-                    let from = nikaia_std::index::or(origin, || "".into());
-                    for bound in names.iter() {
-                        let bound = *bound;
-                        if check_handed_insert(held, key, &view.text(bound), &from) { changed = true; }
+                for bound in names.iter() {
+                    let bound = *bound;
+                    let text = view.text(bound);
+                    if !declared.contains(&text) {
+                        let shadowed = match state.get(&text) {
+                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                            None => None,
+                        };
+                        if shadowed.is_some() { escaped.insert(nikaia_std::block::Text::from(text.to_string()), nikaia_std::index::or(shadowed, || "".into())); }
+                        declared.insert(nikaia_std::block::Text::from(text.to_string()));
                     }
+                    check_handed_bind(state, &text, (origin).as_deref());
+                    if origin.is_some() && check_handed_insert(held, key, &format!("*{}", text), nikaia_std::index::or(origin.as_deref(), || "")) { changed = true; }
                 }
             },
             Stmt::Assign { target, value, .. } => {
                 let origin = check_handed_carries(world, view, key, value, &held);
-                let root = check_handed_root(view, target);
-                if origin.is_some() && root.is_some() { if check_handed_insert(held, key, nikaia_std::index::or(root.as_deref(), || ""), nikaia_std::index::or(origin.as_deref(), || "")) { changed = true; } }
-            },
-            Stmt::For { bindings, iter, .. } => {
-                let origin = check_handed_carries(world, view, key, iter, &held);
-                if origin.is_some() {
-                    let from = nikaia_std::index::or(origin, || "".into());
-                    for bound in bindings.iter() {
-                        let bound = *bound;
-                        if check_handed_insert(held, key, &view.text(bound), &from) { changed = true; }
-                    }
+                let root = match check_handed_root(view, target) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                match target {
+                    Expr::Variable(_, _) => { check_handed_bind(state, &root, (origin).as_deref()); },
+                    _ => {
+                        if origin.is_some() {
+                            state.insert(nikaia_std::block::Text::from(root.to_string()), nikaia_std::index::or(match origin.as_ref() {
+                                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                                None => None,
+                            }, || "".into()));
+                        }
+                    },
                 }
+                if origin.is_some() && check_handed_insert(held, key, &format!("*{}", root), nikaia_std::index::or(origin.as_deref(), || "")) { changed = true; }
             },
             _ => { },
         }
-        for expr in check_visit_stmt(&stmt.node) { if check_handed_expr(world, view, key, expr, closed, held) { changed = true; } }
-        for inner in check_visit_stmt_blocks(&stmt.node) { if check_handed_block(world, view, key, inner, closed, held) { changed = true; } }
     }
+    let mut left: collections::BTreeMap<String, String> = outer.copy_owned();
+    for (name, origin) in state.iter() { if !declared.contains(name) && !left.contains_key(name) { left.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(origin.to_string())); } }
+    for (name, origin) in escaped.iter() { if !left.contains_key(name) { left.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(origin.to_string())); } }
+    let mut gone: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for (name, _) in state.iter() { if !left.contains_key(name) { gone.push(nikaia_std::block::Text::from(name.to_string())); } }
+    for name in gone.iter() { state.remove(name); }
+    for (name, origin) in left.iter() { state.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(origin.to_string())); }
     changed
 }
 
@@ -254,8 +416,15 @@ pub(crate) fn check_handed_expr(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let word = view.text(method);
             let from_receiver = check_handed_carries(world, view, key, receiver, &held);
+            let mut only: Option<String> = None;
+            let owner = check_handed_owner(view, key, receiver);
+            if owner.is_some() {
+                let named = format!("{}::{}", nikaia_std::index::or(owner.as_deref(), || ""), word);
+                if check_handed_defines(world, view, &named) { only = Some(named); }
+            }
             for callee in closed.iter() {
                 if !callee.ends_with(&*format!("::{}", word)) { continue; }
+                if only.is_some() && *callee != nikaia_std::index::or(only.as_deref(), || "") { continue; }
                 let params = check_handed_params_of(world, view, callee);
                 let skip: i64 = if !params.is_empty() && *unsafe { nikaia_std::proven::read(&params, (0) as usize) } == "self" { 1 } else { 0 };
                 if from_receiver.is_some() && skip == 1 { if check_handed_insert(held, callee, "self", nikaia_std::index::or(from_receiver.as_deref(), || "")) { changed = true; } }
@@ -267,28 +436,136 @@ pub(crate) fn check_handed_expr(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
                     if at < params.len() as i64 && check_handed_insert(held, callee, unsafe { nikaia_std::proven::read(&params, (at) as usize) }, &origin) { changed = true; }
                 }
             }
-            if from_receiver.is_some() {
-                for arg in args.iter() {
-                    match arg {
-                        Expr::Closure { params, .. } => {
-                            for param in params.iter() {
-                                let param = *param;
-                                if check_handed_insert(held, key, &view.text(param), nikaia_std::index::or(from_receiver.as_deref(), || "")) { changed = true; }
-                            }
-                        },
-                        _ => { },
-                    }
-                }
-            }
-        },
-        Expr::Match { value, arms, .. } => {
-            let value = nikaia_std::boxed::open(value);
-            let origin = match check_handed_carries(world, view, key, value, &held) { Some(__nikaia_value) => __nikaia_value, None => return false };
-            for arm in arms.iter() { for bound in check_handed_pattern_names(view, &arm.pattern) { if check_handed_insert(held, key, &bound, &origin) { changed = true; } } }
         },
         _ => { },
     }
     changed
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_owner(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, receiver: &Expr) -> Option<String> {
+    match receiver {
+        Expr::StructLit { name, .. } => { let name = *name; return Some(view.text(name)); },
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let text = view.text(name);
+            if text == "self" {
+                let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
+                return if parts.len() == 2 { Some(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string())) } else { None };
+            }
+            return check_handed_typed_in(view, key, &text);
+        },
+        _ => { },
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_defines(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, named: &str) -> bool {
+    if check_handed_params_in(view, named).is_some() { return true; }
+    for unit in world.beside.iter() { if check_handed_params_in(unit, named).is_some() { return true; } }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_typed_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, name: &str) -> Option<String> {
+    for item in view.items.iter() {
+        match &item.node {
+            Item::Fn { name: own, .. } => {
+                let own = *own;
+                if check_handed_name(view, own, None) == key { return check_handed_typed(view, &item.node, name); }
+            },
+            Item::Impl { target, methods, .. } => {
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name: own, .. } => {
+                            let own = *own;
+                            if check_handed_name(view, own, Some(&view.text(target.name))) == key { return check_handed_typed(view, &method.node, name); }
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_typed(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, name: &str) -> Option<String> {
+    let mut found: Vec<String> = vec![];
+    match item {
+        Item::Fn { args, body, .. } => {
+            for arg in args.iter() { if view.text(arg.name) == name { found.push(match check_handed_type_name(view, &arg.ty) { Some(__nikaia_value) => __nikaia_value, None => return None }); } }
+            if !check_handed_typed_block(view, body, name, &mut found) { return None; }
+        },
+        _ => { return None; },
+    }
+    if found.is_empty() { return None; }
+    for each in found.iter() { if *each != *unsafe { nikaia_std::proven::read(&found, (0) as usize) } { return None; } }
+    Some(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&found, (0) as usize) }).to_string()))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_type_name(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Type) -> Option<String> {
+    if ty.is_tuple || ty.is_nullable || (*ty.code).is_some() || !ty.generics.is_empty() { return None; }
+    Some(view.text(ty.name))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_handed_typed_block(view: &ParsedView<'_, '_, '_, '_, '_, '_>, block: &Block, name: &str, found: &mut Vec<String>) -> bool {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Let { names, ty, value, .. } => {
+                for bound in names.iter() {
+                    let bound = *bound;
+                    if view.text(bound) == name {
+                        if names.len() != 1 { return false; }
+                        if ty.is_some() { found.push(match check_handed_type_name(view, match ty { Some(__nikaia_value) => __nikaia_value, None => return false }) { Some(__nikaia_value) => __nikaia_value, None => return false }); } else {
+                            match value {
+                                Expr::StructLit { name: built, .. } => { let built = *built; found.push(view.text(built)); },
+                                _ => { return false; },
+                            }
+                        }
+                    }
+                }
+            },
+            Stmt::Comptime { name: bound, .. } => {
+                let bound = *bound;
+                if view.text(bound) == name { return false; }
+            },
+            Stmt::For { bindings, .. } => {
+                for bound in bindings.iter() {
+                    let bound = *bound;
+                    if view.text(bound) == name { return false; }
+                }
+            },
+            _ => { },
+        }
+        for expr in check_visit_stmt(&stmt.node) {
+            match expr {
+                Expr::Match { arms, .. } => { for arm in arms.iter() { if nikaia_std::list::contains(&check_handed_pattern_names(view, &arm.pattern), &name) { return false; } } },
+                Expr::Closure { params, .. } => {
+                    for param in params.iter() {
+                        let param = *param;
+                        if view.text(param) == name { return false; }
+                    }
+                },
+                Expr::Select(arms, _) => { for arm in arms.iter() { if arm.binding.is_some() && view.text(match arm.binding { Some(__nikaia_value) => __nikaia_value, None => return false }) == name { return false; } } },
+                Expr::TryCatch { .. } => { if name == "error" { return false; } },
+                _ => { },
+            }
+        }
+        for inner in check_visit_stmt_blocks(&stmt.node) { if !check_handed_typed_block(view, inner, name, found) { return false; } }
+    }
+    true
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -359,12 +636,9 @@ pub(crate) fn check_handed_root(view: &ParsedView<'_, '_, '_, '_, '_, '_>, place
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_handed_carries(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, expr: &Expr, held: &collections::BTreeMap<String, String>) -> Option<String> {
+pub(crate) fn check_handed_carries(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, expr: &Expr, held: &collections::BTreeMap<String, String>) -> Option<String> {
     match expr {
-        Expr::Variable(name, _) => { let name = *name; return match held.get(&check_handed_key(key, &view.text(name))) {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-            None => None,
-        }; },
+        Expr::Variable(name, id) => { let id = *id; let name = *name; return check_handed_holds(view, key, name, id.get(), held); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); return check_handed_carries(world, view, key, base, held); },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); return check_handed_carries(world, view, key, base, held); },
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); return check_handed_carries(world, view, key, base, held); },
@@ -432,12 +706,11 @@ pub(crate) fn check_handed_carries_block(world: &CheckWorld<'_, '_, '_, '_, '_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_handed_written(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, expr: &Expr, held: &collections::BTreeMap<String, String>) -> Option<String> {
+pub(crate) fn check_handed_written(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, expr: &Expr, held: &collections::BTreeMap<String, String>) -> Option<String> {
     match expr {
-        Expr::Variable(name, _) => {
-            let name = *name;
-            let text = world.here.text(name);
-            if held.contains_key(&check_handed_key(key, &text)) { return Some(text); }
+        Expr::Variable(name, id) => {
+            let id = *id; let name = *name;
+            if check_handed_holds(&world.here, key, name, id.get(), held).is_some() { return Some(world.here.text(name)); }
             return None;
         },
         Expr::Field { base, name, .. } => {

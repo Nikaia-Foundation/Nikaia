@@ -2,9 +2,10 @@
 // Edit grammar_run.nika in the directory above, not this file.
 
 pub trait GrammarRunHost {
-    fn driver(&self) -> Result<String, Box<dyn std::error::Error>>;
+    fn driver(&self) -> Result<String, std::boxed::Box<dyn std::error::Error>>;
     fn manifest(&self, key: &str, program: &str) -> String;
     fn shared_target(&self) -> fs::Path;
+    fn build_target(&self) -> String;
     fn where_tools_start(&self) -> fs::Path;
     fn unique_beside(&self, path: &std::path::Path) -> fs::Path;
 }
@@ -41,8 +42,9 @@ pub async fn grammar_run_compile_and_run<H: GrammarRunHost>(host: &H, at: &std::
     let manifest_path = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("Cargo.toml")));
     grammar_run_write_if_changed(&manifest_path, &host.manifest(&key, &program), &host.unique_beside(&manifest_path)).await?;
     let target = host.shared_target();
+    let triple = host.build_target();
     let cargo = nikaia_std::index::or(env::var("CARGO"), || "cargo".into());
-    let built = match process::run(&cargo, vec![String::from("build"), String::from("--quiet"), String::from("--manifest-path"), nikaia_std::fs::path::display(&(manifest_path)), String::from("--target-dir"), nikaia_std::fs::path::display(&(target))], &nikaia_std::fs::path::display(&(host.where_tools_start())), vec![], vec![], false, None, process::Input::Closed, process::Stream::Captured, process::Stream::Captured).await {
+    let built = match process::run(&cargo, vec![String::from("build"), String::from("--quiet"), String::from("--manifest-path"), nikaia_std::fs::path::display(&(manifest_path)), String::from("--target-dir"), nikaia_std::fs::path::display(&(target)), String::from("--target"), nikaia_std::block::Text::from(triple.to_string())], &nikaia_std::fs::path::display(&(host.where_tools_start())), vec![], vec![], false, None, process::Input::Closed, process::Stream::Captured, process::Stream::Captured).await {
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("running cargo: {}", error) }, &"grammar_run_compile_and_run")) },
     };
@@ -52,7 +54,7 @@ pub async fn grammar_run_compile_and_run<H: GrammarRunHost>(host: &H, at: &std::
         Ok(_) => {},
         Err(error) => { return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("writing {}: {}", nikaia_std::fs::path::display(&(input_path)), error) }, &"grammar_run_compile_and_run")); },
     };
-    let binary = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(target), std::path::Path::new(&("debug")))), std::path::Path::new(&(format!("p{}", key))));
+    let binary = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(target), std::path::Path::new(&(triple)))), std::path::Path::new(&("debug")))), std::path::Path::new(&(format!("p{}", key))));
     let ran = match process::run(&nikaia_std::fs::path::display(&(binary)), vec![nikaia_std::fs::path::display(&(input_path))], ".", vec![], vec![], false, None, process::Input::Closed, process::Stream::Captured, process::Stream::Captured).await {
         Ok(value) => value,
         Err(error) => {
@@ -100,16 +102,16 @@ pub(crate) async fn grammar_run_write_if_changed(path: &std::path::Path, text: &
 }
 
 pub trait GrammarDriverHost {
-    fn lowered_own(&self) -> Result<String, Box<dyn std::error::Error>>;
+    fn lowered_own(&self) -> Result<String, std::boxed::Box<dyn std::error::Error>>;
     fn beside(&self) -> i64;
-    fn lowered_beside(&self, index: i64) -> Result<String, Box<dyn std::error::Error>>;
+    fn lowered_beside(&self, index: i64) -> Result<String, std::boxed::Box<dyn std::error::Error>>;
     fn dependency_modules(&self) -> Option<String>;
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn grammar_run_driver<H: GrammarDriverHost>(host: &H, names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger, result: &Ty, named: &str, rule: &str) -> Result<String, Box<dyn std::error::Error>> {
+pub fn grammar_run_driver<H: GrammarDriverHost>(host: &H, names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger, result: &Ty, named: &str, rule: &str) -> Result<String, std::boxed::Box<dyn std::error::Error>> {
     let lowered = match host.lowered_own() {
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::raise(CheckWall::DidNotBuild { detail: format!("lowering the grammar: {}", error) }, &"grammar_run_driver")) },
@@ -145,8 +147,8 @@ pub fn grammar_run_dump(names: &winnow_grammar::InternerContext, aliases: &colle
 }
 
 pub(crate) fn grammar_run_shapes(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger) -> Shapes {
-    let mut shapes = Shapes { enums: collections::BTreeMap::new(), structs: collections::BTreeMap::new(), constants: ledger.types.iter().filter_map(|__nikaia_tuple9703| {
-        let (name, entry) = __nikaia_tuple9703;
+    let mut shapes = Shapes { enums: collections::BTreeMap::new(), structs: collections::BTreeMap::new(), constants: ledger.types.iter().filter_map(|__nikaia_tuple10304| {
+        let (name, entry) = __nikaia_tuple10304;
         grammar_run_constant(name, &entry.constant)
     }).collect() };
     for item in program.items.iter() {

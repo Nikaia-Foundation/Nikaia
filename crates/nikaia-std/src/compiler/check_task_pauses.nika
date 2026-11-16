@@ -12,7 +12,7 @@ impl CheckState {
     /// needs after a pause is kept inside the task, and the task can move to
     /// another thread. `bound` is each of the body's own bindings with its type
     /// and the byte it is bound at.
-    pub fn a_task_holds_these_across_a_pause[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, body: ref Block, bound: ref Vec[(String, Ty, i64)], span: ref Span) sync {
+    fn a_task_holds_these_across_a_pause[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, body: ref Block, bound: ref Vec[(String, Ty, i64)], span: ref Span) sync {
         if bound.len() == 0 {
             return
         }

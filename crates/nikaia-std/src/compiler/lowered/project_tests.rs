@@ -66,6 +66,7 @@ impl nikaia_std::error::Full for __NikaiaThrows_ProjectTestsRefusal__io_IoError 
 
 
 
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectTestsOutcome {
     pub ended_well: bool,
@@ -102,7 +103,7 @@ pub struct ProgramTest {
     pub stdin: Bytes,
 }
 
-pub fn shown_path(path: &std::path::Path, root: &std::path::Path) -> String {
+pub(crate) fn shown_path(path: &std::path::Path, root: &std::path::Path) -> String {
     let path = match fs::canonical(path, &fs::Root::Anywhere) {
         Ok(value) => value,
         Err(_error) => { nikaia_std::fs::path::clone(&(path)) },
@@ -254,7 +255,7 @@ pub fn project_tests_stray_bounds(root: &std::path::Path) -> Vec<String> {
     stray
 }
 
-pub fn project_tests_bounds_report(printed: &str, written: &str) -> Bytes {
+pub(crate) fn project_tests_bounds_report(printed: &str, written: &str) -> Bytes {
     let head = format!("bounds in {}: ", written);
     let mut report: String = String::from("");
     let mut inside = false;
@@ -278,7 +279,7 @@ pub fn project_tests_bounds_report(printed: &str, written: &str) -> Bytes {
     report.as_bytes().copy_of()
 }
 
-pub fn project_tests_asserts_report(printed: &str, written: &str) -> Bytes {
+pub(crate) fn project_tests_asserts_report(printed: &str, written: &str) -> Bytes {
     let head = format!("asserts in {}: ", written);
     let mut report: String = String::from("");
     let mut inside = false;
@@ -293,7 +294,7 @@ pub fn project_tests_asserts_report(printed: &str, written: &str) -> Bytes {
     report.as_bytes().copy_of()
 }
 
-pub fn project_tests_bounds_outcome(program: &ProgramTest, outcome: &ProjectTestsOutcome, report: &str, asserts: &str) -> ProjectTestsOutcome {
+pub(crate) fn project_tests_bounds_outcome(program: &ProgramTest, outcome: &ProjectTestsOutcome, report: &str, asserts: &str) -> ProjectTestsOutcome {
     let written = format!("tests/{}.nika", program.name);
     let mut bounds: Vec<(String, Bytes, Bytes)> = vec![];
     match &program.bounds {
@@ -308,7 +309,7 @@ pub fn project_tests_bounds_outcome(program: &ProgramTest, outcome: &ProjectTest
     ProjectTestsOutcome { ended_well: outcome.ended_well, stopped: outcome.stopped, passed: outcome.passed && right, stdout: outcome.stdout.copy_of(), stderr: nikaia_std::block::Text::from(outcome.stderr.to_string()), files: outcome.files.copy_owned(), bounds }
 }
 
-pub fn project_tests_explain_bounds(outcome: &ProjectTestsOutcome) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+pub(crate) fn project_tests_explain_bounds(outcome: &ProjectTestsOutcome) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     for (name, want, got) in outcome.bounds.iter() {
         if want != got {
             nikaia_std::io::println(format_args!("tests/{} (- expected, + reported):", name))?;
@@ -320,16 +321,16 @@ pub fn project_tests_explain_bounds(outcome: &ProjectTestsOutcome) -> Result<(),
 
 pub fn is_refusal(text: &str) -> bool { (text.starts_with("error") || text.contains("\nerror")) && !does_not_compile(text) }
 
-pub fn does_not_compile(text: &str) -> bool { text.contains("could not compile") || text.contains("error[NK1343]") }
+pub(crate) fn does_not_compile(text: &str) -> bool { text.contains("could not compile") || text.contains("error[NK1343]") }
 
-pub fn named_by(output: &OutputTest) -> String {
+pub(crate) fn named_by(output: &OutputTest) -> String {
     match output.stdout.is_some() {
         true => format!("{}.stdout", output.name),
         false => format!("{}.out/", output.name),
     }
 }
 
-pub fn project_tests_difference(expected: &[u8], produced: &[u8]) -> String {
+pub(crate) fn project_tests_difference(expected: &[u8], produced: &[u8]) -> String {
     let want = match expected.text() {
         Ok(value) => value,
         Err(_error) => { return String::from("  the bytes differ, and they are not text\n"); },
@@ -341,9 +342,9 @@ pub fn project_tests_difference(expected: &[u8], produced: &[u8]) -> String {
     differing_lines(want, got)
 }
 
-pub fn project_tests_agree(outcomes: &[(String, ProjectTestsOutcome)]) -> bool { (nikaia_std::range::span(1, outcomes.len() as i64)).all(|at| { nikaia_std::index::get(&outcomes, nikaia_std::index::at(at - 1)).1 == nikaia_std::index::get(&outcomes, nikaia_std::index::at(at)).1 }) }
+pub(crate) fn project_tests_agree(outcomes: &[(String, ProjectTestsOutcome)]) -> bool { (nikaia_std::range::span(1, outcomes.len() as i64)).all(|at| { nikaia_std::index::get(&outcomes, nikaia_std::index::at(at - 1)).1 == nikaia_std::index::get(&outcomes, nikaia_std::index::at(at)).1 }) }
 
-pub fn project_tests_verdict(label: &str, outcomes: &[(String, ProjectTestsOutcome)]) -> Result<bool, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+pub(crate) fn project_tests_verdict(label: &str, outcomes: &[(String, ProjectTestsOutcome)]) -> Result<bool, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let agree = project_tests_agree(outcomes);
     let passed = agree && (nikaia_std::range::span(0, outcomes.len() as i64)).all(|at| { nikaia_std::index::get(&outcomes, nikaia_std::index::at(at)).1.passed });
     let said = match (passed, agree) {
@@ -355,7 +356,7 @@ pub fn project_tests_verdict(label: &str, outcomes: &[(String, ProjectTestsOutco
     Ok(passed)
 }
 
-pub fn project_tests_running(total: i64) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+pub(crate) fn project_tests_running(total: i64) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let plural = match total == 1 {
         true => "",
         false => "s",
@@ -377,9 +378,9 @@ pub fn project_tests_result(total: i64, failed: i64) -> Result<i32, nikaia_std::
     })
 }
 
-pub fn project_tests_output_label(output: &OutputTest) -> String { format!("output \"{}\" (tests/{})", output.name, named_by(output)) }
+pub(crate) fn project_tests_output_label(output: &OutputTest) -> String { format!("output \"{}\" (tests/{})", output.name, named_by(output)) }
 
-pub fn project_tests_program_label(program: &ProgramTest) -> String { format!("program \"{}\" (tests/{}.nika)", program.name, program.name) }
+pub(crate) fn project_tests_program_label(program: &ProgramTest) -> String { format!("program \"{}\" (tests/{}.nika)", program.name, program.name) }
 
 pub(crate) fn project_tests_wrote(got: &[(String, Option<Bytes>)], want: &[(String, Bytes)], at: i64) -> bool {
     match &nikaia_std::index::get(&got, nikaia_std::index::at(at)).1 {
@@ -414,14 +415,14 @@ pub async fn project_tests_output_outcome(output: &OutputTest, own: &std::path::
     ProjectTestsOutcome { ended_well, stopped, passed: ended_right && printed_right && wrote_right, stdout, stderr, files, bounds: vec![] }
 }
 
-pub fn project_tests_stopped(code: i64) -> bool { code == 101 }
+pub(crate) fn project_tests_stopped(code: i64) -> bool { code == 101 }
 
 pub fn project_tests_block_outcome(code: i64, stdout: Bytes, stderr: String) -> ProjectTestsOutcome {
     let ended_well = code == 0;
     ProjectTestsOutcome { ended_well, stopped: project_tests_stopped(code), passed: ended_well, stdout, stderr, files: vec![], bounds: vec![] }
 }
 
-pub fn project_tests_refused_outcome(program: &ProgramTest, stderr: &str) -> ProjectTestsOutcome {
+pub(crate) fn project_tests_refused_outcome(program: &ProgramTest, stderr: &str) -> ProjectTestsOutcome {
     let broken = !is_refusal(stderr);
     let shown = match broken {
         true => format!("the program does not compile (rustc failed, not a refusal):\n{}", stderr),
@@ -434,7 +435,7 @@ pub fn project_tests_refused_outcome(program: &ProgramTest, stderr: &str) -> Pro
     ProjectTestsOutcome { ended_well: false, stopped: false, passed, stdout: Bytes(vec![]), stderr: shown, files: vec![], bounds: vec![] }
 }
 
-pub fn project_tests_ran_outcome(program: &ProgramTest, code: i64, stdout: Bytes, said: String) -> ProjectTestsOutcome {
+pub(crate) fn project_tests_ran_outcome(program: &ProgramTest, code: i64, stdout: Bytes, said: String) -> ProjectTestsOutcome {
     let ended_well = code == 0;
     let stopped = project_tests_stopped(code);
     let printed_right = match &program.stdout {
@@ -481,7 +482,7 @@ pub struct ProjectTestsRan {
     pub timed_out: bool,
 }
 
-pub fn project_tests_time_limit() -> i64 {
+pub(crate) fn project_tests_time_limit() -> i64 {
     let given = nikaia_std::index::or(text::parse_i64(nikaia_std::index::or(env::var("NIKAIA_TEST_TIME_LIMIT"), || "".into()).trim()), || 0);
     match given > 0 {
         true => given,
@@ -489,18 +490,41 @@ pub fn project_tests_time_limit() -> i64 {
     }
 }
 
-pub fn project_tests_timed_out_outcome(limit: i64, stdout: Bytes, said: &str) -> ProjectTestsOutcome {
+pub(crate) fn project_tests_build_time_limit() -> i64 {
+    let given = text::parse_i64(nikaia_std::index::or(env::var("NIKAIA_TEST_BUILD_TIME_LIMIT"), || "".into()).trim());
+    match given {
+        None => project_tests_time_limit().saturating_mul(10),
+        Some(seconds) => match seconds > 0 {
+            true => seconds,
+            false => 0,
+        },
+    }
+}
+
+pub(crate) fn project_tests_timed_out_outcome(limit: i64, stdout: Bytes, said: &str) -> ProjectTestsOutcome {
     let shown = format!("timed out after {} s\n{}", limit, said);
     ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout, stderr: shown, files: vec![], bounds: vec![] }
 }
 
+pub(crate) fn project_tests_build_timed_out_outcome(limit: i64, said: &str) -> ProjectTestsOutcome {
+    let hint = "hint: a build that hangs often waits on a Cargo lock another cargo holds; check once with `ps -ef --forest | grep -B2 -E 'cargo (rustc|build) .*--target-dir'`, or raise NIKAIA_TEST_BUILD_TIME_LIMIT (0: no limit)";
+    let shown = format!("build timed out after {} s\n{}\n{}", limit, hint, said);
+    ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout: Bytes(vec![]), stderr: shown, files: vec![], bounds: vec![] }
+}
+
 pub trait ProjectTestsProgramHost {
-    fn package_name(&self, root: &std::path::Path) -> Result<Option<String>, Box<dyn std::error::Error>>;
-    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
-    fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, Box<dyn std::error::Error>>;
-    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<Option<ProjectTestsRan>, Box<dyn std::error::Error>>;
-    fn batched(&self, setting: &str, project: &std::path::Path, own: &std::path::Path, list: &std::path::Path) -> Result<Option<fs::Path>, Box<dyn std::error::Error>>;
-    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
+    fn package_name(&self, root: &std::path::Path) -> Result<Option<String>, std::boxed::Box<dyn std::error::Error>>;
+    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
+    fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, std::boxed::Box<dyn std::error::Error>>;
+    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<Option<ProjectTestsRan>, std::boxed::Box<dyn std::error::Error>>;
+    fn batched(&self, setting: &str, project: &std::path::Path, own: &std::path::Path, list: &std::path::Path, within: i64) -> Result<ProjectTestsBatchBuilt, std::boxed::Box<dyn std::error::Error>>;
+    fn ran_batched(&self, binary: &std::path::Path, name: &str, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8], within: i64) -> Result<ProjectTestsRan, std::boxed::Box<dyn std::error::Error>>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ProjectTestsBatchBuilt {
+    pub binary: Option<fs::Path>,
+    pub timed_out: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -513,6 +537,12 @@ pub fn project_tests_times_file(cache: &std::path::Path, root: &std::path::Path)
     let shown = format!("{}", nikaia_std::fs::path::display(&(project_members_canonical(root))));
     let name: String = shown.chars().map(|c| { if c.is_alphanumeric() { c } else { '-' } }).collect();
     nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(cache), std::path::Path::new(&("test-times")))), std::path::Path::new(&(name)))
+}
+
+pub fn project_tests_places(cache: &std::path::Path, root: &std::path::Path) -> fs::Path {
+    let shown = format!("{}", nikaia_std::fs::path::display(&(project_members_canonical(root))));
+    let tag: String = hash::sha256_hex(&shown.bytes().collect::<Vec<_>>()).chars().take(16).collect();
+    nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(cache), std::path::Path::new(&("test-places")))), std::path::Path::new(&(tag)))
 }
 
 pub(crate) async fn project_tests_times_read(file: &std::path::Path) -> collections::BTreeMap<String, i64> {
@@ -567,7 +597,7 @@ pub(crate) fn project_tests_batch_least() -> i64 { 8 }
 
 pub(crate) fn project_tests_batch_carrier() -> &'static str { "grammar Carrier {\n    rule n -> ref Bytes = s:bytes(until(\";\")) -> { s }\n    entry rule top -> i64 = x:n \";\" -> { x.len() }\n}\n\nfn main() throws {\n    let r = Carrier::top(\"abc;\") catch { -1 }\n    println(f\"{r}\")\n}\n" }
 
-pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, programs: &[ProgramTest], root: &std::path::Path, setting: &str, own: &std::path::Path) -> Result<collections::BTreeMap<String, ProjectTestsBatched>, Box<dyn std::error::Error>> {
+pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, programs: &[ProgramTest], root: &std::path::Path, setting: &str, own: &std::path::Path) -> Result<collections::BTreeMap<String, ProjectTestsBatched>, std::boxed::Box<dyn std::error::Error>> {
     let __keep_frame = nikaia_std::tether::Keep::new();
     let mut found: collections::BTreeMap<String, ProjectTestsBatched> = collections::BTreeMap::new();
     if env::var("NIKAIA_TEST_NO_BATCH").is_some() { return Ok(found); }
@@ -605,7 +635,9 @@ pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, program
         }
         let list = nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("batch.list")));
         fs::write(&list, &fs::Root::Anywhere, nikaia_std::block::Text::from(lines.join("")), false, true).await?;
-        match host.batched(setting, &nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project"))), &dir, &list)? {
+        let built = host.batched(setting, &nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("project"))), &dir, &list, project_tests_build_time_limit())?;
+        if built.timed_out { continue; }
+        match built.binary {
             None => {
                 let said = match fs::read_to_string(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("batch.said"))), &fs::Root::Anywhere).await {
                     Ok(value) => value,
@@ -669,7 +701,7 @@ pub(crate) fn project_tests_joined(first: &[u8], then: &[u8]) -> Bytes {
     Bytes(all)
 }
 
-pub(crate) async fn project_tests_prepared<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, own: &std::path::Path) -> Result<fs::Path, Box<dyn std::error::Error>> {
+pub(crate) async fn project_tests_prepared<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, own: &std::path::Path) -> Result<fs::Path, std::boxed::Box<dyn std::error::Error>> {
     let project = nikaia_std::fs::path::join(&(own), std::path::Path::new(&("project")));
     project_tests_empty_but(own, "project")?;
     project_tests_empty_but(&project, "target")?;
@@ -697,7 +729,7 @@ pub struct ProjectTestsReports {
     pub asserts: String,
 }
 
-pub async fn project_tests_reports<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, own: &std::path::Path) -> Result<ProjectTestsReports, Box<dyn std::error::Error>> {
+pub async fn project_tests_reports<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, own: &std::path::Path) -> Result<ProjectTestsReports, std::boxed::Box<dyn std::error::Error>> {
     let mut found = ProjectTestsReports { bounds: String::from(""), asserts: String::from("") };
     if program.bounds.is_none() && program.asserts.is_none() { return Ok(found); }
     let entry = project_tests_prepared(host, program, root, own).await?;
@@ -707,7 +739,7 @@ pub async fn project_tests_reports<H: ProjectTestsProgramHost>(host: &H, program
     Ok(found)
 }
 
-pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, setting: &str, own: &std::path::Path, batched: Option<&ProjectTestsBatched>, reports: &ProjectTestsReports) -> Result<ProjectTestsOutcome, Box<dyn std::error::Error>> {
+pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, program: &ProgramTest, root: &std::path::Path, setting: &str, own: &std::path::Path, batched: Option<&ProjectTestsBatched>, reports: &ProjectTestsReports) -> Result<ProjectTestsOutcome, std::boxed::Box<dyn std::error::Error>> {
     let project = nikaia_std::fs::path::join(&(own), std::path::Path::new(&("project")));
     let entry = project_tests_prepared(host, program, root, own).await?;
     let written = format!("tests/{}.nika", program.name);
@@ -725,7 +757,9 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     }
     let report = nikaia_std::block::Text::from(reports.bounds.to_string());
     let asserts = nikaia_std::block::Text::from(reports.asserts.to_string());
-    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]), 0)?;
+    let building = project_tests_build_time_limit();
+    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]), building)?;
+    if built.timed_out { return Ok(project_tests_build_timed_out_outcome(building, &project_tests_relocated(&built.stderr, &entry, &written, root))); }
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, &project_tests_relocated(&built.stderr, &entry, &written, root));
         return Ok(project_tests_bounds_outcome(program, &refused, &report, &asserts));
@@ -754,7 +788,7 @@ pub enum ProjectTestsBlessed {
     Refused(String),
 }
 
-pub fn project_tests_blessed_line(label: &str, blessed: &ProjectTestsBlessed) -> Result<bool, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+pub(crate) fn project_tests_blessed_line(label: &str, blessed: &ProjectTestsBlessed) -> Result<bool, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     match blessed {
         ProjectTestsBlessed::Unchanged => { nikaia_std::io::println(format_args!("{} ... ok", label))?; },
         ProjectTestsBlessed::Written => { nikaia_std::io::println(format_args!("{} ... blessed", label))?; },
@@ -766,7 +800,7 @@ pub fn project_tests_blessed_line(label: &str, blessed: &ProjectTestsBlessed) ->
     Ok(true)
 }
 
-pub async fn project_tests_bless_program(program: &ProgramTest, outcomes: &[(String, ProjectTestsOutcome)], stderr: bool) -> Result<ProjectTestsBlessed, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+pub(crate) async fn project_tests_bless_program(program: &ProgramTest, outcomes: &[(String, ProjectTestsOutcome)], stderr: bool) -> Result<ProjectTestsBlessed, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     if outcomes.is_empty() { return Ok(ProjectTestsBlessed::Unchanged); }
     if !project_tests_agree(outcomes) { return Ok(ProjectTestsBlessed::Refused(String::from("the settings disagree"))); }
     let first = &nikaia_std::index::get(&outcomes, 0).1;
@@ -785,7 +819,7 @@ pub async fn project_tests_bless_program(program: &ProgramTest, outcomes: &[(Str
     Ok(ProjectTestsBlessed::Written)
 }
 
-pub fn project_tests_explain_said(want: &[u8], written: &[u8]) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+pub(crate) fn project_tests_explain_said(want: &[u8], written: &[u8]) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     if want != written {
         nikaia_std::io::println(format_args!("standard error (- expected, + written):"))?;
         nikaia_std::io::print(format_args!("{}", project_tests_difference(want, written)))?;
@@ -793,7 +827,7 @@ pub fn project_tests_explain_said(want: &[u8], written: &[u8]) -> Result<(), nik
     Ok(())
 }
 
-pub fn project_tests_explain_output(output: &OutputTest, outcome: &ProjectTestsOutcome) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+pub(crate) fn project_tests_explain_output(output: &OutputTest, outcome: &ProjectTestsOutcome) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     match &output.stops {
         None => { if !outcome.ended_well { nikaia_std::io::println(format_args!("the program did not end successfully"))?; } },
         _ => { if !outcome.stopped { nikaia_std::io::println(format_args!("the program did not stop, as its .stops expects"))?; } },
@@ -832,7 +866,7 @@ pub fn project_tests_explain_output(output: &OutputTest, outcome: &ProjectTestsO
     Ok(())
 }
 
-pub async fn project_tests_bless(output: &OutputTest, outcomes: &[(String, ProjectTestsOutcome)]) -> Result<ProjectTestsBlessed, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+pub(crate) async fn project_tests_bless(output: &OutputTest, outcomes: &[(String, ProjectTestsOutcome)]) -> Result<ProjectTestsBlessed, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     if outcomes.is_empty() { return Ok(ProjectTestsBlessed::Unchanged); }
     if !project_tests_agree(outcomes) { return Ok(ProjectTestsBlessed::Refused(String::from("the settings disagree"))); }
     let first = &nikaia_std::index::get(&outcomes, 0).1;
@@ -860,9 +894,9 @@ pub struct ProjectTestsFailed {
 }
 
 pub trait ProjectTestsHost {
-    fn block_outcome(&self, binary: &std::path::Path, k: i64) -> Result<ProjectTestsOutcome, Box<dyn std::error::Error>>;
-    fn output_outcome(&self, binary: &std::path::Path, output: &OutputTest) -> Result<ProjectTestsOutcome, Box<dyn std::error::Error>>;
-    fn program_failures(&self, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, Box<dyn std::error::Error>>;
+    fn block_outcome(&self, binary: &std::path::Path, k: i64) -> Result<ProjectTestsOutcome, std::boxed::Box<dyn std::error::Error>>;
+    fn output_outcome(&self, binary: &std::path::Path, output: &OutputTest) -> Result<ProjectTestsOutcome, std::boxed::Box<dyn std::error::Error>>;
+    fn program_failures(&self, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, std::boxed::Box<dyn std::error::Error>>;
 }
 
 pub async fn project_tests_program_done(program: &ProgramTest, outcomes: Vec<(String, ProjectTestsOutcome)>, bless: bool, stderr: bool) -> Result<Option<ProjectTestsFailed>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
@@ -902,7 +936,7 @@ pub fn project_tests_report_failures(failed: &[ProjectTestsFailed]) -> Result<()
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String, fs::Path, i64)], test_builds: &[(String, fs::Path)], outputs: &[OutputTest], programs: &[(String, fs::Path)], program_tests: i64, root: &std::path::Path, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, Box<dyn std::error::Error>> {
+pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String, fs::Path, i64)], test_builds: &[(String, fs::Path)], outputs: &[OutputTest], programs: &[(String, fs::Path)], program_tests: i64, root: &std::path::Path, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, std::boxed::Box<dyn std::error::Error>> {
     let total = unsafe { nikaia_std::proven::add::<i64>(blocks.len() as i64, outputs.len() as i64) } + program_tests;
     project_tests_running(total)?;
     let mut failed: Vec<ProjectTestsFailed> = vec![];

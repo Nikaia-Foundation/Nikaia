@@ -105,16 +105,16 @@ impl SvLog {
     }
 }
 
-pub(crate) fn sv_step_kind(step: &SvStep) -> &'static str {
+pub(crate) fn sv_step_kind(step: &SvStep) -> String {
     match step {
-        SvStep::Input(_) => "input",
-        SvStep::Learn(_, _) => "learn",
-        SvStep::Delete(_) => "delete",
-        SvStep::Farkas(_, _, _, _) => "farkas",
-        SvStep::Combine(_, _) => "combine",
-        SvStep::Round(_, _) => "round",
-        SvStep::Split(_, _) => "split",
-        SvStep::Extend(_, _, _) => "extend",
+        SvStep::Input(_) => String::from("input"),
+        SvStep::Learn(_, _) => String::from("learn"),
+        SvStep::Delete(_) => String::from("delete"),
+        SvStep::Farkas(_, _, _, _) => String::from("farkas"),
+        SvStep::Combine(_, _) => String::from("combine"),
+        SvStep::Round(_, _) => String::from("round"),
+        SvStep::Split(_, _) => String::from("split"),
+        SvStep::Extend(_, _, _) => String::from("extend"),
     }
 }
 

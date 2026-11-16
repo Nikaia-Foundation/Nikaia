@@ -25,7 +25,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn frame_holding(&self, name: &str) -> i64 {
+    pub(crate) fn frame_holding(&self, name: &str) -> i64 {
         let mut frame_at = self.scope.len() as i64;
         while frame_at > 0 {
             frame_at = unsafe { nikaia_std::proven::sub::<i64>(frame_at, 1) };
@@ -35,7 +35,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn followed_here(&self, id: i64, name: &str) -> Option<Integer> {
+    pub(crate) fn followed_here(&self, id: i64, name: &str) -> Option<Integer> {
         let value = match match *nikaia_std::index::get(&self.flow.followed, &id) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -46,7 +46,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn assigned_followed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, op: Option<&BinaryOp>, value: &Expr) {
+    pub(crate) fn assigned_followed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, op: Option<&BinaryOp>, value: &Expr) {
         let name: String = match target {
             Expr::Variable(written, _) => { let written = *written; nikaia_std::block::Text::from(world.words.resolve(written).to_string()) },
             _ => return,
@@ -84,7 +84,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn resolve_call<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, name: &str) -> Option<CheckResolved<'r>> {
+pub(crate) fn resolve_call<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, name: &str) -> Option<CheckResolved<'r>> {
     if world.own.functions.contains_key(name) {
         let contract = match check_scope_found(&world.own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
         return Some(CheckResolved { key: nikaia_std::block::Text::from(name.to_string()), contract });
@@ -107,7 +107,7 @@ pub fn resolve_call<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, name: &s
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn resolve_method<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, key: &str) -> Option<CheckResolved<'r>> {
+pub(crate) fn resolve_method<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, key: &str) -> Option<CheckResolved<'r>> {
     if world.own.functions.contains_key(key) {
         let contract = match check_scope_found(&world.own.functions, key) { Some(__nikaia_value) => __nikaia_value, None => return None };
         return Some(CheckResolved { key: nikaia_std::block::Text::from(key.to_string()), contract });

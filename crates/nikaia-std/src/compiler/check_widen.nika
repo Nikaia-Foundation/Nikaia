@@ -81,7 +81,7 @@ fn a_plain_name(ty: ref Ty) -> String? sync {
 
 /// **The integer type a slot states, where a narrower one goes into it
 /// without loss** (D32): `u32` into `i64`, never `u64` into `i64`.
-pub fn widened_into(found: ref Ty, want: ref Ty) -> String? sync {
+fn widened_into(found: ref Ty, want: ref Ty) -> String? sync {
     let from = an_integer_named(found) ?? ""
     let into = an_integer_named(want) ?? ""
     if from.is_empty() || into.is_empty() || from == into {
@@ -96,7 +96,7 @@ pub fn widened_into(found: ref Ty, want: ref Ty) -> String? sync {
 
 /// **Two different integer types, the second not holding every value of the
 /// first** (D32): `u64` into `i64`, `i64` into `u32`.
-pub fn an_integer_that_does_not_widen(found: ref Ty, want: ref Ty) -> bool sync {
+fn an_integer_that_does_not_widen(found: ref Ty, want: ref Ty) -> bool sync {
     let from = an_integer_named(found) ?? ""
     let into = an_integer_named(want) ?? ""
     if from.is_empty() || into.is_empty() || from == into {
@@ -107,7 +107,7 @@ pub fn an_integer_that_does_not_widen(found: ref Ty, want: ref Ty) -> bool sync 
 
 /// **The unsigned type a signed value goes into where it is not negative**:
 /// `i64` and `i32` into `u64`, `i32` into `u32`.
-pub fn unsigned_from_signed(found: ref Ty, want: ref Ty) -> String? sync {
+fn unsigned_from_signed(found: ref Ty, want: ref Ty) -> String? sync {
     let from = a_plain_name(found) ?? ""
     let into = a_plain_name(want) ?? ""
     let held = match found {
@@ -134,7 +134,7 @@ pub fn unsigned_from_signed(found: ref Ty, want: ref Ty) -> String? sync {
 /// integer literal where it is a float (#703): the
 /// type it takes when nothing asks, so the position's ordinary mismatch says
 /// so.
-pub fn number_where_no_number_is(want: ref Ty, value: ref Expr) -> Ty? sync {
+fn number_where_no_number_is(want: ref Ty, value: ref Expr) -> Ty? sync {
     // **A list of floats given integer literals** (#703): `Vec[f64]` and
     // `[1, 2]` is the list of `i64` it would be.
     match want {
@@ -191,7 +191,7 @@ pub fn number_where_no_number_is(want: ref Ty, value: ref Expr) -> Ty? sync {
 
 /// **A file's name on one side and a name or text on the other** (ADR-319 D3),
 /// either way round.
-pub fn names_a_path(left: ref Ty, right: ref Ty) -> bool sync {
+fn names_a_path(left: ref Ty, right: ref Ty) -> bool sync {
     let l = a_plain_name(left) ?? ""
     let r = a_plain_name(right) ?? ""
     let l_either = l == "fs::Path" || l == "String" || l == "str"
@@ -202,7 +202,7 @@ pub fn names_a_path(left: ref Ty, right: ref Ty) -> bool sync {
 /// **Text stands wherever a file's name is asked** (ADR-319 D2): -1 where
 /// `found` is not text or `want` not an `fs::Path`; else 1 where a view of one
 /// is wanted and 0 where a value is.
-pub fn text_as_a_path(found: ref Ty, want: ref Ty) -> i64 sync {
+fn text_as_a_path(found: ref Ty, want: ref Ty) -> i64 sync {
     let asked = match want {
         Ty::Named { name, args, view } => if name == "fs::Path" && args.len() == 0 { if view { 1 } else { 0 } } else { -1 },
         else => -1,
@@ -220,7 +220,7 @@ pub fn text_as_a_path(found: ref Ty, want: ref Ty) -> i64 sync {
 /// **A mapping where a `Bytes` is taken by value** (ADR-373 D3): a body, a
 /// field, an element, an argument kept. It is the mapping, at a count; a
 /// `ref Bytes` takes it through its `deref` as it always did.
-pub fn mapped_as_bytes(found: ref Ty, want: ref Ty) -> bool sync {
+fn mapped_as_bytes(found: ref Ty, want: ref Ty) -> bool sync {
     let asked = match want {
         Ty::Named { name, args, view } => name == "Bytes" && args.len() == 0 && !view,
         else => false,
@@ -235,7 +235,7 @@ pub fn mapped_as_bytes(found: ref Ty, want: ref Ty) -> bool sync {
 }
 
 /// A view of text, present or absent, going into a `String?` (ADR-282 D12).
-pub fn views_into_nullable_text(found: ref Ty, want: ref Ty) -> bool sync {
+fn views_into_nullable_text(found: ref Ty, want: ref Ty) -> bool sync {
     let present: ref Ty = match found {
         Ty::Nullable(held) => held,
         else => found,
@@ -255,7 +255,7 @@ pub fn views_into_nullable_text(found: ref Ty, want: ref Ty) -> bool sync {
 }
 
 /// A view of text going into text of its own, present or absent.
-pub fn views_into_text(found: ref Ty, want: ref Ty) -> bool sync {
+fn views_into_text(found: ref Ty, want: ref Ty) -> bool sync {
     let seen = match found {
         Ty::Named { name, args, view } => view && args.len() == 0 && name == "str",
         else => false,
@@ -268,7 +268,7 @@ pub fn views_into_text(found: ref Ty, want: ref Ty) -> bool sync {
 }
 
 /// An operator as it is written.
-pub fn binary_op_text(op: BinaryOp) -> String sync {
+fn binary_op_text(op: BinaryOp) -> String sync {
     return match op {
         BinaryOp::Add => "+",
         BinaryOp::Sub => "-",
@@ -293,7 +293,7 @@ pub fn binary_op_text(op: BinaryOp) -> String sync {
 
 /// `NK1200`: one number, two uses, two types (ADR-285 D24). `element` is
 /// whether it is the elements of a list that are used.
-pub fn a_number_asked_for_two_types(name: ref String, element: bool, first: ref String, second: ref String, at: ref Span) -> CheckFinding {
+fn a_number_asked_for_two_types(name: ref String, element: bool, first: ref String, second: ref String, at: ref Span) -> CheckFinding {
     let mut message: String = ""
     let mut help: String = ""
     if element {
@@ -309,7 +309,7 @@ pub fn a_number_asked_for_two_types(name: ref String, element: bool, first: ref 
 
 /// `NK1200` for a map's keys or values (ADR-285 D43); `other` is the other
 /// part's type, for the help.
-pub fn a_map_number_asked_for_two_types(name: ref String, keys: bool, other: ref String, first: ref String, second: ref String, at: ref Span) -> CheckFinding {
+fn a_map_number_asked_for_two_types(name: ref String, keys: bool, other: ref String, first: ref String, second: ref String, at: ref Span) -> CheckFinding {
     let mut part: String = "values"
     let mut written: String = f"{other}, {first}"
     if keys {
@@ -326,7 +326,7 @@ pub fn a_map_number_asked_for_two_types(name: ref String, keys: bool, other: ref
 /// different number of elements (ADR-152 D4). **Both numbers**, because the
 /// length is part of the type and what the reader has to do about it is count.
 /// `computed` is a length a body worked out, not one written.
-pub fn a_list_the_wrong_length_for_its_array(written: i64, wanted: i64, span: ref Span, computed: bool) -> CheckFinding {
+fn a_list_the_wrong_length_for_its_array(written: i64, wanted: i64, span: ref Span, computed: bool) -> CheckFinding {
     let mut magnitude = wanted
     if magnitude < 0 {
         magnitude = 0 - magnitude
@@ -348,7 +348,7 @@ pub fn a_list_the_wrong_length_for_its_array(written: i64, wanted: i64, span: re
 
 /// `NK1157` for a `[v; n]` whose `n` the build does not know, where an
 /// `Array[T, N]` is wanted (ADR-362 D2): the count as written, and `N`.
-pub fn a_repeat_count_unknown_for_its_array(written: ref String, wanted: i64, span: ref Span) -> CheckFinding {
+fn a_repeat_count_unknown_for_its_array(written: ref String, wanted: i64, span: ref Span) -> CheckFinding {
     let message = f"This has `{written}` elements, a number the build doesn't know, but the array holds {wanted}."
     let help = f"Write the length as a number the build knows, `[…; {wanted}]`, or make it a `Vec`."
     let notes: Vec[String] = ["The length is part of the type, so an `Array[T, N]` holds exactly `N` elements."]
@@ -357,7 +357,7 @@ pub fn a_repeat_count_unknown_for_its_array(written: ref String, wanted: i64, sp
 
 /// `NK1280`: a `[v; n]` whose `v` does not copy (ADR-362 D3). The help writes
 /// each copy where it is made, with the program's own `v` and `n`.
-pub fn a_repeated_value_that_does_not_copy(names: ref winnow_grammar::InternerContext, value: ref Expr, count: ref Expr, ty: ref Ty, span: ref Span) -> CheckFinding {
+fn a_repeated_value_that_does_not_copy(names: ref winnow_grammar::InternerContext, value: ref Expr, count: ref Expr, ty: ref Ty, span: ref Span) -> CheckFinding {
     let v = written_expression(names, value)
     let n = written_expression(names, count)
     let message = f"`[{v}; {n}]` copies `{v}`, and a `{ty.text()}` doesn't copy."
@@ -368,7 +368,7 @@ pub fn a_repeated_value_that_does_not_copy(names: ref winnow_grammar::InternerCo
 
 /// `NK1102`: a type variable two integer types are handed to (ADR-285 D32).
 /// `wide` is the type to convert to, `name` the argument to convert.
-pub fn two_integer_types_for_one_variable(key: ref String, variable: ref String, bound: ref String, ty: ref String, name: ref String, wide: ref String, span: ref Span) -> CheckFinding {
+fn two_integer_types_for_one_variable(key: ref String, variable: ref String, bound: ref String, ty: ref String, name: ref String, wide: ref String, span: ref Span) -> CheckFinding {
     let message = f"`{key}` takes one type for `{variable}`, but you're passing `{bound}` and `{ty}`."
     let notes: Vec[String] = ["A type parameter takes the type it is given, and an integer is not widened to make two arguments agree."]
     return check_refusal("NK1102", span, message, notes, f"Convert one of them: `{name} as {wide}`.")
@@ -379,7 +379,7 @@ impl CheckState {
     /// widening takes no part in inference, so `pick(a, b)` for `fn pick[T](a:
     /// T, b: T)` with an `i32` and an `i64` binds `T` twice. A literal takes the
     /// type it is handed to and is not asked.
-    pub fn one_type_variable_two_integer_types(ref mut self, world: ref CheckWorld, key: ref String, wanted: ref Vec[(String, Ty)], given: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
+    fn one_type_variable_two_integer_types(ref mut self, world: ref CheckWorld, key: ref String, wanted: ref Vec[(String, Ty)], given: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
         let mut variables: Vec[String] = []
         let mut types: Vec[String] = []
         let mut places: Vec[i64] = []

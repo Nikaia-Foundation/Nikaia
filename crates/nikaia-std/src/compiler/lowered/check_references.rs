@@ -45,7 +45,7 @@ pub(crate) fn check_reference_nullable_view(ty: &Ty) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_pending_coalesce_is_lent(&mut self, given: &Expr) -> bool {
+    pub(crate) fn a_pending_coalesce_is_lent(&mut self, given: &Expr) -> bool {
         match given {
             Expr::Coalesce { .. } => { },
             _ => { return false; },
@@ -60,7 +60,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_pending_coalesce_of_text_is_lent(&mut self, given: &Expr) -> bool {
+    pub(crate) fn a_pending_coalesce_of_text_is_lent(&mut self, given: &Expr) -> bool {
         let key = id_of(given) as i64;
         let mut of_text = false;
         for pending in self.flow.pending_coalesces.iter() { if pending.key == key && pending.opened == ".as_deref()" { of_text = true; } }
@@ -81,7 +81,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_mut_view_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_mut_view_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
@@ -94,7 +94,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_text_slot_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_text_slot_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
@@ -107,7 +107,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_either_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn an_either_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
@@ -120,7 +120,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_name_that_is_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_name_that_is_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
@@ -134,12 +134,12 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn lent_to_a_mut_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given_expr: &Expr, found: &Ty, want: &Ty, takes_a_receiver: bool, written: &str, span: &Span) -> bool {
+    pub(crate) fn lent_to_a_mut_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given_expr: &Expr, found: &Ty, want: &Ty, takes_a_receiver: bool, written: &str, span: &Span) -> bool {
         if check_reference_written(given_expr) && !takes_a_receiver && !found.is_unknown() {
             let mut under = false;
             for owned in viewed_from_type(found) { if owned.fits(want) || self.fits_through_deref(world, &owned, want) { under = true; } }
             if under {
-                self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: String::from("NK1137"), message: String::from("You don't need the `ref` here: the compiler lends where it's needed."), notes: vec![format!("`{}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call.", written)], help: Some(String::from("Remove the `ref`.")), labels: vec![] });
+                self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: String::from("NK1137"), message: String::from("You don't need the `ref` here: the compiler lends where it's needed."), notes: vec![format!("`{}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call.", written)], help: Some(String::from("Remove the `ref`.")), labels: vec![], edit: None });
                 return true;
             }
         }
@@ -173,7 +173,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn the_compiler_writes_the_reference(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, at: i64, given: Option<&Expr>, found: &Ty, want: &Ty, own: bool, written: &str, span: &Span) -> bool {
+    pub(crate) fn the_compiler_writes_the_reference(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, at: i64, given: Option<&Expr>, found: &Ty, want: &Ty, own: bool, written: &str, span: &Span) -> bool {
         let mut takes_a_receiver = false;
         let mut changes = false;
         let mut position = at;
@@ -239,7 +239,7 @@ impl CheckState {
                 _ => { },
             }
             if takes_a_receiver { return true; }
-            self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1137"), message: String::from("You don't need the `ref` here: the compiler lends where it's needed."), notes: vec![format!("`{}` only reads this argument, so it's lent already. Whether an argument is lent or handed over is decided by the function, not the call.", written)], help: Some(String::from("Remove the `ref`.")), labels: vec![] });
+            self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1137"), message: String::from("You don't need the `ref` here: the compiler lends where it's needed."), notes: vec![format!("`{}` only reads this argument, so it's lent already. Whether an argument is lent or handed over is decided by the function, not the call.", written)], help: Some(String::from("Remove the `ref`.")), labels: vec![], edit: None });
             return true;
         }
         let found_nullable = check_reference_nullable(found);
@@ -264,9 +264,9 @@ impl CheckState {
     }
 }
 
-pub fn check_gives_back(body: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> bool { check_gives_back_tail(body, name, words) || check_gives_back_returns(body, name, words) }
+pub(crate) fn check_gives_back(body: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> bool { check_gives_back_tail(body, name, words) || check_gives_back_returns(body, name, words) }
 
-pub fn check_gives_back_parts(body: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> Vec<Vec<String>> {
+pub(crate) fn check_gives_back_parts(body: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> Vec<Vec<String>> {
     let mut found: Vec<Vec<String>> = vec![];
     check_gives_back_parts_into(body, name, words, &mut found);
     found
@@ -387,7 +387,7 @@ pub(crate) fn check_gives_back_returns(expr: &Expr, name: &str, words: &winnow_g
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_map_read_past_a_jump(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
+    pub(crate) fn a_map_read_past_a_jump(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
         match given {
             Expr::Coalesce { value: read, fallback, .. } => {
                 let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback);

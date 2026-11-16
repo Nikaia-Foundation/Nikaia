@@ -661,7 +661,7 @@ fn nothing_declares(name: ref String, known: ref collections::BTreeSet[String], 
 /// about it, such as whether it compares, gets the answer an absent claim
 /// gets (Part III C.4) rather than a second refusal naming the wrong cause.
 /// A name some ledger knows is never this: there, an absent column is *no*.
-pub fn nobody_knows(name: ref String, own: ref Ledger, library: ref Ledger) -> bool {
+fn nobody_knows(name: ref String, own: ref Ledger, library: ref Ledger) -> bool {
     if BUILT_IN.contains(name) || own.types.contains_key(name) || library.types.contains_key(name) {
         return false
     }

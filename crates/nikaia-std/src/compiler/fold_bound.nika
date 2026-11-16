@@ -50,7 +50,7 @@ fn fb_utf8_len(code: i64) -> u64 {
 
 /// The bytes a literal written in the source matches: an escape is one byte,
 /// a `\u{…}` at least one, which only ever counts fewer than it matches.
-pub fn fb_literal_bytes(written: ref String) -> u64 {
+fn fb_literal_bytes(written: ref String) -> u64 {
     let chars: Vec[scalar] = written.chars().collect()
     let mut bytes: u64 = 0
     let mut i = 0
@@ -237,7 +237,7 @@ pub fn fb_least_width(source: ref FbSource, named: String, rule: String) -> u64?
 }
 
 /// `fb_least_width` of a rule of a grammar at hand.
-pub fn fb_rule_width(source: ref FbSource, def: ref GrammarDef, rule: String) -> u64? {
+fn fb_rule_width(source: ref FbSource, def: ref GrammarDef, rule: String) -> u64? {
     let mut rules: collections::BTreeMap[String, ref GrammarRule] = collections::BTreeMap()
     for r in def.rules {
         rules.insert(source.words.resolve(r.name).clone(), r)
@@ -290,7 +290,7 @@ fn fb_invariant_term(mut a: TermArena, k: i64, k0: i64, x: i64, steps: i64, piec
 /// kept** (ADR-361 D4)? Three obligations: it holds at the start, one step
 /// keeps it, and, where the fold has a merge, the merge of two partial results
 /// keeps it. `ask` is the solver: the goal under the facts, proved or not.
-pub fn fb_invariant_checked[H: FbHost](host: ref H, k: u64, k0: u64, merged: bool) -> bool {
+fn fb_invariant_checked[H: FbHost](host: ref H, k: u64, k0: u64, merged: bool) -> bool {
     let limit: u64 = 9223372036854775807
     if k > limit || k0 > limit {
         return false

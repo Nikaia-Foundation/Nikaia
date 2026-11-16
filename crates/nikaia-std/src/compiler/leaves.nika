@@ -13,7 +13,7 @@
 // prover believes has to be what it believed.
 
 /// Whether `stmt` can leave before what follows it.
-pub fn leaves_stmt(stmt: ref Stmt, throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, with_continue: bool) -> bool {
+fn leaves_stmt(stmt: ref Stmt, throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, with_continue: bool) -> bool {
     match stmt {
         Stmt::Return(_) => return true,
         Stmt::Break => return true,
@@ -46,7 +46,7 @@ pub fn leaves_stmt(stmt: ref Stmt, throwing: fn(ref Expr) -> bool sync, holes_of
 }
 
 /// Whether any statement of `block` can leave.
-pub fn leaves_block(block: ref Block, throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, with_continue: bool) -> bool {
+fn leaves_block(block: ref Block, throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, with_continue: bool) -> bool {
     for stmt in block.stmts {
         if leaves_stmt(stmt.node, throwing, holes_of, with_continue) {
             return true
@@ -57,7 +57,7 @@ pub fn leaves_block(block: ref Block, throwing: fn(ref Expr) -> bool sync, holes
 
 /// Whether `expr` can leave: an expression in it that does, or a block its
 /// companion walk finds.
-pub fn leaves_expr(expr: ref Expr, throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, with_continue: bool) -> bool {
+fn leaves_expr(expr: ref Expr, throwing: fn(ref Expr) -> bool sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, with_continue: bool) -> bool {
     return leaves_within(expr, throwing, holes_of, with_continue) || blocks_leave(expr, throwing, holes_of, with_continue)
 }
 

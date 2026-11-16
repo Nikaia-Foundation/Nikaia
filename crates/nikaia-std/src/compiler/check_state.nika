@@ -306,7 +306,7 @@ pub struct CheckPendingHandle {
 /// Whether reading `read` touches what taking `taken` took: the same path, a
 /// part of it (`p.name` after `p`), or the whole it was part of (`p` after
 /// `p.name`).
-pub fn a_path_overlaps(read: ref String, taken: ref String) -> bool {
+fn a_path_overlaps(read: ref String, taken: ref String) -> bool {
     if read == taken {
         return true
     }
@@ -318,7 +318,7 @@ pub fn a_path_overlaps(read: ref String, taken: ref String) -> bool {
 
 /// Whether assigning `written` gives `taken` a value again: the same path, or
 /// the whole it is a part of.
-pub fn a_path_revives(written: ref String, taken: ref String) -> bool {
+fn a_path_revives(written: ref String, taken: ref String) -> bool {
     if written == taken {
         return true
     }
@@ -327,7 +327,7 @@ pub fn a_path_revives(written: ref String, taken: ref String) -> bool {
 
 /// Whether two places are in different arms of one choice, so that no run
 /// reaches both.
-pub fn choices_apart(a: ref Vec[(i64, i64)], b: ref Vec[(i64, i64)]) -> bool {
+fn choices_apart(a: ref Vec[(i64, i64)], b: ref Vec[(i64, i64)]) -> bool {
     for mine in a {
         for theirs in b {
             if theirs.0 == mine.0 && theirs.1 != mine.1 {
@@ -384,18 +384,18 @@ pub struct CheckHeldTaking {
 }
 
 impl CheckRepeats {
-    pub fn a_loop(words: ref winnow_grammar::InternerContext, frame: i64, opened: i64, body: ref Block) -> CheckRepeats {
+    fn a_loop(words: ref winnow_grammar::InternerContext, frame: i64, opened: i64, body: ref Block) -> CheckRepeats {
         let mut found = CheckRepeats { frame: frame, what: "loop", revived: collections::BTreeSet(), revived_parts: collections::BTreeSet(), leaves: false, opened: opened, held: [] }
         what_a_loop_does(words, body, found)
         return found
     }
 
-    pub fn a_lambda(frame: i64) -> CheckRepeats {
+    fn a_lambda(frame: i64) -> CheckRepeats {
         return CheckRepeats { frame: frame, what: "lambda", revived: collections::BTreeSet(), revived_parts: collections::BTreeSet(), leaves: false, opened: -1, held: [] }
     }
 
     /// Whether the body takes `path` again on its next turn.
-    pub fn takes_again(ref self, path: ref String) -> bool {
+    fn takes_again(ref self, path: ref String) -> bool {
         return !(self.leaves || self.revives(path))
     }
 
@@ -456,7 +456,7 @@ fn a_part_assigned(words: ref winnow_grammar::InternerContext, target: ref Expr)
 /// equivalence is about the written form. **And no `break` bound to this
 /// loop.** The walk over-approximates - it descends into a lambda, where a
 /// `break` is not bound to this loop at all - and that is the safe direction.
-pub fn a_body_never_ends(body: ref Block) -> bool {
+fn a_body_never_ends(body: ref Block) -> bool {
     if body.stmts.len() == 0 {
         return false
     }
@@ -480,7 +480,7 @@ fn a_true_literal(expr: ref Expr) -> bool {
 
 /// Whether a `break` in this block is bound to the loop **around** it rather
 /// than to one written inside. A `continue` is not one.
-pub fn a_jump_leaves(block: ref Block, loops: i64) -> bool {
+fn a_jump_leaves(block: ref Block, loops: i64) -> bool {
     for stmt in block.stmts {
         match stmt.node {
             Stmt::Break => {
@@ -558,11 +558,22 @@ pub struct CheckFinding {
     /// **The places in the source it points at**, each with what happens
     /// there (Part III C.2, rule 5).
     pub labels: Vec[CheckLabel],
+    /// **The edit its help names, as data** (#1714): set only where the edit
+    /// is unambiguous, so that `nikaia fix` can make it and the author
+    /// reviews the diff (ADR-005 §3). It changes nothing that is shown.
+    pub edit: CheckEdit?,
+}
+
+/// **A suggested edit to the source** (#1714): the bytes of `span` replaced
+/// by `text`; an empty `text` deletes them.
+pub struct CheckEdit {
+    pub span: Span,
+    pub text: String,
 }
 
 /// A refusal at `span`: an error with no labels.
-pub fn check_refusal(code: ref String, span: ref Span, message: String, notes: Vec[String], help: String?) -> CheckFinding {
-    return CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: code.clone(), message: message, notes: notes, help: help, labels: [] }
+fn check_refusal(code: ref String, span: ref Span, message: String, notes: Vec[String], help: String?) -> CheckFinding {
+    return CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: code.clone(), message: message, notes: notes, help: help, labels: [], edit: null }
 }
 
 /// **What the checker looks at and does not own**: the file's names, this

@@ -1,0 +1,11 @@
+left staged, not committed: b.txt
+committed SHA8 local
+mine only
+base
+committed:
+a.txt
+still staged:
+b.txt
+status:
+M  b.txt
+?? X.md.report.md

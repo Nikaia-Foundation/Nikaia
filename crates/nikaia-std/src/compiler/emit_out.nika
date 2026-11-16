@@ -59,7 +59,7 @@ impl EmitOut {
 
     /// Opens the `unsafe` block a proved operation stands in: `unsafe { `,
     /// only where no such block is open already (ADR-306 D26).
-    pub fn open_unsafe(ref mut self) {
+    fn open_unsafe(ref mut self) {
         if self.unsafe_depth == 0 {
             self.buf.push_str("unsafe { ")
         }
@@ -67,7 +67,7 @@ impl EmitOut {
     }
 
     /// Closes what `open_unsafe` opened: ` }` once the outermost is done.
-    pub fn close_unsafe(ref mut self) {
+    fn close_unsafe(ref mut self) {
         self.unsafe_depth -= 1
         if self.unsafe_depth == 0 {
             self.buf.push_str(" }")
@@ -78,7 +78,7 @@ impl EmitOut {
     /// goes on after it** (ADR-306 D26): `unsafe { add(i, 3) } == n` as a
     /// statement or a tail, which Rust reads as the block statement and then
     /// a stray `== n`, so the caller writes it in brackets.
-    pub fn block_headed_from(ref self, start: i64) -> bool {
+    fn block_headed_from(ref self, start: i64) -> bool {
         let text = self.buf.bytes[start..].text() catch { return false }
         if !text.starts_with("unsafe { ") { return false }
         let mut depth = 0
@@ -110,7 +110,7 @@ impl EmitOut {
 
     /// Text of its own was put in at `at`, `by` bytes long: every entry that
     /// starts or ends at or after it moves along.
-    pub fn shift_entries(ref mut self, at: i64, by: i64) {
+    fn shift_entries(ref mut self, at: i64, by: i64) {
         for mut entry in self.entries {
             if entry.start >= at {
                 entry.start += by
@@ -126,7 +126,7 @@ impl EmitOut {
     /// the long form is what `clippy` refuses in `std`. Not `&&`, which is the
     /// operator, and not `&mut `, which ends in a space. A `&` at the end of the
     /// buffer is inside no recorded span, so the map is untouched.
-    pub fn take_lend(ref mut self) -> bool {
+    fn take_lend(ref mut self) -> bool {
         if self.buf.ends_with("&") && !self.buf.ends_with("&&") {
             self.buf.pop()
             return true
@@ -135,7 +135,7 @@ impl EmitOut {
     }
 
     /// Insert text just inside the first `{`, moving the map entries after it.
-    pub fn insert_after_first_brace(ref mut self, text: ref String) {
+    fn insert_after_first_brace(ref mut self, text: ref String) {
         let at = (self.buf.find("{") ?? return) + 1
         self.buf.insert_str(at, text)
         self.shift_entries(at, text.len())
@@ -143,12 +143,12 @@ impl EmitOut {
 
     /// The same, just before the last `}`.
     /// Insert `text` at byte `at`, moving the map entries behind it.
-    pub fn insert_at(ref mut self, at: i64, text: ref String) {
+    fn insert_at(ref mut self, at: i64, text: ref String) {
         self.buf.insert_str(at, text)
         self.shift_entries(at, text.len())
     }
 
-    pub fn insert_before_last_brace(ref mut self, text: ref String) {
+    fn insert_before_last_brace(ref mut self, text: ref String) {
         let at = self.buf.rfind("}") ?? return
         self.buf.insert_str(at, text)
         self.shift_entries(at, text.len())

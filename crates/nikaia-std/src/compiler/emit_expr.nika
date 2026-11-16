@@ -49,7 +49,7 @@ fn emit_expr_kept_text(world: ref EmitWorld, func: ref Expr) -> String {
 
 impl EmitState {
     /// An expression, written to `out`.
-    pub fn emit_expr[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_expr[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let at = node_key(node)
         // **A receiver bound before the statement** reads as its name
         // (`hold_owned_receiver`).
@@ -169,7 +169,8 @@ impl EmitState {
         }
         // **Put back into an option, it stays the option it is**: the wrap
         // the slot asked for is already written, and its `)` follows.
-        let lent = if copied || other { "Option::as_ref(&" } else { "Option::as_deref(&" }
+        let option = self.rust_option()
+        let lent = if copied || other { f"{option}::as_ref(&" } else { f"{option}::as_deref(&" }
         if !operand {
             if out.buf.ends_with("Some(&") {
                 out.buf = (out.buf.strip_suffix("Some(&") ?? "").clone()
@@ -179,7 +180,11 @@ impl EmitState {
             }
             if out.buf.ends_with("Some(") {
                 out.buf = (out.buf.strip_suffix("Some(") ?? "").clone()
-                out.push(if a_reference { "Option::as_ref(" } else { "std::convert::identity(" })
+                if a_reference {
+                    out.push(f"{option}::as_ref(")
+                } else {
+                    out.push("std::convert::identity(")
+                }
                 out.append(name)
                 return
             }
@@ -204,7 +209,7 @@ impl EmitState {
     }
 
     /// `emit_expr`, past the wrap of an arm in a mixed position.
-    pub fn emit_expr_unmixed[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_expr_unmixed[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let at = node_key(node)
         // **A plain arm beside a `null` is `Some`** (`some_tails`).
         if self.facts.some_tails.contains(at) {
@@ -262,7 +267,23 @@ impl EmitState {
     /// `emit_expr`, without the wrap an arm beside a `null` takes: **a text's
     /// own bytes kept beyond the text are copied** into a `Bytes` of their own
     /// (ADR-320 D11, `kept_text_bytes`).
-    pub fn emit_expr_as_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_expr_as_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **A `String?` handed back into a `ref String?`** (#1666): the
+        // option of a view of the map's text, `Option<&String>`, is made the
+        // option of a text view the result is.
+        if self.facts.text_option_results.contains(node_key(node)) {
+            // The option is handed back as it is, not lent: a map's read
+            // takes the `&` in front of it, and the `(` would hide it.
+            out.take_lend()
+            out.push("(")
+            self.emit_expr_as_written_plain(world, walk, out, host, node, depth, flow, scope)
+            out.push(").map(|v| ::core::convert::AsRef::<str>::as_ref(v))")
+            return
+        }
+        self.emit_expr_as_written_plain(world, walk, out, host, node, depth, flow, scope)
+    }
+
+    fn emit_expr_as_written_plain[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         if self.facts.kept_text_bytes.contains(node_key(node)) {
             out.push("nikaia_std::bytes::Bytes::from(")
             self.emit_expr_written(world, walk, out, host, node, depth, flow, scope)
@@ -292,8 +313,10 @@ impl EmitState {
     /// `emit_expr_as_written`, past the copy of a text's bytes: the dispatch.
     fn emit_expr_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let at = node_key(node)
-        // **An arm read off a place under a `ref T` is lent** (ADR-views-3 D5).
-        if self.facts.lent_reads.contains(at) {
+        // **An arm read off a place under a `ref T` is lent** (ADR-views-3 D5),
+        // but a name whose buffer a keep holds is a reference already, handed
+        // as it is (#99): `either(a)`, not `either(&a)` (#1658).
+        if self.facts.lent_reads.contains(at) && !self.emit_stmt_a_kept_name(world, walk, node) {
             out.push("&")
         }
         match node {
@@ -622,7 +645,7 @@ impl EmitState {
         out.push(f"nikaia_std::func::Kept(std::sync::Arc::new(move |{names.join(", ")}| ")
         let inside = EmitFlow::plain() with { can_throw: fails, statement: flow.statement }
         if pauses {
-            out.push("Box::pin(async move ")
+            out.push("std::boxed::Box::pin(async move ")
         }
         if fails {
             out.push("{ Ok(")

@@ -1,0 +1,41 @@
+// A program's own `Result` and `Option` are its types, not the language
+// below's (#1846): no ADR reserves the names, so `T?`, `throws`, `??` and
+// a `comptime` option still mean what they mean beside them.
+struct Result {
+	x: i64,
+}
+
+enum Option {
+	Yes,
+	No,
+}
+
+fn find(k: i64) -> i64? {
+	if k == 1 {
+		return 5
+	}
+	return null
+}
+
+comptime P: i64? = find(1)
+comptime Q: i64? = find(2)
+
+fn show(r: Result) throws {
+	println(f"{r.x}")
+}
+
+fn pick(o: Option) -> i64 {
+	return match o {
+		Option::Yes => 1,
+		Option::No => 0,
+	}
+}
+
+fn main() throws {
+	let r = Result { x: 1 }
+	show(r)
+	let v = find(1) ?? 0
+	let w = find(2) ?? 7
+	println(f"{v} {w} {pick(Option::Yes)} {pick(Option::No)}")
+	println(f"{P ?? 0} {Q ?? 9}")
+}

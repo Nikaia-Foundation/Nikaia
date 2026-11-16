@@ -1,0 +1,40 @@
+// A connection that offers transactions hands one out with `begin`; the
+// transaction ends by `commit` or by `rollback` (ADR-299 D4).
+use db
+
+struct Fake {
+    begun: i64,
+}
+
+struct FakeTransaction {
+    name: String,
+    state: String,
+}
+
+impl db::Transaction for FakeTransaction {
+    fn commit(mut self) throws {
+        self.state = "committed"
+    }
+    fn rollback(mut self) throws {
+        self.state = "rolled back"
+    }
+}
+
+impl Fake {
+    fn begin(mut self) -> FakeTransaction throws {
+        self.begun += 1
+        let mut name = String()
+        name.push_str(f"t{self.begun}")
+        return FakeTransaction { name: name, state: "open" }
+    }
+}
+
+fn main() throws {
+    let mut conn = Fake { begun: 0 }
+    let mut first = conn.begin()
+    first.commit()
+    let mut second = conn.begin()
+    second.rollback()
+    println(f"{first.name}: {first.state}")
+    println(f"{second.name}: {second.state}")
+}

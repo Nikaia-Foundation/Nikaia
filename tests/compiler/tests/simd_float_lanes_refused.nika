@@ -1,0 +1,21 @@
+// Float lanes have `+ - * /` between two vectors of one type and no integer
+// operation; integer lanes have no `sqrt`, `abs` or `sum`, and `Lanes` no
+// `sum` at all, since its order would depend on the build's width (ADR-377
+// D9, #1806).
+use std::simd
+
+fn main() {
+    let a: simd::Fixed[f64, 4] = simd::splat(1.0)
+    let i: simd::Fixed[u32, 4] = simd::splat(1)
+    let l: simd::Lanes[f64] = simd::splat(1.0)
+    let bits = a & a
+    let rest = a % a
+    let scaled = a * 2.0
+    let shifted = a << 1
+    let flipped = !a
+    let negated = -a
+    let wrapped = a.wrapping_add(a)
+    let total = l.sum()
+    let root = i.sqrt()
+    let added = i + i
+}

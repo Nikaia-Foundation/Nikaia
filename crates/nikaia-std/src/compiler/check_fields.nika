@@ -39,7 +39,7 @@ impl CheckState {
     /// **A field read through `?.`** (ADR-293 D5): the type it comes to, and
     /// the facts for the emitter - whether the base is flattened, copied or
     /// lent as a view.
-    pub fn a_safe_field(ref mut self, world: ref CheckWorld, inner: ref Ty, base: ref Expr, field: ref String, expr: ref Expr, span: ref Span) -> Ty sync {
+    fn a_safe_field(ref mut self, world: ref CheckWorld, inner: ref Ty, base: ref Expr, field: ref String, expr: ref Expr, span: ref Span) -> Ty sync {
         let ty = named_or_empty(inner)
         if ty.is_empty() {
             return Ty::Unknown
@@ -72,7 +72,7 @@ impl CheckState {
     /// binding is a place as much as `m[k]` is (#1194): the member is lent
     /// out of it, never moved. So is a base that is a view (`viewed`), such as
     /// a method that hands back a field of its receiver (ADR-views-3 D7, #1486).
-    pub fn a_safe_reach(ref mut self, world: ref CheckWorld, base: ref Expr, held_ty: ref Ty, viewed: bool) -> Ty sync {
+    fn a_safe_reach(ref mut self, world: ref CheckWorld, base: ref Expr, held_ty: ref Ty, viewed: bool) -> Ty sync {
         let place = viewed || roots_in_a_binding(base) || shapes_lends_from_a_binding(world, base)
         let key = fact_key(base)
         match held_ty {
@@ -104,7 +104,7 @@ impl CheckState {
     /// `NK1217` otherwise). `what` is `field` or `method`, `plain` the plain
     /// spelling, `shown` the receiver, and `index` and `list` the pieces of an
     /// index read where the receiver is one.
-    pub fn reaches_through_a_plain_value(ref mut self, world: ref CheckWorld, on: ref Ty, receiver: ref Expr, member: ref String, method: bool, reach: ref Expr, span: ref Span) sync {
+    fn reaches_through_a_plain_value(ref mut self, world: ref CheckWorld, on: ref Ty, receiver: ref Expr, member: ref String, method: bool, reach: ref Expr, span: ref Span) sync {
         if on.is_unknown() {
             return
         }
@@ -126,13 +126,13 @@ impl CheckState {
         }
         self.facts.plain_reaches.insert(fact_key(reach))
         let note = f"`?.` is for a value that may be missing: it reaches the {what} when there's something there and gives `null` otherwise. A type without `?` always has a value, so this is the plain `{plain}`."
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1217", message: f"You don't need `?.` here: a `{on.text()}` is never absent.", notes: [note], help: f"Write `{plain}`.", labels: [] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1217", message: f"You don't need `?.` here: a `{on.text()}` is never absent.", notes: [note], help: f"Write `{plain}`.", labels: [], edit: null })
     }
 
     /// **`??` over a value that is never absent** (`NK1211` over an index,
     /// `NK1216` otherwise). True where it is the warning, which the emitter
     /// is told by `plain_reaches`.
-    pub fn nothing_to_fall_back_from(ref mut self, world: ref CheckWorld, value: ref Expr, left: ref Ty, coalesce: ref Expr, span: ref Span) -> bool sync {
+    fn nothing_to_fall_back_from(ref mut self, world: ref CheckWorld, value: ref Expr, left: ref Ty, coalesce: ref Expr, span: ref Span) -> bool sync {
         let seen = left.unseen()
         let never_absent = match seen {
             Ty::Named { name, .. } => type_last_segment(name) != "Option",
@@ -158,14 +158,14 @@ impl CheckState {
             return false
         }
         let note = f"`??` replaces a `null`, and a value of type `{seen.text()}` is never `null`: only a type written with `?` can be."
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1216", message: message, notes: [note], help: "Remove `??` and what follows it.", labels: [] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1216", message: message, notes: [note], help: "Remove `??` and what follows it.", labels: [], edit: null })
         return true
     }
 
     /// `NK1185`: a `??` whose left side is a view and whose fallback owns what
     /// the left side views. A fallback that names a copy (`.clone()`,
     /// `.to_owned()`, a `to_string()` of something not text already) is text.
-    pub fn a_fallback_that_owns_what_the_left_side_views(ref mut self, world: ref CheckWorld, viewed: ref Ty, fallback: ref Ty, written: ref Expr, span: ref Span) sync {
+    fn a_fallback_that_owns_what_the_left_side_views(ref mut self, world: ref CheckWorld, viewed: ref Ty, fallback: ref Ty, written: ref Expr, span: ref Span) sync {
         if !viewed.is_a_view() || fallback.is_a_view() {
             return
         }
@@ -250,7 +250,7 @@ fn a_map_name(name: ref String) -> bool sync {
 impl CheckState {
     /// **A name that is a parameter the function only lends on** (ADR-288):
     /// whether the contract of the function being walked lends at its position.
-    pub fn a_lent_parameter(ref self, world: ref CheckWorld, given: ref Expr) -> bool sync {
+    fn a_lent_parameter(ref self, world: ref CheckWorld, given: ref Expr) -> bool sync {
         let name = match given {
             Expr::Variable(name, _) => world.words.resolve(name).clone(),
             else => return false,
@@ -287,7 +287,7 @@ impl CheckState {
     /// **A name that is a `mut` parameter of the function walked** (ADR-094
     /// D3), while its innermost binding is the parameter's own (#1023): the
     /// caller's value, changed in place.
-    pub fn a_mut_parameter(ref self, world: ref CheckWorld, name: ref String) -> bool sync {
+    fn a_mut_parameter(ref self, world: ref CheckWorld, name: ref String) -> bool sync {
         let key = self.current ?? return false
         let contract = world.own.functions[key]?.clone() ?? return false
         let signature = contract.signature?.clone() ?? return false
@@ -304,7 +304,7 @@ impl CheckState {
     /// **A name that is a parameter this function owns** (#665): one the
     /// contract does not lend (its body keeps it), that is not `mut`, `self`
     /// or a view - a part of it may be moved out.
-    pub fn an_owned_parameter(ref self, world: ref CheckWorld, given: ref Expr) -> bool sync {
+    fn an_owned_parameter(ref self, world: ref CheckWorld, given: ref Expr) -> bool sync {
         let lent = self.a_plain_parameter_lent(world, given) ?? return false
         return !lent
     }
@@ -346,7 +346,7 @@ impl CheckState {
     /// views pass marks the parameter: its type holds text or a list. **A
     /// lent parameter handed back is a view of it, of any type** (ADR-views-3
     /// D12, #1498): what its `from` names is NK1335's to refuse.
-    pub fn an_owned_parameter_handed_back(ref self, world: ref CheckWorld, found: ref Ty, want: ref Ty, given: ref Expr) -> bool sync {
+    fn an_owned_parameter_handed_back(ref self, world: ref CheckWorld, found: ref Ty, want: ref Ty, given: ref Expr) -> bool sync {
         if found.is_a_view() || !want.is_a_view() || want.text() != f"ref {found.text()}" {
             return false
         }
@@ -356,7 +356,7 @@ impl CheckState {
 
     /// **A `comptime` binding used where a type is asked**: the use is written
     /// with the type's suffix (`3u8`), by the node (ADR-287). `ty` is the suffix.
-    pub fn comptimes_asked(ref mut self, world: ref CheckWorld, expr: ref Expr, ty: ref String) sync {
+    fn comptimes_asked(ref mut self, world: ref CheckWorld, expr: ref Expr, ty: ref String) sync {
         match expr {
             Expr::Variable(name, _) => {
                 let local = self.binding(world.words.resolve(name)) ?? return
@@ -391,7 +391,7 @@ impl CheckState {
 
     /// Whether a declared type has a field of the name that holds code
     /// (ADR-230 D1): what a field whose code is not seen is asked about.
-    pub fn a_field_holds_code(ref self, world: ref CheckWorld, owner: ref String, field: ref String) -> bool sync {
+    fn a_field_holds_code(ref self, world: ref CheckWorld, owner: ref String, field: ref String) -> bool sync {
         let fields = self.fields_seen(world, owner)
         for each in fields {
             if each.name == field {
@@ -404,7 +404,7 @@ impl CheckState {
     /// The declared fields of a type by the name a value's type carries: the
     /// program's own, another file's by the exact qualified name, or `std`'s by
     /// the last segment (ADR-296 D17). Empty where there are none.
-    pub fn fields_seen(ref self, world: ref CheckWorld, name: ref String) -> Vec[FieldContract] sync {
+    fn fields_seen(ref self, world: ref CheckWorld, name: ref String) -> Vec[FieldContract] sync {
         if self.structs.contains_key(name) {
             return self.structs[name]?.clone() ?? []
         }
@@ -425,7 +425,7 @@ impl CheckState {
 /// **A map's first writes through the brackets give it its types**
 /// (#543, ADR-285 D43): `m[k] = v` as `insert` does. The value is handed
 /// to an open number by the assignment itself.
-pub fn check_fields_map_first_written(mut state: CheckState, world: ref CheckWorld, target: ref Expr, value: ref Expr, found: ref Ty, span: ref Span) sync {
+fn check_fields_map_first_written(mut state: CheckState, world: ref CheckWorld, target: ref Expr, value: ref Expr, found: ref Ty, span: ref Span) sync {
     match target {
         Expr::Index { base, index, .. } => {
             match base {

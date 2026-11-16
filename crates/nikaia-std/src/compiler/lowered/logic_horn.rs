@@ -44,7 +44,7 @@ impl LgLoopVerdict {
 
 pub fn lg_primed(name: &str) -> String { format!("{}'", name) }
 
-pub fn lg_loop_primed(arena: &mut TermArena, problem: &LgLoop, term: i64) -> i64 {
+pub(crate) fn lg_loop_primed(arena: &mut TermArena, problem: &LgLoop, term: i64) -> i64 {
     let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for name in problem.state.iter() {
         let primed = arena.var(&lg_primed(name));
@@ -53,7 +53,7 @@ pub fn lg_loop_primed(arena: &mut TermArena, problem: &LgLoop, term: i64) -> i64
     arena.substitute(term, &given)
 }
 
-pub fn lg_loop_entry_query(problem: &LgLoop, invariant: i64) -> LgQuery {
+pub(crate) fn lg_loop_entry_query(problem: &LgLoop, invariant: i64) -> LgQuery {
     let mut facts = problem.fixed.copy_owned();
     for fact in problem.entry.iter() {
         let fact = nikaia_std::num::value(fact);
@@ -62,7 +62,7 @@ pub fn lg_loop_entry_query(problem: &LgLoop, invariant: i64) -> LgQuery {
     LgQuery { facts, goal: invariant }
 }
 
-pub fn lg_loop_turn_query(arena: &mut TermArena, problem: &LgLoop, invariant: i64) -> LgQuery {
+pub(crate) fn lg_loop_turn_query(arena: &mut TermArena, problem: &LgLoop, invariant: i64) -> LgQuery {
     let mut facts = problem.fixed.copy_owned();
     facts.push(invariant);
     let condition = nikaia_std::index::or(problem.condition, || -1);
@@ -72,7 +72,7 @@ pub fn lg_loop_turn_query(arena: &mut TermArena, problem: &LgLoop, invariant: i6
     LgQuery { facts, goal }
 }
 
-pub fn lg_loop_exit_queries(arena: &mut TermArena, problem: &LgLoop, invariant: i64) -> Vec<LgQuery> {
+pub(crate) fn lg_loop_exit_queries(arena: &mut TermArena, problem: &LgLoop, invariant: i64) -> Vec<LgQuery> {
     let mut queries: Vec<LgQuery> = vec![];
     for goal in problem.goals.iter() {
         let goal = nikaia_std::num::value(goal);

@@ -113,6 +113,18 @@ fn emit_flow_a_struct_written(node: ref Expr) -> bool {
     }
 }
 
+/// Whether the fallback of a `??` is a call of `std::simd`'s (`simd::splat`,
+/// `simd::load`, `simd::Fixed::from`), whose type the option decides.
+fn emit_flow_a_simd_call(world: ref EmitWorld, node: ref Expr) -> bool {
+    return match node {
+        Expr::Call { func, .. } => match func {
+            Expr::Path(segments, _) => segments.len() > 1 && emit_text(world, segments[0]) == "simd",
+            else => false,
+        },
+        else => false,
+    }
+}
+
 /// Whether a struct literal stands at the head of `node` (D39): Rust refuses one
 /// unbracketed in a `match` scrutinee, so the guarded half of a `catch` is then
 /// written in brackets.
@@ -242,7 +254,7 @@ impl EmitState {
 
     /// A lambda's arguments are the ones it names (ADR-277): nothing is read
     /// off the body, so `fn { .. }` is `||`.
-    pub fn emit_core_closure[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_closure[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let mut names: Vec[String] = []
         for p in params {
             names.push(emit_local_name(self.facts.comptime_names, emit_text(world, p)))
@@ -277,8 +289,29 @@ impl EmitState {
         // **`filter` is handed a reference to its item** (ADR-231 D2): where the
         // item copies, the pattern takes it out.
         let pattern = self.facts.filter_patterns.contains(node_key(node))
+        // **A view of an open number's item is taken out** (#1748).
+        let mut takes_out = false
+        let mut place = 0
+        while place < names.len() as i64 {
+            if self.facts.copied_item_params.contains((node_key(node), place)) {
+                takes_out = true
+            }
+            place += 1
+        }
         if pattern && names.len() == 1 {
             out.push(f"|&{names[0]}| ")
+        } else if takes_out {
+            let mut written: Vec[String] = []
+            let mut at = 0
+            for name in names {
+                if self.facts.copied_item_params.contains((node_key(node), at)) {
+                    written.push(f"&{name}")
+                } else {
+                    written.push(name.clone())
+                }
+                at += 1
+            }
+            out.push(f"|{written.join(", ")}| ")
         } else if self.facts.copied_entry_lambdas.contains(node_key(node)) && names.len() == 1 {
             out.push("|__nikaia_slot| ")
         } else {
@@ -307,7 +340,7 @@ impl EmitState {
         // its body's error is handed back, and the scope throws it at its end.
         if fails {
             let channel = scope.tasks_channel.clone()
-            out.push(f"-> Result<(), {channel}> {{ ")
+            out.push(f"-> {self.rust_result()}<(), {channel}> {{ ")
             let failing = inside with { can_throw: true }
             let failing_scope = EmitScope::plain() with { origin: scope.origin.clone(), function: scope.tasks_function.clone(), channel: channel.clone(), changed: changed, tasks_channel: channel.clone(), tasks_function: scope.tasks_function.clone() }
             self.emit_core_block(world, walk, out, host, body, depth, failing, failing_scope, EmitTail::Value)
@@ -430,7 +463,7 @@ impl EmitState {
             if result != "_" {
                 out.push(f"{{ let __nikaia_future: {emit_boxed_future_in(host.overlaps_user_code())}<'_, {result}> = ")
             }
-            out.push("Box::pin(async move ")
+            out.push("std::boxed::Box::pin(async move ")
         }
         // A type that may fail hands back a `Result`, as a `throws` function does:
         // the value goes inside the `Ok`. Through a `let`: `Ok({ .. })` around a
@@ -479,7 +512,7 @@ impl EmitState {
     }
 
     /// `a + b`, `a < b`, and the many shapes a comparison or a sum takes below.
-    pub fn emit_core_binary[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, at: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_binary[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, at: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let site = at.start as i64
         // **Two kinds compared, decided while building** (ADR-330 D3, D6).
         if self.facts.kind_compares.contains(node_key(node)) {
@@ -749,7 +782,7 @@ impl EmitState {
     }
 
     /// `value ?? fallback`, in its four shapes (Part I 3.5).
-    pub fn emit_core_coalesce[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, value: ref Expr, fallback: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_coalesce[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, value: ref Expr, fallback: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **A `??` after a value that cannot be absent is its left side** (ADR-279
         // D13): the fallback never runs and is not written.
         if self.facts.plain_reaches.contains(node_key(node)) {
@@ -889,8 +922,11 @@ impl EmitState {
         // the left of a `??` may be a view into a container. **And except for text
         // where the left side is a view of text** (ADR-283), **a variant of an enum
         // this file declares**, **a constructor of a type this file declares**, and
-        // **a struct written out**, or a `bool`.
-        let bare = a_number(fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || (emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(node_key(fallback))) || self.facts.view_coalesces.contains(node_key(node))
+        // **a struct written out**, or a `bool`, **or a name of the word the
+        // left side holds** (#1841); **and a vector of `std::simd`'s made
+        // there**, which takes the option's type from `index::or` (ADR-377 D3)
+        // and has none of its own for `into()`.
+        let bare = a_number(fallback) || emit_flow_a_simd_call(world, fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || (emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(node_key(fallback))) || self.facts.view_coalesces.contains(node_key(node)) || self.facts.word_fallbacks.contains(node_key(node))
         // **A fallback that may be `null` too** (Part I 3.5): the first option that
         // has a value, which is the language below's `or_else`, and the answer is
         // an option still.
@@ -1042,11 +1078,27 @@ impl EmitState {
     }
 
     /// Kap 7.1: `expr catch { handler }`, the handler sees the error as `error`.
-    pub fn emit_core_try_catch[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, guarded_expr: ref Expr, handler: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_try_catch[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, guarded_expr: ref Expr, handler: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **A `catch` whose value is not used drops it** (#885): the statement
         // emitter says so through the walk, the checker through a fact.
         let dropped = walk.dropped_catch == node_key(guarded_expr) || self.facts.dropped_catches.contains(node_key(guarded_expr))
-        out.push("match ")
+        // **A fatal error the handler does not name passes** (ADR-345 D2): an
+        // arm before the handler's hands it on as the function's own failure.
+        let passing = self.fatal_passing(world, guarded_expr, handler)
+        // **A handler that pauses and does not read the error is an `else`**
+        // (#1715): a `match` keeps its subject until its end, so a pause in
+        // an arm holds the caught `Result` across it, and a box in it is not
+        // `Send` in a pooled task. An `if let`'s subject is dropped before
+        // its `else` runs (Rust 2024).
+        let unread = !host.block_mentions(handler, "error") && passing.len() == 0 && !emit_catch_is_a_scope(world, guarded_expr)
+        let an_else = unread && self.block_pauses(world, handler)
+        if an_else && dropped {
+            out.push("if let Ok(_) = ")
+        } else if an_else {
+            out.push("if let Ok(value) = ")
+        } else {
+            out.push("match ")
+        }
         // **A joining block is told the handler is right here** (ADR-292 D18), and
         // only when it *is* the guarded half: one nested in an argument hands back
         // a tuple like any other value.
@@ -1102,7 +1154,7 @@ impl EmitState {
         walk.async_bound = ""
         let bound_here = deadline != "" && a_block
         if bound_here {
-            let boxed: String = "Box<dyn std::error::Error>"
+            let boxed: String = "std::boxed::Box<dyn std::error::Error>"
             let bound_flow = guarded with { breaks_to: -1, can_throw: true, in_lambda: false }
             let bound_scope = EmitScope::plain() with { origin: scope.origin.clone(), channel: boxed.clone() }
             out.push(f"{deadline}.bound(async {{ let __nikaia_value = ")
@@ -1113,7 +1165,7 @@ impl EmitState {
             if a_block {
                 out.push(f"'__nikaia_caught_{at}: {{ let __nikaia_value = ")
             } else {
-                out.push(f"'__nikaia_caught_{at}: {{ Ok::<_, Box<dyn std::error::Error>>(")
+                out.push(f"'__nikaia_caught_{at}: {{ Ok::<_, std::boxed::Box<dyn std::error::Error>>(")
             }
         } else {
             guarded = guarded with { breaks_to: -1 }
@@ -1130,7 +1182,7 @@ impl EmitState {
             out.push(")")
         }
         if nested && a_block && !bound_here {
-            out.push("; Ok::<_, Box<dyn std::error::Error>>(__nikaia_value) }")
+            out.push("; Ok::<_, std::boxed::Box<dyn std::error::Error>>(__nikaia_value) }")
         } else if nested && !bound_here {
             out.push(") }")
         }
@@ -1167,7 +1219,7 @@ impl EmitState {
             let own_sum = self.sum_of(scope.function)
             if own_sum != null {
                 sum = own_sum
-            } else if scope.channel == "Box<dyn std::error::Error>" {
+            } else if scope.channel == "std::boxed::Box<dyn std::error::Error>" {
                 sum = ""
                 boxed = true
             } else if scope.channel.starts_with("nikaia_std::error::Thrown<") {
@@ -1207,12 +1259,23 @@ impl EmitState {
         } else if boxed && fallback {
             // **A task over its block is handed as `task::OverBudget`**
             // (ADR-327 D13), and not as the crash that carried it.
-            opening = "let error: Box<dyn std::error::Error> = nikaia_std::task::handed(error.into());"
+            opening = "let error: std::boxed::Box<dyn std::error::Error> = nikaia_std::task::handed(error.into());"
         } else if boxed {
             // A handle whose body cannot fail hands `Crashed` or `Late` bare.
-            opening = "let error: Box<dyn std::error::Error> = error.into();"
+            opening = "let error: std::boxed::Box<dyn std::error::Error> = error.into();"
         }
-        if dropped {
+        if an_else {
+            if dropped {
+                out.push(" {} else ")
+            } else if self.facts.nullable_catches.contains(node_key(guarded_expr)) {
+                out.push(" { Some(value) } else ")
+            } else if self.facts.owned_catches.contains(node_key(guarded_expr)) {
+                let copy = if self.on_block_types() { "copy_owned" } else { "to_owned" }
+                out.push(f" {{ value.{copy}() }} else ")
+            } else {
+                out.push(" { value } else ")
+            }
+        } else if dropped {
             out.push(f" {{\n{pad}Ok(_) => {{}},\n")
         } else if self.facts.nullable_catches.contains(node_key(guarded_expr)) {
             // **A `null` from the handler widens the value to `T?`** (#884).
@@ -1225,16 +1288,13 @@ impl EmitState {
         } else {
             out.push(f" {{\n{pad}Ok(value) => value,\n")
         }
-        // **A fatal error the handler does not name passes** (ADR-345 D2): an
-        // arm before the handler's hands it on as the function's own failure.
-        let passing = self.fatal_passing(world, guarded_expr, handler)
         // **`supervisor::run` hands `Stopped` back** (ADR-346 D7): its
         // `Handed` passes, and the handler gets the `Escalated` in it.
         let mut handler_takes: String = f"Err({bound}) => "
         if passing.len() > 0 && (call_callee_name(world.words, world.aliases, guarded_expr) ?? "") == "supervisor::run" {
             out.push(f"{pad}Err(nikaia_std::supervisor::Stopped::Handed(error)) => return Err(error.into()),\n")
             handler_takes = f"Err(nikaia_std::supervisor::Stopped::Escalated({bound})) => "
-        } else if a_scope && scope.channel == "Box<dyn std::error::Error>" {
+        } else if a_scope && scope.channel == "std::boxed::Box<dyn std::error::Error>" {
             // **A scope's tasks fail in the box** (ADR-346 D7), so whether the
             // error is fatal is asked of the value: one the handler does not
             // name passes.
@@ -1295,7 +1355,9 @@ impl EmitState {
                 }
             }
         }
-        out.push(f"{pad}{handler_takes}")
+        if !an_else {
+            out.push(f"{pad}{handler_takes}")
+        }
         // Kap 7.1 and ADR-292: the handler's last statement is the value of the
         // `catch`, so a `return` in it is the *function's* return and has to stay
         // one.
@@ -1303,13 +1365,18 @@ impl EmitState {
         if dropped {
             handler_tail = EmitTail::Statement
         }
-        self.emit_stmt_block_opening_with(world, walk, out, host, handler, depth + 1, inside, inside_scope, handler_tail, opening)
-        out.push(f",\n{close}}}")
+        // An `else` stands where the `match` did, so its block is not indented
+        // as an arm.
+        let handler_depth = if an_else { depth } else { depth + 1 }
+        self.emit_stmt_block_opening_with(world, walk, out, host, handler, handler_depth, inside, inside_scope, handler_tail, opening)
+        if !an_else {
+            out.push(f",\n{close}}}")
+        }
     }
 
     /// The fatal errors that arrive at a `catch` over `guarded` and that its
     /// handler names in no `match` arm (ADR-345 D2).
-    pub fn fatal_passing(ref self, world: ref EmitWorld, guarded: ref Expr, handler: ref Block) -> Vec[String] {
+    fn fatal_passing(ref self, world: ref EmitWorld, guarded: ref Expr, handler: ref Block) -> Vec[String] {
         let mut out: Vec[String] = []
         let name = call_callee_name(world.words, world.aliases, guarded) ?? return out
         let mut arriving: Vec[String] = []
@@ -1334,14 +1401,14 @@ impl EmitState {
     }
 
     /// `expr?`.
-    pub fn emit_core_try[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, inner: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_try[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, inner: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         self.emit_core_postfix_base(world, walk, out, host, inner, depth, flow, scope)
         out.push("?")
     }
 
     /// `return` and `return value`: what it hands back is wrapped by its own
     /// address (`check::Checked::wrapped`, read in `expr`).
-    pub fn emit_core_return[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_return[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         if value != null {
             let held = value ?? return
             // **A `return` inside an expression hands back what a `return`
@@ -1377,7 +1444,7 @@ impl EmitState {
 
     /// `break` and `continue`, the same refusal the statement form has (ADR-276
     /// D18).
-    pub fn emit_core_jump(ref self, mut out: EmitOut, is_break: bool, flow: EmitFlow) sync throws {
+    fn emit_core_jump(ref self, mut out: EmitOut, is_break: bool, flow: EmitFlow) sync throws {
         let mut word: String = "continue"
         if is_break {
             word = "break"
@@ -1391,7 +1458,7 @@ impl EmitState {
     /// `throw error` inside a handler passes the error on (ADR-280 D11), with the
     /// site it was **raised** at and not the one it was caught at; any other
     /// `throw` leaves the function with the value in the failure channel.
-    pub fn emit_core_throw[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, inner: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_throw[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, inner: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let mut is_the_binding = false
         match inner {
             Expr::Variable(name, _) => {
@@ -1457,7 +1524,7 @@ impl EmitState {
         // **Into the box where the signature is the box**
         // (`defects_found_running::a_typed_throw_in_a_trait_impl_is_boxed`): a trait's `throws` method is declared with the opaque channel
         // whatever its impl throws, so a typed error is raised into it.
-        if self.named_error(world, scope.function) != 0 && scope.channel != "Box<dyn std::error::Error>" {
+        if self.named_error(world, scope.function) != 0 && scope.channel != "std::boxed::Box<dyn std::error::Error>" {
             out.push("return Err(nikaia_std::error::throwing(")
         } else {
             out.push("return Err(nikaia_std::error::raise(")
@@ -1469,7 +1536,7 @@ impl EmitState {
     /// **Part I 8.2 and ADR-055 D5: a task.** `spawn fn { .. }` is
     /// `TaskHandle::start(async move { .. })`: an `async` **block** and not a
     /// closure, with `move` (Part I 8.3's implicit move), and a **handle**, always.
-    pub fn emit_core_spawn[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, lambda: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_spawn[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, lambda: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         match lambda {
             Expr::Closure { body, .. } => self.emit_flow_task(world, walk, out, host, node_key(lambda), body, depth, flow, scope),
             else => {
@@ -1484,7 +1551,7 @@ impl EmitState {
     /// task's value where its failure arrives, the `join`, after the task's
     /// own `catch` and before the receiver's. The guarded block keeps the
     /// task's node, which the checker's facts of this `catch` are keyed by.
-    pub fn emit_core_spawn_fallback[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: ref Expr, lambda: ref Expr, handler: ref Block, id: u32, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_spawn_fallback[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: ref Expr, lambda: ref Expr, handler: ref Block, id: u32, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         match lambda {
             Expr::Closure { body, .. } => {
                 let mut at: u32 = 0
@@ -1582,7 +1649,7 @@ impl EmitState {
         if failing {
             kind = "FailingTask"
             // A box is not `Send`: on the pool it crosses as `BoxedTask`'s.
-            if host.overlaps_user_code() && scope.channel == "Box<dyn std::error::Error>" {
+            if host.overlaps_user_code() && scope.channel == "std::boxed::Box<dyn std::error::Error>" {
                 kind = "BoxedTask"
             }
         }
@@ -1605,22 +1672,25 @@ impl EmitState {
                 out.append(inner)
             }
             out.push(f"; Ok::<_, {scope.channel}>(__nikaia_task) }}")
-            // What its error says in the log if nobody waits (ADR-346 D6).
-            out.push(f", |e: &{scope.channel}| {{ use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})")
+            // What its error says in the log if nobody waits (ADR-346 D6). One
+            // of the two traits answers `report`, so the other is unused
+            // (#1686).
+            out.push(f", |e: &{scope.channel}| {{ #[allow(unused_imports)] use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})")
         } else {
             let inside = EmitFlow::plain() with { statement: flow.statement }
             let inside_scope = EmitScope::plain()
             if fallback_inside {
                 walk.async_bound = "__nikaia_deadline"
             }
+            // The strategy's wait opens the body's own block, so a body of
+            // one expression is not a block in a block (rustc's
+            // `unused_braces`, #1554).
+            let mut opening: String? = null
             if first != "" {
-                out.push(f"{{ {first}")
+                opening = "nikaia_std::task::admission_first(__nikaia_admission).await;"
             }
-            self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return)
+            self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return, opening)
             walk.async_bound = ""
-            if first != "" {
-                out.push(" }")
-            }
             out.push(")")
         }
         if opened {

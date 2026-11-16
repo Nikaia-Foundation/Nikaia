@@ -22,7 +22,7 @@ pub struct FreeFunction {
 
 /// The free function of `program` named `wanted`: not a method, which a call
 /// by name never reaches.
-pub fn free_function(program: ref Program, words: ref winnow_grammar::InternerContext, wanted: ref String) -> FreeFunction? {
+fn free_function(program: ref Program, words: ref winnow_grammar::InternerContext, wanted: ref String) -> FreeFunction? {
     for item in program.items {
         match item.node {
             Item::Fn { name, receiver, args, config, ret_type, can_throw, .. } => {
@@ -48,7 +48,7 @@ pub fn free_function(program: ref Program, words: ref winnow_grammar::InternerCo
 /// The method `wanted` of `owner`'s own `impl` (not a trait's), as a call
 /// `self.wanted(…)` in a method of `owner` reaches it: its parameters without
 /// the receiver (#776).
-pub fn own_method(program: ref Program, words: ref winnow_grammar::InternerContext, owner: ref String, wanted: ref String) -> FreeFunction? {
+fn own_method(program: ref Program, words: ref winnow_grammar::InternerContext, owner: ref String, wanted: ref String) -> FreeFunction? {
     for item in program.items {
         match item.node {
             Item::Impl { methods, target, trait_name } => {
@@ -84,7 +84,7 @@ pub fn own_method(program: ref Program, words: ref winnow_grammar::InternerConte
 /// positional ones as written, then each option as the call names it, or its
 /// default where the call leaves it out (ADR-318), so a claim about an option
 /// is proved at the call as one about a subject parameter is (ADR-269 D5).
-pub fn arguments_in_order(function: ref FreeFunction, args: ref Vec[Expr], config: ref Vec[ConfigArg], words: ref winnow_grammar::InternerContext) -> Vec[Expr] {
+fn arguments_in_order(function: ref FreeFunction, args: ref Vec[Expr], config: ref Vec[ConfigArg], words: ref winnow_grammar::InternerContext) -> Vec[Expr] {
     let mut all: Vec[Expr] = args.clone()
     for (option, default) in function.options {
         let mut value = default.clone()
@@ -117,7 +117,7 @@ fn whole_type(ty: ref Type?, words: ref winnow_grammar::InternerContext) -> bool
 /// whose every failure is `io::IoError` - a `println`, a file read - fails or
 /// not by what is outside the program, never by its values, so it narrows no
 /// state past it; for each state there is a world in which it goes on.
-pub fn may_throw(call: ref Expr, in_throwing: bool, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, unaliased: fn(ref String) -> String sync) -> bool {
+fn may_throw(call: ref Expr, in_throwing: bool, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, unaliased: fn(ref String) -> String sync) -> bool {
     if !in_throwing {
         return false
     }
@@ -175,7 +175,7 @@ fn thrower_named(call: ref Expr, words: ref winnow_grammar::InternerContext, una
 /// a binding in `tainted`, or calls a source `std`'s ledger calls untrusted
 /// without writing `trusted: true` (ADR-365 D2) - anywhere inside it, as `contracts::sync`'s walk reads it: every
 /// expression, not into its blocks, the holes of its literals included.
-pub fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
     match expr {
         Expr::Variable(name, _) => {
             if tainted.contains(words.resolve(name)) {
@@ -318,7 +318,7 @@ fn config_from_outside(config: ref Vec[ConfigArg], tainted: ref collections::BTr
 /// inside it (`io::read_to_string`), or the source of a name in `tainted`
 /// it reads. Null where `from_outside` would find none, or only one this
 /// shorter walk does not reach; the message then names the binding alone.
-pub fn outside_source(expr: ref Expr, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> String? {
+fn outside_source(expr: ref Expr, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> String? {
     match expr {
         Expr::Variable(name, _) => {
             let n = words.resolve(name)
@@ -469,7 +469,7 @@ impl ProverOutside {
 /// rounds repeat until nothing is added. Bindings are followed in the order
 /// they are written, without branches told apart: a value that may come
 /// from outside is taken as coming from outside.
-pub fn prover_outside(program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> ProverOutside {
+fn prover_outside(program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> ProverOutside {
     let mut found = ProverOutside { results: state.outside.results.clone(), fields: state.outside.fields.clone() }
     for item in program.items {
         match item.node {

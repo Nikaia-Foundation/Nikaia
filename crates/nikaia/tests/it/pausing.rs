@@ -301,7 +301,7 @@ fn a_lambda_that_pauses_is_handed_to_the_pausing_counterpart() {
     );
 
     assert!(
-        rust.contains("nikaia_std::seq::sort_by_key(&mut ys, async |n|"),
+        rust.contains("nikaia_std::seq::sort_by_key(&mut ys, async |&n|"),
         "{rust}"
     );
     assert!(rust.contains("size().await"), "{rust}");

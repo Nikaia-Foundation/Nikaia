@@ -16,19 +16,19 @@ use std::collections
 /// for packages of its own.
 pub fn published_entries(ledger: ref Ledger, foreign: ref collections::BTreeSet[String]) -> Ledger {
     let mut out = ledger.clone()
-    out.functions = collections::BTreeMap()
+    out.functions.clear()
     for (key, contract) in ledger.functions {
         if !of_another(key, foreign) {
             out.functions.insert(key.clone(), contract.clone())
         }
     }
-    out.types = collections::BTreeMap()
+    out.types.clear()
     for (key, contract) in ledger.types {
         if !of_another(key, foreign) {
             out.types.insert(key.clone(), contract.clone())
         }
     }
-    out.traits = collections::BTreeMap()
+    out.traits.clear()
     for (key, methods) in ledger.traits {
         if !of_another(key, foreign) {
             out.traits.insert(key.clone(), methods.clone())

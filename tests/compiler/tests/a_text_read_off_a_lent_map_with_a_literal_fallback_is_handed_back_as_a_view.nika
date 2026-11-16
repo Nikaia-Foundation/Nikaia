@@ -1,0 +1,62 @@
+// A `String` result that reads an element off a lent list or map, with a
+// literal or a jump behind its `??`, hands back a view of the parameter or of
+// static text, as `-> ref String` says (ADR-282 D13, D29; ADR-views-3 D12;
+// #1720): no NK1104 "returning `ref String`", no copy behind your back.
+use std::collections
+
+fn make(t: String) -> String {
+    let mut g = String()
+    g.push_str(t)
+    return g
+}
+
+fn idx(m: collections::HashMap[String, String], k: String) -> String {
+    return m[k] ?? ""
+}
+
+fn last_value(m: collections::HashMap[String, String], k: String) -> String {
+    m[k] ?? "none"
+}
+
+fn find(m: collections::BTreeMap[String, String], k: String) -> String {
+    return m.get(k) ?? "none"
+}
+
+fn either(m: collections::HashMap[String, String], a: String, b: String) -> String {
+    return m[a] ?? m[b] ?? "neither"
+}
+
+fn lent(m: ref collections::HashMap[String, String], k: String) -> String {
+    return m[k] ?? "lent"
+}
+
+fn at(xs: Vec[String], i: i64) -> String {
+    return xs.get(i) ?? "out"
+}
+
+fn head(xs: Vec[String]) -> String {
+    return xs.first() ?? "empty"
+}
+
+fn tail(xs: Vec[String]) -> String {
+    xs.last() ?? "empty"
+}
+
+fn main() throws {
+    let mut m: collections::HashMap[String, String] = collections::HashMap()
+    m.insert(make("a"), make("b"))
+    let mut t: collections::BTreeMap[String, String] = collections::BTreeMap()
+    t.insert(make("c"), make("d"))
+    let mut xs: Vec[String] = []
+    xs.push(make("x"))
+    xs.push(make("y"))
+    println(f"[{idx(m, "a")}] [{idx(m, "z")}]")
+    println(f"{last_value(m, "a")} {last_value(m, "z")}")
+    println(f"{find(t, "c")} {find(t, "z")}")
+    println(f"{either(m, "z", "a")} {either(m, "y", "z")}")
+    println(f"{lent(m, "a")} {lent(m, "z")}")
+    println(f"{at(xs, 1)} {at(xs, 5)}")
+    let empty: Vec[String] = []
+    println(f"{head(xs)} {head(empty)} {tail(xs)} {tail(empty)}")
+    println(f"{m.len()} {t.len()} {xs.len()}")
+}

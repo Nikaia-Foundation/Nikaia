@@ -1,0 +1,3 @@
+bounds in tests/a_local_named_like_a_method_keeps_its_derived_claim.nika: 1 indexes, 1 proved; 0 operations, 0 proved
+    13  self.xs[0]  proved
+  derived  top: 0 < self.xs.len(), proved at the calls on lines 20, 28

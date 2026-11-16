@@ -13,16 +13,17 @@
 
 /// The shape that kept an index's check, read off the site.
 ///
-/// `callers` says the function is private and called only where the walk
-/// sees it (ADR-391 D1): its parameters are bounded by its callers or not.
-pub fn blocked_index(
+/// `gate` is `""` where the function is private and called only where the
+/// walk sees it (ADR-391 D1): its parameters are bounded by its callers or
+/// not; else what keeps it from them (`derived_gates`, #1863).
+fn blocked_index(
 	base: ref Expr,
 	index: ref Expr,
 	args: ref Vec[FnArg],
 	body: ref Block,
 	words: ref winnow_grammar::InternerContext,
 	source: ref String,
-	callers: bool,
+	gate: ref String,
 ) -> String {
 	let shape = match base {
 		Expr::Index { .. } => list_of_lists(),
@@ -50,13 +51,13 @@ pub fn blocked_index(
 	if is_element(index, words) {
 		return reason_element_from(index, body, words)
 	}
-	return from_binding(names_read(index, words), args, body, words, source, callers)
+	return from_binding(names_read(index, words), args, body, words, source, gate)
 }
 
 /// **The shape that kept an operation's check**, read off the site. A side
 /// the walk has no fact for at all - a field, a list of lists, a call - is
 /// named before the product: it would block the sum of the two as well.
-pub fn blocked_operation(
+fn blocked_operation(
 	op: BinaryOp,
 	lhs: ref Expr,
 	rhs: ref Expr,
@@ -64,7 +65,7 @@ pub fn blocked_operation(
 	body: ref Block,
 	words: ref winnow_grammar::InternerContext,
 	source: ref String,
-	callers: bool,
+	gate: ref String,
 ) -> String {
 	let shape = site_shape(lhs, rhs)
 	if shape != unbounded() {
@@ -79,7 +80,25 @@ pub fn blocked_operation(
 			names.push(name)
 		}
 	}
-	return from_binding(names, args, body, words, source, callers)
+	let found = from_binding(names, args, body, words, source, gate)
+	// **A field raised by a number or by another field** (#1681): what
+	// bounds it would be a rule of its type, and none was found.
+	if found == unbounded() && a_field_path(lhs) && (is_int_literal(rhs) || a_field_path(rhs)) {
+		return counter_field()
+	}
+	return found
+}
+
+/// Whether `expr` is a field of a name or of a path of fields from one.
+fn a_field_path(expr: ref Expr) -> bool {
+	return match expr {
+		Expr::Field { base, .. } => a_path(base),
+		else => false,
+	}
+}
+
+fn counter_field() -> String {
+	return "a field no rule of its type bounds: the walk finds `a <= b` only of two private fields a method compares (ADR-369 D4, #1681), and a count of work done has none (#1531)"
 }
 
 /// The names an expression reads, each once, in the order written.
@@ -101,16 +120,18 @@ fn names_read(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> Vec
 
 /// **The reason from how a name was bound**: the first of `names` whose
 /// binding in the function names one, else the old catch-all.
-/// Of a function its callers bound (`callers`), a parameter, or a counter
-/// a loop runs up to one, is bounded by what the callers hand it.
+/// Of a function its callers bound (`gate` is `""`), a parameter, or a
+/// counter a loop runs up to one, is bounded by what the callers hand it;
+/// of another, the reason names the gate that kept it from them.
 fn from_binding(
 	names: ref Vec[String],
 	args: ref Vec[FnArg],
 	body: ref Block,
 	words: ref winnow_grammar::InternerContext,
 	source: ref String,
-	callers: bool,
+	gate: ref String,
 ) -> String {
+	let callers = gate == ""
 	for name in names {
 		let found = binding_reason(body, body, name, -1, words, source)
 		if found != "" {
@@ -127,7 +148,7 @@ fn from_binding(
 					if callers {
 						return not_proved_by_callers()
 					}
-					return "a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)"
+					return f"a parameter no precondition bounds, of {gate}: an `assert` at the top of the function makes it one (ADR-269 D5)"
 				}
 			}
 		}

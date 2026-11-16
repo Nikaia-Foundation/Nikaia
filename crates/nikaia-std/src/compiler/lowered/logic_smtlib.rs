@@ -19,7 +19,7 @@ pub fn lg_smtlib_write(arena: &TermArena, facts: &[i64], goal: i64) -> String {
     out
 }
 
-pub fn lg_symbol(name: &str) -> String {
+pub(crate) fn lg_symbol(name: &str) -> String {
     let mut simple = !name.is_empty();
     let mut first = true;
     for c in name.chars() {
@@ -46,7 +46,7 @@ pub(crate) fn lg_smt_list(op: &str, arena: &TermArena, parts: &[i64], empty: &st
     format!("({} {})", op, nikaia_std::block::Text::from(written.join(" ")))
 }
 
-pub fn lg_term(arena: &TermArena, id: i64) -> String {
+pub(crate) fn lg_term(arena: &TermArena, id: i64) -> String {
     let node = arena.at(id);
     match node {
         SolverTerm::Bool(b) => if b { String::from("true") } else { String::from("false") },

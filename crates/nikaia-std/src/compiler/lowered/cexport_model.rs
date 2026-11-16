@@ -61,7 +61,7 @@ pub enum CxOut {
     AbsentRecord(i64),
 }
 
-pub fn cx_out_index(out: &CxOut) -> i64 {
+pub(crate) fn cx_out_index(out: &CxOut) -> i64 {
     match out {
         CxOut::Choice(at) => { let at = *at; at },
         CxOut::Handle(at) => { let at = *at; at },
@@ -74,7 +74,7 @@ pub fn cx_out_index(out: &CxOut) -> i64 {
 }
 
 impl CxOut {
-    pub fn flagged(&self) -> bool { matches!(self, CxOut::AbsentValue(_) | CxOut::AbsentRecord(_)) }
+    pub(crate) fn flagged(&self) -> bool { matches!(self, CxOut::AbsentValue(_) | CxOut::AbsentRecord(_)) }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -97,11 +97,11 @@ pub enum CxPart {
     Value(CxByValue),
     Choice(i64),
     Record(i64),
-    Array(Box<CxPart>, i64),
+    Array(std::boxed::Box<CxPart>, i64),
 }
 
 impl CxRecord {
-    pub fn is_enum(&self) -> bool { !self.variants.is_empty() }
+    pub(crate) fn is_enum(&self) -> bool { !self.variants.is_empty() }
     pub fn parts(&self) -> Vec<CxPart> {
         let mut out: Vec<CxPart> = vec![];
         for (_, part) in self.fields.iter() { out.push(cx_element(part)); }
@@ -110,7 +110,7 @@ impl CxRecord {
     }
 }
 
-pub fn cx_element(part: &CxPart) -> CxPart {
+pub(crate) fn cx_element(part: &CxPart) -> CxPart {
     match part {
         CxPart::Array(element, _) => { let element = nikaia_std::boxed::open(element); element.clone() },
         _ => part.clone(),
@@ -159,7 +159,7 @@ impl CxEntry {
         let owner = match self.owner.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(self.name.to_string()) };
         format!("{}.{}", owner, self.name)
     }
-    pub fn of_a_record(&self, records: &[CxRecord]) -> bool {
+    pub(crate) fn of_a_record(&self, records: &[CxRecord]) -> bool {
         let owner = match self.owner.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         for record in records.iter() { if record.name == owner { return true; } }
         false
@@ -181,7 +181,7 @@ pub struct CxShown {
 }
 
 impl CxHandled {
-    pub fn is_enum(&self) -> bool { !self.variants.is_empty() }
+    pub(crate) fn is_enum(&self) -> bool { !self.variants.is_empty() }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -205,7 +205,7 @@ impl CxCode {
     }
 }
 
-pub fn cx_escaped(name: &str) -> String {
+pub(crate) fn cx_escaped(name: &str) -> String {
     let reserved: [&str; 28] = ["abstract", "async", "await", "become", "box", "const", "do", "dyn", "extern", "final", "gen", "loop", "macro", "mod", "move", "override", "priv", "ref", "static", "trait", "try", "type", "typeof", "unsafe", "unsized", "virtual", "where", "yield"];
     for word in reserved.iter() {
         let word = *word;
@@ -214,11 +214,11 @@ pub fn cx_escaped(name: &str) -> String {
     nikaia_std::block::Text::from(name.to_string())
 }
 
-pub fn cx_not_yet(written: &str, what: &str) -> String { format!("`{}` is an entry point whose {} this compiler does not export yet: what is built is numbers, `bool`, `scalar` and an `enum` without payload in and out, text and bytes in and out, a run of numbers in, and a `pub struct` as a handle, of a function in `src/main.nika` (ADR-284 D5).", written, what) }
+pub(crate) fn cx_not_yet(written: &str, what: &str) -> String { format!("`{}` is an entry point whose {} this compiler does not export yet: what is built is numbers, `bool`, `scalar` and an `enum` without payload in and out, text and bytes in and out, a run of numbers in, and a `pub struct` as a handle, of a function in `src/main.nika` (ADR-284 D5).", written, what) }
 
 pub fn cx_nothing_exported() -> String { String::from("`artifact = \"c-library\"`, and the package exports nothing: write `pub extern fn` before a function C may call (ADR-284 D4).") }
 
-pub fn cx_by_value(words: &winnow_grammar::InternerContext, ty: &Type) -> Option<CxByValue> {
+pub(crate) fn cx_by_value(words: &winnow_grammar::InternerContext, ty: &Type) -> Option<CxByValue> {
     if ty.is_view || ty.is_nullable || ty.is_tuple || !ty.generics.is_empty() || (*ty.code).is_some() { return None; }
     let name = words.resolve(ty.name);
     if name == "i32" { return Some(CxByValue { rust: String::from("i32"), c: String::from("int32_t"), scalar: false }); }
@@ -285,12 +285,12 @@ pub(crate) fn cx_part(words: &winnow_grammar::InternerContext, plains: &[CxPlain
     if words.resolve(ty.name) == "Array" && ty.generics.len() == 2 {
         let element = cx_one_part(words, plains, declared, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) });
         let count = unsafe { nikaia_std::proven::read(&ty.generics, (1) as usize) }.count;
-        if element.is_some() && count.is_some() { found = Some(CxPart::Array(Box::new(nikaia_std::index::or(element, || CxPart::Choice(0))), nikaia_std::index::or(count, || 0))); }
+        if element.is_some() && count.is_some() { found = Some(CxPart::Array(std::boxed::Box::new(nikaia_std::index::or(element, || CxPart::Choice(0))), nikaia_std::index::or(count, || 0))); }
     } else { found = cx_one_part(words, plains, declared, ty); }
     Ok(match found { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(CxRefused::Because(cx_not_yet(written, "field of an `extern` struct or enum")), &"cx_part")) })
 }
 
-pub fn cx_records(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>], plains: &[CxPlain]) -> Result<Vec<CxRecord>, nikaia_std::error::Thrown<CxRefused>> {
+pub(crate) fn cx_records(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>], plains: &[CxPlain]) -> Result<Vec<CxRecord>, nikaia_std::error::Thrown<CxRefused>> {
     let mut declared: Vec<String> = vec![];
     for item in items.iter() {
         match &item.node {
@@ -358,7 +358,7 @@ pub fn cx_records(words: &winnow_grammar::InternerContext, items: &[Spanned<Item
     Ok(out)
 }
 
-pub fn cx_record_of(words: &winnow_grammar::InternerContext, records: &[CxRecord], ty: &Type) -> Option<i64> {
+pub(crate) fn cx_record_of(words: &winnow_grammar::InternerContext, records: &[CxRecord], ty: &Type) -> Option<i64> {
     if ty.is_view || ty.is_nullable || ty.is_tuple || !ty.generics.is_empty() || (*ty.code).is_some() { return None; }
     let name = words.resolve(ty.name);
     let mut at: i64 = 0;
@@ -369,7 +369,7 @@ pub fn cx_record_of(words: &winnow_grammar::InternerContext, records: &[CxRecord
     None
 }
 
-pub fn cx_records_in_order(records: &[CxRecord]) -> Vec<i64> {
+pub(crate) fn cx_records_in_order(records: &[CxRecord]) -> Vec<i64> {
     let mut order: Vec<i64> = vec![];
     let mut at: i64 = 0;
     while at < records.len() as i64 {
@@ -392,7 +392,7 @@ pub(crate) fn cx_ordered(at: i64, records: &[CxRecord], seen: &mut Vec<i64>, wal
     seen.push(at);
 }
 
-pub fn cx_plain_enums(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> Vec<CxPlain> {
+pub(crate) fn cx_plain_enums(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> Vec<CxPlain> {
     let mut out: Vec<CxPlain> = vec![];
     for item in items.iter() {
         match &item.node {
@@ -419,7 +419,7 @@ pub fn cx_plain_enums(words: &winnow_grammar::InternerContext, items: &[Spanned<
     out
 }
 
-pub fn cx_choice(words: &winnow_grammar::InternerContext, plains: &[CxPlain], ty: &Type) -> Option<i64> {
+pub(crate) fn cx_choice(words: &winnow_grammar::InternerContext, plains: &[CxPlain], ty: &Type) -> Option<i64> {
     if ty.is_view || ty.is_nullable || ty.is_tuple || !ty.generics.is_empty() || (*ty.code).is_some() { return None; }
     let name = words.resolve(ty.name);
     let mut at: i64 = 0;
@@ -430,7 +430,7 @@ pub fn cx_choice(words: &winnow_grammar::InternerContext, plains: &[CxPlain], ty
     None
 }
 
-pub fn cx_handle_of(words: &winnow_grammar::InternerContext, handles: &[CxHandled], ty: &Type) -> Option<i64> {
+pub(crate) fn cx_handle_of(words: &winnow_grammar::InternerContext, handles: &[CxHandled], ty: &Type) -> Option<i64> {
     if ty.is_tuple || !ty.generics.is_empty() || (*ty.code).is_some() { return None; }
     let name = words.resolve(ty.name);
     let mut at: i64 = 0;
@@ -441,7 +441,7 @@ pub fn cx_handle_of(words: &winnow_grammar::InternerContext, handles: &[CxHandle
     None
 }
 
-pub fn cx_taken(words: &winnow_grammar::InternerContext, plains: &[CxPlain], handles: &[CxHandled], records: &[CxRecord], ty: &Type) -> Option<CxIn> {
+pub(crate) fn cx_taken(words: &winnow_grammar::InternerContext, plains: &[CxPlain], handles: &[CxHandled], records: &[CxRecord], ty: &Type) -> Option<CxIn> {
     let record = cx_record_of(words, records, ty);
     if record.is_some() { return Some(CxIn::Record(match record { Some(__nikaia_value) => __nikaia_value, None => return None })); }
     let name = words.resolve(ty.name);
@@ -485,7 +485,7 @@ pub fn cx_taken(words: &winnow_grammar::InternerContext, plains: &[CxPlain], han
     None
 }
 
-pub fn cx_handed(words: &winnow_grammar::InternerContext, plains: &[CxPlain], handles: &[CxHandled], records: &[CxRecord], ty: &Type) -> Option<CxOut> {
+pub(crate) fn cx_handed(words: &winnow_grammar::InternerContext, plains: &[CxPlain], handles: &[CxHandled], records: &[CxRecord], ty: &Type) -> Option<CxOut> {
     let record = cx_record_of(words, records, ty);
     if record.is_some() { return Some(CxOut::Record(match record { Some(__nikaia_value) => __nikaia_value, None => return None })); }
     let name = words.resolve(ty.name);
@@ -518,7 +518,7 @@ pub fn cx_handed(words: &winnow_grammar::InternerContext, plains: &[CxPlain], ha
     None
 }
 
-pub fn cx_parameter_names(params: &[String]) -> Vec<String> {
+pub(crate) fn cx_parameter_names(params: &[String]) -> Vec<String> {
     #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for list in params.iter() {
         let mut depth = 0;
@@ -542,7 +542,7 @@ pub fn cx_parameter_names(params: &[String]) -> Vec<String> {
     out
 }
 
-pub fn cx_handled_structs(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> Vec<CxHandled> {
+pub(crate) fn cx_handled_structs(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> Vec<CxHandled> {
     let mut out: Vec<CxHandled> = vec![];
     for item in items.iter() {
         match &item.node {
@@ -606,7 +606,7 @@ pub fn cx_handled_structs(words: &winnow_grammar::InternerContext, items: &[Span
     out
 }
 
-pub fn cx_result_of(entry: &CxEntry, words: &winnow_grammar::InternerContext, plains: &[CxPlain], handles: &[CxHandled], records: &[CxRecord]) -> CxResult {
+pub(crate) fn cx_result_of(entry: &CxEntry, words: &winnow_grammar::InternerContext, plains: &[CxPlain], handles: &[CxHandled], records: &[CxRecord]) -> CxResult {
     let kind = entry.kind_of;
     if kind.is_some() { return CxResult::Made(CxOut::Choice(nikaia_std::index::or(kind, || 0))); }
     let ty = match entry.ret_type.as_ref() {
@@ -681,7 +681,7 @@ pub(crate) fn cx_take(words: &winnow_grammar::InternerContext, owner: Option<Str
     Ok(())
 }
 
-pub fn cx_variant_codes(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>], entries: &[CxEntry], contracts: &Ledger, target: &str) -> Vec<CxRaising> {
+pub(crate) fn cx_variant_codes(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>], entries: &[CxEntry], contracts: &Ledger, target: &str) -> Vec<CxRaising> {
     let mut thrown: collections::BTreeSet<String> = collections::BTreeSet::new();
     for entry in entries.iter() {
         let contract = match *nikaia_std::index::get(&contracts.functions, &(entry.key())) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -728,7 +728,7 @@ pub fn cx_std_codes(error: &str, target: &str) -> Vec<CxCode> {
     vec![]
 }
 
-pub fn cx_errno(target: &str, name: &str) -> i64 {
+pub(crate) fn cx_errno(target: &str, name: &str) -> i64 {
     let wasi = target.starts_with("wasm32");
     if name == "ENOENT" { return if wasi { 44 } else { 2 }; }
     if name == "EACCES" { return if wasi { 2 } else { 13 }; }

@@ -1,0 +1,6 @@
+bounds in tests/a_counter_field_below_its_limit_field_is_a_found_rule.nika: 0 indexes, 0 proved; 4 operations, 2 proved
+    16  self.used += 1    proved
+    41  self.steps += 1   proved
+    58  self.used += 1    checked: a field no rule of its type bounds: the walk finds `a <= b` only of two private fields a method compares (ADR-369 D4, #1681), and a count of work done has none (#1531)
+    74  self.pivots += 1  checked: a field no rule of its type bounds: the walk finds `a <= b` only of two private fields a method compares (ADR-369 D4, #1681), and a count of work done has none (#1531)
+  derived  budget: 0 <= n, proved at the calls on lines 79

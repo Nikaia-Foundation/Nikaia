@@ -1,0 +1,38 @@
+// A name of the word a map or a list holds is a `??` fallback as it is
+// (Part I 3.5, #1841): `m[8] ?? zero` over a map of `f64` printed 0.25 only
+// with a type on the `let`; without one, rustc could not pick `Or`'s impl
+// for `Option<&f64>` beside `zero.into()` (NK1343).
+use std::collections
+
+enum Kind { A, B }
+
+fn main() throws {
+    let mut m: collections::HashMap[i64, f64] = collections::HashMap()
+    m.insert(7, 0.5)
+    let zero = 0.25
+    let missing = m[8] ?? zero
+    println(f"{missing}")
+    let got = m.get(8) ?? zero
+    println(f"{got}")
+    let seven = m[7] ?? zero
+    println(f"{seven}")
+    let mut n: collections::HashMap[i64, i64] = collections::HashMap()
+    n.insert(1, 3)
+    let d = 9
+    let a = n[2] ?? d
+    println(f"{a}")
+    let mut b: collections::HashMap[i64, bool] = collections::HashMap()
+    b.insert(1, true)
+    let no = false
+    let c = b[2] ?? no
+    println(f"{c}")
+    let xs: Vec[f64] = [1.5]
+    let e = xs.get(3) ?? zero
+    println(f"{e}")
+    let mut k: collections::HashMap[i64, Kind] = collections::HashMap()
+    k.insert(1, Kind::A)
+    let dk = Kind::B
+    let f = k[2] ?? dk
+    println(f"{f == Kind::B}")
+    println(f"{m[9] ?? zero}")
+}

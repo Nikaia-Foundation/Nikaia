@@ -37,7 +37,7 @@ fn the_high_end_of(ty: ref String) -> String {
 /// `beyond` is a fold that left the 65 bits, heading the way `value`'s sign
 /// says; `bare` a literal standing alone, which says its own digits; `why` a
 /// note saying where the type came from, for one the uses decided (ADR-285).
-pub fn a_number_that_does_not_fit(value: ref Integer, beyond: bool, bare: bool, ty: ref String, span: Span, why: String?) -> Finding? {
+fn a_number_that_does_not_fit(value: ref Integer, beyond: bool, bare: bool, ty: ref String, span: Span, why: String?) -> Finding? {
     if ty != "i32" && ty != "i64" && ty != "u8" && ty != "u32" && ty != "u64" {
         return null
     }

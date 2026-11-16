@@ -92,13 +92,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn collect_field_walks(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+    pub(crate) fn collect_field_walks(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
         self.field_walks_in(&world.here);
         for other in world.beside.iter() { self.field_walks_in(other); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn collect_comparisons(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+    pub(crate) fn collect_comparisons(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
         let found = check_function_compared(world, &world.parts_beside, &self.structs, &self.enums, &self.enum_payloads, &self.struct_parameters);
         self.facts.compares.extend(found.compares.iter().cloned());
         self.facts.compares_totally.extend(found.totally.iter().cloned());
@@ -148,7 +148,7 @@ pub(crate) fn check_function_grown_in(here: &ParsedView<'_, '_, '_, '_, '_, '_>,
     }
 }
 
-pub fn check_function_grown_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block) -> collections::BTreeSet<String> {
+pub(crate) fn check_function_grown_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     check_function_grown_in(here, body, &mut out);
     out
@@ -203,7 +203,7 @@ pub(crate) fn check_function_fielded_in(here: &ParsedView<'_, '_, '_, '_, '_, '_
     }
 }
 
-pub fn check_function_mixed_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, grown: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+pub(crate) fn check_function_mixed_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, grown: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut fielded: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut both: collections::BTreeSet<String> = collections::BTreeSet::new();
     check_function_fielded_in(here, body, &mut fielded, &mut both);
@@ -214,7 +214,7 @@ pub fn check_function_mixed_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef) {
+pub(crate) fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef) {
     let named = nikaia_std::block::Text::from(world.words.resolve(gram.name).to_string());
     let mut results: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     let mut rules: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -381,7 +381,7 @@ pub(crate) fn check_function_every_end_is_a_value(expr: &Expr) -> bool {
     }
 }
 
-pub fn check_function_is_branching(expr: &Expr) -> bool {
+pub(crate) fn check_function_is_branching(expr: &Expr) -> bool {
     match expr {
         Expr::If { .. } => check_function_every_end_is_a_value(expr),
         Expr::Match { .. } => check_function_every_end_is_a_value(expr),
@@ -432,7 +432,7 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
         let plain_option = arg.ty.is_nullable && !arg.ty.is_view && !arg.ty.is_slice && (*arg.ty.code).is_none() && !arg.mutable;
         let type_parameter = arg.ty.generics.is_empty() && !arg.ty.is_view && !arg.ty.is_nullable && !arg.ty.is_slice && (*arg.ty.code).is_none() && !arg.mutable && state.type_parameters.contains_key(world.words.resolve(arg.ty.name));
         let mut ty = Ty::Unknown;
-        if (plain_text || plain_option || type_parameter) && check_function_lends(world, key, at + offset) {
+        if (plain_text || plain_option || type_parameter) && check_function_lends(world, key, unsafe { nikaia_std::proven::add::<i64>(at, offset) }) {
             let mut viewed = arg.ty.clone();
             viewed.is_view = true;
             viewed.either = false;
@@ -496,7 +496,7 @@ pub(crate) fn check_function_handed_back<H: CheckHost>(state: &mut CheckState, w
                     check_core_a_field_of_a_borrowed_subject(state, world, host, value, &at, "handed back");
                     check_core_a_field_of_a_lent_place_handed_back(state, world, host, value, &at);
                 }
-                tail_view = state.lent_arms_handed_back(world, value, check_function_is_nullable(&want));
+                tail_view = state.lent_arms_handed_back(world, value, check_function_is_nullable(&want)) || state.a_get_off_a_lent_parameter(world, value);
                 if !tail_lent && !tail_view { check_core_lent_places_in_arms_handed_back(state, world, host, value, &at); }
             }
             state.number_asked(world, value, &want, &at, true);
@@ -517,6 +517,7 @@ pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, w
     if lending || tail_view { shown = view_of_type(&shown); }
     match &last.node {
         Stmt::Expr(value) => {
+            if !state.flow.expected_either && check_core_a_text_option_into_a_view(&shown, expected) { state.facts.text_option_results.insert(node_key(value)); }
             if lending && nullable && tail_nullable && check_core_a_field(value) { state.facts.lent_option_results.insert(node_key(value)); } else if lending && nullable { state.facts.lent_reads.insert(id_of(value) as i64); } else if lending { state.facts.lent_returns.insert(span.start as i64); }
             if !lending {
                 if !tail_view { state.narrowed_reads_given_back(value); }
@@ -534,7 +535,7 @@ pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, w
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_function_wrap_tail<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, shown: &Ty, expected: &Ty, value: &Expr, span: &Span) {
+pub(crate) fn check_function_wrap_tail<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, shown: &Ty, expected: &Ty, value: &Expr, span: &Span) {
     let nullable = check_function_is_nullable(expected);
     let branches = check_function_is_branching(value);
     let how = check_widened_slot(state, world, host, shown, expected, Some(value), span);
@@ -565,7 +566,7 @@ pub(crate) fn check_function_hands_nothing(state: &mut CheckState, body: &Block,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_function_function<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, item: &Item, at: &Span, target: Option<&str>) {
+pub(crate) fn check_function_function<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, item: &Item, at: &Span, target: Option<&str>) {
     match item {
         Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, can_throw, is_sync, sync_by, is_extern, .. } => {
             let can_throw = *can_throw; let is_extern = *is_extern; let is_sync = *is_sync; let name = *name; let spread = *spread;
@@ -671,13 +672,13 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.scope.push(frame);
     let tail_span = check_function_last_span(body);
     let outer_lists = state.flow.empty_lists.copy_owned();
-    state.flow.empty_lists = collections::BTreeMap::new();
+    state.flow.empty_lists.clear();
     let outer_numbers = state.flow.open_numbers.copy_owned();
-    state.flow.open_numbers = collections::BTreeMap::new();
+    state.flow.open_numbers.clear();
     let outer_chars = state.flow.open_chars.copy_owned();
-    state.flow.open_chars = collections::BTreeMap::new();
+    state.flow.open_chars.clear();
     let outer_bytes = state.flow.high_bytes.copy_owned();
-    state.flow.high_bytes = collections::BTreeMap::new();
+    state.flow.high_bytes.clear();
     let outer_grown = state.flow.grown_text.copy_owned();
     state.flow.grown_text = check_function_grown_text(&world.here, body);
     let outer_mixed = state.flow.mixed_text.copy_owned();
@@ -713,9 +714,9 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.data_handed_over_is_used_again();
     state.needless_clones_said();
     state.reads_on_paths.clear();
-    state.flow.read_index = collections::BTreeMap::new();
-    state.lent_lets = collections::BTreeSet::new();
-    state.got_past_a_jump = collections::BTreeSet::new();
+    state.flow.read_index.clear();
+    state.lent_lets.clear();
+    state.got_past_a_jump.clear();
     state.a_task_took_what_is_used_again();
     state.expected = outer;
     state.flow.expected_either = outer_either;

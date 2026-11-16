@@ -1,0 +1,4 @@
+lib built: exit 0
+own record: Checked src/main.nika (exit 0)
+another inference: error[NK2605]: This function can fail, because `lib::hello` can fail. (exit 1)
+another format version: error[NK2605]: This function can fail, because `lib::hello` can fail. (exit 1)

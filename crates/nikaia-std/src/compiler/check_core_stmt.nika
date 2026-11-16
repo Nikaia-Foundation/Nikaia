@@ -606,7 +606,7 @@ fn check_core_stmt_lent_let(mut state: CheckState, world: ref CheckWorld, names:
 /// view of it** ([ADR-views-3](../../docs/specification/adr/adr-views-3.md) D5, #613):
 /// 1 where the read is lent, 2 where it is a word by its kind and is copied
 /// (`NK1257`), 0 where the rule has nothing to say.
-pub fn check_core_stmt_element_view(state: ref CheckState, world: ref CheckWorld, value: ref Expr, found: ref Ty, want: ref Ty) -> i64 sync {
+fn check_core_stmt_element_view(state: ref CheckState, world: ref CheckWorld, value: ref Expr, found: ref Ty, want: ref Ty) -> i64 sync {
     if !check_core_stmt_a_place(state, value) {
         return 0
     }
@@ -750,7 +750,7 @@ fn check_core_stmt_code_given(value: ref Expr) -> bool {
 }
 
 /// Whether a value is code, or a list or map of it (ADR-351 D1).
-pub fn check_core_stmt_holds_code(ty: ref Ty) -> bool {
+fn check_core_stmt_holds_code(ty: ref Ty) -> bool {
     match ty {
         Ty::Fn { .. } => return true,
         Ty::Named { args, .. } => {
@@ -765,7 +765,7 @@ pub fn check_core_stmt_holds_code(ty: ref Ty) -> bool {
     }
 }
 
-pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, deep: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
+fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, deep: bool, ty: ref Type?, value: ref Expr, span: ref Span) -> Ty sync {
     let by_use: Ty? = state.flow.let_lambda_use?.clone()
     state.flow.let_lambda_use = null
     let typed_by_use = ty == null && by_use != null
@@ -1479,7 +1479,7 @@ fn check_core_stmt_an_immutable_that_changes(mut state: CheckState, world: ref C
     let note: String = "`immutable` promises that nothing reachable from the value ever changes (ADR-389). A `SharedMut`, a `Locked` and a channel end are changed through every other owner of the same storage."
     let help: String = "Bind it with `let`, or hold a value that can't change: a copy, or a `Shared[T]` of a `T` that can't change."
     let label = CheckLabel { span: at.clone(), word: "", text: "can change through another owner", main: true }
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1331", message: message, notes: [note], help: help, labels: [label] })
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: "NK1331", message: message, notes: [note], help: help, labels: [label], edit: null })
 }
 
 /// A handle to storage another owner changes: `SharedMut`, `Locked`, a
@@ -1727,7 +1727,7 @@ fn check_core_stmt_owns_whole(ty: ref Ty) -> bool sync {
     }
 }
 
-pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, target: ref Expr, op: ref BinaryOp?, value: ref Expr, span: ref Span) -> Ty sync {
+fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, target: ref Expr, op: ref BinaryOp?, value: ref Expr, span: ref Span) -> Ty sync {
     // **Code assigned meets what the place holds** (ADR-351 D3).
     let code_keys: Vec[String] = if op == null { check_core_places_code_keys(state, world, target) } else { [] }
     // `NK2101`: an assignment **revives** a name a task took with it, and a
@@ -1804,6 +1804,10 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
     // by a `let` that declares it is: `g = fn { … }` to a `fn()` is weighed
     // against `fn()`.
     if op == null && check_core_stmt_expects_a_lambda(value) && check_core_stmt_a_fn_type(into) {
+        state.flow.lambda_expected = into.clone()
+    }
+    // **A vector assigned is made of the place's type** (ADR-377 D3).
+    if op == null && check_simd_wanted(world, value, into) != null {
         state.flow.lambda_expected = into.clone()
     }
     let mut found = check_core_expr(state, world, host, value, span)
@@ -1986,7 +1990,7 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
 }
 
 /// **`while`** (Part I 3.3).
-pub fn check_core_stmt_while[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, cond: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
+fn check_core_stmt_while[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, cond: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
     // **The condition is read again on every turn** (ADR-382 D5).
     check_narrow_turn_begins(state, state.scope.len() as i64)
     let cond_ty = check_core_expr(state, world, host, cond, span)
@@ -2087,7 +2091,7 @@ fn check_core_stmt_a_list_type(ty: ref Ty) -> bool sync {
 }
 
 /// **`for`** (Part I 3.3).
-pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, iter: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
+fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, iter: ref Expr, body: ref Block, span: ref Span) -> Ty sync {
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates")
     let over = check_core_expr(state, world, host, iter, span)
     state.a_loop_over_a_nullable(world, over, iter, span)
@@ -2132,7 +2136,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
         match elements[0] {
             Ty::Named { name, args, .. } => {
                 if args.is_empty() && is_whole_number(name) {
-                    state.facts.whole_loops.insert(id_of(iter) as i64)
+                    state.facts.whole_loops.insert(id_of(iter) as i64, name.clone())
                 }
             },
             else => {}
@@ -2429,7 +2433,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
 }
 
 /// **`return`**: `Ty::Unknown`, a statement that jumps is not a value.
-pub fn check_core_stmt_return[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, span: ref Span) -> Ty sync {
+fn check_core_stmt_return[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, span: ref Span) -> Ty sync {
     check_core_returns(state, world, host, value, span, false)
     if value != null {
         let returned = value ?? return Ty::Unknown
@@ -2440,7 +2444,7 @@ pub fn check_core_stmt_return[H: CheckHost](mut state: CheckState, world: ref Ch
 }
 
 /// **`break` and `continue`** (Part I 3.3): `Ty::Unknown`, as a `return`.
-pub fn check_core_stmt_jump(mut state: CheckState, word: ref String, span: ref Span) -> Ty sync {
+fn check_core_stmt_jump(mut state: CheckState, word: ref String, span: ref Span) -> Ty sync {
     if state.flow.loops == 0 {
         state.a_jump_with_nowhere_to_go(word, span)
     }
@@ -2451,7 +2455,7 @@ pub fn check_core_stmt_jump(mut state: CheckState, word: ref String, span: ref S
 }
 
 /// **A statement, walked**: one function per variant.
-pub fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, stmt: ref Stmt, span: ref Span) -> Ty sync {
+fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, stmt: ref Stmt, span: ref Span) -> Ty sync {
     state.flow.literal_receivers.clear()
     return match stmt {
         Stmt::Let { names, shape, mutable, deep, ty, value } => check_core_stmt_let(state, world, host, names, shape, mutable, deep, ty, value, span),
@@ -2479,7 +2483,7 @@ fn check_core_stmt_is_a_jump(stmt: ref Stmt) -> bool sync {
 
 /// **A loop body's value is never used** (#596): its tail `if` or `match` is a
 /// statement, and its arms are not asked for a common type.
-pub fn check_core_stmt_body_discarded(mut state: CheckState, body: ref Block) sync {
+fn check_core_stmt_body_discarded(mut state: CheckState, body: ref Block) sync {
     let count = body.stmts.len() as i64
     if count == 0 {
         return
@@ -2602,7 +2606,7 @@ fn check_core_stmt_code_parameter(world: ref CheckWorld, func: ref Expr, at: i64
     }
 }
 
-pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, block: ref Block) -> Ty sync {
+fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, block: ref Block) -> Ty sync {
     let ends_group = check_async_group_ended(state, block)
     check_async_block(state, world, block)
     state.scope.push([])

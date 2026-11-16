@@ -11,4 +11,5 @@ bounds in tests/prove_a_counter_bounded_through_a_second_counter.nika: 1 indexes
     56  t.seen += 1  proved
   derived  apart: 0 <= cap, proved at the calls on lines 65
   derived  fields: 0 <= cap, proved at the calls on lines 64
+  derived  hits: 0 <= budget, 0 < xs.len(), proved at the calls on lines 65
   derived  together: 0 <= cap, proved at the calls on lines 65

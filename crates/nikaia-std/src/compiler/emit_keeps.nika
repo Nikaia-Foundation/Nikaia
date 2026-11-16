@@ -20,7 +20,7 @@ fn emit_keep_numbered(at: i64, lent: bool) -> String {
 }
 
 /// How a keep is named in the Rust, owned or lent.
-pub fn emit_keep_expr(keep: ref KeepAt, lent: bool) -> String {
+fn emit_keep_expr(keep: ref KeepAt, lent: bool) -> String {
     match keep {
         KeepAt::Param => return "__keep",
         KeepAt::Frame => {
@@ -58,7 +58,7 @@ impl EmitState {
 
     /// The lines that declare the keeps of the statement `at`, where a
     /// function has any.
-    pub fn keep_prelude(ref self, walk: ref EmitWalk, function: ref String, at: i64) -> String? {
+    fn keep_prelude(ref self, walk: ref EmitWalk, function: ref String, at: i64) -> String? {
         let key = self.keep_plan_key(walk, function) ?? return null
         let plan = self.keep_plans.get(key) ?? return null
         let mut lines: Vec[String] = []
@@ -94,7 +94,7 @@ impl EmitState {
     }
 
     /// The keep argument `i` of a call to `callee` at the statement is lent.
-    pub fn argument_keep(ref self, walk: ref EmitWalk, function: ref String, statement: i64, callee: ref String, i: i64) -> String? {
+    fn argument_keep(ref self, walk: ref EmitWalk, function: ref String, statement: i64, callee: ref String, i: i64) -> String? {
         let key = self.keep_plan_key(walk, function) ?? return null
         let plan = self.keep_plans.get(key) ?? return null
         let keep = plan.calls.get((statement, f"{callee}#{i}")) ?? return null
@@ -102,7 +102,7 @@ impl EmitState {
     }
 
     /// The keep a call to `callee` at the statement is handed.
-    pub fn keep_handed(ref self, walk: ref EmitWalk, function: ref String, statement: i64, callee: ref String) -> String? {
+    fn keep_handed(ref self, walk: ref EmitWalk, function: ref String, statement: i64, callee: ref String) -> String? {
         let key = self.keep_plan_key(walk, function) ?? return null
         let plan = self.keep_plans.get(key) ?? return null
         let keep = plan.calls.get((statement, callee.clone())) ?? return null
@@ -111,7 +111,7 @@ impl EmitState {
 
     /// The lifetimes a function that takes a keep is written with, where the
     /// function is one.
-    pub fn kept_lifetimes(ref self, key: ref String, lifetimes: EmitLifetimes) -> EmitLifetimes? {
+    fn kept_lifetimes(ref self, key: ref String, lifetimes: EmitLifetimes) -> EmitLifetimes? {
         let contract = self.own_contracts.functions.get(key) ?? return null
         if !takes_a_keep(contract) {
             return null
@@ -123,7 +123,7 @@ impl EmitState {
     }
 
     /// Whether the view at `position` of the function is tethered.
-    pub fn tethered_position(ref self, key: ref String, position: ref String) -> bool {
+    fn tethered_position(ref self, key: ref String, position: ref String) -> bool {
         let contract = self.own_contracts.functions.get(key) ?? return false
         for held in contract.views {
             if held.position == position && held.state == State::Tethered {
@@ -135,7 +135,7 @@ impl EmitState {
 
     /// Whether the expression is a name the function's plan reads through a
     /// handle.
-    pub fn reads_through_handle(ref self, world: ref EmitWorld, walk: ref EmitWalk, function: ref String, expr: ref Expr) -> bool {
+    fn reads_through_handle(ref self, world: ref EmitWorld, walk: ref EmitWalk, function: ref String, expr: ref Expr) -> bool {
         match expr {
             Expr::Variable(name, _) => {
                 let key = self.keep_plan_key(walk, function) ?? return false
@@ -148,7 +148,7 @@ impl EmitState {
     }
 
     /// Whether a type names a struct that holds a view.
-    pub fn names_borrowing(ref self, world: ref EmitWorld, ty: ref Type) -> bool {
+    fn names_borrowing(ref self, world: ref EmitWorld, ty: ref Type) -> bool {
         let code = ty.code ?? return self.names_borrowing_written(world, ty)
         let result = code.result ?? return false
         return self.names_borrowing(world, result)
@@ -168,7 +168,7 @@ impl EmitState {
 
     /// Whether the field of the struct a keeper name stands for carries a view;
     /// it does where nothing says it does not.
-    pub fn held_field_carries_view(ref self, world: ref EmitWorld, walk: ref EmitWalk, function: ref String, keeper: ref Expr, field: winnow_grammar::Symbol) -> bool {
+    fn held_field_carries_view(ref self, world: ref EmitWorld, walk: ref EmitWalk, function: ref String, keeper: ref Expr, field: winnow_grammar::Symbol) -> bool {
         match keeper {
             Expr::Variable(held, _) => {
                 let key = self.keep_plan_key(walk, function) ?? return true
@@ -216,7 +216,7 @@ fn emit_returned_by(world: ref EmitWorld, wanted: ref String) -> Type? {
 
 /// The type a tethered `let` holds: the one written, or else the result type
 /// of the function the value calls.
-pub fn emit_tethered_type(world: ref EmitWorld, ty: ref Type?, value: ref Expr) -> Type? {
+fn emit_tethered_type(world: ref EmitWorld, ty: ref Type?, value: ref Expr) -> Type? {
     if ty != null {
         return ty?.clone()
     }

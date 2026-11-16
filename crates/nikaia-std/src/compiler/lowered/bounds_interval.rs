@@ -16,7 +16,7 @@ pub(crate) struct Form {
 impl Range {
     pub fn open() -> Range { Range { lo: None, hi: None } }
     pub fn exactly(n: i64) -> Range { Range { lo: Some(n), hi: Some(n) } }
-    pub fn of_type(ty: &str) -> Option<Range> {
+    pub(crate) fn of_type(ty: &str) -> Option<Range> {
         match ty {
             "i8" => Some(Range { lo: Some(-128), hi: Some(127) }),
             "i16" => Some(Range { lo: Some(-32768), hi: Some(32767) }),
@@ -31,7 +31,7 @@ impl Range {
             _ => None,
         }
     }
-    pub fn held_by_type(ty: &str) -> Option<Range> {
+    pub(crate) fn held_by_type(ty: &str) -> Option<Range> {
         if ty == "u64" || ty == "usize" { return Some(Range { lo: Some(0), hi: None }); }
         Range::of_type(ty)
     }
@@ -60,7 +60,7 @@ impl Range {
         }
         out
     }
-    pub fn is_bounded(&self) -> bool { self.lo.is_some() || self.hi.is_some() }
+    pub(crate) fn is_bounded(&self) -> bool { self.lo.is_some() || self.hi.is_some() }
     pub fn add(&self, other: &Range) -> Range {
         let mut out = Range::open();
         if self.lo.is_some() && other.lo.is_some() { out.lo = nikaia_std::index::or(self.lo, || 0).checked_add(nikaia_std::index::or(other.lo, || 0)); }

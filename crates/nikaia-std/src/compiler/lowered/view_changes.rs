@@ -93,7 +93,7 @@ pub(crate) fn vc_index(methods: &mut collections::BTreeMap<String, Vec<(bool, St
     methods.entry(String::from(name)).or_insert(vec![]).push((own, nikaia_std::block::Text::from(key.to_string())));
 }
 
-pub fn vc_coalesced(facts: &CheckFacts) -> collections::BTreeSet<i64> {
+pub(crate) fn vc_coalesced(facts: &CheckFacts) -> collections::BTreeSet<i64> {
     let mut ids: collections::BTreeSet<i64> = collections::BTreeSet::new();
     ids.extend(facts.lent_coalesces.keys().copied());
     ids.extend(facts.view_coalesces.iter().cloned());
@@ -106,7 +106,7 @@ pub fn vc_coalesced(facts: &CheckFacts) -> collections::BTreeSet<i64> {
     ids
 }
 
-pub fn vc_mut_viewed(facts: &CheckFacts) -> collections::BTreeSet<i64> {
+pub(crate) fn vc_mut_viewed(facts: &CheckFacts) -> collections::BTreeSet<i64> {
     let mut ids: collections::BTreeSet<i64> = collections::BTreeSet::new();
     ids.extend(facts.mut_view_reads.keys().copied());
     ids
@@ -765,8 +765,8 @@ pub(crate) fn vc_assign(block: &Block, j: i64, target: &Expr, whole: bool, at: &
     let viewer = vc_first_viewing(&views, &root);
     if whole && vc_looped_over(&views, &root) || !whole && vc_any_watches(&views, &root, &vc_path_of(target, ask)) { vc_refuse(&root, at, &views, walk); } else if whole && viewer >= 0 && declared.contains_key(&root) {
         let mut changed = false;
-        for k in j + 1..block.stmts.len() as i64 {
-            if vc_changes(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(k)).node, &root, ask, holes_of, &walk) {
+        for k in unsafe { nikaia_std::proven::add::<i64>(j, 1) }..block.stmts.len() as i64 {
+            if vc_changes(&unsafe { nikaia_std::proven::read(&block.stmts, (k) as usize) }.node, &root, ask, holes_of, &walk) {
                 changed = true;
                 break;
             }

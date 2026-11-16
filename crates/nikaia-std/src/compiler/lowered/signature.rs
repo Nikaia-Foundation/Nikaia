@@ -29,10 +29,24 @@ pub fn translate(written: &str, crate_word: &str, parameters: &[String], types: 
         let inner = translate(&element, crate_word, parameters, types, mentioned);
         return Translated { ty: Ty::Named { name: String::from("Array"), args: vec![inner.ty], view: false }, kept: true };
     }
+    if text.starts_with('(') && text.ends_with(')') {
+        let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+        let inside = slice(&c, 1, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 1) });
+        let written_parts = split_top_level(&inside);
+        if written_parts.len() == 1 { return Translated { ty: Ty::Unknown, kept: true }; }
+        let mut parts: Vec<Ty> = vec![];
+        let mut kept = false;
+        for part in written_parts.iter() {
+            let one = translate(part, crate_word, parameters, types, mentioned);
+            if one.kept { kept = true; }
+            parts.push(one.ty);
+        }
+        return Translated { ty: Ty::Tuple(parts), kept };
+    }
     let optional = generic_of(text, "Option");
     if optional.is_some() {
         let inner = translate(nikaia_std::index::or(optional.as_deref(), || ""), crate_word, parameters, types, mentioned);
-        return Translated { ty: Ty::Nullable(Box::new(inner.ty)), kept: inner.kept };
+        return Translated { ty: Ty::Nullable(std::boxed::Box::new(inner.ty)), kept: inner.kept };
     }
     let listed = generic_of(text, "Vec");
     if listed.is_some() {
@@ -67,7 +81,7 @@ pub fn result_of(written: &str, crate_word: &str, parameters: &[String], types: 
     Resulted { ty: fine.ty, fails: Some(fails) }
 }
 
-pub fn view_of(ty: Ty) -> Ty {
+pub(crate) fn view_of(ty: Ty) -> Ty {
     match ty {
         Ty::Named { name, args, .. } => Ty::Named { name, args, view: true },
         Ty::Var { name, .. } => Ty::Var { name, view: true },
@@ -140,7 +154,11 @@ pub fn contract(written: &WrittenFn, crate_word: &str, types: &collections::BTre
     if !written.result.is_empty() {
         let resulted = result_of(&written.result, crate_word, &written.parameters, types, mentioned);
         if resulted.fails.is_some() { fails.push(nikaia_std::index::or(resulted.fails, || "?".into())); }
-        answer = Some(resulted.ty);
+        let unit = match resulted.ty {
+            Ty::Tuple(ref parts) => parts.is_empty(),
+            _ => false,
+        };
+        if !unit { answer = Some(resulted.ty); }
     }
     let mut signature = Signature::empty();
     signature.params = params;

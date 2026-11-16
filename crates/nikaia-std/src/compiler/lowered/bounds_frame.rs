@@ -5,7 +5,7 @@ pub(crate) fn frame_depth() -> i64 { 4 }
 
 pub(crate) fn frame_rounds() -> i64 { 64 }
 
-pub fn bounds_around(program: &Program, beside: &[&BoundsBeside], ledgers: &[&Ledger], std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>, words: &winnow_grammar::InternerContext) -> Around {
+pub(crate) fn bounds_around(program: &Program, beside: &[&BoundsBeside], ledgers: &[&Ledger], std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>, words: &winnow_grammar::InternerContext) -> Around {
     let mut around = Around { functions: collections::BTreeMap::new(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet::new(), frames: collections::BTreeMap::new(), rules: vec![], held: collections::BTreeMap::new(), derived: no_derived(), fields: collections::BTreeSet::new(), field_writers: collections::BTreeSet::new(), field_bounds: collections::BTreeMap::new(), returning: collections::BTreeSet::new() };
     for item in program.items.iter() {
         match &item.node {
@@ -43,7 +43,7 @@ pub fn bounds_around(program: &Program, beside: &[&BoundsBeside], ledgers: &[&Le
         context.around.frames = next;
         round = unsafe { nikaia_std::proven::add::<i64>(round, 1) };
     }
-    if !settled { context.around.frames = collections::BTreeMap::new(); }
+    if !settled { context.around.frames.clear(); }
     let rules = rules_candidates(program, &context, words);
     context.around.rules = rules;
     context.around.derived = derived_of(program, beside, words);
@@ -53,7 +53,7 @@ pub fn bounds_around(program: &Program, beside: &[&BoundsBeside], ledgers: &[&Le
     context.around
 }
 
-pub(crate) fn frame_context(around: Around, std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>) -> BoundsContext { BoundsContext { lengths: collections::BTreeSet::new(), sized: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), nonnegative: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), ensured: collections::BTreeMap::new(), required: collections::BTreeMap::new(), each: collections::BTreeMap::new(), collected: collections::BTreeMap::new(), std_receivers: std_receivers.copy_owned(), simd_loads: simd_loads.copy_owned(), shifts: collections::BTreeMap::new(), divisions: collections::BTreeMap::new(), given: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: collections::BTreeSet::new(), whole_types: collections::BTreeMap::new(), whole_loops: collections::BTreeSet::new(), whole_parts: collections::BTreeMap::new(), array_lengths: collections::BTreeMap::new(), through_loops: false, trace: vec![], decided: collections::BTreeMap::new(), list_indices: collections::BTreeSet::new(), text_bytes: collections::BTreeSet::new(), returns: collections::BTreeMap::new() } }
+pub(crate) fn frame_context(around: Around, std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>) -> BoundsContext { BoundsContext { lengths: collections::BTreeSet::new(), sized: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), nonnegative: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), ensured: collections::BTreeMap::new(), required: collections::BTreeMap::new(), each: collections::BTreeMap::new(), collected: collections::BTreeMap::new(), std_receivers: std_receivers.copy_owned(), simd_loads: simd_loads.copy_owned(), shifts: collections::BTreeMap::new(), divisions: collections::BTreeMap::new(), given: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: collections::BTreeSet::new(), whole_types: collections::BTreeMap::new(), whole_loops: collections::BTreeMap::new(), whole_parts: collections::BTreeMap::new(), array_lengths: collections::BTreeMap::new(), through_loops: false, trace: vec![], decided: collections::BTreeMap::new(), list_indices: collections::BTreeSet::new(), text_bytes: collections::BTreeSet::new(), returns: collections::BTreeMap::new() } }
 
 pub(crate) fn frames_round(program: &Program, context: &BoundsContext, words: &winnow_grammar::InternerContext) -> collections::BTreeMap<String, BoundsChanged> {
     let mut out: collections::BTreeMap<String, BoundsChanged> = collections::BTreeMap::new();
@@ -133,7 +133,7 @@ pub(crate) fn frame_put(out: &mut BoundsChanged, path: &str, kind: i64, roots: &
         }
     }
     let mapped = frame_rooted(&at, roots);
-    if whole || kind == 0 || frame_deep(&mapped) { out.values.insert(frame_cut(&mapped)); } else if kind == 1 { out.lengths.insert(mapped); } else if kind == 3 { out.falls.insert(mapped); } else { out.parts.insert(mapped); }
+    if whole || kind == 0 || frame_deep(&mapped) { out.values.insert(frame_cut(&mapped)); } else if kind == 1 { out.lengths.insert(mapped); } else if kind == 3 { changed_falls(out, &mapped); } else { out.parts.insert(mapped); }
 }
 
 pub(crate) fn frame_rooted(path: &str, roots: &collections::BTreeMap<String, String>) -> String {
@@ -236,18 +236,18 @@ pub(crate) fn frame_pattern_names(pattern: &MatchPattern, words: &winnow_grammar
     }
 }
 
-pub fn frame_at_call(frame: &BoundsChanged, receiver: Option<&str>, handed: &[Option<String>]) -> BoundsChanged {
+pub(crate) fn frame_at_call(frame: &BoundsChanged, receiver: Option<&str>, handed: &[Option<String>]) -> BoundsChanged {
     let mut out = nothing_changed();
     for path in frame.values.iter() {
         let on = match frame_onto(path, receiver, handed) { Some(__nikaia_value) => __nikaia_value, None => continue };
         out.values.insert(nikaia_std::block::Text::from(on.to_string()));
         out.jumps.insert(nikaia_std::block::Text::from(on.to_string()));
         out.drops.insert(nikaia_std::block::Text::from(on.to_string()));
-        out.falls.insert(nikaia_std::block::Text::from(on.to_string()));
+        changed_falls(&mut out, &on);
         out.lengths.insert(on);
     }
     for path in frame.lengths.iter() { out.lengths.insert(match frame_onto(path, receiver, handed) { Some(__nikaia_value) => __nikaia_value, None => continue }); }
-    for path in frame.falls.iter() { out.falls.insert(match frame_onto(path, receiver, handed) { Some(__nikaia_value) => __nikaia_value, None => continue }); }
+    for path in frame.falls.iter() { changed_falls(&mut out, &match frame_onto(path, receiver, handed) { Some(__nikaia_value) => __nikaia_value, None => continue }); }
     for path in frame.parts.iter() { out.parts.insert(match frame_onto(path, receiver, handed) { Some(__nikaia_value) => __nikaia_value, None => continue }); }
     for place in frame.elements.iter() {
         let pieces: Vec<&str> = place.split('|').collect::<Vec<_>>();
@@ -279,7 +279,7 @@ pub(crate) fn frame_list(entry: &str) -> String {
     nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).to_string())
 }
 
-pub fn frame_writes(frame: &BoundsChanged, root: &str) -> bool { frame.values.iter().any(|e| { frame_from(e, root) }) || frame.lengths.iter().any(|e| { frame_from(e, root) }) || frame.parts.iter().any(|e| { frame_from(e, root) }) || frame.elements.iter().any(|e| { frame_from(e, root) }) }
+pub(crate) fn frame_writes(frame: &BoundsChanged, root: &str) -> bool { frame.values.iter().any(|e| { frame_from(e, root) }) || frame.lengths.iter().any(|e| { frame_from(e, root) }) || frame.parts.iter().any(|e| { frame_from(e, root) }) || frame.elements.iter().any(|e| { frame_from(e, root) }) }
 
 pub(crate) fn frame_from(entry: &str, root: &str) -> bool { path_root(&frame_list(entry)) == root }
 
@@ -321,7 +321,7 @@ pub fn bounds_beside(program: &Program, words: &winnow_grammar::InternerContext)
     BoundsBeside { names, declared, reached, has_main, lost: scan.lost }
 }
 
-pub fn fields_seen(program: &Program, beside: &[&BoundsBeside], words: &winnow_grammar::InternerContext) -> FieldsSeen {
+pub(crate) fn fields_seen(program: &Program, beside: &[&BoundsBeside], words: &winnow_grammar::InternerContext) -> FieldsSeen {
     let mut scan = FieldsScan { live: collections::BTreeMap::new(), walked: false, wrote: false, here: true, recording: false, lost: collections::BTreeSet::new() };
     let mut reached: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut a_program = fields_declared(program, words, true, &mut scan, &mut reached);

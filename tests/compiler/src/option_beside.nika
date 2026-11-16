@@ -1,0 +1,15 @@
+use std::collections
+
+/// A method with an option of a map of text, called from a program of
+/// another package by `tests/a_package_method_option_keeps_the_text_of_a_map.nika`
+/// (#116).
+pub struct OptionBeside {
+    pub name: String,
+}
+
+impl OptionBeside {
+    pub fn counted(self; m: collections::HashMap[String, i64]? = null) -> i64 {
+        let held = m ?? collections::HashMap()
+        return held.len()
+    }
+}

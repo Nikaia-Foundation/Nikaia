@@ -44,7 +44,7 @@ pub(crate) fn check_defaults_a_text_for_string(value: &Expr, want: &Ty) -> bool 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_defaults_a_computed_default<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, option: &ConfigParam) {
+pub(crate) fn check_defaults_a_computed_default<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, option: &ConfigParam) {
     let name = world.here.text(option.name);
     let declared = host.type_of(&option.ty);
     check_defaults_computed_value(state, world, host, &name, &declared, &option.default, &option.default_span, &CheckComputing::Option);
@@ -52,7 +52,7 @@ pub fn check_defaults_a_computed_default<H: CheckHost>(state: &mut CheckState, w
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_defaults_a_field_default<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, field: &FieldDef) {
+pub(crate) fn check_defaults_a_field_default<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, field: &FieldDef) {
     let given: Option<FieldDefault> = match field.default.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -93,7 +93,7 @@ pub fn check_defaults_a_field_default<H: CheckHost>(state: &mut CheckState, worl
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_defaults_computed_value<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, ty: &Ty, default: &Expr, span: &Span, kind: &CheckComputing) {
+pub(crate) fn check_defaults_computed_value<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, ty: &Ty, default: &Expr, span: &Span, kind: &CheckComputing) {
     if a_literal(default) { return; }
     let walked_from = state.findings.len() as i64;
     check_core_expr(state, world, host, default, span);
@@ -148,7 +148,7 @@ pub fn check_defaults_computed_value<H: CheckHost>(state: &mut CheckState, world
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_defaults_item_constants<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
+pub(crate) fn check_defaults_item_constants<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
     state.scope.push(vec![]);
     for (beside, declared) in host.constants_beside() {
         state.facts.comptime_names.insert(nikaia_std::block::Text::from(beside.to_string()));
@@ -183,7 +183,7 @@ pub fn check_defaults_item_constants<H: CheckHost>(state: &mut CheckState, world
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_defaults_fold<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef, spec: &FoldSpec, span: &Span) {
+pub(crate) fn check_defaults_fold<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef, spec: &FoldSpec, span: &Span) {
     let item = check_defaults_item_of(host, gram, spec);
     let named: Option<Ty> = state.a_named_fold_part_that_may_pause(world, &spec.init, span);
     let built = check_core_expr(state, world, host, &spec.init, span);
@@ -249,7 +249,7 @@ pub(crate) fn check_defaults_fold_part<H: CheckHost>(state: &mut CheckState, wor
     match part {
         Expr::Closure { params, mutable, body, .. } => {
             let (tail, paused) = check_core_lambda(state, world, host, params, mutable, body, &given, &promised, span);
-            found = Ty::Fn { params: given.copy_owned(), result: Box::new(Some(tail)), is_sync: true, can_throw: false };
+            found = Ty::Fn { params: given.copy_owned(), result: std::boxed::Box::new(Some(tail)), is_sync: true, can_throw: false };
         },
         _ => {
             state.a_named_fold_part_that_may_pause(world, part, span);
@@ -261,7 +261,7 @@ pub(crate) fn check_defaults_fold_part<H: CheckHost>(state: &mut CheckState, wor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_defaults_folds_in<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef, pattern: &Pattern, span: &Span) {
+pub(crate) fn check_defaults_folds_in<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef, pattern: &Pattern, span: &Span) {
     match pattern {
         Pattern::Fold(spec) => { check_defaults_fold(state, world, host, gram, spec, span); },
         Pattern::Seq(parts) => { for part in parts.iter() { check_defaults_folds_in(state, world, host, gram, &part.node, &part.span); } },

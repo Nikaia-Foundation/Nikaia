@@ -12,7 +12,7 @@ impl CheckState {
     /// the type it is computed in. A sum or a difference that leaves the 65
     /// bits heads the way the left operand does, a product the way the signs
     /// together do; a division by zero is `NK1118`'s, not this.
-    pub fn an_operation_that_overflows(ref mut self, world: ref CheckWorld, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, reach: ref String?, span: ref Span) sync {
+    fn an_operation_that_overflows(ref mut self, world: ref CheckWorld, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, reach: ref String?, span: ref Span) sync {
         let here = span.start as i64
         if !(op == BinaryOp::Add || op == BinaryOp::Sub || op == BinaryOp::Mul || op == BinaryOp::Div || op == BinaryOp::Rem) || self.flow.overflowed.contains(here) {
             return
@@ -86,7 +86,7 @@ impl CheckState {
     /// signed type it is computed in (Part I 2.2): its smallest value. An open
     /// number in it is measured once its uses have decided its type; `-x` on
     /// an unsigned type is the type check's.
-    pub fn a_negation_that_overflows(ref mut self, world: ref CheckWorld, inner: ref Expr, span: ref Span) sync {
+    fn a_negation_that_overflows(ref mut self, world: ref CheckWorld, inner: ref Expr, span: ref Span) sync {
         let here = span.start as i64
         if self.flow.overflowed.contains(here) {
             return
@@ -123,7 +123,7 @@ impl CheckState {
 
     /// Whether each slot waiting at the statement `span` already holds a
     /// refusal, before a check runs that may add one (#107).
-    pub fn slots_waiting(ref self, span: ref Span) -> Vec[bool] sync {
+    fn slots_waiting(ref self, span: ref Span) -> Vec[bool] sync {
         let mut waiting: Vec[bool] = []
         let key = span.start as i64
         let slots = self.flow.unsigned_slots.get(key) ?? return waiting
@@ -136,7 +136,7 @@ impl CheckState {
     /// **What a check refused at the statement `span`, said at `at`** (#107):
     /// the findings from `pushed` on, and the refusal it left waiting on an
     /// unsigned slot, which stays keyed by the statement (ADR-285 D32).
-    pub fn findings_moved(ref mut self, span: ref Span, at: ref Span, pushed: i64, waiting: ref Vec[bool]) sync {
+    fn findings_moved(ref mut self, span: ref Span, at: ref Span, pushed: i64, waiting: ref Vec[bool]) sync {
         if at == span {
             return
         }
@@ -164,7 +164,7 @@ impl CheckState {
 /// **How a plain value goes into a slot of another type** (Part I 2.3,
 /// ADR-278, ADR-285 D32, ADR-319 D2): widened, as a file's name, wrapped as a
 /// `T?`, or not at all.
-pub fn check_wrap_for(found: ref Ty, want: ref Ty, literal: bool) -> FactWrap? sync {
+fn check_wrap_for(found: ref Ty, want: ref Ty, literal: bool) -> FactWrap? sync {
     let into = widened_into(found, want) ?? ""
     if !into.is_empty() {
         return FactWrap::Widen(into.clone())
@@ -254,7 +254,7 @@ fn check_overflow_wanted(want: ref Ty) -> String sync {
     }
 }
 
-pub fn check_wrap_undecided(found: ref Ty, want: ref Ty, literal: bool) -> bool sync {
+fn check_wrap_undecided(found: ref Ty, want: ref Ty, literal: bool) -> bool sync {
     if literal || !found.is_unknown() {
         return false
     }
@@ -296,7 +296,7 @@ fn check_overflow_a_number_inside(want: ref Ty) -> bool sync {
 /// is recorded at the statement, and the bounds answer it once the body is
 /// walked. A widening that a narrower bit operation or the operands decide
 /// takes no wrap of its own.
-pub fn check_widened_slot[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, found: ref Ty, want: ref Ty, value: ref Expr?, span: ref Span) -> FactWrap? sync {
+fn check_widened_slot[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, found: ref Ty, want: ref Ty, value: ref Expr?, span: ref Span) -> FactWrap? sync {
     let mut literal = false
     if value != null {
         let given = value ?? return null
@@ -385,7 +385,7 @@ pub fn check_widened_slot[H: CheckHost](mut state: CheckState, world: ref CheckW
 /// I, 3.5; #700): `[f"{1}"]` where `Vec[String?]` is wanted is
 /// `vec![Some(..)]`, element by element, as the same value is in a `let` of
 /// its own. True where the elements were wrapped.
-pub fn check_overflow_list_into_nullables(mut state: CheckState, given: ref Expr, found: ref Ty, want: ref Ty) -> bool sync {
+fn check_overflow_list_into_nullables(mut state: CheckState, given: ref Expr, found: ref Ty, want: ref Ty) -> bool sync {
     // **Into a `T?` of such a list or tuple** (#1476): `(1, 2)` for `(i64,
     // i64?)?` is `Some((1, Some(2)))`, its parts wrapped against the `T`;
     // the whole still takes its own `Some`, so this says no wrap was made.
@@ -483,7 +483,7 @@ pub fn check_overflow_list_into_nullables(mut state: CheckState, given: ref Expr
 /// A part that is `null` or already a `T?` stays as written; a list or tuple
 /// inside is wrapped against its own part, at any depth. True where a part
 /// was wrapped.
-pub fn check_overflow_tuple_into_nullables(mut state: CheckState, given: ref Expr, found: ref Ty, want: ref Ty) -> bool sync {
+fn check_overflow_tuple_into_nullables(mut state: CheckState, given: ref Expr, found: ref Ty, want: ref Ty) -> bool sync {
     let items = match given {
         Expr::Tuple(items, _) => items,
         else => return false,
@@ -527,7 +527,7 @@ pub fn check_overflow_tuple_into_nullables(mut state: CheckState, given: ref Exp
 /// join of the ends, where its part already looks like a `T?`. Only where
 /// every end is a tuple literal or `null`, as `tuple_literal` asks
 /// (`check_texts.nika`). True where a part was wrapped.
-pub fn check_overflow_ends_into_nullables(mut state: CheckState, given: ref Expr, found: ref Ty, want: ref Ty) -> bool sync {
+fn check_overflow_ends_into_nullables(mut state: CheckState, given: ref Expr, found: ref Ty, want: ref Ty) -> bool sync {
     if !ends_in_tuple(given) {
         return false
     }
@@ -541,7 +541,7 @@ pub fn check_overflow_ends_into_nullables(mut state: CheckState, given: ref Expr
     return any
 }
 
-pub fn check_overflow_a_nullable(ty: ref Ty) -> bool sync {
+fn check_overflow_a_nullable(ty: ref Ty) -> bool sync {
     return match ty {
         Ty::Nullable(_) => true,
         else => false,
@@ -551,7 +551,7 @@ pub fn check_overflow_a_nullable(ty: ref Ty) -> bool sync {
 /// **A signed value in an unsigned slot the walk could not show is not
 /// negative** (ADR-285 D32): the slot's refusal, or `NK1102`, with the two
 /// ways to say it.
-pub fn check_unsigned_slot_refused(slot: ref CheckUnsignedSlot) -> CheckFinding sync {
+fn check_unsigned_slot_refused(slot: ref CheckUnsignedSlot) -> CheckFinding sync {
     let found = slot.found.text()
     let want = slot.want.text()
     let value = slot.written.clone()

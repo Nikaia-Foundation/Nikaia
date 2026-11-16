@@ -30,7 +30,7 @@
 pub use task_block::text::{format, join, repeat, replace, replacen, to_lowercase, to_uppercase};
 pub use task_block::{
     BLOCK, Block, Counting, Entered, Housed, List, Place, Text, count, enter, extend, full,
-    hand_over, held, leftover, list, push, reserve, take_over,
+    hand_over, held, leftover, list, outside, push, reserve, take_over,
 };
 
 use std::cell::Cell;
@@ -295,6 +295,7 @@ shallow_only!(
     f32,
     f64,
     std::time::Duration,
+    std::time::Instant,
 );
 
 impl DeepSize for String {
@@ -386,19 +387,53 @@ impl<F: ?Sized> DeepSize for crate::func::Kept<F> {
     }
 }
 
+/// **`std`'s own map** (`collections::HashMap`): its table as `hashbrown`
+/// allocated it, and what its keys and values hold.
+impl<K: DeepSize, V: DeepSize, S> DeepSize for crate::map::HashMap<K, V, S> {
+    fn heap(&self) -> usize {
+        self.outside_size() + self.iter().map(|(k, v)| k.heap() + v.heap()).sum::<usize>()
+    }
+}
+
+/// **What the standard library's `hashbrown` allocates for a table** of
+/// `capacity` entries of `T`: its buckets, a power of two its capacity is
+/// read back from (seven in eight of them past eight, all but one below),
+/// their slots, padded to the control bytes' alignment, and a control byte
+/// per bucket plus one group's worth more. The table's own figure is not
+/// public there, so it is worked out from the layout: exact, so a weight
+/// handed over leaves nothing behind on the giver (ADR-327 D9).
+fn std_table_size<T>(capacity: usize) -> usize {
+    if capacity == 0 {
+        return 0;
+    }
+    let buckets = if capacity < 8 {
+        capacity + 1
+    } else {
+        capacity / 7 * 8
+    };
+    // The group a control byte scan reads: SSE2's on x86, a word elsewhere.
+    let group = if cfg!(all(
+        any(target_arch = "x86", target_arch = "x86_64"),
+        target_feature = "sse2"
+    )) {
+        16
+    } else {
+        std::mem::size_of::<usize>()
+    };
+    let align = std::mem::align_of::<T>().max(group);
+    (buckets * std::mem::size_of::<T>()).next_multiple_of(align) + buckets + group
+}
+
 impl<K: DeepSize, V: DeepSize, S> DeepSize for std::collections::HashMap<K, V, S> {
     fn heap(&self) -> usize {
-        // The table's slots and a control byte each, which is what
-        // `hashbrown` allocates, near enough for a budget.
-        self.capacity() * (std::mem::size_of::<(K, V)>() + 1)
+        std_table_size::<(K, V)>(self.capacity())
             + self.iter().map(|(k, v)| k.heap() + v.heap()).sum::<usize>()
     }
 }
 
 impl<K: DeepSize, S> DeepSize for std::collections::HashSet<K, S> {
     fn heap(&self) -> usize {
-        self.capacity() * (std::mem::size_of::<K>() + 1)
-            + self.iter().map(DeepSize::heap).sum::<usize>()
+        std_table_size::<K>(self.capacity()) + self.iter().map(DeepSize::heap).sum::<usize>()
     }
 }
 

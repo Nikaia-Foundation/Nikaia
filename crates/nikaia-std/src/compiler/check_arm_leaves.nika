@@ -9,7 +9,7 @@ impl CheckState {
     /// **The values a choice can come to**, each one written where the whole
     /// goes: an `if` with an `else` and a `match`, through blocks; an arm that
     /// leaves comes to nothing.
-    pub fn value_leaves(ref self, world: ref CheckWorld, value: ref Expr) -> Vec[ref Expr] sync {
+    fn value_leaves(ref self, world: ref CheckWorld, value: ref Expr) -> Vec[ref Expr] sync {
         let mut out: Vec[ref Expr] = []
         match value {
             Expr::If { then_branch, else_branch, .. } => {
@@ -43,7 +43,7 @@ impl CheckState {
     }
 
     /// **The choices `value_leaves` walked through**, by their nodes.
-    pub fn choice_nodes(ref self, world: ref CheckWorld, value: ref Expr) -> Vec[i64] sync {
+    fn choice_nodes(ref self, world: ref CheckWorld, value: ref Expr) -> Vec[i64] sync {
         let mut out: Vec[i64] = []
         match value {
             Expr::If { then_branch, else_branch, .. } => {
@@ -79,7 +79,7 @@ impl CheckState {
     }
 
     /// The type the arm ending in `leaf` came to, where it has one.
-    pub fn arm_type_of(ref self, leaf: ref Expr) -> Ty? sync {
+    fn arm_type_of(ref self, leaf: ref Expr) -> Ty? sync {
         let ty = self.arm_types.get(node_key(leaf)) ?? return null
         return ty.clone()
     }
@@ -88,7 +88,7 @@ impl CheckState {
     /// the whole goes into** (#596): each arm with the type it came to; empty
     /// where `value` is not a choice or none of its arms has a type. Asking
     /// them takes back the refusal that the arms disagree.
-    pub fn arms_to_ask(ref mut self, world: ref CheckWorld, value: ref Expr) -> Vec[CheckArm] sync {
+    fn arms_to_ask(ref mut self, world: ref CheckWorld, value: ref Expr) -> Vec[CheckArm] sync {
         let mut asked: Vec[CheckArm] = []
         if !is_a_choice(value) {
             return asked
@@ -108,7 +108,7 @@ impl CheckState {
     /// **A `null` arm beside arms that read an element off a place, under a
     /// `ref E?`, is an optional view** (ADR-views-3 D5, #655): every other arm is
     /// lent, `null` stays `None`. True where the arms were lent.
-    pub fn lend_choice_beside_null(ref mut self, world: ref CheckWorld, value: ref Expr, want: ref Ty) -> bool sync {
+    fn lend_choice_beside_null(ref mut self, world: ref CheckWorld, value: ref Expr, want: ref Ty) -> bool sync {
         let optional = match want {
             Ty::Nullable(_) => true,
             else => false,
@@ -140,7 +140,7 @@ impl CheckState {
     /// into a position both kinds flow into** (#562): the lowering wraps each
     /// leaf on its own (`either(…)`, `either_maybe(…)` in a `T?`, `null`
     /// stays `None`) instead of the whole value once.
-    pub fn note_mixed(ref mut self, world: ref CheckWorld, value: ref Expr, nullable: bool) sync {
+    fn note_mixed(ref mut self, world: ref CheckWorld, value: ref Expr, nullable: bool) sync {
         for leaf in self.value_leaves(world, value) {
             if !ends_in_null(check_peeled(leaf)) {
                 self.facts.mixed_leaves.insert(node_key(leaf), nullable)
@@ -156,7 +156,7 @@ impl CheckState {
     /// else into `Arm` - and that value is lent through the call. True where
     /// the argument is one; an arm that is `null` or a place of its own leaves
     /// it to the other rules, and so does an arm whose view is not a name or a literal.
-    pub fn lent_arms_view_and_new(ref mut self, world: ref CheckWorld, given: ref Expr) -> bool sync {
+    fn lent_arms_view_and_new(ref mut self, world: ref CheckWorld, given: ref Expr) -> bool sync {
         if !is_a_choice(given) {
             return false
         }
@@ -236,7 +236,7 @@ impl CheckState {
     /// into a view, where every other arm is a view or `null`, and the whole
     /// is one then. Asked while the scope stands; true where the whole is a
     /// view.
-    pub fn lent_arms_handed_back(ref mut self, world: ref CheckWorld, value: ref Expr, nullable: bool) -> bool sync {
+    fn lent_arms_handed_back(ref mut self, world: ref CheckWorld, value: ref Expr, nullable: bool) -> bool sync {
         if !is_a_choice(value) {
             return false
         }
@@ -296,7 +296,7 @@ impl CheckState {
     /// `let y = if c { s } else { int_text(1) }` is text, and the position `y`
     /// goes into decides what it is (ADR-282 D14). The name is bound as the
     /// view it may be (ADR-282 D22, D25).
-    pub fn views_meet_owned_text(ref mut self, world: ref CheckWorld, value: ref Expr) -> Ty? sync {
+    fn views_meet_owned_text(ref mut self, world: ref CheckWorld, value: ref Expr) -> Ty? sync {
         return self.choice_of_views_and_text(world, value, false, false)
     }
 
@@ -304,7 +304,7 @@ impl CheckState {
     /// parameter** (ADR-282 D13, #744): those arms are lent, as `return
     /// h.name` is; beside literals and views the whole is a view, beside text
     /// of its own it is mixed. Null where no arm is such a read.
-    pub fn lent_arms_bound(ref mut self, world: ref CheckWorld, value: ref Expr) -> Ty? sync {
+    fn lent_arms_bound(ref mut self, world: ref CheckWorld, value: ref Expr) -> Ty? sync {
         if self.a_lent_text_place(world, value, a_string_type()) {
             // **A plain `let` over such a read is a view of it** (Part I 6.5,
             // #839); the `let` over a place lends it.
@@ -317,7 +317,7 @@ impl CheckState {
     /// arms that are such reads, literals and views, to a name that holds a
     /// view** (ADR-282 D13, #839): the reads are lent. False where anything
     /// else flows in (text of its own keeps the hand-over).
-    pub fn lent_views_assigned(ref mut self, world: ref CheckWorld, value: ref Expr, found: ref Ty) -> bool sync {
+    fn lent_views_assigned(ref mut self, world: ref CheckWorld, value: ref Expr, found: ref Ty) -> bool sync {
         if self.a_lent_text_place(world, value, found) {
             self.facts.lent_reads.insert(node_key(value))
             return true
@@ -327,7 +327,7 @@ impl CheckState {
 
     /// Whether a value is a `String` field or element read through a `ref`
     /// parameter (`found` is what it came to), not a choice.
-    pub fn a_lent_text_place(ref self, world: ref CheckWorld, value: ref Expr, found: ref Ty) -> bool sync {
+    fn a_lent_text_place(ref self, world: ref CheckWorld, value: ref Expr, found: ref Ty) -> bool sync {
         return !is_a_choice(value) && found == a_string_type() && self.a_place_of_a_lent_parameter(world, value)
     }
 
@@ -415,7 +415,7 @@ impl CheckState {
     /// **A struct or a list a test proved not `null`, handed over, returned or
     /// bound, is given up by the option that holds it** (ADR-382, #621): the
     /// lowering reads it with `unwrap()` there and with `as_ref()` elsewhere.
-    pub fn a_narrowed_read_given_up(ref mut self, value: ref Expr) sync {
+    fn a_narrowed_read_given_up(ref mut self, value: ref Expr) sync {
         let narrowed = self.facts.narrowed_reads.get(node_key(value)) ?? 0
         if narrowed % 8 >= 4 && narrowed < 8 {
             self.facts.narrowed_reads.insert(node_key(value), narrowed + 8)
@@ -426,7 +426,7 @@ impl CheckState {
     /// (ADR-382, #879): the function's value is the `String` itself, not a
     /// view of it (`s.unwrap()`, not `s.as_ref().unwrap()`). A path of
     /// fields keeps its view.
-    pub fn a_narrowed_read_given_back(ref mut self, value: ref Expr) sync {
+    fn a_narrowed_read_given_back(ref mut self, value: ref Expr) sync {
         self.a_narrowed_read_given_up(value)
         let a_name = match value {
             Expr::Variable(_, _) => true,
@@ -440,7 +440,7 @@ impl CheckState {
 
     /// **Every end of a function's tail hands its value back** (ADR-282 D4):
     /// a proved read there is given up as after `return`.
-    pub fn narrowed_reads_given_back(ref mut self, value: ref Expr) sync {
+    fn narrowed_reads_given_back(ref mut self, value: ref Expr) sync {
         match value {
             Expr::If { then_branch, else_branch, .. } => {
                 if else_branch != null {
@@ -474,7 +474,7 @@ impl CheckState {
     /// **A value handed to something that keeps it** (ADR-293 D29): a name or
     /// a field path read here is handed over; `name.to_string()` is `name`
     /// (ADR-282 D8).
-    pub fn hands_over(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref Ty, to: ref String, span: ref Span) sync {
+    fn hands_over(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref Ty, to: ref String, span: ref Span) sync {
         self.hands_over_read_at(world, value, ty, to, span, span.start as i64)
     }
 
@@ -570,7 +570,7 @@ impl CheckState {
 
     /// **A text's own bytes, `s.bytes`, or a name a `let` bound to them**
     /// (ADR-320 D11): a view of the text, whatever reads it.
-    pub fn a_text_bytes_view(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    fn a_text_bytes_view(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
         if self.facts.text_bytes.contains(node_key(value)) {
             return true
         }
@@ -581,7 +581,7 @@ impl CheckState {
     }
 
     /// Whether `name` is bound by a `let` to a text's own bytes (ADR-320 D11).
-    pub fn a_text_bytes_name(ref self, name: ref String) -> bool sync {
+    fn a_text_bytes_name(ref self, name: ref String) -> bool sync {
         let local = self.binding(name) ?? return false
         return self.text_bytes_lets.contains(local.id)
     }
@@ -589,7 +589,7 @@ impl CheckState {
     /// **`s.bytes` kept beyond the text is copied** (ADR-320 D11): handed to
     /// something that keeps it or handed back, the view
     /// becomes a `Bytes` of its own, and the text is not given up.
-    pub fn a_text_bytes_kept(ref mut self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    fn a_text_bytes_kept(ref mut self, world: ref CheckWorld, value: ref Expr) -> bool sync {
         // **A cut of a `Bytes` kept is copied** as well (ADR-320 D7, #1345):
         // the checker's `Bytes` is a view into the cut one below.
         if !self.a_text_bytes_view(world, value) && !self.facts.bytes_cuts.contains(node_key(value)) {
@@ -604,7 +604,7 @@ impl CheckState {
     /// refused; read, the key is lent or goes in as it is where it is a view
     /// already. A map keyed by views, and one whose key type nothing pinned,
     /// is keyed by what goes in the brackets.
-    pub fn a_map_key(ref mut self, world: ref CheckWorld, keys: ref Ty, found: ref Ty, index: ref Expr, writing: bool, span: ref Span) sync {
+    fn a_map_key(ref mut self, world: ref CheckWorld, keys: ref Ty, found: ref Ty, index: ref Expr, writing: bool, span: ref Span) sync {
         // **A map whose key type nothing pinned is keyed by what goes in the
         // brackets** where that decides the form: a key written is handed
         // over, a view goes in as it is, a number is lent. Text of its own is
@@ -768,7 +768,7 @@ impl CheckState {
     /// question `arguments` asks of a parameter that says `String` itself. A
     /// position the tier pass made a view is `ref String` here and fits; one
     /// it made mixed is handed `value.into_either()`.
-    pub fn a_view_kept_where_the_receiver_says_text(ref mut self, world: ref CheckWorld, key: ref String, contract: ref FnContract, given: ref Vec[Expr], found: ref Vec[Ty], expected: ref Vec[Ty], span: ref Span) sync {
+    fn a_view_kept_where_the_receiver_says_text(ref mut self, world: ref CheckWorld, key: ref String, contract: ref FnContract, given: ref Vec[Expr], found: ref Vec[Ty], expected: ref Vec[Ty], span: ref Span) sync {
         let signature = contract.signature ?? return
         let offset = if signature.takes_a_receiver() { 1 } else { 0 }
         let own = world.own.functions.contains_key(key)
@@ -848,7 +848,7 @@ fn is_a_choice(value: ref Expr) -> bool sync {
 /// parser's span of the expression when it made the node and the node
 /// stands inside the statement; a node the compiler built, or one from
 /// another file, is reported at the statement.
-pub fn check_span_at(world: ref CheckWorld, expr: ref Expr, span: ref Span) -> Span sync {
+fn check_span_at(world: ref CheckWorld, expr: ref Expr, span: ref Span) -> Span sync {
     let at = world.here.spans.get(id_of(expr)) ?? return Span { start: span.start, end: span.end }
     if at.start >= span.start && at.end <= span.end {
         return Span { start: at.start, end: at.end }
@@ -863,7 +863,7 @@ impl CheckState {
     /// the function says `throws` and the cleanup can fail. The settle the
     /// function reaches, where a function is being walked. **A cleanup that
     /// says `sync` settles without a pause** (#1317): `cleanup::settle_sync`.
-    pub fn a_settle_in_this_function(ref mut self, fails: bool, pauses: bool) -> String? sync {
+    fn a_settle_in_this_function(ref mut self, fails: bool, pauses: bool) -> String? sync {
         let current = (self.current ?? return null).clone()
         let failing = fails && self.flow.throwing
         let before = self.facts.settle_fns.get(current) ?? false
@@ -898,7 +898,7 @@ impl CheckState {
     /// **An `if` or a `match` whose arms did not agree is asked arm by arm**
     /// (#596): each is a value written in this position, with this position's
     /// code and help.
-    pub fn expect_kept_asked(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?, keeper: ref String, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) sync {
+    fn expect_kept_asked(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?, keeper: ref String, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) sync {
         let mut arms: Vec[CheckArm] = []
         let mut at = Span { start: span.start, end: span.end }
         if value != null {

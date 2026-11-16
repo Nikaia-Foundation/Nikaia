@@ -1,0 +1,32 @@
+// #1653 (ADR-306 D23, ADR-369 D4): a builder that copies `cols` but leaves
+// `ks` empty, and hands its `Row` back as a field written by its name alone
+// (`Reading { form, scale }`), breaks `cols.len() == ks.len()`, so
+// `row.ks[0]` keeps its check: the name alone is a use of the value.
+struct Row {
+	cols: Vec[u32],
+	ks: Vec[i64],
+	constant: i64,
+}
+
+struct Reading {
+	form: Row,
+	scale: i64,
+}
+
+fn first_k(row: ref Row) -> i64 {
+	if row.cols.len() == 1 && row.ks[0] == 1 {
+		return 1
+	}
+	return 0
+}
+
+fn reading(row: ref Row, scale: i64) -> Reading {
+	let mut form = Row { cols: row.cols.clone(), ks: [], constant: 0 }
+	form.constant = scale
+	return Reading { form, scale }
+}
+
+fn main() throws {
+	let row = Row { cols: [], ks: [1], constant: 0 }
+	println(first_k(reading(row, 2).form))
+}

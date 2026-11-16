@@ -219,6 +219,19 @@ impl<T> Local<T> {
         }
     }
 
+    /// **`SharedMut(value)` as the compiler writes it** (ADR-327 D9, #1751):
+    /// the value's deep size, as `size` measures it, moves from the creator
+    /// to the shared value at its creation, as `set` moves it, so what the
+    /// value frees inside its block was counted there.
+    pub fn weighed(value: T, size: impl FnOnce(&T) -> usize) -> Self {
+        let size = size(&value);
+        Self {
+            inner: RefCell::new(crate::block::Housed::moved_in(value, size)),
+            poisoned: std::cell::Cell::new(false),
+            rebuild: None,
+        }
+    }
+
     /// `SharedMut::supervised(fn { … })` as the compiler writes it: the kept
     /// function a program hands over.
     pub fn supervised_kept<F: Fn() -> T + ?Sized + 'static>(
@@ -286,10 +299,12 @@ impl<T> Local<T> {
     /// **The borrow with no poison mark** (ADR-327 D11): for a block that
     /// cannot leave the value half-changed, because it only reads it or works
     /// on a copy. A panic in it releases the borrow and poisons nothing.
+    /// The value's block is not in place: what the block builds leaves the
+    /// door, so it counts against the task that opened it (D9, #1554).
     #[track_caller]
     #[inline]
     fn unmarked<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
-        self.opened().inside(f)
+        f(self.opened().get_mut())
     }
 
     /// Part II 12.2's first door: a copy out. No code of the user's runs while
@@ -384,18 +399,35 @@ impl<T> Local<T> {
     /// witness taken by value would be *moved* out of the caller, and reading
     /// what was seen after asking whether it still holds is an ordinary thing
     /// to write — so the ledger says `seen: &$T` and the caller keeps it.
+    ///
+    /// **The value's deep size moves as [`set`](Self::set)'s does** (ADR-327
+    /// D9, #1554), and only where it is stored: an overtaken value stays
+    /// the setter's, and is dropped outside the lock, against the setter.
     #[track_caller]
     pub fn set_after(&self, value: T, seen: &T) -> Result<(), Overtaken>
     where
-        T: PartialEq,
+        T: PartialEq + crate::block::DeepSize,
     {
-        self.held(|held| match *held == *seen {
+        let size = crate::block::deep_size(&value);
+        let mut value = Some(value);
+        crate::block::hand_over(size);
+        let stored = self.held(|held| match *held == *seen {
             true => {
-                *held = value;
-                Ok(())
+                crate::block::received(size);
+                if let Some(value) = value.take() {
+                    *held = value;
+                }
+                true
             }
-            false => Err(Overtaken),
-        })
+            false => false,
+        });
+        if stored {
+            return Ok(());
+        }
+        // Back to the setter, which held it a moment ago: no new memory,
+        // so nothing to refuse.
+        crate::block::take_over(size);
+        Err(Overtaken)
     }
 
     /// **Exclusive even to read**, and that is not an oversight.
@@ -455,6 +487,16 @@ impl<T> Crossing<T> {
     pub fn new(value: T) -> Self {
         Self {
             inner: Mutex::new(crate::block::Housed::new(value)),
+            held_by: AtomicU64::new(NOBODY),
+            rebuild: None,
+        }
+    }
+
+    /// [`Local::weighed`], where the value crosses threads (#1751).
+    pub fn weighed(value: T, size: impl FnOnce(&T) -> usize) -> Self {
+        let size = size(&value);
+        Self {
+            inner: Mutex::new(crate::block::Housed::moved_in(value, size)),
             held_by: AtomicU64::new(NOBODY),
             rebuild: None,
         }
@@ -536,18 +578,35 @@ impl<T> Crossing<T> {
     /// crossing shape. [`Local::set_after`] carries the reasoning; what is
     /// different here is only that the lock is a mutex, so the compare and the
     /// store happen under the guard the owner check already took.
+    ///
+    /// **The value's deep size moves as [`set`](Self::set)'s does** (ADR-327
+    /// D9, #1554), and only where it is stored: an overtaken value stays
+    /// the setter's, and is dropped outside the lock, against the setter.
     #[track_caller]
     pub fn set_after(&self, value: T, seen: &T) -> Result<(), Overtaken>
     where
-        T: PartialEq,
+        T: PartialEq + crate::block::DeepSize,
     {
-        self.hold(|slot| match *slot == *seen {
+        let size = crate::block::deep_size(&value);
+        let mut value = Some(value);
+        crate::block::hand_over(size);
+        let stored = self.hold(|slot| match *slot == *seen {
             true => {
-                *slot = value;
-                Ok(())
+                crate::block::received(size);
+                if let Some(value) = value.take() {
+                    *slot = value;
+                }
+                true
             }
-            false => Err(Overtaken),
-        })
+            false => false,
+        });
+        if stored {
+            return Ok(());
+        }
+        // Back to the setter, which held it a moment ago: no new memory,
+        // so nothing to refuse.
+        crate::block::take_over(size);
+        Err(Overtaken)
     }
 
     /// The owner check and the guard, around whatever the door does with the
@@ -555,6 +614,14 @@ impl<T> Crossing<T> {
     /// forgot one would be the hang this shape carries the check to prevent.
     #[track_caller]
     fn hold<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
+        self.hold_in(true, f)
+    }
+
+    /// [`hold`](Self::hold), with the value's block in place or not: a door
+    /// that leaves the value whole builds nothing that stays in it (D9,
+    /// #1554).
+    #[track_caller]
+    fn hold_in<R>(&self, in_block: bool, f: impl FnOnce(&mut T) -> R) -> R {
         let me = current_task();
         // **Read before the acquisition**, because once that blocks there is
         // nothing left to report to - which is the whole reason this shape
@@ -603,18 +670,24 @@ impl<T> Crossing<T> {
         // would make the next door read as a re-entry rather than as the
         // poisoned value it is.
         let _released = Released(&self.held_by);
-        guard.inside(f)
+        if in_block {
+            guard.inside(f)
+        } else {
+            f(guard.get_mut())
+        }
     }
 
     /// **The guard with no poison** (ADR-327 D11), for a block that cannot
     /// leave the value half-changed: `std`'s mutex poisons itself when its
     /// guard is dropped by a panic, so the panic is caught while the guard is
     /// held, the guard is dropped as on any other way out, and the panic goes
-    /// on from there. The panic hook has run already where it began.
+    /// on from there. The panic hook has run already where it began. The
+    /// value's block is not in place, as in [`Local`]'s (D9, #1554).
     #[track_caller]
     fn unmarked<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
-        let ended =
-            self.hold(|slot| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(slot))));
+        let ended = self.hold_in(false, |slot| {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(slot)))
+        });
         match ended {
             Ok(result) => result,
             Err(panic) => std::panic::resume_unwind(panic),

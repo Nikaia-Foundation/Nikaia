@@ -204,7 +204,7 @@ fn lg_consistent_answer(arena: ref TermArena, facts: ref Vec[i64], goal: i64, fo
 // --- The checker ---
 
 /// A Boolean term's value under `values`, where it has one.
-pub fn lg_bool_value(arena: ref TermArena, id: i64, values: ref collections::BTreeMap[String, i64]) -> bool? {
+fn lg_bool_value(arena: ref TermArena, id: i64, values: ref collections::BTreeMap[String, i64]) -> bool? {
     let node = arena.at(id)
     return match node {
         SolverTerm::Bool(x) => x,

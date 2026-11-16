@@ -18,7 +18,7 @@ pub enum EmitTail {
 
 impl EmitTail {
     /// The last statement is the value of what surrounds it.
-    pub fn is_value(self) -> bool {
+    fn is_value(self) -> bool {
         return match self {
             EmitTail::Statement => false,
             else => true,
@@ -27,7 +27,7 @@ impl EmitTail {
 
     /// The same, for the statement `i` of a block whose last is `last`: only
     /// the last keeps it.
-    pub fn at(self, i: i64, last: i64) -> EmitTail {
+    fn at(self, i: i64, last: i64) -> EmitTail {
         if i == last {
             return self
         }
@@ -145,7 +145,7 @@ impl EmitLifetimes {
     }
 
     /// The same reference, over the input's own lifetime parameter `'a`.
-    pub fn over_the_input(self) -> EmitLifetimes {
+    fn over_the_input(self) -> EmitLifetimes {
         return match self {
             EmitLifetimes::Elided => EmitLifetimes::Inner,
             EmitLifetimes::Static => EmitLifetimes::StaticIn,
@@ -166,7 +166,7 @@ impl EmitLifetimes {
     }
 
     /// The same parameters, with a reference spelled over the input's buffer.
-    pub fn of_the_input(self) -> EmitLifetimes {
+    fn of_the_input(self) -> EmitLifetimes {
         return match self {
             EmitLifetimes::Elided => EmitLifetimes::OfInputElided,
             EmitLifetimes::Static => EmitLifetimes::OfInputStatic,
@@ -200,7 +200,7 @@ pub enum EmitPointer {
 
 /// Which of the first two a declared parameter is, or `null` where it is an
 /// ordinary value.
-pub fn emit_pointer_for(ty: ref Type) -> EmitPointer? {
+fn emit_pointer_for(ty: ref Type) -> EmitPointer? {
     if ty.is_slice {
         return EmitPointer::Run { mutable: ty.is_mut }
     }
@@ -228,7 +228,7 @@ pub struct EmitMethod {
 impl EmitMethod {
     /// A method that mutates its subject and yields nothing - the shape that
     /// has to be threaded to become a fold's step or merge.
-    pub fn mutates_in_place(ref self) -> bool {
+    fn mutates_in_place(ref self) -> bool {
         if self.returns_value {
             return false
         }
@@ -305,7 +305,7 @@ impl EmitFlow {
         return EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false, breaks_to: -1, subject_copies: false }
     }
 
-    pub fn inside_a_loop(keep self) -> EmitFlow {
+    fn inside_a_loop(keep self) -> EmitFlow {
         return self with { in_loop: true }
     }
 
@@ -313,7 +313,7 @@ impl EmitFlow {
         return self with { caught: true }
     }
 
-    pub fn joined_here(keep self) -> EmitFlow {
+    fn joined_here(keep self) -> EmitFlow {
         return self with { caught: true, handled_here: true }
     }
 
@@ -325,7 +325,7 @@ impl EmitFlow {
         return self with { caught_named: named }
     }
 
-    pub fn at(keep self, statement: i64) -> EmitFlow {
+    fn at(keep self, statement: i64) -> EmitFlow {
         return self with { statement: statement }
     }
 
@@ -359,6 +359,6 @@ pub struct EmitScope {
 impl EmitScope {
     /// Nothing around: the opaque channel, no names.
     pub fn plain() -> EmitScope {
-        return EmitScope { origin: "", function: "", channel: "Box<dyn std::error::Error>", caught_sum: null, caught_member: null, bound: "", changed: [], awaited: [], tasks_channel: "", tasks_function: "" }
+        return EmitScope { origin: "", function: "", channel: "std::boxed::Box<dyn std::error::Error>", caught_sum: null, caught_member: null, bound: "", changed: [], awaited: [], tasks_channel: "", tasks_function: "" }
     }
 }

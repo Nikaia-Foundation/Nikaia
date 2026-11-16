@@ -21,20 +21,27 @@ together with the specification section and an example test.
 | Rust tests by NK code | `grep -rln NK1234 crates/nikaia/tests/it/` |
 | Specification | `docs/specification/10-nikaia-light.md`, `20-nikaia-advance.md`, `30-nikaia-tooling.md` (code table) |
 | A name, Rust or Nikaia | `nikaia run scripts/where.nika -- NAME...`: definitions with file:line and the files that call them; for an `NKnnnn` the tests and the spec row (a field is not found: grep it); `-- --outline FILE` lists each item of a file with its line range |
-| A snippet through the built compiler | `nikaia run scripts/probe.nika -- 'let x = 1\nprintln(x)'` (`--check`, `--file F.nika`): runs it with `target/fast/nikaia`, prints at most 60 lines and `exit N`; a probe for a report is the snippet and these lines |
+| A snippet through the built compiler | `nikaia run scripts/probe.nika -- 'let x = 1\nprintln(x)'` (`--check`, `--file F.nika`): runs it with `target/fast/nikaia`, prints at most 60 lines and `exit N`; a probe for a report is the snippet and these lines. A first `note: target/fast/nikaia is older than ...` line means the binary may predate HEAD: build it before reading a refusal as a defect (#1866) |
 | How a form is written | `nikaia run scripts/syntax.nika -- KEYWORD`: the specification section, an example test and the facts lines on it (e.g. `slice`, `view`, `throws`) |
 
 ### Every run
 
+* **The compiler runs as rustc inside the program's `cargo build`**, so a sub-build in the same target dir waits for ever on Cargo's lock. Nothing says so: the nested `cargo` runs `--quiet` (`comptime_bundle.nika`, `grammar_run.nika`), so Cargo's *Blocking waiting for file lock* never shows, and `nikaia test` ends a test program's build only after `NIKAIA_TEST_BUILD_TIME_LIMIT` seconds (default ten times `NIKAIA_TEST_TIME_LIMIT`, so 3000 s; 0 is no limit; #1774, #1775): such a program then fails with `build timed out after N s` and a hint naming this `ps` check. A cold build or test silent for minutes is checked once with `ps -ef --forest | grep -B2 -E 'cargo (rustc|build) .*--target-dir'`: such a `cargo` under a `nikaia` that an outer `cargo build` started, both on one target dir, is this wait; kill it, do not wait it out. (issue-1705, #1727)
+* **Check the binary against HEAD before the first `nikaia test` or probe**: `git log --oneline --since=@$(stat -c %Y target/fast/nikaia) -- crates/` lists the compiler commits `target/fast/nikaia` predates; any line means build it first (`cargo build --profile fast -p nikaia`). A stale binary shows as a refusal in code you did not touch, often the `tests/compiler` library (`src/*.nika`) refusing a test before it runs (#1862's run read NK1102/NK1103/NK1185 on `tier_private_beside_caller` from a binary older than 151d2961, 5.5 minutes lost; `probe.nika`'s `note:` covers only probes). (#1893)
+* **`nikaia run` takes the run_fast path without Cargo**: probe a build-time change with a cold `nikaia build`, not `nikaia run`. (issue-1705)
+* With `cargo --target`, proc-macro crates land in `<dir>/debug/deps`, not `<dir>/<triple>/debug/deps`. (issue-1705)
+* A test program that spawns `nikaia` finds it among its ancestors only under `nikaia test`, not `nikaia run`. (issue-1705)
 * **`lower-std` runs the bounds walk**, so a slower walk slows every `lower-std` (one ran past 20 minutes and was killed): while you change the walk, lower with the binary before your change and measure with yours once. (issue-1470)
 * **After a change to any `bounds_*.nika`, each `lower-std` re-proves std with the new walk: 10-13 minutes, not the 40 s of `builder.md`.** Plan one such cycle per hour; iterate with `check --bounds` on a probe reduced from the real site, and find a slowdown with a few `gdb` stack samples (a minute), not callgrind (an hour). (issue-1470)
+* **Another agent's uncommitted `bounds_*.nika` makes your cycle re-prove std too** (`lower-std` reads the working tree): run `git status --short crates/nikaia-std/src/compiler/bounds_*.nika` before the first cycle; with one modified there, plan 10 minutes per `lower-std`, run it in the background, and need fewer cycles; do not touch their file. (issue-1731, #1745)
+* **`lower-std` lowers the other agents' unfinished `.nika` too**: one half-written can refuse your cycle (an NK code whose `-->` names a file `git status` shows modified and not yours), and their `lowered/*.rs` change under your cycles. Save the list once before the first cycle (`git status --short crates/nikaia-std/src/compiler > $S/before.txt`); a refusal or a lowered change in a file on it, or new since, is theirs: no defect, no `Found:`, no fix, never staged (`commit.nika` adds only your `Files:`). Judge your change by your own files and the new binary's `lower-std`; name the refusal once under `Tests:`, not as friction. Such a refusal makes the tree's `lower-std` write no file at all, yours neither: `nikaia run scripts/lower_mine.nika -- YOUR_FILES...` lowers HEAD plus only your files in `target/lower-mine` and names each lowered file your change moves (`--write` copies them into the tree, all but `lowered.rs`; `--exe $S/old/nikaia` for the cycle's first run) (#1875). Their `.nika` may also lower to Rust the build refuses (a rustc error in `lowered/X.rs` of a file on the list): for each build, put HEAD's copy of only that lowered file back (`git show HEAD:PATH > PATH`, the one sanctioned exception to never restoring `lowered/` by hand; their next `lower-std` writes it again), never stage it, and name it once under `Tests:`, not as friction or `Found:`. (issue-1759, #1762, #1794)
 * **A change to the bounds walk that asks new questions makes committed `nikaia.proofs` stale** (the examples', a package's): `build --locked` then fails with "N questions were searched", but only on a clean target, since a warm cache hides it. The driver refreshes them before each push and after merging `origin/develop` (`drive_ledgers`), and CI fails a stale one; by hand, `nikaia run scripts/ledgers.nika -- --check` finds them and `-- --refresh` rewrites them, so commit the added entries with the change. (qa, 3c055bf5; #1591)
 * `/usr/bin/time` does not exist here; time a command with the bash `time` keyword or `date +%s.%N` before and after. (issue-1470)
-* `cargo fmt -- FILE` fails here; run `cargo fmt` at the repository root or `rustfmt --edition 2024 FILE`. (issue-1473)
+* `cargo fmt -- FILE` fails here; run `cargo fmt --all` at the repository root (plain `cargo fmt` skips `crates/unsafe/*`, outside the workspace, which pre-push's `cargo fmt --all -- --check` checks as path dependencies, #1847) or `rustfmt --edition 2024 FILE`. (issue-1473)
 * A whole `lower-std` under callgrind takes hours; an A/B of it is user time with the bash `time` keyword, two interleaved rounds, twin binaries built from the same source. Uncached: set `NIKAIA_LOWER_CACHE_SALT` and pass `--sysroot` a copy laid out as `X/crates` with `X/packages` beside it. (issue-1473)
 * A wip branch whose single commit sits on an ancestor of HEAD is applied with `git diff HEAD...wip/X | git apply`, after `git diff --stat BASE HEAD` shows HEAD has not touched its files; after `lower-std`, an empty `git diff --stat wip/X -- crates/nikaia-std/src/compiler/lowered` shows its lowered files are current. (issue-1470)
 * A fix in our tool sources (not the compiler) has no fails-before run of the compiler; show instead the same test program written the old way reported checked. (issue-1496)
-* `lower-std --bounds` prints only verdicts; a site's goal and facts come from `lower-std --bounds --bounds-trace tools/FILE.nika:LINE`, which is cheaper than re-running the whole walk to re-measure one site. (issue-1496)
+* `lower-std --bounds` prints only verdicts; a site's goal and facts come from `lower-std --bounds --bounds-trace FILE.nika:LINE` (the bare file name, `fixed.nika:95`: it matches the end of the path, so the old `tools/fixed.nika:95` matches nothing since the move to `compiler/`, and a trace that matches no file prints nothing, no error), which is cheaper than re-running the whole walk to re-measure one site. Name the `.nika` line, never the lowered `.rs` one. (issue-1496, #1780)
 * A test parameter written `ref String` draws NK1261 (`ref` is redundant); write `String`. (issue-1496)
 * **A new `nikaia` flag is declared in clap in `crates/nikaia/src/main.rs` (Rust)**: the command line cannot be Nikaia-only, so a flag needs that Rust plumbing even under *no new Rust*. A development aid read deep inside is kept in a static `OnceLock` set there, not passed through every caller. (issue-1495)
 * **ADRs live in `docs/specification/adr/`**; search them with the Grep tool, since a `grep -r` from the root runs into `target/`. A script test run by hand resolves a relative `target/fast/nikaia` under its tmp dir: run a copy with the absolute path. (issue-1397, issue-1414)
@@ -43,28 +50,109 @@ together with the specification section and an example test.
   use, since another agent may rebuild `target/fast/nikaia` mid-run (P5a, j5).
   Keep the copy in its own directory and name it exactly `nikaia`
   (`$S/old/nikaia`): script tests check the basename and otherwise fall back
-  to `target/fast/nikaia` (b42). `target/release/nikaia` is older than the
+  to `target/fast/nikaia` (b42), resolved under the test's tmp dir: a test
+  failing with *no such file ... target/fast/nikaia* (about 170 programs
+  carry this `toolchain()`, e.g. `describe_reads_a_tuple_parameter`) ran
+  under a copy named otherwise (`nikaia-old`, `nk`); rename it, it is no
+  defect (#1868). `target/release/nikaia` is older than the
   views syntax and cannot serve.
   The copy may predate HEAD (another session built it from another tree,
   and its mtime is when you copied it): when a fails-before result surprises,
   build the before binary from HEAD's own sources first; a stale copy cost
   a run 30 turns chasing a regression HEAD never had. (issue-1483)
 * A rebuild while `nikaia test` runs fails tests at random: rerun the failed
-  ones alone before calling them failures. (issue-1414)
+  ones alone before calling them failures. Under `--both-settings` it shows
+  as `FAILED (the settings disagree)` on tests that pass alone (the settings
+  ran different binaries), or as `Error: running .../nikaia (deleted)`; a
+  test that spawns `nikaia` (every `drive_*`) runs its own ancestor, so run
+  a filter of many such tests with your `$S/old/nikaia` copy. (issue-1414,
+  #1837)
+* **A touched test that fails on `$S/old/nikaia` too is red on `develop`, not
+  yours**: one run there settles it; then `git fetch origin develop && git log
+  --oneline HEAD..origin/develop -- tests/compiler/tests/NAME.*` shows whether
+  a re-record already landed. Name it under `Tests:` and go on; never a second
+  run to rule it out (#1902: `loop_assert_is_invariant_proved`, re-recorded in
+  the commit for ADR-361 D15's flag facts, cost #1849's run two).
 * **The checkout is shared.** A file another agent has modified: stage only
   your hunks (`git diff FILE > $S/p.diff`, delete theirs from the copy, `git
   apply --cached`, check with `git diff --cached FILE`; `git add -p` is
   refused here). A build that shows none of your edits may have run during a
   driver rebase: check `git status` and your file, then rebuild; never touch
   others' `UU` files, name them under `Needs:` (BT, b1043).
+  An uncommitted edit of yours that is gone from the tree mid-cycle is
+  in the driver's merge (`git merge --no-commit --autostash`, by design,
+  #1333): `.git/MERGE_HEAD` exists and `git stash list` shows the
+  autostash. Never type the edit again (the autostash pop then conflicts);
+  wait in one call for the merge to end (Monitor until `.git/MERGE_HEAD`
+  is gone), check the edit is back, then run the cycle again. (#1830)
+  Meanwhile `commit.nika` refuses (`a merge is in progress`): a commit
+  then would be a merge commit that drops the merged side (#1901). An
+  edit still missing after the merge ended (or was aborted) is in an
+  autostash git could not put back: `git stash list`, then `git stash
+  show -p stash@{N}`, not `git fsck` (#1901).
+  Where the merge also changed a lowered file of yours, putting the edit
+  back conflicts there: the driver gives that file HEAD's copy, unstages
+  what git staged, and prints `MERGE autostash conflicted in ...`; run
+  `lower-std` again. A conflict in a source escalates instead, and the stash
+  keeps your side (#1862).
 * **Long runs go in the background** with `run_in_background` and `timeout:
   3600000`, and you wait for the wake-up, never a `sleep` or `pgrep` loop. A
   `lower-std` and build cycle takes 10-15 minutes: find every change it needs
   with probes on the old binary first; one cycle less is the largest saving a
   run can make (a9, v6, v7). Put a `&` on one command, never on a chain (P4b).
+  **One `lower-std` or build at a time:** while a cycle runs in the
+  background, start no other `lower-std`, build or touched test until it
+  wakes you; two `lower-std` runs write the same lowered files and one
+  silently undoes the other (issue-1711).
 * **Probes live in the scratchpad**, outside any project: `nikaia check FILE`
   inside `tests/compiler/tests/` reads the sibling files (prover lane).
-* **Never commit `nikaia.lock`**; it is git-ignored and changes with each build.
+* **Never commit a `nikaia.lock` you did not mean to change**: it changes with each build. Most are
+  git-ignored, but `packages/*/nikaia.lock` and `nikaia.proofs` are tracked; a
+  change to them in the tree that is not yours comes from the driver's
+  `drive_ledgers` or another run's `ledgers.nika --refresh`, which commits it.
+  Leave it unstaged; `nikaia run scripts/ledgers.nika -- --check` says whether
+  your change made them stale (issue-1691). A stale one is often stale on
+  `develop` already: one run of `ledgers.nika -- --check --tree HEAD --exe
+  $S/old/nikaia` (HEAD's ledgers, the before binary) settles it; stale there
+  too, it is not yours, say so under `Tests:` and do not refresh it (#1712).
+  `ledgers.nika --check` and `--refresh` build every ledger directory
+  (`-- --list` names them, 19 today) cold, in a fresh `NIKAIA_CACHE_DIR`:
+  many minutes, past the tool's foreground limit. Run it with
+  `run_in_background` and its output in a file (`> $S/ledgers.txt 2>&1`),
+  never piped through `head`: its output is already short (a line per
+  directory, 40 per failure, `ledgers_head`), and a foreground run piped
+  through `head` was killed (exit 144) and ended the session (#1777).
+* **A file another agent also edits** goes under the report's `Partial:`,
+  not `Files:`: stage only your hunks (`git apply --cached`), and
+  `commit.nika` commits what is staged of it without `git add` (#1704).
+  When their edit is in the same compiler `.nika` as yours, its lowered
+  `.rs` mixes both and cannot be split by hunks (the `__nikaia_tupleN`
+  names are byte offsets): lower HEAD plus your hunks once in a copy and
+  stage its blobs (`scripts/lower_mine.nika` does the copy and the
+  lowering for whole files, #1875). `git archive HEAD | tar -x -C $S/head`, `git diff
+  F.nika > $S/p.diff`, drop their hunks, `git -C $S/head apply`, then
+  `NIKAIA_LOWER_CACHE_SALT=$RANDOM target/fast/nikaia lower-std --sysroot
+  $S/head/crates`; for the `.nika`, its `lowered/*.rs` and `lowered.rs`:
+  `git update-index --cacheinfo 100644,$(git hash-object -w
+  $S/head/PATH),PATH`, list them under `Partial:` (issue-1839, #1858).
+* **Your change is a sweep** (it rewrites many files other lanes edit, e.g.
+  a visibility pass over every compiler `.nika`): make it your run's last
+  step and commit it in one go (edit, `lower-std`, build, commit), never left
+  uncommitted across probes or test runs; every other run meanwhile has to
+  stage its own files hunk by hunk around it (#1808, #1850).
+* **A defect fix and a step in the same file are two commits**, but
+  `commit.nika` stages whole `Files:` (or list it under `Partial:` with only
+  the fix hunks staged): commit the fix (the `.nika` and its
+  lowered `.rs`) before starting the step in that file. Met late, put HEAD's
+  version plus the fix hunks in place, commit, then restore the step
+  (issue-1470, issue-1691). Two fixes in different `.nika` lowered in one
+  cycle are two commits too: the first lists its `.nika`, its lowered
+  `.rs` and `lowered.rs` (`commit.nika` writes the digest of what is
+  staged, so the tree's `lowered.rs` still differs for the second); a
+  lowered `.rs` both fixes move is staged for the first from `lower_mine.nika
+  -- FIRST.nika` (`git update-index --cacheinfo` of its blob in
+  `target/lower-mine`, under `Partial:`, as for a file another agent also
+  edits, above) (#1883).
 * **Never run `nikaia fmt` on `crates/nikaia-std/src/compiler/*.nika`**: it
   reindents the whole file (b1012b). Format by hand there.
 * **`pre-push` fails with *out of date: self-hosted.svg*** when a `.nika`
@@ -83,17 +171,19 @@ together with the specification section and an example test.
 * Running a copied test file with `nikaia run` inside `tests/compiler/tests/` is refused as not the entry point; run the fails-before check on the scratchpad copy. (issue-1266)
 * After a `.nika` change, the cycle's first `lower-std` must run with the before binary (`$S/old/nikaia`); `target/fast/nikaia` still holds the logic of the previous attempt. (issue-1209)
 * An issue's probe may pass on `develop` because a later fix masks it; vary the shape (index, `.iter()`, a second call site of another kind) before judging the defect gone. (issue-1210)
-* A `git mv` staged before `commit.nika` makes it refuse (staged and not listed, or `git add` of a missing path); delete files unstaged and list both paths. (issue-1218)
+* `commit.nika` commits only your `Files:` / `Partial:` through a private index: another agent's staged file (even an unmerged `UU` one) is no refusal, stays staged and is named on a `left staged, not committed:` line; no `git commit --only` by hand. (issue-1375, #1792)
+* A move is committed by listing both paths under `Files:`; a path left out of a staged `git mv` stays staged and uncommitted (`left staged, not committed:`). (issue-1218, #1792)
 * Before planning, `git log --grep=<issue>`: earlier lane runs may have finished part of the issue under `Part of #N`. (issue-1224)
 * A test of "a `keep` parameter keeps it" needs a callee that really keeps (stores or spawns); `fn hold(keep w: W) -> i64 { w.k }` only gets an NK1334 warning and proves nothing. (issue-1225)
 * `scripts/pre-push.nika` is red on `develop` (self-hosted badge) whatever is staged; compare with an empty index and never reset to find out. (issue-1277)
 * `NIKAIA_LOWER_CACHE_SALT=<fresh>` plus `lower-std --sysroot <copy>` gives an uncached reference run to `diff -r` against for byte-identity, without touching the shared cache. (issue-1277)
+* Whether HEAD lowers a file as committed is shown by that uncached run on a `git archive HEAD | tar -x -C $S/head` copy, diffing the copy's `lowered/` against `git show HEAD:...`; a plain `git diff` of the shared `lowered/` also shows the files other agents lowered mid-run (`bounds_rules.rs`, `bounds_walk.rs` in #1763's run). A `Found:` from such a run names HEAD's subject and sha and the binary's, so the next run can bisect once the tree moves on. (issue-1763, #1793)
 * A `let` over a field of a `ref` parameter (`let k = index.keys`) is NK2106 by design; read the field in place at each use. (issue-1279)
 * Two `--lib` filters in one `cargo test` call (`emit:: sysroot::`) printed nothing for me; run one filter per call. (issue-1279)
 * A rustc "temporary dropped while borrowed" or "mismatched types" on text usually comes from the text-tier pass (`text_tiers.nika`, ADR-282), not the keep code: lower the probe and check whether a `Vec[String]` became `Vec<&str>`. (issue-1287)
 * `.to_string()` of text is emitted as the bare receiver (`text_as_is`, ADR-282 D8); copying text out of a view is `.clone()`, and a kept view of a temporary is NK1102 by design. (issue-1287)
 * `nikaia test --filter X` prints no `test result` line when nothing matches, so a wait loop that counts result lines never ends. (issue-1287)
-* `nikaia check` on a single `crates/nikaia-std/src/compiler/*.nika` fails with NK1135 for imported types (`Span`); only the `lower-std` cycle checks a tool file. (issue-1289)
+* `nikaia check` on a single `crates/nikaia-std/src/compiler/*.nika` fails with NK1135 for imported types (`Span`); only the `lower-std` cycle checks a tool file. Its first step needs no build: after each edit of a tools file run `$S/old/nikaia lower-std` alone (seconds to a minute, one file re-lowered), and fix what it refuses before the 5-minute build (`let mut v = ""` later given a `String` is NK1105 by ADR-282; start it as `String()`). (issue-1289, #1764)
 * `nikaia lower F.nika` in the scratchpad writes `F.rs` beside it; read `__nikaia_main` there before guessing at an emitter cause. (issue-1289)
 * `scripts/pre-push.nika` checks only what is staged, so run it after `git add` of your files, or it is green on nothing. (issue-1290)
 * `cargo test -p nikaia-std --lib emit_core_args::` matches no test, because lowered modules have no unit tests; skip it for a `tools/*.nika` change. (issue-1290)
@@ -119,7 +209,7 @@ together with the specification section and an example test.
 * A `let x: Array[T]` (no length) is made a view by `lv_let_views` in `text_tiers.nika`, like fields (`sf_slice_fields`) and results (`hb_fn`); extend those passes rather than the checker. (issue-1270)
 * Package-wide facts reach a file's tier pass only through `BesideFields` in `crates/nikaia/src/text_tiers.rs` (built in `beside_fields`, read by `refine_with`); add a field there rather than a new parameter at each caller. (issue-1272)
 * A two-file package test puts the struct in `tests/compiler/src/X_beside.nika` and the user in `X_beside_caller.nika`, and the program in `tests/` calls it as `compiler_tests::fn`. (issue-1272)
-* `cargo test -p nikaia --lib text_tiers::` runs 0 tests; the tier pass is covered only by tests/compiler programs. (issue-1272)
+* `cargo test -p nikaia --lib text_tiers::` runs 0 tests; the tier pass is covered by tests/compiler programs and by the `it` tests `text_tiers::` (`crates/nikaia/tests/it/text_tiers.rs`). A checker change to lending or moving (`hands_over`, `parts_lent`, `lent_args`) is a touched test of `cargo test --profile fast -p nikaia --test it -- text_tiers::` too: #1740's first fix broke `m[line]` of a view there, and no program caught it. (issue-1272, #1753)
 * The cycle in builder.md writes `target/fast/nikaia lower-std` first, but after a failed attempt that binary holds the bad logic; run `$S/old/nikaia lower-std` first. (issue-1274)
 * A new `sv_*.nika` must be added to `solver_engine_files()` and to the hard-coded file lists in ten `tests/compiler/tests/solver_*.nika`. (issue-1339)
 * `test` is a reserved word, and the error shows only once the concatenated solver program is built. (issue-1339)
@@ -128,8 +218,9 @@ together with the specification section and an example test.
 * A change to the `check --asserts` header breaks `it` tests `assert::asserts_reports_every_claim` and `assume::asserts_lists_every_assume`, which match it exactly. (issue-1350)
 * A move probe needs a callee that keeps its argument (`all.push(x)` into a list declared outside the loop), or the checker lends the parameter and no move happens. (issue-1366)
 * Nikaia's `a..b` includes `b`; use `0..<n` for n turns. (issue-1366)
-* After an interrupted build, `cargo test --test it` can fail at link time with "undefined hidden symbol"; delete only `target/fast/deps/it-*` and `target/fast/incremental/it-*`, then rebuild. (issue-1366)
+* After an interrupted build, `cargo test --test it` can fail at link time with "undefined hidden symbol"; delete only `target/fast/deps/it-*` and `target/fast/incremental/it-*`, then rebuild. The same error linking `nikaia` itself: `cargo clean --profile fast -p nikaia-std -p nikaia` cured it (a 7.3 GiB rebuild); deleting only `target/fast/incremental/nikaia-*` and `nikaia_std-*` first is cheaper and untried. (issue-1366, #1671)
 * NK2105 for loops is decided in `hands_over_path_of` and `CheckRepeats` (`check_takes.nika`, `check_state.nika`); `revived` there also drives narrowing (ADR-382), so a new exemption needs its own set. (issue-1366)
+* A value moved inside a loop is no NK2105 when the moved name gets a new value before the turn ends: `let mut y = p` before the loop, then `use(x); x = y; y = [2]` in the body brings a parameter to `x` only on the second turn without a clone (`rust_owner_rebound_to_a_copy_is_followed`). (issue-1713)
 * `a..b` is inclusive in Nikaia (lowered `0..=b`); write `a..<b` in probes for a half-open slice. (issue-1276)
 * The prover (`prover_*.nika`) reads only the syntax tree; a checker fact reaches it only by adding a field to `ProveComptimes`, filled in `comptimes_of` (`prove.rs`, called from `check/host.rs`) and copied into `ProverState` by `prove_state`. (issue-1358)
 * `cargo test -p nikaia --lib prove::` and `--lib check::` run 0 tests; the prover is covered by the `it` tests `prove::`, `assert::`, `assume::` and by `tests/compiler` programs. (issue-1358)
@@ -148,10 +239,8 @@ together with the specification section and an example test.
 * A `Found:` filed from an earlier run: read that run's commit message (`git log --grep=#N`) first; it often holds the cause and a path already dropped. (issue-1327)
 * A `tests/compiler/tests/*.nika` program only runs under `nikaia test --project tests/compiler --filter NAME` (`nikaia run` refuses it as not the entry, and its `toolchain()` finds the compiler through its parent process). (issue-539)
 * `fs::read` returns `Bytes`, so a `catch { "" }` on it is NK1103; in a test program, read text with `process::run("cat", …).stdout`. (issue-539)
-* When `commit.nika` refuses another agent's staged file, commit only yours with `git commit --only -F MSG -- FILES`, which leaves their index entry as it was. (issue-1375)
 * A test whose assert is refused (NK1300) does not build, so it cannot sit beside a `.stdout`: put the refused case in its own test with a `.stderr`. (issue-1375)
 * When a mass migration such as `print-throws` rewrites test programs, the `accepted_sweep.rs` allow-list hashes change. The sweep's failure log pairs each new refused hash with the old "no longer checked" one, so replace the old hash with the new one. (qa-task)
-* `commit.nika` refuses when another agent's file (even an unmerged `UU` one) is staged. `git commit -- PATH` commits only your path, and the report should say so under `Deviation:`. (qa-task)
 * the bounds walk's loop candidates never read a `for`'s binding, and the prover proposes only for a `while`; past a `for`, bound a counter by its turns (D13), not by an invariant over the counter. (issue-1383)
 * pre-push shows `badges red` / `version red` (self-hosted.svg) on `develop` with nothing staged; it was red before this run, and the badges are the supervisor's. (issue-1383)
 * A brief that needs a new NK code without naming a reserved one is blocked at once; search `docs/supervisor.md` and the brief for an NK block before planning. (issue-1318)
@@ -189,7 +278,6 @@ together with the specification section and an example test.
 * When a wip draft was built before your run, `target/fast/nikaia` already holds it; build the before binary by checking out HEAD's version of only your own files, building, then `git apply` your saved patch. (issue-1473)
 * The `lower-std` cache key includes the `Build` settings, so an A/B of two settings needs a warm-up run for each binary; the first run with a fresh salt is the cold figure. (issue-1473)
 * A new `nikaia` flag must be declared in clap in `crates/nikaia/src/main.rs` (Rust); a development aid read deep inside can be kept in a static `OnceLock` set there, instead of passing it through every caller. (issue-1495)
-* `lower-std --bounds` prints only verdicts; to see a site's goal and facts, run `lower-std --bounds --bounds-trace tools/FILE.nika:LINE`. (issue-1496)
 * The walk gets no fact from `let end = a.min(n)`, so a slice `s.bytes[0..<end]` stays checked whatever length `n` names. (issue-1496)
 * A test parameter written `ref String` draws an NK1261 warning; write `String`. (issue-1496)
 * Checker facts (`check_facts.nika`) are pure Nikaia with no Rust mirror: a new field needs only its declaration and its initializer there. (issue-1411)
@@ -208,7 +296,7 @@ together with the specification section and an example test.
 * A new `VcAsk` field also needs the Rust adapters `view_changes.rs` `analyse`, `check/host.rs` `view_change_findings` and `contracts/keep.rs` `buffer_plans`, plus `emit_contracts.nika` and the `check_walked.nika` trait. (issue-1478)
 * `views_what_it_is_called_on` (`tiers.nika`) is the existing list of text methods whose result is a view of their receiver; reuse it, don't write a new list. (issue-1478)
 * A list whose items come from `split()`/`map()` is a list of views of the argument, so a probe of "owned items" must build them with `a + "…"` or `push_str`. (issue-1481)
-* Files of one package share one namespace: call a sibling file's `pub fn` by its bare name, since `mod x` is a parse error. (issue-1481)
+* Files of one package share one namespace: call a sibling file's `fn` by its bare name, private or not (`mod x` is a parse error). Mark a `fn` `pub` only where another package or the Rust host (`crates/nikaia/src`, `crates/orchestrator`) calls it: the bounds walk derives no precondition for a `pub fn` (ADR-391 D4), so a needless `pub` leaves its sites checked. (issue-1481, #1831)
 * A `??` whose left side reads a map value (`m[k] ?? []`) is NK1185 in tools code; write `m[k]?.clone() ?? []` behind a `contains_key` check. (issue-1485)
 * A heredoc report or edit script with backticks needs a quoted delimiter (`<<'EOF'`); unquoted, each backticked word runs as a shell command and silently drops out of the text. (issue-1485)
 * A new `.stderr` expectation is written only when the file is absent before `--bless-stderr`. (issue-1490)
@@ -242,10 +330,10 @@ together with the specification section and an example test.
 * A batch of test programs is driven by hand with `NIKAIA_TEST_BATCH=LIST nikaia build --project CARRIER` (LIST holds `NAME<TAB>ENTRY` lines, each program with its own `nikaia.toml`); `LIST.included` names what lowered, and `NIKAIA_LOWER_THREADS=1` makes it run in a fixed order. (issue-1639)
 * Under `nikaia test`, a refusal in the tested package never reaches a batch: the batch's own package depends on the tested package, refuses first, and every program is then built alone. (issue-1639)
 * `nikaia test --filter` matches plain text, not a regex: pass one `--filter NAME` per test to run several. (issue-1657)
-* `lowered.rs` changes on every `lower-std` after a `.nika` edit (`LOWERED_DIGEST`): commit it with your lowered file, and check stability by comparing it before and after the second build. (issue-1657)
+* `lowered.rs` changes on every `lower-std` after a `.nika` edit (`LOWERED_DIGEST`): commit it with your lowered file, and check stability by comparing it before and after the second build. When the tree's `lowered.rs` also holds another agent's `include!` line, list it under `Partial:` with your hunks staged (the digest hunk at least): `commit.nika` refuses a staged `include!` of a lowered file the commit lacks and a lowered change without its `lowered.rs`, and writes the digest of the set as committed into the staged copy itself. (issue-1657, #1709)
 * `artifact = "rust-library"` has its own path in `project_drive_drive_to` (`crate_build`): a subcommand added there needs both the program case and the library case probed. (issue-1657)
 * A test of a driver step that builds a compiler needs a stub `cargo` on PATH whose built "compiler" bakes in the source it was built from; with a BUILD of `true` the old code finds no compiler and the test passes there for nothing. (issue-1665)
 * `nikaia run` of a scratch copy of a `tests/compiler` program cannot find the toolchain through its parent; replace `toolchain()` and `root()` with absolute paths in the copy. (issue-1665)
 * The test runner's processes start in `ProgramHost::ran` in `crates/nikaia/src/project.rs`, not in `project_tests.nika`, and `std::process::run` cannot replace them because it returns text only (`NotText` on bytes). (issue-1672)
-* A test program can now set `NIKAIA_TEST_TIME_LIMIT` (default 300 s) on its nested `nikaia test`, which turns a fails-before run of a hang into a few seconds on the new binary; on the old binary, wrap it in `timeout`. (issue-1672)
+* A test program can now set `NIKAIA_TEST_TIME_LIMIT` (default 300 s; a build's limit, `NIKAIA_TEST_BUILD_TIME_LIMIT`, is ten times it unless set, 0 for none, #1775: a nested `nikaia test` with a tiny run limit sets the build's to 0) on its nested `nikaia test`, which turns a fails-before run of a hang into a few seconds on the new binary; on the old binary, wrap it in `timeout`. (issue-1672)
 

@@ -46,6 +46,9 @@ pub struct Shown {
     /// Where the finding stands, for one that names no place of its own.
     pub span: Span,
     pub labels: Vec[Marked],
+    /// The edit the finding suggests, where it is unambiguous (#1714):
+    /// what `nikaia fix` makes. Never rendered.
+    pub edit: CheckEdit?,
 }
 
 // One label, found in the text: 1-based line and column, and how wide.
@@ -285,7 +288,7 @@ pub fn paused(pause: ref Pause) -> Shown {
         let split = package_and_function(callee)
         let package = split.0
         let function = split.1
-        return Shown { warning: false, code: "NK2202", message: f"`{caller}` is `{promise}`, but it calls `{callee}`, which doesn't promise that it never pauses.", notes: [f"`{callee}` is `{package}`'s, and its source doesn't say `sync`. That its body doesn't pause today is not a promise another package can rely on."], help: f"Write `sync` after the result of `{function}` in `{package}`, or remove `{promise}` from `{caller}`.", span: pause.span.clone(), labels: [Marked { span: pause.span.clone(), word: callee.clone(), text: "doesn't promise `sync`", main: true }] }
+        return Shown { warning: false, code: "NK2202", message: f"`{caller}` is `{promise}`, but it calls `{callee}`, which doesn't promise that it never pauses.", notes: [f"`{callee}` is `{package}`'s, and its source doesn't say `sync`. That its body doesn't pause today is not a promise another package can rely on."], help: f"Write `sync` after the result of `{function}` in `{package}`, or remove `{promise}` from `{caller}`.", span: pause.span.clone(), labels: [Marked { span: pause.span.clone(), word: callee.clone(), text: "doesn't promise `sync`", main: true }], edit: null }
     }
     let ledger = if pause.from_library { "`std`" } else { "this program" }
     let article = an_or_a(callee)
@@ -297,7 +300,7 @@ pub fn paused(pause: ref Pause) -> Shown {
         notes.push(f"`{callee}` isn't declared `sync` in {ledger}.")
     }
     let message = if pause.construct { f"`{caller}` is `{promise}`, but it contains {article} `{callee}` block, which can pause." } else { f"`{caller}` is `{promise}`, but it calls `{callee}`, which can pause." }
-    return Shown { warning: false, code: "NK2202", message: message, notes: notes, help: f"Remove `{promise}` from `{caller}`, or move the call out of it.", span: pause.span.clone(), labels: [Marked { span: pause.span.clone(), word: callee.clone(), text: "this can pause", main: true }] }
+    return Shown { warning: false, code: "NK2202", message: message, notes: notes, help: f"Remove `{promise}` from `{caller}`, or move the call out of it.", span: pause.span.clone(), labels: [Marked { span: pause.span.clone(), word: callee.clone(), text: "this can pause", main: true }], edit: null }
 }
 
 // `pkg::f` as its package and its function; a name with no `::` is its
@@ -312,7 +315,7 @@ fn package_and_function(callee: ref String) -> (String, String) {
 
 /// `an` before a word that starts with a vowel the way these names are
 /// written, `a` otherwise.
-pub fn an_or_a(word: ref String) -> String {
+fn an_or_a(word: ref String) -> String {
     let first: Vec[scalar] = word.chars().collect()
     if first.len() > 0 && (first[0] == 'i' || first[0] == 'a' || first[0] == 'e' || first[0] == 'o' || first[0] == 'I' || first[0] == 'A' || first[0] == 'E' || first[0] == 'O') {
         return "an"
@@ -347,7 +350,7 @@ fn rustc_refused(message: ref Relayed, at: ref String, path: ref String, source:
     }
     let help = "This is a bug in Nikaia, not in your program: the checker accepted it, and Rust refused the code it became. Please report it, with this message, at https://github.com/Nikaia-Foundation/Nikaia/issues."
     if message.located {
-        let shown = Shown { warning: false, code: "NK1343", message: "internal compiler error", notes: notes, help: help, span: message.span.clone(), labels: [Marked { span: message.span.clone(), word: message.word.clone(), text: "", main: true }] }
+        let shown = Shown { warning: false, code: "NK1343", message: "internal compiler error", notes: notes, help: help, span: message.span.clone(), labels: [Marked { span: message.span.clone(), word: message.word.clone(), text: "", main: true }], edit: null }
         return rendered(shown, path, source)
     }
     let mut out = f"error[NK1343]: internal compiler error\n  --> {at} (no Nikaia source maps to this)\n"
@@ -401,7 +404,7 @@ pub fn relayed(message: ref Relayed, path: ref String, source: ref String, gener
     if message.internal != null {
         let original = message.internal ?? return ""
         if message.located {
-            let shown = Shown { warning: false, code: "", message: "This is a bug in Nikaia, not in your program. Please report it.", notes: ["The compiler generated two different types for one of yours.", f"What the Rust compiler said: {original}"], help: null, span: message.span.clone(), labels: [] }
+            let shown = Shown { warning: false, code: "", message: "This is a bug in Nikaia, not in your program. Please report it.", notes: ["The compiler generated two different types for one of yours.", f"What the Rust compiler said: {original}"], help: null, span: message.span.clone(), labels: [], edit: null }
             let out = rendered(shown, path, source)
             if out.starts_with("error:") {
                 return f"internal {out}"
@@ -420,7 +423,7 @@ pub fn relayed(message: ref Relayed, path: ref String, source: ref String, gener
                 notes.push(note.clone())
             }
         }
-        let shown = Shown { warning: message.level == "warning", code: "", message: message.message.clone(), notes: notes, help: help, span: message.span.clone(), labels: [Marked { span: message.span.clone(), word: message.word.clone(), text: "", main: true }] }
+        let shown = Shown { warning: message.level == "warning", code: "", message: message.message.clone(), notes: notes, help: help, span: message.span.clone(), labels: [Marked { span: message.span.clone(), word: message.word.clone(), text: "", main: true }], edit: null }
         return rendered(shown, path, source)
     }
     // Nothing in the map covers it: the emitted line is all there is, and

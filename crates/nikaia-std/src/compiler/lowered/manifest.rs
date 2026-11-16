@@ -14,12 +14,12 @@ pub(crate) fn withdrawn(key: &str) -> &'static str {
     ""
 }
 
-pub(crate) fn moved(key: &str) -> &'static str {
-    if key == "cleanup-deadline" { return "the runtime configuration file `nikaia-runtime.toml`, which is read when the program starts. How long a program waits at exit is set by whoever runs it, and the compiler no longer reads this key"; }
-    ""
+pub(crate) fn moved(key: &str) -> String {
+    if key == "cleanup-deadline" { return String::from("the runtime configuration file `nikaia-runtime.toml`, which is read when the program starts. How long a program waits at exit is set by whoever runs it, and the compiler no longer reads this key"); }
+    String::from("")
 }
 
-pub fn build_key(key: &str) -> Result<Switch, nikaia_std::error::Thrown<Refused>> {
+pub(crate) fn build_key(key: &str) -> Result<Switch, nikaia_std::error::Thrown<Refused>> {
     let gone = withdrawn(key);
     if !gone.is_empty() { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` in `[build]` is no longer supported: {}", key, gone)), &"build_key")); }
     if !contains(&known(), key) {
@@ -33,14 +33,14 @@ pub fn build_key(key: &str) -> Result<Switch, nikaia_std::error::Thrown<Refused>
 
 pub fn targets() -> Vec<String> { vec![String::from("x86_64-linux"), String::from("aarch64-linux"), String::from("wasm32-unknown")] }
 
-pub fn codegen_keys() -> Vec<String> { vec![String::from("opt-level"), String::from("lto"), String::from("codegen-units"), String::from("incremental"), String::from("debug")] }
+pub(crate) fn codegen_keys() -> Vec<String> { vec![String::from("opt-level"), String::from("lto"), String::from("codegen-units"), String::from("incremental"), String::from("debug")] }
 
 pub fn codegen_units(target: &str, units: Option<i64>, written: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
     if nikaia_std::index::or(units, || 0) < 1 { return Err(nikaia_std::error::throwing(Refused::Because(format!("`codegen-units` in `[build.{}]` is a whole number from 1, the number of pieces rustc cuts each crate into, not `{}`.", target, written)), &"codegen_units")); }
     Ok(())
 }
 
-pub fn codegen_table(target: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+pub(crate) fn codegen_table(target: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
     if !contains(&targets(), target) {
         let expected = choices(&targets());
         return Err(nikaia_std::error::throwing(Refused::Because(format!("`[build.{}]` isn't a machine Nikaia builds for. The machines are: {}.", target, expected)), &"codegen_table"));
@@ -48,7 +48,7 @@ pub fn codegen_table(target: &str) -> Result<(), nikaia_std::error::Thrown<Refus
     Ok(())
 }
 
-pub fn codegen_key(target: &str, key: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+pub(crate) fn codegen_key(target: &str, key: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
     if !contains(&codegen_keys(), key) {
         let expected = choices(&codegen_keys());
         return Err(nikaia_std::error::throwing(Refused::Because(format!("`[build.{}]` has no key called `{}`. The keys are: {}.", target, key, expected)), &"codegen_key"));
@@ -174,7 +174,12 @@ pub(crate) fn manifest_features(items: &[ManifestItem]) -> Vec<ManifestFeature> 
 
 pub fn manifest_parse(items: &[ManifestItem]) -> Result<ManifestFile, nikaia_std::error::Thrown<Refused>> {
     let mut manifest = manifest_empty();
-    for item in items.iter() { if item.section == "package" && !item.name.is_empty() && item.key.is_empty() { manifest.package.insert(nikaia_std::block::Text::from(item.name.to_string()), nikaia_std::block::Text::from(item.text.to_string())); } }
+    for item in items.iter() {
+        if item.section == "package" && !item.name.is_empty() && item.key.is_empty() {
+            if contains(&known(), &item.name) { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` is a `[build]` key, and `[package]` does not read it: move it under `[build]`.", item.name)), &"manifest_parse")); }
+            manifest.package.insert(nikaia_std::block::Text::from(item.name.to_string()), nikaia_std::block::Text::from(item.text.to_string()));
+        }
+    }
     manifest.name = manifest_word_at(items, "package", "name", "");
     manifest.version = nikaia_std::index::or(manifest_word_at(items, "package", "version", ""), || "0.0.0".into());
     manifest.dependencies = manifest_dependencies(items)?;
@@ -345,7 +350,7 @@ pub(crate) fn manifest_test_refusal(items: &[ManifestItem]) -> String {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("package"), String::from(""), false), manifest_test_word(String::from("package"), String::from("name"), String::from(""), String::from("x"))];
     let manifest = match manifest_parse(&items) {
         Ok(value) => value,
@@ -361,7 +366,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("user_parallelism"), String::from(""), String::from("yes"))];
     let said = manifest_test_refusal(&items);
     if !(said.contains("user_parallelism")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"user_parallelism\"))", None, &[]) };
@@ -370,7 +375,16 @@ pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let items = vec![manifest_test_table(String::from("package"), String::from(""), false), manifest_test_word(String::from("package"), String::from("user-parallelism"), String::from(""), String::from("yes"))];
+    let said = manifest_test_refusal(&items);
+    if !(said.contains("user-parallelism")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"user-parallelism\"))", None, &[]) };
+    if !(said.contains("[build]")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"[build]\"))", None, &[]) };
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("user-parallelism"), String::from(""), String::from("yes")), manifest_test_table(String::from("build"), String::from("x86_64-linux"), true), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("opt-level"), String::from("3"), Some(3)), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("lto"), String::from("true"), None), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("incremental"), String::from("false"), None), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("debug"), String::from("2"), Some(2))];
     let manifest = match manifest_parse(&items) {
         Ok(value) => value,
@@ -393,7 +407,7 @@ pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from("x86_64-linux"), true), manifest_test_value(String::from("build"), String::from("x86_64-linux"), String::from("opt_level"), String::from("3"), Some(3))];
     let said = manifest_test_refusal(&items);
     if !(said.contains("opt_level")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"opt_level\"))", None, &[]) };
@@ -403,21 +417,21 @@ pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_4() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from("x86_65-linux"), false), manifest_test_value(String::from("build"), String::from("x86_65-linux"), String::from("opt-level"), String::from("3"), Some(3))];
     if !(manifest_test_refusal(&items).contains("x86_64-linux")) { nikaia_std::abort::assertion_failed("assert(manifest_test_refusal(items).contains(\"x86_64-linux\"))", None, &[]) };
     Ok(())
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_5() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_6() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("dependencies"), String::from("x"), false), manifest_test_word(String::from("dependencies"), String::from("x"), String::from("type"), String::from("c")), manifest_test_word(String::from("dependencies"), String::from("x"), String::from("version"), String::from("1"))];
     if !(manifest_test_refusal(&items).contains("rust")) { nikaia_std::abort::assertion_failed("assert(manifest_test_refusal(items).contains(\"rust\"))", None, &[]) };
     Ok(())
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_6() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_7() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("dependencies"), String::from("x"), false), manifest_test_value(String::from("dependencies"), String::from("x"), String::from("type"), String::from("1"), Some(1)), manifest_test_word(String::from("dependencies"), String::from("x"), String::from("path"), String::from("../x"))];
     let said = manifest_test_refusal(&items);
     if !(said.contains("`x`")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"`x`\"))", None, &[]) };
@@ -426,7 +440,7 @@ pub(crate) fn __nikaia_test_6() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_7() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_8() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("dependencies"), String::from("http"), false), manifest_test_word(String::from("dependencies"), String::from("http"), String::from("path"), String::from("../http")), manifest_test_table(String::from("dependencies"), String::from("hyper-shim"), false), manifest_test_word(String::from("dependencies"), String::from("hyper-shim"), String::from("type"), String::from("rust")), manifest_test_word(String::from("dependencies"), String::from("hyper-shim"), String::from("version"), String::from("1"))];
     let manifest = match manifest_parse(&items) {
         Ok(value) => value,
@@ -442,7 +456,7 @@ pub(crate) fn __nikaia_test_7() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_8() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_9() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("cleanup-deadline"), String::from(""), String::from("30s"))];
     let manifest = match manifest_parse(&items) {
         Ok(value) => value,
@@ -461,7 +475,7 @@ pub(crate) fn __nikaia_test_8() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_9() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_10() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("target"), String::from(""), String::from("x86_64-linux"))];
     let manifest = match manifest_parse(&items) {
         Ok(value) => value,
@@ -475,7 +489,7 @@ pub(crate) fn __nikaia_test_9() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_10() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_11() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_word(String::from("build"), String::from("ordering"), String::from(""), String::from("strict"))];
     let said = manifest_test_refusal(&items);
     if !(said.contains("`ordering`")) { nikaia_std::abort::assertion_failed("assert(said.contains(\"`ordering`\"))", None, &[]) };
@@ -487,7 +501,7 @@ pub(crate) fn __nikaia_test_10() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_11() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_12() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let items = vec![manifest_test_table(String::from("build"), String::from(""), false), manifest_test_value(String::from("build"), String::from("user-parallelism"), String::from(""), String::from("false"), None)];
     let manifest = match manifest_parse(&items) {
         Ok(value) => value,
@@ -512,43 +526,47 @@ mod nikaia_tests {
         super::__nikaia_test_1().unwrap()
     }
     #[test]
-    fn a_per_target_table_is_not_a_switch() {
+    fn a_build_key_under_package_is_refused_naming_build() {
         super::__nikaia_test_2().unwrap()
     }
     #[test]
-    fn an_unknown_codegen_key_is_named_rather_than_ignored() {
+    fn a_per_target_table_is_not_a_switch() {
         super::__nikaia_test_3().unwrap()
     }
     #[test]
-    fn a_per_target_table_for_no_machine_is_refused() {
+    fn an_unknown_codegen_key_is_named_rather_than_ignored() {
         super::__nikaia_test_4().unwrap()
     }
     #[test]
-    fn a_dependency_naming_no_ecosystem_is_refused() {
+    fn a_per_target_table_for_no_machine_is_refused() {
         super::__nikaia_test_5().unwrap()
     }
     #[test]
-    fn a_dependency_type_that_is_not_a_word_is_refused() {
+    fn a_dependency_naming_no_ecosystem_is_refused() {
         super::__nikaia_test_6().unwrap()
     }
     #[test]
-    fn a_path_dependency_is_a_path_and_a_crate_key_is_underscored() {
+    fn a_dependency_type_that_is_not_a_word_is_refused() {
         super::__nikaia_test_7().unwrap()
     }
     #[test]
-    fn the_cleanup_deadline_is_accepted_and_says_where_it_went() {
+    fn a_path_dependency_is_a_path_and_a_crate_key_is_underscored() {
         super::__nikaia_test_8().unwrap()
     }
     #[test]
-    fn a_manifest_without_a_moved_key_has_nothing_to_say() {
+    fn the_cleanup_deadline_is_accepted_and_says_where_it_went() {
         super::__nikaia_test_9().unwrap()
     }
     #[test]
-    fn a_withdrawn_key_is_refused_saying_what_replaced_it() {
+    fn a_manifest_without_a_moved_key_has_nothing_to_say() {
         super::__nikaia_test_10().unwrap()
     }
     #[test]
-    fn a_non_string_reaches_the_switch_that_can_explain_it() {
+    fn a_withdrawn_key_is_refused_saying_what_replaced_it() {
         super::__nikaia_test_11().unwrap()
+    }
+    #[test]
+    fn a_non_string_reaches_the_switch_that_can_explain_it() {
+        super::__nikaia_test_12().unwrap()
     }
 }

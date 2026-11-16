@@ -1,0 +1,52 @@
+// A function value whose body fails in a sum (its own error beside the
+// `io::IoError` of a print) hands that failure on to its caller's channel,
+// member by member (ADR-351 D1-D4, #1836): through a lambda, a typed local
+// a named function, and a named function that pauses.
+use std::fs
+
+enum Bad { Oops }
+
+impl Error for Bad {
+    fn message(self) -> String {
+        return "oops"
+    }
+}
+
+fn fails() throws {
+    println("failing")
+    throw Bad::Oops
+}
+
+fn pauses() throws {
+    fs::write("/dev/null", fs::Root::Anywhere, "x")
+    throw Bad::Oops
+}
+
+fn twice(step: fn() throws) throws {
+    step()
+    step()
+}
+
+fn through_a_lambda() throws {
+    twice(fn() { fails() })
+}
+
+fn through_a_local() throws {
+    let g: fn() throws = fn() { fails() }
+    g()
+}
+
+fn through_a_name() throws {
+    twice(fails)
+}
+
+fn through_a_pausing_name() throws {
+    twice(pauses)
+}
+
+fn main() throws {
+    through_a_lambda() catch { println("caught a lambda") }
+    through_a_local() catch { println("caught a local") }
+    through_a_name() catch { println("caught a name") }
+    through_a_pausing_name() catch { println("caught a pausing name") }
+}

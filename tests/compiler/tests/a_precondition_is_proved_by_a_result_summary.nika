@@ -1,0 +1,29 @@
+// A precondition at a call is asked with the result summaries of the calls
+// it reads, as an `assert` is (ADR-359 D2, D14, #1849): `kind` returns 7 or
+// 0, so `need`'s `n >= 1` holds of `k + 1` and of `kind(m) + 1`.
+
+fn need(n: i64) -> i64 {
+    assert(n >= 1)
+    return n
+}
+
+fn kind(n: i64) -> i64 {
+    if n == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn bound_first(m: i64) -> i64 {
+    let k = kind(m)
+    return need(k + 1)
+}
+
+fn called_inside(m: i64) -> i64 {
+    return need(kind(m) + 1)
+}
+
+fn main() throws {
+    println(bound_first(1))
+    println(called_inside(2))
+}

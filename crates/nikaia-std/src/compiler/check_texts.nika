@@ -24,7 +24,7 @@ fn ascii_scalar(n: i64) -> scalar? sync {
 
 /// Whether a `'…'` written as `written` can be a byte: one ASCII character, or
 /// a `'\xNN'` above `\x7F`, which is only one.
-pub fn literal_is_a_byte(written: ref String) -> bool sync {
+fn literal_is_a_byte(written: ref String) -> bool sync {
     if a_high_byte(written) != null {
         return true
     }
@@ -34,7 +34,7 @@ pub fn literal_is_a_byte(written: ref String) -> bool sync {
 
 /// A `'…'` that is a byte, as the language below writes it: `b'x'`, with `\`
 /// and `'` escaped and anything not printable as `\xNN`.
-pub fn check_byte_literal(written: ref String) -> String sync {
+fn check_byte_literal(written: ref String) -> String sync {
     let text = decoded(written) fn(n) { ascii_scalar(n) } ?? ""
     let mut byte: i64 = a_high_byte(written) ?? -1
     for b in text.bytes() {
@@ -86,7 +86,7 @@ fn check_texts_ends_in_a_jump(block: ref Block) -> bool sync {
 }
 
 /// Whether an expression's value is a text literal at every end.
-pub fn ends_in_text(expr: ref Expr) -> bool sync {
+fn ends_in_text(expr: ref Expr) -> bool sync {
     return match expr {
         Expr::LitStr { .. } => true,
         Expr::If { then_branch, else_branch, .. } => if else_branch == null { false } else { both_tails_text(then_branch, else_branch ?? return false) },
@@ -139,7 +139,7 @@ fn check_texts_ends_in_a_throw(block: ref Block) -> bool sync {
 }
 
 /// Whether an expression's value is `null` at its end.
-pub fn ends_in_null(expr: ref Expr) -> bool sync {
+fn ends_in_null(expr: ref Expr) -> bool sync {
     return match expr {
         Expr::LitNull(_) => true,
         Expr::Block(block, _) => tail_is_null(block),
@@ -210,7 +210,7 @@ fn check_texts_ends_in_literal(expr: ref Expr, text: bool) -> bool sync {
     }
 }
 
-pub fn a_text_literal_expr(expr: ref Expr) -> bool sync {
+fn a_text_literal_expr(expr: ref Expr) -> bool sync {
     return match expr {
         Expr::LitStr { .. } => true,
         else => false,
@@ -221,7 +221,7 @@ impl CheckState {
     /// **A text literal where `String` is wanted is built as text of its own**
     /// (ADR-282 D4). The type it comes to, or nothing where this is not that
     /// case. `owned` is whether the position keeps what it is given.
-    pub fn text_literal(ref mut self, world: ref CheckWorld, want: ref Ty, value: ref Expr, owned: bool) -> Ty? sync {
+    fn text_literal(ref mut self, world: ref CheckWorld, want: ref Ty, value: ref Expr, owned: bool) -> Ty? sync {
         match want {
             Ty::Nullable(inner) => return self.text_literal(world, inner, value, owned),
             else => {},
@@ -370,7 +370,7 @@ impl CheckState {
 
     /// **A plain arm beside a `null` is `Some`** (ADR-279): every end of the
     /// arm that is not `null` is recorded.
-    pub fn some_at_the_tails(ref mut self, arm: ref Expr) sync {
+    fn some_at_the_tails(ref mut self, arm: ref Expr) sync {
         match arm {
             Expr::If { then_branch, else_branch, .. } => {
                 if else_branch != null {
@@ -426,7 +426,7 @@ impl CheckState {
     /// handed to a `Vec[(String, Vec[i64])]` builds its text where it is kept,
     /// as one such tuple handed alone does (#750). The list type it comes to,
     /// or nothing where an item is not such a tuple.
-    pub fn tuple_list_literal(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
+    fn tuple_list_literal(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
         let element: Ty = match want {
             Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { args[0].clone() } else { return null },
             else => return null,
@@ -453,7 +453,7 @@ impl CheckState {
 
     /// **A tuple of text literals where a tuple with text is wanted**: the
     /// tuple type it comes to, where any part was built.
-    pub fn tuple_literal(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
+    fn tuple_literal(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
         // A tuple's parts, or those of the tuple a `(A, B)?` holds (ADR-364).
         let wants: Vec[Ty] = match want {
             Ty::Tuple(parts) => parts.clone(),
@@ -550,7 +550,7 @@ impl CheckState {
     }
 
     /// **A list of tuple literals where a list of tuples with text is wanted.**
-    pub fn list_of_tuple_literals(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
+    fn list_of_tuple_literals(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
         let name = match want {
             Ty::Named { name, view, .. } => if view { return null } else { name.clone() },
             else => return null,
@@ -581,7 +581,7 @@ impl CheckState {
 }
 
 /// Whether an expression's value is a tuple literal at every end.
-pub fn ends_in_tuple(expr: ref Expr) -> bool sync {
+fn ends_in_tuple(expr: ref Expr) -> bool sync {
     let ends = tuple_ends(expr)
     if ends.len() == 0 {
         return false
@@ -599,7 +599,7 @@ pub fn ends_in_tuple(expr: ref Expr) -> bool sync {
 
 /// The ends of an `if` with an `else`, a `match` or a block, down to what is
 /// none of them; an expression that is none of them is its own end.
-pub fn tuple_ends(expr: ref Expr) -> Vec[ref Expr] sync {
+fn tuple_ends(expr: ref Expr) -> Vec[ref Expr] sync {
     let mut out: Vec[ref Expr] = []
     match expr {
         Expr::If { then_branch, else_branch, .. } => {
@@ -688,7 +688,7 @@ impl CheckState {
     /// is walked** (ADR-320 D8, as numbers are, ADR-285 D24): a `let` read
     /// only where a `u8` is wanted is a byte, one read both ways is `NK1200`,
     /// and a `'\xNN'` above `\x7F` that no use made a byte is `NK1212`.
-    pub fn chars_typed_by_their_uses(ref mut self) sync {
+    fn chars_typed_by_their_uses(ref mut self) sync {
         for (_, open) in self.flow.open_chars {
             let mut first_byte: Span? = null
             let mut first_scalar: Span? = null
@@ -720,13 +720,13 @@ impl CheckState {
                 self.findings.push(check_texts_a_byte_as_a_scalar(open.written, open.name.clone(), open.at))
             }
         }
-        self.flow.open_chars = collections::BTreeMap()
+        self.flow.open_chars.clear()
         for (literal, held) in self.flow.high_bytes {
             if !self.facts.byte_literals.contains(literal) {
                 self.findings.push(check_texts_a_byte_as_a_scalar(held.0, null, held.1))
             }
         }
-        self.flow.high_bytes = collections::BTreeMap()
+        self.flow.high_bytes.clear()
     }
 }
 

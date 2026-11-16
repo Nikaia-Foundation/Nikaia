@@ -7,16 +7,16 @@ pub(crate) fn check_finding_of(found: &Finding) -> CheckFinding {
     CheckFinding { severity, span: found.span.clone(), code: nikaia_std::block::Text::from(found.code.to_string()), message: nikaia_std::block::Text::from(found.message.to_string()), notes: found.notes.copy_owned(), help: match found.help.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    }, labels: vec![] }
+    }, labels: vec![], edit: None }
 }
 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn open_root(&self, start: i64) -> i64 {
+    pub(crate) fn open_root(&self, start: i64) -> i64 {
         let mut at = start;
         while self.flow.open_numbers.contains_key(&at) {
-            let joined = nikaia_std::index::or((*nikaia_std::index::get(&self.flow.open_numbers, &at)).as_ref().map(|__nikaia_it| __nikaia_it.joined), || at.into());
+            let joined = nikaia_std::index::or((*nikaia_std::index::get(&self.flow.open_numbers, &at)).as_ref().map(|__nikaia_it| __nikaia_it.joined), || at);
             if joined == at { break; }
             at = joined;
         }
@@ -34,7 +34,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn numbers_typed_by_their_uses(&mut self) {
+    pub(crate) fn numbers_typed_by_their_uses(&mut self) {
         self.chars_typed_by_their_uses();
         if self.flow.open_numbers.is_empty() { return; }
         let mut groups: collections::BTreeMap<i64, Vec<(i64, CheckOpenNumber)>> = collections::BTreeMap::new();
@@ -62,8 +62,8 @@ impl CheckState {
             receivers.push(receiver);
             sums.insert(head, receivers);
         }
-        self.flow.open_sums = collections::BTreeMap::new();
-        self.flow.open_numbers = collections::BTreeMap::new();
+        self.flow.open_sums.clear();
+        self.flow.open_numbers.clear();
         for (head_at, members) in groups.iter() {
             let head_at = nikaia_std::num::value(head_at);
             let mut head = nikaia_std::index::get(&members, 0).1.clone();

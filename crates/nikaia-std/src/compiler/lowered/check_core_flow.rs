@@ -1074,6 +1074,14 @@ pub(crate) fn check_core_flow_bound_in_place(state: &CheckState, world: &CheckWo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_bound_out_of_a_lent(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    let name = check_core_flow_variable(world, value);
+    let local = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    state.narrowing.lent_part_refs.contains(&local.id)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, on: &Ty, arm: &MatchArm, typed: &Ty, lendable: bool, through_the_reference: bool, mut_subject: Option<&str>, choice: i64, taken: i64, span: &Span) -> Option<Ty> {
     state.an_or_pattern_that_binds_unevenly(world, &arm.pattern, span);
@@ -1101,7 +1109,7 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     for local in frame.iter() {
         if !state.copied(world, &local.ty) {
             in_place.insert(local.id);
-            if mut_subject.is_some() { state.narrowing.in_place_refs.insert(local.id); }
+            if mut_subject.is_some() { state.narrowing.in_place_refs.insert(local.id); } else if through_the_reference && check_core_flow_bound_in_place(&state, world, value) < 0 { state.narrowing.lent_part_refs.insert(local.id); }
         }
     }
     state.scope.push(frame);
@@ -1185,7 +1193,7 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
     let a_variable = matches!(value, Expr::Variable(_, _));
     let in_place_binding = if a_variable { check_core_flow_bound_in_place(&state, world, value) } else { -1 };
     let in_place_name = in_place_binding >= 0;
-    let a_lent_parameter = a_variable && !typed.is_a_view() && moves_away(&typed) && state.a_lent_parameter(world, value);
+    let a_lent_parameter = a_variable && !typed.is_a_view() && moves_away(&typed) && (state.a_lent_parameter(world, value) || check_core_flow_bound_out_of_a_lent(&state, world, value));
     let through_the_reference = mut_subject.is_some() && a_variable || in_place_name || a_lent_parameter;
     let through_a_view = check_core_flow_through_a_view(&state, world, value);
     let text = !typed.is_a_view() && check_core_flow_owned_text(&typed) && !shapes_has_a_null_arm(arms) && check_core_flow_text_arms(arms);
@@ -1501,7 +1509,7 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
     }
     if !state.block_leaves(world, handler) && check_core_flow_widened_by_null(&value, &answers) {
         state.facts.nullable_catches.insert(node_key(guarded_expr));
-        return Ty::Nullable(Box::new(answers.clone()));
+        return Ty::Nullable(std::boxed::Box::new(answers.clone()));
     }
     if state.block_leaves(world, handler) || value.is_unknown() || value.fits(&answers) {
         if a_type_variable(&answers) && a_plain_string(&value) {

@@ -99,7 +99,7 @@ pub(crate) fn check_core_call_declared(contract: &FnContract) -> Option<Ty> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_call_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty], found: &[Ty], name: &str, span: &Span) {
+pub(crate) fn check_core_call_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty], found: &[Ty], name: &str, span: &Span) {
     let mut i: i64 = -1;
     for given in args.iter() {
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
@@ -406,7 +406,7 @@ pub(crate) fn check_core_call_unresolved<H: CheckHost>(state: &mut CheckState, w
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_call_rust_owner(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, contract: &FnContract, args: &[Expr], span: &Span) {
+pub(crate) fn check_core_call_rust_owner(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, contract: &FnContract, args: &[Expr], span: &Span) {
     if !contract.described { return; }
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let current = match match state.current.as_ref() {
@@ -471,16 +471,22 @@ pub(crate) fn check_core_call_described<H: CheckHost>(state: &mut CheckState, wo
     }
     let mut options: Vec<i64> = vec![];
     let mut literals: Vec<bool> = vec![];
+    let mut texts: Vec<String> = vec![];
     for option in config.iter() {
         options.push(id_of(&option.value) as i64);
         literals.push(a_text_literal_expr(&option.value));
+        texts.push(check_walked_written(&option.value, world.words));
     }
     state.flow.option_values = options;
     state.flow.option_literals = literals;
+    state.flow.option_written = texts;
+    state.flow.call_written = nikaia_std::block::Text::from(name.to_string());
     let typed_options = check_core_call_option_texts(state, world, contract, config, passed);
     let result = check_crossings_arguments(state, world, host, key, name, contract, args, found, &typed_options, span);
     state.flow.option_values = vec![];
     state.flow.option_literals = vec![];
+    state.flow.option_written = vec![];
+    state.flow.call_written = String::from("");
     check_core_call_options_handed_over(state, world, contract, name, config, &typed_options, span);
     let bound = argument_bindings(contract, found);
     check_crossings_a_call_that_hands_its_number_back(state, world, contract, &bound, args);
@@ -526,7 +532,7 @@ pub(crate) fn check_core_call_options_handed_over(state: &mut CheckState, world:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_call_moving_options(state: &CheckState, contract: &FnContract, written: &str, passed: &[(String, Ty)]) -> Vec<(String, Ty)> {
+pub(crate) fn check_core_call_moving_options(state: &CheckState, contract: &FnContract, written: &str, passed: &[(String, Ty)]) -> Vec<(String, Ty)> {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     if state.foreign_names.contains(written) { return vec![]; }
     let options = lowered_options(contract);
@@ -662,7 +668,11 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
         state.a_handle_is_not_made_here(name, span);
         return check_core_call_named(name);
     }
-    if is_hull(name) { return state.hull(name, args.len() as i64, &found, span); }
+    if is_hull(name) {
+        let built = state.hull(name, args.len() as i64, &found, span);
+        check_core_call_on_weighs(state, &built, "new");
+        return built;
+    }
     if !have { return check_core_call_unresolved(state, world, host, func, name, args, &found, config, &passed, shadowed, span); }
     let contract: FnContract = match callee { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     let described = check_core_call_described(state, world, host, name, &key, &contract, args, &found, config, &passed, span);
@@ -710,11 +720,11 @@ pub(crate) fn check_core_call_hands_back_a_variable(contract: &FnContract) -> bo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+pub(crate) fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     let member = check_core_call_attribute_member(&state, world, func);
     if member != "" {
         let read: String = match check_attributes_an_attribute_read(state, world, args, span) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-        if member == "attribute" { return Ty::Nullable(Box::new(check_core_call_named(&read))); }
+        if member == "attribute" { return Ty::Nullable(std::boxed::Box::new(check_core_call_named(&read))); }
         return Ty::Named { name: String::from("Vec"), args: vec![check_core_call_named(&read)], view: false };
     }
     if state.inside_a_door {
@@ -833,7 +843,7 @@ pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world
     }
     if !needed {
         let note: String = String::from("Brackets after a function's name are allowed while their uses are collected; here the arguments already say the type.");
-        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1233"), message: format!("`{}[…]` names a type the arguments of the call already say.", name), notes: vec![note], help: Some(format!("Leave the brackets out, `{}(…)`, or add your use case to https://github.com/Nikaia-Foundation/Nikaia/issues/514.", name)), labels: vec![] });
+        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1233"), message: format!("`{}[…]` names a type the arguments of the call already say.", name), notes: vec![note], help: Some(format!("Leave the brackets out, `{}(…)`, or add your use case to https://github.com/Nikaia-Foundation/Nikaia/issues/514.", name)), labels: vec![], edit: None });
         state.facts.plain_bracket_calls.insert(id_of(base) as i64);
     }
     let walked: String = nikaia_std::index::or(match state.walks_fields.get(&name) {
@@ -883,7 +893,7 @@ pub(crate) fn check_core_call_type_parameters(world: &CheckWorld<'_, '_, '_, '_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn signature_type_variables(signature: &Signature) -> Vec<String> {
+pub(crate) fn signature_type_variables(signature: &Signature) -> Vec<String> {
     let mut found: Vec<String> = vec![];
     for param in signature.params.iter() { check_core_call_variables_in(&param.1, &mut found); }
     if signature.result.is_some() {
@@ -940,7 +950,7 @@ pub(crate) fn check_core_call_ty_names(ty: &Ty, parameter: &str) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+pub(crate) fn check_core_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     if check_core_call_the_prelude_claim(&state, world, func, "assert") { return check_core_an_assert(state, world, host, args, config, span, false); }
     if check_core_call_the_prelude_claim(&state, world, func, "assume") {
         state.an_assume_outside_unsafe(span);
@@ -951,7 +961,7 @@ pub fn check_core_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_tuple<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, parts: &[Expr], span: &Span) -> Ty {
+pub(crate) fn check_core_tuple<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, parts: &[Expr], span: &Span) -> Ty {
     let mut found: Vec<Ty> = vec![];
     for part in parts.iter() { found.push(check_core_expr(state, world, host, part, span)); }
     let mut i: i64 = 0;

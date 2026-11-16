@@ -191,7 +191,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         }
         false
     }
-    pub fn unhashed(&self, ty: &'a Ty) -> Ty {
+    pub(crate) fn unhashed(&self, ty: &'a Ty) -> Ty {
         let mut at = ty.clone();
         let mut turns = 0;
         while turns < 32 {
@@ -253,7 +253,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
     }
 }
 
-pub fn compare_refusal(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, left: &Ty, right: &Ty, span: &Span) -> Option<CheckFinding> {
+pub(crate) fn compare_refusal(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, left: &Ty, right: &Ty, span: &Span) -> Option<CheckFinding> {
     let mut found: String = String::from("");
     if !asking.of(left) { found = left.text(); } else if !asking.of(right) { found = right.text(); }
     if found == "" { return None; }
@@ -268,7 +268,7 @@ pub struct CompareDeclared {
     pub hashes: Vec<String>,
 }
 
-pub fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_>) -> CompareDeclared {
+pub(crate) fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_>) -> CompareDeclared {
     let mut declared: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in here.items.iter() {
         match &item.node {
@@ -300,7 +300,7 @@ pub fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, he
 }
 
 impl CheckState {
-    pub fn a_write_that_skips_the_door(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, into: &Ty, written: &str, span: &Span) {
+    pub(crate) fn a_write_that_skips_the_door(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, into: &Ty, written: &str, span: &Span) {
         let hull = match into {
             Ty::Named { name, .. } => name == "SharedMut",
             _ => false,
@@ -313,11 +313,11 @@ impl CheckState {
         let note: String = String::from("Changing shared state goes through a method that takes the lock.");
         self.findings.push(check_refusal("NK2204", span, format!("You can't assign to `{}` directly: it holds shared mutable state.", bound), vec![note], Some(format!("Write `{}.set({})`.", bound, written))));
     }
-    pub fn a_failing_cleanup_undeclared(&mut self, name: &str, ty: &Ty, owner: &str, span: &Span) {
+    pub(crate) fn a_failing_cleanup_undeclared(&mut self, name: &str, ty: &Ty, owner: &str, span: &Span) {
         let finding = match self.a_failing_cleanup_refusal(name, ty, owner, span) { Some(__nikaia_value) => __nikaia_value, None => return };
         self.findings.push(finding);
     }
-    pub fn a_failing_cleanup_refusal(&self, name: &str, ty: &Ty, owner: &str, span: &Span) -> Option<CheckFinding> {
+    pub(crate) fn a_failing_cleanup_refusal(&self, name: &str, ty: &Ty, owner: &str, span: &Span) -> Option<CheckFinding> {
         if self.flow.throwing || self.flow.caught || self.current.is_none() { return None; }
         let mut is: &'static str = "holds";
         match ty.unseen() {
@@ -328,7 +328,7 @@ impl CheckState {
         if is == "is" { help = format!("Declare the function with `throws`, or close it yourself where you want to handle the failure: `{}.close() catch {{ … }}`.", name); }
         Some(check_refusal("NK2605", span, format!("This function can fail, because cleaning up `{}` can fail.", name), vec![format!("`{}` {} a `{}`. Its cleanup runs at the end of this block and can fail, so the function can fail with it.", name, is, owner)], Some(help)))
     }
-    pub fn parts_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, parts: &collections::BTreeMap<String, Ty>, from: i64, changed_from: i64) -> collections::BTreeSet<String> {
+    pub(crate) fn parts_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, parts: &collections::BTreeMap<String, Ty>, from: i64, changed_from: i64) -> collections::BTreeSet<String> {
         let mut lent: collections::BTreeSet<String> = collections::BTreeSet::new();
         for (name, ty) in parts.iter() {
             if !self.takes_away(world, ty) { continue; }
@@ -343,7 +343,7 @@ impl CheckState {
                 if *nikaia_std::index::get(&self.changed, nikaia_std::index::at(at)) == *name { taken = true; }
                 at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
-            if taken || check_gives_back(body, name, world.words) || self.gives_back_a_moving_field(world, body, name, ty) { continue; }
+            if taken || check_gives_back(body, name, world.words) || self.gives_back_a_moving_field(world, body, name, ty) || compare_wrapped_by_the_tiers(body, name, world.words) { continue; }
             lent.insert(nikaia_std::block::Text::from(name.to_string()));
         }
         lent
@@ -372,6 +372,27 @@ impl CheckState {
     }
 }
 
+pub(crate) fn compare_wrapped_by_the_tiers(body: &Expr, name: &str, words: &winnow_grammar::InternerContext) -> bool {
+    for expr in visited_in_expr(body) {
+        match expr {
+            Expr::MethodCall { receiver, method, args, config, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                let called = words.resolve(method);
+                if !args.is_empty() || !config.is_empty() || called != "into_either" && called != "into_either_maybe" { continue; }
+                match receiver {
+                    Expr::Variable(read, _) => {
+                        let read = *read;
+                        if words.resolve(read) == name { return true; }
+                    },
+                    _ => { },
+                }
+            },
+            _ => { },
+        }
+    }
+    false
+}
+
 pub(crate) fn compare_base(name: &str) -> String {
     let parts = name.split("::");
     let mut last: String = nikaia_std::block::Text::from(name.to_string());
@@ -381,7 +402,7 @@ pub(crate) fn compare_base(name: &str) -> String {
 
 pub(crate) fn compare_path_within(path: &str, name: &str, inside: &str) -> bool { path == name || path.starts_with(AsRef::<str>::as_ref(inside)) }
 
-pub fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, parameters: &collections::BTreeMap<String, Vec<String>>, key: &str, wanted: &collections::BTreeMap<String, Vec<String>>, bound: &collections::BTreeMap<String, Ty>, span: &Span) -> Vec<CheckFinding> {
+pub(crate) fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, parameters: &collections::BTreeMap<String, Vec<String>>, key: &str, wanted: &collections::BTreeMap<String, Vec<String>>, bound: &collections::BTreeMap<String, Ty>, span: &Span) -> Vec<CheckFinding> {
     let mut refused: Vec<CheckFinding> = vec![];
     for (parameter, traits) in wanted.iter() {
         let held = match bound.get(parameter) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -425,7 +446,7 @@ pub fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, 
     refused
 }
 
-pub fn compare_keys_with_no_order(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
+pub(crate) fn compare_keys_with_no_order(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
     let mut refused: Vec<CheckFinding> = vec![];
     let mut stack: Vec<Ty> = nikaia_std::block::List::from_array_in([ty.clone()], nikaia_std::block::Place::Block);
     while !stack.is_empty() {
@@ -448,7 +469,7 @@ pub fn compare_keys_with_no_order(asking: &CheckComparable<'_, '_, '_, '_, '_, '
     refused
 }
 
-pub fn compare_keys_that_do_not_hash(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
+pub(crate) fn compare_keys_that_do_not_hash(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
     let mut refused: Vec<CheckFinding> = vec![];
     let mut stack: Vec<Ty> = nikaia_std::block::List::from_array_in([ty.clone()], nikaia_std::block::Place::Block);
     while !stack.is_empty() {
@@ -495,7 +516,7 @@ pub(crate) fn compare_parameter_bounds(ty: &Ty, parameters: &collections::BTreeM
     bounds.copy_owned()
 }
 
-pub fn compare_language_impls(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_>) -> Vec<CheckFinding> {
+pub(crate) fn compare_language_impls(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_>) -> Vec<CheckFinding> {
     let mut refused: Vec<CheckFinding> = vec![];
     for item in here.items.iter() {
         match &item.node {

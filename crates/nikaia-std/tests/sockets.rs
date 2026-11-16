@@ -23,7 +23,7 @@ fn run<T: Send + 'static>(work: impl std::future::Future<Output = T> + Send + 's
 #[test]
 fn a_listener_accepts_and_the_two_ends_talk() {
     let said = run(async {
-        let listener = net::listen("127.0.0.1:0").await.expect("a listener");
+        let listener = net::listen("127.0.0.1:0", None).await.expect("a listener");
         let address = listener.address();
         assert!(address.starts_with("127.0.0.1:"), "{address}");
 
@@ -37,7 +37,7 @@ fn a_listener_accepts_and_the_two_ends_talk() {
             String::from_utf8_lossy(asked.as_ref()).to_string()
         };
         let asking = async {
-            let mut connection = net::connect(&address).await.expect("connected");
+            let mut connection = net::connect(&address, None).await.expect("connected");
             connection.write(b"ping").await.expect("the ask goes out");
             let answer = connection.read().await.expect("the answer");
             String::from_utf8_lossy(answer.as_ref()).to_string()
@@ -54,14 +54,14 @@ fn a_listener_accepts_and_the_two_ends_talk() {
 #[test]
 fn a_closed_peer_reads_as_nothing() {
     let nothing = run(async {
-        let listener = net::listen("127.0.0.1:0").await.expect("a listener");
+        let listener = net::listen("127.0.0.1:0", None).await.expect("a listener");
         let address = listener.address();
         let serving = async {
             let mut connection = listener.accept().await.expect("a connection");
             connection.read().await.expect("a read")
         };
         let asking = async {
-            let connection = net::connect(&address).await.expect("connected");
+            let connection = net::connect(&address, None).await.expect("connected");
             connection.close();
         };
         let (read, ()) = futures_join(serving, asking).await;

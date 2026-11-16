@@ -55,7 +55,7 @@ pub fn result_from_check(view: ref ParsedView, inferred: ref Vec[ResultSource]) 
 /// **The ledger's sources, as written** (D10): each function of `items` that
 /// writes `from` points into what it names, in the order written, whatever
 /// the body reaches.
-pub fn result_from_as_written(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], mut sources: Vec[ResultSource]) {
+fn result_from_as_written(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], mut sources: Vec[ResultSource]) {
     let mut written: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     for item in items {
         match item.node {
@@ -138,7 +138,7 @@ fn result_from_note() -> String {
 /// the type, or a `from` on a type whose parameters have no names, is
 /// `NK1335`. The types inside it are walked by the caller
 /// (`types.nika`, `written_at_the_boundary`).
-pub fn result_from_of_code(names: ref winnow_grammar::InternerContext, ty: ref Type, span: ref Span) -> Finding? {
+fn result_from_of_code(names: ref winnow_grammar::InternerContext, ty: ref Type, span: ref Span) -> Finding? {
     let code = ty.code ?? return null
     if code.result_from.is_empty() {
         return null

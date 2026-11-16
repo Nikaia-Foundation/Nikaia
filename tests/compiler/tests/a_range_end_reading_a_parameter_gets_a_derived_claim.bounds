@@ -1,0 +1,6 @@
+bounds in tests/a_range_end_reading_a_parameter_gets_a_derived_claim.nika: 1 indexes, 1 proved; 3 operations, 2 proved
+     7  last + 1         proved
+     8  n + toks[k - 1]  checked: a counter the loop on line 7 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+     8  toks[k - 1]      proved
+     8  k - 1            proved
+  derived  ranged: 0 <= last, last < toks.len(), proved at the calls on lines 15

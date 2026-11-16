@@ -1,0 +1,5 @@
+bounds in tests/a_method_compared_in_an_early_return_proves_the_read.nika: 2 indexes, 1 proved; 0 operations, 0 proved
+    19  self.marks[at]  proved
+    27  self.marks[at]  checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+  derived  drop_at: 0 <= at, proved at the calls on lines 36
+  derived  mark_at: at <= self.marks.len(), proved at the calls on lines 33, 34, 35

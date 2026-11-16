@@ -216,6 +216,26 @@ impl<K, V, S> HashMap<K, V, S> {
         self.table.is_empty()
     }
 
+    /// **The bytes its table holds outside every block** (ADR-327 D9): the
+    /// whole allocation, slots and control bytes, as `hashbrown` made it; none
+    /// where the table is in the running task's block. A table placed in a
+    /// block with no entry to ask about is taken to be there, where
+    /// [`Place::Block`] puts it while a task runs.
+    pub fn outside_size(&self) -> usize {
+        let place = *self.table.allocator();
+        let in_block = place == Place::Block
+            && self
+                .table
+                .iter()
+                .next()
+                .is_none_or(|entry| place.holds(std::ptr::from_ref(entry).cast_mut().cast()));
+        if in_block {
+            0
+        } else {
+            self.table.allocation_size()
+        }
+    }
+
     /// Every entry, in the table's order.
     #[inline]
     pub fn iter(&self) -> Iter<'_, K, V> {

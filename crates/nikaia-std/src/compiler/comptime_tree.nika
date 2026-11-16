@@ -66,7 +66,7 @@ pub comptime TURN_MARK: ref String = "__nikaia_comptime_turn"
 
 /// The checker's half: `value` read in the turn of `on` at `field`, the turn's
 /// field held by `local`.
-pub fn comptime_turn_marked(on: ref String, field: ref String, local: ref String, value: ref Expr) -> Expr sync {
+fn comptime_turn_marked(on: ref String, field: ref String, local: ref String, value: ref Expr) -> Expr sync {
     let texts: Vec[Expr] = [on, field, local].iter().map(fn(text) { Expr::LitStr { text: text.clone(), id: fresh_id() } }).collect()
     let mut args = texts
     args.push(value.clone())
@@ -377,7 +377,7 @@ pub fn comptime_as_built(ty: Ty) -> Ty {
 /// neither `library` has nor a file of the program declares
 /// (`declared_in_files`, over `comptime_declares`): its result has no type,
 /// so neither has the value, and the callee is why.
-pub fn comptime_undeclared_callee(words: ref winnow_grammar::InternerContext, value: ref Expr, library: ref Ledger, declared_in_files: fn(ref String) -> bool sync) -> String? {
+fn comptime_undeclared_callee(words: ref winnow_grammar::InternerContext, value: ref Expr, library: ref Ledger, declared_in_files: fn(ref String) -> bool sync) -> String? {
     for expr in visited_in_expr(value) {
         match expr {
             Expr::Call { func, .. } => match func {
@@ -396,7 +396,7 @@ pub fn comptime_undeclared_callee(words: ref winnow_grammar::InternerContext, va
 }
 
 /// Whether one file declares `name`: a function, a struct or an enum.
-pub fn comptime_declares(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext, name: String) -> bool {
+fn comptime_declares(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext, name: String) -> bool {
     return items.iter().any(fn(item) { comptime_declared_as(item.node, words) == name })
 }
 
@@ -415,7 +415,7 @@ fn comptime_declared_as(item: ref Item, words: ref winnow_grammar::InternerConte
 /// its name or its path, a method by its key (`Reader::read`), read off the
 /// program's entries (`derived`) and then `std`'s. `forbidden` asks the rule
 /// (D2) of the entry a key names.
-pub fn comptime_culprit(words: ref winnow_grammar::InternerContext, value: ref Expr, derived: ref Ledger, forbidden: fn(ref String) -> bool sync) -> String? {
+fn comptime_culprit(words: ref winnow_grammar::InternerContext, value: ref Expr, derived: ref Ledger, forbidden: fn(ref String) -> bool sync) -> String? {
     for expr in visited_in_expr(value) {
         let key = comptime_key_of(words, expr, derived, forbidden) ?? continue
         if forbidden(key) {
@@ -659,8 +659,15 @@ pub fn comptime_without_foreign(mut items: Vec[Spanned[Item]], words: ref winnow
             Item::Extern { .. } => {},
             Item::Impl { trait_name, target, methods } => {
                 let owner = f"{a_symbols_text(words, target.name)}::"
+                let whole = methods.len()
                 let mut left = methods
                 left.retain(fn(method) { comptime_runs(method.node, words, owner, runs) })
+                // A trait's impl is whole or not there: one that lost a method
+                // is a rustc refusal (E0046), and what calls the lost method
+                // is refused before this program is built.
+                if trait_name != null && left.len() != whole {
+                    continue
+                }
                 let node = Item::Impl { trait_name: trait_name, target: target, methods: left }
                 kept.push(Spanned { node: node, span: item.span, doc: item.doc, attributes: item.attributes })
             },

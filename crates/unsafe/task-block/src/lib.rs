@@ -676,6 +676,16 @@ pub fn enter(block: &Block) -> Entered {
     }
 }
 
+/// **No block in place until the guard is dropped** (D9): what the runtime
+/// builds and frees for its own bookkeeping - a task's slot, its body's box,
+/// its place in a queue - counts against no task.
+#[inline]
+pub fn outside() -> Entered {
+    Entered {
+        previous: CURRENT.with(|current| current.replace(std::ptr::null())),
+    }
+}
+
 impl Drop for Entered {
     #[inline]
     fn drop(&mut self) {
@@ -823,7 +833,7 @@ impl Place {
     /// Whether `ptr` is in the running task's block, where this handle
     /// places.
     #[inline(always)]
-    pub(crate) fn holds(self, ptr: *mut u8) -> bool {
+    pub fn holds(self, ptr: *mut u8) -> bool {
         self.block()
             .is_some_and(|block| block.ours(ptr) || block.chained(ptr))
     }
@@ -914,6 +924,27 @@ impl<T> Housed<T> {
         }
     }
 
+    /// **A value built already, outside, whose weight moves in with it** (D9,
+    /// #1751): its `size` bytes on the heap leave the running task and count
+    /// against the value's block from its creation, as a `set` moves them, so
+    /// what the value frees inside its block was counted there. The block holds
+    /// the value's segments and the one a shared value always had, so a value
+    /// bigger than a segment fits, and a `set` that fitted a one-segment block
+    /// still fits beside it.
+    pub fn moved_in(value: T, size: usize) -> Housed<T> {
+        let segments = size.div_ceil(BLOCK).saturating_add(1);
+        let housed = Housed {
+            value: std::mem::ManuallyDrop::new(value),
+            block: Block::with_budget(segments.saturating_mul(BLOCK)),
+        };
+        hand_over(size);
+        {
+            let _in = enter(&housed.block);
+            count(isize::try_from(size).unwrap_or(isize::MAX));
+        }
+        housed
+    }
+
     /// A value built inside its own block (D5: the construction is the
     /// value's).
     #[track_caller]
@@ -944,6 +975,15 @@ impl<T> Housed<T> {
     #[inline]
     pub fn get(&self) -> &T {
         &self.value
+    }
+
+    /// The value, without its block in place, for a door that leaves it
+    /// whole or puts back a copy (`access`, `get`, `update` of a value that
+    /// copies): what it builds leaves the door, so it is the task's that
+    /// opened it and counts there (D9, #1554).
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut T {
+        &mut self.value
     }
 }
 

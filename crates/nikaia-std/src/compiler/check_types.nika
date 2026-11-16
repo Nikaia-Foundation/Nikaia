@@ -8,12 +8,12 @@
 // needs a ledger or the program stays with the checker.
 
 /// The numbers Part I 2.2 offers, by name.
-pub fn a_number_name(name: ref String) -> bool {
+fn a_number_name(name: ref String) -> bool {
     return name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" || name == "f32" || name == "f64"
 }
 
 /// A floating-point type, `f32` or `f64`, viewed or not.
-pub fn a_float_type(ty: ref Ty) -> bool {
+fn a_float_type(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, .. } => args.len() == 0 && (name == "f32" || name == "f64"),
         else => false,
@@ -21,7 +21,7 @@ pub fn a_float_type(ty: ref Ty) -> bool {
 }
 
 /// **An integer written as a literal**, negated or not: `2`, `-2`.
-pub fn an_integer_literal(expr: ref Expr) -> bool {
+fn an_integer_literal(expr: ref Expr) -> bool {
     return match check_peeled(expr) {
         Expr::LitInt { .. } => true,
         Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && an_integer_literal(expr),
@@ -30,13 +30,13 @@ pub fn an_integer_literal(expr: ref Expr) -> bool {
 }
 
 /// A name's last segment: `fs::Root` is `Root`.
-pub fn type_last_segment(name: ref String) -> String {
+fn type_last_segment(name: ref String) -> String {
     return (name.rsplit("::").next() ?? name).clone()
 }
 
 /// **A view of a type**: a view of text is `str`, a view of anything else is
 /// the same type read through `ref`, and a view of a `T?` is a `T?` of views.
-pub fn view_of_type(inner: ref Ty) -> Ty {
+fn view_of_type(inner: ref Ty) -> Ty {
     return match inner {
         Ty::Named { name, args, view } => if view { inner.clone() } else { if args.len() == 0 && name == "String" { Ty::Named { name: "str", args: [], view: true } } else { Ty::Named { name: name.clone(), args: args.clone(), view: true } } },
         Ty::Nullable(held) => Ty::Nullable(view_of_type(held)),
@@ -46,7 +46,7 @@ pub fn view_of_type(inner: ref Ty) -> Ty {
 
 /// **What a view may be a view of**: `str` of `String`, any other view of the
 /// same type held.
-pub fn viewed_from_type(view: ref Ty) -> Vec[Ty] {
+fn viewed_from_type(view: ref Ty) -> Vec[Ty] {
     return match view {
         Ty::Named { name, args, view } => if !view { [] } else { if args.len() == 0 && name == "str" { [Ty::Named { name: "String", args: [], view: false }] } else { [Ty::Named { name: name.clone(), args: args.clone(), view: false }] } },
         else => [],
@@ -54,7 +54,7 @@ pub fn viewed_from_type(view: ref Ty) -> Vec[Ty] {
 }
 
 /// The type itself, read without `ref`.
-pub fn unviewed_type(ty: ref Ty) -> Ty {
+fn unviewed_type(ty: ref Ty) -> Ty {
     return match ty {
         // The text view's own is `String` (ADR-184 D2, #1388).
         Ty::Named { name, args, view } => if view && args.len() == 0 && name == TEXT_VIEW { Ty::Named { name: TEXT.clone(), args: [], view: false } } else { Ty::Named { name: name.clone(), args: args.clone(), view: false } },
@@ -65,7 +65,7 @@ pub fn unviewed_type(ty: ref Ty) -> Ty {
 /// **A run handed to a lent or `mut` `Array[T]`** (ADR-views-3 D11, #1209):
 /// the parameter is an array with no length, and the argument a list, an
 /// array or a part of either, whose elements fit.
-pub fn hands_a_run(found: ref Ty, want: ref Ty) -> bool {
+fn hands_a_run(found: ref Ty, want: ref Ty) -> bool {
     let wanted = match want {
         Ty::Named { name, args, view } => !view && name == ARRAY && args.len() == 1,
         else => false,
@@ -88,7 +88,7 @@ pub fn hands_a_run(found: ref Ty, want: ref Ty) -> bool {
 /// typed as the `ref Array[T]` it lowers to, and is a view already, as a
 /// part `v[a..b]` is. Only a lent parameter takes it: a `mut` one needs a
 /// run it may change.
-pub fn hands_a_run_view(found: ref Ty, want: ref Ty) -> bool {
+fn hands_a_run_view(found: ref Ty, want: ref Ty) -> bool {
     return match found {
         Ty::Pointed { item, slice, mutable } => slice && !mutable && match want {
             Ty::Named { name, args, view } => !view && name == ARRAY && args.len() == 1 && item.fits(args[0]),
@@ -99,7 +99,7 @@ pub fn hands_a_run_view(found: ref Ty, want: ref Ty) -> bool {
 }
 
 /// A view of a number, a `bool` or a `char`: read, it is the same value.
-pub fn copies_as_a_view(ty: ref Ty) -> bool {
+fn copies_as_a_view(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, view } => view && args.len() == 0 && (a_number_name(name) || name == "bool" || name == "char" || name == "scalar"),
         else => false,
@@ -107,7 +107,7 @@ pub fn copies_as_a_view(ty: ref Ty) -> bool {
 }
 
 /// The value such a view reads as, and any other type as it is.
-pub fn value_of_a_copy(ty: ref Ty) -> Ty {
+fn value_of_a_copy(ty: ref Ty) -> Ty {
     if copies_as_a_view(ty) {
         return unviewed_type(ty)
     }
@@ -115,7 +115,7 @@ pub fn value_of_a_copy(ty: ref Ty) -> Ty {
 }
 
 /// A view of text, however the name is written.
-pub fn is_a_view_of_a_string(ty: ref Ty) -> bool {
+fn is_a_view_of_a_string(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, view } => view && args.len() == 0 && type_last_segment(name) == "String",
         else => false,
@@ -123,7 +123,7 @@ pub fn is_a_view_of_a_string(ty: ref Ty) -> bool {
 }
 
 /// A number, a `bool` or a `char`, held and not viewed.
-pub fn a_copy_by_value(ty: ref Ty) -> bool {
+fn a_copy_by_value(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, view } => !view && args.len() == 0 && (a_number_name(name) || name == "bool" || name == "char" || name == "scalar"),
         else => false,
@@ -153,7 +153,7 @@ fn any_moves_away(types: ref Array[Ty]) -> bool {
 
 /// **Whether handing a value of this type out takes nothing away**: Part I
 /// 2.2's numbers, `bool`, `char` and any view - `moves_away`'s other half.
-pub fn copies_plainly(ty: ref Ty) -> bool {
+fn copies_plainly(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, view } => if name == ARRAY { all_copy(args) } else { view || name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" },
         else => false,
@@ -170,7 +170,7 @@ fn all_copy(types: ref Array[Ty]) -> bool {
 }
 
 /// Whether a type holds an `Array` anywhere inline.
-pub fn holds_an_array(ty: ref Ty) -> bool {
+fn holds_an_array(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, .. } => name == ARRAY || any_holds_an_array(args),
         Ty::Tuple(parts) => any_holds_an_array(parts),
@@ -189,7 +189,7 @@ fn any_holds_an_array(types: ref Array[Ty]) -> bool {
 }
 
 /// A list: what `[…]` makes, and what `Vec()` builds.
-pub fn is_a_list_type(ty: ref Ty) -> bool {
+fn is_a_list_type(ty: ref Ty) -> bool {
     return match ty.unseen() {
         Ty::Named { name, .. } => name == "Vec" || name == "List" || name == "Array",
         else => false,
@@ -197,7 +197,7 @@ pub fn is_a_list_type(ty: ref Ty) -> bool {
 }
 
 /// A list, a map or a set - the types Part I gives no operator.
-pub fn is_a_collection_type(ty: ref Ty) -> bool {
+fn is_a_collection_type(ty: ref Ty) -> bool {
     if is_a_list_type(ty) {
         return true
     }
@@ -212,7 +212,7 @@ pub fn is_a_collection_type(ty: ref Ty) -> bool {
 
 /// Whether a type is one this language calls text: `String` and a view of
 /// it, and nothing else - a `T?` is not text (Part I 2.3).
-pub fn is_text_type(ty: ref Ty) -> bool {
+fn is_text_type(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, .. } => args.len() == 0 && (name == "String" || name == "str"),
         else => false,
@@ -223,12 +223,12 @@ pub fn is_text_type(ty: ref Ty) -> bool {
 
 /// `Shared[T]`, `SharedMut[T]`, `Locked[T]`: a value held where more than
 /// one place may reach it.
-pub fn is_a_hull(name: ref String) -> bool {
+fn is_a_hull(name: ref String) -> bool {
     return name == "Shared" || name == "SharedMut" || name == "Locked"
 }
 
 /// What a hull a body may change holds: `SharedMut[T]` or `Locked[T]`'s `T`.
-pub fn locked_content_of(ty: ref Ty) -> Ty? {
+fn locked_content_of(ty: ref Ty) -> Ty? {
     return match ty {
         Ty::Named { name, args, .. } => if (name == "SharedMut" || name == "Locked") && args.len() > 0 { args[0].clone() } else { null },
         else => null,
@@ -236,7 +236,7 @@ pub fn locked_content_of(ty: ref Ty) -> Ty? {
 }
 
 /// A handle that is shared: `Shared[T]` or `SharedMut[T]`, held.
-pub fn is_a_handle(ty: ref Ty) -> bool {
+fn is_a_handle(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, view, .. } => !view && (name == "Shared" || name == "SharedMut"),
         else => false,
@@ -244,7 +244,7 @@ pub fn is_a_handle(ty: ref Ty) -> bool {
 }
 
 /// What a `Locked[T]` holds, and any other type as it is.
-pub fn locked_content(ty: ref Ty) -> Ty {
+fn locked_content(ty: ref Ty) -> Ty {
     return match ty {
         Ty::Named { name, args, view } => if name == "Locked" && !view && args.len() == 1 { args[0].clone() } else { ty.clone() },
         else => ty.clone(),
@@ -253,7 +253,7 @@ pub fn locked_content(ty: ref Ty) -> Ty {
 
 /// **A value that goes into a hull it fits**: `Shared(x)` where `x` is the
 /// held type, or what a `Locked` inside it holds.
-pub fn becomes_shared(found: ref Ty, want: ref Ty) -> bool {
+fn becomes_shared(found: ref Ty, want: ref Ty) -> bool {
     return match want {
         Ty::Named { name, args, view } => {
             if !is_a_hull(name) || view || args.len() != 1 || found.is_unknown() {
@@ -269,7 +269,7 @@ pub fn becomes_shared(found: ref Ty, want: ref Ty) -> bool {
 /// **The one way out of a mismatch** (Part III C.2): wrap it in its hull,
 /// declare a part of a list as one, clone a view, lend text, convert a number
 /// - or the two declarations, either of which may be the wrong one.
-pub fn way_out_of_a_mismatch(found: ref Ty, want: ref Ty) -> String {
+fn way_out_of_a_mismatch(found: ref Ty, want: ref Ty) -> String {
     if becomes_shared(found, want) {
         let hull = match want {
             Ty::Named { name, .. } => name.clone(),
@@ -415,7 +415,7 @@ fn part_of_a_list(found: ref Ty, want: ref Ty) -> String? {
 /// **The element one binding of a `for` takes**: a list's or a set's one
 /// argument, an array's first, a run's item, a sequence's item - and
 /// `Unknown` where none of these is what is walked.
-pub fn element_walked(over: ref Ty, bindings: i64) -> Ty {
+fn element_walked(over: ref Ty, bindings: i64) -> Ty {
     if bindings != 1 {
         return Ty::Unknown
     }
@@ -453,7 +453,7 @@ pub fn element_walked(over: ref Ty, bindings: i64) -> Ty {
 /// **The words the program was started with**, `cli::args()`'s `cli::Args`:
 /// an iterator, so a `for` walks it by value and uses it up, as a sequence
 /// that does not replay (ADR-105 D2, ADR-293 D19; #1416).
-pub fn the_command_line(ty: ref Ty) -> bool {
+fn the_command_line(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, view } => !view && args.len() == 0 && name == "cli::Args",
         else => false,
@@ -463,7 +463,7 @@ pub fn the_command_line(ty: ref Ty) -> bool {
 /// **What the bindings of a `for` take**, one type each: a map's key and
 /// value for two, the parts of a pair a list, a set, an array or a sequence
 /// holds - and `Unknown` for each where the shape is not one of these.
-pub fn elements_walked(over: ref Ty, bindings: i64) -> Vec[Ty] {
+fn elements_walked(over: ref Ty, bindings: i64) -> Vec[Ty] {
     if bindings == 1 {
         return [element_walked(over, 1)]
     }
@@ -503,7 +503,7 @@ fn tuple_parts(ty: ref Ty) -> Vec[Ty] {
 }
 
 /// Whether a type is known all the way down.
-pub fn wholly_known(ty: ref Ty) -> bool {
+fn wholly_known(ty: ref Ty) -> bool {
     return match ty {
         Ty::Unknown => false,
         Ty::Nullable(inner) => wholly_known(inner),
@@ -516,14 +516,14 @@ pub fn wholly_known(ty: ref Ty) -> bool {
 /// The map types whose key and value a first `insert` decides (#543).
 /// By the last segment: the type is `collections::HashMap` where the `use`
 /// named the module.
-pub fn a_map_type(name: ref String) -> bool {
+fn a_map_type(name: ref String) -> bool {
     let last = type_last_segment(name)
     return last == "HashMap" || last == "BTreeMap" || last == "Map"
 }
 
 /// A literal of another kind than `kind` (`bool` or `text`): a number, a
 /// character and `null` are never what a truth value or text wants.
-pub fn is_a_literal_other_than(expr: ref Expr, kind: ref String) -> bool {
+fn is_a_literal_other_than(expr: ref Expr, kind: ref String) -> bool {
     return match expr {
         Expr::LitBool(_, _) => kind != "bool",
         Expr::LitStr { .. } => kind != "text",
@@ -538,7 +538,7 @@ pub fn is_a_literal_other_than(expr: ref Expr, kind: ref String) -> bool {
 
 /// A part a value copies with: a plain number, `bool`, `char`, an array of
 /// such, or a type the program declared as copying.
-pub fn a_copied_part(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> bool {
+fn a_copied_part(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> bool {
     return match ty {
         Ty::Named { name, args, view } => if name == "Array" { args.iter().all fn(arg) { a_count(arg) || a_copied_part(arg, copies) } } else { !view && args.len() == 0 && (a_copied_scalar(name) || copies.contains(name)) },
         Ty::Nullable(inner) => a_copied_part(inner, copies),
@@ -555,7 +555,7 @@ fn a_copied_scalar(name: ref String) -> bool {
 }
 
 /// The value a block ends in: its last statement, where that is an expression.
-pub fn tail_value_of(block: ref Block) -> ref Expr? {
+fn tail_value_of(block: ref Block) -> ref Expr? {
     if block.stmts.len() == 0 {
         return null
     }
@@ -566,7 +566,7 @@ pub fn tail_value_of(block: ref Block) -> ref Expr? {
 }
 
 /// A block's value, through every block that only hands on its tail.
-pub fn check_peeled(value: ref Expr) -> ref Expr {
+fn check_peeled(value: ref Expr) -> ref Expr {
     return match value {
         Expr::Block(block, _) => {
             let tail = tail_value_of(block) ?? return value

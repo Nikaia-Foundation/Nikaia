@@ -282,7 +282,7 @@ pub(crate) fn sv_unit_chain(entries: &[SvEntry], value: &mut Vec<i64>, lits: &[u
         let h = nikaia_std::num::value(h);
         let at = h as i64;
         if at >= entries.len() as i64 { return format!("hint {} is no earlier entry", h); }
-        let clause = match nikaia_std::index::get(&entries, nikaia_std::index::at(at)) {
+        let clause = match unsafe { nikaia_std::proven::read(&entries, (at) as usize) } {
             SvEntry::Clause(c) => c,
             _ => return format!("hint {} is no clause", h),
         };
@@ -311,11 +311,11 @@ pub(crate) fn sv_value(value: &[i64], l: u32) -> i64 {
     if l % 2u32 == 0u32 { v } else { -v }
 }
 
-pub(crate) fn sv_rel_text(rel: &SvRel) -> &'static str {
+pub(crate) fn sv_rel_text(rel: &SvRel) -> String {
     match rel {
-        SvRel::Le => "<=",
-        SvRel::Lt => "<",
-        SvRel::Eq => "=",
+        SvRel::Le => String::from("<="),
+        SvRel::Lt => String::from("<"),
+        SvRel::Eq => String::from("="),
     }
 }
 
@@ -463,7 +463,7 @@ pub(crate) fn sv_check_test_single(query: &SvQuery, steps: Vec<SvStep>) -> SvLog
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== accepted\n"));
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_check_test_report("clauses (input, learn, delete)", &sv_check_test_clauses(), &sv_check_test_clause_log(false))));
@@ -478,7 +478,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== rejected\n"));
     out = { let __nikaia_value = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, sv_check_test_report("negative multiplier on an inequality", &sv_check_test_bounds(), &sv_check_test_farkas_log(-1, 1, vec![sv_check_test_neg(0u32), sv_check_test_neg(1u32)])))); __nikaia_value };

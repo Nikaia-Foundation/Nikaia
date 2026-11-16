@@ -66,7 +66,7 @@ impl CheckState {
     /// a comparison of two constant integers, and `!`, `&&` and `||` over
     /// those; `null` for anything else. A branch whose condition folds the
     /// other way never runs.
-    pub fn condition_constant(ref self, world: ref CheckWorld, cond: ref Expr) -> bool? sync {
+    fn condition_constant(ref self, world: ref CheckWorld, cond: ref Expr) -> bool? sync {
         return match cond {
             Expr::LitBool(value, _) => value,
             Expr::Unary { op, expr, .. } => self.condition_negated(world, op, expr),
@@ -139,7 +139,7 @@ impl CheckState {
 
     /// The first integer `comptime` with no written type in `expr`, by name and
     /// where it is declared.
-    pub fn an_open_comptime_in(ref self, world: ref CheckWorld, expr: ref Expr) -> CheckOpenComptime? sync {
+    fn an_open_comptime_in(ref self, world: ref CheckWorld, expr: ref Expr) -> CheckOpenComptime? sync {
         return match expr {
             Expr::Variable(name, _) => self.an_open_comptime_named(world, name),
             Expr::Binary { lhs, rhs, .. } => self.an_open_comptime_either(world, lhs, rhs),
@@ -166,7 +166,7 @@ impl CheckState {
     /// written type, a `return` against a declared result, an argument whose
     /// parameter says what it takes - and a sum an operand's declaration typed.
     /// A literal alone, with nothing beside it, stays accepted (Part III C.4).
-    pub fn constant_fits(ref mut self, world: ref CheckWorld, value: ref Expr, want: ref Ty?, span: ref Span) sync {
+    fn constant_fits(ref mut self, world: ref CheckWorld, value: ref Expr, want: ref Ty?, span: ref Span) sync {
         // **A type beside a value is a use of the numbers in it** (ADR-285
         // D24), whether or not the value folds.
         self.number_asked_beside(world, value, want, span)
@@ -228,7 +228,7 @@ impl CheckState {
 
     /// Whether an open number in `value`, or one joined with it, was given a
     /// shift of literals (ADR-285 D40).
-    pub fn an_open_shift_in(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    fn an_open_shift_in(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
         for number in self.open_numbers_in(world, value) {
             let root = self.open_root(number)
             for (at, entry) in self.flow.open_numbers {
@@ -245,7 +245,7 @@ impl CheckState {
     /// against it and its literals are written as it, ahead of the widening
     /// their exact value would ask for. Said once for a value, however many
     /// of the checks that see a type beside it ask.
-    pub fn a_shift_asked_as(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref String, span: ref Span) sync {
+    fn a_shift_asked_as(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref String, span: ref Span) sync {
         let literals = literals_in(value)
         let mut done = literals.len() > 0
         for literal in literals {
@@ -326,7 +326,7 @@ impl CheckState {
 
     /// **A number given to an open one**: its own value at the `let`, or one
     /// assigned to it later (D3).
-    pub fn open_number_given(ref mut self, world: ref CheckWorld, number: i64, value: ref Expr, span: ref Span) sync {
+    fn open_number_given(ref mut self, world: ref CheckWorld, number: i64, value: ref Expr, span: ref Span) sync {
         let mut joined: Vec[i64] = [number]
         for at in self.open_numbers_in(world, value) {
             joined.push(at)

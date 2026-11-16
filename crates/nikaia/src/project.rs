@@ -2761,8 +2761,10 @@ pub fn output_tests(root: &Path) -> Result<Vec<OutputTest>> {
 }
 
 /// **A directory of a test's own, removed when it goes**
-/// ([ADR-247](../../docs/specification/adr/adr-247.md) D1).
-struct Sandbox(PathBuf);
+/// ([ADR-247](../../docs/specification/adr/adr-247.md) D1), or **kept for
+/// the next run** where it holds the lock of a place in the user cache
+/// ([`Sandbox::kept`]).
+struct Sandbox(PathBuf, Option<std::fs::File>);
 
 impl Sandbox {
     fn new() -> Result<Sandbox> {
@@ -2778,13 +2780,37 @@ impl Sandbox {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir)
             .with_context(|| format!("making a directory for a test at {}", dir.display()))?;
-        Ok(Sandbox(dir))
+        Ok(Sandbox(dir, None))
+    }
+
+    /// **The place `name` in `places`, kept from one run to the next**
+    /// (`project_tests_places`, #1750): a program built there again finds
+    /// its build's record and starts no Cargo. Held by a lock without
+    /// waiting; a place another run holds is not shared, a new directory is
+    /// made instead.
+    fn kept(places: &Path, name: &str) -> Result<Sandbox> {
+        orchestrator::cache::use_entry(places);
+        let dir = places.join(name);
+        std::fs::create_dir_all(&dir)
+            .with_context(|| format!("making a directory for a test at {}", dir.display()))?;
+        let lock = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(places.join(format!("{name}.lock")))
+            .with_context(|| format!("locking {}", dir.display()))?;
+        if !orchestrator::cache::lock_exclusive(&lock) {
+            return Sandbox::new();
+        }
+        Ok(Sandbox(dir, Some(lock)))
     }
 }
 
 impl Drop for Sandbox {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        if self.1.is_none() {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
     }
 }
 
@@ -2962,9 +2988,9 @@ impl project_tests::ProjectTestsHost for TestsHost<'_> {
 const TEST_JOBS_VAR: &str = "NIKAIA_TEST_JOBS";
 
 /// **The test programs, on workers of their own** (as many as
-/// [`TEST_JOBS_VAR`] says, else as the machine has cores), each worker with a
-/// place per setting that it keeps from one program to the next
-/// ([`run_program_test`]). `done` is called on this thread with each
+/// [`TEST_JOBS_VAR`] says, else as the machine has cores), each program in a
+/// place per setting kept from one run to the next ([`Sandbox::kept`],
+/// [`run_program_test`], #1750). `done` is called on this thread with each
 /// program's outcomes at every setting, **in the order of the programs**,
 /// whichever finished first: what is printed is the same as one after
 /// another. An error stops the workers from taking more and is returned once
@@ -2980,18 +3006,18 @@ fn run_program_tests<'a>(
         .and_then(|jobs| jobs.trim().parse::<usize>().ok())
         .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
         .clamp(1, programs.len().max(1));
-    let places = (0..jobs)
-        .map(|_| settings.iter().map(|_| Sandbox::new()).collect())
-        .collect::<Result<Vec<Vec<_>>>>()?;
+    // **A place per program and setting, and one per setting's batches,
+    // kept from one run to the next** (`project_tests_places`, #1750).
+    let kept = project_tests::project_tests_places(&Layout::user_cache_dir(), root);
+    let kept = &kept;
     // **One build per setting for the programs** (`project_tests_batches`);
     // not at `--bless`, which keeps what a build says beside each program.
     // The builds run on a thread of their own, one after the other (the
     // settings share Cargo's target directory and its lock), while the
     // workers already make the reports; a worker waits for a setting's build
     // only when it runs a program at that setting.
-    let batch_places = settings
-        .iter()
-        .map(|_| Sandbox::new())
+    let batch_places = (0..settings.len())
+        .map(|k| Sandbox::kept(kept, &format!("batches-{k}")))
         .collect::<Result<Vec<_>>>()?;
     let batches: Vec<std::sync::OnceLock<std::result::Result<BTreeMap<_, _>, String>>> = settings
         .iter()
@@ -3023,7 +3049,7 @@ fn run_program_tests<'a>(
                 let _ = slot.set(found);
             }
         });
-        for place in &places {
+        for _ in 0..jobs {
             let send = send.clone();
             scope.spawn(move || {
                 while let Some(&k) = order.get(next.fetch_add(1, Ordering::SeqCst)) {
@@ -3032,8 +3058,11 @@ fn run_program_tests<'a>(
                     // Its time without the waits for the builds.
                     let started = std::time::Instant::now();
                     let mut waited = std::time::Duration::ZERO;
+                    let place = (0..settings.len().max(1))
+                        .map(|s| Sandbox::kept(kept, &format!("{s}-{}", program.name)))
+                        .collect::<Result<Vec<_>>>();
                     // The reports once per program, not once per setting.
-                    let outcomes =
+                    let outcomes = place.and_then(|place| {
                         program_reports(program, root, &place[0].0).and_then(|reports| {
                             settings
                                 .iter()
@@ -3051,7 +3080,8 @@ fn run_program_tests<'a>(
                                     .map(|outcome| (setting.clone(), outcome))
                                 })
                                 .collect::<Result<Vec<_>>>()
-                        });
+                        })
+                    });
                     let millis = started.elapsed().saturating_sub(waited).as_millis() as i64;
                     if send.send((k, millis, outcomes)).is_err() {
                         break;
@@ -3121,7 +3151,7 @@ pub fn program_tests(root: &Path) -> Result<Vec<ProgramTest>> {
 }
 
 /// **Build and run one test program** in its own package and directory,
-/// `own` kept for the next program at this setting:
+/// `own` kept for this program and setting from one run to the next:
 /// `project_tests_program_test` (`tools/project_tests.nika`), the processes
 /// it starts behind [`ProgramHost`].
 fn run_program_test(
@@ -3332,7 +3362,8 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         project: &Path,
         own: &Path,
         list: &Path,
-    ) -> HostResult<Option<PathBuf>> {
+        within: i64,
+    ) -> HostResult<project_tests::ProjectTestsBatchBuilt> {
         let mut command = std::process::Command::new(&self.exe);
         command
             .args(["build", "--user-parallelism", setting, "--project"])
@@ -3340,13 +3371,16 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
             .env(nikaia_std::fs::TEST_DIR_VAR, own)
             .env(project_batch::project_batch_var(), list)
             .env("CARGO_TERM_QUIET", "true");
-        let built = self.held(self.ran(&self.exe, command, own, &[], 0))?;
+        let built = self.held(self.ran(&self.exe, command, own, &[], within))?;
         let binary = project
             .join("target")
             .join("nikaia")
             .join("bin")
             .join(format!("program_test{}", std::env::consts::EXE_SUFFIX));
-        Ok((built.code == 0 && binary.is_file()).then_some(binary))
+        Ok(project_tests::ProjectTestsBatchBuilt {
+            binary: (built.code == 0 && !built.timed_out && binary.is_file()).then_some(binary),
+            timed_out: built.timed_out,
+        })
     }
 
     fn ran_batched(
@@ -3609,6 +3643,20 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
             .map(|error| format!("{error:#}"))
     }
 
+    fn rustc_version(&self) -> String {
+        orchestrator::project::rustc_version().to_text()
+    }
+
+    fn cargo_fresh(&self, record: &Path, handed: &str) -> Option<String> {
+        nikaia_std::rt::exec::block_on(project_drive::project_drive_fresh(record, handed))
+    }
+
+    fn record_cargo(&self, record: &Path, handed: &str, messages: &str, generated: &Path) {
+        nikaia_std::rt::exec::block_on(project_drive::project_drive_record(
+            record, handed, messages, generated,
+        ));
+    }
+
     fn target_triple(&self) -> String {
         self.project.settings.build.target.triple().to_text()
     }
@@ -3848,6 +3896,59 @@ fn run_directly(binary: &std::path::Path, args: &[String]) -> Result<i32> {
     // report for one, and the alternative - claiming success - is the one answer
     // that must not be given.
     Ok(status.code().unwrap_or(1))
+}
+
+/// **Where the compiler's own sub-builds compile `std`** (#1705), and the
+/// triple they pass Cargo as `--target`: the two bundles
+/// (`tools/comptime_bundle.nika`) and every grammar run's parser.
+///
+/// **The tree a program with no settings is built in** (`Sysroot::rlib_cache`,
+/// ADR-002 D4), with the program's `--target` and the profile a generated
+/// workspace gives its dependencies, so Cargo compiles `std` there once for the
+/// sub-builds and the program alike. They run in the driver, before the
+/// program's Cargo build takes that tree's lock. **Inside that build** - the
+/// compiler as its `rustc`, under [`WRAPPER_MARKER`] - the lock is held, and a
+/// sub-build there would wait on it for ever; one asked there (a record the
+/// driver wrote finds a bundle without one, `comptime_bundle_recorded`) goes
+/// to `build-time/<key>` beside it. A program with settings of its own has a
+/// tree of its own and shares nothing with them. Asked once a process.
+pub fn build_time_tree() -> (PathBuf, String) {
+    static HELD: std::sync::OnceLock<(PathBuf, String)> = std::sync::OnceLock::new();
+    let (tree, triple) = HELD.get_or_init(|| {
+        let manifest = Manifest::default();
+        let inside = std::env::var_os(WRAPPER_MARKER).is_some();
+        // Settings with nothing set do not fail; were they to, the
+        // sub-builds still get a tree of their own, for this machine.
+        match Settings::resolve(&manifest, None, None) {
+            Ok(settings) => {
+                let codegen = Codegen::new(
+                    &manifest.codegen_for(&settings.words.target),
+                    &settings.panic_strategy(),
+                );
+                let program = Sysroot::resolve().rlib_cache(
+                    &settings.words.target,
+                    &codegen,
+                    &settings.words.reentrancy_check,
+                    "",
+                );
+                let tree = match (inside, program.file_name()) {
+                    (true, Some(key)) => Layout::user_cache_dir().join("build-time").join(key),
+                    _ => program,
+                };
+                (tree, settings.build.target.triple().to_text())
+            }
+            Err(_) => (
+                Layout::user_cache_dir()
+                    .join("build-time")
+                    .join("unsettled"),
+                crate::emit::default_target().triple().to_text(),
+            ),
+        }
+    });
+    // Marked used at every ask, as `rlib_cache` does for a program, so
+    // `prune` keeps it while it is used and evicts it after.
+    orchestrator::cache::use_entry(tree);
+    (tree.clone(), triple.clone())
 }
 
 /// The same, for a program this compiler wrote for its own use — the parser a

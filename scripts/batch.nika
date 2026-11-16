@@ -19,7 +19,8 @@
 // `none` prints `CUT <brief>: <line>`; a line `Supervisor: <date>: accepted ...`
 // in the report clears a cut on `Result:`, `Gate:` or `Deviation:` (the
 // builder's lines stay as written), never one on `Result: blocked` (it needs
-// the next brief) or on `Pushed:` (the commits are not on develop), and never
+// the next brief) or on `Pushed: rejected` (the commits are not on develop;
+// `Pushed: none` of a done report that built nothing is cleared), and never
 // an `Owner:` question (supervisor, 2026-11-10); the driver accepts a report
 // itself (owner, 2026-11-15, #1694) when its `Result:` is done or partial, its
 // `Pushed:` is a commit, `Gate:` is green, `Needs:` is `none` and `Owner:`
@@ -109,8 +110,9 @@ fn batch_cut(text: String) -> String {
     let accepted = batch_accepted(text)
     let word = result.split(" ").collect()[0].trim_end_matches(".").clone()
     if word == "blocked" { return f"Result: {result}" }
-    if word == "done" && (pushed == "rejected" || pushed == "none" || pushed == "") { return f"Pushed: {pushed}" }
+    if word == "done" && pushed == "rejected" { return f"Pushed: {pushed}" }
     if accepted { return "" }
+    if word == "done" && (pushed == "none" || pushed == "") { return f"Pushed: {pushed}" }
     if word != "done" && word != "noop" { return f"Result: {result}" }
     if gate != "" && !gate.starts_with("green") { return f"Gate: {gate}" }
     if deviation != "none" { return f"Deviation: {deviation}" }

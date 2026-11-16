@@ -25,7 +25,7 @@ fn check_visit_block_one(block: ref Block) -> Vec[ref Block] {
 /// The expressions an expression holds directly, outside its blocks: what the
 /// walk descends into, and what a search for blocks looks through. A `spawn`
 /// holds none here, being a detached context (Part I, 5.4).
-pub fn check_visit_children(expr: ref Expr) -> Vec[ref Expr] {
+fn check_visit_children(expr: ref Expr) -> Vec[ref Expr] {
     let mut out: Vec[ref Expr] = []
     match expr {
         Expr::Call { func, args, config, .. } => {
@@ -136,7 +136,7 @@ pub fn check_visit_children(expr: ref Expr) -> Vec[ref Expr] {
 /// Every expression inside this one, this one included, outside the blocks it
 /// holds, in the order the walk meets them. A literal's holes come after the
 /// literal and before what follows it in the list; the caller puts them there.
-pub fn check_visit_preorder(expr: ref Expr) -> Vec[ref Expr] {
+fn check_visit_preorder(expr: ref Expr) -> Vec[ref Expr] {
     let mut out: Vec[ref Expr] = [expr]
     for child in check_visit_children(expr) {
         out.extend(check_visit_preorder(child))
@@ -146,7 +146,7 @@ pub fn check_visit_preorder(expr: ref Expr) -> Vec[ref Expr] {
 
 /// Whether the host can answer holes for this expression: an `f"…"` or a
 /// template. Asking only these keeps the walk off the host everywhere else.
-pub fn check_visit_has_holes(expr: ref Expr) -> bool {
+fn check_visit_has_holes(expr: ref Expr) -> bool {
     return match expr {
         Expr::LitInterpolated { .. } => true,
         Expr::Dsl { .. } => true,
@@ -155,7 +155,7 @@ pub fn check_visit_has_holes(expr: ref Expr) -> bool {
 }
 
 /// The expressions a statement holds, without the blocks inside it.
-pub fn check_visit_stmt(stmt: ref Stmt) -> Vec[ref Expr] {
+fn check_visit_stmt(stmt: ref Stmt) -> Vec[ref Expr] {
     let mut out: Vec[ref Expr] = []
     match stmt {
         Stmt::Let { value, .. } => out.extend(check_visit_preorder(value)),
@@ -183,7 +183,7 @@ pub fn check_visit_stmt(stmt: ref Stmt) -> Vec[ref Expr] {
 /// it calls, the function around it calls; `spawn` is a detached context and is
 /// not walked. An `unsafe` block makes no boundary of its own (ADR-302 D3).
 /// **Through every expression that holds others** (#494).
-pub fn check_visit_expr_blocks(expr: ref Expr) -> Vec[ref Block] {
+fn check_visit_expr_blocks(expr: ref Expr) -> Vec[ref Block] {
     let mut out: Vec[ref Block] = []
     match expr {
         Expr::Block(block, _) => {
@@ -229,7 +229,7 @@ pub fn check_visit_expr_blocks(expr: ref Expr) -> Vec[ref Block] {
 
 /// The blocks a statement holds - an `if`, a loop, a lambda: their statements
 /// have spans of their own, so the order is the source's.
-pub fn check_visit_stmt_blocks(stmt: ref Stmt) -> Vec[ref Block] {
+fn check_visit_stmt_blocks(stmt: ref Stmt) -> Vec[ref Block] {
     let mut out: Vec[ref Block] = []
     match stmt {
         Stmt::For { body, .. } => out.push(body),

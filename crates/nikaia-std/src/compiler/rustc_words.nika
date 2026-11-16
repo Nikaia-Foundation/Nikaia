@@ -53,7 +53,7 @@ pub fn in_this_language(message: ref String) -> String {
 /// Cargo's tooling, or a remedy that is a shape this compiler emitted. **A
 /// note is suppressed for naming something unreachable, never for sounding
 /// foreign**: *"prefix it with an underscore"* works in Nikaia, and stays.
-pub fn is_rust_internal(note: ref String) -> bool {
+fn is_rust_internal(note: ref String) -> bool {
     for internal in ["#[deny(", "#[warn(", "#[allow(", "#[forbid(", "Cargo.toml", "cargo add", "RUST_BACKTRACE", "rustc --explain", "consider using the type `u32`", "consider using the type `u64`", "consider using the type `usize`", "consider calling `.as_ref()`", "consider calling `.as_mut()`", "you can `clone` the value and consume it"] {
         if note.contains(internal) {
             return true
@@ -64,7 +64,7 @@ pub fn is_rust_internal(note: ref String) -> bool {
 
 /// The type an `expected … found …` names on both sides, where both are the
 /// same: a message naming one thing twice cannot be about the program.
-pub fn both_sides_the_same(message: ref String) -> String? {
+fn both_sides_the_same(message: ref String) -> String? {
     let expected = backticked_after(message, "expected ") ?? return null
     let found = backticked_after(message, "found ") ?? return null
     if expected == found {
@@ -210,7 +210,7 @@ pub fn said(text: ref String) -> String {
 }
 
 /// `error[NK1102]`, or the level alone for a message that has no code.
-pub fn headed(level: ref String, code: ref String) -> String {
+fn headed(level: ref String, code: ref String) -> String {
     if code.len() == 0 {
         return level.clone()
     }
@@ -221,7 +221,7 @@ pub fn headed(level: ref String, code: ref String) -> String {
 /// it is, both in characters and the column 1-based. A whole word only at an
 /// edge that is a word character: `}` or a space has no word to be part of.
 /// Where it is not there, the column asked and one character.
-pub fn word_in(line: ref String, column: i64, word: ref String) -> (i64, i64) {
+fn word_in(line: ref String, column: i64, word: ref String) -> (i64, i64) {
     let c: Vec[scalar] = line.chars().collect()
     let w: Vec[scalar] = word.chars().collect()
     if w.len() == 0 {

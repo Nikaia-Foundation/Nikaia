@@ -878,7 +878,7 @@ grammar! {
     }
 }
 
-pub fn spelled_signature(written: &str, key: &str) -> Result<Spelling, nikaia_std::error::Thrown<Refused>> {
+pub(crate) fn spelled_signature(written: &str, key: &str) -> Result<Spelling, nikaia_std::error::Thrown<Refused>> {
     let parts = match nikaia_std::grammar::parse(&*written, SignatureText::parse_signature()) {
         Ok(value) => value,
         Err(_error) => { return Err(nikaia_std::error::throwing(Refused::Because(format!("a signature is `[T](a: A; o: O = v) -> R`, found `{}`", written)), &"spelled_signature")) },

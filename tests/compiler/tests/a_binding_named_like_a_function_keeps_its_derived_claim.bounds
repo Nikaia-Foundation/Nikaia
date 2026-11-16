@@ -1,0 +1,6 @@
+bounds in tests/a_binding_named_like_a_function_keeps_its_derived_claim.nika: 2 indexes, 1 proved; 2 operations, 0 proved
+     7  xs[at]       proved
+    20  sum += pick  checked: a counter the loop on line 19 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+    26  pick * 2     checked: a parameter no precondition bounds, of a function whose body reads no parameter in a shape a claim is proposed for (ADR-391 D1): an `assert` at the top of the function makes it one (ADR-269 D5)
+    31  twice[1]     checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+  derived  pick: 0 <= at, at <= xs.len(), at < xs.len(), proved at the calls on lines 14

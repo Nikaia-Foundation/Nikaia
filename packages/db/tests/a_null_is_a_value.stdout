@@ -1,0 +1,7 @@
+name = 'it''s', email = NULL, photo = x'0aff', score = 1.5, admin = false
+true
+true
+true
+false
+true
+a NULL arrived from the column `users.email` in the field `email`, which is not a `T?`

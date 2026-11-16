@@ -1,0 +1,23 @@
+// #1527: a `spawn` whose body can fail picks its log report by autoref from
+// two traits, so one of the two imports the emitter writes is always unused.
+// rustc warned "Unused import: `ProbePlain`" at every such `spawn`; the
+// import is allowed now, and the program warns nothing.
+enum Odd { Odd }
+
+impl Error for Odd {
+    fn message(ref self) -> String {
+        return "odd"
+    }
+}
+
+fn half(n: i64) -> i64 throws {
+    if n % 2 != 0 {
+        throw Odd::Odd
+    }
+    return n / 2
+}
+
+fn main() throws {
+    let task = spawn fn { half(8) }
+    println(f"half of 8 is {task.join()}")
+}

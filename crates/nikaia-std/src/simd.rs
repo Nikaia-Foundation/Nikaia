@@ -13,8 +13,12 @@
 //! **`Lanes[T]` holds as many lanes as the build's widest integer register**
 //! (D1): 16 bytes at x86-64's baseline and on aarch64, 32 where the build
 //! enables AVX2 (`--cpu=x86-64-v3`).
+//!
+//! **Float lanes keep the scalar's meaning** (D9): on `f32` and `f64` lanes
+//! `+ - * /` and `sqrt` give each lane the bits the scalar operation gives,
+//! and `sum()` adds neighbouring pairs in a fixed tree.
 
-use std::ops::{BitAnd, BitOr, BitXor, Not, Shl, Shr};
+use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Not, Shl, Shr, Sub};
 
 /// The bytes of the build's widest integer vector register (D1).
 pub const WIDTH: usize = if cfg!(all(target_arch = "x86_64", target_feature = "avx2")) {
@@ -23,7 +27,9 @@ pub const WIDTH: usize = if cfg!(all(target_arch = "x86_64", target_feature = "a
     16
 };
 
-/// **A lane's type**: `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`.
+/// **A lane's type**: `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`,
+/// `f32`, `f64`. The bit operations work on the lane's bits, which is what a
+/// mask of float lanes needs.
 pub trait Lane: Copy + Default + PartialEq + PartialOrd + std::fmt::Debug + 'static {
     /// Every bit set: a mask lane that holds.
     const ONES: Self;
@@ -33,21 +39,42 @@ pub trait Lane: Copy + Default + PartialEq + PartialOrd + std::fmt::Debug + 'sta
     type Lanes: Copy;
     /// `Mask[Self]`: what a comparison of two `Lanes[Self]` answers.
     type LanesMask: Copy;
+    fn and(self, other: Self) -> Self;
+    fn or(self, other: Self) -> Self;
+    fn xor(self, other: Self) -> Self;
+    fn not(self) -> Self;
+    /// Whether any bit is set: a mask lane that holds.
+    fn is_set(self) -> bool;
+    /// The smaller of two lanes, as the scalar's `min`.
+    fn least(self, other: Self) -> Self;
+    /// The larger of two lanes, as the scalar's `max`.
+    fn most(self, other: Self) -> Self;
+    /// The lane read from `Self::SIZE` bytes, least significant first.
+    fn from_le(bytes: &[u8]) -> Self;
+    /// The lane's least significant byte.
+    fn low_byte(self) -> u8;
+}
+
+/// **An integer lane**: the wrapping, saturating and shifting operations
+/// (D3, D4), which float lanes do not offer (D9).
+pub trait IntLane: Lane {
     fn wrapping_add(self, other: Self) -> Self;
     fn wrapping_sub(self, other: Self) -> Self;
     fn wrapping_mul(self, other: Self) -> Self;
     fn saturating_add(self, other: Self) -> Self;
     fn saturating_sub(self, other: Self) -> Self;
-    fn and(self, other: Self) -> Self;
-    fn or(self, other: Self) -> Self;
-    fn xor(self, other: Self) -> Self;
-    fn not(self) -> Self;
     fn shl(self, k: u32) -> Self;
     fn shr(self, k: u32) -> Self;
-    /// The lane read from `Self::SIZE` bytes, least significant first.
-    fn from_le(bytes: &[u8]) -> Self;
-    /// The lane's least significant byte.
-    fn low_byte(self) -> u8;
+}
+
+/// **A float lane** (D9): the scalar's IEEE operations, lane by lane.
+pub trait FloatLane: Lane {
+    fn add(self, other: Self) -> Self;
+    fn sub(self, other: Self) -> Self;
+    fn mul(self, other: Self) -> Self;
+    fn div(self, other: Self) -> Self;
+    fn sqrt(self) -> Self;
+    fn abs(self) -> Self;
 }
 
 macro_rules! lane {
@@ -57,6 +84,46 @@ macro_rules! lane {
             const SIZE: usize = $size;
             type Lanes = Fixed<$t, { WIDTH / $size }>;
             type LanesMask = Mask<$t, { WIDTH / $size }>;
+            #[inline(always)]
+            fn and(self, other: Self) -> Self {
+                self & other
+            }
+            #[inline(always)]
+            fn or(self, other: Self) -> Self {
+                self | other
+            }
+            #[inline(always)]
+            fn xor(self, other: Self) -> Self {
+                self ^ other
+            }
+            #[inline(always)]
+            fn not(self) -> Self {
+                !self
+            }
+            #[inline(always)]
+            fn is_set(self) -> bool {
+                self != 0
+            }
+            #[inline(always)]
+            fn least(self, other: Self) -> Self {
+                if other < self { other } else { self }
+            }
+            #[inline(always)]
+            fn most(self, other: Self) -> Self {
+                if other > self { other } else { self }
+            }
+            #[inline(always)]
+            fn low_byte(self) -> u8 {
+                self as u8
+            }
+            #[inline(always)]
+            fn from_le(bytes: &[u8]) -> Self {
+                let mut word = [0u8; $size];
+                word.copy_from_slice(bytes);
+                <$t>::from_le_bytes(word)
+            }
+        }
+        impl IntLane for $t {
             #[inline(always)]
             fn wrapping_add(self, other: Self) -> Self {
                 <$t>::wrapping_add(self, other)
@@ -78,22 +145,6 @@ macro_rules! lane {
                 <$t>::saturating_sub(self, other)
             }
             #[inline(always)]
-            fn and(self, other: Self) -> Self {
-                self & other
-            }
-            #[inline(always)]
-            fn or(self, other: Self) -> Self {
-                self | other
-            }
-            #[inline(always)]
-            fn xor(self, other: Self) -> Self {
-                self ^ other
-            }
-            #[inline(always)]
-            fn not(self) -> Self {
-                !self
-            }
-            #[inline(always)]
             fn shl(self, k: u32) -> Self {
                 <$t>::wrapping_shl(self, k)
             }
@@ -101,15 +152,80 @@ macro_rules! lane {
             fn shr(self, k: u32) -> Self {
                 <$t>::wrapping_shr(self, k)
             }
+        }
+    };
+}
+
+macro_rules! float_lane {
+    ($t:ty, $bits:ty, $size:expr) => {
+        impl Lane for $t {
+            const ONES: Self = <$t>::from_bits(!0);
+            const SIZE: usize = $size;
+            type Lanes = Fixed<$t, { WIDTH / $size }>;
+            type LanesMask = Mask<$t, { WIDTH / $size }>;
+            #[inline(always)]
+            fn and(self, other: Self) -> Self {
+                <$t>::from_bits(self.to_bits() & other.to_bits())
+            }
+            #[inline(always)]
+            fn or(self, other: Self) -> Self {
+                <$t>::from_bits(self.to_bits() | other.to_bits())
+            }
+            #[inline(always)]
+            fn xor(self, other: Self) -> Self {
+                <$t>::from_bits(self.to_bits() ^ other.to_bits())
+            }
+            #[inline(always)]
+            fn not(self) -> Self {
+                <$t>::from_bits(!self.to_bits())
+            }
+            #[inline(always)]
+            fn is_set(self) -> bool {
+                self.to_bits() != 0
+            }
+            #[inline(always)]
+            fn least(self, other: Self) -> Self {
+                <$t>::min(self, other)
+            }
+            #[inline(always)]
+            fn most(self, other: Self) -> Self {
+                <$t>::max(self, other)
+            }
             #[inline(always)]
             fn low_byte(self) -> u8 {
-                self as u8
+                self.to_bits() as u8
             }
             #[inline(always)]
             fn from_le(bytes: &[u8]) -> Self {
                 let mut word = [0u8; $size];
                 word.copy_from_slice(bytes);
-                <$t>::from_le_bytes(word)
+                <$t>::from_bits(<$bits>::from_le_bytes(word))
+            }
+        }
+        impl FloatLane for $t {
+            #[inline(always)]
+            fn add(self, other: Self) -> Self {
+                self + other
+            }
+            #[inline(always)]
+            fn sub(self, other: Self) -> Self {
+                self - other
+            }
+            #[inline(always)]
+            fn mul(self, other: Self) -> Self {
+                self * other
+            }
+            #[inline(always)]
+            fn div(self, other: Self) -> Self {
+                self / other
+            }
+            #[inline(always)]
+            fn sqrt(self) -> Self {
+                <$t>::sqrt(self)
+            }
+            #[inline(always)]
+            fn abs(self) -> Self {
+                <$t>::abs(self)
             }
         }
     };
@@ -123,6 +239,8 @@ lane!(u32, 4);
 lane!(i32, 4);
 lane!(u64, 8);
 lane!(i64, 8);
+float_lane!(f32, u32, 4);
+float_lane!(f64, u64, 8);
 
 /// **`simd::Lanes[T]`**: `T`'s lanes at the build's width (D1).
 pub type Lanes<T> = <T as Lane>::Lanes;
@@ -234,37 +352,18 @@ impl<T: Lane, const N: usize> Fixed<T, N> {
         Fixed(lanes)
     }
 
-    lanewise!(
-        wrapping_add,
-        wrapping_sub,
-        wrapping_mul,
-        saturating_add,
-        saturating_sub
-    );
     compare!(eq ==, ne !=, lt <, le <=, gt >, ge >=);
 
     /// The smaller of each pair of lanes.
     #[inline(always)]
     pub fn min(self, other: Self) -> Self {
-        Fixed(std::array::from_fn(|i| {
-            if other.0[i] < self.0[i] {
-                other.0[i]
-            } else {
-                self.0[i]
-            }
-        }))
+        Fixed(std::array::from_fn(|i| self.0[i].least(other.0[i])))
     }
 
     /// The larger of each pair of lanes.
     #[inline(always)]
     pub fn max(self, other: Self) -> Self {
-        Fixed(std::array::from_fn(|i| {
-            if other.0[i] > self.0[i] {
-                other.0[i]
-            } else {
-                self.0[i]
-            }
-        }))
+        Fixed(std::array::from_fn(|i| self.0[i].most(other.0[i])))
     }
 
     /// **`lane(i)`**, checked as an index is.
@@ -274,28 +373,16 @@ impl<T: Lane, const N: usize> Fixed<T, N> {
         *crate::index::get(&self.0[..], crate::index::at(i))
     }
 
-    /// The lanes added, wrapping.
-    #[inline(always)]
-    pub fn wrapping_sum(self) -> T {
-        self.0
-            .iter()
-            .fold(T::default(), |sum, &x| sum.wrapping_add(x))
-    }
-
     /// The smallest lane.
     #[inline(always)]
     pub fn min_lane(self) -> T {
-        self.0
-            .iter()
-            .fold(self.0[0], |m, &x| if x < m { x } else { m })
+        self.0.iter().fold(self.0[0], |m, &x| m.least(x))
     }
 
     /// The largest lane.
     #[inline(always)]
     pub fn max_lane(self) -> T {
-        self.0
-            .iter()
-            .fold(self.0[0], |m, &x| if x > m { x } else { m })
+        self.0.iter().fold(self.0[0], |m, &x| m.most(x))
     }
 
     /// The lanes in the order `of` names them. The checker has proved each
@@ -313,17 +400,79 @@ impl<T: Lane, const N: usize> Fixed<T, N> {
     }
 }
 
+impl<T: IntLane, const N: usize> Fixed<T, N> {
+    lanewise!(
+        wrapping_add,
+        wrapping_sub,
+        wrapping_mul,
+        saturating_add,
+        saturating_sub
+    );
+
+    /// The lanes added, wrapping.
+    #[inline(always)]
+    pub fn wrapping_sum(self) -> T {
+        self.0
+            .iter()
+            .fold(T::default(), |sum, &x| sum.wrapping_add(x))
+    }
+}
+
+impl<T: FloatLane, const N: usize> Fixed<T, N> {
+    /// Each lane's square root, as the scalar's `sqrt`.
+    #[inline(always)]
+    pub fn sqrt(self) -> Self {
+        Fixed(std::array::from_fn(|i| self.0[i].sqrt()))
+    }
+
+    /// Each lane's absolute value.
+    #[inline(always)]
+    pub fn abs(self) -> Self {
+        Fixed(std::array::from_fn(|i| self.0[i].abs()))
+    }
+
+    /// **The lanes added in a fixed tree** (D9): neighbouring pairs, then the
+    /// pairs' sums, to one lane; the same order on every target.
+    #[inline(always)]
+    pub fn sum(self) -> T {
+        let mut lanes = self.0;
+        let mut n = N;
+        while n > 1 {
+            n /= 2;
+            for i in 0..n {
+                lanes[i] = lanes[2 * i].add(lanes[2 * i + 1]);
+            }
+        }
+        lanes[0]
+    }
+}
+
+macro_rules! float_ops {
+    ($($trait:ident $name:ident),*) => {
+        $(
+            impl<T: FloatLane, const N: usize> $trait for Fixed<T, N> {
+                type Output = Self;
+                #[inline(always)]
+                fn $name(self, other: Self) -> Self {
+                    Fixed(std::array::from_fn(|i| FloatLane::$name(self.0[i], other.0[i])))
+                }
+            }
+        )*
+    };
+}
+float_ops!(Add add, Sub sub, Mul mul, Div div);
+
 macro_rules! shifts {
     ($($k:ty),*) => {
         $(
-            impl<T: Lane, const N: usize> Shl<$k> for Fixed<T, N> {
+            impl<T: IntLane, const N: usize> Shl<$k> for Fixed<T, N> {
                 type Output = Self;
                 #[inline(always)]
                 fn shl(self, k: $k) -> Self {
                     Fixed(std::array::from_fn(|i| self.0[i].shl(k as u32)))
                 }
             }
-            impl<T: Lane, const N: usize> Shr<$k> for Fixed<T, N> {
+            impl<T: IntLane, const N: usize> Shr<$k> for Fixed<T, N> {
                 type Output = Self;
                 #[inline(always)]
                 fn shr(self, k: $k) -> Self {
@@ -374,7 +523,7 @@ impl<T: Lane, const N: usize> Mask<T, N> {
     /// Whether lane `i` holds.
     #[inline(always)]
     fn holds(&self, i: usize) -> bool {
-        self.0[i] != T::default()
+        self.0[i].is_set()
     }
 
     /// The first lane that holds, or nothing.
@@ -549,6 +698,30 @@ mod tests {
             a.shuffle(Fixed::from([3, 2, 1, 0])),
             Fixed::from([3, 2, 1, 250])
         );
+    }
+
+    #[test]
+    fn float_lanes_keep_the_scalar_bits() {
+        let a = Fixed::<f64, 4>::from([1.0, 4.0, 9.0, 0.1]);
+        let b = splat::<Fixed<f64, 4>>(0.3);
+        let scalar =
+            |f: fn(f64, f64) -> f64| Fixed::from(std::array::from_fn(|i| f(a.0[i], b.0[i])));
+        assert_eq!(
+            (a + b).0.map(f64::to_bits),
+            scalar(|x, y| x + y).0.map(f64::to_bits)
+        );
+        assert_eq!(
+            (a / b).0.map(f64::to_bits),
+            scalar(|x, y| x / y).0.map(f64::to_bits)
+        );
+        assert_eq!(a.sqrt().lane(2), 3.0);
+        assert_eq!(a.sum(), (1.0 + 4.0) + (9.0 + 0.1));
+        let m = a.gt(b);
+        assert_eq!(m.positions().collect::<Vec<_>>(), vec![0, 1, 2]);
+        assert_eq!(select(m, a, b).lane(3), 0.3);
+        assert_eq!(a.min_lane(), 0.1);
+        let l: Lanes<f64> = splat(1.0);
+        assert_eq!(l.count() as usize, WIDTH / 8);
     }
 
     #[test]

@@ -40,7 +40,7 @@ pub(crate) fn check_core_expr_char_scalars<H: CheckHost>(state: &mut CheckState,
         let one = *unsafe { nikaia_std::proven::read(&scalars, (0) as usize) };
         let hex = hex_of(one as i64);
         let note = format!("Your editor stored this character decomposed, as {} scalars; composed (NFC) they are the one scalar `'{}'`, and that is what the literal is.", count, one);
-        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1213"), message: format!("This `'…'` is written as {} scalars that compose to one, `'{}'`.", count, one), notes: vec![note], help: Some(format!("Write the composed character, `'{}'`, or `'\\u{{{}}}'`.", one, hex)), labels: vec![] });
+        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1213"), message: format!("This `'…'` is written as {} scalars that compose to one, `'{}'`.", count, one), notes: vec![note], help: Some(format!("Write the composed character, `'{}'`, or `'\\u{{{}}}'`.", one, hex)), labels: vec![], edit: None });
         return;
     }
     let mut quoted: String = String::from("");
@@ -56,7 +56,7 @@ pub(crate) fn check_core_expr_char_scalars<H: CheckHost>(state: &mut CheckState,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
+pub(crate) fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
     let reaching: Option<String> = match state.flow.reaching.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -167,7 +167,7 @@ pub(crate) fn check_core_expr_flat_get(state: &mut CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
+pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
     match expr {
         Expr::LitInt { .. } => Ty::Unknown,
         Expr::LitFloat(_, _) => check_core_expr_named("f64"),
@@ -185,7 +185,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             check_core_expr_named("scalar")
         },
         Expr::LitBool(_, _) => check_core_expr_named("bool"),
-        Expr::LitNull(_) => Ty::Nullable(Box::new(Ty::Unknown)),
+        Expr::LitNull(_) => Ty::Nullable(std::boxed::Box::new(Ty::Unknown)),
         Expr::Variable(name, _) => {
             let name = *name;
             let read = check_core_expr_variable(state, world, host, expr, name, span);
@@ -577,7 +577,7 @@ pub(crate) fn check_core_expr_unary<H: CheckHost>(state: &mut CheckState, world:
         UnaryOp::Not => {
             let boolean = check_core_expr_named("bool");
             let value = value_of_a_copy(&found.unseen());
-            if integer_named(&value).is_some() || !check_simd_kind(&value).is_empty() { value } else if found.fits(&boolean) { boolean } else { Ty::Unknown }
+            if integer_named(&value).is_some() || !check_simd_kind(&value).is_empty() && !check_simd_float_vector(&value) { value } else if found.fits(&boolean) { boolean } else { Ty::Unknown }
         },
         UnaryOp::Ref => view_of_type(&found),
     }
@@ -721,7 +721,7 @@ pub(crate) fn check_core_async_crash<H: CheckHost>(state: &mut CheckState, world
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_walk_timed_out(state: &mut CheckState, span: &Span) {
+pub(crate) fn check_core_walk_timed_out(state: &mut CheckState, span: &Span) {
     let function = nikaia_std::index::or(match state.current.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,

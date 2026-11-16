@@ -82,13 +82,13 @@ pub(crate) fn a_borrowing_target(target: Option<&str>, borrowing: &collections::
 
 pub(crate) fn result_carries(names: &winnow_grammar::InternerContext, result: Option<&Type>, borrowing: &collections::BTreeSet<String>) -> bool { carries_a_view(names, match result { Some(__nikaia_value) => __nikaia_value, None => return false }, borrowing) }
 
-pub fn carries_a_view(names: &winnow_grammar::InternerContext, ty: &Type, borrowing: &collections::BTreeSet<String>) -> bool {
+pub(crate) fn carries_a_view(names: &winnow_grammar::InternerContext, ty: &Type, borrowing: &collections::BTreeSet<String>) -> bool {
     if holds_view(ty) || borrowing.contains(names.resolve(ty.name)) { return true; }
     for argument in ty.generics.iter() { if carries_a_view(names, argument, borrowing) { return true; } }
     false
 }
 
-pub fn declares_text(names: &winnow_grammar::InternerContext, ty: Option<&Type>) -> bool {
+pub(crate) fn declares_text(names: &winnow_grammar::InternerContext, ty: Option<&Type>) -> bool {
     let written = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
     names.resolve(written.name) == "String" && written.generics.is_empty() && !written.is_view && !written.is_nullable
 }
@@ -149,7 +149,7 @@ pub(crate) fn an_entry(key: &str, asked: &Asked<'_, '_, '_>) -> Option<FnContrac
     })
 }
 
-pub fn is_a_buffer(ty: &Ty) -> bool {
+pub(crate) fn is_a_buffer(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, .. } => a_buffer_name(name, args),
         _ => false,
@@ -272,7 +272,7 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
                 continue;
             }
             #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            let found = handed.get(callee); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+            let found = handed.get(nikaia_std::index::as_text(&callee)); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
             if found.is_some() {
                 let list = match found { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
                 for one in list.iter() { names.push(nikaia_std::block::Text::from(one.to_string())); }

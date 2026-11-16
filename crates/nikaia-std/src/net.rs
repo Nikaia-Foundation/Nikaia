@@ -38,6 +38,8 @@ use std::net::{TcpListener, TcpStream};
 use crate::bytes::Bytes;
 use crate::io::IoError;
 use crate::rt::{Interest, io as readiness};
+use crate::tls::Session;
+pub use crate::tls::Tls;
 
 /// How much one `read` asks the kernel for.
 ///
@@ -51,6 +53,9 @@ const CHUNK: usize = 64 * 1024;
 /// A bound socket, waiting for connections.
 pub struct Listener {
     inner: TcpListener,
+    /// The server's TLS (ADR-289 D34): each accepted connection gets a
+    /// session of it, its handshake run in the connection's task.
+    tls: Option<std::sync::Arc<rustls::ServerConfig>>,
 }
 
 /// One connection, open until it is dropped.
@@ -62,6 +67,18 @@ pub struct Listener {
 /// wants the close at a named moment writes `close`.
 pub struct Connection {
     inner: TcpStream,
+    /// The TLS session where the connection has one (ADR-289 D34): `read`
+    /// and `write` carry plaintext through it.
+    tls: Option<Session>,
+}
+
+impl Drop for Connection {
+    /// A TLS connection says `close_notify` where the socket has room for it.
+    fn drop(&mut self) {
+        if let Some(session) = &mut self.tls {
+            session.close(&self.inner);
+        }
+    }
 }
 
 /// Bind `address` and start listening.
@@ -69,23 +86,34 @@ pub struct Connection {
 /// `"127.0.0.1:8080"` — the address is the caller's and this makes no choice
 /// about it. Which address a *server* binds when nobody says is
 /// [ADR-289](../../../docs/specification/adr/adr-289.md) D13's, one layer up.
-pub async fn listen(address: &str) -> Result<Listener, IoError> {
+///
+/// With `tls:` (ADR-289 D34) every connection it accepts speaks TLS.
+pub async fn listen(address: &str, tls: Option<Tls>) -> Result<Listener, IoError> {
+    let tls = tls.map(Tls::server).transpose()?;
     let inner = TcpListener::bind(address).map_err(|e| IoError::of(e, address))?;
     inner
         .set_nonblocking(true)
         .map_err(|e| IoError::of(e, address))?;
-    Ok(Listener { inner })
+    Ok(Listener { inner, tls })
 }
 
 /// Connect to `address`.
 ///
 /// Blocking, which the module header says is the one thing here that is.
-pub async fn connect(address: &str) -> Result<Connection, IoError> {
+/// With `tls:` (ADR-289 D34) the handshake runs before this returns, and the
+/// address's host is the name the server's certificate must carry.
+pub async fn connect(address: &str, tls: Option<Tls>) -> Result<Connection, IoError> {
+    let session = tls.map(|tls| tls.client(address)).transpose()?;
     let inner = TcpStream::connect(address).map_err(|e| IoError::of(e, address))?;
     inner
         .set_nonblocking(true)
         .map_err(|e| IoError::of(e, address))?;
-    Ok(Connection { inner })
+    let mut connection = Connection {
+        inner,
+        tls: session,
+    };
+    connection.handshake().await?;
+    Ok(connection)
 }
 
 impl Listener {
@@ -93,16 +121,21 @@ impl Listener {
     pub async fn accept(&self) -> Result<Connection, IoError> {
         loop {
             match self.inner.accept() {
-                Ok((stream, _)) => {
-                    stream
-                        .set_nonblocking(true)
-                        .map_err(|e| IoError::of(e, "a connection"))?;
-                    return Ok(Connection { inner: stream });
-                }
+                Ok((stream, _)) => return self.connection(stream),
                 Err(error) if would_block(&error) => ready(&self.inner, Interest::Readable).await?,
                 Err(error) => return Err(IoError::of(error, "accept")),
             }
         }
+    }
+
+    /// An accepted socket, non-blocking, with a TLS session where the listener
+    /// has TLS; the handshake is left to the connection's first use.
+    fn connection(&self, stream: TcpStream) -> Result<Connection, IoError> {
+        stream
+            .set_nonblocking(true)
+            .map_err(|e| IoError::of(e, "a connection"))?;
+        let tls = self.tls.as_ref().map(Session::server).transpose()?;
+        Ok(Connection { inner: stream, tls })
     }
 
     /// The address this is bound to, which is what a caller that asked for port
@@ -122,6 +155,15 @@ impl Connection {
     /// on every socket there has ever been and is the one thing a caller has to
     /// know to write a loop.
     pub async fn read(&mut self) -> Result<Bytes, IoError> {
+        if let Some(session) = &mut self.tls {
+            return match session.read(&self.inner, None).await {
+                Ok(read) => Ok(Bytes::from(read)),
+                Err(ReadFailed::Io(error)) => Err(error),
+                Err(ReadFailed::TimedOut(_)) => {
+                    Err(IoError::Other("a connection timed out".into()))
+                }
+            };
+        }
         let mut buffer = vec![0_u8; CHUNK];
         loop {
             match self.inner.read(&mut buffer) {
@@ -149,6 +191,12 @@ impl Connection {
         within: crate::time::Duration,
     ) -> Result<Bytes, ReadFailed> {
         let deadline = std::time::Instant::now() + within;
+        if let Some(session) = &mut self.tls {
+            return session
+                .read(&self.inner, Some(deadline))
+                .await
+                .map(Bytes::from);
+        }
         let mut buffer = vec![0_u8; CHUNK];
         loop {
             match self.inner.read(&mut buffer) {
@@ -183,6 +231,9 @@ impl Connection {
         // `ref String` or a buffer, and naming one of them would refuse a
         // correct program.
         let bytes = bytes.as_ref();
+        if let Some(session) = &mut self.tls {
+            return session.write(&self.inner, bytes).await;
+        }
         let mut at = 0;
         while at < bytes.len() {
             match self.inner.write(&bytes[at..]) {
@@ -193,6 +244,15 @@ impl Connection {
             }
         }
         Ok(())
+    }
+
+    /// **The TLS handshake, where the connection has TLS and has not had it**
+    /// (ADR-289 D34); nothing on a plain one. `read` and `write` run it too.
+    pub async fn handshake(&mut self) -> Result<(), IoError> {
+        match &mut self.tls {
+            Some(session) => session.handshake(&self.inner).await,
+            None => Ok(()),
+        }
     }
 
     /// Who is on the other end.
@@ -220,14 +280,18 @@ impl Connection {
 ///
 /// **A descriptor ceiling pauses the accepting and never ends it** (D3): the
 /// system's queue holds the next connection until one closes.
-pub async fn serve(address: &str, handler: Handler) -> Result<(), IoError> {
-    listen(address).await?.serve(handler, 0).await
+pub async fn serve(address: &str, handler: Handler, tls: Option<Tls>) -> Result<(), IoError> {
+    listen(address, tls).await?.serve(handler, 0).await
 }
 
 /// [`serve`] where tasks run on threads (`user_parallelism = yes`): the
 /// handler and its futures cross one.
-pub async fn serve_on_pool(address: &str, handler: PoolHandler) -> Result<(), IoError> {
-    listen(address).await?.serve_on_pool(handler, 0).await
+pub async fn serve_on_pool(
+    address: &str,
+    handler: PoolHandler,
+    tls: Option<Tls>,
+) -> Result<(), IoError> {
+    listen(address, tls).await?.serve_on_pool(handler, 0).await
 }
 
 impl Listener {
@@ -247,8 +311,11 @@ impl Listener {
             let handler = handler.clone();
             // **Started as a `spawn` is**, so a panic is caught at the task's
             // edge and ends this connection alone (D4).
-            let task =
-                crate::task::TaskHandle::start(async move { said(handler(connection).await) });
+            let task = crate::task::TaskHandle::start(async move {
+                if let Some(connection) = shaken(connection).await {
+                    said(handler(connection).await)
+                }
+            });
             // Only a counted server waits for its connections; one that serves
             // until the program ends keeps no handle.
             if connections > 0 {
@@ -272,10 +339,11 @@ impl Listener {
                 continue;
             };
             let handler = handler.clone();
-            let task =
-                crate::task::TaskHandle::start_on_pool(
-                    async move { said(handler(connection).await) },
-                );
+            let task = crate::task::TaskHandle::start_on_pool(async move {
+                if let Some(connection) = shaken(connection).await {
+                    said(handler(connection).await)
+                }
+            });
             if connections > 0 {
                 started.push(task);
             }
@@ -339,18 +407,26 @@ fn said(outcome: Outcome) {
     }
 }
 
+/// **A connection past its TLS handshake**, run in the connection's own task
+/// before the handler (ADR-289 D34). A failed handshake closes the connection
+/// and is said on standard error, as a handler's error is; the server goes on.
+async fn shaken(mut connection: Connection) -> Option<Connection> {
+    match connection.handshake().await {
+        Ok(()) => Some(connection),
+        Err(error) => {
+            eprintln!("net::serve: a TLS handshake failed: {error}");
+            None
+        }
+    }
+}
+
 /// The next connection, or `None` after a pause where the process is out of
 /// descriptors (ADR-326 D3): the connection waits in the system's queue, and
 /// the server does not end for it.
 async fn accepted(listener: &Listener) -> Result<Option<Connection>, IoError> {
     loop {
         match listener.inner.accept() {
-            Ok((stream, _)) => {
-                stream
-                    .set_nonblocking(true)
-                    .map_err(|e| IoError::of(e, "a connection"))?;
-                return Ok(Some(Connection { inner: stream }));
-            }
+            Ok((stream, _)) => return listener.connection(stream).map(Some),
             Err(error) if would_block(&error) => ready(&listener.inner, Interest::Readable).await?,
             Err(error) if out_of_descriptors(&error) => {
                 crate::time::sleep(crate::time::Duration::from_millis(10)).await;

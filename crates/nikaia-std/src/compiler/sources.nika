@@ -22,7 +22,7 @@ use std::collections
 ///
 /// A directory under `src` that cannot be read is left out, as the walk leaves
 /// it out; a file that cannot be read, or is not UTF-8, is the failure, named.
-pub fn rust_sources(src: ref String) -> collections::BTreeMap[String, String] throws {
+fn rust_sources(src: ref String) -> collections::BTreeMap[String, String] throws {
     let mut out = collections::BTreeMap()
     for name in fs::walk(src, fs::Root::Anywhere) {
         if !name.ends_with(".rs") { continue }

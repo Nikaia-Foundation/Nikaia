@@ -85,7 +85,7 @@ pub trait ProjectMembersHost {
     fn shipped(&self) -> fs::Path;
 }
 
-pub fn project_members_official() -> Vec<(String, String)> { vec![(String::from("json"), String::from("0.1.0"))] }
+pub(crate) fn project_members_official() -> Vec<(&'static str, &'static str)> { vec![("db", "0.1.0"), ("json", "0.1.0")] }
 
 pub(crate) async fn project_members_taken_in<H: ProjectMembersHost>(manifest: &ProjectMembersManifest, root: &std::path::Path, host: &H) -> Vec<(String, fs::Path)> {
     let src = nikaia_std::fs::path::join(&(root), std::path::Path::new(&("src")));
@@ -220,7 +220,7 @@ pub struct ProjectMembersMember {
     pub fetched: Option<String>,
 }
 
-pub fn project_members_dependencies_first(members: &[ProjectMembersMember]) -> Vec<i64> {
+pub(crate) fn project_members_dependencies_first(members: &[ProjectMembersMember]) -> Vec<i64> {
     let at_of: collections::HashMap<fs::Path, i64> = (nikaia_std::range::span(0, members.len() as i64)).map(|at| { (nikaia_std::fs::path::clone(&(nikaia_std::index::get(&members, nikaia_std::index::at(at)).root)), at) }).collect();
     let needs: Vec<collections::BTreeSet<i64>> = members.iter().map(|m| {
         let wanted: collections::BTreeSet<i64> = m.dependencies.iter().filter_map(|d| { at_of.get(&project_members_canonical(&d.root)).copied() }).collect();
@@ -276,9 +276,9 @@ pub async fn project_members_members_of<H: ProjectMembersHost>(entry_manifest: &
     Ok(out)
 }
 
-pub fn project_members_fetched_variable() -> String { String::from("NIKAIA_FETCHED") }
+pub(crate) fn project_members_fetched_variable() -> String { String::from("NIKAIA_FETCHED") }
 
-pub fn project_members_fetched_text(members: &[ProjectMembersMember]) -> String {
+pub(crate) fn project_members_fetched_text(members: &[ProjectMembersMember]) -> String {
     let lines: Vec<String> = members.iter().filter_map(|m| {
         let named = match m.fetched.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(format!("{}={}", named, nikaia_std::fs::path::display(&(m.root))))
@@ -318,7 +318,7 @@ pub(crate) fn project_members_a_nikaia_package(key: &str, named: &str, at: &std:
     return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Refused(format!("`{}`, the crate Cargo found for `{}`, is not a Nikaia package: it has {} ({}).\nA Nikaia package on crates.io carries its `nikaia.toml`, its `src/*.nika` and its `nikaia.contracts`. Depend on another version, or on the package by path.", named, key, said, nikaia_std::fs::path::display(&(at)))), &"project_members_a_nikaia_package"));
 }
 
-pub async fn project_members_fetched_of<H: ProjectMembersHost>(manifest: &ProjectMembersManifest, root: &std::path::Path, host: &H) -> Result<collections::BTreeMap<String, fs::Path>, nikaia_std::error::Thrown<ProjectMembersRefusal>> {
+pub(crate) async fn project_members_fetched_of<H: ProjectMembersHost>(manifest: &ProjectMembersManifest, root: &std::path::Path, host: &H) -> Result<collections::BTreeMap<String, fs::Path>, nikaia_std::error::Thrown<ProjectMembersRefusal>> {
     let mut out: collections::BTreeMap<String, fs::Path> = collections::BTreeMap::new();
     match env::var(&project_members_fetched_variable()) {
         None => { },

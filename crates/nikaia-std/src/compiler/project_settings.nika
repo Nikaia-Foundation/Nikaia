@@ -457,7 +457,7 @@ pub fn project_settings_ledger_path(root: ref fs::Path) -> fs::Path {
 /// **The switches file the driver wrote**, where there is one in `gen_dir`.
 /// Absent means the wrapper was run by hand rather than by a project build,
 /// and then there is no switch anybody could flip between two runs.
-pub fn project_settings_switches_beside(gen_dir: ref fs::Path) -> fs::Path? {
+fn project_settings_switches_beside(gen_dir: ref fs::Path) -> fs::Path? {
     let path = gen_dir.join("switches")
     let found = fs::metadata(path, fs::Root::Anywhere) catch { return null }
     return if found.is_file() { path } else { null }

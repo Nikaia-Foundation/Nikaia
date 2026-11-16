@@ -39,7 +39,8 @@ pub(crate) fn sv_mul_add(a: i64, x: i64, b: i64, y: i64) -> Option<i64> {
     left.checked_add(right)
 }
 
-pub fn sv_fits32(k: i64) -> bool { k >= -2147483648 && k <= 2147483647 }
+#[cfg(test)]
+pub(crate) fn sv_fits32(k: i64) -> bool { k >= -2147483648 && k <= 2147483647 }
 
 pub(crate) fn sv_content(ks: &[i64]) -> Option<i64> {
     let mut g: i64 = 0;
@@ -51,7 +52,8 @@ pub(crate) fn sv_content(ks: &[i64]) -> Option<i64> {
     Some(g)
 }
 
-pub fn sv_reduced(ks: Vec<i64>) -> Vec<i64> {
+#[cfg(test)]
+pub(crate) fn sv_reduced(ks: Vec<i64>) -> Vec<i64> {
     let g = match sv_content(&ks) { Some(__nikaia_value) => __nikaia_value, None => return ks };
     if g <= 1 { return ks; }
     let mut out: Vec<i64> = vec![];
@@ -62,7 +64,8 @@ pub fn sv_reduced(ks: Vec<i64>) -> Vec<i64> {
     out
 }
 
-pub fn sv_max_abs(ks: &[i64]) -> Option<i64> {
+#[cfg(test)]
+pub(crate) fn sv_max_abs(ks: &[i64]) -> Option<i64> {
     let mut most: i64 = 0;
     for k in ks.iter() {
         let k = nikaia_std::num::value(k);
@@ -72,7 +75,8 @@ pub fn sv_max_abs(ks: &[i64]) -> Option<i64> {
     Some(most)
 }
 
-pub fn sv_dense_combine(a: i64, x: &[i64], b: i64, y: &[i64]) -> Option<Vec<i64>> {
+#[cfg(test)]
+pub(crate) fn sv_dense_combine(a: i64, x: &[i64], b: i64, y: &[i64]) -> Option<Vec<i64>> {
     if (x.len() as i64) != y.len() as i64 { return None; }
     let mut out: Vec<i64> = vec![];
     let mut i: i64 = 0;
@@ -95,13 +99,15 @@ pub(crate) fn sv_cancelling(xj: i64, yj: i64) -> Option<Vec<i64>> {
     Some(vec![a, b])
 }
 
-pub fn sv_dense_eliminate(x: &[i64], y: &[i64], j: i64) -> Option<Vec<i64>> {
+#[cfg(test)]
+pub(crate) fn sv_dense_eliminate(x: &[i64], y: &[i64], j: i64) -> Option<Vec<i64>> {
     if j < 0 || j >= x.len() as i64 || j >= y.len() as i64 { return None; }
     let ab = match sv_cancelling(*unsafe { nikaia_std::proven::read(&x, (j) as usize) }, *unsafe { nikaia_std::proven::read(&y, (j) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
     sv_dense_combine(*nikaia_std::index::get(&ab, 0), x, *nikaia_std::index::get(&ab, 1), y)
 }
 
-pub fn sv_pick_column(x: &[i64], y: &[i64], width: i64, opposite: bool) -> i64 {
+#[cfg(test)]
+pub(crate) fn sv_pick_column(x: &[i64], y: &[i64], width: i64, opposite: bool) -> i64 {
     let mut best: i64 = -1;
     let mut best_cost: i64 = 0;
     let mut j: i64 = 0;
@@ -123,6 +129,7 @@ pub fn sv_pick_column(x: &[i64], y: &[i64], width: i64, opposite: bool) -> i64 {
     best
 }
 
+#[cfg(test)]
 pub(crate) fn sv_column_cost(xj: i64, yj: i64) -> Option<i64> {
     if xj == 1 || xj == -1 || yj == 1 || yj == -1 { return Some(0); }
     let ab = match sv_cancelling(xj, yj) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -209,7 +216,7 @@ pub(crate) fn sv_rat_floor(a: &SvRat) -> i64 { a.num.div_euclid(a.den) }
 
 pub(crate) fn sv_rat_ceil(a: &SvRat) -> i64 { nikaia_std::index::or(sv_ceil_div(a.num, a.den), || 0) }
 
-pub fn sv_rat_text(a: &SvRat) -> String {
+pub(crate) fn sv_rat_text(a: &SvRat) -> String {
     if a.den == 1 { return format!("{}", a.num); }
     format!("{}/{}", a.num, a.den)
 }
@@ -228,7 +235,8 @@ pub(crate) fn sv_delta_add(a: &SvDelta, b: &SvDelta) -> Option<SvDelta> {
     Some(SvDelta { c, k })
 }
 
-pub fn sv_delta_sub(a: &SvDelta, b: &SvDelta) -> Option<SvDelta> {
+#[cfg(test)]
+pub(crate) fn sv_delta_sub(a: &SvDelta, b: &SvDelta) -> Option<SvDelta> {
     let c = match sv_rat_sub(&a.c, &b.c) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let k = match sv_rat_sub(&a.k, &b.k) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(SvDelta { c, k })
@@ -246,7 +254,8 @@ pub(crate) fn sv_delta_cmp(a: &SvDelta, b: &SvDelta) -> i64 {
     sv_rat_cmp(&a.k, &b.k)
 }
 
-pub fn sv_delta_text(a: &SvDelta) -> String {
+#[cfg(test)]
+pub(crate) fn sv_delta_text(a: &SvDelta) -> String {
     if a.k.num == 0 { return sv_rat_text(&a.c); }
     let real = if a.c.num == 0 { String::from("") } else { sv_rat_text(&a.c) };
     let sign = if a.k.num > 0 && a.c.num != 0 { "+" } else { "" };
@@ -315,7 +324,7 @@ pub(crate) fn sv_num_test_dorder(a: &SvDelta, b: &SvDelta) -> String {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== item 1: i64 kept small\n"));
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("reduced chain: {}\n", sv_num_test_chain(true, 40))));
@@ -343,7 +352,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== item 2: rationals and delta\n"));
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("6/-4 = {}, 0/-5 = {}, 1/0: {}\n", sv_num_test_show((sv_rat(6, -4)).as_ref()), sv_num_test_show((sv_rat(0, -5)).as_ref()), sv_num_test_show((sv_rat(1, 0)).as_ref()))));

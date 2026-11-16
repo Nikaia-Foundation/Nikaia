@@ -1,0 +1,59 @@
+// #1759: once, after `nikaia test` had rebuilt both builds of a package
+// (its `test` blocks and its program, ADR-269 D12), the next run rebuilt one
+// of them again. The probe that shows it: an input of the first build (the
+// package's `.nika`, or a `std` source of a shared checkout) touched while
+// the second one builds; Cargo dates freshness by mtime, so the first build
+// is stale on the next run, and only it. That rebuild is right, never a
+// stale binary. What is pinned here is the rest: the generated Rust is
+// written before Cargo starts (#280), so with nothing touched a second run
+// compiles neither build, after a first build and after an edit that changes
+// the lowered code alike. Through a Cargo that counts.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
+		],
+	).stdout.trim().clone()
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let nikaia = toolchain()
+	let real = process::run("sh", ["-c", "echo ${CARGO:-$(command -v cargo)}"]).stdout.trim().clone()
+	let path = process::run("sh", ["-c", "echo $PATH"]).stdout.trim().clone()
+	process::run("mkdir", ["-p", f"{tmp}/p/src", f"{tmp}/p/tests", f"{tmp}/bin"])
+	let shim = f"{tmp}/bin/cargo"
+	fs::write(shim, fs::Root::Anywhere, SHIM)
+	process::run("chmod", ["+x", shim.clone()])
+	let p = f"{tmp}/p"
+	fs::write(f"{p}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"twice\"\nversion = \"0.1.0\"\n")
+	fs::write(f"{p}/src/main.nika", fs::Root::Anywhere, PROGRAM)
+	fs::write(f"{p}/tests/main.stdout", fs::Root::Anywhere, "6\n")
+	let log = f"{tmp}/cargo.log"
+	let env = [("RUST_BACKTRACE", "0"), ("CARGO_TERM_COLOR", "never"), ("CARGO", shim.clone()), ("REAL_CARGO", real), ("SHIM_LOG", log.clone()), ("PATH", f"{tmp}/bin:{path}")]
+	let steps = ["first run", "again", "edited", "again"]
+	for step in steps {
+		if step == "edited" {
+			fs::write(f"{p}/src/main.nika", fs::Root::Anywhere, PROGRAM.replace("x * 2", "x + x"))
+		}
+		fs::write(log, fs::Root::Anywhere, "")
+		let ran = process::run(nikaia, ["test"]; dir: p.clone(), env: env.clone())
+		let compiled = process::run("sh", ["-c", f"grep -c 'Compiling twice ' {log}"]).stdout.trim().clone()
+		println(f"{step}: {ran.code}, builds compiled: {compiled}")
+	}
+	process::run("rm", ["-rf", tmp])
+}
+
+comptime SHIM: ref String = "#!/bin/bash\n# Cargo, with what it compiles counted: `--quiet` dropped, its `Compiling` lines kept.\nargs=()\nfor a in \"$@\"; do [ \"$a\" = --quiet ] || args+=(\"$a\"); done\n{ \"$REAL_CARGO\" \"${args[@]}\" 2>&1 1>&3 | tee -a \"$SHIM_LOG\" >&2; } 3>&1\nexit ${PIPESTATUS[0]}\n"
+
+comptime PROGRAM: ref String = "pub fn double(x: i64) -> i64 {\n\treturn x * 2\n}\n\ntest \"doubles\" {\n\tassert(double(2) == 4)\n}\n\nfn main() throws {\n\tprintln(f\"{double(3)}\")\n}\n"

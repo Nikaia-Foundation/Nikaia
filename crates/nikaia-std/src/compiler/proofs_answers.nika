@@ -116,7 +116,7 @@ pub struct ProofsWhere {
 }
 
 /// No file.
-pub fn proofs_nowhere() -> ProofsWhere {
+fn proofs_nowhere() -> ProofsWhere {
     return ProofsWhere { file: null, source: "", breaks: [] }
 }
 
@@ -203,7 +203,7 @@ pub fn proofs_shown(place: (String?, i64?, String?), root: ref fs::Path) -> Stri
 
 /// The question as its terms are written, every node in full: two questions
 /// written alike have one normal form, whatever their term ids.
-pub fn proofs_written(arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> String {
+fn proofs_written(arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> String {
     let mut out = ""
     for fact in facts {
         proofs_write_term(arena, fact, out)
@@ -351,7 +351,7 @@ fn proofs_answered(t: ref ProofsThread, normal: ref LgNormal, key: ref String) -
 /// `PROOFS_ANSWERED` answers the thread starts over.
 fn proofs_remember(mut t: ProofsThread, key: ref String, asked: ref ProofsAsked, entry: ref ProofsEntry?) {
     if t.answered.len() >= PROOFS_ANSWERED {
-        t.answered = collections::BTreeMap()
+        t.answered.clear()
     }
     let kept = match asked {
         ProofsAsked::Refuted(_) => entry?.clone(),

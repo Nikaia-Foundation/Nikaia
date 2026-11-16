@@ -65,7 +65,7 @@ impl CheckState {
     /// than a wrong one passed on: a trait this unit does not declare, an
     /// argument that could not be typed, and a parameter of the caller's own,
     /// which answers for whatever its own bounds say.
-    pub fn a_bound_the_argument_does_not_meet(ref mut self, world: ref CheckWorld, key: ref String, bound: ref collections::BTreeMap[String, Ty], span: ref Span) sync {
+    fn a_bound_the_argument_does_not_meet(ref mut self, world: ref CheckWorld, key: ref String, bound: ref collections::BTreeMap[String, Ty], span: ref Span) sync {
         let wanted = self.bounds_wanted(world, key) ?? return
         for (parameter, traits) in wanted {
             let held = bound.get(parameter) ?? continue
@@ -114,7 +114,7 @@ impl CheckState {
     /// `NK1138` for a parameter, `NK1139` for a `let`). Said once per binding:
     /// a body that changes one usually does so several times. Only where the
     /// change is certain.
-    pub fn a_changed_binding_says_mut(ref mut self, name: ref String, how: ref String, changed_at: Span) sync {
+    fn a_changed_binding_says_mut(ref mut self, name: ref String, how: ref String, changed_at: Span) sync {
         self.changed.push(name.clone())
         let local = self.binding(name) ?? return
         let without_mut = local.without_mut ?? return
@@ -154,13 +154,13 @@ impl CheckState {
         self.said_mut.insert(declared)
         let there = CheckLabel { span: without_mut.at.clone(), word: name.clone(), text: declared_text, main: false }
         let here = CheckLabel { span: changed_at.clone(), word: name.clone(), text: how.clone(), main: true }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code: code, message: message, notes: notes, help: help, labels: [there, here] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code: code, message: message, notes: notes, help: help, labels: [there, here], edit: null })
     }
 
     /// **`NK1306`: `mut` on a `for` binding that cannot be changed in place**
     /// (ADR-views-2 D4, section 6): a map's key, a set's element, the element a
     /// lending adapter hands. Labelled at the `mut`.
-    pub fn a_for_mut_that_cannot_write(ref mut self, why: ref String, iter: ref Expr, world: ref CheckWorld, span: ref Span) sync {
+    fn a_for_mut_that_cannot_write(ref mut self, why: ref String, iter: ref Expr, world: ref CheckWorld, span: ref Span) sync {
         let mut message: String = ""
         let mut note: String = ""
         let mut help: String = ""
@@ -183,30 +183,30 @@ impl CheckState {
             label = "marks a read-only view"
         }
         let there = CheckLabel { span: span.clone(), word: "mut", text: label, main: true }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1306", message: message, notes: [note], help: help, labels: [there] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1306", message: message, notes: [note], help: help, labels: [there], edit: null })
     }
 
     /// **`for mut` over a list the function may not change** (ADR-views-2 D2):
     /// `NK1139`, labelled at the list.
-    pub fn a_for_mut_over_a_list_not_mut(ref mut self, list: ref String, head: ref String, a_parameter: bool, span: ref Span) sync {
+    fn a_for_mut_over_a_list_not_mut(ref mut self, list: ref String, head: ref String, a_parameter: bool, span: ref Span) sync {
         let mut way_out: String = f"Declare it `mut` where it's declared: `let mut {list}`, or walk a copy of your own: `for mut {head} in {list}.clone()`."
         if a_parameter {
             way_out = f"Write `mut {list}` in the parameter list, or walk a copy of your own: `for mut {head} in {list}.clone()`."
         }
         let label = CheckLabel { span: span.clone(), word: list.clone(), text: "can't be changed here", main: true }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1139", message: f"`for mut {head}` changes the elements of `{list}`, but `{list}` wasn't declared as mutable.", notes: ["A `for mut` binding is the element of the list itself, so a change to it reaches the list."], help: way_out, labels: [label] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1139", message: f"`for mut {head}` changes the elements of `{list}`, but `{list}` wasn't declared as mutable.", notes: ["A `for mut` binding is the element of the list itself, so a change to it reaches the list."], help: way_out, labels: [label], edit: null })
     }
 
     /// **`for mut` over a place that is not a list or an array** (ADR-views-2
     /// D2): not supported yet.
-    pub fn a_for_mut_over_a_place(ref mut self, world: ref CheckWorld, iter: ref Expr, over: ref Ty, span: ref Span) sync {
+    fn a_for_mut_over_a_place(ref mut self, world: ref CheckWorld, iter: ref Expr, over: ref Ty, span: ref Span) sync {
         self.findings.push(check_refusal("NK1139", span, "`for mut` over a list isn't supported yet.", [], null))
     }
 
     /// **`NK1178`: a grammar this compiler could not run while it built**
     /// (issue #178). One code and six sentences, because what a reader can do
     /// about it differs completely.
-    pub fn a_grammar_that_did_not_run(ref mut self, owner: ref String, rule: ref String, why: ref CheckWall, span: ref Span) sync {
+    fn a_grammar_that_did_not_run(ref mut self, owner: ref String, rule: ref String, why: ref CheckWall, span: ref Span) sync {
         let entry = f"{owner}::{rule}"
         let mut message: String = ""
         let mut note: String = ""
@@ -286,7 +286,7 @@ impl CheckState {
     /// **`NK1117`: a `std` name written without its module.** Only where the
     /// name is known to nothing in the program, and exactly one module of
     /// `std` has it.
-    pub fn a_std_name_without_its_module(ref mut self, world: ref CheckWorld, name: ref String, span: ref Span) sync {
+    fn a_std_name_without_its_module(ref mut self, world: ref CheckWorld, name: ref String, span: ref Span) sync {
         if name.contains("::") {
             return
         }
@@ -323,7 +323,7 @@ impl CheckState {
     /// (ADR-321 D1, D16): the same code stops the program the same way. In its own words, at the
     /// place it stopped (`at`, a byte of this file, or -1) and, where that is a
     /// function of another file, its name.
-    pub fn a_build_time_run_that_stopped_at(ref mut self, bound: ref String, why: ref String, at: i64, function: ref String?, span: ref Span) sync {
+    fn a_build_time_run_that_stopped_at(ref mut self, bound: ref String, why: ref String, at: i64, function: ref String?, span: ref Span) sync {
         let mut labels: Vec[CheckLabel] = []
         if at >= 0 {
             let place = Span { start: at as u32, end: at as u32 }
@@ -339,6 +339,6 @@ impl CheckState {
         if self.computing_default {
             help = "Fix it as you would fix the program stopping there, or make the option a `T?` and compute the value in the body."
         }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1244", message: f"`{bound}` stopped while the program was built: {why}.", notes: notes, help: help, labels: labels })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1244", message: f"`{bound}` stopped while the program was built: {why}.", notes: notes, help: help, labels: labels, edit: null })
     }
 }

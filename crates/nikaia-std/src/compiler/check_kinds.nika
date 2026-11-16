@@ -158,7 +158,7 @@ fn kind_some_binding(world: ref CheckWorld, pattern: ref MatchPattern) -> String
 }
 
 /// The numbers' type names.
-pub fn kind_a_number_name(name: ref String) -> bool {
+fn kind_a_number_name(name: ref String) -> bool {
     return name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "i128" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "u128" || name == "usize" || name == "f32" || name == "f64"
 }
 
@@ -238,7 +238,7 @@ fn kind_path_text(world: ref CheckWorld, segments: ref Vec[winnow_grammar::Symbo
 impl CheckState {
     /// **The bounds a `comptime` raises** (ADR-321 D11), read before anything
     /// runs: a bound that is refused runs nothing, and `null` says so.
-    pub fn raised_bounds(ref mut self, world: ref CheckWorld, bounds: ref Vec[ConfigArg], span: ref Span) -> CheckRaised? sync {
+    fn raised_bounds(ref mut self, world: ref CheckWorld, bounds: ref Vec[ConfigArg], span: ref Span) -> CheckRaised? sync {
         let mut raised = CheckRaised { steps: null, ram: null }
         let mut refused = false
         for bound in bounds {
@@ -274,7 +274,7 @@ impl CheckState {
     /// after it, a `usize` of a foreign declaration. The buffer's own `len()`,
     /// and a constant its length is known to cover, are accepted; the rest is
     /// asked of `a_length_that_may_not_fit`.
-    pub fn a_length_that_fits_its_buffer(ref mut self, world: ref CheckWorld, written: ref String, wanted: ref Vec[(String, Ty)], given: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
+    fn a_length_that_fits_its_buffer(ref mut self, world: ref CheckWorld, written: ref String, wanted: ref Vec[(String, Ty)], given: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
         if !self.foreign_names.contains(written) {
             return
         }
@@ -309,7 +309,7 @@ impl CheckState {
 
     /// **`NK2207`: an `update` block that replaces a name without reading it**,
     /// which is what `set` is for (ADR-281 D10).
-    pub fn an_update_block_reads_what_it_writes(ref mut self, world: ref CheckWorld, params: ref Vec[winnow_grammar::Symbol], body: ref Block, span: ref Span) sync {
+    fn an_update_block_reads_what_it_writes(ref mut self, world: ref CheckWorld, params: ref Vec[winnow_grammar::Symbol], body: ref Block, span: ref Span) sync {
         for param in params {
             let name = world.words.resolve(param).clone()
             if kind_an_update_only_replaces(world, name, body) {
@@ -320,7 +320,7 @@ impl CheckState {
 
     /// **`NK1256`: `null` matched on a value that cannot be `null`**
     /// (ADR-352 D3). Where the type is not known nothing is claimed.
-    pub fn a_null_arm_on_a_plain_value(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
+    fn a_null_arm_on_a_plain_value(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
         match on {
             Ty::Nullable(_) => return,
             Ty::Unknown => return,
@@ -339,7 +339,7 @@ impl CheckState {
     /// or one of the program's structs or enums; a number against a `char` is
     /// not asked. A `T?` is `NK1205`'s, and a type not known stays `?`
     /// (ADR-291 D3).
-    pub fn a_pattern_of_another_type(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
+    fn a_pattern_of_another_type(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
         let mut kind: String = ""
         let mut shown: String = ""
         let known = self.kind_of_the_matched(on)
@@ -369,7 +369,7 @@ impl CheckState {
     /// #673): over `error`, an arm naming a type by its bare name or its path
     /// takes that member of the set, and a type outside the set is no
     /// pattern of it. Where the set is not known nothing is claimed.
-    pub fn a_type_that_cannot_arrive(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
+    fn a_type_that_cannot_arrive(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
         let mut members: Vec[String] = []
         for member in several_errors_of(on) {
             members.push(member.text())
@@ -457,7 +457,7 @@ impl CheckState {
     /// D5). A `T?` has no constructors: its nothing is `null`, its value the
     /// `T` itself. Only a `T?` subject is asked, so a type of the program's
     /// own with a variant called `Some` or `None` keeps its meaning.
-    pub fn a_some_or_none_over_a_nullable(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) -> bool sync {
+    fn a_some_or_none_over_a_nullable(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) -> bool sync {
         match on {
             Ty::Nullable(_) => {},
             else => return false,
@@ -484,7 +484,7 @@ impl CheckState {
     /// #704): a pattern of `W`
     /// says nothing about the nothing. The way out is to say what `null` stands
     /// for first, with `??`.
-    pub fn a_variant_matched_on_a_nullable(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
+    fn a_variant_matched_on_a_nullable(ref mut self, world: ref CheckWorld, on: ref Ty, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) sync {
         let inner = match on {
             Ty::Nullable(inner) => inner.clone(),
             else => return,
@@ -513,7 +513,7 @@ impl CheckState {
 
     /// Whether the guarded call can fail with several error types, by this
     /// unit's own ledger.
-    pub fn several_arrive(ref self, world: ref CheckWorld, guarded: ref Expr) -> bool sync {
+    fn several_arrive(ref self, world: ref CheckWorld, guarded: ref Expr) -> bool sync {
         let name = match guarded {
             Expr::Call { func, .. } => kind_callee_name(world, func) ?? return false,
             Expr::Try(inner, _) => return self.several_arrive(world, inner),

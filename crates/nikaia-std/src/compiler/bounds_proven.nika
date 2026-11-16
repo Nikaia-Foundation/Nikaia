@@ -41,6 +41,9 @@ pub struct BoundsAllProven {
 	pub negations: collections::BTreeSet[i64],
 	pub calls: collections::BTreeMap[i64, String],
 	pub derived: Vec[String],
+	/// **What keeps each function from its callers' bounds** (#1863), for
+	/// `--bounds`: `derived_gates`, `""` where they bound it (ADR-391 D1).
+	pub gates: collections::BTreeMap[String, String],
 	/// What `--bounds-trace` shows (#1495), each goal's rows once.
 	pub trace: Vec[String],
 }
@@ -73,6 +76,7 @@ pub fn bounds_proven(
 		negations: collections::BTreeSet(),
 		calls: collections::BTreeMap(),
 		derived: [],
+		gates: collections::BTreeMap(),
 		trace: [],
 	}
 	// What each call may change, each function's frame among it (ADR-306
@@ -159,7 +163,7 @@ pub fn bounds_proven(
 				let entries = context.around.derived.entry.len()
 				derived_note(context.around, walked)
 				if context.around.derived.entry.len() != entries {
-					context.around.held = collections::BTreeMap()
+					context.around.held.clear()
 				}
 				bp_add(out, walked)
 			},
@@ -167,12 +171,13 @@ pub fn bounds_proven(
 		}
 	}
 	out.derived = derived_rows(context.around)
+	out.gates = derived_gates(context.around.derived)
 	// **A grammar's actions, walked like a function's body** (ADR-314 D1),
 	// from what each binding matched.
 	let none: Vec[FnArg] = []
 	// What a grammar binding matched changes every walk: each finds the
 	// rules that hold itself.
-	context.around.held = collections::BTreeMap()
+	context.around.held.clear()
 	for item in program.items {
 		match item.node {
 			Item::Grammar(def) => {

@@ -1,0 +1,79 @@
+error[NK1296]: `&` is not a lane operation between these, and this is a `simd::Fixed[f64, 4]`.
+   --> tests/simd_float_lanes_refused.nika:11:18
+    |
+ 11 |     let bits = a & a
+    |                  ^^^
+    |
+    = note: Float lanes have `+ - * /` between two vectors of one type, each lane the bits the scalar operation gives, and none of the integer operators (ADR-377 D9).
+    = help: Write the operation lane by lane over `lane(i)`, or with the vector's own methods: `sqrt`, `abs`, `min`, `max`, `select`.
+error[NK1296]: `%` is not a lane operation between these, and this is a `simd::Fixed[f64, 4]`.
+   --> tests/simd_float_lanes_refused.nika:12:18
+    |
+ 12 |     let rest = a % a
+    |                  ^^^
+    |
+    = note: Float lanes have `+ - * /` between two vectors of one type, each lane the bits the scalar operation gives, and none of the integer operators (ADR-377 D9).
+    = help: Write the operation lane by lane over `lane(i)`, or with the vector's own methods: `sqrt`, `abs`, `min`, `max`, `select`.
+error[NK1296]: `*` is not a lane operation between these, and this is a `simd::Fixed[f64, 4]`.
+   --> tests/simd_float_lanes_refused.nika:13:20
+    |
+ 13 |     let scaled = a * 2.0
+    |                    ^^^^^
+    |
+    = note: Float lanes have `+ - * /` between two vectors of one type, each lane the bits the scalar operation gives, and none of the integer operators (ADR-377 D9).
+    = help: Write both sides as `simd::Fixed[f64, 4]`: a number is made a vector with `simd::splat(x)`.
+error[NK1296]: `<<` is not a lane operation between these, and this is a `simd::Fixed[f64, 4]`.
+   --> tests/simd_float_lanes_refused.nika:14:21
+    |
+ 14 |     let shifted = a << 1
+    |                     ^^^^
+    |
+    = note: Float lanes have `+ - * /` between two vectors of one type, each lane the bits the scalar operation gives, and none of the integer operators (ADR-377 D9).
+    = help: Write the operation lane by lane over `lane(i)`, or with the vector's own methods: `sqrt`, `abs`, `min`, `max`, `select`.
+error[NK1191]: You can't use `!` on `simd::Fixed[f64, 4]`.
+   --> tests/simd_float_lanes_refused.nika:15:5
+    |
+ 15 |     let flipped = !a
+    |     ^^^^^^^^^^^^^^^^
+    |
+    = note: `!` flips a `bool`, the bits of an integer or the lanes of an integer vector or a mask.
+error[NK1191]: You can't use `-` on `simd::Fixed[f64, 4]`.
+   --> tests/simd_float_lanes_refused.nika:16:5
+    |
+ 16 |     let negated = -a
+    |     ^^^^^^^^^^^^^^^^
+    |
+    = note: `-` negates a number.
+error[NK1171]: `simd::Fixed[f64, 4]` has no method called `wrapping_add`.
+   --> tests/simd_float_lanes_refused.nika:17:5
+    |
+ 17 |     let wrapped = a.wrapping_add(a)
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `wrapping_add` is an integer lane's operation; float lanes round by IEEE 754 and neither wrap nor saturate (ADR-377 D9).
+    = help: Write `+`, `-`, `*` or `/` between two float vectors, or `sum()` on a `simd::Fixed`.
+error[NK1171]: `simd::Lanes` has no method called `sum`.
+   --> tests/simd_float_lanes_refused.nika:18:5
+    |
+ 18 |     let total = l.sum()
+    |     ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What can be called is what is written down: `.sum()` is in no declaration, ledger or description this program reads.
+    = help: Write the lanes as a `simd::Fixed[T, N]`, whose `sum()` adds in the same order on every target, or `wrapping_sum()` on integer lanes.
+error[NK1171]: `simd::Fixed[u32, 4]` has no method called `sqrt`.
+   --> tests/simd_float_lanes_refused.nika:19:5
+    |
+ 19 |     let root = i.sqrt()
+    |     ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `sqrt` is a float lane's operation (ADR-377 D9).
+    = help: Write the operation lane by lane over `lane(i)`.
+error[NK1296]: `+` is not a lane operation, and this is a `simd::Fixed[u32, 4]`.
+   --> tests/simd_float_lanes_refused.nika:20:19
+    |
+ 20 |     let added = i + i
+    |                   ^^^
+    |
+    = note: A lane's `+` would either check every lane, which costs the compare and branch the vector exists to avoid, or wrap, which `+` never does elsewhere in Nikaia (ADR-377 D4).
+    = help: Name what a lane does where the result does not fit: `a.wrapping_add(b)` wraps, `a.saturating_add(b)` stops at the nearest value a lane holds.
+10 type errors

@@ -11,7 +11,7 @@ impl CheckState {
     /// positional variant's parts in order, a variant with named fields by name.
     /// Nested patterns are typed from their part; an or-pattern's names are typed
     /// where its alternatives agree.
-    pub fn pattern_parts(ref self, world: ref CheckWorld, pattern: ref MatchPattern, on: ref Ty) -> collections::BTreeMap[String, Ty] sync {
+    fn pattern_parts(ref self, world: ref CheckWorld, pattern: ref MatchPattern, on: ref Ty) -> collections::BTreeMap[String, Ty] sync {
         let mut out: collections::BTreeMap[String, Ty] = collections::BTreeMap()
         // **An or-pattern binds a name as the type every alternative gives
         // it**: `Item::Test { body, .. } | Item::Bench { body, .. }` is typed
@@ -162,7 +162,7 @@ impl CheckState {
     /// struct's own name where the pattern names the struct matched (`F {
     /// name, .. }` over an `F`, no type arguments), the variant's key
     /// otherwise.
-    pub fn named_pattern_key(ref self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], on: ref Ty) -> String sync {
+    fn named_pattern_key(ref self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], on: ref Ty) -> String sync {
         let (owner, plain) = match on {
             Ty::Named { name, args, .. } => (name.clone(), args.len() == 0),
             else => return "",
@@ -176,7 +176,7 @@ impl CheckState {
 
     /// The ledger's key of the variant a pattern names: `Owner::One` for one
     /// segment, the path as written otherwise.
-    pub fn pattern_variant(ref self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], owner: ref String) -> String sync {
+    fn pattern_variant(ref self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], owner: ref String) -> String sync {
         let mut written: Vec[String] = []
         for part in path {
             written.push(world.words.resolve(part).clone())
@@ -228,7 +228,7 @@ impl CheckState {
 /// answer that is right *once `NK1155` has run*: every alternative binds the
 /// same set, so any of them will do — and where they do not, the refusal is
 /// the finding rather than a scope this guessed at.
-pub fn pattern_names(world: ref CheckWorld, pattern: ref MatchPattern) -> Vec[String] sync {
+fn pattern_names(world: ref CheckWorld, pattern: ref MatchPattern) -> Vec[String] sync {
     return match pattern {
         MatchPattern::Path(segments) => if segments.len() == 1 { [world.words.resolve(segments[0]).clone()] } else { [] },
         MatchPattern::Tuple { parts, .. } => names_of_parts(world, parts),
@@ -261,7 +261,7 @@ fn names_of_fields(world: ref CheckWorld, fields: ref Vec[PatternField]) -> Vec[
 }
 
 /// Whether a part is a rest, `..` or `..name` (ADR-355).
-pub fn pattern_is_rest(part: ref MatchPattern) -> bool {
+fn pattern_is_rest(part: ref MatchPattern) -> bool {
     return match part {
         MatchPattern::Rest => true,
         MatchPattern::RestNamed(_) => true,
@@ -271,7 +271,7 @@ pub fn pattern_is_rest(part: ref MatchPattern) -> bool {
 
 /// The element type a list pattern matches: of a `Vec[T]`, an `Array[T]` or a
 /// view of either (ADR-355 D1).
-pub fn pattern_list_element(on: ref Ty) -> Ty? {
+fn pattern_list_element(on: ref Ty) -> Ty? {
     match on {
         Ty::Named { name, args, .. } => {
             if (name == "Vec" || name == "Array" || name == "List") && args.len() > 0 {
@@ -287,7 +287,7 @@ impl CheckState {
     /// **A struct pattern names every field, or ends with `..`** (Part I 3.4,
     /// #732): `Point { x: px }` over a `Point` with a `y` is `NK1234`, as a
     /// literal that leaves a field out is. Nested patterns are asked too.
-    pub fn a_struct_pattern_that_leaves_fields_out(ref mut self, world: ref CheckWorld, pattern: ref MatchPattern, on: ref Ty, span: ref Span) sync {
+    fn a_struct_pattern_that_leaves_fields_out(ref mut self, world: ref CheckWorld, pattern: ref MatchPattern, on: ref Ty, span: ref Span) sync {
         match pattern {
             MatchPattern::Or(alternatives) => {
                 for alternative in alternatives {

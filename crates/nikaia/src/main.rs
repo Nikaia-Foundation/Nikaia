@@ -296,6 +296,17 @@ pub enum Command {
         #[arg(value_name = "PATH", required = true)]
         files: Vec<PathBuf>,
     },
+    /// Make the edits the checker's warnings suggest (a `.clone()` that
+    /// copies nothing new, deleted) in the files named, or in the `.nika`
+    /// files under the directories named, and name each edit (#1714).
+    Fix {
+        /// The files, or directories to fix the `.nika` files of.
+        #[arg(value_name = "PATH", required = true)]
+        paths: Vec<PathBuf>,
+        /// Write nothing: print the diff of each file instead.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Run one `.nika` file in the interpreter; nothing is written and
     /// nothing is compiled.
     ///
@@ -773,6 +784,7 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
         | Command::Fmt { .. }
         | Command::Lsp
         | Command::Migrate { .. }
+        | Command::Fix { .. }
         | Command::Interpret { .. }
         | Command::Explain { .. } => {
             unreachable!("the single-file verbs are dispatched by `run`")
@@ -1202,6 +1214,19 @@ fn run() -> Result<()> {
                 _ => nikaia::migrate::run(files)?,
             };
             std::process::exit(code);
+        }
+        Command::Fix { paths, dry_run } => {
+            let named: Vec<String> = paths
+                .iter()
+                .map(|path| path.display().to_string().into())
+                .collect();
+            let code = nikaia_std::rt::exec::block_on(nikaia_std::compiler::fix::fix_run(
+                &project::Lsp,
+                &named,
+                *dry_run,
+            ))
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+            std::process::exit(code as i32);
         }
         Command::Interpret { file } => single_file(&args, file, Verb::Interpret),
         Command::Explain { file } => single_file(&args, file, Verb::Explain),

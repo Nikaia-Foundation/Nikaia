@@ -71,7 +71,8 @@ pub struct Proved {
 /// `let` without a written type that binds a whole number (#1358); and the
 /// entry each method call resolved to (#1446); and the divisors `NK1118`
 /// refused (#1566); and each `+`, `-`, `*`'s type and the statements
-/// `NK1116` refused, for the overflow goal (ADR-306 D15, #1476); and the
+/// `NK1116` refused, for the overflow goal (ADR-306 D15, #1476); and each
+/// `/` and `%`'s type, for a divisor's goal on outside data (ADR-396 D7); and the
 /// struct each field read came from and what carries outside data (#1573).
 #[allow(clippy::too_many_arguments)]
 pub fn comptimes_of(
@@ -83,6 +84,7 @@ pub fn comptimes_of(
     outside: &ProverOutside,
     zero_divisors: &BTreeSet<i64>,
     arithmetic: &BTreeMap<i64, String>,
+    divisions: &BTreeMap<i64, String>,
     unfit_numbers: &BTreeSet<i64>,
 ) -> Comptimes {
     prove_run::prove_comptimes_of(
@@ -95,6 +97,7 @@ pub fn comptimes_of(
         outside,
         zero_divisors,
         arithmetic,
+        divisions,
         unfit_numbers,
     )
 }

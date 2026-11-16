@@ -1,0 +1,32 @@
+/// A precondition derived from the callers (ADR-391 D1) is not lost to a
+/// binding named like the function (#1776): a `for`'s binding, a lambda's
+/// parameter and a function's parameter called `pick` read the binding, not
+/// the function used as a value, so every call of `pick` is still known and
+/// `xs[at]` is proved, as with a `let` (#1666).
+fn pick(xs: ref Vec[i64], at: i64) -> i64 sync {
+	return xs[at]
+}
+
+fn first(xs: ref Vec[i64]) -> i64 sync {
+	if xs.len() == 0 {
+		return 0
+	}
+	return pick(xs, 0)
+}
+
+fn counted() -> i64 sync {
+	let mut sum = 0
+	for pick in 0..<3 {
+		sum += pick
+	}
+	return sum
+}
+
+fn doubled(pick: i64) -> i64 sync {
+	return pick * 2
+}
+
+fn main() throws {
+	let twice: Vec[i64] = [5, 6].iter().map(fn(pick) { pick + pick }).collect()
+	println(f"{first([7, 8])} {first([])} {counted()} {doubled(4)} {twice[1]}")
+}

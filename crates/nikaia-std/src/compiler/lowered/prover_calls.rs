@@ -9,7 +9,7 @@ pub struct FreeFunction {
     pub whole_result: bool,
 }
 
-pub fn free_function(program: &Program, words: &winnow_grammar::InternerContext, wanted: &str) -> Option<FreeFunction> {
+pub(crate) fn free_function(program: &Program, words: &winnow_grammar::InternerContext, wanted: &str) -> Option<FreeFunction> {
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { name, receiver, args, config, ret_type, can_throw, .. } => {
@@ -31,7 +31,7 @@ pub fn free_function(program: &Program, words: &winnow_grammar::InternerContext,
     None
 }
 
-pub fn own_method(program: &Program, words: &winnow_grammar::InternerContext, owner: &str, wanted: &str) -> Option<FreeFunction> {
+pub(crate) fn own_method(program: &Program, words: &winnow_grammar::InternerContext, owner: &str, wanted: &str) -> Option<FreeFunction> {
     for item in program.items.iter() {
         match &item.node {
             Item::Impl { methods, target, trait_name } => {
@@ -63,7 +63,7 @@ pub fn own_method(program: &Program, words: &winnow_grammar::InternerContext, ow
     None
 }
 
-pub fn arguments_in_order(function: &FreeFunction, args: &[Expr], config: &[ConfigArg], words: &winnow_grammar::InternerContext) -> Vec<Expr> {
+pub(crate) fn arguments_in_order(function: &FreeFunction, args: &[Expr], config: &[ConfigArg], words: &winnow_grammar::InternerContext) -> Vec<Expr> {
     let mut all: Vec<Expr> = args.copy_owned();
     for (option, default) in function.options.iter() {
         let mut value = default.clone();
@@ -83,7 +83,7 @@ pub(crate) fn whole_type(ty: Option<&Type>, words: &winnow_grammar::InternerCont
     t.generics.is_empty() && is_whole_number(words.resolve(t.name))
 }
 
-pub fn may_throw(call: &Expr, in_throwing: bool, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, unaliased: &impl Fn(&str) -> String) -> bool {
+pub(crate) fn may_throw(call: &Expr, in_throwing: bool, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, unaliased: &impl Fn(&str) -> String) -> bool {
     if !in_throwing { return false; }
     let name = match thrower_named(call, words, unaliased) { Some(__nikaia_value) => __nikaia_value, None => return true };
     let function = free_function(program, words, &name);
@@ -125,7 +125,7 @@ pub(crate) fn thrower_named(call: &Expr, words: &winnow_grammar::InternerContext
     }
 }
 
-pub fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
+pub(crate) fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
     match expr {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -212,7 +212,7 @@ pub(crate) fn config_from_outside(config: &[ConfigArg], tainted: &collections::B
     false
 }
 
-pub fn outside_source(expr: &Expr, tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> Option<String> {
+pub(crate) fn outside_source(expr: &Expr, tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -359,7 +359,7 @@ impl ProverOutside {
     pub fn nothing() -> ProverOutside { ProverOutside { results: collections::BTreeMap::new(), fields: collections::BTreeMap::new() } }
 }
 
-pub fn prover_outside(program: &Program, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> ProverOutside {
+pub(crate) fn prover_outside(program: &Program, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> ProverOutside {
     let mut found = ProverOutside { results: state.outside.results.copy_owned(), fields: state.outside.fields.copy_owned() };
     for item in program.items.iter() {
         match &item.node {

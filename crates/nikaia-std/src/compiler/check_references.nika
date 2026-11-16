@@ -71,7 +71,7 @@ fn check_reference_nullable_view(ty: ref Ty) -> bool {
 impl CheckState {
     /// **A `??` in a position that only reads it lends its left side**
     /// (ADR-279 D5): recorded for the emitter, and no longer pending.
-    pub fn a_pending_coalesce_is_lent(ref mut self, given: ref Expr) -> bool sync {
+    fn a_pending_coalesce_is_lent(ref mut self, given: ref Expr) -> bool sync {
         match given {
             Expr::Coalesce { .. } => {},
             else => return false,
@@ -93,7 +93,7 @@ impl CheckState {
 
     /// The same for a `??` of text, where the position is a comparison
     /// (issue #98).
-    pub fn a_pending_coalesce_of_text_is_lent(ref mut self, given: ref Expr) -> bool sync {
+    fn a_pending_coalesce_of_text_is_lent(ref mut self, given: ref Expr) -> bool sync {
         let key = id_of(given) as i64
         let mut of_text = false
         for pending in self.flow.pending_coalesces {
@@ -119,7 +119,7 @@ impl CheckState {
 
     /// Whether the expression is a name a `let mut` bound to a mutable view
     /// of a place (#975), which is the `&mut` already.
-    pub fn a_mut_view_name(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    fn a_mut_view_name(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
             Expr::Variable(symbol, _) => {
                 let name = world.words.resolve(symbol).clone()
@@ -132,7 +132,7 @@ impl CheckState {
 
     /// Whether the expression is a name a `let mut` bound to a view of a
     /// `String` slot (#1388).
-    pub fn a_text_slot_name(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    fn a_text_slot_name(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
             Expr::Variable(symbol, _) => {
                 let name = world.words.resolve(symbol).clone()
@@ -145,7 +145,7 @@ impl CheckState {
 
     /// Whether the expression is a name a `let` bound to views and text of
     /// its own (#1310), which holds `EitherText`, not the view it is typed.
-    pub fn an_either_name(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    fn an_either_name(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
             Expr::Variable(symbol, _) => {
                 let name = world.words.resolve(symbol).clone()
@@ -157,7 +157,7 @@ impl CheckState {
     }
 
     /// Whether the expression is a name whose binding was lent to this code.
-    pub fn a_name_that_is_lent(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    fn a_name_that_is_lent(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
             Expr::Variable(symbol, _) => {
                 let name = world.words.resolve(symbol).clone()
@@ -173,7 +173,7 @@ impl CheckState {
     /// named function's `mut` parameter and a function type's (`fn(mut S)`,
     /// #1134) are lent alike. Whether the answer is `true`: nothing is left for
     /// the positions below to decide.
-    pub fn lent_to_a_mut_parameter(ref mut self, world: ref CheckWorld, given_expr: ref Expr, found: ref Ty, want: ref Ty, takes_a_receiver: bool, written: ref String, span: ref Span) -> bool sync {
+    fn lent_to_a_mut_parameter(ref mut self, world: ref CheckWorld, given_expr: ref Expr, found: ref Ty, want: ref Ty, takes_a_receiver: bool, written: ref String, span: ref Span) -> bool sync {
         // **A `ref` written in front of it is the compiler's to write as
         // well** (Part I 6.5, #700): `put(ref t)` for `mut tab: Table` is
         // `NK1137`, as a `ref` at any other argument is.
@@ -185,7 +185,7 @@ impl CheckState {
                 }
             }
             if under {
-                self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: "NK1137", message: "You don't need the `ref` here: the compiler lends where it's needed.", notes: [f"`{written}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call."], help: "Remove the `ref`.", labels: [] })
+                self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: check_span_at(world, given_expr, span), code: "NK1137", message: "You don't need the `ref` here: the compiler lends where it's needed.", notes: [f"`{written}` changes this argument in place, so it's passed `ref mut` already. The `mut` in the declaration says so, not the call."], help: "Remove the `ref`.", labels: [], edit: null })
                 return true
             }
         }
@@ -246,7 +246,7 @@ impl CheckState {
     /// type and `want` the parameter's; `own` says the callee is a function or
     /// method of this program's own. Whether the answer is `true`: nothing is
     /// left for the positions below to decide.
-    pub fn the_compiler_writes_the_reference(ref mut self, world: ref CheckWorld, contract: ref FnContract, at: i64, given: ref Expr?, found: ref Ty, want: ref Ty, own: bool, written: ref String, span: ref Span) -> bool sync {
+    fn the_compiler_writes_the_reference(ref mut self, world: ref CheckWorld, contract: ref FnContract, at: i64, given: ref Expr?, found: ref Ty, want: ref Ty, own: bool, written: ref String, span: ref Span) -> bool sync {
         // `arguments()` drops the receiver, and the contract's positions do
         // not, so a method's argument sits one further along.
         let mut takes_a_receiver = false
@@ -361,7 +361,7 @@ impl CheckState {
             if takes_a_receiver {
                 return true
             }
-            self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1137", message: "You don't need the `ref` here: the compiler lends where it's needed.", notes: [f"`{written}` only reads this argument, so it's lent already. Whether an argument is lent or handed over is decided by the function, not the call."], help: "Remove the `ref`.", labels: [] })
+            self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1137", message: "You don't need the `ref` here: the compiler lends where it's needed.", notes: [f"`{written}` only reads this argument, so it's lent already. Whether an argument is lent or handed over is decided by the function, not the call."], help: "Remove the `ref`.", labels: [], edit: null })
             return true
         }
         // **A view of a nullable handed to a nullable view** is recorded, and
@@ -416,14 +416,14 @@ impl CheckState {
 
 /// **Whether an arm hands a name back by value**: as its own value, or through
 /// a `return` or a `throw`. Either needs the part itself and not a view of it.
-pub fn check_gives_back(body: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+fn check_gives_back(body: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     return check_gives_back_tail(body, name, words) || check_gives_back_returns(body, name, words)
 }
 
 /// **The fields of `name` the body ends in** (#1092): `model.values` at the
 /// tail of an arm, of a branch or of a block, as the paths of field names
 /// after `name`. Whether one moves is the caller's to say, by its type.
-pub fn check_gives_back_parts(body: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> Vec[Vec[String]] {
+fn check_gives_back_parts(body: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext) -> Vec[Vec[String]] {
     let mut found: Vec[Vec[String]] = []
     check_gives_back_parts_into(body, name, words, found)
     return found
@@ -596,7 +596,7 @@ fn check_gives_back_returns(expr: ref Expr, name: ref String, words: ref winnow_
 impl CheckState {
     /// `m[k] ?? continue`: a read through the brackets of a map whose fallback
     /// jumps, and which is not copied out.
-    pub fn a_map_read_past_a_jump(ref self, world: ref CheckWorld, given: ref Expr) -> bool sync {
+    fn a_map_read_past_a_jump(ref self, world: ref CheckWorld, given: ref Expr) -> bool sync {
         return match given {
             Expr::Coalesce { value: read, fallback, .. } => {
                 let node = id_of(read) as i64

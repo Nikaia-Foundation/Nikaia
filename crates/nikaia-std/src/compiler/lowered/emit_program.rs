@@ -4,7 +4,7 @@
 impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn emit_program<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, whole: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn emit_program<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, whole: bool) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         if whole { self.emit_program_preamble(world, out); }
         self.emit_program_shadow_types(world, out);
         self.write_error_sums(world, out);
@@ -48,7 +48,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_program_field_copies<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, item: &Spanned<Item>, slot: i64) -> Result<(), Box<dyn std::error::Error>> {
+    pub(crate) fn emit_program_field_copies<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, item: &Spanned<Item>, slot: i64) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         let name: String = match &item.node {
             Item::Fn { name, args, .. } => {
                 let name = *name;
@@ -138,7 +138,7 @@ impl EmitState {
                 types.push(String::from("String"));
                 passing.push(String::from("&{}"));
             } else if ty == "Option<&str>" {
-                types.push(String::from("Option<String>"));
+                types.push(format!("{}<String>", self.rust_option()));
                 passing.push(String::from("{}.as_deref()"));
             } else if ty.starts_with("&[") && ty.ends_with(']') {
                 let element = nikaia_std::index::or(nikaia_std::index::or(ty.strip_prefix("&["), || "").strip_suffix(']'), || "");

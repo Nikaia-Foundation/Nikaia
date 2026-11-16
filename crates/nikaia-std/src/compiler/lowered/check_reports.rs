@@ -46,7 +46,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_bound_the_argument_does_not_meet(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
+    pub(crate) fn a_bound_the_argument_does_not_meet(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
         let wanted = match self.bounds_wanted(world, key) { Some(__nikaia_value) => __nikaia_value, None => return };
         for (parameter, traits) in wanted.iter() {
             let held = match bound.get(parameter) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -79,7 +79,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_changed_binding_says_mut(&mut self, name: &str, how: &str, changed_at: Span) {
+    pub(crate) fn a_changed_binding_says_mut(&mut self, name: &str, how: &str, changed_at: Span) {
         self.changed.push(nikaia_std::block::Text::from(name.to_string()));
         let local = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return };
         let without_mut = match local.without_mut { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -117,11 +117,11 @@ impl CheckState {
         self.said_mut.insert(declared);
         let there = CheckLabel { span: without_mut.at.clone(), word: nikaia_std::block::Text::from(name.to_string()), text: declared_text, main: false };
         let here = CheckLabel { span: changed_at.clone(), word: nikaia_std::block::Text::from(name.to_string()), text: nikaia_std::block::Text::from(how.to_string()), main: true };
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code, message, notes, help: Some(help), labels: vec![there, here] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code, message, notes, help: Some(help), labels: vec![there, here], edit: None });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_for_mut_that_cannot_write(&mut self, why: &str, iter: &Expr, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, span: &Span) {
+    pub(crate) fn a_for_mut_that_cannot_write(&mut self, why: &str, iter: &Expr, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, span: &Span) {
         let mut message: String = String::from("");
         let mut note: String = String::from("");
         let mut help: String = String::from("");
@@ -144,22 +144,22 @@ impl CheckState {
             label = String::from("marks a read-only view");
         }
         let there = CheckLabel { span: span.clone(), word: String::from("mut"), text: label, main: true };
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1306"), message, notes: vec![note], help: Some(help), labels: vec![there] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1306"), message, notes: vec![note], help: Some(help), labels: vec![there], edit: None });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_for_mut_over_a_list_not_mut(&mut self, list: &str, head: &str, a_parameter: bool, span: &Span) {
+    pub(crate) fn a_for_mut_over_a_list_not_mut(&mut self, list: &str, head: &str, a_parameter: bool, span: &Span) {
         let mut way_out: String = format!("Declare it `mut` where it's declared: `let mut {}`, or walk a copy of your own: `for mut {} in {}.clone()`.", list, head, list);
         if a_parameter { way_out = format!("Write `mut {}` in the parameter list, or walk a copy of your own: `for mut {} in {}.clone()`.", list, head, list); }
         let label = CheckLabel { span: span.clone(), word: nikaia_std::block::Text::from(list.to_string()), text: String::from("can't be changed here"), main: true };
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1139"), message: format!("`for mut {}` changes the elements of `{}`, but `{}` wasn't declared as mutable.", head, list, list), notes: vec![String::from("A `for mut` binding is the element of the list itself, so a change to it reaches the list.")], help: Some(way_out), labels: vec![label] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1139"), message: format!("`for mut {}` changes the elements of `{}`, but `{}` wasn't declared as mutable.", head, list, list), notes: vec![String::from("A `for mut` binding is the element of the list itself, so a change to it reaches the list.")], help: Some(way_out), labels: vec![label], edit: None });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_for_mut_over_a_place(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, iter: &Expr, over: &Ty, span: &Span) { self.findings.push(check_refusal("NK1139", span, String::from("`for mut` over a list isn't supported yet."), vec![], None)); }
+    pub(crate) fn a_for_mut_over_a_place(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, iter: &Expr, over: &Ty, span: &Span) { self.findings.push(check_refusal("NK1139", span, String::from("`for mut` over a list isn't supported yet."), vec![], None)); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_grammar_that_did_not_run(&mut self, owner: &str, rule: &str, why: &CheckWall, span: &Span) {
+    pub(crate) fn a_grammar_that_did_not_run(&mut self, owner: &str, rule: &str, why: &CheckWall, span: &Span) {
         let entry = format!("{}::{}", owner, rule);
         let mut message: String = String::from("");
         let mut note: String = String::from("");
@@ -229,7 +229,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_std_name_without_its_module(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
+    pub(crate) fn a_std_name_without_its_module(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
         if name.contains("::") { return; }
         let known = self.binding(name).is_some() || resolve_call(world, name).is_some() || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || name == "access_all" || name == "update_all" || is_hull(name);
         if known { return; }
@@ -246,7 +246,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_build_time_run_that_stopped_at(&mut self, bound: &str, why: &str, at: i64, function: Option<&str>, span: &Span) {
+    pub(crate) fn a_build_time_run_that_stopped_at(&mut self, bound: &str, why: &str, at: i64, function: Option<&str>, span: &Span) {
         let mut labels: Vec<CheckLabel> = vec![];
         if at >= 0 {
             let place = Span { start: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
@@ -258,7 +258,7 @@ impl CheckState {
         notes.push(String::from("The code a `comptime` runs is the program's own, and it stops where the program would stop when it runs."));
         let mut help: String = String::from("Fix it as you would fix the program stopping there, or compute the value while the program runs, with `let` instead of `comptime`."); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
         if self.computing_default { help = String::from("Fix it as you would fix the program stopping there, or make the option a `T?` and compute the value in the body."); }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1244"), message: format!("`{}` stopped while the program was built: {}.", bound, why), notes, help: Some(help), labels });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1244"), message: format!("`{}` stopped while the program was built: {}.", bound, why), notes, help: Some(help), labels, edit: None });
     }
 }
 

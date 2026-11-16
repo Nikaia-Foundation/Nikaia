@@ -1,0 +1,42 @@
+/// A byte divided by 16 reads one of 16 digits (#1786): a name of a narrow
+/// unsigned type lies in its type's range (ADR-306 D34), so `let d = b as
+/// i64` of a byte is at most 255 and `d / 16` at most 15. The byte is a
+/// `for` over `bytes()` (the shape of `lsp_path_uri`), a parameter and a
+/// `let` declared `u8` that is assigned again; a quotient of an `i64` keeps
+/// its check.
+fn escaped(path: String) -> String {
+	let mut out: String = ""
+	let digits: Vec[scalar] = "0123456789ABCDEF".chars().collect()
+	for b in path.bytes() {
+		let d = b as i64
+		out.push('%')
+		out.push(digits[d / 16])
+		out.push(digits[d % 16])
+	}
+	return out
+}
+
+fn high(b: u8) -> scalar {
+	let digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F']
+	let d = b as i64
+	return digits[d / 16]
+}
+
+fn again(b: u8, n: u8) -> scalar {
+	let digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F']
+	let mut d: u8 = b
+	if n > b {
+		d = n
+	}
+	return digits[(d as i64) / 16]
+}
+
+fn wide(d: i64) -> scalar {
+	let digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F']
+	return digits[d / 16]
+}
+
+fn main() throws {
+	println(escaped("a /"))
+	println(f"{high(200)} {again(31, 250)} {wide(100)}")
+}

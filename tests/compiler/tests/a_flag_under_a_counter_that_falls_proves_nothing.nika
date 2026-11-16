@@ -1,0 +1,27 @@
+/// What held where a list grew is projected only through a bound that holds
+/// (ADR-361 D15, D4, #1848): `i` falls from 0, so `i < args.len()` where
+/// `at` grew says nothing of `args`, and the precondition of `need` stays
+/// unproved.
+fn need(n: i64) -> i64 {
+	assert(n >= 1)
+	return n
+}
+
+pub fn f(args: ref Vec[i64], m: i64) -> i64 {
+	let mut at: Vec[i64] = []
+	let mut i = 0
+	while i > m {
+		if i < args.len() as i64 {
+			at.push(i)
+		}
+		i -= 1
+	}
+	if at.len() == 0 {
+		return 0
+	}
+	return need(args.len() as i64)
+}
+
+fn main() throws {
+	println(f([1], -2))
+}

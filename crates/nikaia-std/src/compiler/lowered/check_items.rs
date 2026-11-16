@@ -17,13 +17,13 @@ pub(crate) fn item_type_name(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &I
     }
 }
 
-pub fn declares_a_type(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+pub(crate) fn declares_a_type(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> bool {
     if name == "" { return false; }
     for item in view.items.iter() { if item_type_name(view, &item.node) == name { return true; } }
     false
 }
 
-pub fn declared_with_no_arithmetic(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
+pub(crate) fn declared_with_no_arithmetic(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
     let seen = ty.unseen();
     let name = match seen {
         Ty::Named { name, .. } => name,
@@ -54,7 +54,7 @@ pub(crate) fn item_fn_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_>, na
     (unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.either)
 }
 
-pub fn either_param(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
+pub(crate) fn either_param(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
     let own = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string());
     let mut target: String = String::from("");
@@ -77,7 +77,7 @@ pub(crate) fn item_impl_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_>, 
     false
 }
 
-pub fn either_field(view: &ParsedView<'_, '_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
+pub(crate) fn either_field(view: &ParsedView<'_, '_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
     let owner = item_last_segment(owner);
     for item in view.items.iter() {
         let found = match &item.node {
@@ -94,7 +94,7 @@ pub(crate) fn item_has_either_field(view: &ParsedView<'_, '_, '_, '_, '_, '_>, f
     false
 }
 
-pub fn imports_a_package(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+pub(crate) fn imports_a_package(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> bool {
     for item in view.items.iter() {
         let found = match &item.node {
             Item::Import { path, alias } => { let alias = *alias; item_import_is(view, path, alias, name) },
@@ -111,7 +111,7 @@ pub(crate) fn item_import_is(view: &ParsedView<'_, '_, '_, '_, '_, '_>, path: &[
     view.text(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 1)) as usize) }) == name
 }
 
-pub fn imports_exactly(view: &ParsedView<'_, '_, '_, '_, '_, '_>, head: &str) -> bool {
+pub(crate) fn imports_exactly(view: &ParsedView<'_, '_, '_, '_, '_, '_>, head: &str) -> bool {
     for item in view.items.iter() {
         let found = match &item.node {
             Item::Import { path, .. } => path.len() == 1 && view.text(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }) == head,
@@ -122,7 +122,7 @@ pub fn imports_exactly(view: &ParsedView<'_, '_, '_, '_, '_, '_>, head: &str) ->
     false
 }
 
-pub fn a_field_of_static_text(view: &ParsedView<'_, '_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
+pub(crate) fn a_field_of_static_text(view: &ParsedView<'_, '_, '_, '_, '_, '_>, owner: &str, field: &str) -> bool {
     for item in view.items.iter() {
         match &item.node {
             Item::Struct { name, fields, .. } => {
@@ -135,7 +135,7 @@ pub fn a_field_of_static_text(view: &ParsedView<'_, '_, '_, '_, '_, '_>, owner: 
     false
 }
 
-pub fn an_extern_struct_named(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+pub(crate) fn an_extern_struct_named(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) -> bool {
     for item in view.items.iter() {
         let found = match &item.node {
             Item::Struct { name: declared, is_extern, .. } => { let declared = *declared; let is_extern = *is_extern; is_extern && view.text(declared) == name },
@@ -163,7 +163,7 @@ pub(crate) fn item_all_unit(variants: &[EnumVariant]) -> bool {
     true
 }
 
-pub fn a_c_value(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Type) -> bool {
+pub(crate) fn a_c_value(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Type) -> bool {
     if ty.is_view || ty.is_nullable || ty.is_tuple || (*ty.code).is_some() { return false; }
     let name = view.text(ty.name);
     if ty.generics.is_empty() {
@@ -175,7 +175,7 @@ pub fn a_c_value(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Type) -> bool {
     false
 }
 
-pub fn implements_error(here: &ParsedView<'_, '_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], ty: &str) -> bool {
+pub(crate) fn implements_error(here: &ParsedView<'_, '_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_, '_>], ty: &str) -> bool {
     if item_implements_error(here, ty) { return true; }
     for unit in beside.iter() { if item_implements_error(unit, ty) { return true; } }
     false
@@ -198,14 +198,14 @@ pub(crate) fn item_is_error_impl(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, trai
 }
 
 impl CheckState {
-    pub fn a_package_where_a_grammar_stands(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, target: winnow_grammar::Symbol, span: &Span) -> bool {
+    pub(crate) fn a_package_where_a_grammar_stands(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, target: winnow_grammar::Symbol, span: &Span) -> bool {
         let name = view.text(target);
         if name == "html" || self.grammars.contains_key(&name) { return false; }
         if !imports_a_package(view, &name) { return false; }
         self.findings.push(check_refusal("NK1228", span, format!("`{}` is a package, and a `dsl` block names a grammar.", name), vec![String::from("A grammar from a package is named with its package, as every name from one is.")], Some(format!("Write `dsl {}::Grammar`, naming the grammar `{}` offers.", name, name))));
         true
     }
-    pub fn through_a_package_unread(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn through_a_package_unread(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         let func = match expr {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); func },
             Expr::Path(_, _) => expr,
@@ -274,7 +274,7 @@ pub(crate) fn item_plain_name(subject: &Ty) -> Option<String> {
     }
 }
 
-pub fn check_payload_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
+pub(crate) fn check_payload_in(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
     for item in view.items.iter() {
         match &item.node {
             Item::Enum { name, variants, .. } => {
@@ -401,7 +401,7 @@ pub(crate) fn item_variant_names(view: &ParsedView<'_, '_, '_, '_, '_, '_>, vari
 }
 
 impl CheckState {
-    pub fn a_placeholder(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, subject: &Ty) -> Option<String> {
+    pub(crate) fn a_placeholder(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, subject: &Ty) -> Option<String> {
         let name = match item_plain_name(subject) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let declared = item_enum_placeholder_in(&world.here, &name);
         if declared.is_some() { return Some(match declared { Some(__nikaia_value) => __nikaia_value, None => return None }); }
@@ -428,11 +428,11 @@ impl CheckState {
         let joined = nikaia_std::block::Text::from(holes.join(", "));
         Some(format!("{} {{ {} }}", name, joined))
     }
-    pub fn a_stand_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
+    pub(crate) fn a_stand_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
         if item_has_a_default(ty) { return Some(String::from("")); }
         self.a_placeholder(world, ty)
     }
-    pub fn shape_of(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &str) -> Option<Vec<FieldContract>> {
+    pub(crate) fn shape_of(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &str) -> Option<Vec<FieldContract>> {
         if !self.enums.contains_key(on) { return self.fields_of(world, on); }
         let known = match self.enums.get(on) { Some(__nikaia_value) => __nikaia_value, None => return None };
         #[allow(unused_mut)] let mut variants: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -452,7 +452,7 @@ impl CheckState {
         for variant in variants.iter() { out.push(FieldContract { name: nikaia_std::block::Text::from(variant.to_string()), ty: Ty::Named { name: String::from("$Variant"), args: vec![], view: false }, public: true, default: String::from(""), attributes: vec![] }); }
         Some(out)
     }
-    pub fn a_function_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
+    pub(crate) fn a_function_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let declared = self.lookup(name).is_some() || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || self.foreign_names.contains(name) || self.variant_parts.contains_key(name) || is_hull(name) || name == "access_all" || name == "update_all" || name == "panic" || name == "asset" || name == "assert" || name == "assume" || imports_a_package(view, name);
         if declared { return; }
         let mut known: Vec<String> = vec![];
@@ -467,7 +467,7 @@ impl CheckState {
         }
         self.findings.push(check_refusal("NK1117", span, format!("There's no function called `{}`.", name), vec![String::from("A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.")], Some(help)));
     }
-    pub fn a_trait_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, span: &Span) {
+    pub(crate) fn a_trait_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, span: &Span) {
         let at = nikaia_std::search::find(&written, &"::", 0);
         if at.is_some() {
             let head = nikaia_std::block::Text::from(nikaia_std::index::get(&written, nikaia_std::index::at(0..match at { Some(__nikaia_value) => __nikaia_value, None => return })).to_string());
@@ -488,7 +488,7 @@ impl CheckState {
         }
         self.findings.push(check_refusal("NK1117", span, format!("There's no trait called `{}`.", written), vec![because], Some(help)));
     }
-    pub fn a_head_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, head: &str, written: &str, span: &Span) {
+    pub(crate) fn a_head_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, head: &str, written: &str, span: &Span) {
         let head = view.unaliased(head);
         let prefix = format!("{}::", head);
         let mut declared = self.structs.contains_key(&head) || self.enums.contains_key(&head);
@@ -631,7 +631,7 @@ pub(crate) fn item_declared_type_name(file: &ParsedView<'_, '_, '_, '_, '_, '_>,
 }
 
 impl CheckState {
-    pub fn types_that_contain_themselves(&mut self, here: &ParsedView<'_, '_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_, '_>]) {
+    pub(crate) fn types_that_contain_themselves(&mut self, here: &ParsedView<'_, '_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_, '_>]) {
         let mut files: Vec<ParsedView<'_, '_, '_, '_, '_, '_>> = nikaia_std::block::List::from_array_in([here.clone()], nikaia_std::block::Place::Block);
         for other in beside.iter() { files.push(other.clone()); }
         let mut generics: collections::BTreeMap<String, ItemGeneric<'_>> = collections::BTreeMap::new();

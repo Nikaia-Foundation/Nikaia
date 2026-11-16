@@ -92,7 +92,7 @@ impl std::fmt::Display for LspRefusal {
 }
 impl std::error::Error for LspRefusal {}
 
-pub async fn lsp_read_message() -> Result<Option<String>, __NikaiaThrows_LspRefusal__io_IoError> {
+pub(crate) async fn lsp_read_message() -> Result<Option<String>, __NikaiaThrows_LspRefusal__io_IoError> {
     let mut length: i64 = -1;
     loop {
         let line = match io::read_line().await? { Some(__nikaia_value) => __nikaia_value, None => return Ok(None) };
@@ -109,30 +109,30 @@ pub async fn lsp_read_message() -> Result<Option<String>, __NikaiaThrows_LspRefu
     Ok(Some(nikaia_std::block::Text::from(read.to_string())))
 }
 
-pub fn lsp_write_message(body: &json::Value) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+pub(crate) fn lsp_write_message(body: &json::Value) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let text = json::to_string(body);
     nikaia_std::io::print(format_args!("Content-Length: {}\r\n\r\n{}", text.len() as i64, text))?;
     Ok(())
 }
 
-pub fn lsp_object(members: &[(&str, json::Value)]) -> json::Value { json::Value::Object(members.iter().map(|member| { json::Member { key: nikaia_std::block::Text::from(member.0.to_string()), value: member.1.clone() } }).collect::<Vec<_>>()) }
+pub(crate) fn lsp_object(members: &[(&str, json::Value)]) -> json::Value { json::Value::Object(members.iter().map(|member| { json::Member { key: nikaia_std::block::Text::from(member.0.to_string()), value: member.1.clone() } }).collect::<Vec<_>>()) }
 
-pub fn lsp_string(text: &str) -> json::Value { json::Value::Str(nikaia_std::block::Text::from(text.to_string())) }
+pub(crate) fn lsp_string(text: &str) -> json::Value { json::Value::Str(nikaia_std::block::Text::from(text.to_string())) }
 
-pub fn lsp_number(n: i64) -> json::Value { json::Value::Number(format!("{}", n)) }
+pub(crate) fn lsp_number(n: i64) -> json::Value { json::Value::Number(format!("{}", n)) }
 
-pub fn lsp_respond(id: &json::Value, result: json::Value) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+pub(crate) fn lsp_respond(id: &json::Value, result: json::Value) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     lsp_write_message(&lsp_object(&vec![("jsonrpc", lsp_string("2.0")), ("id", id.clone()), ("result", result)]))?;
     Ok(())
 }
 
-pub fn lsp_refuse(id: &json::Value, code: i64, message: &str) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+pub(crate) fn lsp_refuse(id: &json::Value, code: i64, message: &str) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let error = lsp_object(&vec![("code", lsp_number(code)), ("message", lsp_string(message))]);
     lsp_write_message(&lsp_object(&vec![("jsonrpc", lsp_string("2.0")), ("id", id.clone()), ("error", error)]))?;
     Ok(())
 }
 
-pub fn lsp_capabilities() -> json::Value { lsp_object(&vec![("capabilities", lsp_object(&vec![("textDocumentSync", lsp_number(1)), ("definitionProvider", json::Value::Bool(true))]))]) }
+pub(crate) fn lsp_capabilities() -> json::Value { lsp_object(&vec![("capabilities", lsp_object(&vec![("textDocumentSync", lsp_number(1)), ("definitionProvider", json::Value::Bool(true))]))]) }
 
 pub async fn lsp_serve<H: LspHost>(host: &H) -> Result<i64, __NikaiaThrows_LspRefusal__io_IoError> {
     let mut shut_down = false;
@@ -195,7 +195,7 @@ pub async fn lsp_serve<H: LspHost>(host: &H) -> Result<i64, __NikaiaThrows_LspRe
     Ok(1)
 }
 
-pub fn lsp_uri_path(uri: &str) -> Option<String> {
+pub(crate) fn lsp_uri_path(uri: &str) -> Option<String> {
     let rest = match uri.strip_prefix("file://") { Some(__nikaia_value) => __nikaia_value, None => return None };
     let given: Vec<u8> = rest.bytes().collect::<Vec<_>>();
     let mut decoded: Vec<u8> = vec![];
@@ -269,7 +269,7 @@ pub(crate) async fn lsp_text_of(path: &str, open: &collections::BTreeMap<String,
     }
 }
 
-pub fn lsp_offset(source: &str, line: i64, character: i64) -> i64 {
+pub(crate) fn lsp_offset(source: &str, line: i64, character: i64) -> i64 {
     let mut at_line: i64 = 0;
     let mut column: i64 = 0;
     let mut byte: i64 = 0;
@@ -348,7 +348,7 @@ pub(crate) fn lsp_uri_of(path: &str, uris: &collections::BTreeMap<String, String
     }
 }
 
-pub fn lsp_path_uri(path: &str) -> String {
+pub(crate) fn lsp_path_uri(path: &str) -> String {
     let mut out: String = String::from("file://");
     let digits: Vec<scalar> = nikaia_std::list::chars("0123456789ABCDEF".chars());
     for b in path.bytes() {
@@ -356,14 +356,14 @@ pub fn lsp_path_uri(path: &str) -> String {
         let kept = d >= 48 && d <= 57 || d >= 65 && d <= 90 || d >= 97 && d <= 122 || d == 45 || d == 46 || d == 95 || d == 126 || d == 47;
         if kept { out.push(b as scalar); } else {
             out.push('%');
-            out.push((*nikaia_std::index::get(&digits, nikaia_std::index::at(d / 16))).clone());
-            out.push((*nikaia_std::index::get(&digits, nikaia_std::index::at(d % 16))).clone());
+            out.push((*unsafe { nikaia_std::proven::read(&digits, (d / 16) as usize) }).clone());
+            out.push((*unsafe { nikaia_std::proven::read(&digits, (d % 16) as usize) }).clone());
         }
     }
     out
 }
 
-pub fn lsp_diagnostic(shown: &Shown, source: &str, uri: &str) -> json::Value {
+pub(crate) fn lsp_diagnostic(shown: &Shown, source: &str, uri: &str) -> json::Value {
     let mut message = said(&shown.message);
     for note in shown.notes.iter() { message.push_str(&format!("\nnote: {}", said(note))); }
     match &shown.help {
@@ -392,7 +392,7 @@ pub fn lsp_diagnostic(shown: &Shown, source: &str, uri: &str) -> json::Value {
     lsp_object(&members)
 }
 
-pub fn lsp_range(source: &str, span: &Span, word: &str) -> json::Value {
+pub(crate) fn lsp_range(source: &str, span: &Span, word: &str) -> json::Value {
     let lines: Vec<&str> = source.split("\n").collect::<Vec<_>>();
     let at = span.start as i64;
     let end = span.end as i64;

@@ -101,7 +101,7 @@ pub(crate) fn inferred_sync(claim: &Sync) -> bool { matches!(claim, Sync::Inferr
 
 pub(crate) fn no_sync(claim: &Sync) -> bool { matches!(claim, Sync::No) }
 
-pub fn pause_path(chain: &[String]) -> String {
+pub(crate) fn pause_path(chain: &[String]) -> String {
     #[allow(unused_mut)] let mut steps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps;
     while ((k + 1) as usize) < chain.len() {
@@ -133,7 +133,7 @@ pub fn lost_sync(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledg
         let mut notes: Vec<String> = vec![];
         if pause.chain.len() > 1 { notes.push(format!("{}, which pauses here.", pause_path(&pause.chain))); }
         notes.push(format!("{} can pause.", site.what));
-        let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: site.span.start, end: site.span.end }, code: String::from("NK2211"), message, notes, help: Some(help), labels: vec![] };
+        let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: site.span.start, end: site.span.end }, code: String::from("NK2211"), message, notes, help: Some(help), labels: vec![], edit: None };
         out.push_str(&render(&finding, pause.unit));
     }
     out
@@ -146,7 +146,7 @@ pub struct ModulesPause {
     pub site: Option<Site>,
 }
 
-pub fn lost_sync_unplaced(message: &str, help: &str) -> String { format!("warning[NK2211]: {}\n   = note: a method call it makes, or one of the calls it leads to, can pause.\n   = help: {}\n", message, help) }
+pub(crate) fn lost_sync_unplaced(message: &str, help: &str) -> String { format!("warning[NK2211]: {}\n   = note: a method call it makes, or one of the calls it leads to, can pause.\n   = help: {}\n", message, help) }
 
 pub fn declared_once(paths: &[String], declared: &[Vec<(String, Span)>]) -> Option<(i64, Finding)> {
     let mut seen: collections::BTreeMap<String, String> = collections::BTreeMap::new();
@@ -176,7 +176,7 @@ pub fn groups(packages: &[Option<String>]) -> Vec<(i64, i64)> {
     out
 }
 
-pub fn as_promised(ledger: &mut Ledger, another: &impl Fn(&str) -> bool) {
+pub(crate) fn as_promised(ledger: &mut Ledger, another: &impl Fn(&str) -> bool) {
     let mut unpromised: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (key, contract) in ledger.functions.iter() { if inferred_sync(&contract.sync_claim) && another(key) { unpromised.push(nikaia_std::block::Text::from(key.to_string())); } }
     for key in unpromised.iter() {
@@ -236,7 +236,7 @@ pub fn dependency_ledgers(library: &mut Ledger, contracts: &mut Ledger, describe
     as_its_own
 }
 
-pub fn absorb_own(contracts: &mut Ledger, renames: &collections::BTreeMap<String, String>, own: &Ledger) {
+pub(crate) fn absorb_own(contracts: &mut Ledger, renames: &collections::BTreeMap<String, String>, own: &Ledger) {
     contracts.sources = own.sources.copy_owned();
     let module: Option<String> = None;
     absorb_into(contracts, (module).as_deref(), renames, own);
@@ -264,7 +264,7 @@ pub fn package_names(packages: &[Option<String>]) -> collections::BTreeSet<Strin
 
 pub fn is_single_file(units: i64) -> bool { units == 1 }
 
-pub fn test_function(k: i64) -> String { format!("__nikaia_test_{}", k) }
+pub(crate) fn test_function(k: i64) -> String { format!("__nikaia_test_{}", k) }
 
 pub fn test_dispatcher(cli: &str, with_use: bool, count: i64, dispatch: &str) -> String {
     let mut text: String = String::from("");
@@ -357,7 +357,7 @@ pub fn modules_test_wrappers(titles: &[String], first: i64) -> String {
     text
 }
 
-pub fn modules_test_only_mark() -> String { String::from("cfg(test)") }
+pub(crate) fn modules_test_only_mark() -> String { String::from("cfg(test)") }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModulesReach {
@@ -831,6 +831,7 @@ pub(crate) fn modules_is_file(path: &std::path::Path) -> bool {
 
 pub trait ModulesLedgerHost {
     fn read_beside(&self, path: &std::path::Path) -> Option<Ledger>;
+    fn this_compiler(&self) -> Ledger;
 }
 
 pub fn modules_sources_of<H: ModulesLedgerHost>(paths: &[fs::Path], texts: &[String], host: &H) -> collections::BTreeMap<String, String> {
@@ -849,6 +850,8 @@ pub fn modules_sources_of<H: ModulesLedgerHost>(paths: &[fs::Path], texts: &[Str
 pub fn modules_believed<H: ModulesLedgerHost>(dependency: &ProjectMembersDependency, sources: &collections::BTreeMap<String, String>, host: &H) -> Option<Ledger> {
     let shipped = match modules_shipped_ledger(&dependency.root, host) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if !stale_units(&shipped, sources).is_empty() { return None; }
+    let ours = host.this_compiler();
+    if shipped.version != ours.version || shipped.inference != ours.inference { return None; }
     Some(published_entries(&shipped, &dependency.reachable))
 }
 
@@ -894,12 +897,12 @@ pub trait ModulesEmitHost {
     fn own_names(&self) -> collections::BTreeSet<String>;
     fn barrier_names(&self, all: bool) -> collections::BTreeSet<String>;
     fn preamble(&self) -> String;
-    fn emit_unit(&self, at: i64, provenance: &Provenance, offset: i64) -> Result<String, Box<dyn std::error::Error>>;
+    fn emit_unit(&self, at: i64, provenance: &Provenance, offset: i64) -> Result<String, std::boxed::Box<dyn std::error::Error>>;
     fn has_main(&self) -> bool;
     fn map_rows(&self) -> Vec<(i64, i64, i64)>;
 }
 
-pub fn modules_emit_reading<H: ModulesEmitHost>(host: &H, packages: &[Option<String>], shown: &[String], sources: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
+pub fn modules_emit_reading<H: ModulesEmitHost>(host: &H, packages: &[Option<String>], shown: &[String], sources: &[&str]) -> Result<String, std::boxed::Box<dyn std::error::Error>> {
     let mut provenance = host.trust();
     if provenance == Provenance::Trusted {
         let called = host.own_names();
@@ -985,7 +988,7 @@ pub(crate) fn modules_reach_test_shown(found: &[collections::BTreeSet<String>]) 
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let a = modules_reach_test_file(&vec![("a_help", false, vec!["a_deeper"]), ("a_deeper", false, vec![]), ("", false, vec!["a_used"]), ("a_used", false, vec![])]);
     let b = modules_reach_test_file(&vec![("", true, vec!["a_help", "b_help"]), ("b_help", false, vec!["a_used"])]);
     let found = modules_only_tests_package(&vec![a, b]);
@@ -995,7 +998,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let a = modules_reach_test_file(&vec![("a_help", false, vec![]), ("", true, vec!["a_help"])]);
     let b = modules_reach_test_file(&vec![("", false, vec!["a_help"])]);
     let found = modules_only_tests_package(&vec![a, b]);
@@ -1005,7 +1008,7 @@ pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let a = modules_reach_test_file(&vec![("twin", false, vec![]), ("", true, vec!["twin"])]);
     let b = modules_reach_test_file(&vec![("twin", false, vec![])]);
     let found = modules_only_tests_package(&vec![a, b]);
@@ -1015,7 +1018,7 @@ pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let a = modules_reach_test_file(&vec![("ARun", false, vec![]), ("a_check", false, vec!["ARun"]), ("AKept", false, vec![]), ("", false, vec!["AKept"])]);
     let b = modules_reach_test_file(&vec![("", true, vec!["a_check", "AKept"])]);
     let found = modules_only_tests_package(&vec![a, b]);

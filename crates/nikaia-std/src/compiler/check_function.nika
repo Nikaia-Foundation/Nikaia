@@ -128,7 +128,7 @@ impl CheckState {
     /// **Which functions walk a type's fields, and which parameter each
     /// walks** (ADR-304 D4), over the program's every file: they share one
     /// namespace (Part I 9.1), so a call may stand in another file.
-    pub fn collect_field_walks(ref mut self, world: ref CheckWorld) sync {
+    fn collect_field_walks(ref mut self, world: ref CheckWorld) sync {
         self.field_walks_in(world.here)
         for other in world.beside {
             self.field_walks_in(other)
@@ -138,7 +138,7 @@ impl CheckState {
     /// **Which declared types compare** (ADR-204 D1), for the derive the
     /// emitter writes and the refusal the checker raises. After every type is
     /// collected, because the answer is structural.
-    pub fn collect_comparisons(ref mut self, world: ref CheckWorld) sync {
+    fn collect_comparisons(ref mut self, world: ref CheckWorld) sync {
         let found = check_function_compared(world, world.parts_beside, self.structs, self.enums, self.enum_payloads, self.struct_parameters)
         self.facts.compares.extend(found.compares.clone())
         self.facts.compares_totally.extend(found.totally.clone())
@@ -207,7 +207,7 @@ fn check_function_grown_in(here: ref ParsedView, block: ref Block, mut out: coll
 /// is asked at the `let`, before the assignment has been walked; and narrow
 /// for the same reason - `+` and an f-string can only hand back owned text,
 /// where a name or a call may hand back a view.
-pub fn check_function_grown_text(here: ref ParsedView, body: ref Block) -> collections::BTreeSet[String] {
+fn check_function_grown_text(here: ref ParsedView, body: ref Block) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     check_function_grown_in(here, body, out)
     return out
@@ -277,7 +277,7 @@ fn check_function_fielded_in(here: ref ParsedView, block: ref Block, mut out: co
 /// **The names a body gives text of its own and a field read** (ADR-282 D13,
 /// #840, #841): `x = h.name` beside `x = f"…"`, or an `if` or `match` with both.
 /// Syntactic, as `grown_text` is.
-pub fn check_function_mixed_text(here: ref ParsedView, body: ref Block, grown: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+fn check_function_mixed_text(here: ref ParsedView, body: ref Block, grown: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
     let mut fielded: collections::BTreeSet[String] = collections::BTreeSet()
     let mut both: collections::BTreeSet[String] = collections::BTreeSet()
     check_function_fielded_in(here, body, fielded, both)
@@ -294,7 +294,7 @@ pub fn check_function_mixed_text(here: ref ParsedView, body: ref Block, grown: r
 /// answers, the fold lambdas in the pattern's frame, the action's block against
 /// the rule's declared type. An action may not pause (D35), so the flag is
 /// set around the folds and the block alike.
-pub fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, gram: ref GrammarDef) sync {
+fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, gram: ref GrammarDef) sync {
     let named = world.words.resolve(gram.name).clone()
     let mut results: collections::BTreeMap[String, Ty] = collections::BTreeMap()
     let mut rules: collections::BTreeSet[String] = collections::BTreeSet()
@@ -493,7 +493,7 @@ fn check_function_every_end_is_a_value(expr: ref Expr) -> bool {
     }
 }
 
-pub fn check_function_is_branching(expr: ref Expr) -> bool {
+fn check_function_is_branching(expr: ref Expr) -> bool {
     return match expr {
         Expr::If { .. } => check_function_every_end_is_a_value(expr),
         Expr::Match { .. } => check_function_every_end_is_a_value(expr),
@@ -626,7 +626,8 @@ fn check_function_handed_back[H: CheckHost](mut state: CheckState, world: ref Ch
                     check_core_a_field_of_a_borrowed_subject(state, world, host, value, at, "handed back")
                     check_core_a_field_of_a_lent_place_handed_back(state, world, host, value, at)
                 }
-                tail_view = state.lent_arms_handed_back(world, value, check_function_is_nullable(want))
+                // A read off a lent list or map, as a `return` hands it (#1711).
+                tail_view = state.lent_arms_handed_back(world, value, check_function_is_nullable(want)) || state.a_get_off_a_lent_parameter(world, value)
                 if !tail_lent && !tail_view {
                     check_core_lent_places_in_arms_handed_back(state, world, host, value, at)
                 }
@@ -652,6 +653,10 @@ fn check_function_tail_checks[H: CheckHost](mut state: CheckState, world: ref Ch
     }
     match last.node {
         Stmt::Expr(value) => {
+            // **A `String?` handed back into a `ref String?`** (#1666).
+            if !state.flow.expected_either && check_core_a_text_option_into_a_view(shown, expected) {
+                state.facts.text_option_results.insert(node_key(value))
+            }
             if lending && nullable && tail_nullable && check_core_a_field(value) {
                 // A `T?` lent into a `ref T?` is the option of a view (#1486).
                 state.facts.lent_option_results.insert(node_key(value))
@@ -686,7 +691,7 @@ fn check_function_tail_checks[H: CheckHost](mut state: CheckState, world: ref Ch
 /// D32): a branching tail under a nullable result is `Some` at each plain
 /// end, another tail takes the wrap of its slot. A named function's tail and
 /// a lambda's whose type the place declares (#1017) take it alike.
-pub fn check_function_wrap_tail[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, shown: ref Ty, expected: ref Ty, value: ref Expr, span: ref Span) sync {
+fn check_function_wrap_tail[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, shown: ref Ty, expected: ref Ty, value: ref Expr, span: ref Span) sync {
     let nullable = check_function_is_nullable(expected)
     let branches = check_function_is_branching(value)
     let how = check_widened_slot(state, world, host, shown, expected, value, span)
@@ -735,7 +740,7 @@ fn check_function_hands_nothing(mut state: CheckState, body: ref Block, expected
 
 /// **A function, checked**: its frame, its body, what the body hands back,
 /// and the questions that can only be asked once the whole body has been seen.
-pub fn check_function_function[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, item: ref Item, at: ref Span, target: String?) sync {
+fn check_function_function[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, item: ref Item, at: ref Span, target: String?) sync {
     match item {
         Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, can_throw, is_sync, sync_by, is_extern, .. } => {
             check_function_fn(state, world, host, name, generics, receiver, args, config, spread, ret_type, body, can_throw, is_sync, sync_by, is_extern, at, target)
@@ -843,13 +848,13 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     state.scope.push(frame)
     let tail_span = check_function_last_span(body)
     let outer_lists = state.flow.empty_lists.clone()
-    state.flow.empty_lists = collections::BTreeMap()
+    state.flow.empty_lists.clear()
     let outer_numbers = state.flow.open_numbers.clone()
-    state.flow.open_numbers = collections::BTreeMap()
+    state.flow.open_numbers.clear()
     let outer_chars = state.flow.open_chars.clone()
-    state.flow.open_chars = collections::BTreeMap()
+    state.flow.open_chars.clear()
     let outer_bytes = state.flow.high_bytes.clone()
-    state.flow.high_bytes = collections::BTreeMap()
+    state.flow.high_bytes.clear()
     let outer_grown = state.flow.grown_text.clone()
     state.flow.grown_text = check_function_grown_text(world.here, body)
     let outer_mixed = state.flow.mixed_text.clone()
@@ -901,9 +906,9 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     state.data_handed_over_is_used_again()
     state.needless_clones_said()
     state.reads_on_paths.clear()
-    state.flow.read_index = collections::BTreeMap()
-    state.lent_lets = collections::BTreeSet()
-    state.got_past_a_jump = collections::BTreeSet()
+    state.flow.read_index.clear()
+    state.lent_lets.clear()
+    state.got_past_a_jump.clear()
     state.a_task_took_what_is_used_again()
 
     state.expected = outer

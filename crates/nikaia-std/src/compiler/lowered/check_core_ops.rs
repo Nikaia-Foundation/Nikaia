@@ -51,6 +51,10 @@ pub(crate) fn check_core_ops_lit_str(value: &Expr) -> bool { matches!(value, Exp
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_ops_a_coalesce(value: &Expr) -> bool { matches!(value, Expr::Coalesce { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_ops_empty_list(value: &Expr) -> bool {
     match value {
         Expr::ListLit { items, .. } => items.is_empty(),
@@ -63,6 +67,15 @@ pub(crate) fn check_core_ops_empty_list(value: &Expr) -> bool {
 pub(crate) fn check_core_ops_view_of_a_list(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, view, .. } => { let view = *view; view && type_last_segment(name) == "Vec" },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_ops_a_number(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, .. } => args.is_empty() && a_number_name(name),
         _ => false,
     }
 }
@@ -325,7 +338,7 @@ pub(crate) fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, op: &BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span, span: &Span) -> Ty {
+pub(crate) fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, op: &BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span, span: &Span) -> Ty {
     let arithmetic = check_core_ops_arithmetic(&op);
     let reached: Option<String> = match state.flow.reached.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -604,7 +617,7 @@ pub(crate) fn check_core_ops_a_word(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, fallback: &Expr, span: &Span) -> Ty {
+pub(crate) fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, fallback: &Expr, span: &Span) -> Ty {
     let outer = state.flow.read_a_map;
     state.flow.read_a_map = false;
     let lending = state.flow.lending_let;
@@ -622,7 +635,9 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     let from_a_map = check_core_ops_from_a_map(&state, world, value, read_now);
     let from = state.taken_so_far();
     state.flow.lending_let = lending;
+    state.flow.lambda_expected = check_simd_wanted(world, fallback, Some(&check_core_ops_inside(&left)));
     let other = check_core_expr(state, world, host, fallback, span);
+    state.flow.lambda_expected = None;
     state.flow.lending_let = false;
     let leaves = state.leaves(world, fallback);
     state.a_branch_that_leaves(from, leaves, span);
@@ -637,7 +652,9 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
         let shown = arith_shown(&written_expression(world.words, value));
         state.findings.push(check_refusal("NK1342", span, format!("The compiler can't tell what type `{}` holds, so it can't tell what the fallback of this `??` becomes.", shown), vec![String::from("What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).")], Some(String::from("Write the type down where the value is made, such as `let x: T? = …`."))));
     }
-    if from_a_map && nullable && moves(&inner) && state.jumps(world, fallback) { state.facts.map_read_views.insert(id_of(expr) as i64); }
+    let a_word_held = state.a_word_by_its_kind(world, &unviewed_type(&inner));
+    if from_a_map && nullable && moves(&inner) && !a_word_held && state.jumps(world, fallback) { state.facts.map_read_views.insert(id_of(expr) as i64); }
+    if from_a_map && nullable && a_word_held && !a_copy_by_value(&unviewed_type(&inner)) && check_core_stmt_an_index(value) { state.facts.copied_reads.insert(id_of(value) as i64); }
     if nullable && leaves && check_core_ops_a_word(&inner) && (check_core_stmt_an_index(value) || check_core_stmt_a_get(world, value)) { state.facts.copied_jump_reads.insert(id_of(expr) as i64); }
     if lending && !from_a_map && check_core_ops_index(value) && (state.jumps(world, fallback) || state.facts.lent_coalesces.contains_key(&(id_of(fallback) as i64))) && nullable && state.takes_away(world, &inner.unseen()) {
         if check_core_ops_plain_text(&inner) { state.facts.lent_coalesces.insert(id_of(expr) as i64, String::from(".as_deref()")); } else { state.facts.lent_coalesces.insert(id_of(expr) as i64, String::from(".as_ref()")); }
@@ -671,6 +688,10 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
             state.facts.view_fallbacks.insert(id_of(fallback) as i64);
             return check_core_ops_view("str");
         }
+        if inner == check_core_ops_named("String") && state.flow.list_ends.contains(&(id_of(value) as i64)) {
+            state.facts.view_fallbacks.insert(id_of(fallback) as i64);
+            return check_core_ops_view("str");
+        }
         if inner == check_core_ops_named("String") && !from_a_map && check_core_ops_index(value) {
             state.facts.view_fallbacks.insert(id_of(fallback) as i64);
             state.facts.lent_list_reads.insert(id_of(expr) as i64);
@@ -685,9 +706,13 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
         state.facts.view_coalesces.insert(id_of(expr) as i64);
         return check_core_ops_view("str");
     }
+    if nullable && inner == check_core_ops_named("String") && from_a_map && check_core_ops_a_coalesce(fallback) && other == check_core_ops_view("str") {
+        state.facts.view_coalesces.insert(id_of(expr) as i64);
+        return check_core_ops_view("str");
+    }
     if nullable && inner == check_core_ops_view("str") && !from_a_map && !check_core_ops_index(value) && check_core_ops_variable(fallback) && other.is_a_view() && check_core_ops_text_base(&other) { state.facts.text_view_fallbacks.insert(id_of(expr) as i64); }
     if nullable && !place && inner == check_core_ops_named("String") && !from_a_map && !check_core_ops_index(value) && check_core_ops_variable(fallback) && other.is_a_view() && check_core_ops_text_base(&other) { state.facts.text_owned_fallbacks.insert(id_of(expr) as i64); }
-    if nullable && from_a_map && check_core_ops_variable(fallback) && !other.is_a_view() && check_core_ops_held_matches(&inner, &other) && moves(&other) {
+    if nullable && from_a_map && check_core_ops_variable(fallback) && !other.is_a_view() && check_core_ops_held_matches(&inner, &other) && moves(&other) && !a_word_held {
         state.facts.lent_map_fallbacks.insert(id_of(expr) as i64);
         return view_of_type(&other);
     }
@@ -695,6 +720,8 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
         state.facts.lent_map_fallbacks.insert(id_of(expr) as i64);
         return check_core_ops_view("str");
     }
+    let held_word = unviewed_type(&inner);
+    if nullable && check_core_ops_variable(fallback) && (a_copy_by_value(&held_word) || a_word_held) && (held_word == other || other.is_unknown() && check_core_ops_a_number(&held_word)) { state.facts.word_fallbacks.insert(id_of(expr) as i64); }
     if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && state.a_package_copy(world, &unviewed_type(&inner)) && state.a_value_written_out(world, fallback) { return unviewed_type(&inner); }
     if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && check_core_ops_not_plain(&inner) && state.a_value_written_out(world, fallback) {
         if made_in_the_call(fallback) { state.facts.slot_fallbacks.insert(id_of(expr) as i64, false); } else { Some(state.facts.lent_map_fallbacks.insert(id_of(expr) as i64)); }
@@ -786,7 +813,7 @@ pub(crate) fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckW
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_ops_none_named(state: &mut CheckState, declared: Option<&Ty>, params: &[winnow_grammar::Symbol], span: &Span) {
+pub(crate) fn check_core_ops_none_named(state: &mut CheckState, declared: Option<&Ty>, params: &[winnow_grammar::Symbol], span: &Span) {
     if !params.is_empty() { return; }
     let ty: &Ty = match declared { Some(__nikaia_value) => __nikaia_value, None => return };
     let handed: i64 = match ty {
@@ -829,7 +856,7 @@ pub(crate) fn check_core_ops_promised(declared: Option<&Ty>) -> Option<CheckProm
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
+pub(crate) fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
     let declared: Option<Ty> = match state.flow.lambda_expected.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -962,7 +989,7 @@ pub(crate) fn check_core_ops_task<H: CheckHost>(state: &mut CheckState, world: &
 
 pub const CHILD_HANDLE: &str = "task::ChildHandle";
 
-pub fn a_child_handle(ty: &Ty) -> bool {
+pub(crate) fn a_child_handle(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, .. } => name == CHILD_HANDLE,
         _ => false,
@@ -971,7 +998,7 @@ pub fn a_child_handle(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_ops_spawn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, spawned: &Expr, detached: bool, child: bool, span: &Span) -> Ty {
+pub(crate) fn check_core_ops_spawn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, spawned: &Expr, detached: bool, child: bool, span: &Span) -> Ty {
     if !child { state.crosses_into_a_task(world, spawned, span); }
     let task = id_of(spawned) as i64;
     match spawned {

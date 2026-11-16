@@ -31,7 +31,7 @@ comptime SETS: Array[ref String, 3] = ["HashSet", "BTreeSet", "Set"]
 comptime MAPS: Array[ref String, 3] = ["HashMap", "BTreeMap", "Map"]
 
 /// A method whose result is text of its own, whatever it is called on.
-pub fn owns_its_text(method: ref String) -> bool {
+fn owns_its_text(method: ref String) -> bool {
     for one in OWNS {
         if one == method {
             return true
@@ -41,7 +41,7 @@ pub fn owns_its_text(method: ref String) -> bool {
 }
 
 /// A method of text whose result is a view of the text it is called on.
-pub fn views_what_it_is_called_on(method: ref String) -> bool {
+fn views_what_it_is_called_on(method: ref String) -> bool {
     for one in VIEWS {
         if one == method {
             return true
@@ -51,7 +51,7 @@ pub fn views_what_it_is_called_on(method: ref String) -> bool {
 }
 
 /// A method whose result is an element of what it is called on.
-pub fn hands_back_an_element(method: ref String) -> bool {
+fn hands_back_an_element(method: ref String) -> bool {
     for one in ELEMENTS {
         if one == method {
             return true
@@ -61,7 +61,7 @@ pub fn hands_back_an_element(method: ref String) -> bool {
 }
 
 /// A method that changes the text it is called on in place.
-pub fn changes_its_text(method: ref String) -> bool {
+fn changes_its_text(method: ref String) -> bool {
     for one in CHANGES {
         if one == method {
             return true
@@ -71,7 +71,7 @@ pub fn changes_its_text(method: ref String) -> bool {
 }
 
 /// A method that puts its argument into what it is called on.
-pub fn puts_its_argument(method: ref String) -> bool {
+fn puts_its_argument(method: ref String) -> bool {
     for one in PUTS {
         if one == method {
             return true
@@ -82,7 +82,7 @@ pub fn puts_its_argument(method: ref String) -> bool {
 
 /// Whether a container's name is a map's, whose key and value are two
 /// positions.
-pub fn is_a_map_name(name: ref String) -> bool {
+fn is_a_map_name(name: ref String) -> bool {
     for one in MAPS {
         if one == name {
             return true
@@ -93,7 +93,7 @@ pub fn is_a_map_name(name: ref String) -> bool {
 
 /// Whether a callee names a container this pass follows text into, by its
 /// last segment.
-pub fn is_a_container_name(callee: ref String) -> bool {
+fn is_a_container_name(callee: ref String) -> bool {
     let name = last_segment(callee)
     for one in RUNS {
         if one == name {
@@ -111,13 +111,13 @@ pub fn is_a_container_name(callee: ref String) -> bool {
 /// A declared `String`, or `String?`: a value that may be absent is a
 /// position as well, and `null` puts no text of either kind into it
 /// (ADR-282 D12).
-pub fn plain_string(names: ref winnow_grammar::InternerContext, ty: ref Type) -> bool {
+fn plain_string(names: ref winnow_grammar::InternerContext, ty: ref Type) -> bool {
     return names.resolve(ty.name) == "String" && ty.generics.len() == 0 && !ty.is_view && !ty.is_tuple && !ty.is_slice && ty.code == null
 }
 
 /// The container a written type is, by its last segment, or nothing: a view,
 /// a nullable, a tuple and code are none.
-pub fn container_of(names: ref winnow_grammar::InternerContext, ty: ref Type) -> String? {
+fn container_of(names: ref winnow_grammar::InternerContext, ty: ref Type) -> String? {
     if ty.is_view || ty.is_nullable || ty.is_tuple || ty.code != null {
         return null
     }

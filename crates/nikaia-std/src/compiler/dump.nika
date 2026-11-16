@@ -263,7 +263,7 @@ fn dump_fields(shapes: ref Shapes, ty: ref Ty, name: ref String, expr: ref Strin
 /// Whether a name is one of the whole numbers, which cross as themselves.
 /// **`f32` and `f64` are not here**, and that is not an absence: a float is a
 /// build-time value of its own, written with `{:?}`.
-pub fn is_whole(name: ref String) -> bool {
+fn is_whole(name: ref String) -> bool {
     return name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize"
 }
 

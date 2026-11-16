@@ -1,0 +1,14 @@
+// What `http1::Head::size()`, `length()` and `http1::Buffer::len()` hand back
+// has a range in `std`'s ledger: a head is at least its blank line long, and a
+// length and a count of bytes are never negative. So the operations a server
+// does on them are proved (ADR-314 D3, ADR-396 D8 step 2, #1811).
+use std::http1
+
+fn main() throws {
+	let mut buffer = http1::Buffer()
+	buffer.take("GET / HTTP/1.1\r\ncontent-length: 3\r\n\r\nabc")
+	let head = buffer.head()
+	let size = head.size()
+	let length = head.length()
+	print(f"{buffer.len() - size} {size - 4} {length - buffer.len()}\n")
+}

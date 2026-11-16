@@ -65,7 +65,7 @@ impl std::error::Error for FeaturesRefusal {}
 
 pub(crate) fn features_plain(c: scalar) -> bool { c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' }
 
-pub fn features_name_ok(name: &str) -> bool {
+pub(crate) fn features_name_ok(name: &str) -> bool {
     let mut first = true;
     for c in name.chars() {
         let plain = features_plain(c) || c == '_';
@@ -79,7 +79,7 @@ pub fn features_name_ok(name: &str) -> bool {
     !first
 }
 
-pub fn features_lists_checked(features: &[ManifestFeature], package: &str) -> Option<FeaturesRefusal> {
+pub(crate) fn features_lists_checked(features: &[ManifestFeature], package: &str) -> Option<FeaturesRefusal> {
     let mut declared: Vec<String> = vec![];
     for feature in features.iter() { declared.push(nikaia_std::block::Text::from(feature.name.to_string())); }
     for feature in features.iter() {
@@ -98,7 +98,7 @@ pub fn features_lists_checked(features: &[ManifestFeature], package: &str) -> Op
     None
 }
 
-pub fn features_chosen_checked(features: &[ManifestFeature], chosen: &[String]) -> Option<FeaturesRefusal> {
+pub(crate) fn features_chosen_checked(features: &[ManifestFeature], chosen: &[String]) -> Option<FeaturesRefusal> {
     let mut declared: Vec<String> = vec![];
     for feature in features.iter() { declared.push(nikaia_std::block::Text::from(feature.name.to_string())); }
     for name in chosen.iter() {
@@ -406,7 +406,7 @@ pub(crate) struct FeaturesReach {
     pub(crate) default: Vec<String>,
 }
 
-pub fn features_applied(rust: &str, manifest: &str, features: &[ManifestFeature], package: &str) -> Result<FeaturesMade, nikaia_std::error::Thrown<FeaturesRefusal>> {
+pub(crate) fn features_applied(rust: &str, manifest: &str, features: &[ManifestFeature], package: &str) -> Result<FeaturesMade, nikaia_std::error::Thrown<FeaturesRefusal>> {
     let reach = features_reach(rust, features, package)?;
     #[allow(unused_mut)] let mut lines = reach.lines.copy_owned();
     let items = reach.items.copy_owned();
@@ -589,7 +589,7 @@ pub(crate) fn features_reader_blanked(lines: &mut Vec<String>, item: &FeatureIte
     for i in 0..lines.len() as i64 { if (*unsafe { nikaia_std::proven::read(&lines, (i) as usize) }).trim().starts_with(&*taken) { { let __nikaia_stored = String::from(""); unsafe { nikaia_std::proven::write(&mut *lines, (i) as usize, __nikaia_stored) }; } } }
 }
 
-pub fn features_readers_dropped(rust: &str) -> String {
+pub(crate) fn features_readers_dropped(rust: &str) -> String {
     let mut lines: Vec<String> = vec![];
     for line in rust.split("\n") { lines.push(nikaia_std::block::Text::from(line.to_string())); }
     let items = features_items(&lines);
@@ -654,7 +654,7 @@ pub(crate) fn features_reach(rust: &str, features: &[ManifestFeature], package: 
     Ok(FeaturesReach { lines, items, resolved, reached, core, default })
 }
 
-pub fn features_manifest(manifest: &str, made: &FeaturesMade) -> String {
+pub(crate) fn features_manifest(manifest: &str, made: &FeaturesMade) -> String {
     let mut out = String::from("");
     let mut inside = false;
     let merged = manifest.lines().any(|line| { line.trim() == "[features]" });
@@ -687,7 +687,7 @@ pub fn features_manifest(manifest: &str, made: &FeaturesMade) -> String {
     out
 }
 
-pub fn features_blamed(said: &str, made: &FeaturesMade, fallback: &str) -> String {
+pub(crate) fn features_blamed(said: &str, made: &FeaturesMade, fallback: &str) -> String {
     let line = features_first_error(said);
     let mut at = 0;
     for piece in line.split('`') {
@@ -697,7 +697,7 @@ pub fn features_blamed(said: &str, made: &FeaturesMade, fallback: &str) -> Strin
     nikaia_std::block::Text::from(fallback.to_string())
 }
 
-pub fn features_first_error(said: &str) -> String {
+pub(crate) fn features_first_error(said: &str) -> String {
     for line in said.lines() {
         if !line.contains("\"reason\":\"compiler-message\"") || !line.contains("\"level\":\"error\"") { continue; }
         let after = match line.split("\"rendered\":\"").nth(1) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -709,7 +709,7 @@ pub fn features_first_error(said: &str) -> String {
     String::from("an error it did not render")
 }
 
-pub fn features_span(toml: &str, feature: &str, entry: &str) -> Span {
+pub(crate) fn features_span(toml: &str, feature: &str, entry: &str) -> Span {
     let mut offset: i64 = 0;
     let mut inside = false;
     let mut header: i64 = -1;

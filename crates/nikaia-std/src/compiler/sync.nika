@@ -235,8 +235,8 @@ fn declared_sync(is_sync: bool, sync_by: ref Vec[winnow_grammar::Symbol], mut no
         return
     }
     node.reach.blocked = false
-    node.reach.calls = collections::BTreeSet()
-    node.reach.through_code = collections::BTreeSet()
+    node.reach.calls.clear()
+    node.reach.through_code.clear()
 }
 
 fn leaf(blocked: bool) -> SyncNode {

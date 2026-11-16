@@ -162,7 +162,7 @@ pub(crate) fn all_of(parts: &[Ty], walking: &Walking<'_, '_>, seen: &mut collect
     worst
 }
 
-pub fn worst_of(worst: Crossing, answer: Crossing) -> Crossing {
+pub(crate) fn worst_of(worst: Crossing, answer: Crossing) -> Crossing {
     match worst {
         Crossing::MayNot { .. } => worst,
         Crossing::Undecided { .. } => match answer {
@@ -229,7 +229,7 @@ pub fn held_across_a_pause(bound: &[(String, i64)], pauses: &[i64], named: &coll
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let answers: Vec<Crossing> = vec![Crossing::May, Crossing::Undecided { part: String::from("?") }, Crossing::MayNot { part: String::from("Locked[i64]"), at: None, why: Refusal::Lock }, Crossing::May];
     let mut worst = Crossing::May;
     for answer in answers.into_iter() { worst = worst_of(worst, answer); }
@@ -291,7 +291,7 @@ pub(crate) fn refused_as(answer: &Crossing) -> String {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let all = vec!["i64", "String", "&str", "bool", "Vec[i64]", "HashMap[String, Vec[i64]]", "(i64, String)", "()", "Option[Vec[(String, f64)]]"];
     for written in all.iter() {
         let written = *written;
@@ -301,7 +301,7 @@ pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     if !(is_may(&ours("Shared[String]"))) { nikaia_std::abort::assertion_failed("assert(is_may(ours(\"Shared[String]\")))", None, &[]) };
     if !(is_may(&ours("&Shared[String]"))) { nikaia_std::abort::assertion_failed("assert(is_may(ours(\"&Shared[String]\")))", None, &[]) };
     if !(is_may(&ours("Vec[Shared[i64]]"))) { nikaia_std::abort::assertion_failed("assert(is_may(ours(\"Vec[Shared[i64]]\")))", None, &[]) };
@@ -312,7 +312,7 @@ pub(crate) fn __nikaia_test_2() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_3() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let all = vec!["Locked[i32]", "SharedMut[i32]", "Shared[Locked[i32]]", "HashMap[String, Shared[Locked[i64]]]", "Vec[SharedMut[String]]"];
     for written in all.iter() {
         let written = *written;
@@ -325,7 +325,7 @@ pub(crate) fn __nikaia_test_3() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_4() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_4() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let all = vec!["Locked[i32]", "SharedMut[i32]", "Shared[Locked[i32]]", "HashMap[String, Shared[Locked[i64]]]"];
     for written in all.iter() {
         let written = *written;
@@ -343,7 +343,7 @@ pub(crate) fn __nikaia_test_4() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_5() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_5() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     for written in ["Shared[String]", "Shared[i64]", "Shared"] {
         if !(why_word(&foreign(written)) == "count") { nikaia_std::abort::assertion_failed("assert(why_word(foreign(written)) == \"count\")", None, &[("why_word(foreign(written))", (&&nikaia_std::abort::Operand(&(why_word(&foreign(written))))).shown()), ]) };
         if !(!is_refused(&ours(written))) { nikaia_std::abort::assertion_failed("assert(!is_refused(ours(written)))", None, &[]) };
@@ -363,7 +363,7 @@ pub(crate) fn __nikaia_test_5() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_6() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_6() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let refused = Crossing::MayNot { part: String::from("Locked[i32]"), at: Some(String::from("hits")), why: Refusal::Lock };
     if !(refused_as(&refused) == "Locked[i32] at hits") { nikaia_std::abort::assertion_failed("assert(refused_as(refused) == \"Locked[i32] at hits\")", None, &[("refused_as(refused)", (&&nikaia_std::abort::Operand(&(refused_as(&refused)))).shown()), ]) };
     if !(why_word(&refused) == "lock") { nikaia_std::abort::assertion_failed("assert(why_word(refused) == \"lock\")", None, &[("why_word(refused)", (&&nikaia_std::abort::Operand(&(why_word(&refused)))).shown()), ]) };
@@ -379,7 +379,7 @@ pub(crate) fn __nikaia_test_6() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_7() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_7() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     for written in ["?", "Mapped", "Locked[Mapped]", "fn(&Stats)", "$V", "Vec[?]"] {
         let answer = ours(written);
         if !(is_undecided(&answer)) { nikaia_std::abort::assertion_failed("assert(is_undecided(answer))", None, &[]) };
@@ -389,7 +389,7 @@ pub(crate) fn __nikaia_test_7() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_8() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_8() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut own = Ledger::blank();
     add_struct(&mut own, "Reading", &vec![(String::from("name"), String::from("String")), (String::from("temp"), String::from("f64"))]);
     add_struct(&mut own, "Counter", &vec![(String::from("hits"), String::from("Shared[Locked[i64]]"))]);
@@ -410,7 +410,7 @@ pub(crate) fn __nikaia_test_8() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_9() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_9() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut own = Ledger::blank();
     add_struct(&mut own, "Node", &vec![(String::from("value"), String::from("i64")), (String::from("next"), String::from("Option[Node]"))]);
     if !(is_may(&crossing_of("Node", &own, Going::Ours))) { nikaia_std::abort::assertion_failed("assert(is_may(crossing_of(\"Node\", own, Going::Ours)))", None, &[]) };
@@ -421,7 +421,7 @@ pub(crate) fn __nikaia_test_9() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_10() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_10() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let orders = nikaia_std::block::List::from_array_in([vec!["u", "r"], vec!["r", "u"], vec!["m", "u", "r"]], nikaia_std::block::Place::Block);
     for order in orders.iter() {
         let mut worst = Crossing::May;

@@ -164,6 +164,8 @@ pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
             text: String::new(),
             main: true,
         }],
+
+        edit: None,
     };
     Err(crate::diagnostics::refuse_finding(
         finding,

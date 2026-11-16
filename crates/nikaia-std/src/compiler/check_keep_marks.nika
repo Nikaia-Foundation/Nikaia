@@ -59,7 +59,7 @@ fn keep_marks_opted_in(view: ref ParsedView) -> bool {
 
 /// The same, asked of a file's items: also by the hand-back pass
 /// (`text_tiers.nika`, `tier_hand_back`).
-pub fn keep_marks_opted_in_items(items: ref Vec[Spanned[Item]]) -> bool {
+fn keep_marks_opted_in_items(items: ref Vec[Spanned[Item]]) -> bool {
     for item in items {
         match item.node {
             Item::Fn { receiver, args, .. } => {

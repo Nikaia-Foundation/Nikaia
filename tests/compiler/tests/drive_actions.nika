@@ -11,6 +11,20 @@ fn root() -> String throws {
     return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
 }
 
+// An ESCALATE line ends with the commit of the drive.nika that ran (#1801),
+// which changes with each commit: it is printed as SHA.
+fn unsha(text: String) -> String throws {
+    let mut lines: Vec[String] = []
+    for line in text.split("\n") {
+        let mut first = true
+        for part in line.split(" (drive.nika ") {
+            if first { if part.len() < line.len() { lines.push(part + " (drive.nika SHA)") } else { lines.push(part.clone()) } }
+            first = false
+        }
+    }
+    return lines.join("\n")
+}
+
 fn case(nikaia: String, repo: String, tmp: String, name: String, cycle: String) throws {
     case_with(nikaia, repo, tmp, name, cycle, "--dry-run")
 }
@@ -20,7 +34,7 @@ fn case_with(nikaia: String, repo: String, tmp: String, name: String, cycle: Str
     fs::write(f"{tmp}/lines", fs::Root::Anywhere, cycle.replace("%T", tmp.clone()) + "\n")
     let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.clone(), "--lines", f"{tmp}/lines", flag]; dir: repo, env_remove: ["NIKAIA_SUITE_DIR"])
     println(f"== {name} (exit {out.code})")
-    println(out.stdout.trim().replace(tmp, "T").replace("target/release/nikaia", "target/fast/nikaia"))
+    println(unsha(out.stdout.trim().clone()).replace(tmp, "T").replace("target/release/nikaia", "target/fast/nikaia"))
 }
 
 // The toolchain that runs this test (CI builds target/release only); if the

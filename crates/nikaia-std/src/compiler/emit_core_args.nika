@@ -54,7 +54,7 @@ fn emit_arg_opening_inside(inner: ref Ty) -> String {
 /// (`Vec[u8]?`, `(Vec[u8], u64)`) or a list holds lists or texts
 /// (`Vec[String]`); empty for a type with none, and for one no crossing
 /// reaches (`emit_rust_crossing`).
-pub fn emit_rust_owner(ty: ref Ty) -> String sync {
+fn emit_rust_owner(ty: ref Ty) -> String sync {
     if emit_rust_crossing(ty, true, 0) == null {
         return ""
     }
@@ -98,7 +98,7 @@ fn emit_ty_holds_text(ty: ref Ty) -> bool sync {
 /// or texts element by element (a block's `Text` and Rust's `String` are not
 /// the same element), an option inside it, a tuple part by part. `depth`
 /// names the bindings, so a crossing inside another binds names of its own.
-pub fn emit_rust_crossing(ty: ref Ty, toward: bool, depth: i64) -> (String, String)? sync {
+fn emit_rust_crossing(ty: ref Ty, toward: bool, depth: i64) -> (String, String)? sync {
     return match ty {
         Ty::Named { name, args, view } => emit_rust_crossing_named(name, args, view, toward, depth),
         Ty::Nullable(inner) => {
@@ -185,7 +185,7 @@ fn emit_rust_crossing_tuple(parts: ref Vec[Ty], toward: bool, depth: i64) -> (St
 /// `null` where `callee` is not one of a described crate's or the argument
 /// holds no list or text. `inside` is an argument the call puts into an
 /// option itself (`Some(…)`): its crossing is the option's item's.
-pub fn emit_rust_owner_param(described: ref Ledger, callee: ref String, i: i64, inside: bool) -> (String, String)? sync {
+fn emit_rust_owner_param(described: ref Ledger, callee: ref String, i: i64, inside: bool) -> (String, String)? sync {
     let contract = described.functions.get(callee) ?? return null
     let signature = contract.signature ?? return null
     let params = call_arguments(signature)
@@ -236,6 +236,14 @@ fn emit_arg_plain_option(ty: ref Ty) -> bool {
             Ty::Tuple(_) => true,
             else => false,
         },
+        else => false,
+    }
+}
+
+/// Whether an option's type is a `T?`.
+fn emit_arg_nullable_option(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Nullable(_) => true,
         else => false,
     }
 }
@@ -481,14 +489,11 @@ impl EmitState {
     /// The count of parameters of a declared function named where a
     /// `fn(..) throws` parameter runs it, where its channel is not the box
     /// that type fails in (ADR-280 D9, #703); `-1` otherwise. One that pauses
-    /// is handed over as it is.
+    /// is awaited inside the closure, as one that cannot fail is (#1836).
     fn emit_arg_into_the_box(ref self, world: ref EmitWorld, arg: ref Expr) -> i64 {
         let arity = self.facts.boxed_fn_values.get(node_key(arg)) ?? return -1
         let key = emit_arg_function_key(world, arg) ?? return -1
-        if call_pauses(self.own_contracts, key) {
-            return -1
-        }
-        if self.error_channel(world, key, true, "", "", false) == "Box<dyn std::error::Error>" {
+        if self.error_channel(world, key, true, "", "", false) == "std::boxed::Box<dyn std::error::Error>" {
             return -1
         }
         return arity
@@ -500,7 +505,7 @@ impl EmitState {
     /// call several arguments. `takes_a_handle` says which positional
     /// parameters take a handle on a shared value by value (empty where nothing
     /// does or nothing is known).
-    pub fn emit_core_args[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, callee: ref String, args: ref Vec[Expr], takes_a_handle: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_args[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, callee: ref String, args: ref Vec[Expr], takes_a_handle: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **This call's mask and no other's**: taken here, so a call written
         // inside one of these arguments does not see it.
         let boxed_mask: Vec[bool] = (walk.boxed_args?.clone() ?? [])
@@ -587,7 +592,7 @@ impl EmitState {
         // around everything else this argument is written with.
         let boxed_here = i < boxed_mask.len() && boxed_mask[i]
         if boxed_here {
-            out.push("Box::new(")
+            out.push("std::boxed::Box::new(")
         }
         let node = node_key(arg)
         // **A lookup's key of no known type** (0.0.235): the reference the map
@@ -901,7 +906,7 @@ impl EmitState {
                 if runs {
                     out.push(f"async |{joined}| ")
                 } else {
-                    out.push(f"|{joined}| Box::pin(async move ")
+                    out.push(f"|{joined}| std::boxed::Box::pin(async move ")
                 }
                 let mut changed: Vec[winnow_grammar::Symbol] = scope.changed.clone()
                 changed.extend(mutable.clone())
@@ -1024,12 +1029,18 @@ impl EmitState {
                 names.push(f"__nikaia_a{n}")
             }
             let joined = names.join(", ")
-            if arity >= 0 {
+            let key: String = (emit_arg_function_key(world, arg) ?? "").clone()
+            let pauses = key != "" && call_pauses(self.own_contracts, key)
+            if arity >= 0 || pauses {
                 out.push("async ")
             }
             out.push(f"|{joined}| ")
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
-            out.push(f"({emit_arg_passing(names, lent)}).map_err(Into::into)")
+            out.push(f"({emit_arg_passing(names, lent)})")
+            if pauses {
+                out.push(".await")
+            }
+            out.push(".map_err(Into::into)")
             return
         }
         if arity < 0 && lent.len() > 0 {
@@ -1103,7 +1114,7 @@ impl EmitState {
     /// so where the function lends one, the value is a closure that lends it.
     /// Its parameters carry the written types: the language below cannot infer
     /// an owned argument from the view the call lends. Whether it wrote one.
-    pub fn emit_arg_named_fn_bound[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+    fn emit_arg_named_fn_bound[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         if !self.facts.named_fn_values.contains_key(node_key(value)) {
             return false
         }
@@ -1168,7 +1179,7 @@ fn emit_arg_passing(names: ref Vec[String], lent: ref Vec[i64]) -> String {
 /// `std`'s entries that run a kept function in a task of their own and have a
 /// twin for `user_parallelism = yes`, named `<name>_on_pool`: a function, or a
 /// method by its ledger key (`net::Listener::serve`, ADR-326 D10).
-pub fn emit_call_on_the_pool(key: ref String) -> bool {
+fn emit_call_on_the_pool(key: ref String) -> bool {
     return key == "net::serve" || key == "net::Listener::serve" || key == "supervisor::child" || key == "supervisor::run" || key == "task::scope"
 }
 
@@ -1177,7 +1188,7 @@ pub fn emit_call_on_the_pool(key: ref String) -> bool {
 /// `Crashed` alone where nothing else can.
 fn emit_call_tasks_channel(flow: EmitFlow, scope: ref EmitScope) -> String {
     if flow.handled_here {
-        return "Box<dyn std::error::Error>"
+        return "std::boxed::Box<dyn std::error::Error>"
     }
     if flow.can_throw {
         return scope.channel.clone()
@@ -1189,7 +1200,7 @@ fn emit_call_tasks_channel(flow: EmitFlow, scope: ref EmitScope) -> String {
 /// where a `catch` opens it, so its tasks may borrow (`task::Boxed`); its
 /// tasks still fail in the box.
 fn emit_call_scope_channel(channel: ref String) -> String {
-    if channel == "Box<dyn std::error::Error>" {
+    if channel == "std::boxed::Box<dyn std::error::Error>" {
         return "nikaia_std::task::Boxed"
     }
     return channel.clone()
@@ -1212,7 +1223,7 @@ fn emit_async_wait(gates: ref Vec[i64]) -> String {
 /// **What starts the waiting tasks of the gates around** (D37): the
 /// innermost gated group's `Waiting`, which asks the outer ones too; `""`
 /// where no gate is around.
-pub fn emit_async_line(gates: ref Vec[i64]) -> String {
+fn emit_async_line(gates: ref Vec[i64]) -> String {
     if gates.len() == 0 {
         return ""
     }
@@ -1223,7 +1234,7 @@ pub fn emit_async_line(gates: ref Vec[i64]) -> String {
 /// are polled meanwhile, and those waiting for a place start as places free,
 /// as where it waits for one of them. Inside a task's body no gate is in the
 /// walk: the task's own groups have theirs.
-pub fn emit_async_pause(walk: ref EmitWalk) -> String {
+fn emit_async_pause(walk: ref EmitWalk) -> String {
     let line = emit_async_line(walk.async_gates)
     if line == "" {
         return ".await"
@@ -1233,7 +1244,7 @@ pub fn emit_async_pause(walk: ref EmitWalk) -> String {
 
 /// **A wait of the main line under a gate** (D37): the group's tasks run
 /// meanwhile, the waiting ones starting as places free.
-pub fn emit_async_during(line: ref String, wait: ref String) -> String {
+fn emit_async_during(line: ref String, wait: ref String) -> String {
     if line == "" {
         return f"{wait}.await"
     }
@@ -1325,7 +1336,7 @@ fn emit_call_owned_text(ty: ref Ty) -> bool {
 
 impl EmitState {
     /// The call itself, without ADR-023 D8's propagation.
-    pub fn emit_core_called[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_called[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // The types `path::f[T](…)` wrote, for this call alone.
         let path_types = walk.path_types.clone()
         walk.path_types = ""
@@ -1423,7 +1434,7 @@ impl EmitState {
             if channel == scope.channel {
                 owner = scope.function.clone()
             }
-            let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>"
+            let boxed = flow.handled_here && channel == "std::boxed::Box<dyn std::error::Error>"
             // **The scope's function may throw itself** (ADR-346 D7): its error
             // is the scope's, after its tasks' (`settled`).
             let mut written = false
@@ -1432,7 +1443,7 @@ impl EmitState {
                     Expr::Closure { params, body, .. } => {
                         if params.len() == 1 {
                             let named = emit_local_name(self.facts.comptime_names, emit_text(world, params[0]))
-                            out.push(f"|{named}| {{ let __scope_body: Result<_, {channel}> = (|| {{ let {named} = {named}; Ok(")
+                            out.push(f"|{named}| {{ let __scope_body: {self.rust_result()}<_, {channel}> = (|| {{ let {named} = {named}; Ok(")
                             self.emit_call_scope_body(world, walk, out, host, body, depth, flow, scope, channel, owner, false)
                             out.push(f") }})(); {named}.settled(__scope_body) }}")
                             written = true
@@ -1506,12 +1517,23 @@ impl EmitState {
     fn emit_call_option[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, option: ref ConfigContract, config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         for passed in config {
             if emit_text(world, passed.name) == option.name {
-                if self.facts.lent_options.contains(node_key(passed.value)) {
+                // **Lent inside its option** (#1729): `Some(&name)`, and a
+                // `String?` of its own handed to a lent `String?` is opened,
+                // `name.as_deref()`, as at a parameter (#1256).
+                let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(passed.value))
+                let lent = self.facts.lent_options.contains(node_key(passed.value))
+                let opened = lent && before == "" && emit_arg_nullable_option(option.ty)
+                out.push(before)
+                if lent && !opened {
                     out.push("&")
                 }
-                let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(passed.value))
-                out.push(before)
+                if opened {
+                    out.push("(")
+                }
                 self.emit_expr(world, walk, out, host, passed.value, depth, flow, scope)
+                if opened {
+                    out.push(").as_deref()")
+                }
                 out.push(after)
                 return
             }
@@ -1571,7 +1593,7 @@ impl EmitState {
     /// `task::OrCrash` of the function's channel, their own failures in it and
     /// a crash raised again, and the function's own failures leave through the
     /// group's value (`task::group_raised`).
-    pub fn emit_async_tasks_channel(ref self, channel: ref String) -> String sync {
+    fn emit_async_tasks_channel(ref self, channel: ref String) -> String sync {
         if self.emit_channel_holds_a_crash(channel) {
             return channel.clone()
         }
@@ -1583,7 +1605,7 @@ impl EmitState {
     fn emit_channel_holds_a_crash(ref self, channel: ref String) -> bool sync {
         // `task::OverBudget` takes a crash apart (ADR-327 D13): a full block
         // is its own, any other crash unwinds on.
-        if channel == "nikaia_std::task::Crashed" || channel == "nikaia_std::task::OverBudget" || channel == "Box<dyn std::error::Error>" || channel == "nikaia_std::task::Boxed" {
+        if channel == "nikaia_std::task::Crashed" || channel == "nikaia_std::task::OverBudget" || channel == "std::boxed::Box<dyn std::error::Error>" || channel == "nikaia_std::task::Boxed" {
             return true
         }
         if channel.starts_with("nikaia_std::error::Thrown<") {
@@ -1610,7 +1632,7 @@ impl EmitState {
     /// and its handle holds the end until the wait point. `kind` is `join`
     /// (waited for before a call or an operation, in place), `handle` (a
     /// binding's, waited for later) or `spawn` (a statement, its value dropped).
-    pub fn emit_async_task[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: ref Expr, id: i64, kind: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_async_task[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: ref Expr, id: i64, kind: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let group = self.emit_async_group_of(id)
         if !walk.async_groups.contains(group) {
             throw EmitRefused { message: "The compiler can't translate `async e` yet where its group is a block inside the function (#988): put it in `async { … }` or in the function's own body.", at: emit_async_at(flow.statement) }
@@ -1656,7 +1678,7 @@ impl EmitState {
             },
             else => {},
         }
-        let boxed: String = "Box<dyn std::error::Error>"
+        let boxed: String = "std::boxed::Box<dyn std::error::Error>"
         let mut own = channel.clone()
         if raised {
             own = outer.clone()
@@ -1700,11 +1722,11 @@ impl EmitState {
             let text = body.buf.clone()
             body = EmitOut::empty()
             if bound {
-                body.push(f"{deadline}.bound(nikaia_std::task::fell_paused(async || -> Result<_, {boxed}> {{ Ok({text}) }})).await")
+                body.push(f"{deadline}.bound(nikaia_std::task::fell_paused(async || -> {self.rust_result()}<_, {boxed}> {{ Ok({text}) }})).await")
             } else if walk.async_pausing {
-                body.push(f"nikaia_std::task::fell_paused(async || -> Result<_, {boxed}> {{ Ok({text}) }}).await")
+                body.push(f"nikaia_std::task::fell_paused(async || -> {self.rust_result()}<_, {boxed}> {{ Ok({text}) }}).await")
             } else {
-                body.push(f"nikaia_std::task::fell(|| -> Result<_, {boxed}> {{ Ok({text}) }})")
+                body.push(f"nikaia_std::task::fell(|| -> {self.rust_result()}<_, {boxed}> {{ Ok({text}) }})")
             }
         }
         if bound && !fallback {
@@ -1716,9 +1738,9 @@ impl EmitState {
             let text = body.buf.clone()
             body = EmitOut::empty()
             if walk.async_pausing {
-                body.push(f"(async || -> Result<_, {outer}> {{ Ok({text}) }})().await.map_err(nikaia_std::task::OrCrash::Failed)?")
+                body.push(f"(async || -> {self.rust_result()}<_, {outer}> {{ Ok({text}) }})().await.map_err(nikaia_std::task::OrCrash::Failed)?")
             } else {
-                body.push(f"(|| -> Result<_, {outer}> {{ Ok({text}) }})().map_err(nikaia_std::task::OrCrash::Failed)?")
+                body.push(f"(|| -> {self.rust_result()}<_, {outer}> {{ Ok({text}) }})().map_err(nikaia_std::task::OrCrash::Failed)?")
             }
         }
         let name = emit_async_group_name(group)
@@ -1743,7 +1765,7 @@ impl EmitState {
                 if admission != "" {
                     kept = f"start_kept_admitted(&{cell}, &{line}, nikaia_std::task::admitted({admission}), "
                 }
-                out.push(f"{{ let _ = {line}.keep({name}.{kept}async || -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await); }}")
+                out.push(f"{{ let _ = {line}.keep({name}.{kept}async || -> {self.rust_result()}<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await); }}")
                 walk.async_kept.push(cell)
                 return
             }
@@ -1755,7 +1777,7 @@ impl EmitState {
                 asked = f"nikaia_std::task::asked(nikaia_std::task::admitted({admission})); "
             }
             if kind == "spawn" {
-                let spawned = f"{name}.spawn_paused_here(async || -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await"
+                let spawned = f"{name}.spawn_paused_here(async || -> {self.rust_result()}<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await"
                 if asked != "" {
                     out.push(f"async {{ {asked}{spawned} }}.await")
                 } else {
@@ -1774,7 +1796,7 @@ impl EmitState {
                     start = f"start_paused_admitted(&{line}, nikaia_std::task::admitted({admission}), "
                 }
             }
-            let mut held = f"{name}.{start}async || -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
+            let mut held = f"{name}.{start}async || -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
             // **A handle named later keeps its rest in a cell of its block**
             // (Part I 8.2, #987): dropped live, the task is waited for at
             // the block's end instead of cancelled at its pause.
@@ -1787,7 +1809,7 @@ impl EmitState {
                         kept = f"start_kept_admitted(&{cell}, &{line}, nikaia_std::task::admitted({admission}), "
                     }
                 }
-                held = f"{name}.{kept}async || -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
+                held = f"{name}.{kept}async || -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
                 walk.async_kept.push(cell)
             }
             // The gate keeps its rest, to poll it, or start it, where the
@@ -1812,7 +1834,7 @@ impl EmitState {
             enter = f"nikaia_std::task::asked(nikaia_std::task::admitted({admission})); {enter}"
         }
         if kind == "spawn" {
-            let spawned = f"{name}.spawn_here(|| -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }})"
+            let spawned = f"{name}.spawn_here(|| -> {self.rust_result()}<(), {channel}> {{ let _ = {body.buf}; Ok(()) }})"
             if enter != "" {
                 out.push(f"{{ {enter}{spawned} }}")
             } else {
@@ -1820,7 +1842,7 @@ impl EmitState {
             }
             return
         }
-        let mut started = f"{name}.start_here(|| -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})"
+        let mut started = f"{name}.start_here(|| -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})"
         if enter != "" {
             started = f"{{ {enter}{started} }}"
         }
@@ -1839,7 +1861,7 @@ impl EmitState {
     /// pauses and writes neither: each of its tasks runs to its end where it
     /// starts, so none holds a place when the next starts, and every start is
     /// admitted whatever the strategy says.
-    pub fn emit_async_gate_options[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, name: ref String, limit: ref Expr?, admission: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> String sync throws {
+    fn emit_async_gate_options[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, name: ref String, limit: ref Expr?, admission: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> String sync throws {
         let n = self.emit_async_option(world, walk, host, limit, depth, flow, scope)
         let s = self.emit_async_option(world, walk, host, admission, depth, flow, scope)
         if n == "" && s == "" && !walk.async_pausing {
@@ -1857,7 +1879,7 @@ impl EmitState {
     }
 
     /// The text of an option's value; `""` for an option not written.
-    pub fn emit_async_option[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, option: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> String sync throws {
+    fn emit_async_option[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, option: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> String sync throws {
         let value = option ?? return ""
         let mut text = EmitOut::empty()
         self.emit_expr(world, walk, text, host, value, depth, EmitFlow::plain().at(flow.statement), scope)
@@ -1867,7 +1889,7 @@ impl EmitState {
     /// **`within: d` as the deadline it starts** (ADR-async-5 D16, #986):
     /// `task::Deadline::after(d)`, counted from where it is written; `""`
     /// for a form without one.
-    pub fn emit_async_deadline[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, within: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> String sync throws {
+    fn emit_async_deadline[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, within: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> String sync throws {
         let d = within ?? return ""
         let mut text = EmitOut::empty()
         self.emit_expr(world, walk, text, host, d, depth, EmitFlow::plain().at(flow.statement), scope)
@@ -1884,7 +1906,7 @@ impl EmitState {
     /// Where the task of the node `id` is waited for (D6): `join` before a call
     /// or an operation, `handle` at a later statement, `spawn` at the group's
     /// end; `` where the checker recorded nothing.
-    pub fn emit_async_kind(ref self, id: i64) -> String sync {
+    fn emit_async_kind(ref self, id: i64) -> String sync {
         let wait = self.facts.async_waits.get(id) ?? return ""
         return match wait.at {
             CheckAsyncWaitAt::Before(_) => "join",
@@ -1897,7 +1919,7 @@ impl EmitState {
     /// How the child task (`async(handle)`) of the node `id` starts (8.1.2,
     /// D11): `handle` for one whose handle is used, `spawn` for one nothing
     /// names, which runs to its end and is waited for at its group's end.
-    pub fn emit_child_kind(ref self, id: i64, flow: EmitFlow) -> String sync throws {
+    fn emit_child_kind(ref self, id: i64, flow: EmitFlow) -> String sync throws {
         let kind = self.emit_async_kind(id)
         if kind == "" {
             throw EmitRefused { message: "The compiler can't translate `async(handle)` here yet: put it in `async { … }` or in the function's own body.", at: emit_async_at(flow.statement) }
@@ -1907,7 +1929,7 @@ impl EmitState {
 
     /// The start of the statement the binding's task of the node `id` waits
     /// before; `-1` for none.
-    pub fn emit_async_waits_before(ref self, id: i64) -> i64 sync {
+    fn emit_async_waits_before(ref self, id: i64) -> i64 sync {
         let wait = self.facts.async_waits.get(id) ?? return -1
         return match wait.at {
             CheckAsyncWaitAt::BeforeStatement(at) => at,
@@ -1919,7 +1941,7 @@ impl EmitState {
     /// function, which ends after it and every task it started, and throws
     /// the first failure nobody read; a failure that leaves it carries the
     /// unread ones.
-    pub fn emit_async_group[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, id: i64, within: ref Expr?, limit: ref Expr?, admission: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_async_group[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, id: i64, within: ref Expr?, limit: ref Expr?, admission: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         if flow.handled_here {
             throw EmitRefused { message: "The compiler can't translate `async { … }` under a `catch` yet (#988).", at: emit_async_at(flow.statement) }
         }
@@ -1980,25 +2002,25 @@ impl EmitState {
         // a future over the group, which its tasks borrow.
         if walk.async_pausing {
             if plain {
-                out.push(f"{{ {opened}let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_raised({name}, (async || -> Result<_, {outer}> {{ let __value = {body.buf}; Ok(__value) }})()).await? }}")
+                out.push(f"{{ {opened}let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_raised({name}, (async || -> {self.rust_result()}<_, {outer}> {{ let __value = {body.buf}; Ok(__value) }})()).await? }}")
                 return
             }
             if channel == "nikaia_std::task::Crashed" {
                 out.push(f"{{ {opened}let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({name}, async {body.buf}).await }}")
                 return
             }
-            out.push(f"{{ {opened}let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused::<_, {channel}>({name}, (async || -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})()).await? }}")
+            out.push(f"{{ {opened}let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused::<_, {channel}>({name}, (async || -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})()).await? }}")
             return
         }
         if opened != "" {
             out.push(f"{{ {opened}")
         }
         if plain {
-            out.push(f"nikaia_std::task::group_raised(|{name}| -> Result<_, {outer}> {{ let __value = {body.buf}; Ok(__value) }})?")
+            out.push(f"nikaia_std::task::group_raised(|{name}| -> {self.rust_result()}<_, {outer}> {{ let __value = {body.buf}; Ok(__value) }})?")
         } else if channel == "nikaia_std::task::Crashed" {
             out.push(f"nikaia_std::task::group_plain(|{name}| {body.buf})")
         } else {
-            out.push(f"nikaia_std::task::group::<_, {channel}>(|{name}| -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})?")
+            out.push(f"nikaia_std::task::group::<_, {channel}>(|{name}| -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})?")
         }
         if opened != "" {
             out.push(" }")
@@ -2008,7 +2030,7 @@ impl EmitState {
     /// The binding of `async e` the statement `let` at `start` binds, written
     /// where its task starts (D6): its handle now, and the `let` itself kept for
     /// the statement that waits for it. `false` where the statement is not one.
-    pub fn emit_async_binding[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+    fn emit_async_binding[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Stmt, span: ref Span, depth: i64, tail: EmitTail, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         // The tasks the `let` starts: one value, or every part of a tuple.
         let mut tasks: Vec[(Expr, i64)] = []
         // Each task's deadline (D16), by the same index; `""` for none.
@@ -2118,7 +2140,7 @@ impl EmitState {
         }
         if waits < 0 {
             // Named in another task alone (D8): that task waits for it.
-            walk.async_joining = collections::BTreeMap()
+            walk.async_joining.clear()
             if named != "" {
                 walk.async_handles.insert(named, inside[0].clone())
             }
@@ -2126,14 +2148,14 @@ impl EmitState {
         }
         let mut kept = EmitOut::empty()
         self.emit_stmt_written(world, walk, kept, host, node, span, depth, tail, here, scope)
-        walk.async_joining = collections::BTreeMap()
+        walk.async_joining.clear()
         walk.async_pending.push((kept.buf.clone(), named, waits))
         return true
     }
 
     /// The bindings whose wait point is the statement at `start` (D6): their
     /// kept `let`s, each on a line before it.
-    pub fn emit_async_joins(ref self, mut walk: EmitWalk, mut out: EmitOut, start: i64, pad: ref String) sync {
+    fn emit_async_joins(ref self, mut walk: EmitWalk, mut out: EmitOut, start: i64, pad: ref String) sync {
         let mut rest: Vec[(String, String, i64)] = []
         for each in walk.async_pending {
             if each.2 == start {
@@ -2178,11 +2200,11 @@ impl EmitState {
                         channel = "nikaia_std::task::Crashed"
                     }
                 }
-                let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>"
+                let boxed = flow.handled_here && channel == "std::boxed::Box<dyn std::error::Error>"
                 out.push(f"{{ let {named} = &nikaia_std::task::{made}::<{emit_call_scope_channel(channel)}>::new(); nikaia_std::task::{run}({named}, async ")
                 // **Its function may throw itself** (ADR-346 D7), as `task::scope`'s.
                 if channel != "nikaia_std::task::Crashed" {
-                    out.push(f"{{ let __scope_body: Result<_, {channel}> = async {{ let {named} = {named}; Ok(")
+                    out.push(f"{{ let __scope_body: {self.rust_result()}<_, {channel}> = async {{ let {named} = {named}; Ok(")
                     self.emit_call_scope_body(world, walk, out, host, body, depth, flow, scope, channel, owner, true)
                     out.push(f") }}.await; {named}.settled(__scope_body) }}")
                     walk.boxed_scope = boxed
@@ -2393,7 +2415,7 @@ impl EmitState {
     /// callee's name, where `base` is a path to a function of a ledger whose
     /// signature names one type parameter and every type written is a name;
     /// `null` where the brackets are an index.
-    pub fn emit_call_path_types(ref self, world: ref EmitWorld, base: ref Expr, index: ref Expr) -> String? {
+    fn emit_call_path_types(ref self, world: ref EmitWorld, base: ref Expr, index: ref Expr) -> String? {
         let segments = match base {
             Expr::Path(segments, _) => segments,
             else => return null,
@@ -2432,10 +2454,16 @@ impl EmitState {
     }
 
     /// The count a hull's allocation is counted with: the one an enclosing
-    /// argument handed down, taken, or else the function's own answer.
-    fn emit_call_hull_count[H: EmitHost](ref self, host: ref H, mut walk: EmitWalk, scope: ref EmitScope) -> Count {
+    /// argument handed down, taken; else the one of the slot it is made into
+    /// (a parameter, the result, a field: #1638), by the value put into it;
+    /// or else the function's own answer.
+    fn emit_call_hull_count[H: EmitHost](ref self, host: ref H, mut walk: EmitWalk, scope: ref EmitScope, value: ref Expr) -> Count {
         let given = walk.hull_count
         walk.hull_count = null
+        let made = made_slot(node_key(value))
+        if given == null && self.shared.contains_key(f"{scope.function}::{made}") {
+            return self.count_at(host.crossings_are_possible(), scope.function, made)
+        }
         return given ?? self.count_at(host.crossings_are_possible(), scope.function, scope.bound)
     }
 
@@ -2449,7 +2477,7 @@ impl EmitState {
                 if emit_text(world, segments[0]) != "SharedMut" || emit_text(world, segments[1]) != "supervised" {
                     return false
                 }
-                let count = self.emit_call_hull_count(host, walk, scope)
+                let count = self.emit_call_hull_count(host, walk, scope, args[0])
                 let hulls = self.hull_new(world, host.crossings_are_possible(), walk.trusting, "SharedMut", count) ?? return false
                 if hulls.len() != 2 {
                     return false
@@ -2507,14 +2535,27 @@ impl EmitState {
         // shape `written_name` would give the *type* - so the constructor and the
         // annotation cannot disagree about a value.
         if args.len() == 1 {
-            let count = self.emit_call_hull_count(host, walk, scope)
+            let count = self.emit_call_hull_count(host, walk, scope, args[0])
             let hulls = self.hull_new(world, host.crossings_are_possible(), walk.trusting, text, count)
             if hulls != null {
                 let paths = hulls ?? return false
+                // **A lock's value brings its weight** (ADR-327 D9, #1751):
+                // `weighed` moves the value's deep size from the creator to
+                // the shared value, measured by the field walk, which counts a
+                // Rust-owned type's own size only.
+                let mut weighed = false
                 for path in paths {
-                    out.push(f"{path}::new(")
+                    weighed = path == "nikaia_std::lock::Local" || path == "nikaia_std::lock::Crossing"
+                    if weighed {
+                        out.push(f"{path}::weighed(")
+                    } else {
+                        out.push(f"{path}::new(")
+                    }
                 }
                 self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
+                if weighed {
+                    out.push(", |value| nikaia_std::__nikaia_deep_size!(*value)")
+                }
                 for _ in paths {
                     out.push(")")
                 }

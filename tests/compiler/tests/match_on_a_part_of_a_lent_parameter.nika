@@ -1,0 +1,75 @@
+// A by-value parameter the contract lends arrives as a reference, and so
+// does a part an arm binds out of it: a nested `match` on that part binds
+// through the reference without `ref` (#1805).
+
+enum Tree { Leaf(i64), Opt(Tree), Pair(Vec[Tree]) }
+
+fn count(parts: ref Vec[Tree]) -> i64 { parts.len() as i64 }
+
+fn size(t: ref Tree) -> i64 { match t { Tree::Leaf(n) => n, else => 0 } }
+
+fn look(on: Tree) -> i64 {
+    match on {
+        Tree::Opt(inner) => {
+            match inner {
+                Tree::Pair(parts) => { return count(parts) },
+                else => {}
+            }
+            return size(inner)
+        },
+        else => { return 0 }
+    }
+}
+
+fn seven(on: Tree) -> i64 {
+    match on {
+        Tree::Opt(inner) => {
+            match inner {
+                Tree::Pair(parts) => { return count(parts) },
+                else => {}
+            }
+            return 7
+        },
+        else => { return 0 }
+    }
+}
+
+fn leaf(on: Tree) -> i64 {
+    match on {
+        Tree::Opt(inner) => {
+            return match inner {
+                Tree::Leaf(n) => n,
+                else => -1,
+            }
+        },
+        else => { return 0 }
+    }
+}
+
+fn deep(on: Tree) -> i64 {
+    match on {
+        Tree::Opt(a) => {
+            match a {
+                Tree::Opt(b) => {
+                    match b {
+                        Tree::Pair(parts) => { return count(parts) },
+                        Tree::Leaf(n) => { return n },
+                        else => {}
+                    }
+                },
+                else => {}
+            }
+            return -1
+        },
+        else => { return 0 }
+    }
+}
+
+fn main() throws {
+    println(f"{look(Tree::Opt(Tree::Pair([Tree::Leaf(1), Tree::Leaf(2)])))}")
+    println(f"{look(Tree::Opt(Tree::Leaf(5)))}")
+    println(f"{seven(Tree::Opt(Tree::Leaf(5)))}")
+    println(f"{leaf(Tree::Opt(Tree::Leaf(4)))}")
+    println(f"{deep(Tree::Opt(Tree::Opt(Tree::Pair([Tree::Leaf(1), Tree::Leaf(2), Tree::Leaf(3)]))))}")
+    println(f"{deep(Tree::Opt(Tree::Opt(Tree::Leaf(9))))}")
+}

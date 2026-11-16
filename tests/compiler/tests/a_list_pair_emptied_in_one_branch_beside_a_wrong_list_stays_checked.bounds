@@ -1,0 +1,2 @@
+bounds in tests/a_list_pair_emptied_in_one_branch_beside_a_wrong_list_stays_checked.nika: 1 indexes, 0 proved; 0 operations, 0 proved
+    12  row.ks[0]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

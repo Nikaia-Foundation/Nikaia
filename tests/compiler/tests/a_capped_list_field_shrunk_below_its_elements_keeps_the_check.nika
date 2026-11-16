@@ -1,0 +1,54 @@
+// A list field's bound by another field's length is lost where that field
+// shrinks below its elements (ADR-306 D21, #1785): `undo` cuts `trail` and
+// leaves `marks`, so a mark may exceed the length and `trail[i]` below the
+// first mark keeps its check.
+
+struct Levels {
+	marks: Vec[i64],
+	trail: Vec[i64],
+}
+
+impl Levels {
+	fn assign(ref mut self, x: i64) {
+		self.trail.push(x)
+	}
+
+	fn decide(ref mut self, x: i64) {
+		self.marks.push(self.trail.len())
+		self.assign(x)
+	}
+
+	fn undo(ref mut self) {
+		self.trail.clear()
+	}
+
+	fn carried(ref self) -> Vec[i64] {
+		let top = if self.marks.len() > 0 { self.marks[0] } else { self.trail.len() }
+		let mut out: Vec[i64] = []
+		for i in 0..<top {
+			out.push(self.trail[i])
+		}
+		return out
+	}
+}
+
+// The list's elements as text: a list has no text form of its own.
+fn show(xs: ref Vec[i64]) -> String {
+	let mut out: Vec[String] = []
+	for x in xs {
+		out.push(f"{x}")
+	}
+	return "[" + out.join(", ") + "]"
+}
+
+fn main() throws {
+	let mut levels = Levels { marks: [], trail: [] }
+	levels.assign(1)
+	levels.assign(2)
+	levels.decide(3)
+	println(show(levels.carried()))
+	levels.undo()
+	levels.assign(4)
+	levels.assign(5)
+	println(show(levels.carried()))
+}

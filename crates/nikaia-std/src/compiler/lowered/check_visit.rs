@@ -5,7 +5,7 @@ pub(crate) fn check_visit_one(expr: &Expr) -> Vec<&Expr> { vec![expr] }
 
 pub(crate) fn check_visit_block_one(block: &Block) -> Vec<&Block> { vec![block] }
 
-pub fn check_visit_children(expr: &Expr) -> Vec<&Expr> {
+pub(crate) fn check_visit_children(expr: &Expr) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![];
     match expr {
         Expr::Call { func, args, config, .. } => {
@@ -86,15 +86,15 @@ pub fn check_visit_children(expr: &Expr) -> Vec<&Expr> {
     out
 }
 
-pub fn check_visit_preorder(expr: &Expr) -> Vec<&Expr> {
+pub(crate) fn check_visit_preorder(expr: &Expr) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![expr];
     for child in check_visit_children(expr) { out.extend(check_visit_preorder(child)); }
     out
 }
 
-pub fn check_visit_has_holes(expr: &Expr) -> bool { matches!(expr, Expr::LitInterpolated { .. } | Expr::Dsl { .. }) }
+pub(crate) fn check_visit_has_holes(expr: &Expr) -> bool { matches!(expr, Expr::LitInterpolated { .. } | Expr::Dsl { .. }) }
 
-pub fn check_visit_stmt(stmt: &Stmt) -> Vec<&Expr> {
+pub(crate) fn check_visit_stmt(stmt: &Stmt) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![];
     match stmt {
         Stmt::Let { value, .. } => { out.extend(check_visit_preorder(value)); },
@@ -113,7 +113,7 @@ pub fn check_visit_stmt(stmt: &Stmt) -> Vec<&Expr> {
     out
 }
 
-pub fn check_visit_expr_blocks(expr: &Expr) -> Vec<&Block> {
+pub(crate) fn check_visit_expr_blocks(expr: &Expr) -> Vec<&Block> {
     let mut out: Vec<&Block> = vec![];
     match expr {
         Expr::Block(block, _) => {
@@ -149,7 +149,7 @@ pub fn check_visit_expr_blocks(expr: &Expr) -> Vec<&Block> {
     out
 }
 
-pub fn check_visit_stmt_blocks(stmt: &Stmt) -> Vec<&Block> {
+pub(crate) fn check_visit_stmt_blocks(stmt: &Stmt) -> Vec<&Block> {
     let mut out: Vec<&Block> = vec![];
     match stmt {
         Stmt::For { body, .. } => { out.push(body); },

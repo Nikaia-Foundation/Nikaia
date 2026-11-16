@@ -104,7 +104,7 @@ impl CheckState {
     /// file of the package declares** (ADR-286 D1), so each file answers alike.
     /// Never a type with a `Drop` or a cleanup (E0184, ADR-297 D1). A
     /// described Rust type that says it copies is a part that copies (D9.3).
-    pub fn collect_copies(ref mut self, world: ref CheckWorld) sync {
+    fn collect_copies(ref mut self, world: ref CheckWorld) sync {
         let declared = copies_declared_in(world.here)
         let mut package: Vec[String] = declared.clone()
         let mut at: i64 = 0

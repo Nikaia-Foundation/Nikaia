@@ -1,0 +1,6 @@
+bounds in tests/a_list_field_pushed_a_smaller_value_keeps_its_check.nika: 3 indexes, 1 proved; 2 operations, 2 proved
+    24  self.at[n - 1]     proved
+    24  n - 1              proved
+    30  self.items[a]      checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
+    43  self.items[a - 1]  checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
+    43  a - 1              proved

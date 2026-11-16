@@ -157,18 +157,18 @@ pub struct CheckPendingHandle {
     pub taken: CheckTaken,
 }
 
-pub fn a_path_overlaps(read: &str, taken: &str) -> bool {
+pub(crate) fn a_path_overlaps(read: &str, taken: &str) -> bool {
     if read == taken { return true; }
     if read.starts_with(AsRef::<str>::as_ref(taken)) && nikaia_std::index::or(read.strip_prefix(AsRef::<str>::as_ref(taken)), || "").starts_with('.') { return true; }
     taken.starts_with(AsRef::<str>::as_ref(read)) && nikaia_std::index::or(taken.strip_prefix(AsRef::<str>::as_ref(read)), || "").starts_with('.')
 }
 
-pub fn a_path_revives(written: &str, taken: &str) -> bool {
+pub(crate) fn a_path_revives(written: &str, taken: &str) -> bool {
     if written == taken { return true; }
     taken.starts_with(AsRef::<str>::as_ref(written)) && nikaia_std::index::or(taken.strip_prefix(AsRef::<str>::as_ref(written)), || "").starts_with('.')
 }
 
-pub fn choices_apart(a: &[(i64, i64)], b: &[(i64, i64)]) -> bool {
+pub(crate) fn choices_apart(a: &[(i64, i64)], b: &[(i64, i64)]) -> bool {
     for mine in a.iter() { for theirs in b.iter() { if theirs.0 == mine.0 && theirs.1 != mine.1 { return true; } } }
     false
 }
@@ -197,13 +197,13 @@ pub struct CheckHeldTaking {
 }
 
 impl CheckRepeats {
-    pub fn a_loop(words: &winnow_grammar::InternerContext, frame: i64, opened: i64, body: &Block) -> CheckRepeats {
+    pub(crate) fn a_loop(words: &winnow_grammar::InternerContext, frame: i64, opened: i64, body: &Block) -> CheckRepeats {
         let mut found = CheckRepeats { frame, what: String::from("loop"), revived: collections::BTreeSet::new(), revived_parts: collections::BTreeSet::new(), leaves: false, opened, held: vec![] };
         what_a_loop_does(words, body, &mut found);
         found
     }
-    pub fn a_lambda(frame: i64) -> CheckRepeats { CheckRepeats { frame, what: String::from("lambda"), revived: collections::BTreeSet::new(), revived_parts: collections::BTreeSet::new(), leaves: false, opened: -1, held: vec![] } }
-    pub fn takes_again(&self, path: &str) -> bool { !(self.leaves || self.revives(path)) }
+    pub(crate) fn a_lambda(frame: i64) -> CheckRepeats { CheckRepeats { frame, what: String::from("lambda"), revived: collections::BTreeSet::new(), revived_parts: collections::BTreeSet::new(), leaves: false, opened: -1, held: vec![] } }
+    pub(crate) fn takes_again(&self, path: &str) -> bool { !(self.leaves || self.revives(path)) }
     pub fn revives(&self, path: &str) -> bool {
         let root: String = nikaia_std::block::Text::from(nikaia_std::index::or(path.split('.').next(), || "").to_string());
         self.revived.contains(&root) || self.revived_parts.iter().any(|part| { AsRef::<str>::as_ref(&(path)) == AsRef::<str>::as_ref(&(part)) || path.starts_with(&*format!("{}.", part)) })
@@ -246,7 +246,7 @@ pub(crate) fn a_part_assigned(words: &winnow_grammar::InternerContext, target: &
     }
 }
 
-pub fn a_body_never_ends(body: &Block) -> bool {
+pub(crate) fn a_body_never_ends(body: &Block) -> bool {
     if body.stmts.is_empty() { return false; }
     let last = unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) };
     match &last.node {
@@ -262,7 +262,7 @@ pub(crate) fn a_true_literal(expr: &Expr) -> bool {
     }
 }
 
-pub fn a_jump_leaves(block: &Block, loops: i64) -> bool {
+pub(crate) fn a_jump_leaves(block: &Block, loops: i64) -> bool {
     for stmt in block.stmts.iter() {
         match &stmt.node {
             Stmt::Break => { if loops == 0 { return true; } },
@@ -297,9 +297,16 @@ pub struct CheckFinding {
     pub notes: Vec<String>,
     pub help: Option<String>,
     pub labels: Vec<CheckLabel>,
+    pub edit: Option<CheckEdit>,
 }
 
-pub fn check_refusal(code: &str, span: &Span, message: String, notes: Vec<String>, help: Option<String>) -> CheckFinding { CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: nikaia_std::block::Text::from(code.to_string()), message, notes, help, labels: vec![] } }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CheckEdit {
+    pub span: Span,
+    pub text: String,
+}
+
+pub(crate) fn check_refusal(code: &str, span: &Span, message: String, notes: Vec<String>, help: Option<String>) -> CheckFinding { CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: nikaia_std::block::Text::from(code.to_string()), message, notes, help, labels: vec![], edit: None } }
 
 #[derive(Debug, Clone)]
 pub struct CheckWorld<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6> {

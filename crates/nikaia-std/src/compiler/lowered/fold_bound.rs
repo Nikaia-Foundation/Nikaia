@@ -15,7 +15,7 @@ pub(crate) fn fb_utf8_len(code: i64) -> u64 {
     4u64
 }
 
-pub fn fb_literal_bytes(written: &str) -> u64 {
+pub(crate) fn fb_literal_bytes(written: &str) -> u64 {
     let chars: Vec<scalar> = nikaia_std::list::chars(written.chars());
     let mut bytes: u64 = 0u64;
     let mut i: i64 = 0;
@@ -153,7 +153,7 @@ pub fn fb_least_width(source: &FbSource<'_, '_>, named: &str, rule: &str) -> Opt
     None
 }
 
-pub fn fb_rule_width(source: &FbSource<'_, '_>, def: &GrammarDef, rule: &str) -> Option<u64> {
+pub(crate) fn fb_rule_width(source: &FbSource<'_, '_>, def: &GrammarDef, rule: &str) -> Option<u64> {
     let mut rules: collections::BTreeMap<String, &GrammarRule> = collections::BTreeMap::new();
     for r in def.rules.iter() { rules.insert(nikaia_std::block::Text::from(source.words.resolve(r.name).to_string()), r); }
     let element = match rules.get(rule) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -185,7 +185,7 @@ pub(crate) fn fb_invariant_term(a: &mut TermArena, k: i64, k0: i64, x: i64, step
     a.and(vec![low, high])
 }
 
-pub fn fb_invariant_checked<H: FbHost>(host: &H, k: u64, k0: u64, merged: bool) -> bool {
+pub(crate) fn fb_invariant_checked<H: FbHost>(host: &H, k: u64, k0: u64, merged: bool) -> bool {
     let limit: u64 = 9223372036854775807u64;
     if k > limit || k0 > limit { return false; }
     let k = i64::try_from(k).unwrap_or_else(|_| panic!("the value does not fit in an `i64`"));

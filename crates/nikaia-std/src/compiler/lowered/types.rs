@@ -460,7 +460,7 @@ pub(crate) fn nothing_declares(name: &str, known: &collections::BTreeSet<String>
     refusal("NK1135", span.clone(), format!("There's no type called `{}`.", name), vec![String::from("A type is either built in, declared in your program with `struct` or `enum`, provided by `std`, or a type parameter.")], format!("Check the spelling, or declare `{}` with `struct` or `enum`.", name))
 }
 
-pub fn nobody_knows(name: &str, own: &Ledger, library: &Ledger) -> bool {
+pub(crate) fn nobody_knows(name: &str, own: &Ledger, library: &Ledger) -> bool {
     if nikaia_std::list::contains(&BUILT_IN, &name) || own.types.contains_key(name) || library.types.contains_key(name) { return false; }
     let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
     let mut last: i64 = -1;

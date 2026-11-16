@@ -4,13 +4,13 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_table_with_one_key_twice(&mut self, bound: &str, key: &str, first: i64, again: i64, span: &Span) { self.findings.push(check_refusal("NK1169", span, format!("`{}` has the key `{}` twice.", bound, key), vec![format!("Pairs {} and {} both use it, and a table holds one value per key.", first + 1, again + 1)], Some(String::from("Remove one of them, or give them different keys.")))); }
+    pub(crate) fn a_table_with_one_key_twice(&mut self, bound: &str, key: &str, first: i64, again: i64, span: &Span) { self.findings.push(check_refusal("NK1169", span, format!("`{}` has the key `{}` twice.", bound, key), vec![format!("Pairs {} and {} both use it, and a table holds one value per key.", first + 1, again + 1)], Some(String::from("Remove one of them, or give them different keys.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_table_key_that_is_not_text(&mut self, bound: &str, key: &str, span: &Span) { self.findings.push(check_refusal("NK1170", span, format!("`{}` uses `{}` as its keys, but a fixed table's keys are text.", bound, key), vec![String::from("A fixed table looks up text keys. Numbers or `bool`s as keys need a different kind of table, which isn't available yet.")], Some(String::from("Write the keys as text, or use a `collections::HashMap` built while the program runs.")))); }
+    pub(crate) fn a_table_key_that_is_not_text(&mut self, bound: &str, key: &str, span: &Span) { self.findings.push(check_refusal("NK1170", span, format!("`{}` uses `{}` as its keys, but a fixed table's keys are text.", bound, key), vec![String::from("A fixed table looks up text keys. Numbers or `bool`s as keys need a different kind of table, which isn't available yet.")], Some(String::from("Write the keys as text, or use a `collections::HashMap` built while the program runs.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_build_time_index_is_not_there(&mut self, at: &Integer, len: i64, span: &Span) {
+    pub(crate) fn a_build_time_index_is_not_there(&mut self, at: &Integer, len: i64, span: &Span) {
         let help: String = match len {
             0 => String::from("The array is empty, so there's nothing to read."),
             _ => format!("The indexes go from 0 to {}.", len - 1),
@@ -19,13 +19,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_thrown_value_that_is_not_an_error(&mut self, value: &Expr, thrown: &Ty, span: &Span) {
+    pub(crate) fn a_thrown_value_that_is_not_an_error(&mut self, value: &Expr, thrown: &Ty, span: &Span) {
         let what = match element_kind(value, thrown) { Some(__nikaia_value) => __nikaia_value, None => return };
         self.findings.push(check_refusal("NK1161", span, format!("You can only throw an error, and this throws {}.", what), vec![String::from("An error is a type with an `impl Error` for it, which says what its message is.")], Some(String::from("Declare one, such as `enum Refused { NotFound }` with `impl Error for Refused { fn message(ref self) -> String { … } }`, and throw a value of it."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_thrown_type_with_no_error(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, thrown: &Ty, span: &Span) {
+    pub(crate) fn a_thrown_type_with_no_error(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, thrown: &Ty, span: &Span) {
         let name: String = match thrown {
             Ty::Named { name, view, .. } => { let view = *view; if view { String::from("") } else { nikaia_std::block::Text::from(name.to_string()) } },
             _ => String::from(""),
@@ -47,13 +47,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_handle_has_nothing_inside(&mut self, handle: &str, what: &str, span: &Span) { self.findings.push(check_refusal("NK1160", span, format!("You can't look inside `{}`: it's a handle, and {} reaches into it.", handle, what), vec![format!("`{}` is declared `opaque`: what it points at belongs to the C library that made it.", handle)], Some(String::from("Pass the handle to a function declared in the `extern \"C\"` block.")))); }
+    pub(crate) fn a_handle_has_nothing_inside(&mut self, handle: &str, what: &str, span: &Span) { self.findings.push(check_refusal("NK1160", span, format!("You can't look inside `{}`: it's a handle, and {} reaches into it.", handle, what), vec![format!("`{}` is declared `opaque`: what it points at belongs to the C library that made it.", handle)], Some(String::from("Pass the handle to a function declared in the `extern \"C\"` block.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_handle_is_not_made_here(&mut self, handle: &str, span: &Span) { self.findings.push(check_refusal("NK1160", span, format!("You can't make a `{}` yourself: it's a handle a C library gives you.", handle), vec![format!("`{}` is declared `opaque`: only a C function can hand one out.", handle)], Some(format!("Call the function in the `extern \"C\"` block that returns a `{}`.", handle)))); }
+    pub(crate) fn a_handle_is_not_made_here(&mut self, handle: &str, span: &Span) { self.findings.push(check_refusal("NK1160", span, format!("You can't make a `{}` yourself: it's a handle a C library gives you.", handle), vec![format!("`{}` is declared `opaque`: only a C function can hand one out.", handle)], Some(format!("Call the function in the `extern \"C\"` block that returns a `{}`.", handle)))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_length_that_may_not_fit(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, buffer: &Expr, span: &Span) {
+    pub(crate) fn a_length_that_may_not_fit(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, buffer: &Expr, span: &Span) {
         let named = match buffer {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => String::from("the buffer"),
@@ -64,7 +64,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn element_kind(expr: &Expr, ty: &Ty) -> Option<String> {
+pub(crate) fn element_kind(expr: &Expr, ty: &Ty) -> Option<String> {
     match expr {
         Expr::LitInt { .. } => { return Some(String::from("a number")); },
         Expr::LitFloat(_, _) => { return Some(String::from("a number")); },

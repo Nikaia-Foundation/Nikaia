@@ -44,12 +44,12 @@ pub(crate) fn check_core_places_bound(bound: &collections::BTreeMap<String, Ty>,
 
 pub(crate) fn check_core_places_unrolled_default(unrolling: Option<&CheckUnrolling>) -> Ty {
     let u: &CheckUnrolling = match unrolling { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-    Ty::Nullable(Box::new(u.field.ty.clone()))
+    Ty::Nullable(std::boxed::Box::new(u.field.ty.clone()))
 }
 
 pub(crate) fn check_core_places_offered(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str" }
 
-pub fn check_core_places_beyond_f32(value: &Expr) -> bool {
+pub(crate) fn check_core_places_beyond_f32(value: &Expr) -> bool {
     match check_peeled(value) {
         Expr::LitFloat(written, _) => {
             let number = nikaia_std::index::or(text::parse_f64(written), || 0.0);
@@ -91,7 +91,7 @@ pub(crate) fn check_core_places_tuple_part(state: &mut CheckState, parts: &[Ty],
         if last < 0 { last = 0; }
         let mut help: String = String::from("There's nothing in it to read.");
         if count > 0 { help = format!("Use one of `.0` to `.{}`.", last); }
-        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1107"), message: format!("This tuple has no part `.{}`.", at), notes: vec![format!("A tuple's parts are counted from 0, and this one has {}.", count)], help: Some(help), labels: vec![] });
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1107"), message: format!("This tuple has no part `.{}`.", at), notes: vec![format!("A tuple's parts are counted from 0, and this one has {}.", count)], help: Some(help), labels: vec![], edit: None });
         return Ty::Unknown;
     }
     if at < 0 { return Ty::Unknown; }
@@ -107,12 +107,12 @@ pub(crate) fn check_core_places_a_named_field(state: &mut CheckState, world: &Ch
     }
     if (ty == "String" || ty == "str") && field == "scalars" {
         state.facts.text_scalars.insert(id_of(expr) as i64);
-        return Ty::Seq { item: Box::new(check_core_places_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false } };
+        return Ty::Seq { item: std::boxed::Box::new(check_core_places_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false } };
     }
     if (ty == "String" || ty == "str") && field == "graphemes" {
         state.facts.text_graphemes.insert(id_of(expr) as i64);
         let grapheme = check_core_places_str_view();
-        return Ty::Seq { item: Box::new(grapheme), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: false, sized: false, replays: false, timed: false } };
+        return Ty::Seq { item: std::boxed::Box::new(grapheme), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: false, sized: false, replays: false, timed: false } };
     }
     let boxed = state.facts.boxed_members.get(ty);
     if boxed.is_some() {
@@ -163,7 +163,7 @@ pub(crate) fn check_core_places_a_named_field(state: &mut CheckState, world: &Ch
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, base: &Expr, name: winnow_grammar::Symbol, span: &Span) -> Ty {
+pub(crate) fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, base: &Expr, name: winnow_grammar::Symbol, span: &Span) -> Ty {
     let got = check_core_field_walked(state, world, host, expr, safe, base, name, span);
     if safe { return got; }
     check_narrow_path_read(state, world, expr, &got, span)
@@ -171,9 +171,18 @@ pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn stamped_if(seen: bool, got: Ty) -> Ty {
+    if !seen || got.is_unknown() || got.is_seen() { return got; }
+    Ty::Named { name: nikaia_std::block::Text::from(SEEN.to_string()), args: vec![got], view: false }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, base: &Expr, name: winnow_grammar::Symbol, span: &Span) -> Ty {
-    let on = check_core_expr(state, world, host, base, span);
+    let read = check_core_expr(state, world, host, base, span);
+    let seen_base = read.is_seen();
+    let on = read.unseen();
     let owned_result = match on {
         Ty::Named { view, .. } => !view,
         _ => false,
@@ -205,11 +214,11 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
                     Ty::Tuple(ref parts) => {
                         let part = check_core_places_tuple_part(state, parts, &field, span);
                         if part.is_unknown() { return Ty::Unknown; }
-                        return state.a_safe_reach(world, base, &part, inner.is_a_view());
+                        return stamped_if(seen_base, state.a_safe_reach(world, base, &part, inner.is_a_view()));
                     },
                     _ => { },
                 }
-                return state.a_safe_field(world, inner, base, &field, expr, span);
+                return stamped_if(seen_base, state.a_safe_field(world, inner, base, &field, expr, span));
             },
             Ty::Unknown => { return Ty::Unknown; },
             _ => { state.reaches_through_a_plain_value(world, &on, base, &field, false, expr, span); },
@@ -228,11 +237,11 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
     let members = several_errors_of(&on);
     if !members.is_empty() {
         let named = members_named(&members);
-        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1107"), message: format!("This is an error, one of {}, and an error has no field `{}`.", named, field), notes: vec![String::from("A field belongs to one of them, and which one it is is said by a `match`.")], help: Some(format!("Take it apart first: `match error {{ … }}`, and read `{}` in the arm of the type that has it.", field)), labels: vec![] });
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1107"), message: format!("This is an error, one of {}, and an error has no field `{}`.", named, field), notes: vec![String::from("A field belongs to one of them, and which one it is is said by a `match`.")], help: Some(format!("Take it apart first: `match error {{ … }}`, and read `{}` in the arm of the type that has it.", field)), labels: vec![], edit: None });
         return Ty::Unknown;
     }
     match on {
-        Ty::Tuple(ref parts) => { return check_core_places_tuple_part(state, parts, &field, span); },
+        Ty::Tuple(ref parts) => { return stamped_if(seen_base, check_core_places_tuple_part(state, parts, &field, span)); },
         _ => { },
     }
     let mut seen: Ty = on.clone();
@@ -255,12 +264,12 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
         _ => { },
     }
     check_core_places_array_length(state, id_of(expr) as i64, &got);
-    got
+    stamped_if(seen_base, got)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_places_array_length(state: &mut CheckState, node: i64, on: &Ty) {
+pub(crate) fn check_core_places_array_length(state: &mut CheckState, node: i64, on: &Ty) {
     match on {
         Ty::Named { name, args, .. } => {
             if (name == "Array" || name.ends_with("::Array")) && args.len() == 2 {
@@ -279,7 +288,7 @@ pub fn check_core_places_array_length(state: &mut CheckState, node: i64, on: &Ty
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_places_stored<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: Option<&Expr>, key: &str) {
+pub(crate) fn check_core_places_stored<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: Option<&Expr>, key: &str) {
     let mut stored: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
     if value.is_none() { stored.unresolved = true; } else {
         let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -292,7 +301,7 @@ pub fn check_core_places_stored<H: CheckHost>(state: &mut CheckState, world: &Ch
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_places_stored_keys<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: Option<&Expr>, keys: &[String]) {
+pub(crate) fn check_core_places_stored_keys<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: Option<&Expr>, keys: &[String]) {
     let mut stored: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
     if value.is_none() { stored.unresolved = true; } else {
         let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -307,7 +316,7 @@ pub fn check_core_places_stored_keys<H: CheckHost>(state: &mut CheckState, world
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_places_code_keys(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr) -> Vec<String> {
+pub(crate) fn check_core_places_code_keys(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr) -> Vec<String> {
     let mut keys: Vec<String> = vec![];
     match target {
         Expr::Variable(bound, _) => {
@@ -369,7 +378,7 @@ pub fn check_core_places_code_keys(state: &CheckState, world: &CheckWorld<'_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_places_code_into<H: CheckHost>(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, v: &Expr, stored: &mut CheckStoredCode) {
+pub(crate) fn check_core_places_code_into<H: CheckHost>(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, v: &Expr, stored: &mut CheckStoredCode) {
     match v {
         Expr::Closure { body, .. } => {
             stored.free.extend(host.free_calls(body));
@@ -537,7 +546,12 @@ pub(crate) fn check_core_places_a_literal_field<H: CheckHost>(state: &mut CheckS
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || Ty::Unknown);
-    if check_core_places_a_closure((init.value).as_ref()) { state.flow.lambda_expected = expected; }
+    let mut made_here = false;
+    if init.value.is_some() {
+        let made: &Expr = match init.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
+        made_here = check_simd_wanted(world, made, (expected).as_ref()).is_some();
+    }
+    if check_core_places_a_closure((init.value).as_ref()) || made_here { state.flow.lambda_expected = expected; }
     let given = check_core_places_given(state, world, host, (init.value).as_ref(), &field, span);
     state.flow.lambda_expected = None;
     if init.value.is_some() && check_core_places_lent_field(&field_ty, &given) {
@@ -571,7 +585,7 @@ pub(crate) fn check_core_places_a_handle(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_places_store_handle(state: &mut CheckState, value: &Expr, ty: &Ty) {
+pub(crate) fn check_core_places_store_handle(state: &mut CheckState, value: &Expr, ty: &Ty) {
     if !check_core_places_a_handle(ty) { return; }
     let place = matches!(value, Expr::Variable(_, _) | Expr::Field { .. });
     if place { state.facts.stored_handles.insert(id_of(value) as i64); }
@@ -579,7 +593,7 @@ pub fn check_core_places_store_handle(state: &mut CheckState, value: &Expr, ty: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_places_give_handle(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, span: &Span) {
+pub(crate) fn check_core_places_give_handle(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, span: &Span) {
     if !check_core_places_a_handle(ty) { return; }
     check_core_places_store_handle(state, value, ty);
     state.a_handle_handed_on(world, value, ty, span);
@@ -587,7 +601,7 @@ pub fn check_core_places_give_handle(state: &mut CheckState, world: &CheckWorld<
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_struct_literal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, written: winnow_grammar::Symbol, fields: &[FieldInit], span: &Span) -> Ty {
+pub(crate) fn check_core_struct_literal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, written: winnow_grammar::Symbol, fields: &[FieldInit], span: &Span) -> Ty {
     let name: String = world.here.unaliased(&format!("{}", world.words.resolve(written)));
     if !state.declared_a_variant(expr, &name) { state.declared_use(expr, CheckDeclared::Type(nikaia_std::block::Text::from(name.to_string()))); }
     let declared: Option<Vec<FieldContract>> = state.fields_of(world, &name);
@@ -617,7 +631,7 @@ pub fn check_core_struct_literal<H: CheckHost>(state: &mut CheckState, world: &C
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_with<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, base: &Expr, fields: &[FieldInit], span: &Span) -> Ty {
+pub(crate) fn check_core_with<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, base: &Expr, fields: &[FieldInit], span: &Span) -> Ty {
     let found = check_core_expr(state, world, host, base, span);
     let mut written: String = String::from("");
     let mut view = false;
@@ -736,7 +750,7 @@ pub(crate) fn check_core_places_viewed_as(found: &Ty, want: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_places_text_key(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, text: &Expr) -> String {
+pub(crate) fn check_core_places_text_key(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, text: &Expr) -> String {
     let mut root: &Expr = text;
     let mut walking = true;
     while walking {
@@ -795,7 +809,7 @@ pub(crate) fn check_core_places_block_position(state: &CheckState, world: &Check
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_places_text_position(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<CheckTextPosition> {
+pub(crate) fn check_core_places_text_position(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<CheckTextPosition> {
     match expr {
         Expr::LitInt { value, .. } => {
             let value = *value;
@@ -912,7 +926,7 @@ pub(crate) fn check_core_places_text_cut(state: &mut CheckState, world: &CheckWo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, base: &Expr, index: &Expr, span: &Span) -> Ty {
+pub(crate) fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, base: &Expr, index: &Expr, span: &Span) -> Ty {
     let writing = state.flow.writing_index;
     state.flow.writing_index = false;
     let first = check_core_expr(state, world, host, base, span);
@@ -930,7 +944,7 @@ pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
         Ty::Pointed { ref item, slice, mutable } => {
             let item = nikaia_std::boxed::open(item);
             if slice {
-                if written_range { return Ty::Pointed { item: Box::new(item.clone()), slice: true, mutable }; }
+                if written_range { return Ty::Pointed { item: std::boxed::Box::new(item.clone()), slice: true, mutable }; }
                 state.number_asked(world, index, &check_core_places_named("i64"), span, false);
                 state.facts.list_indices.insert(id_of(base) as i64);
                 return item.clone();
@@ -1000,19 +1014,19 @@ pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
                 Ty::Nullable(ref held) => {
                     let held = nikaia_std::boxed::open(held);
                     state.facts.flat_reads.insert(id_of(expr) as i64);
-                    return Ty::Nullable(Box::new(held.clone()));
+                    return Ty::Nullable(std::boxed::Box::new(held.clone()));
                 },
                 _ => { },
             }
         }
-        return Ty::Nullable(Box::new(value));
+        return Ty::Nullable(std::boxed::Box::new(value));
     }
     Ty::Unknown
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_cast<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, inner: &Expr, ty: &Type, span: &Span) -> Ty {
+pub(crate) fn check_core_cast<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, inner: &Expr, ty: &Type, span: &Span) -> Ty {
     let from = check_core_expr(state, world, host, inner, span);
     let into = check_walked_declared(state, world, ty, span);
     state.a_cast_over_a_lent_binding(world, inner, span);
@@ -1054,11 +1068,11 @@ pub fn check_core_cast<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_range<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, start: &Expr, end: &Expr, span: &Span) -> Ty {
+pub(crate) fn check_core_range<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, start: &Expr, end: &Expr, span: &Span) -> Ty {
     let from = check_core_expr(state, world, host, start, span);
     let to = check_core_expr(state, world, host, end, span);
     let mut item: Ty = from;
     if item.is_unknown() { item = to; }
-    Ty::Seq { item: Box::new(item), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: true, replays: true, timed: false } }
+    Ty::Seq { item: std::boxed::Box::new(item), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: true, replays: true, timed: false } }
 }
 

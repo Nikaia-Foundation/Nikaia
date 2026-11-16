@@ -60,7 +60,7 @@ pub struct ProofsWhere {
     pub breaks: Vec<i64>,
 }
 
-pub fn proofs_nowhere() -> ProofsWhere { ProofsWhere { file: None, source: String::from(""), breaks: vec![] } }
+pub(crate) fn proofs_nowhere() -> ProofsWhere { ProofsWhere { file: None, source: String::from(""), breaks: vec![] } }
 
 pub fn proofs_where(path: &std::path::Path, source: &str) -> ProofsWhere {
     let mut breaks: Vec<i64> = vec![];
@@ -129,7 +129,7 @@ pub fn proofs_shown(place: &(Option<String>, Option<i64>, Option<String>), root:
     String::from("a place the compiler did not name")
 }
 
-pub fn proofs_written(arena: &TermArena, facts: &[i64], goal: i64) -> String {
+pub(crate) fn proofs_written(arena: &TermArena, facts: &[i64], goal: i64) -> String {
     let mut out: String = String::from("");
     for fact in facts.iter() {
         let fact = nikaia_std::num::value(fact);
@@ -266,7 +266,7 @@ pub(crate) fn proofs_answered(t: &ProofsThread, normal: &LgNormal, key: &str) ->
 }
 
 pub(crate) fn proofs_remember(t: &mut ProofsThread, key: &str, asked: &ProofsAsked, entry: Option<&ProofsEntry>) {
-    if (t.answered.len() as i64) >= PROOFS_ANSWERED { t.answered = collections::BTreeMap::new(); }
+    if (t.answered.len() as i64) >= PROOFS_ANSWERED { t.answered.clear(); }
     let kept = match asked {
         ProofsAsked::Refuted(_) => match entry {
             Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
@@ -439,11 +439,11 @@ pub fn proofs_book_for_worker(book: &ProofsBook) -> ProofsBook {
 }
 
 pub fn proofs_book_merge(into: &mut ProofsBook, part: &ProofsBook) {
-    for (key, entry) in part.entries.iter() { if !into.entries.contains_key(key) { into.entries.insert(nikaia_std::block::Text::from(key.to_string()), entry.clone()); } }
+    for (key, entry) in part.entries.iter() { if !into.entries.contains_key(nikaia_std::index::as_text(&key)) { into.entries.insert(nikaia_std::block::Text::from(key.to_string()), entry.clone()); } }
     for key in part.asked.iter() { into.asked.insert(nikaia_std::block::Text::from(key.to_string())); }
     into.searched += part.searched;
     for place in part.searched_at.iter() { into.searched_at.insert(place.clone()); }
-    for (place, parts) in part.invariants.iter() { if !into.invariants.contains_key(place) { into.invariants.insert(nikaia_std::block::Text::from(place.to_string()), nikaia_std::block::Text::from(parts.to_string())); } }
+    for (place, parts) in part.invariants.iter() { if !into.invariants.contains_key(nikaia_std::index::as_text(&place)) { into.invariants.insert(nikaia_std::block::Text::from(place.to_string()), nikaia_std::block::Text::from(parts.to_string())); } }
     for place in part.used.iter() { into.used.insert(nikaia_std::block::Text::from(place.to_string())); }
 }
 
@@ -542,7 +542,7 @@ pub async fn proofs_book_read(root: &std::path::Path) -> ProofsBook {
 pub fn proofs_book_render(book: &ProofsBook) -> PbRendered {
     let mut lines: Vec<PbLine> = vec![];
     for (key, entry) in book.entries.iter() {
-        if !book.asked.contains(key) { continue; }
+        if !book.asked.contains(nikaia_std::index::as_text(&key)) { continue; }
         let line = match entry {
             ProofsEntry::Proved(text) => PbLine { key: nikaia_std::block::Text::from(key.to_string()), kind: String::from("proved"), body: nikaia_std::block::Text::from(text.to_string()) },
             ProofsEntry::ProvedLog(text) => PbLine { key: nikaia_std::block::Text::from(key.to_string()), kind: String::from("proved"), body: nikaia_std::block::Text::from(text.to_string()) },
@@ -551,7 +551,7 @@ pub fn proofs_book_render(book: &ProofsBook) -> PbRendered {
         };
         lines.push(line);
     }
-    for (place, parts) in book.invariants.iter() { if book.used.contains(place) { lines.push(PbLine { key: hash::sha256_hex(&place.bytes().collect::<Vec<_>>()), kind: String::from("invariant"), body: format!("{} {}", place, parts) }); } }
+    for (place, parts) in book.invariants.iter() { if book.used.contains(nikaia_std::index::as_text(&place)) { lines.push(PbLine { key: hash::sha256_hex(&place.bytes().collect::<Vec<_>>()), kind: String::from("invariant"), body: format!("{} {}", place, parts) }); } }
     lines.sort_by_key(|line| { nikaia_std::block::Text::from(line.key.to_string()) });
     pb_render(&lines, PROOFS_LONG)
 }
@@ -618,7 +618,7 @@ pub async fn proofs_book_as_recorded(book: &ProofsBook, root: &std::path::Path) 
 
 pub fn proofs_book_len(book: &ProofsBook) -> i64 {
     let mut count = book.used.len() as i64;
-    for key in book.entries.keys() { if book.asked.contains(key) { count += 1; } }
+    for key in book.entries.keys() { if book.asked.contains(nikaia_std::index::as_text(&key)) { count += 1; } }
     count
 }
 

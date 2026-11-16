@@ -212,7 +212,7 @@ pub fn candidates(export: ref Export, name: ref String) -> Vec[String] {
 /// `mod` block treated as the file's can only make a name resolve where it
 /// would not have, which for a *note* is a wrong sentence and not a wrong
 /// claim.
-pub fn imported(items: ref Vec[RustItem], mut out: collections::BTreeMap[String, String]) {
+fn imported(items: ref Vec[RustItem], mut out: collections::BTreeMap[String, String]) {
     for item in items {
         match item {
             // A `pub use` is an import here too: it brings the name into this

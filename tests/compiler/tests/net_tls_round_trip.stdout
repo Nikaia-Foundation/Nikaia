@@ -1,0 +1,9 @@
+refused: TLS/localhost.key.pem: no certificate in it (a PEM `BEGIN CERTIFICATE` block is wanted)
+refused: TLS/localhost.cert.pem: no private key in it (no items found)
+refused: no such file or directory: TLS/missing.pem
+over TLS: HTTP/1.1 200 OK / answered /one
+without TLS: the server closed the connection
+the next TLS client: HTTP/1.1 200 OK / answered /two
+listen returned after three connections
+exit 0
+a failed handshake said on stderr: true

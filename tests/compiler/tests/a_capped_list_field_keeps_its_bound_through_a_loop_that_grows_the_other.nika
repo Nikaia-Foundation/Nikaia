@@ -1,0 +1,52 @@
+// A list field whose every element is at most another field's length
+// keeps that bound through a loop that only adds to the other list
+// (ADR-306 D21, #1785): `fill` pushes onto `trail` itself and `replay`
+// through `assign`, so each mark of `marks` stays at most the length and
+// `trail[i]` below the first mark is proved in `carried`.
+
+struct Levels {
+	marks: Vec[i64],
+	trail: Vec[i64],
+}
+
+impl Levels {
+	fn assign(ref mut self, x: i64) {
+		self.trail.push(x)
+	}
+
+	fn decide(ref mut self, x: i64) {
+		self.marks.push(self.trail.len())
+		self.assign(x)
+	}
+
+	fn fill(ref mut self, n: i64) {
+		let mut i = 0
+		while i < n {
+			self.trail.push(i)
+			i += 1
+		}
+	}
+
+	fn replay(ref mut self, xs: ref Vec[i64]) {
+		for x in xs {
+			self.assign(x)
+		}
+	}
+
+	fn carried(ref self) -> i64 {
+		let top = if self.marks.len() > 0 { self.marks[0] } else { self.trail.len() }
+		let mut sum = 0
+		for i in 0..<top {
+			sum = sum + self.trail[i]
+		}
+		return sum
+	}
+}
+
+fn main() throws {
+	let mut levels = Levels { marks: [], trail: [] }
+	levels.fill(3)
+	levels.decide(7)
+	levels.replay([4, 5])
+	println(levels.carried())
+}

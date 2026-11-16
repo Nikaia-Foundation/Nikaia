@@ -12,6 +12,7 @@ guide/contracts.md #5 lowered (as written)  /// Divides 100 by a, a few times.
 guide/contracts.md #6 refused (as written) [NK1202]  use std::process
 guide/contracts.md #7 lowered (as written)  use std::process
 guide/getting-started.md #1 lowered (as written)  // src/main.nika
+guide/getting-started.md #2 refused (a body) [NK1117,NK1181,NK1181]  let tls = net::Tls::files("cert.pem", "key.pem")
 guide/grammars.md #1 lowered (as written)  grammar Pairs {
 guide/grammars.md #2 lowered (as written)  grammar Point {
 guide/grammars.md #3 lowered (as written)  grammar Words {

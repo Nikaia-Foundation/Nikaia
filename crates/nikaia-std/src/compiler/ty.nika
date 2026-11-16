@@ -227,7 +227,7 @@ fn code_params_listed(params: ref Array[Ty]) -> String {
 /// **What a function type's `mut` parameter changes** (#1134): the `S` of
 /// `fn(mut S)`, held as a mutable pointer to it; `null` for any other
 /// parameter.
-pub fn lent_mut(ty: ref Ty) -> Ty? {
+fn lent_mut(ty: ref Ty) -> Ty? {
     return match ty {
         Ty::Pointed { item, slice, mutable } => if mutable && !slice { item.clone() } else { null },
         else => null,
@@ -236,7 +236,7 @@ pub fn lent_mut(ty: ref Ty) -> Ty? {
 
 /// A function type's parameters as the arguments are typed against them:
 /// a `mut` one is the type it changes (#1134).
-pub fn unlent_each(params: ref Array[Ty]) -> Vec[Ty] {
+fn unlent_each(params: ref Array[Ty]) -> Vec[Ty] {
     let mut out: Vec[Ty] = []
     for part in params {
         out.push(lent_mut(part) ?? part.clone())
@@ -414,7 +414,7 @@ pub fn split_args(written: ref String) -> Vec[String] {
 /// **The view marker off the front of a written type** (ADR-184 D1): `ref T`,
 /// and `&T`, the spelling it replaced. The word needs the space after it, so
 /// `reference` is not read as a view of `erence`.
-pub fn a_view_of(written: ref String) -> String? {
+fn a_view_of(written: ref String) -> String? {
     // **`ref(a | b) T`, where a signature's result says what it points
     // into** (ADR-251 D4): a view of `T` like any other, and the names are the
     // ledger's to read, beside the type.
@@ -767,7 +767,7 @@ impl Sync {
     }
 
     /// The one reading of *may pause* that is not a pause (ADR-288 D28).
-    pub fn is_unpromised(ref self) -> bool {
+    fn is_unpromised(ref self) -> bool {
         return match self {
             Sync::Unpromised => true,
             else => false,
@@ -873,7 +873,7 @@ pub struct Touch {
 }
 
 impl Touch {
-    pub fn names_a_lock(ref self) -> bool {
+    fn names_a_lock(ref self) -> bool {
         return self.kind == "lock"
     }
 
@@ -1095,12 +1095,12 @@ impl Signature {
     }
 
     /// Whether the first parameter is the receiver.
-    pub fn takes_a_receiver(ref self) -> bool {
+    fn takes_a_receiver(ref self) -> bool {
         return self.params.len() > 0 && self.params[0].0 == "self"
     }
 
     /// The result, and the empty tuple where nothing is handed back.
-    pub fn result_or_unit(ref self) -> Ty {
+    fn result_or_unit(ref self) -> Ty {
         return self.result?.clone() ?? Ty::Tuple([])
     }
 
@@ -1496,7 +1496,7 @@ impl Ty {
     /// `String` is `str` (ADR-184 D2), a view of anything else is that name
     /// with the word on it. A type this compiler cannot name has no view, and
     /// neither does one that is already one.
-    pub fn as_a_view(ref self) -> Ty {
+    fn as_a_view(ref self) -> Ty {
         return match self {
             Ty::Named { name, args, view } => viewed_name(name, args, view),
             else => self.clone(),
@@ -1506,7 +1506,7 @@ impl Ty {
     /// Whether a lock handed this out (ADR-281 D22), at any depth a stamp can
     /// be at: a nullable of a stamped value is stamped. A bare `Seen` is a
     /// type the program declared.
-    pub fn is_seen(ref self) -> bool {
+    fn is_seen(ref self) -> bool {
         return match self {
             Ty::Named { name, args, .. } => name == SEEN && args.len() == 1,
             Ty::Nullable(inner) => inner.is_seen(),
@@ -1666,7 +1666,7 @@ impl Ty {
     /// call site binds (ADR-295): `erase`'s sibling, for a name that stands
     /// for a type a caller passes. A variable is bound and replaced, or
     /// becomes `?`, so it never reaches a comparison.
-    pub fn parameterise(ref self, parameters: ref collections::BTreeSet[String]) -> Ty {
+    fn parameterise(ref self, parameters: ref collections::BTreeSet[String]) -> Ty {
         return match self {
             Ty::Pointed { item, slice, mutable } => Ty::Pointed { item: item.parameterise(parameters), slice: slice, mutable: mutable },
             Ty::Tuple(parts) => Ty::Tuple(parameterised_each(parts, parameters)),
@@ -2030,7 +2030,7 @@ fn substituted(name: ref String, view: bool, bound: ref collections::BTreeMap[St
 /// alone, as an option or as a sequence's item (#1388): substituted it is
 /// the one text view, but below it views a slot that holds text, a `String`
 /// or, unless `owned`, a view. A walk of either reads `&String` or `&&str`.
-pub fn views_text_slots(ty: ref Ty, bound: ref collections::BTreeMap[String, Ty], owned: bool) -> bool {
+fn views_text_slots(ty: ref Ty, bound: ref collections::BTreeMap[String, Ty], owned: bool) -> bool {
     return match ty {
         Ty::Var { name, view } => view && text_bound(name, bound, owned),
         Ty::Nullable(inner) => views_text_slots(inner, bound, owned),
@@ -2172,7 +2172,7 @@ pub fn method_index(ledger: ref Ledger) -> MethodIndex {
 /// Every key of the indexed ledger that ends in `::{method}`, in key order:
 /// what a scan with `key.ends_with(f"::{method}")` finds. A key ending so has
 /// the same last `::` segment as the suffix, so the bucket holds them all.
-pub fn method_keys(index: ref MethodIndex, method: ref String) -> Vec[String] {
+fn method_keys(index: ref MethodIndex, method: ref String) -> Vec[String] {
     // The last segment of `::{method}` is the method's own: no text is made
     // for a name no key ends in (#727).
     let last = method.rsplit("::").next() ?? ""

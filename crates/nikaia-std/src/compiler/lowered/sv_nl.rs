@@ -8,10 +8,12 @@ pub struct SvNlRun {
     pub why: String,
 }
 
+#[cfg(test)]
 pub(crate) fn sv_nl_rounds() -> i64 { 24 }
 
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
-pub fn sv_nl_engine(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudget, theory: &str, reals: &collections::BTreeSet<String>, settings: &str, defs: &[SvNl]) -> Option<SvNlRun> {
+pub(crate) fn sv_nl_engine(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudget, theory: &str, reals: &collections::BTreeSet<String>, settings: &str, defs: &[SvNl]) -> Option<SvNlRun> {
     let mut lemmas: Vec<SvLemma> = vec![];
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut work: i64 = 0;
@@ -61,8 +63,10 @@ pub fn sv_nl_engine(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudg
     Some(SvNlRun { run: sv_engine_unknown(LgUnknown::NoContradiction, work), lemmas, why: String::from("budget") })
 }
 
+#[cfg(test)]
 pub(crate) fn sv_nl_worked(run: &SvEngineRun, work: i64) -> SvEngineRun { SvEngineRun { driven: run.driven.clone(), work, path: nikaia_std::block::Text::from(run.path.to_string()), carried: run.carried.copy_owned(), stats: run.stats.clone() } }
 
+#[cfg(test)]
 pub(crate) fn sv_nl_rats(model: &LgModel) -> collections::BTreeMap<String, SvRat> {
     let mut out: collections::BTreeMap<String, SvRat> = collections::BTreeMap::new();
     for (name, v) in model.values.iter() {
@@ -72,6 +76,7 @@ pub(crate) fn sv_nl_rats(model: &LgModel) -> collections::BTreeMap<String, SvRat
     out
 }
 
+#[cfg(test)]
 pub(crate) fn sv_nl_driven(reals: &collections::BTreeSet<String>, values: &collections::BTreeMap<String, SvRat>) -> Option<SvDriven> {
     if !reals.is_empty() { return Some(SvDriven::RealModel(values.copy_owned())); }
     let mut ints: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
@@ -83,6 +88,7 @@ pub(crate) fn sv_nl_driven(reals: &collections::BTreeSet<String>, values: &colle
     Some(SvDriven::Answer(LgAnswer::Refuted { model: LgModel { values: ints } }))
 }
 
+#[cfg(test)]
 pub(crate) fn sv_nl_settled(defs: &[SvNl], values: &collections::BTreeMap<String, SvRat>) -> Option<collections::BTreeMap<String, SvRat>> {
     let mut out = values.copy_owned();
     for t in defs.iter() {
@@ -95,6 +101,7 @@ pub(crate) fn sv_nl_settled(defs: &[SvNl], values: &collections::BTreeMap<String
     Some(out)
 }
 
+#[cfg(test)]
 pub(crate) fn sv_nl_answers(arena: &TermArena, facts: &[i64], goal: i64, reals: &collections::BTreeSet<String>, defs: &[SvNl], values: &collections::BTreeMap<String, SvRat>) -> bool {
     for (name, v) in values.iter() {
         let v = *v;
@@ -103,6 +110,7 @@ pub(crate) fn sv_nl_answers(arena: &TermArena, facts: &[i64], goal: i64, reals: 
     sv_nl_holds(defs, values) && sv_real_model_holds(arena, facts, goal, values)
 }
 
+#[cfg(test)]
 pub(crate) fn sv_nl_repair(arena: &TermArena, facts: &[i64], goal: i64, reals: &collections::BTreeSet<String>, defs: &[SvNl], values: &collections::BTreeMap<String, SvRat>) -> Option<collections::BTreeMap<String, SvRat>> {
     let settled = sv_nl_settled(defs, values);
     match settled {
@@ -183,6 +191,7 @@ pub(crate) fn sv_nl_repair(arena: &TermArena, facts: &[i64], goal: i64, reals: &
     None
 }
 
+#[cfg(test)]
 pub(crate) fn sv_nl_root(v: &SvRat) -> Option<SvRat> {
     if v.num < 0 { return None; }
     let n = match sv_nl_isqrt(v.num) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -190,6 +199,7 @@ pub(crate) fn sv_nl_root(v: &SvRat) -> Option<SvRat> {
     sv_rat(n, d)
 }
 
+#[cfg(test)]
 pub(crate) fn sv_nl_isqrt(n: i64) -> Option<i64> {
     let mut r: i64 = 0;
     while r <= 3037000499i64 && unsafe { nikaia_std::proven::mul::<i64>(r, r) } < n {
@@ -199,6 +209,7 @@ pub(crate) fn sv_nl_isqrt(n: i64) -> Option<i64> {
     if r * r == n { Some(r) } else { None }
 }
 
+#[cfg(test)]
 pub(crate) fn sv_nl_candidates(defs: &[SvNl], values: &collections::BTreeMap<String, SvRat>) -> Vec<SvLemma> {
     let mut out: Vec<SvLemma> = vec![];
     for i in 0..defs.len() as i64 {
@@ -314,7 +325,7 @@ pub(crate) fn sv_nl_test_lines(files: &[(String, String)]) -> String {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files: Vec<(String, String)> = vec![(String::from("sat-abstraction"), sv_nl_test_script("QF_NIA", "sat", "Int", "x y", "(assert (= (* x y) 0))\n(assert (= x 0))\n")), (String::from("unsat-abstraction"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x y", "(assert (> (* x y) 5))\n(assert (< (* y x) 3))\n")), (String::from("sat-repaired"), sv_nl_test_script("QF_NIA", "sat", "Int", "x y", "(assert (= (int.pow2 x) 8))\n(assert (> y x))\n")), (String::from("sat-refined"), sv_nl_test_script("QF_NIA", "sat", "Int", "x y", "(assert (= (- x y) (int.pow2 x)))\n")), (String::from("arguments"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x y", "(assert (= (* (+ x 1) (* 2 y)) 6))\n(assert (= x 0))\n(assert (= y 2))\n")), (String::from("square"), sv_nl_test_script("QF_NRA", "unsat", "Real", "x", "(assert (< (* x x) 0))\n")), (String::from("division"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x", "(assert (= (mod x 3) 4))\n")), (String::from("remainder"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x", "(assert (= (div x 3) 2))\n(assert (= (mod x 3) 1))\n(assert (distinct x 7))\n")), (String::from("free"), sv_nl_test_script("QF_NRA", "unsat", "Real", "x y", "(assert (= (/ x 0) 1))\n(assert (= (/ y 0) 2))\n(assert (= x y))\n")), (String::from("point"), sv_nl_test_script("QF_NIA", "unsat", "Int", "x y", "(assert (= x 3))\n(assert (= y 2))\n(assert (= (* x y) 7))\n")), (String::from("irrational"), sv_nl_test_script("QF_NRA", "sat", "Real", "x", "(assert (= (* x x) 2))\n"))];
     let out = sv_nl_test_lines(&files);
     let expected = vec!["sat-abstraction.smt2: refuted 1; lemmas []", "unsat-abstraction.smt2: proved 1; lemmas []", "sat-repaired.smt2: refuted 2; lemmas []", "sat-refined.smt2: refuted 5; lemmas [pow2-low]", "arguments.smt2: proved 3; lemmas [tangent]; changed tangent: refused", "square.smt2: proved 2; lemmas [square]", "division.smt2: proved 1; lemmas [division]; changed division: refused", "remainder.smt2: proved 4; lemmas [division]; changed division: refused", "free.smt2: proved 3; lemmas [congruence, congruence]", "point.smt2: proved 1; lemmas [tangent]; changed tangent: refused", "irrational.smt2: unknown (non-linear, budget) 93; lemmas [zero, tangent, tangent, tangent, tangent, tangent, tangent]"];
@@ -323,7 +334,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let files: Vec<(String, String)> = vec![(String::from("parallel-let"), sv_nl_test_script("QF_LIA", "unknown", "Int", "x", "(assert (let ((a x) (b (+ a x))) (> b a)))\n")), (String::from("zero-denominator"), sv_nl_test_script("QF_LRA", "unknown", "Real", "x y", "(assert (= (+ x y) 5/0))\n"))];
     let out = sv_nl_test_lines(&files);
     let expected = vec!["parallel-let.smt2: malformed (a is unbound: a parallel let binds its names only in its body, in assertion 1) 0", "zero-denominator.smt2: malformed (the literal 5/0 has a zero denominator, in assertion 1) 0"];

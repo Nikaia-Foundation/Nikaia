@@ -20,14 +20,14 @@ pub fn integer_as_count(n: &Integer) -> Option<i64> {
     Some(-1 - below)
 }
 
-pub fn integer_text(n: &Integer) -> String {
+pub(crate) fn integer_text(n: &Integer) -> String {
     if n.negative { return format!("-{}", n.magnitude); }
     format!("{}", n.magnitude)
 }
 
-pub fn integer_negated(n: &Integer) -> Integer { integer(n.magnitude, !n.negative) }
+pub(crate) fn integer_negated(n: &Integer) -> Integer { integer(n.magnitude, !n.negative) }
 
-pub fn integer_sum(a: &Integer, b: &Integer) -> Option<Integer> {
+pub(crate) fn integer_sum(a: &Integer, b: &Integer) -> Option<Integer> {
     if a.negative == b.negative {
         let sum = match a.magnitude.checked_add(b.magnitude) { Some(__nikaia_value) => __nikaia_value, None => return None };
         return Some(integer(sum, a.negative));
@@ -36,14 +36,14 @@ pub fn integer_sum(a: &Integer, b: &Integer) -> Option<Integer> {
     Some(integer(b.magnitude - a.magnitude, b.negative))
 }
 
-pub fn integer_difference(a: &Integer, b: &Integer) -> Option<Integer> { integer_sum(a, &integer_negated(b)) }
+pub(crate) fn integer_difference(a: &Integer, b: &Integer) -> Option<Integer> { integer_sum(a, &integer_negated(b)) }
 
-pub fn integer_product(a: &Integer, b: &Integer) -> Option<Integer> {
+pub(crate) fn integer_product(a: &Integer, b: &Integer) -> Option<Integer> {
     let product = match a.magnitude.checked_mul(b.magnitude) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(integer(product, a.negative != b.negative))
 }
 
-pub fn integer_quotient(a: &Integer, b: &Integer, remainder: bool) -> Option<Integer> {
+pub(crate) fn integer_quotient(a: &Integer, b: &Integer, remainder: bool) -> Option<Integer> {
     if remainder {
         let left = match a.magnitude.checked_rem(b.magnitude) { Some(__nikaia_value) => __nikaia_value, None => return None };
         return Some(integer(left, a.negative));
@@ -52,7 +52,7 @@ pub fn integer_quotient(a: &Integer, b: &Integer, remainder: bool) -> Option<Int
     Some(integer(quotient, a.negative != b.negative))
 }
 
-pub fn integer_order(a: &Integer, b: &Integer) -> i64 {
+pub(crate) fn integer_order(a: &Integer, b: &Integer) -> i64 {
     if a.negative != b.negative { return if a.negative { -1 } else { 1 }; }
     if a.magnitude == b.magnitude { return 0; }
     let larger = a.magnitude > b.magnitude;
@@ -60,7 +60,7 @@ pub fn integer_order(a: &Integer, b: &Integer) -> i64 {
     -1
 }
 
-pub fn integer_bits(a: &Integer, b: &Integer, op: &str) -> Option<Integer> {
+pub(crate) fn integer_bits(a: &Integer, b: &Integer, op: &str) -> Option<Integer> {
     if !a.negative && !b.negative {
         let x = a.magnitude;
         let y = b.magnitude;
@@ -75,7 +75,7 @@ pub fn integer_bits(a: &Integer, b: &Integer, op: &str) -> Option<Integer> {
     Some(integer_of_count(x ^ y))
 }
 
-pub fn integer_shifted(a: &Integer, b: &Integer, left: bool) -> Option<Integer> {
+pub(crate) fn integer_shifted(a: &Integer, b: &Integer, left: bool) -> Option<Integer> {
     if b.negative || b.magnitude >= 64u64 { return None; }
     let count = i64::try_from(b.magnitude).unwrap_or_else(|_| panic!("the value does not fit in an `i64`"));
     if left {

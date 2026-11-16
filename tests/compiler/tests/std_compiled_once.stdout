@@ -1,0 +1,3 @@
+build: 0
+run: 0, printed: host=example.com 42
+nikaia-std compiled: 1

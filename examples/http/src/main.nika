@@ -272,13 +272,17 @@ fn body_start_millis() -> i64 {
 //
 // * `head_timeout`, the time from a request's first byte to the end of its
 //   head;
-// * `body_bytes_per_second`, the rate a body arrives at, measured once two
-//   seconds have passed (`0` takes the body at any rate);
+// * `body_bytes_per_second`, the rate a body arrives at since its first byte,
+//   measured once two seconds have passed (`0` takes the body at any rate);
 // * `idle_timeout`, the time between one answer and the next request's first
 //   byte.
 //
 // The limits are options after the `;`, so a program names only the ones it
 // changes.
+//
+// `tls:` serves HTTPS (ADR-289 D34): `tls: net::Tls::files("cert.pem",
+// "key.pem")`. Each connection's TLS handshake runs in its own task, and past
+// it a connection carries plaintext, so nothing below changes for it.
 //
 // The accepting is `std::net`'s (ADR-326 D10): bind first, so the address can
 // be printed (port `0` picks any free one), then `serve` the listener. Nothing
@@ -289,25 +293,20 @@ pub fn listen(
     keep handler: fn(keep Request) -> Response;
     body_cap: i64 = 1048576,
     head_cap: i64 = 16384,
-    head_timeout: time::Duration? = null,
+    head_timeout: time::Duration = 10.seconds(),
     body_bytes_per_second: i64 = 500,
-    idle_timeout: time::Duration? = null,
-    connections: i64 = 0
+    idle_timeout: time::Duration = 75.seconds(),
+    connections: i64 = 0,
+    tls: net::Tls? = null
 ) throws {
-    let listener = net::listen(at)
+    let listener = net::listen(at; tls: tls)
     let bound = listener.address()
     println(f"http: listening on {bound}")
-
-    // The defaults are 10 seconds and 75 seconds (ADR-326 D6, D9), decided
-    // here: a default that calls a method is not computed while the program is
-    // built.
-    let head_limit = head_timeout ?? 10.seconds()
-    let idle_limit = idle_timeout ?? 75.seconds()
 
     // `connections: 0` means serve forever. Any other number stops accepting
     // after that many connections and returns once they are answered.
     listener.serve(fn(mut connection) {
-        answer(connection, handler, head_limit, idle_limit; body_cap: body_cap, head_cap: head_cap, body_bytes_per_second: body_bytes_per_second)
+        answer(connection, handler, head_timeout, idle_timeout; body_cap: body_cap, head_cap: head_cap, body_bytes_per_second: body_bytes_per_second)
     }; connections: connections)
 }
 
@@ -329,7 +328,7 @@ fn answer(
     let mut buffer = http1::Buffer()
     let mut open = true
     while open {
-        open = request(connection, buffer, handler, head_timeout; body_cap: body_cap, head_cap: head_cap, body_bytes_per_second: body_bytes_per_second)
+        open = request(connection, buffer, handler, head_timeout, idle_timeout; body_cap: body_cap, head_cap: head_cap, body_bytes_per_second: body_bytes_per_second)
         if open && buffer.len() == 0 {
             // A quiet connection is closed without a word: there is no request
             // to answer. A client that sends nothing more ends it the same way.
@@ -352,7 +351,8 @@ fn request(
     mut connection: net::Connection,
     mut buffer: http1::Buffer,
     keep handler: fn(keep Request) -> Response,
-    head_timeout: time::Duration;
+    head_timeout: time::Duration,
+    keep idle_timeout: time::Duration;
     body_cap: i64 = 1048576,
     head_cap: i64 = 16384,
     body_bytes_per_second: i64 = 500
@@ -403,10 +403,26 @@ fn request(
     }
 
     // Read the rest of the body. Some of it may have arrived with the head,
-    // so this counts from where the head ends. Each read waits until the body
-    // would fall below `body_bytes_per_second`, and not past it.
+    // so this counts from where the head ends. The body's clock starts at its
+    // first byte (ADR-326 D7): the bytes that came with the head, or else the
+    // first read after it. The wait for that read is a quiet connection's,
+    // held to `idle_timeout` (D8). Each later read waits until the body would
+    // fall below `body_bytes_per_second`, and not past it.
     let size = asked.size()
     let end = size + asked.length()
+    if buffer.len() == size && end > size {
+        let first = connection.read(within: idle_timeout) catch {
+            match error {
+                task::TimedOut => refuse(connection, 408, "408 a body that never began"),
+                else => {},
+            }
+            return false
+        }
+        if first.len() == 0 {
+            return false
+        }
+        buffer.take(first)
+    }
     let body_started = time::now()
     while buffer.len() < end {
         let mut more = Bytes([])

@@ -1,0 +1,75 @@
+// The Benchmarks Game's `spectral-norm`: the largest singular value of the
+// infinite matrix A, A(i, j) = 1 / ((i + j)(i + j + 1) / 2 + i + 1), cut to its
+// first n rows and columns, found by the power method on AᵀA and printed to
+// nine decimals.
+//
+//     nikaia run main.nika -- 100
+//     1.274219991
+//
+// The argument is n (100 if left out); the game's published output for 100 is
+// the line above. Written as a Nikaia programmer writes it first: lists of
+// floats, a small function for the matrix entry, nested `for` loops.
+use std::cli
+use std::text
+
+// The entry of A at row `i`, column `j`, counted from 0.
+fn a(i: i64, j: i64) -> f64 sync {
+	return 1.0 / ((i + j) * (i + j + 1) / 2 + i + 1) as f64
+}
+
+// `out = A v`.
+fn times(v: Vec[f64], mut out: Vec[f64]) sync {
+	let n = v.len()
+	for i in 0..<n {
+		let mut sum = 0.0
+		for j in 0..<n {
+			sum = sum + a(i, j) * v[j]
+		}
+		out[i] = sum
+	}
+}
+
+// `out = Aᵀ v`.
+fn times_transposed(v: Vec[f64], mut out: Vec[f64]) sync {
+	let n = v.len()
+	for i in 0..<n {
+		let mut sum = 0.0
+		for j in 0..<n {
+			sum = sum + a(j, i) * v[j]
+		}
+		out[i] = sum
+	}
+}
+
+// `out = AᵀA v`, through `tmp`.
+fn times_at_a(v: Vec[f64], mut out: Vec[f64], mut tmp: Vec[f64]) sync {
+	times(v, tmp)
+	times_transposed(tmp, out)
+}
+
+fn spectral_norm(n: i64) -> f64 sync {
+	let mut u: Vec[f64] = []
+	let mut v: Vec[f64] = []
+	let mut tmp: Vec[f64] = []
+	for _ in 0..<n {
+		u.push(1.0)
+		v.push(0.0)
+		tmp.push(0.0)
+	}
+	for _ in 0..<10 {
+		times_at_a(u, v, tmp)
+		times_at_a(v, u, tmp)
+	}
+	let mut vbv = 0.0
+	let mut vv = 0.0
+	for i in 0..<n {
+		vbv = vbv + u[i] * v[i]
+		vv = vv + v[i] * v[i]
+	}
+	return (vbv / vv).sqrt()
+}
+
+fn main() throws {
+	let n = text::parse_i64(cli::args().nth(1) ?? "100") ?? 100
+	println(f"{spectral_norm(n):.9}")
+}

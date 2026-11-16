@@ -281,7 +281,7 @@ fn an_uncaught_failure_in_a_branch_fails_the_block() {
 fn a_branch_that_catches_its_own_failure_propagates_nothing() {
     let rust = lower(THREE_READS);
     assert!(
-        !rust.contains("Ok::<_, Box<dyn std::error::Error>>("),
+        !rust.contains("Ok::<_, std::boxed::Box<dyn std::error::Error>>("),
         "{rust}"
     );
     assert!(!rust.contains("__nikaia_branch_0?"), "{rust}");

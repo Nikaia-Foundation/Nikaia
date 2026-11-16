@@ -68,7 +68,7 @@ pub fn breaks(body: ref Block, words: ref winnow_grammar::InternerContext) -> bo
 
 /// **How many `break`s and `continue`s leave this loop's turn** from its
 /// body (ADR-361 D10): each is a place an invariant must hold.
-pub fn turn_jumps(body: ref Block, words: ref winnow_grammar::InternerContext) -> i64 {
+fn turn_jumps(body: ref Block, words: ref winnow_grammar::InternerContext) -> i64 {
     let mut found = tally()
     tally_block(body, Ask::Jumps, false, words, found)
     return found.count
@@ -78,28 +78,28 @@ pub fn turn_jumps(body: ref Block, words: ref winnow_grammar::InternerContext) -
 /// `body` changes or hands on**: what it assigns (through an index or a
 /// field to the name under them), a method's receiver, and a call's
 /// arguments that are names.
-pub fn pinned_in(body: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+fn pinned_in(body: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
     let mut found = tally()
     tally_block(body, Ask::Pinned, false, words, found)
     return found.names
 }
 
 /// **Every name a statement assigns**, at any depth (ADR-361 D1).
-pub fn assigned_in_statement(stmt: ref Stmt, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+fn assigned_in_statement(stmt: ref Stmt, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
     let mut found = tally()
     tally_statement(stmt, Ask::Assigned, false, words, found)
     return found.names
 }
 
 /// **Every name a block assigns**, at any depth (ADR-361 D1).
-pub fn assigned_in(body: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+fn assigned_in(body: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
     let mut found = tally()
     tally_block(body, Ask::Assigned, false, words, found)
     return found.names
 }
 
 /// **Every name an expression assigns**, at any depth (ADR-361 D1).
-pub fn assigned_in_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+fn assigned_in_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
     let mut found = tally()
     tally_expr(expr, Ask::Assigned, false, words, found)
     return found.names
@@ -110,7 +110,7 @@ pub fn assigned_in_expr(expr: ref Expr, words: ref winnow_grammar::InternerConte
 /// `match` arm, it is handed to no call or method, and nothing in the body
 /// binds `binding` again, so each value it takes there is one the binding
 /// had.
-pub fn follows_only(body: ref Block, name: ref String, binding: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+fn follows_only(body: ref Block, name: ref String, binding: ref String, words: ref winnow_grammar::InternerContext) -> bool {
     let mut found = tally()
     tally_block(body, Ask::Follows(name.clone(), binding.clone()), false, words, found)
     return !found.found && !rebinds(body, binding, words)
@@ -120,18 +120,60 @@ pub fn follows_only(body: ref Block, name: ref String, binding: ref String, word
 /// numbers** (ADR-361 D1): changed by a deferred body or through an index or
 /// a field, or handed to a call or a method that may change it: not to one
 /// of `readers`, the functions whose parameters are all read-only (Part I:
-/// only a `mut` parameter changes the caller's value).
-pub fn untracked_in(body: ref Block, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] sync {
+/// only a `mut` parameter changes the caller's value). Nor to `push` on a
+/// list the block binds as a `Vec` or a list literal and never binds again
+/// (ADR-361 D15): `Vec::push` takes its value, so `at.push(i)` leaves `i`
+/// as it was; such a method is kept among the readers as `at.push`, a key no
+/// function's name can be.
+fn untracked_in(body: ref Block, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] sync {
+    let mut keeping = readers.clone()
+    for k in 0..<body.stmts.len() {
+        let list = std_list_bound(body.stmts[k].node, words) ?? continue
+        let mut again = false
+        for j in 0..<body.stmts.len() {
+            if j != k && rebinds_in_statement(body.stmts[j].node, list, words) {
+                again = true
+            }
+        }
+        if !again {
+            keeping.insert(f"{list}.push")
+        }
+    }
     let mut found = tally()
-    tally_block(body, Ask::Untracked(readers.clone()), false, words, found)
+    tally_block(body, Ask::Untracked(keeping), false, words, found)
     return found.names
+}
+
+/// The name a `let mut` binds to a `Vec` - its type written `Vec`, or a list
+/// literal as its value.
+fn std_list_bound(stmt: ref Stmt, words: ref winnow_grammar::InternerContext) -> String? sync {
+    return match stmt {
+        Stmt::Let { names, mutable, ty, value, .. } => {
+            if !mutable || names.len() != 1 {
+                return null
+            }
+            let listed = match value {
+                Expr::ListLit { .. } => true,
+                else => false,
+            }
+            let typed = match ty {
+                null => false,
+                t => words.resolve(t.name) == "Vec",
+            }
+            if !listed && !typed {
+                return null
+            }
+            words.resolve(names[0]).clone()
+        },
+        else => null,
+    }
 }
 
 /// **The lists a loop's body pushes onto exactly once per turn** (ADR-306
 /// D4): one `xs.push(v)` among the body's own statements, nothing else that
 /// changes `xs`'s length or hands it on, nothing that binds it again, it is
 /// not `pinned`, and there is no way out of a turn before its end.
-pub fn filled_once(body: ref Block, pinned: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> Vec[String] {
+fn filled_once(body: ref Block, pinned: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> Vec[String] {
     let mut leaving = tally()
     tally_block(body, Ask::Leaves, false, words, leaving)
     if leaving.found {
@@ -435,11 +477,14 @@ fn tally_here(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
             else => {},
         },
         Ask::Untracked(readers) => match expr {
-            Expr::MethodCall { receiver, args, .. } => {
+            Expr::MethodCall { receiver, method, args, .. } => {
                 if deferred {
                     add_variable(receiver, words, tally.names)
                 }
-                add_variables(args, words, tally.names)
+                let on = variable_text(receiver, words) ?? ""
+                if deferred || on == "" || !readers.contains(f"{on}.{words.resolve(method)}") {
+                    add_variables(args, words, tally.names)
+                }
             },
             Expr::SafeMethod { receiver, args, .. } => {
                 if deferred {
@@ -592,21 +637,21 @@ fn tally_expr(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
 /// **Whether a statement may change `list`'s length** (#782): a method
 /// `keeps_length` does not know on it, or the list handed to a call or a
 /// method, at any depth.
-pub fn changes_length_in_statement(stmt: ref Stmt, list: ref String, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> bool {
+fn changes_length_in_statement(stmt: ref Stmt, list: ref String, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> bool {
     let mut changes = tally()
     tally_statement(stmt, Ask::Changes(list.clone(), readers.clone()), false, words, changes)
     return changes.count > 0
 }
 
 /// **Whether an expression may change `list`'s length** (#782), at any depth.
-pub fn changes_length_in_expr(expr: ref Expr, list: ref String, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> bool {
+fn changes_length_in_expr(expr: ref Expr, list: ref String, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> bool {
     let mut changes = tally()
     tally_expr(expr, Ask::Changes(list.clone(), readers.clone()), false, words, changes)
     return changes.count > 0
 }
 
 /// **Whether a block may change `list`'s length** (#782), at any depth.
-pub fn changes_length_in(body: ref Block, list: ref String, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> bool {
+fn changes_length_in(body: ref Block, list: ref String, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> bool {
     let mut changes = tally()
     tally_block(body, Ask::Changes(list.clone(), readers.clone()), false, words, changes)
     return changes.count > 0

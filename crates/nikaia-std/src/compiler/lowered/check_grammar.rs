@@ -64,7 +64,7 @@ pub(crate) fn grammar_ungrouped(pattern: &Pattern) -> &Pattern {
 // this was written - see `contracts::sync`.
 pub(crate) fn an_offered_number_name(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" }
 
-pub fn grammar_stream_refused(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, rule: &GrammarRule, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> Option<CheckFinding> {
+pub(crate) fn grammar_stream_refused(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, rule: &GrammarRule, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> Option<CheckFinding> {
     let entry = nikaia_std::block::Text::from(world.words.resolve(rule.name).to_string());
     let wanted: Ty = nikaia_std::index::or(match *nikaia_std::index::get(&results, &entry) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -144,7 +144,7 @@ pub(crate) fn grammar_stream_item(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn pattern_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Ty {
+    pub(crate) fn pattern_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Ty {
         match pattern {
             Pattern::Repeat { pat, rep } => { let pat = nikaia_std::boxed::open(pat); self.repeat_type(world, &pat.node, rep, rules) },
             Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); self.pattern_type(world, &pat.node, rules) },
@@ -167,7 +167,7 @@ impl CheckState {
             let inner = self.pattern_type(world, pat, rules);
             return match inner {
                 Ty::Nullable(_) => inner,
-                _ => Ty::Nullable(Box::new(inner)),
+                _ => Ty::Nullable(std::boxed::Box::new(inner)),
             };
         }
         let called = bare_reference(pat, world);
@@ -223,7 +223,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn bindings_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
+    pub(crate) fn bindings_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
         let mut out: Vec<CheckLocal> = vec![];
         match pattern {
             Pattern::Bind { name, pat } => {
@@ -314,7 +314,7 @@ pub(crate) fn grammar_position_in_view(world: &CheckWorld<'_, '_, '_, '_, '_, '_
     String::from("")
 }
 
-pub fn grammar_positions_over_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, named: &str, span: &Span) -> Option<CheckFinding> {
+pub(crate) fn grammar_positions_over_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, named: &str, span: &Span) -> Option<CheckFinding> {
     let written = grammar_position_of(world, named);
     if written == "" { return None; }
     let notes: Vec<String> = vec![format!("Over a `Bytes` `{}` is built (Part II 10.8); over text it is a `text::Match` or a `text::Pos`, which are not built yet (#743).", written)];
@@ -324,7 +324,7 @@ pub fn grammar_positions_over_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn rule_values<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, rule: &GrammarRule) -> Vec<CheckLocal> {
+    pub(crate) fn rule_values<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, rule: &GrammarRule) -> Vec<CheckLocal> {
         let mut out: Vec<CheckLocal> = vec![];
         for arg in rule.args.iter() {
             self.next_binding = self.next_binding + 1;
@@ -338,7 +338,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn grammar_values<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef, pattern: &Spanned<Pattern>, rules: &collections::BTreeSet<String>, scope: Vec<CheckLocal>) -> Vec<CheckLocal> {
+    pub(crate) fn grammar_values<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef, pattern: &Spanned<Pattern>, rules: &collections::BTreeSet<String>, scope: Vec<CheckLocal>) -> Vec<CheckLocal> {
         match &pattern.node {
             Pattern::Seq(parts) => {
                 let mut now = scope;

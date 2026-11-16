@@ -191,7 +191,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_function<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>, depth: i64, lifetimes: EmitLifetimes, carries_input: &collections::BTreeSet<String>, owner_target: Option<&str>, owner_declared_by: Option<&str>, owner_bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_function<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>, depth: i64, lifetimes: EmitLifetimes, carries_input: &collections::BTreeSet<String>, owner_target: Option<&str>, owner_declared_by: Option<&str>, owner_bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         match &written.node {
             Item::Fn { name, generics, receiver, args: written_args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
                 let can_throw = *can_throw; let is_public = *is_public; let is_sync = *is_sync; let name = *name; let spread = *spread;
@@ -565,7 +565,7 @@ impl EmitState {
                     },
                     None => { returned = String::from("()"); },
                 }
-                let mut channel: String = String::from("Box<dyn std::error::Error>"); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+                let mut channel: String = String::from("std::boxed::Box<dyn std::error::Error>"); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                 if !has_declared_by {
                     let mut borrows_any = receiver.is_some();
                     for each in args.iter() { if self.carries_a_view(world, &each.ty) { borrows_any = true; } }
@@ -623,7 +623,7 @@ impl EmitState {
                     }
                 }
                 let mut ret: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
-                if throws_ { ret = format!(" -> Result<{}, {}>", returned, channel); } else if ret_type.is_some() { ret = format!(" -> {}", returned); }
+                if throws_ { ret = format!(" -> {}<{}, {}>", self.rust_result(), returned, channel); } else if ret_type.is_some() { ret = format!(" -> {}", returned); }
                 let a_copy = walk.specialising.is_some() && (walk.slotted || self.copy_substitutes(&nikaia_std::block::Text::from(nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string())));
                 let weighed = self.facts.weighed_of(&key);
                 if !a_copy && !weighed.is_empty() {
@@ -778,7 +778,7 @@ impl EmitState {
                             walk.async_groups = outer_groups;
                             walk.async_pausing = outer_pausing;
                             walk.async_pending = vec![];
-                            walk.async_handles = collections::BTreeMap::new();
+                            walk.async_handles.clear();
                             if pausing == "" && inner.buf.contains(".await") { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet in a function that pauses (#988)."), at: Some(i64::from(nikaia_std::index::get(&body.stmts, 0).span.start)) }, &"emit_function")); }
                             let name = emit_async_group_name(group);
                             let grouped = throws_ && self.emit_async_tasks_channel(&channel) == channel;

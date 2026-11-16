@@ -133,6 +133,14 @@ fn check_core_ops_lit_str(value: ref Expr) -> bool sync {
     }
 }
 
+/// A `??` itself, as the fallback of another.
+fn check_core_ops_a_coalesce(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Coalesce { .. } => true,
+        else => false,
+    }
+}
+
 /// An empty list written out: `[]`.
 fn check_core_ops_empty_list(value: ref Expr) -> bool sync {
     return match value {
@@ -150,6 +158,14 @@ fn check_core_ops_view_of_a_list(ty: ref Ty) -> bool sync {
 }
 
 /// A name.
+/// A number type, viewed or not: the word a number literal becomes (#1841).
+fn check_core_ops_a_number(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, args, .. } => args.len() == 0 && a_number_name(name),
+        else => false,
+    }
+}
+
 fn check_core_ops_variable(value: ref Expr) -> bool sync {
     return match value {
         Expr::Variable(_, _) => true,
@@ -520,7 +536,7 @@ fn check_core_ops_outcome[H: CheckHost](mut state: CheckState, world: ref CheckW
 
 /// **`a op b`** (ADR-081, ADR-285): both sides walked, then what the operator
 /// asks of them.
-pub fn check_core_ops_binary[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, at: ref Span, span: ref Span) -> Ty sync {
+fn check_core_ops_binary[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, at: ref Span, span: ref Span) -> Ty sync {
     let arithmetic = check_core_ops_arithmetic(op)
     let reached: String? = state.flow.reached?.clone()
     state.flow.reached = null
@@ -864,7 +880,7 @@ fn check_core_ops_a_word(ty: ref Ty) -> bool {
 }
 
 /// **`a ?? b`** (Part I 3.5, ADR-279, ADR-293): the first that has a value.
-pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, value: ref Expr, fallback: ref Expr, span: ref Span) -> Ty sync {
+fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, value: ref Expr, fallback: ref Expr, span: ref Span) -> Ty sync {
     let outer = state.flow.read_a_map
     state.flow.read_a_map = false
     let lending = state.flow.lending_let
@@ -885,7 +901,11 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     // **A fallback that jumps takes its takings with it** (ADR-293 D30).
     let from = state.taken_so_far()
     state.flow.lending_let = lending
+    // **A vector made for the fallback is of the type the left side holds**
+    // (ADR-377 D3): `m[k] ?? simd::splat(0.0)`.
+    state.flow.lambda_expected = check_simd_wanted(world, fallback, check_core_ops_inside(left))
     let other = check_core_expr(state, world, host, fallback, span)
+    state.flow.lambda_expected = null
     state.flow.lending_let = false
     let leaves = state.leaves(world, fallback)
     state.a_branch_that_leaves(from, leaves, span)
@@ -910,9 +930,19 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
         let shown = arith_shown(written_expression(world.words, value))
         state.findings.push(check_refusal("NK1342", span, f"The compiler can't tell what type `{shown}` holds, so it can't tell what the fallback of this `??` becomes.", ["What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7)."], "Write the type down where the value is made, such as `let x: T? = …`."))
     }
-    // **A map read past a jump is a view of the map** (ADR-293 D28, #739).
-    if from_a_map && nullable && moves(inner) && state.jumps(world, fallback) {
+    // **A map read past a jump is a view of the map** (ADR-293 D28, #739),
+    // unless it holds a word by its kind (ADR-279 D8, #1842).
+    let a_word_held = state.a_word_by_its_kind(world, unviewed_type(inner))
+    if from_a_map && nullable && moves(inner) && !a_word_held && state.jumps(world, fallback) {
         state.facts.map_read_views.insert(id_of(expr) as i64)
+    }
+    // **A word by its kind read through brackets is copied out** (ADR-279 D8,
+    // #1842): `m[k] ?? simd::splat(0.0)` and `m[k] ?? return` hold the
+    // `simd::Fixed`, never a view of the map, and the vector made for the
+    // fallback takes the one type an `Option<Fixed>` falls back to. A number's
+    // read is copied by the emitter already, a `get` by `copied_walks`.
+    if from_a_map && nullable && a_word_held && !a_copy_by_value(unviewed_type(inner)) && check_core_stmt_an_index(value) {
+        state.facts.copied_reads.insert(id_of(value) as i64)
     }
     // **A number read through brackets past a jump is the number, wherever
     // the `??` stands** (#456): each arm of the `match` it lowers to hands back
@@ -984,6 +1014,12 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
             state.facts.view_fallbacks.insert(id_of(fallback) as i64)
             return check_core_ops_view("str")
         }
+        // **And a list's first or last** (#1731), as its `get` is: the text
+        // it finds is the list's, never copied behind your back.
+        if inner == check_core_ops_named("String") && state.flow.list_ends.contains(id_of(value) as i64) {
+            state.facts.view_fallbacks.insert(id_of(fallback) as i64)
+            return check_core_ops_view("str")
+        }
         // **And a list's** (#342, ADR-279 D12).
         if inner == check_core_ops_named("String") && !from_a_map && check_core_ops_index(value) {
             state.facts.view_fallbacks.insert(id_of(fallback) as i64)
@@ -1002,6 +1038,12 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
         state.facts.view_coalesces.insert(id_of(expr) as i64)
         return check_core_ops_view("str")
     }
+    // **And a `??` beside it that came to a view of text** (#1720): `m[a] ??
+    // m[b] ?? ""` reads each map as `m[b] ?? ""` alone does, and is a view.
+    if nullable && inner == check_core_ops_named("String") && from_a_map && check_core_ops_a_coalesce(fallback) && other == check_core_ops_view("str") {
+        state.facts.view_coalesces.insert(id_of(expr) as i64)
+        return check_core_ops_view("str")
+    }
     // **A name that is a view of text beside a view of text** (#719): a
     // `ref String` loop variable is `&String` below, and the answer `&str`.
     if nullable && inner == check_core_ops_view("str") && !from_a_map && !check_core_ops_index(value) && check_core_ops_variable(fallback) && other.is_a_view() && check_core_ops_text_base(other) {
@@ -1014,8 +1056,9 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     if nullable && !place && inner == check_core_ops_named("String") && !from_a_map && !check_core_ops_index(value) && check_core_ops_variable(fallback) && other.is_a_view() && check_core_ops_text_base(other) {
         state.facts.text_owned_fallbacks.insert(id_of(expr) as i64)
     }
-    // **And a name of the type the map holds** (ADR-279 D7).
-    if nullable && from_a_map && check_core_ops_variable(fallback) && !other.is_a_view() && check_core_ops_held_matches(inner, other) && moves(other) {
+    // **And a name of the type the map holds** (ADR-279 D7), one that is not
+    // a word by its kind, which is copied (D8, #1842).
+    if nullable && from_a_map && check_core_ops_variable(fallback) && !other.is_a_view() && check_core_ops_held_matches(inner, other) && moves(other) && !a_word_held {
         state.facts.lent_map_fallbacks.insert(id_of(expr) as i64)
         return view_of_type(other)
     }
@@ -1028,6 +1071,16 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     if nullable && from_a_map && check_core_ops_variable(fallback) && (check_core_ops_plain_text(inner) && check_core_ops_plain_text(other) || inner == check_core_ops_view("str") && other == check_core_ops_view("str")) {
         state.facts.lent_map_fallbacks.insert(id_of(expr) as i64)
         return check_core_ops_view("str")
+    }
+    // **A name of the word the left side holds is that word** (Part I 3.5,
+    // #1841): `m[k] ?? zero` over a map of `f64` passes `zero` as it is, and
+    // `index::or` copies the `f64` out of the `Option<&f64>`. So is a name of
+    // a number literal, whose type the checker leaves to its use (`let d = 9`):
+    // `d.into()` made it an `i32` below. So is a name of a word by its kind
+    // the ledger says copies, a `simd::Fixed[f64, 4]` (ADR-279 D8, #1842).
+    let held_word = unviewed_type(inner)
+    if nullable && check_core_ops_variable(fallback) && (a_copy_by_value(held_word) || a_word_held) && (held_word == other || other.is_unknown() && check_core_ops_a_number(held_word)) {
+        state.facts.word_fallbacks.insert(id_of(expr) as i64)
     }
     // **A value written out beside a view of a word is the word** (ADR-279
     // D8): `index::or` copies a `T: Copy` out of `&Option<T>` and
@@ -1206,7 +1259,7 @@ fn check_core_ops_a_pair_split(mut state: CheckState, world: ref CheckWorld, dec
 /// **`NK1101`: a lambda that names no argument where one is handed** (Part I
 /// 5.3, #703): `xs.map fn { 7 }`. A lambda takes the arguments it names, so
 /// `fn { … }` takes none, and the place hands it some.
-pub fn check_core_ops_none_named(mut state: CheckState, declared: ref Ty?, params: ref Vec[winnow_grammar::Symbol], span: ref Span) sync {
+fn check_core_ops_none_named(mut state: CheckState, declared: ref Ty?, params: ref Vec[winnow_grammar::Symbol], span: ref Span) sync {
     if params.len() > 0 {
         return
     }
@@ -1258,7 +1311,7 @@ fn check_core_ops_promised(declared: ref Ty?) -> CheckPromises? sync {
 
 /// **A lambda** (ADR-277): its arguments are the ones it names, of the types
 /// the place it stands in says (#497).
-pub fn check_core_ops_closure[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], body: ref Block, span: ref Span) -> Ty sync {
+fn check_core_ops_closure[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], body: ref Block, span: ref Span) -> Ty sync {
     let declared: Ty? = state.flow.lambda_expected?.clone()
     state.flow.lambda_expected = null
     let given: Vec[Ty] = check_core_ops_given(declared, params.len() as i64)
@@ -1407,7 +1460,7 @@ pub comptime CHILD_HANDLE: ref String = "task::ChildHandle"
 
 /// Whether the type is a child task's handle, which cannot leave its group
 /// (`NK2122`).
-pub fn a_child_handle(ty: ref Ty) -> bool {
+fn a_child_handle(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, .. } => name == CHILD_HANDLE,
         else => false,
@@ -1417,7 +1470,7 @@ pub fn a_child_handle(ty: ref Ty) -> bool {
 /// **`spawn`** hands back a `TaskHandle` of what the task's body comes to;
 /// `detached` where it is written `async(detached)` (ADR-async-5 D13); a
 /// `task::ChildHandle` where it is written `async(handle)` (`child`, D11).
-pub fn check_core_ops_spawn[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, spawned: ref Expr, detached: bool, child: bool, span: ref Span) -> Ty sync {
+fn check_core_ops_spawn[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, spawned: ref Expr, detached: bool, child: bool, span: ref Span) -> Ty sync {
     // **Before** the body is walked, so that the task's own `let`s are not
     // yet in scope. A child task crosses into nothing: it may borrow.
     if !child {

@@ -175,6 +175,7 @@ pub(crate) fn reserved_word_note(has_found: bool, found: &str, c: &[scalar], at:
     if !rest.starts_with(AsRef::<str>::as_ref(&token)) { return None; }
     let letters: Vec<scalar> = nikaia_std::list::chars(token.chars());
     let width = letters.len() as i64;
+    if token == "pub" && a_declaration_word(&word_after(c, at + width)) { return None; }
     let mut with_a_name = upto(c, at);
     let mut placed: i64 = 0;
     while placed < width {
@@ -184,6 +185,19 @@ pub(crate) fn reserved_word_note(has_found: bool, found: &str, c: &[scalar], at:
     with_a_name = format!("{}{}", with_a_name, slice(c, at + width, c.len() as i64));
     if parses_further(&with_a_name, at + width, stops_at) { return Some(format!("`{}` is a reserved word, so it can't be used as a name here.", token)); }
     None
+}
+
+pub(crate) fn word_after(c: &[scalar], from: i64) -> String {
+    let mut at = from;
+    while at < c.len() as i64 && (*nikaia_std::index::get(&c, nikaia_std::index::at(at)) == ' ' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '\t' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '\n' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '\r') { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
+    let start = at;
+    while at < c.len() as i64 && ((*nikaia_std::index::get(&c, nikaia_std::index::at(at))).is_alphanumeric() || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '_') { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
+    slice(c, start, at)
+}
+
+pub(crate) fn a_declaration_word(word: &str) -> bool {
+    for each in ["rule", "entry", "grammar", "fn", "struct", "enum", "trait", "comptime", "extern", "sync", "async", "use", "dsl", "test", "impl"] { if AsRef::<str>::as_ref(&(each)) == AsRef::<str>::as_ref(&(word)) { return true; } }
+    false
 }
 
 pub(crate) fn sorted_words(list: &[String]) -> Vec<String> {
@@ -235,7 +249,7 @@ pub(crate) fn if_empty(first: &[String], second: &[String]) -> Vec<String> {
     out
 }
 
-pub fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> i64) -> ParseReading {
+pub(crate) fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> i64) -> ParseReading {
     let c: Vec<scalar> = nikaia_std::list::chars(source.chars());
     let mut at = error.offset;
     if at > c.len() as i64 { at = c.len() as i64; }
@@ -279,7 +293,7 @@ pub fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> 
     ParseReading { at, word, message, notes, help }
 }
 
-pub fn unclosed_block_comment(error: &Failure, source: &str) -> Option<ParseReading> {
+pub(crate) fn unclosed_block_comment(error: &Failure, source: &str) -> Option<ParseReading> {
     if !lists(&error.expected, "`*/`") { return None; }
     let at = opening_of_an_unclosed_comment(source);
     if at < 0 { return None; }

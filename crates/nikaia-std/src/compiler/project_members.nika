@@ -56,8 +56,8 @@ pub trait ProjectMembersHost {
 /// the one place that says which names are official. A `use` of one that
 /// nothing else names takes it in (`project_members_taken_in`); a name joins
 /// the list when its package is under `packages/` with this version.
-pub fn project_members_official() -> Vec[(String, String)] {
-    return [("json", "0.1.0")]
+fn project_members_official() -> Vec[(String, String)] {
+    return [("db", "0.1.0"), ("json", "0.1.0")]
 }
 
 /// **The official packages `manifest`'s package takes in by its first `use`**
@@ -319,7 +319,7 @@ pub struct ProjectMembersMember {
 /// compiler that hung or panicked on the way to that message would be reporting
 /// the wrong thing. What comes out is every member exactly once either way,
 /// which is what the caller needs of it.
-pub fn project_members_dependencies_first(members: ref Vec[ProjectMembersMember]) -> Vec[i64] {
+fn project_members_dependencies_first(members: ref Vec[ProjectMembersMember]) -> Vec[i64] {
     let at_of: collections::HashMap[fs::Path, i64] = (0..<members.len()).map(fn(at) { (members[at].root.clone(), at) }).collect()
 
     // `needs[at]` is what `at` waits for.
@@ -406,12 +406,12 @@ pub fn project_members_members_of[H: ProjectMembersHost](entry_manifest: ref Pro
 /// The variable a build hands Cargo's `rustc` wrapper where each package by
 /// version landed, one `crate=directory` line each, so the wrapper reads the
 /// driver's resolution rather than asking Cargo again from inside its build.
-pub fn project_members_fetched_variable() -> String {
+fn project_members_fetched_variable() -> String {
     return "NIKAIA_FETCHED"
 }
 
 /// `members`' packages by version, as `project_members_fetched_variable()` carries them.
-pub fn project_members_fetched_text(members: ref Vec[ProjectMembersMember]) -> String {
+fn project_members_fetched_text(members: ref Vec[ProjectMembersMember]) -> String {
     let lines: Vec[String] = members.iter().filter_map(fn(m) {
         let named = m.fetched ?? return null
         f"{named}={m.root.display()}"
@@ -470,7 +470,7 @@ fn project_members_a_nikaia_package(key: ref String, named: ref String, at: ref 
 /// resolved is the one the next build reads. With nothing by version, no
 /// Cargo runs. Under a build, the `rustc` wrapper is handed the answer in
 /// `project_members_fetched_variable()` instead.
-pub fn project_members_fetched_of[H: ProjectMembersHost](manifest: ref ProjectMembersManifest, root: ref fs::Path, host: ref H) -> collections::BTreeMap[String, fs::Path] throws {
+fn project_members_fetched_of[H: ProjectMembersHost](manifest: ref ProjectMembersManifest, root: ref fs::Path, host: ref H) -> collections::BTreeMap[String, fs::Path] throws {
     let mut out: collections::BTreeMap[String, fs::Path] = collections::BTreeMap()
     match env::var(project_members_fetched_variable()) {
         null => {},

@@ -14,12 +14,12 @@ fn check_finding_of(found: ref Finding) -> CheckFinding {
     if found.warning {
         severity = CheckSeverity::Warning
     }
-    return CheckFinding { severity: severity, span: found.span.clone(), code: found.code.clone(), message: found.message.clone(), notes: found.notes.clone(), help: found.help?.clone(), labels: [] }
+    return CheckFinding { severity: severity, span: found.span.clone(), code: found.code.clone(), message: found.message.clone(), notes: found.notes.clone(), help: found.help?.clone(), labels: [], edit: null }
 }
 
 impl CheckState {
     /// The entry an open number was joined into (ADR-285 D23).
-    pub fn open_root(ref self, start: i64) -> i64 sync {
+    fn open_root(ref self, start: i64) -> i64 sync {
         let mut at = start
         while self.flow.open_numbers.contains_key(at) {
             let joined = self.flow.open_numbers[at]?.joined ?? at
@@ -43,7 +43,7 @@ impl CheckState {
 
     /// **Every open number of a body, decided** once the body has been walked
     /// (ADR-285 D24, D25, D27).
-    pub fn numbers_typed_by_their_uses(ref mut self) sync {
+    fn numbers_typed_by_their_uses(ref mut self) sync {
         self.chars_typed_by_their_uses()
         if self.flow.open_numbers.len() == 0 {
             return
@@ -68,8 +68,8 @@ impl CheckState {
             receivers.push(receiver)
             sums.insert(head, receivers)
         }
-        self.flow.open_sums = collections::BTreeMap()
-        self.flow.open_numbers = collections::BTreeMap()
+        self.flow.open_sums.clear()
+        self.flow.open_numbers.clear()
         for (head_at, members) in groups {
             let mut head = members[0].1.clone()
             for member in members {

@@ -101,7 +101,7 @@ pub(crate) fn sysroot_package_has_for(text: &str, at: i64) -> bool {
     sysroot_package_slice(text, at, end).contains(" for ")
 }
 
-pub fn sysroot_package_shared(text: &str) -> String {
+pub(crate) fn sysroot_package_shared(text: &str) -> String {
     let keywords: Vec<&'static str> = vec!["fn ", "const ", "static ", "struct ", "enum ", "type ", "trait ", "unsafe fn ", "async fn "];
     let method_keywords: Vec<&'static str> = vec!["fn ", "const ", "unsafe fn ", "async fn "]; #[allow(clippy::redundant_locals)] let keywords = keywords;
     let n = text.as_bytes().len() as i64;
@@ -213,7 +213,7 @@ pub(crate) fn sysroot_package_raw_string(text: &str, at: i64) -> Option<i64> {
     None
 }
 
-pub fn sysroot_package_facade(file: &str, unit: &ParsedView<'_, '_, '_, '_, '_, '_>) -> String {
+pub(crate) fn sysroot_package_facade(file: &str, unit: &ParsedView<'_, '_, '_, '_, '_, '_>) -> String {
     #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in unit.items.iter() {
         let name: String = match &item.node {

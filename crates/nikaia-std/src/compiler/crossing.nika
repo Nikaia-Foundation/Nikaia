@@ -68,7 +68,7 @@ pub fn crosses(fields: ref Vec[String]) -> Crosses {
 /// A view (`&`) crosses where what it points at does - and whether *that* is
 /// borrowed for long enough is a lifetime question this does not have, so it
 /// is silence.
-pub fn plainly_sendable(written: ref String) -> bool {
+fn plainly_sendable(written: ref String) -> bool {
     let ty = written.trim()
     if ty.starts_with("&") {
         return false
@@ -89,7 +89,7 @@ pub fn plainly_sendable(written: ref String) -> bool {
 
 /// Whether a Rust type name is one of the scalars that travel unchanged into
 /// the ledger's language - or `str`, only ever seen behind a `&`.
-pub fn is_plain(name: ref String) -> bool {
+fn is_plain(name: ref String) -> bool {
     for plain in PLAIN {
         if name == plain {
             return true
@@ -231,7 +231,7 @@ fn is_a_sink(call: ref String) -> bool {
 /// **What the describer saw of the crate's promises and did not claim**
 /// (ADR-290 D10): an `unsafe impl` is a promise the toolchain can see was made
 /// and cannot see is true. The lines of the note, or none where it made none.
-pub fn promise_lines(promises: ref Vec[String]) -> Vec[String] {
+fn promise_lines(promises: ref Vec[String]) -> Vec[String] {
     let mut out: Vec[String] = []
     if promises.is_empty() {
         return out
@@ -249,7 +249,7 @@ pub fn promise_lines(promises: ref Vec[String]) -> Vec[String] {
 /// (ADR-290 D8, D9): the parameters a `Send` bound reaches, and the shortest
 /// way to a thread sink through the crate's own calls. The lines of the note,
 /// ending with the question a reviewer answers, or none where it saw neither.
-pub fn thread_lines(name: ref String, bound: ref Vec[String], way: Vec[String]?) -> Vec[String] {
+fn thread_lines(name: ref String, bound: ref Vec[String], way: Vec[String]?) -> Vec[String] {
     let mut out: Vec[String] = []
     // **The bound**, which carries the safe half on its own (D4): every safe
     // way of reaching another thread demands it of the caller.
@@ -294,7 +294,7 @@ pub fn thread_lines(name: ref String, bound: ref Vec[String], way: Vec[String]?)
 /// and `compares`, `hashes` and `copies` from what it derives (ADR-294 D9.3), each read
 /// from the source and written for review. `fields` is empty for a type whose
 /// fields were not read, which is *nobody looked*.
-pub fn type_entry(fields: ref Vec[String], derives: ref collections::BTreeSet[String]) -> TypeContract {
+fn type_entry(fields: ref Vec[String], derives: ref collections::BTreeSet[String]) -> TypeContract {
     let mut entry = TypeContract::empty()
     entry.public = true
     entry.crosses = crosses(fields)

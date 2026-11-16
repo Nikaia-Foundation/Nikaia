@@ -59,7 +59,7 @@ fn check_core_expr_char_scalars[H: CheckHost](mut state: CheckState, host: ref H
         let one = scalars[0]
         let hex = hex_of(one as i64)
         let note = f"Your editor stored this character decomposed, as {count} scalars; composed (NFC) they are the one scalar `'{one}'`, and that is what the literal is."
-        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1213", message: f"This `'…'` is written as {count} scalars that compose to one, `'{one}'`.", notes: [note], help: f"Write the composed character, `'{one}'`, or `'\\u{{{hex}}}'`.", labels: [] })
+        state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1213", message: f"This `'…'` is written as {count} scalars that compose to one, `'{one}'`.", notes: [note], help: f"Write the composed character, `'{one}'`, or `'\\u{{{hex}}}'`.", labels: [], edit: null })
         return
     }
     let mut quoted: String = ""
@@ -77,7 +77,7 @@ fn check_core_expr_char_scalars[H: CheckHost](mut state: CheckState, host: ref H
 
 /// **The walk of one expression**, and what every arm asks of the ones inside
 /// it: the arm's type, and what holds of every expression whatever it is.
-pub fn check_core_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, span: ref Span) -> Ty sync {
+fn check_core_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, span: ref Span) -> Ty sync {
     let reaching: String? = state.flow.reaching?.clone()
     state.flow.reaching = null
     state.flow.reached = reaching
@@ -210,7 +210,7 @@ fn check_core_expr_flat_get(mut state: CheckState, world: ref CheckWorld, expr: 
 
 /// **The type of one expression, by its shape.** Each arm is a function of
 /// its own, here or in the unit that moved it.
-pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, span: ref Span) -> Ty sync {
+fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, span: ref Span) -> Ty sync {
     return match expr {
         // A bare number fits every numeric type, exactly as it does in the
         // language below.
@@ -744,7 +744,7 @@ fn check_core_expr_unary[H: CheckHost](mut state: CheckState, world: ref CheckWo
             let boolean = check_core_expr_named("bool")
             let value = value_of_a_copy(found.unseen())
             // **`!` on a vector or a mask flips each lane** (ADR-377 D3).
-            if integer_named(value) != null || check_simd_kind(value).len() > 0 {
+            if integer_named(value) != null || (check_simd_kind(value).len() > 0 && !check_simd_float_vector(value)) {
                 value
             } else if found.fits(boolean) {
                 boolean
@@ -944,7 +944,7 @@ fn check_core_async_crash[H: CheckHost](mut state: CheckState, world: ref CheckW
 /// **A walk with `within:` can fail where it ends** (ADR-async-5 D27): the
 /// step that ends it throws `task::TimedOut` once the deadline ran out, and
 /// that enters the function's throw set as any failing call's does.
-pub fn check_core_walk_timed_out(mut state: CheckState, span: ref Span) sync {
+fn check_core_walk_timed_out(mut state: CheckState, span: ref Span) sync {
     let function = state.current?.clone() ?? ""
     check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `par_iter(within:)` can run out.", "When the deadline runs out, no element starts any more and the step that ends the walk throws `task::TimedOut` (ADR-async-5 D27).", f"Add `throws` to `{function}`, or handle it at the call: `… catch {{ … }}`.")
 }

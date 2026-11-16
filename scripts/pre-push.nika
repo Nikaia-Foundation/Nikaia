@@ -22,8 +22,21 @@
 // staged is what the next commit holds; with nothing staged it is HEAD.
 // `bump.py check` runs there too: it read the working tree, so another agent's
 // unstaged `.nika` move turned `version` red for every committer (#1187).
+//
+// `page-examples` (owner, 2026-11-15): when what is staged touches guide/,
+// website/ or tests/page-examples/, the examples of those pages go through
+// `nikaia test` in tests/page-examples, as CI's `examples` job does (about a
+// minute; the package's built `target/` is copied in first). Nothing of those
+// staged: the line says `page-examples skipped`. The compiler it runs is
+// the repository's own build (`target/fast/nikaia`, else `target/release`):
+// its directory goes first on PATH, since the examples' program spawns a
+// bare `nikaia` too; `nikaia` on PATH as it is only when neither is built
+// (#1883: the step failed with "no such file or directory: nikaia" wherever
+// target/fast was not on PATH).
 
 use std::cli
+use std::env
+use std::fs
 use std::process
 
 fn check(name: String, cmd: String, args: Vec[String], dir: String) -> bool throws {
@@ -36,6 +49,46 @@ fn check(name: String, cmd: String, args: Vec[String], dir: String) -> bool thro
     println(out.stdout.trim_end())
     println(out.stderr.trim_end())
     return false
+}
+
+// The pages' examples, only when a staged path can change them.
+fn page_examples(copy: String) -> bool throws {
+    let staged = process::run("git", ["diff", "--cached", "--name-only"]).stdout.clone()
+    let mut touched = false
+    for line in staged.lines() {
+        if line.starts_with("guide/") || line.starts_with("website/") || line.starts_with("tests/page-examples/") {
+            touched = true
+        }
+    }
+    if !touched {
+        println("page-examples skipped")
+        return true
+    }
+    let dir = f"{copy}/tests/page-examples"
+    process::run("cp", ["-r", "tests/page-examples/target", f"{dir}/"])
+    let bin = pre_push_bin()
+    let path = env::var("PATH") ?? ""
+    let exe = if bin == "" { "nikaia" } else { f"{bin}/nikaia" }
+    let out = process::run(exe, ["test"]; dir: dir, env: [("PATH", f"{bin}:{path}")])
+    if out.code == 0 {
+        println("page-examples green")
+        return true
+    }
+    println("page-examples red")
+    println(out.stdout.trim_end())
+    println(out.stderr.trim_end())
+    return false
+}
+
+// The directory of the repository's built compiler, absolute; "" when
+// neither build exists (PATH is then searched as it is).
+fn pre_push_bin() -> String throws {
+    for dir in ["target/fast", "target/release"] {
+        if fs::exists(f"{dir}/nikaia", fs::Root::Anywhere) {
+            return process::run("realpath", [dir.clone()]).stdout.trim().clone()
+        }
+    }
+    return ""
 }
 
 fn main() throws {
@@ -55,6 +108,7 @@ fn main() throws {
             println("badges stale (the driver's)")
         }
         ok = check("version", "python3", ["scripts/bump.py", "check"], copy.clone()) && ok
+        ok = page_examples(copy.clone()) && ok
     }
     process::run("rm", ["-rf", copy])
     if !ok { process::exit(1) }

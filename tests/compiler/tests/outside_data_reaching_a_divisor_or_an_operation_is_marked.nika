@@ -1,0 +1,25 @@
+// Outside data reaching a divisor or a plain `+`, `-` or `*` is marked
+// `outside` by `--bounds`, with its source; `wrapping_*` never is
+// (ADR-396 D7, D8, #1660).
+use std::io
+use std::text
+
+fn share(total: i64, parts: i64) -> i64 {
+    return total / parts
+}
+
+fn main() throws {
+    let n = text::parse_i64(io::read_to_string().trim()) ?? 4
+    println(100 / n)
+    let m = n * 1000
+    println(m.wrapping_mul(2))
+    println(share(100, n))
+    let d = text::parse_i64(io::read_to_string().trim()) ?? 2
+    return if d <= 0 || d > 1000
+    println(100 / d)
+    let small = d as i32
+    println(small + 1)
+    let local = 5
+    let q = local * 3
+    println(100 / q)
+}

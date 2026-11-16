@@ -9,7 +9,7 @@ use std::collections
 
 /// **A handler's `error` where several error types arrive** (ADR-280 D30): its
 /// members, and none where it is not one.
-pub fn several_errors_of(ty: ref Ty) -> Vec[Ty] sync {
+fn several_errors_of(ty: ref Ty) -> Vec[Ty] sync {
     return match ty {
         Ty::Named { name, args, view } => if name == "Error" && args.len() > 1 && !view { args.clone() } else { [] },
         else => [],
@@ -20,7 +20,7 @@ pub fn several_errors_of(ty: ref Ty) -> Vec[Ty] sync {
 /// #728): a float literal is an `f64` unless its use asks for an `f32`, so a
 /// float written out - negated, in parentheses, or worked out of others - goes
 /// into an `f32` place, an `f32?`, or a list of them, as it is written.
-pub fn check_float_literal_fits(value: ref Expr, want: ref Ty) -> bool {
+fn check_float_literal_fits(value: ref Expr, want: ref Ty) -> bool {
     return match want {
         Ty::Nullable(inner) => check_float_literal_fits(value, inner),
         Ty::Named { name, args, .. } => {
@@ -49,7 +49,7 @@ pub fn check_float_literal_fits(value: ref Expr, want: ref Ty) -> bool {
 }
 
 /// Whether a value is floats written out and nothing else.
-pub fn check_floats_written(value: ref Expr) -> bool {
+fn check_floats_written(value: ref Expr) -> bool {
     return match check_peeled(value) {
         Expr::LitFloat(_, _) => true,
         Expr::Unary { op, expr, .. } => op == UnaryOp::Neg && check_floats_written(expr),
@@ -105,14 +105,14 @@ fn expect_code(what: ref String) -> String sync {
 impl CheckState {
     /// **A float written out beyond the `f32` range, in an `f32` place**
     /// (Part I 2.2, ADR-285 D33, #737): `NK1116`, as for `as f32`.
-    pub fn floats_beyond_f32(ref mut self, value: ref Expr, want: ref Ty, span: ref Span) sync {
+    fn floats_beyond_f32(ref mut self, value: ref Expr, want: ref Ty, span: ref Span) sync {
         if check_floats_beyond_f32(value, want) {
             self.findings.push(check_refusal("NK1116", span, "This number is beyond the range of an `f32`.", ["An `f32` holds finite values up to about 3.4e38 either side of zero."], "Keep it an `f64`, or write a number within the `f32` range."))
         }
     }
 
     /// Report only when both sides are known and they disagree.
-    pub fn expect_type(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) sync {
+    fn expect_type(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) sync {
         if found.is_unknown() {
             self.literal_receivers_take(want)
         }
@@ -205,7 +205,7 @@ impl CheckState {
     /// D1, widening ADR-233 D4 from a call to every such place): a name of a
     /// `ref C` where a `C` or a `C?` is wanted is copied out of, `*name`
     /// below. A `*` on what an operator made is not Rust, so only a name.
-    pub fn a_view_copied_out(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?) -> bool sync {
+    fn a_view_copied_out(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?) -> bool sync {
         let given = value ?? return false
         let named = match given {
             Expr::Variable(_, _) => true,
@@ -240,7 +240,7 @@ impl CheckState {
         return true
     }
 
-    pub fn expect_kept(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?, keeper: ref String, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) sync {
+    fn expect_kept(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr?, keeper: ref String, span: ref Span, what: ref String, message: fn(ref String, ref String) -> String sync) sync {
         // **A place that says its type is a use of the numbers put there**
         // (ADR-285 D24): a field, a `let`'s annotation, what a function hands
         // back.

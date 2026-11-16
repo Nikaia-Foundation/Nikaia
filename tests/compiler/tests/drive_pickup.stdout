@@ -1,0 +1,7 @@
+PICKUP issue-1620: its run was cut off after its report, the follow-up runs now
+builder done issue-1620 (picked up)
+left: issue-1621.md.running
+unpushed: lane/issue-1620.md
+api repos/Nikaia-Foundation/Nikaia/issues/1620/comments -F
+api -X DELETE
+again: []

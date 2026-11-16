@@ -3,19 +3,21 @@
 What a main session does. **Every main session is a supervisor, of its own
 work** (owner, 2026-11-14): the sessions running at the same time (a solver, a
 CI session, a lane) form a swarm, each with its own driver
-(`scripts/drive.nika`) and its own agents. Each one talks to the owner, raises
-the version for what its own driver pushed, writes its own `CHANGELOG.md`
-heading and its own `docs/tokenspeed.md` rows, and takes new `NK` codes for its
-own agents; none waits for another session to do this, and none commits
-another session's rows or headings. A collision in the version lines or
-`CHANGELOG.md` is repaired by whoever pushes second (*Versions and error
-codes*). Builders do not need this file; the rules
-for everyone are in `CLAUDE.md`. Since the owner removed the architect role
-(2026-11-01) the supervisor also writes the briefs, keeps the lanes and the
-issues and decides obvious language gaps (*Language decisions*); anything else
-goes to the owner. The cycle and the hand-over between main sessions are
-below, under *Running the lanes*; briefs and reports under *Briefs and
-reports*.
+(`scripts/drive.nika`) and its own agents. Each one talks to the owner and
+takes new `NK` codes for its own agents. **The work order is the issue**: the
+driver queues its lane's `ready` issues itself and renders the agent's prompt
+from each; nobody writes briefs by hand. **The release is the driver's**: after
+each push it runs `scripts/release.nika`, which raises the version and writes
+the `CHANGELOG.md` entry from the reports' `Changelog:` lines; the session
+checks that it ran (`DIR/released.txt` must exist) and does not do it by hand.
+None commits another session's rows or headings. A collision in the version
+lines or `CHANGELOG.md` is repaired by whoever pushes second (*Versions and
+error codes*). Builders do not need this file; the rules for everyone are in
+`CLAUDE.md`. Since the owner removed the architect role (2026-11-01) the
+supervisor keeps the lanes and the issues and decides obvious language gaps
+(*Language decisions*); anything else goes to the owner. The cycle and the
+hand-over between main sessions are below, under *Running the lanes*; the
+reports under *Briefs and reports*.
 
 ## Reporting to the owner
 
@@ -67,7 +69,8 @@ reports*.
   -- --dry-run DIR` prints one `CI` line; never the MCP `actions_list` (tens of
   k tokens). CI logs: the proxy refuses the blob download; failing test names
   come from `gh api .../check-runs/<job id>/annotations`. A red run gets a
-  fix-forward brief (or a revert) from the supervisor.
+  fix-forward from the supervisor (a `ready` issue, its `#N` line first in the
+  lane's `batch.txt`), or a revert.
 
 ## Trunk, CI and issues
 
@@ -190,6 +193,15 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   than it saves. Leaves first: a consumer moved before its dependencies finds
   its errors late. Record the state in the commit message after each chunk.
   One builder at a time for now.
+* **A sweep runs alone, and lands in one short window** (#1850). An issue
+  whose change rewrites files across the lanes (a visibility pass, a rename,
+  a migration of every compiler `.nika`: #1831 touched 459 files) is queued
+  when no other session's builder edits those files, or its brief says to
+  make the sweep the run's last step: edit, lower, build, commit, with no
+  probing or test runs in between. A sweep left uncommitted for a cycle
+  makes every other run that edits one of its files stage hunk by hunk
+  around it (#1808 filtered `pub` lines out of three bounds files and their
+  lowered `.rs` with a script).
 * **Tokens: one agent, one slice, at most 100-150 turns, then a fresh one.**
   Build agents are started as the `builder` type (`.claude/agents/builder.md`).
   The measure is tokens per moved line (target below 50 k); turns are the guard
@@ -247,7 +259,10 @@ What the owner expects from such a round:
   round - not left to whoever builds it. An ADR states the reasons and the
   rejected alternatives, not how the question was found or what was broken
   before; that is the issue's. The specification states the rule and nothing
-  else: no status, no history, no reasons, no padding.
+  else: no status, no history, no reasons, no padding. Every code example in
+  both is run through `scripts/probe.nika --check` (on stubs for what is not
+  built yet) before the build is ordered: syntax the language refuses is
+  fixed in the text, not left for the builder to decide (#1687, I6).
 * **The issue gets the history and the build order**: how the question came up,
   what was checked, the decision in short with links to the ADR and the
   specification, and a numbered *To build* list with tests that another session
@@ -290,6 +305,29 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   the owner, and starts again once that is handled. A watcher in the
   background wakes the main session when the driver ends, and the hourly
   check-in restarts a driver it finds stopped.
+* **Woken only for what matters** (owner, 2026-11-15 and 2026-11-16, #1821).
+  The driver prints every `ESCALATE`, `STOP` and `PUSHED` line a second time
+  as one self-contained line `WAKE <KIND> read=<path or -> do=<action>:
+  <line>` (`drive_wake_line`; `nikaia run scripts/drive.nika -- --wake DIR
+  LINE` shows it). A watcher the main session puts on the driver's log greps
+  `^WAKE ` and nothing else, and on a wake the session reads only the file
+  `read=` names and does what `do=` says: not the log, not the other
+  reports, not CI. Every other line (`FOUND`, `FILED`, `IMPROVE*`, `SUITE`,
+  `RELEASE`, builder runs, `MERGE ... pulled`, `CLEANUP`) is for the log
+  only (the background task's end wakes the session in any case).
+
+  | WAKE kind | read | do |
+  | :--- | :--- | :--- |
+  | `PUSHED` | - | nothing: the driver ran `release.nika` itself (not under `--no-bump`, nor while HEAD holds untested commits: then the next push releases) |
+  | `STOP` | - | restart the driver (time limit, `--max` reached) |
+  | `CUT` | the report | accept it with a `Supervisor:` line, or file what it names; restart (`brief missing`: `DIR/batch.txt`, put the issue's `#N` line in its place or drop the line; `Result: blocked`, which no `Supervisor:` line clears: file or decide what `Found:` names and write its `#M` under the report's `Needs:`; the restarted driver drops the brief and blocks the issue until `#M` is closed, as it does by itself when it filed the Founds, #1857) |
+  | `OWNER` | the report (`DIR/owner.txt` for the open questions) | tell the owner the question; restart |
+  | `RED` | `DIR/qa-input.txt` (suite red after two QA rounds); - (CI red on `develop`: the line names the jobs) | file the fix-forward as a `ready` issue (the failed jobs, the push's commits) and put its `#N` line first in `DIR/batch.txt` (`batch.nika` writes its brief); restart |
+  | `MERGE` | - | merge `origin/develop` by hand and resolve the sources the line names (`merge left open`: finish or abort it now); restart |
+  | `BATCH` | - | no `ready` issue left in the lane (every focus area empty): decide or file the waiting ones (`ready`); restart |
+  | `ESCALATE` | - | fix the cause the line names; restart |
+  | `PROVED` | `DIR/proved.log` | find the commit of the range that lowered the proof figure and file it for the prover lane; the driver goes on |
+  | (the driver's task ended, no `WAKE` line) | the log's last 20 lines | the driver crashed: fix or file the cause the lines show; restart |
 * **The cycle of one DIR.** `nikaia run scripts/drive.nika -- DIR` with
   `run_in_background` (`--max N` agent runs, default 8; `--dry-run` shows the
   next step; the bug lane with `--no-bump`). It loops on `cycle.nika`: runs
@@ -297,8 +335,9 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   first; the run's files stay untracked working files, #1252), applies `BUMP
   pending` when CI is green, and on `CUT`, `BATCH DONE` and a `RED` with no
   builder queued waits for the batch's suite and stops (`ESCALATE <stop line>:
-  the supervisor writes the next briefs`): the supervisor writes the next
-  briefs (for `RED` the fix-forward, queued first) and starts it again. It
+  <what to do>`, by kind, #1887): the supervisor acts on the issues (files
+  or decides the waiting ones; for `RED` the fix-forward issue, its `#N` line queued first) and
+  starts it again. It
   prints one line per agent run and stops with one final line, exit 2, on an
   escalation: an `OWNER` line, `ESCALATE` of `agent.nika`, a stop line,
   `--max` reached, a push rejected whose merge of `origin/develop` conflicted
@@ -315,7 +354,15 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   the owner in German, per *Decision rounds*, with the issue. After the answer
   the supervisor re-queues: the build brief first in `batch.txt`, the blocked
   brief's report renamed `BRIEF.run1.report.md` (so `batch.nika` sees it
-  unrun), `DIR/QUESTION` deleted.
+  unrun), `DIR/QUESTION` deleted. A `#N` brief whose last run ended blocked
+  naming an open `#M` under `Needs:`/`Found:`, or ended partial naming one
+  under `Needs:` (#1827), is dropped from the batch
+  again, `ready` swapped for `blocked` (`DROPPED #N waits for #M`, #1819):
+  re-queue it once #M is closed. A renamed `run<k>` report holds only
+  through its `Needs:` and the Founds the driver filed (#1881): write there
+  what the re-queued brief still waits for. An issue never waits for the
+  issue it is `Part of`, nor for a `#M` in quoted text (a backtick span, a
+  fenced or `<details>` block).
 * **By hand**: `nikaia run scripts/batch.nika -- DIR` after a hand-back
   (`--tokens BRIEF TOKENS CALLS` records the harness figures in
   `DIR/tokens.txt`); `nikaia run scripts/status.nika -- DIR` (CI, batch and
@@ -470,8 +517,8 @@ own driver run:
   *A missing form stops the work*). A brief with a `Blocks:` line goes before
   the lane's own picks. Its own `NK` block, no version raise (`--no-bump`).
 * **Improvement lane, `docs/briefs/improve/`** (owner, 2026-11-15): the
-  issues labelled `improve`, which the driver files from the reports'
-  `Issue:`, `Deviation:`, `Needs:` and `Friction:` (*The report*). The lane
+  issues labelled `improve`, which the driver files from the new points of
+  the reports' `Issue:`, `Needs:` and `Friction:` (*The report*). The lane
   judges each: a general fix (a rule in `docs/`, a script, the driver, a
   brief template, a check that turns builders red for nothing) it builds; noise
   (one run's slip, already fixed, a wish against an ADR) it closes with a
@@ -667,7 +714,8 @@ The builder writes exactly `<full brief path>.report.md`, these fields only:
     Needs: none | <NK code, supervisor decision, owner decision>
     Changelog: none | <one sentence for the version heading>
     Owner: none | <one question for the owner, never a role>   (batch.nika: `OWNER <brief>: <text>`; cycle.nika writes the first to DIR/QUESTION, a second while it exists prints `OWNER second: ...`)
-    Friction: none | <one sentence: what cost turns or tokens needlessly (a tool, a rule, noise such as a red check that was not the run's)>
+    Friction: none | <one sentence: what cost turns or tokens needlessly (a tool, a rule, noise such as a red check that was not the run's); a claim that the compiler refuses or lacks something names each shape tried, its snippet and the code it drew, #1728>
+    Comment: #N <text>   (optional, one line each: what to say on issue N, which the run is not about; drive.nika posts it there, #1698)
     Cache: none | <large entries newly created, MB>
     Disk freed: <GB>
     Measure: <builds=.. clippy_with_tests=.. ...>   (never under Found)
@@ -680,9 +728,19 @@ or `PUSH REJECTED <sha>, report <path>`, plus `NEEDS: <short>` when `Needs`
 is not `none`.
 
 The driver files issues from the report itself (owner, 2026-11-15): each
-`Found:` as an issue labelled `bugs` for the bug lane, and, once per report, an
-`Issue:` that is not `complete`, a `Deviation:`, `Needs:` or `Friction:` other
-than `none` as one issue labelled `improve` for the improvement lane (*Lanes*).
+`Found:` as an issue labelled `bugs` for the bug lane, and, once per report, the
+new points of `Issue:` (each answer that is not `complete`), `Needs:` and
+`Friction:` as one issue labelled `improve` for the improvement lane (*Lanes*).
+Only new points (#1818, `drive_improve_sorted`, `--improve-plan` shows it): a
+`Deviation:` stays in the report (`IMPROVE-DROP`), read when the cut is
+accepted; a `broke I<n>` answer is a comment on the run's issue
+(`IMPROVE-BROKE #N`); a point the report says it closed or built, or that
+names a rules file under `docs/`, `scripts/` or `.claude/` the run's commit
+changed, is dropped; one an open or recently closed improvement issue already
+has (its title or a `## Reported` line, by word overlap) is a comment there
+(`IMPROVE-DUP #M`). The driver also posts each `Comment: #N <text>` as a
+comment on issue N (#1698: a `Needs: supervisor: comment on #N` became an improvement issue no builder could do,
+having no GitHub). A `Comment:` without its `#N` goes to the improvement issue.
 Nobody has to ask a builder what went badly. The supervisor reads the reports'
 fields before the next batch, writes the `Supervisor:` line, comments on or
 reopens an issue a `Deviation` leaves open, lists

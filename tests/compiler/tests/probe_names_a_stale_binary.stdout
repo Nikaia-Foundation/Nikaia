@@ -1,0 +1,7 @@
+== binary newer than the sources
+stub run
+exit 0
+== a source newer than the binary
+note: target/fast/nikaia is older than 1 compiler source file(s) in the tree (e.g. crates/c/src/a.nika): it may predate HEAD, so build it (cargo build --profile fast -p nikaia) before reading a refusal as a defect
+stub run
+exit 0

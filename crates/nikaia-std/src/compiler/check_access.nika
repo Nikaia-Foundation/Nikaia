@@ -15,7 +15,7 @@ impl CheckState {
     /// nothing gives it to a task (Part I 8.2). Dropping the name silently would
     /// be the worse answer: the body would then refer to something nothing
     /// declared, which `NK1117` reports about a name the author *did* write.
-    pub fn a_task_takes_no_arguments(ref mut self, world: ref CheckWorld, params: ref Vec[winnow_grammar::Symbol], span: ref Span) sync {
+    fn a_task_takes_no_arguments(ref mut self, world: ref CheckWorld, params: ref Vec[winnow_grammar::Symbol], span: ref Span) sync {
         if params.len() == 0 {
             return
         }
@@ -41,7 +41,7 @@ impl CheckState {
     /// [`Checker::reachable`] uses: a type named `http::Request` is another
     /// package's, and one named `Request` is this package's, where every field is
     /// visible however it is declared.
-    pub fn field_is_reachable(ref mut self, ty: ref String, field: ref FieldContract, span: ref Span) sync {
+    fn field_is_reachable(ref mut self, ty: ref String, field: ref FieldContract, span: ref Span) sync {
         if field.public {
             return
         }
@@ -95,7 +95,7 @@ impl CheckState {
     }
 
     /// `NK1109`: an option a function does not have.
-    pub fn no_such_option(ref mut self, key: ref String, name: ref String, signature: ref Signature, span: ref Span) sync {
+    fn no_such_option(ref mut self, key: ref String, name: ref String, signature: ref Signature, span: ref Span) sync {
         let mut names: Vec[String] = []
         for option in signature.config {
             names.push(option.name.clone())
@@ -104,7 +104,7 @@ impl CheckState {
     }
 
     /// `NK1109` for an option not among `names`, the options `key` has.
-    pub fn no_such_option_among(ref mut self, key: ref String, name: ref String, names: ref Vec[String], span: ref Span) sync {
+    fn no_such_option_among(ref mut self, key: ref String, name: ref String, names: ref Vec[String], span: ref Span) sync {
         let near = nearest_name(name, names)
         let note: String = match names.len() {
             0 => f"`{key}` takes no options: its declaration has no `;`.",
@@ -131,7 +131,7 @@ impl CheckState {
     /// [ADR-133](../../docs/specification/adr/adr-133.md) D1's options-only call,
     /// which this compiler does not parse yet, and *nothing declares a struct*
     /// would send them looking for a `struct` they never wanted.
-    pub fn a_struct_nothing_declares(ref mut self, world: ref CheckWorld, name: ref String, span: ref Span) sync {
+    fn a_struct_nothing_declares(ref mut self, world: ref CheckWorld, name: ref String, span: ref Span) sync {
         let is_a_function = world.own.functions.contains_key(name) || world.library.functions.contains_key(name) || world.own.functions.contains_key(f"{name}::new")
         let mut note: String = "Braces after a name build a struct, and no struct of that name is declared here or in a package you use."
         let mut help: String = "Declare the `struct`, or fix the name."
@@ -154,7 +154,7 @@ impl CheckState {
     ///
     /// The message carries the whole rewrite rather than the rule, because the
     /// rewrite is mechanical and the reader has the fields in hand.
-    pub fn a_literal_written_like_a_call(ref mut self, world: ref CheckWorld, name: ref String, config: ref Vec[ConfigArg], span: ref Span) sync {
+    fn a_literal_written_like_a_call(ref mut self, world: ref CheckWorld, name: ref String, config: ref Vec[ConfigArg], span: ref Span) sync {
         let mut fields: Vec[String] = []
         for setting in config {
             fields.push(world.words.resolve(setting.name).clone())
@@ -176,7 +176,7 @@ impl CheckState {
     ///
     /// Recursive, because a pattern nests: an or-pattern inside a tuple's part
     /// is the same rule one level down.
-    pub fn an_or_pattern_that_binds_unevenly(ref mut self, world: ref CheckWorld, pattern: ref MatchPattern, span: ref Span) sync {
+    fn an_or_pattern_that_binds_unevenly(ref mut self, world: ref CheckWorld, pattern: ref MatchPattern, span: ref Span) sync {
         match pattern {
             MatchPattern::Or(alternatives) => {
                 let mut first: collections::BTreeSet[String] = collections::BTreeSet()
@@ -228,7 +228,7 @@ impl CheckState {
 
     /// The message [`a_match_that_misses_a_case`] raises, with what is missing
     /// already spelled: the variants for an enum, `else` for everything else.
-    pub fn a_case_is_missing(ref mut self, missing: ref String, span: ref Span) sync {
+    fn a_case_is_missing(ref mut self, missing: ref String, span: ref Span) sync {
         self.findings.push(check_refusal("NK1151", span, f"This `match` doesn't handle `{missing}`.", ["A `match` has to handle every case, so that adding a variant to a type shows you every place that needs to know."], "Add an arm for it, or `else => …` for everything else."))
     }
 }
@@ -241,7 +241,7 @@ impl CheckState {
 /// there is one, which `NK2503`'s way out writes a path onto
 /// (`state.counts.get()`) and which is `None` for an argument that is not a
 /// name at all.
-pub fn names_the_argument(world: ref CheckWorld, expr: ref Expr, at: i64) -> (String, String?) sync {
+fn names_the_argument(world: ref CheckWorld, expr: ref Expr, at: i64) -> (String, String?) sync {
     let prose: String = match expr {
         Expr::Variable(name, _) => f"`{world.words.resolve(name)}`",
         Expr::Field { name, .. } => f"the `{world.words.resolve(name)}` this passes",
@@ -258,7 +258,7 @@ pub fn names_the_argument(world: ref CheckWorld, expr: ref Expr, at: i64) -> (St
 /// D2). So the answer is exact where it is `Some` - a name and a chain of
 /// fields is all of it - and absent where a guess would be needed, which is
 /// the same polarity as the ellipsis `NK2204` prints.
-pub fn dotted_path(world: ref CheckWorld, expr: ref Expr) -> String? sync {
+fn dotted_path(world: ref CheckWorld, expr: ref Expr) -> String? sync {
     return match expr {
         Expr::Variable(name, _) => world.words.resolve(name).clone(),
         Expr::Field { base, name, .. } => dotted_field(world, base, name),
@@ -289,7 +289,7 @@ fn dotted_field(world: ref CheckWorld, base: ref Expr, name: winnow_grammar::Sym
 /// A **tuple's parts** are deliberately not walked: a part names a variant
 /// of some *other* type, and what this is collecting is the cases of the
 /// one being matched on.
-pub fn variants_named(world: ref CheckWorld, pattern: ref MatchPattern, mut out: collections::BTreeSet[String]) sync {
+fn variants_named(world: ref CheckWorld, pattern: ref MatchPattern, mut out: collections::BTreeSet[String]) sync {
     match pattern {
         MatchPattern::Path(path) => a_last_segment(world, path, out),
         MatchPattern::Tuple { path, .. } => a_last_segment(world, path, out),

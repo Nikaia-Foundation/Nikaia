@@ -1,6 +1,9 @@
 // scripts/drive.nika --time-up: the time limit after which the driver starts
 // no new agent (NIKAIA_DRIVE_LIMIT_MIN, default 105 minutes, counted from
-// NIKAIA_DRIVE_STARTED where a restart set it).
+// NIKAIA_DRIVE_STARTED where a restart set it); `--time-up DIR` (#1885): an
+// agent of DIR starts only where the minutes left until the task's end
+// (NIKAIA_DRIVE_TASK_MIN, default 120) cover the longest of DIR's last runs
+// (BRIEF.posted to BRIEF.run.json, else its duration_ms), 60 with none.
 use std::fs
 use std::process
 use std::text
@@ -26,6 +29,13 @@ fn case(nikaia: String, repo: String, name: String, ago: i64, limit: String) thr
     println(f"{name}: {out.stdout.trim()}")
 }
 
+fn lane(nikaia: String, repo: String, dir: String, name: String, ago: i64, task: String) throws {
+    let now = text::parse_i64(process::run("date", ["+%s"]).stdout.trim()) ?? 0
+    let started = f"{now - ago}"
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--time-up", dir.clone()]; dir: repo, env: [("NIKAIA_DRIVE_STARTED", started), ("NIKAIA_DRIVE_TASK_MIN", task)])
+    println(f"{name}: {out.stdout.trim().replace(dir, "DIR")}")
+}
+
 fn main() throws {
     let repo = root()
     let nikaia = toolchain()
@@ -33,4 +43,18 @@ fn main() throws {
     case(nikaia.clone(), repo.clone(), "an hour and 50 in", 6600, "")
     case(nikaia.clone(), repo.clone(), "limit 0", 60, "0")
     case(nikaia.clone(), repo.clone(), "limit 120, an hour and 50 in", 6600, "120")
+    // A lane without runs: a run is taken as 60 minutes.
+    let empty = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    lane(nikaia.clone(), repo.clone(), empty.clone(), "no runs, 50 min in", 3030, "")
+    lane(nikaia.clone(), repo.clone(), empty.clone(), "no runs, 65 min in", 3930, "")
+    // Runs of 40 minutes (posted to run.json) and of 10 (duration_ms only,
+    // no posted marker): the longest counts.
+    let runs = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let now = text::parse_i64(process::run("date", ["+%s"]).stdout.trim()) ?? 0
+    process::run("sh", ["-c", f"cd {runs} && echo '\"duration_ms\":45000,' > a.md.run.json && touch a.md.posted && touch -d @{now - 3000} a.md.posted && touch -d @{now - 600} a.md.run.json && echo '\"duration_ms\":600000,' > b.md.run.json"])
+    lane(nikaia.clone(), repo.clone(), runs.clone(), "runs of 40, 75 min in", 4530, "")
+    lane(nikaia.clone(), repo.clone(), runs.clone(), "runs of 40, 85 min in", 5130, "")
+    lane(nikaia.clone(), repo.clone(), runs.clone(), "runs of 40, 85 min in, task 180", 5130, "180")
+    lane(nikaia, repo, runs.clone(), "runs of 40, 110 min in", 6630, "")
+    process::run("rm", ["-rf", empty, runs])
 }

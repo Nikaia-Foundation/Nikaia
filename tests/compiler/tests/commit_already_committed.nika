@@ -1,0 +1,54 @@
+// scripts/commit.nika run again on a report an earlier attempt already
+// committed (#1794): every listed file unchanged and a recent commit with the
+// report's subject touching them gives `already committed <sha8> local` and
+// `Pushed: local <sha>`, and no second commit; another subject is still
+// refused as unchanged.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/commit.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/commit.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn git(dir: String, args: Vec[String]) -> String throws {
+    let mut all: Vec[String] = ["-c", "user.name=T", "-c", "user.email=t@example.com"]
+    for a in args { all.push(a.clone()) }
+    return process::run("git", all; dir: dir).stdout.trim().clone()
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let env = [("GIT_AUTHOR_NAME", "T"), ("GIT_AUTHOR_EMAIL", "t@example.com"), ("GIT_COMMITTER_NAME", "T"), ("GIT_COMMITTER_EMAIL", "t@example.com")]
+    git(tmp.clone(), ["init", "-q", "-b", "develop"])
+    fs::write(f"{tmp}/b.txt", fs::Root::Anywhere, "base\n")
+    git(tmp.clone(), ["add", "b.txt"])
+    git(tmp.clone(), ["commit", "-q", "-m", "base"])
+    fs::write(f"{tmp}/a.txt", fs::Root::Anywhere, "x\n")
+    let report = "Result: done\nFiles: a.txt\nCommit: a subject\nChangelog: none\nPushed: none\n"
+    fs::write(f"{tmp}/X.md.report.md", fs::Root::Anywhere, report)
+    process::run(nikaia.clone(), ["run", f"{repo}/scripts/commit.nika", "--", f"{tmp}/X.md.report.md"]; dir: tmp.clone(), env: env.clone())
+    let sha = git(tmp.clone(), ["rev-parse", "HEAD"])
+    let short = git(tmp.clone(), ["rev-parse", "--short=8", "HEAD"])
+    // The resumed attempt: the report as it was before the commit.
+    fs::write(f"{tmp}/X.md.report.md", fs::Root::Anywhere, report)
+    let again = process::run(nikaia.clone(), ["run", f"{repo}/scripts/commit.nika", "--", f"{tmp}/X.md.report.md"]; dir: tmp.clone(), env: env.clone())
+    println(again.stdout.trim().replace(short, "SHA8"))
+    println(fs::read_to_string(f"{tmp}/X.md.report.md", fs::Root::Anywhere).trim().replace(sha, "SHA"))
+    fs::write(f"{tmp}/Y.md.report.md", fs::Root::Anywhere, "Result: done\nFiles: a.txt\nCommit: another subject\nChangelog: none\nPushed: none\n")
+    let other = process::run(nikaia, ["run", f"{repo}/scripts/commit.nika", "--", f"{tmp}/Y.md.report.md"]; dir: tmp.clone(), env: env)
+    println(other.stdout.trim())
+    println(git(tmp.clone(), ["log", "--format=%s"]))
+    process::run("rm", ["-rf", tmp])
+}

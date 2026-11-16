@@ -167,6 +167,26 @@ the compiler, because it needs a database.
 [`examples/README.md`](../examples/README.md) lists which gaps in the language each
 example exposed, and which are still open.
 
+### Serving over TLS
+
+`http::listen` takes the option `tls:`, and the server then speaks HTTPS. The
+certificate and its private key are read from PEM files:
+
+```nika
+let tls = net::Tls::files("cert.pem", "key.pem")
+http::listen("0.0.0.0:8443"; tls: tls) fn(request) {
+    return http::Response::text("hello over TLS")
+}
+```
+
+A client opens an encrypted connection with `net::connect(at; tls:
+net::Tls::trusting("cert.pem"))`. It trusts the system's roots, plus the certificate
+in the file, which lets a test talk to a server that signed its own. TLS comes from
+the Rust library `rustls` ([ADR-289](../docs/specification/adr/adr-289.md) D34). Each
+connection runs its handshake in its own task: a client whose handshake fails loses
+its connection, the server names the failure on stderr, and every other connection
+is answered as before.
+
 ## Where next
 
 * [A tour of the syntax](syntax.md): the language on one page, for readers coming from

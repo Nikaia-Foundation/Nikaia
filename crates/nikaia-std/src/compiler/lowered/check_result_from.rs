@@ -20,7 +20,7 @@ pub fn result_from_check(view: &ParsedView<'_, '_, '_, '_, '_, '_>, inferred: &[
     out
 }
 
-pub fn result_from_as_written(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>], sources: &mut Vec<ResultSource>) {
+pub(crate) fn result_from_as_written(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>], sources: &mut Vec<ResultSource>) {
     let mut written: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for item in items.iter() {
         match &item.node {
@@ -77,7 +77,7 @@ pub(crate) fn result_from_unknown(function: &str, named: &str) -> String { forma
 
 pub(crate) fn result_from_note() -> String { String::from("A result's `from` names the parameters its views point into (ADR-views-3 D8).") }
 
-pub fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &Type, span: &Span) -> Option<Finding> {
+pub(crate) fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &Type, span: &Span) -> Option<Finding> {
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     if code.result_from.is_empty() { return None; }
     #[allow(unused_mut)] let mut parameters: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);

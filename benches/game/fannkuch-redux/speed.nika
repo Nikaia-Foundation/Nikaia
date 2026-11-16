@@ -1,0 +1,81 @@
+// fannkuch-redux written for speed: the program of `main.nika`, its lists
+// made arrays of 16 (the game's n stays below 16), and the copy that is
+// flipped kept in one array of its own, filled again for each permutation,
+// so no permutation allocates. One thread.
+//
+//     nikaia run speed.nika -- 7
+//     228
+//     Pfannkuchen(7) = 16
+use std::cli
+use std::text
+
+struct Counts {
+	checksum: i64,
+	flips: i64,
+}
+
+fn fannkuch(n: i64) -> Counts sync {
+	let mut perm: Array[i64, 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+	let mut count: Array[i64, 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+	let mut flip: Array[i64, 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+	let mut checksum = 0
+	let mut most = 0
+	let mut even = true
+	let mut r = n
+	while true {
+		while r != 1 {
+			count[r - 1] = r
+			r = r - 1
+		}
+		if perm[0] != 0 {
+			for i in 0..<n {
+				flip[i] = perm[i]
+			}
+			let mut flips = 0
+			let mut k = flip[0]
+			while k != 0 {
+				let mut i = 0
+				let mut j = k
+				while i < j {
+					let t = flip[i]
+					flip[i] = flip[j]
+					flip[j] = t
+					i = i + 1
+					j = j - 1
+				}
+				flips = flips + 1
+				k = flip[0]
+			}
+			if flips > most {
+				most = flips
+			}
+			if even {
+				checksum = checksum + flips
+			} else {
+				checksum = checksum - flips
+			}
+		}
+		while true {
+			if r == n {
+				return Counts { checksum: checksum, flips: most }
+			}
+			let first = perm[0]
+			for i in 0..<r {
+				perm[i] = perm[i + 1]
+			}
+			perm[r] = first
+			count[r] = count[r] - 1
+			if count[r] > 0 {
+				break
+			}
+			r = r + 1
+		}
+		even = !even
+	}
+}
+
+fn main() throws {
+	let n = text::parse_i64(cli::args().nth(1) ?? "7") ?? 7
+	let result = fannkuch(n)
+	println(f"{result.checksum}\nPfannkuchen({n}) = {result.flips}")
+}

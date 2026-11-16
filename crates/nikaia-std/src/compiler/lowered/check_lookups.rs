@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn collect_library_enums(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+    pub(crate) fn collect_library_enums(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
         self.collect_enums_of(world.own);
         self.collect_enums_of(world.library);
     }
@@ -31,7 +31,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn bounds_declared_by(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, item: &Item, target: Option<&str>) {
+    pub(crate) fn bounds_declared_by(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, item: &Item, target: Option<&str>) {
         match item {
             Item::Fn { name, generics, .. } => {
                 let name = *name;
@@ -57,7 +57,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_drivers_row(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_drivers_row(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::MethodCall { method, .. } => { let method = *method; self.dsl_drivers.contains(world.words.resolve(method)) },
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
@@ -69,7 +69,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn refused_where_it_is_lowered(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn refused_where_it_is_lowered(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Dsl { .. } => true,
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
@@ -94,7 +94,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_member_of_an_open_argument(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_member_of_an_open_argument(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         let base = match expr {
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); base },
             Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); base },
@@ -117,7 +117,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn names_something_here(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn names_something_here(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(name, _) => { let name = *name; self.names_a_binding_or_a_function(world, world.words.resolve(name)) },
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.names_something_here(world, base) },
@@ -151,7 +151,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn is_a_number(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn is_a_number(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::LitInt { .. } => true,
             Expr::LitFloat(_, _) => true,
@@ -167,7 +167,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn warn_migration(&mut self, span: &Span, message: String, help: String) { self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1111"), message, notes: vec![String::from("Only `f\"…\"` strings fill in `{…}`; a plain string keeps the braces as they are.")], help: Some(help), labels: vec![] }); }
+    pub(crate) fn warn_migration(&mut self, span: &Span, message: String, help: String) { self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1111"), message, notes: vec![String::from("Only `f\"…\"` strings fill in `{…}`; a plain string keeps the braces as they are.")], help: Some(help), labels: vec![], edit: None }); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn spelling(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, span: &Span) {
@@ -190,7 +190,7 @@ pub(crate) fn any_unknown(types: &[Ty]) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn names_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> {
+pub(crate) fn names_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string())) },
         _ => None,
@@ -199,7 +199,7 @@ pub fn names_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn as_this_program_says(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, trait_name: &str) -> String {
+pub(crate) fn as_this_program_says(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, trait_name: &str) -> String {
     if world.own.traits.contains_key(trait_name) { return nikaia_std::block::Text::from(trait_name.to_string()); }
     let segments: Vec<&str> = key.split("::").collect::<Vec<_>>();
     let mut take = unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) };
@@ -219,7 +219,7 @@ pub fn as_this_program_says(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn bounds_in_a_signature(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Option<collections::BTreeMap<String, Vec<String>>> {
+pub(crate) fn bounds_in_a_signature(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Option<collections::BTreeMap<String, Vec<String>>> {
     let contract = match ledger_function(world, key) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut bounds: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
@@ -235,7 +235,7 @@ pub fn bounds_in_a_signature(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn ledger_function<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, key: &str) -> Option<&'r FnContract> {
+pub(crate) fn ledger_function<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, key: &str) -> Option<&'r FnContract> {
     if world.own.functions.contains_key(key) { return *nikaia_std::index::get(&world.own.functions, key); }
     *nikaia_std::index::get(&world.library.functions, key)
 }
@@ -243,7 +243,7 @@ pub fn ledger_function<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, key: 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn declares_a_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+    pub(crate) fn declares_a_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
         if self.structs.contains_key(name) || world.own.types.contains_key(name) { return true; }
         if name == "Self" || self.enums.contains_key(name) { return true; }
         let suffix = format!("::{}", name);

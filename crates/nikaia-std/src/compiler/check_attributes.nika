@@ -22,7 +22,7 @@ pub struct CheckAttributesMark {
 }
 
 /// The mark itself, which `std` declares and nothing else may be.
-pub fn check_attributes_mark_name() -> String {
+fn check_attributes_mark_name() -> String {
     return "meta::Attribute"
 }
 
@@ -90,7 +90,7 @@ fn check_attributes_place_word(unit: ref ParsedView, arg: ref Expr) -> String {
 
 /// **A mark as the ledger writes it**: `field, struct; repeatable`
 /// (ADR-331 D8), read off the mark's arguments.
-pub fn check_attributes_mark_text(unit: ref ParsedView, mark: ref Attribute) -> String {
+fn check_attributes_mark_text(unit: ref ParsedView, mark: ref Attribute) -> String {
     let read = check_attributes_mark_of(unit, mark)
     let mut places: String = ""
     for place in read.places {
@@ -219,7 +219,7 @@ fn check_attributes_repeats(marks: ref collections::BTreeMap[String, CheckAttrib
 }
 
 /// **Every attribute of this file, where it stands** (ADR-331 D1-D4).
-pub fn check_attributes_all[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
+fn check_attributes_all[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
     let marks = check_attributes_marks(world)
     for item in world.here.items {
         let place: String = match item.node {
@@ -565,7 +565,7 @@ fn check_attributes_argument[H: CheckHost](mut state: CheckState, world: ref Che
 
 /// **`field.attribute(X)`'s `X`** (ADR-331 D6): one type, an attribute. `null`
 /// where it is refused.
-pub fn check_attributes_an_attribute_read(mut state: CheckState, world: ref CheckWorld, args: ref Vec[Expr], span: ref Span) -> String? sync {
+fn check_attributes_an_attribute_read(mut state: CheckState, world: ref CheckWorld, args: ref Vec[Expr], span: ref Span) -> String? sync {
     let mut written: String = ""
     let mut one = false
     if args.len() == 1 {
@@ -711,7 +711,7 @@ fn check_attributes_misfit_named(literal: ref Expr, name: ref String, plain: boo
 /// **A literal that cannot be the type wanted**, said by its kind: a number
 /// has no type of its own until a use gives it one, so the general check
 /// passes it, and before a declaration there is no later use to ask.
-pub fn check_attributes_literal_misfit(literal: ref Expr, want: ref Ty) -> String? {
+fn check_attributes_literal_misfit(literal: ref Expr, want: ref Ty) -> String? {
     return match want {
         Ty::Named { name, args, .. } => check_attributes_misfit_named(literal, name, args.len() == 0),
         else => null,
@@ -721,7 +721,7 @@ pub fn check_attributes_literal_misfit(literal: ref Expr, want: ref Ty) -> Strin
 /// **What `@inline` asks, as Rust's attribute writes it** (ADR-370 D1):
 /// `@inline`, `@inline(always)`, `@inline(never)`. Null where none is written,
 /// or where the one written is refused (its words are the checker's to say).
-pub fn check_attributes_inline_written(words: ref winnow_grammar::InternerContext, attributes: ref Vec[Attribute]) -> String? {
+fn check_attributes_inline_written(words: ref winnow_grammar::InternerContext, attributes: ref Vec[Attribute]) -> String? {
     for attribute in attributes {
         if words.resolve(attribute.name) != "inline" {
             continue

@@ -16,19 +16,27 @@
 // `Owner: none` does not cut either: batch.nika auto-accepts it, #1694); an area entered with an empty queue is skipped (`FOCUS
 // <area> empty, skipped`); every area empty escalates. Before each cycle the open
 // issues labelled `ready` and the area's name, without `wip`, are appended to
-// DIR/batch.txt as `#N` (`QUEUED #N <area>`, drive_queue). A run on issue N
+// DIR/batch.txt as `#N` (`QUEUED #N <area>`, drive_queue; one a commit on
+// develop already `Fixes`: `SKIPPED #N fixed on develop`). A run on issue N
 // sets `wip` on it first and, by its report, keeps it (done, `Fixes:` names
 // #N; promote closes the issue), swaps `ready` for `blocked` (blocked), or
 // removes it (anything else), drive_wip_after; an escalation mid-run leaves
-// `wip` for the supervisor to clear. At a block's end the debriefs'
-// `Fact:` lines go into the facts files (`facts-collect.nika -- --apply`,
-// committed as docs, `FACTS <n> entered`). Before a block, the first unrun
+// `wip` for the supervisor to clear. A `#N` line stays in batch.txt after its
+// run, and batch.nika counts a brief with a report as run, so an issue left
+// `ready` is not queued nor run again in this DIR: a retry is a new line
+// `#N SUFFIX` (brief `issue-N-SUFFIX.md`) or the old line and report removed.
+// At a block's end the debriefs' `Fact:` lines go into the facts files
+// (`facts-collect.nika -- --apply`, committed as docs, `FACTS <n> entered`). Before a block, the first unrun
 // docs/briefs/bugs brief with a `Blocks:` line runs first. Test flags:
 // `--focus-next FILE [SKIPPED...]`, `--focus-log DIR AREA BRIEF...` (the
 // block's comment), `--focus-issue FILE NAME|DIR...`, `--blocks DIR`,
 // `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add),
+// `--fixed-in LOG N...` (drive_fixed_in), `--queue-plan LIST [OPEN...]`
+// (drive_queue_plan: LIST in drive_queue's `=== #N ===` record form, OPEN the
+// dependencies taken as open), `--report-aside DIR NAME [HELD...]`
+// (drive_report_aside),
 // `--wip-after RESULT FIXES N`, `--found-issue NAME N FOUND NEEDS`,
-// `--improve-issue NAME N REPORT`, `--time-up` (drive_time_up: `up` or `not up`).
+// `--improve-issue NAME N REPORT [DIR]`, `--improve-plan NAME N REPORT EXISTING`, `--time-up` (drive_time_up: `up` or `not up`), `--time-up DIR` (drive_time_check: `up`, `starts` or why not), `--pickup DIR` (drive_pickup).
 //
 // Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time;
 // before each cycle the area's ready issues (the area being DIR's last name)
@@ -47,34 +55,52 @@
 //                                 <brief>: Found: ...`, then filed as an
 //                                 issue (`ready` or `decision`, the area,
 //                                 `bugs`; `FILED #N <brief>`,
-//                                 drive_found_file); the report's `Issue:`,
-//                                 `Deviation:`, `Needs:` and `Friction:`
+//                                 drive_found_file); the report's new
+//                                 `Issue:`, `Needs:` and `Friction:` points
 //                                 filed as one issue for the improvement
 //                                 lane (`ready`, `improve`; `IMPROVE #N
-//                                 <brief>`, drive_improve_file); the batch
-//                                 goes on
+//                                 <brief>`, drive_improve_file; its body
+//                                 names the run's report and commit,
+//                                 #1706), a `broke` answer said on the
+//                                 run's issue (`IMPROVE-BROKE #N`), a
+//                                 point an improvement issue has added
+//                                 there (`IMPROVE-DUP #M`), a deviation or
+//                                 a point the run settled dropped
+//                                 (`IMPROVE-DROP`, #1818); each
+//                                 `Comment: #N <text>` posted on issue N
+//                                 (`COMMENT #N <brief>`, drive_comment_file,
+//                                 #1698); the batch goes on
 //     BUMP pending, CI green      cycle.nika -- DIR --apply
 //     CUT, RED, BATCH DONE        the batch's suite runs and is waited for,
 //                                 then the driver stops for the supervisor
-//                                 (`ESCALATE <stop line>: the supervisor
-//                                 writes the next briefs`, exit 2); the
-//                                 supervisor writes the briefs (a fix-forward
-//                                 for RED) and starts the driver again
+//                                 (`ESCALATE <stop line>: <what to do>`,
+//                                 drive_stop_next, exit 2); the supervisor
+//                                 acts on the issues (files or decides the
+//                                 waiting ones, a fix-forward issue for RED) and
+//                                 starts the driver again
 //
 // Output: one line per agent run (`builder done ...`).
 // Time limit: the background task that runs the driver is ended after 2 h,
 // the agent it runs with it. So after NIKAIA_DRIVE_LIMIT_MIN minutes (default
 // 105) the driver starts no new agent: before a builder, and before a QA for a
 // red suite, it ends with `STOP drive: time limit after <n> min`, exit 4, for
-// the supervisor to start it again. A suite still running on CI (or a red one
-// not yet handed to QA) is not lost: its files stay in target/suite.lock with
-// target/suite.lock/handover, and the next run takes the lock over (`SUITE
-// <sha8> taken over from the last run`, drive_adopt). The minutes count from
+// the supervisor to start it again. It stops so too where the minutes left
+// until the task's end (NIKAIA_DRIVE_TASK_MIN, default 120) are fewer than a
+// run of the lane takes, the longest of its last five, 60 while it has none
+// (`STOP drive: time limit after <n> min (<m> min left of 120, a run of DIR
+// takes <k> min)`, drive_time_check, #1885). A builder run cut off all the
+// same after its report (BRIEF.running left beside it) gets its follow-up at
+// the next start (`PICKUP <name>`, drive_pickup). A suite still running on
+// CI (or a red one not yet handed to QA) is not lost: its files stay in
+// target/suite.lock with target/suite.lock/handover, and the next run takes
+// the lock over (`SUITE <sha8> taken over from the last run`, drive_adopt). The minutes count from
 // the first start; a RESTART passes it on in NIKAIA_DRIVE_STARTED.
 // Escalation: one final line, exit 2, on an OWNER line, an ESCALATE of
 // agent.nika, a stop line (above), `--max` agent runs (default 8), a merge
 // conflict on a rejected push, a suite still red after 2 QA rounds. A RED line
-// with a builder queued goes on with it (the supervisor's fix-forward brief).
+// with a builder queued goes on with it (the supervisor's fix-forward, a
+// `#N` line queued first in DIR/batch.txt, which batch.nika briefs itself).
+// Each ESCALATE line names the drive.nika commit that ran (drive_wake).
 //
 // `--ignore-ci-red`: a RED line of the cycle (CI red on develop) does not
 // stop the driver; NEXT and BATCH DONE go on as if CI were green, and a BUMP
@@ -106,7 +132,12 @@
 // changed scripts run here (owner, 2026-11-06; drive_named_filters,
 // `LOCAL tests ...`): red writes `Gate: red local-tests` and their output to
 // the suite log and goes to QA without a CI round; `--named-filters FILE`
-// prints the filters for the paths in FILE (for tests). Else the driver
+// prints the filters for the paths in FILE (for tests). They run with the
+// driver's own copy of the compiler (drive_tests_run, #1722), and a run that
+// loses its compiler to another lane's rebuild prints `SUITE <sha8> local
+// tests interrupted (compiler rebuilt)` and runs once more instead of going
+// red; `--local-tests FILE` runs them for the paths in FILE and prints `LOCAL
+// green` or `LOCAL red` and the output (for tests). Else the driver
 // takes the checkout's suite lock, `mkdir target/suite.lock` with
 // `<pid> <DIR>` in target/suite.lock/owner: two drivers (the main lane and the
 // bug lane) share this checkout, so one waits in 60 s steps while the owner's
@@ -168,6 +199,16 @@
 // once (the next batch starts only on green). At most 2 QA
 // rounds: a third red prints `ESCALATE drive: suite red after 2 QA rounds:
 // <steps>` and leaves the commits local. Nothing else pushes.
+// Before each issue (the builder's run) and before each suite, the driver
+// also fetches `origin/develop` and merges it into HEAD (#1717, drive_pull):
+// a lane that does not push would otherwise keep running the scripts it
+// started with. No local commits: a fast-forward; else the merge, its
+// regeneration and its conflict handling of a rejected push (above, the
+// escalation saying `merging origin/develop before ...` instead of `push
+// rejected`). Nothing new prints nothing; else `MERGE <sha8> pulled <n>
+// commits`; a merge that brought `scripts/*.nika` ends with `RESTART drive:
+// the merge brought <paths>` and the run with the merged scripts
+// (drive_restart). `--pull LOWER BUILD BADGES` runs that merge alone (for tests).
 // `--no-bump` leaves the version raise to another driver: a second lane in the
 // same session (`docs/briefs/bugs`) runs with it, so only the main lane's
 // driver raises the version and two raises never meet in `CHANGELOG.md`.
@@ -185,6 +226,13 @@
 // `--cleanup` runs the cleanup alone, in the directory it runs in.
 // A builder's `Pushed: rejected` (or `none`) is rewritten when its commit is found in the log.
 // `--rewrite REPORT LOGFILE` prints the rewritten report (for tests).
+// `--wake DIR LINE...` prints each LINE's WAKE line (drive_wake_line).
+// After each push the proof figure of the commit on develop is measured
+// beside the next batch and logged to DIR/proved.log (#1823, drive_proved_start:
+// `PROVED ...` lines, a WAKE where it fell); `--proved DIR SHA` measures one
+// commit, `--proved-lines DIR VERSION SHA SUMMARY` logs a `scripts/proved.nika`
+// output and prints its lines, `--proved-report DIR` prints DIR/proved.out
+// (for tests).
 // `--issue NAME...` prints each brief's issue number (drive_issue) or `none`;
 // `--post-body BRIEF` prints the comment that posts BRIEF, `--run-body DIR
 // BRIEF` the comment of BRIEF's run from its files in DIR (for tests).
@@ -213,6 +261,136 @@ fn drive_exe() -> String throws {
 
 // Ends the run with exit 2; a suite still running is waited for and handled
 // first (drive_settle), with one line naming the escalation it delays.
+// A line the main session must act on (owner, 2026-11-15: woken only for
+// what matters): the line itself, then its WAKE line (drive_wake_line), which
+// names its kind, the one file to read and what to do, so the session reads
+// nothing else on a wake (#1821). The session's watcher on the log greps
+// `^WAKE ` and nothing else; the end of the background task wakes it anyway.
+// Only ESCALATE, STOP, PUSHED and PROVED FELL go through here; DIR is the lane the line
+// comes from ("" where none is known).
+// An ESCALATE line ends with the commit of the scripts/drive.nika this run
+// loaded, ` (drive.nika <sha8>)` (`+edited` where the tree's copy differs
+// from that commit; nothing outside a checkout holding the script): a run
+// keeps the script it started with until a merge brings a new one
+// (drive_restart), so an escalation can come from a script older than
+// develop, and the issue filed from it says which (#1801, docs/issues.md I4c).
+fn drive_wake(dir: String, line: String) throws {
+	let mut said = line.clone()
+	if line.starts_with("ESCALATE ") {
+		let sha = drive_script_commit()
+		if sha != "" { said = f"{line} (drive.nika {sha})" }
+	}
+	println(said)
+	println(drive_wake_line(dir, said))
+}
+
+// The WAKE line of a line that wakes the session (#1821), one self-contained
+// line: `WAKE <KIND> read=<path or -> do=<action>: <line>`. The kinds:
+//
+//     PUSHED    read=-                do=nothing (the driver released, drive_release)
+//     STOP      read=-                do=restart the driver (time limit, --max)
+//     CUT       read=<the report>     do=accept with a Supervisor line, or file it
+//                                     (Result: blocked, never accepted: file or decide what Found names, its #M
+//                                     under the report's Needs:, restart: the driver drops it, drive_queue_prune;
+//                                     brief missing: put an issue's #N line in its place, or drop it)
+//     OWNER     read=<the report>     do=tell the owner (DIR/owner.txt for open ones)
+//     RED       read=DIR/qa-input.txt do=file the fix-forward as a ready issue, its #N line first
+//                                     in DIR/batch.txt (read=- for CI red on develop)
+//     MERGE     read=-                do=resolve the named sources, restart
+//     BATCH     read=-                do=decide or file the waiting issues (ready), restart
+//     PROVED    read=DIR/proved.log   do=find and file the commit that lowered the proof figure
+//     ESCALATE  read=-                do=fix the cause it names, restart
+//
+// The action holds no `: `, so the first one after `do=` ends it.
+fn drive_wake_line(dir: String, said: String) -> String throws {
+	let mut body = said.clone()
+	if said.starts_with("ESCALATE ") { body = (said.strip_prefix("ESCALATE ") ?? "").clone() }
+	let mut kind: String = "ESCALATE"
+	let mut read: String = "-"
+	let mut act: String = "fix the cause it names, then restart the driver"
+	if body.starts_with("PUSHED ") {
+		kind = "PUSHED"
+		act = "nothing, the driver releases"
+	} else if body.starts_with("STOP ") || body.starts_with("drive: --max ") {
+		kind = "STOP"
+		act = "restart the driver"
+	} else if body.starts_with("CUT ") {
+		kind = "CUT"
+		let brief = drive_wake_brief((body.strip_prefix("CUT ") ?? "").clone())
+		if body.contains(": brief missing") {
+			read = drive_wake_in(dir, "batch.txt")
+			act = "put the issue's `#N` line in its place or drop the line from batch.txt, then restart the driver"
+		} else if body.contains(": Result: blocked") {
+			read = drive_wake_report(dir, brief)
+			act = "file or decide what `Found:` names and write its `#M` under the report's `Needs:`, then restart the driver, which drops the brief and blocks the issue until `#M` is closed (#1857)"
+		} else {
+			read = drive_wake_report(dir, brief)
+			act = "accept it with a Supervisor line in the report or file what it names, then restart the driver"
+		}
+	} else if body.starts_with("OWNER ") {
+		kind = "OWNER"
+		act = "tell the owner the question, then restart the driver"
+		let mut rest = (body.strip_prefix("OWNER ") ?? "").clone()
+		if rest.starts_with("second: ") { rest = (rest.strip_prefix("second: ") ?? "").clone() }
+		let brief = drive_wake_brief(rest)
+		if brief.ends_with(" open") {
+			read = drive_wake_in(dir, "owner.txt")
+		} else {
+			read = drive_wake_report(dir, brief)
+		}
+	} else if body.starts_with("RED ") {
+		kind = "RED"
+		act = "file the failed jobs it names as a `ready` issue with the push's commits, its `#N` line first in batch.txt, then restart the driver"
+	} else if body.starts_with("drive: suite red after") {
+		kind = "RED"
+		read = drive_wake_in(dir, "qa-input.txt")
+		act = "file it as a `ready` issue, its `#N` line first in batch.txt, then restart the driver"
+	} else if body.contains("merge left open") {
+		kind = "MERGE"
+		act = "finish or abort the merge in the shared checkout now, then restart the driver"
+	} else if body.contains("merge aborted") || body.contains("the fast-forward failed") {
+		kind = "MERGE"
+		act = "merge origin/develop by hand and resolve the sources it names, then restart the driver"
+	} else if body.starts_with("PROVED FELL ") {
+		kind = "PROVED"
+		read = drive_wake_in(dir, "proved.log")
+		act = "find the commit of the range that lowered the proof figure and file it for the prover lane"
+	} else if body.starts_with("BATCH DONE") || body.starts_with("focus: every area empty") {
+		kind = "BATCH"
+		act = "no ready issue left in the lane, decide or file the waiting ones (`ready`), then restart the driver"
+	}
+	return f"WAKE {kind} read={read} do={act}: {said}"
+}
+
+// The brief a CUT or OWNER line names: its text up to the first `:`.
+fn drive_wake_brief(rest: String) -> String {
+	return rest.split(":").collect()[0].trim().clone()
+}
+
+// NAME in DIR, `-` where the lane is not known.
+fn drive_wake_in(dir: String, name: String) -> String {
+	if dir == "" { return "-" }
+	return f"{dir}/{name}"
+}
+
+// The report of BRIEF in DIR (drive_report_of), `DIR/BRIEF.report.md` where
+// there is none yet, `-` where the lane is not known.
+fn drive_wake_report(dir: String, brief: String) -> String throws {
+	if dir == "" { return "-" }
+	let found = drive_report_of(f"{dir}/{brief}")
+	if found != "" { return found }
+	return f"{dir}/{brief}.report.md"
+}
+
+// The last commit of scripts/drive.nika in this checkout, `+edited` where
+// the working tree's copy differs from it; "" where there is none.
+fn drive_script_commit() -> String throws {
+	let sha = process::run("git", ["log", "-1", "--format=%h", "--", "scripts/drive.nika"]).stdout.trim().clone()
+	if sha == "" { return "" }
+	if process::run("git", ["diff", "--quiet", "HEAD", "--", "scripts/drive.nika"]).code != 0 { return sha + "+edited" }
+	return sha
+}
+
 fn drive_escalate(why: String) throws {
 	let lane = drive_lock_lane()
 	if lane != "" && drive_testing() != "" {
@@ -221,15 +399,16 @@ fn drive_escalate(why: String) throws {
 		drive_settle(exe, lane)
 	}
 	drive_unlock()
-	println(f"ESCALATE drive: {why}")
+	drive_wake(lane, f"ESCALATE drive: {why}")
 	process::exit(2)
 }
 
-// After a change to scripts/drive.nika: compiles and runs the new script with
+// After a change to scripts/drive.nika (or a merge that brought scripts,
+// drive_pull_or_restart): prints LINE, compiles and runs the new script with
 // the same arguments, its output inherited, and ends with its exit code. The lock is released first,
 // or the new run would wait on this one. Exit 3 where it cannot be started.
-fn drive_restart(exe: String) throws {
-	println("RESTART drive: scripts/drive.nika changed")
+fn drive_restart(exe: String, line: String) throws {
+	println(line)
 	drive_unlock()
 	let mut args: Vec[String] = []
 	for a in cli::args() { args.push(a) }
@@ -270,19 +449,72 @@ fn drive_time_up() -> bool throws {
 	return drive_elapsed() >= limit * 60
 }
 
+// The seconds of one run of DIR's past runs, BRIEF.run.json: the span from
+// BRIEF.posted (written just before the agent starts) to the run.json, since
+// claude's `duration_ms` covers only the last turn of a run a background task
+// woke; that field where the span is missing or longer than the agent's 150
+// minutes (a brief run again later).
+fn drive_run_seconds(json_path: String) -> i64 throws {
+	let brief = (json_path.strip_suffix(".run.json") ?? "").clone()
+	let stat = process::run("stat", ["-c", "%Y", f"{brief}.posted", json_path.clone()])
+	let stamps = stat.stdout.trim().split("\n").collect()
+	if stamps.len() == 2 {
+		let span = (text::parse_i64(stamps[1].trim()) ?? 0) - (text::parse_i64(stamps[0].trim()) ?? 0)
+		if span > 0 && span <= 150 * 60 { return span }
+	}
+	let ms = text::parse_i64(drive_json_field(drive_read(json_path), "duration_ms")) ?? 0
+	return ms / 1000
+}
+
+// Minutes a run of DIR is expected to take (#1885): the longest of DIR's last
+// five runs (drive_run_seconds, newest run.json first), rounded up; 60 while
+// DIR has none.
+fn drive_run_minutes(dir: String) -> i64 throws {
+	let listed = process::run("sh", ["-c", "ls -t -- \"$1\"/*.run.json 2>/dev/null | head -5", "sh", dir.clone()]).stdout
+	let mut longest: i64 = 0
+	let mut seen: i64 = 0
+	for path in listed.split("\n") {
+		if path.trim() == "" { continue }
+		seen += 1
+		longest = longest.max(drive_run_seconds(path.trim().clone()))
+	}
+	if seen == 0 { return 60 }
+	return (longest + 59) / 60
+}
+
+// Whether an agent of DIR may start (#1885): "" when it may; `up` past
+// NIKAIA_DRIVE_LIMIT_MIN (drive_time_up); else, where the minutes left until
+// the task ends (NIKAIA_DRIVE_TASK_MIN, default 120: the 2 h after which the
+// harness ends the driver and its agent) are fewer than a run of DIR takes
+// (drive_run_minutes, at most NIKAIA_DRIVE_LIMIT_MIN), what says so.
+fn drive_time_check(dir: String) -> String throws {
+	if drive_time_up() { return "up" }
+	let task = text::parse_i64(env::var("NIKAIA_DRIVE_TASK_MIN") ?? "") ?? 120
+	let left = (task * 60 - drive_elapsed()) / 60
+	// A run longer than the time limit fits no task: it is counted as the
+	// limit, so a fresh driver still starts one (a lane whose runs were cut
+	// off would otherwise stop at every start).
+	let limit = text::parse_i64(env::var("NIKAIA_DRIVE_LIMIT_MIN") ?? "") ?? 105
+	let run = drive_run_minutes(dir).min(limit)
+	if left >= run { return "" }
+	return f"{left} min left of {task}, a run of {dir} takes {run} min"
+}
+
 // Ends the run at the time limit, before an agent starts: a suite this driver
 // started is left to the next run (target/suite.lock/handover), else the
-// lock is released. Exit 4.
-fn drive_time_stop() throws {
+// lock is released. Exit 4. WHY is drive_time_check's answer, named after the
+// minutes unless it is `up`.
+fn drive_time_stop(why: String) throws {
 	let minutes = drive_elapsed() / 60
+	let note = if why == "up" { "" } else { f" ({why})" }
 	let testing = drive_testing()
 	if testing != "" {
 		fs::write(drive_lock_dir() + "/handover", fs::Root::Anywhere, testing + "\n")
 		let sha = testing.split(" ").collect()[0].clone()
-		println(f"STOP drive: time limit after {minutes} min, suite {drive_short(sha)} left to the next run")
+		drive_wake("", f"STOP drive: time limit after {minutes} min{note}, suite {drive_short(sha)} left to the next run")
 	} else {
 		drive_unlock()
-		println(f"STOP drive: time limit after {minutes} min")
+		drive_wake("", f"STOP drive: time limit after {minutes} min{note}")
 	}
 	process::exit(4)
 }
@@ -373,6 +605,71 @@ fn drive_field(body: String, key: String) -> String {
 	return ""
 }
 
+// Every value of KEY in BODY, one per `KEY:` line, in order (a report may give
+// several `Found:` lines, one defect each, #1677).
+fn drive_fields(body: String, key: String) -> Vec[String] {
+	let prefix = key + ":"
+	let mut out: Vec[String] = []
+	for line in body.split("\n") {
+		let t = line.trim()
+		if t.starts_with(prefix) { out.push((t.strip_prefix(prefix) ?? "").trim().clone()) }
+	}
+	return out
+}
+
+// The `Found:` values of a report that name a defect (not empty, not `none`).
+// A report with none whose `Needs:` names its gap (`Needs: supervisor
+// decision: <gap>`) gives that gap (drive_needs_gap) as its one Found, so it
+// is filed as a `decision` issue (drive_found_labels), not buried in the
+// improvement issue (#1744: #1557's run put its ADR-306 question there).
+// A blocked report's Found that only says the issue waits for issues its
+// `Needs:` names is a dependency, not a defect, and is not filed
+// (drive_found_dependency; #1898 was filed from #1857's `Found: #1857 waits
+// for #1848 and #1849`, `Needs: #1848, #1849`).
+fn drive_founds(text: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	for f in drive_fields(text.clone(), "Found") {
+		if f != "" && drive_word(f.clone()) != "none" && !drive_found_dependency(text.clone(), f.clone()) { out.push(f) }
+	}
+	if out.len() == 0 {
+		let gap = drive_needs_gap(text)
+		if gap != "" { out.push(gap) }
+	}
+	return out
+}
+
+// Whether FOUND, a `Found:` value of a report TEXT that ended `Result:
+// blocked`, says only that the issue waits for others: it says `waits for`,
+// `blocked by` or `depends on`, and every `#M` after those words is named
+// under `Needs:` too.
+fn drive_found_dependency(text: String, found: String) -> bool {
+	if !drive_field(text.clone(), "Result").to_lowercase().starts_with("blocked") { return false }
+	let needs = drive_hash_numbers(drive_field(text, "Needs"))
+	if needs.len() == 0 { return false }
+	let low = found.to_lowercase()
+	let mut named: Vec[String] = []
+	for word in ["waits for", "waiting for", "blocked by", "depends on"] {
+		let parts: Vec[String] = low.split(word).collect()
+		for i in 1..<parts.len() {
+			for n in drive_hash_numbers(parts[i].split("(").collect()[0].clone()) { named.push(n) }
+		}
+	}
+	if named.len() == 0 { return false }
+	for n in named {
+		if !needs.contains(n.clone()) { return false }
+	}
+	return true
+}
+
+// The gap a report's `Needs: supervisor decision: <gap>` names, without the
+// words before it; "" when `Needs:` says no more than `supervisor decision`
+// or asks for something else.
+fn drive_needs_gap(text: String) -> String {
+	let needs = drive_field(text, "Needs")
+	let rest = (needs.strip_prefix("supervisor decision") ?? "").trim()
+	return (rest.strip_prefix(":") ?? "").trim().clone()
+}
+
 fn drive_word(value: String) -> String {
 	return value.split(" ").collect()[0].replace(".", "")
 }
@@ -380,8 +677,8 @@ fn drive_word(value: String) -> String {
 // Which action a cycle's output leads to, as one line:
 //   ESCALATE <why> | STOP <line> | BUMP | NEXT <abs brief>
 // STOP (CUT, BATCH DONE, or RED with no builder queued): the driver stops for
-// the supervisor, who writes the next briefs. A RED with a builder queued goes
-// on with it (the supervisor's fix-forward brief).
+// the supervisor, who acts on the issues (drive_stop_next). A RED with a builder queued goes
+// on with it (the supervisor's fix-forward, a `#N` line queued first).
 // `ignore_red` (--ignore-ci-red): a RED line leads nowhere; NEXT and BATCH DONE
 // go on as if CI were green, and BUMP still waits for a green CI line.
 fn drive_action(lines: Vec[String], ignore_red: bool) -> String {
@@ -451,7 +748,7 @@ fn drive_say(dry: bool, line: String) throws {
 // went on while CI ran, owner 2026-11-06), a rejected push merges nothing: a
 // merge would push HEAD's untested commits; "none", and the next suite, on
 // HEAD, pushes them all.
-fn drive_push(sha: String) -> String throws {
+fn drive_push(dir: String, sha: String) -> String throws {
 	let first = process::run("git", ["push", "origin", f"{sha}:develop"])
 	let mut pushed = sha.clone()
 	let mut head = "sha"
@@ -474,6 +771,7 @@ fn drive_push(sha: String) -> String throws {
 		// them left develop red (`lowered/sv_smtlib.rs`, `self-hosted.svg`).
 		let exe = process::run("realpath", [drive_exe()]).stdout.trim().clone()
 		drive_merge_fetched(
+			"push rejected",
 			f"'{exe}' lower-std",
 			"cargo build -q --profile fast -p nikaia",
 			"python3 scripts/badges.py",
@@ -495,8 +793,281 @@ fn drive_push(sha: String) -> String throws {
 		let now = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 		head = if now == merge { "head" } else { "sha" }
 	}
-	println(f"PUSHED {drive_short(pushed)}")
+	let note = drive_release(dir, pushed.clone())
+	drive_wake(dir, f"PUSHED {drive_short(pushed)}, {note}")
+	if note.contains("PUSH REJECTED") { drive_escalate("the release's push was rejected") }
+	drive_proved_start(dir, pushed)
 	return head
+}
+
+// After a push (#1821): the release (`scripts/release.nika DIR`) runs at
+// once, so PUSHED asks nothing of the session. Not under `--no-bump` (the main
+// lane's driver releases), nor where HEAD has moved past the pushed commit:
+// release.nika commits on HEAD and pushes it, and those commits have not been
+// through the suite (the next push releases them). Its lines go to the log as
+// `RELEASE <line>`; the note it returns ends the PUSHED line.
+fn drive_release(dir: String, pushed: String) -> String throws {
+	if drive_no_bump() { return "release left to the main lane (--no-bump)" }
+	let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+	if head != pushed { return "release at the next push (HEAD holds commits the suite has not tested)" }
+	let rel = process::run(drive_exe(), ["run", "scripts/release.nika", "--", dir.clone()])
+	let mut last: String = "release.nika printed nothing"
+	for l in rel.stdout.trim().split("\n") {
+		if l.trim() == "" { continue }
+		println(f"RELEASE {l.trim()}")
+		last = l.trim().clone()
+	}
+	return f"release {last}"
+}
+
+// Whether this run was started with `--no-bump`.
+fn drive_no_bump() -> bool throws {
+	for a in cli::args() {
+		if a == "--no-bump" { return true }
+	}
+	return false
+}
+
+// The proof figure after each push (#1823): the share of index and
+// arithmetic checks the prover proves, measured on the commit now on
+// develop (the release's commit where drive_release pushed one, else the
+// pushed one) without stopping the driver. drive_proved_start starts
+// `drive.nika -- --proved DIR SHA` detached, beside the next batch; that run
+// (drive_proved) makes a detached worktree of SHA in `target/proved-<sha8>/tree`,
+// takes the compiler of SHA (the ledger step's binary, copied here at once
+// where it was built from the same `crates/` tree, drive_tree_exe; else built
+// in `target/proved-<sha8>/target`), runs `lower-std --bounds --asserts
+// --sysroot <worktree>/crates` and `scripts/proved.nika` on the report in the
+// worktree, appends one line to DIR/proved.log (drive_proved_lines) and its
+// lines to DIR/proved.out, and removes `target/proved-<sha8>` with the
+// worktree. The driver prints DIR/proved.out at each round and while it waits
+// for a suite (drive_proved_report): `PROVED <version> <sha8>: ...` with the
+// change since the last line of the log, and `PROVED FELL ...` (a WAKE,
+// drive_wake_line) where the share of indexes or of operations fell by more
+// than 0.2 points, naming the commit range. A measurement that fails says
+// `PROVED <sha8> not measured: <why>`. A `target/proved-*` left by a run that
+// died is removed after 6 hours.
+fn drive_proved_start(dir: String, pushed: String) throws {
+	let mut sha = pushed.clone()
+	let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+	if head != pushed
+		&& process::run("git", ["merge-base", "--is-ancestor", pushed.clone(), head.clone()]).ok
+		&& process::run("git", ["merge-base", "--is-ancestor", head.clone(), "refs/remotes/origin/develop"]).ok {
+		sha = head
+	}
+	process::run("sh", ["-c", "find target -maxdepth 1 -name 'proved-*' -mmin +360 -exec rm -rf {} + 2>/dev/null; git worktree prune"])
+	let base = drive_proved_dir(sha.clone())
+	process::run("rm", ["-rf", base.clone()])
+	process::run("mkdir", ["-p", f"{base}/bin"])
+	let built = f"{drive_tree_target()}/fast/nikaia"
+	let stamp = drive_read(f"{built}.crates").trim()
+	let crates = process::run("git", ["rev-parse", f"{sha}:crates"]).stdout.trim().clone()
+	let mut from = "built from its sources"
+	if stamp != "" && stamp == crates && process::run("cp", [built, f"{base}/bin/nikaia"]).ok {
+		from = "with the ledger step's compiler"
+	}
+	let exe = process::run("realpath", [drive_exe()]).stdout.trim().clone()
+	let script = process::run("realpath", ["scripts/drive.nika"]).stdout.trim().clone()
+	let lane = process::run("realpath", ["-m", dir.clone()]).stdout.trim().clone()
+	let run = f"'{exe}' run '{script}' -- --proved '{lane}' {sha}"
+	let started = process::run("sh", ["-c", f"( {run} ) < /dev/null > /dev/null 2>&1 &"])
+	if !started.ok {
+		println(f"PROVED {drive_short(sha)} not measured: the measurement did not start: {started.stderr.trim()}")
+		return
+	}
+	println(f"PROVED {drive_short(sha)} measuring beside the next batch, {from}")
+}
+
+// The directory one measurement of the proof figure works in.
+fn drive_proved_dir(sha: String) -> String throws {
+	return f"target/proved-{drive_short(sha)}"
+}
+
+// `--proved DIR SHA`: measures the proof figure of SHA (drive_proved_start)
+// and appends its lines to DIR/proved.out.
+fn drive_proved(dir: String, sha: String) throws {
+	let out = f"{dir}/proved.out"
+	let short = drive_short(sha)
+	let base = process::run("realpath", ["-m", drive_proved_dir(sha.clone())]).stdout.trim().clone()
+	let tree = f"{base}/tree"
+	process::run("mkdir", ["-p", base.clone()])
+	let made = process::run("git", ["worktree", "add", "--detach", "-f", tree.clone(), sha.clone()])
+	if !made.ok {
+		drive_append(out, f"PROVED {short} not measured: no worktree: {made.stderr.trim()}")
+		drive_proved_clean(base)
+		return
+	}
+	let cache = f"NIKAIA_CACHE_DIR='{base}/cache'"
+	let mut exe = f"{base}/bin/nikaia"
+	if !fs::exists(exe, fs::Root::Anywhere) {
+		let built = process::run(
+			"sh",
+			["-c", f"cd '{tree}' && CARGO_TARGET_DIR='{base}/target' cargo build -q --profile fast -p nikaia 2>&1"],
+		)
+		if !built.ok {
+			drive_append(out, f"PROVED {short} not measured: the compiler did not build: {drive_tail(built.stdout, 1)}")
+			drive_proved_clean(base)
+			return
+		}
+		exe = f"{base}/target/fast/nikaia"
+	}
+	let report = f"{base}/report.txt"
+	process::run(
+		"sh",
+		["-c", f"cd '{tree}' && {cache} '{exe}' lower-std --bounds --asserts --sysroot '{tree}/crates' > '{report}' 2> '{base}/lower.err'"],
+	)
+	if !drive_read(report).contains("bounds in ") {
+		drive_append(out, f"PROVED {short} not measured: lower-std --bounds gave no report: {drive_tail(drive_read(f"{base}/lower.err"), 1)}")
+		drive_proved_clean(base)
+		return
+	}
+	let summed = process::run("sh", ["-c", f"cd '{tree}' && {cache} '{exe}' run scripts/proved.nika -- '{report}' 2>&1"])
+	if !summed.ok || !summed.stdout.starts_with("proved: ") {
+		drive_append(out, f"PROVED {short} not measured: scripts/proved.nika failed: {drive_tail(summed.stdout, 1)}")
+		drive_proved_clean(base)
+		return
+	}
+	let version = drive_proved_version(drive_read(f"{tree}/CHANGELOG.md"))
+	for l in drive_proved_lines(dir, version, sha, summed.stdout) { drive_append(out, l) }
+	drive_proved_clean(base)
+}
+
+// Removes a measurement's worktree and directory, its target too.
+fn drive_proved_clean(base: String) throws {
+	process::run("git", ["worktree", "remove", "--force", f"{base}/tree"])
+	process::run("rm", ["-rf", base])
+	process::run("git", ["worktree", "prune"])
+}
+
+// The version at the top of a CHANGELOG.md (`## [0.0.1400] ...`), "?" where none.
+fn drive_proved_version(changelog: String) -> String throws {
+	for line in changelog.split("\n") {
+		if line.starts_with("## [") { return (line.strip_prefix("## [") ?? "").split("]").collect()[0].clone() }
+	}
+	return "?"
+}
+
+// `n` of `total` in hundredths of a percent, rounded: 8227 for 82.27 %.
+fn drive_proved_hundredths(n: i64, total: i64) -> i64 {
+	if total <= 0 { return 0 }
+	return (n * 10000 + total / 2) / total
+}
+
+// Hundredths written as a number with two decimals, `82.27`; `signed` puts
+// `+` before a positive one.
+fn drive_proved_decimal(h: i64, signed: bool) -> String throws {
+	let mut sign: String = ""
+	let mut a = h
+	if h < 0 {
+		sign = "-"
+		a = 0 - h
+	} else if signed {
+		sign = "+"
+	}
+	let cents = a % 100
+	let pad = if cents < 10 { "0" } else { "" }
+	return f"{sign}{a / 100}.{pad}{cents}"
+}
+
+// `(proved, total)` of a `P/T` word, `(0, 0)` where it is not one.
+fn drive_proved_pair(word: String) -> (i64, i64) {
+	let (p, t) = word.split_once("/") ?? return (0, 0)
+	return (text::parse_i64(p) ?? 0, text::parse_i64(t) ?? 0)
+}
+
+// The word before `word` in `line`, "" where `word` is not there.
+fn drive_proved_before(line: String, word: String) -> String {
+	let mut previous: String = ""
+	for each in line.split(" ") {
+		if each == word { return previous }
+		previous = each.clone()
+	}
+	return ""
+}
+
+// From the output of `scripts/proved.nika` (SUMMARY) of the commit SHA at
+// VERSION: appends its line to DIR/proved.log,
+//
+//     <version> <sha8> indexes P/T <pct> % operations P/T <pct> % left <n> reasons <count> <reason> | ...
+//
+// (the five largest buckets of unproved sites by reason), and gives back the
+// PROVED line with the change since the log's last line and, where the share
+// of indexes or of operations fell by more than 0.2 points, a `PROVED FELL`
+// line naming the commit range.
+fn drive_proved_lines(dir: String, version: String, sha: String, summary: String) -> Vec[String] throws {
+	let short = drive_short(sha)
+	let mut indexes = (0, 0)
+	let mut operations = (0, 0)
+	let mut left: String = "?"
+	let mut reasons: Vec[String] = []
+	let mut in_reasons = false
+	for line in summary.split("\n") {
+		if line.starts_with("proved: ") {
+			indexes = drive_proved_pair(drive_proved_before(line, "indexes"))
+			operations = drive_proved_pair(drive_proved_before(line, "operations"))
+		} else if line.starts_with("left at run time: ") {
+			left = (line.strip_prefix("left at run time: ") ?? "").split(" ").collect()[0].clone()
+		} else if line.starts_with("unproved sites by reason:") {
+			in_reasons = true
+		} else if in_reasons {
+			if line.trim() == "" {
+				in_reasons = false
+			} else if reasons.len() < 5 {
+				let (count, reason) = line.trim().split_once("  ") ?? (line.trim(), "")
+				reasons.push(f"{count} {reason.trim()}")
+			}
+		}
+	}
+	let (ip, itot) = indexes
+	let (op, ot) = operations
+	let ih = drive_proved_hundredths(ip, itot)
+	let oh = drive_proved_hundredths(op, ot)
+	let log = f"{dir}/proved.log"
+	let mut last: String = ""
+	for l in drive_read(log).split("\n") {
+		if l.trim() != "" { last = l.trim().clone() }
+	}
+	let entry = f"{version} {short} indexes {ip}/{itot} {drive_proved_decimal(ih, false)} % operations {op}/{ot} {drive_proved_decimal(oh, false)} % left {left} reasons {reasons.join(" | ")}"
+	drive_append(log, entry)
+	let figure = f"indexes {ip}/{itot} {drive_proved_decimal(ih, false)} %"
+	let ops = f"operations {op}/{ot} {drive_proved_decimal(oh, false)} %"
+	let words: Vec[String] = last.split(" ").collect()
+	if words.len() < 8 {
+		return [f"PROVED {version} {short}: {figure}, {ops}, left {left} (first measurement in {log})"]
+	}
+	let (pip, pit) = drive_proved_pair(words[3])
+	let (pop, pot) = drive_proved_pair(words[7])
+	let di = ih - drive_proved_hundredths(pip, pit)
+	let d_o = oh - drive_proved_hundredths(pop, pot)
+	let since = f"{words[0]} {words[1]}"
+	let mut lines: Vec[String] = [
+		f"PROVED {version} {short}: {figure} ({drive_proved_decimal(di, true)}), {ops} ({drive_proved_decimal(d_o, true)}), left {left}; since {since}",
+	]
+	let mut fell: Vec[String] = []
+	if di < -20 { fell.push(f"indexes {drive_proved_decimal(di, true)} points") }
+	if d_o < -20 { fell.push(f"operations {drive_proved_decimal(d_o, true)} points") }
+	if fell.len() > 0 {
+		lines.push(f"PROVED FELL {short}: {fell.join(", ")} since {since}, in {words[1]}..{short}")
+	}
+	return lines
+}
+
+// Prints the lines a measurement of the proof figure left in DIR/proved.out
+// (drive_proved), a `PROVED FELL` line through drive_wake.
+fn drive_proved_report(dir: String) throws {
+	let out = f"{dir}/proved.out"
+	if !fs::exists(out, fs::Root::Anywhere) { return }
+	let taken = f"{out}.taken"
+	if !process::run("mv", [out, taken.clone()]).ok { return }
+	for l in drive_read(taken).split("\n") {
+		if l.trim() == "" { continue }
+		if l.trim().starts_with("PROVED FELL ") {
+			drive_wake(dir, l.trim().clone())
+		} else {
+			println(l.trim())
+		}
+	}
+	process::run("rm", ["-f", taken])
 }
 
 // The short checks on a merge of `origin/develop` before it is pushed (owner,
@@ -524,16 +1095,74 @@ fn drive_merge_check(base: String, merge: String) -> String throws {
 		if name != "" && !names.contains(name.clone()) { names.push(name) }
 	}
 	if names.len() == 0 { return "" }
-	let exe = process::run("realpath", [drive_exe()]).stdout.trim().clone()
 	let mut args: String = ""
 	for n in names { args = args + f" --filter '{n}'" }
 	println(f"LOCAL tests {names.join(" ")}")
-	let out = process::run(
-		"sh",
-		["-c", f"cd tests/compiler && NIKAIA_CACHE_LIMIT=2G '{exe}' test{args} 2>&1"],
+	return drive_tests_run(args)
+}
+
+// Before each issue and each suite (#1717): `origin/develop` fetched and
+// merged into HEAD, so a lane that has not pushed for a while still runs the
+// scripts and the compiler other sessions pushed. Nothing new prints nothing.
+// HEAD an ancestor of it (no local commits): a fast-forward, which leaves no
+// merge commit for the suite to test; else drive_merge_fetched with LOWER,
+// BUILD and BADGES, as for a rejected push (regenerated, a conflict only in
+// the lowered files re-lowered, any other aborted and escalated with CAUSE).
+// Then `MERGE <sha8> pulled <n> commits`. A failed fetch prints `MERGE
+// skipped: git fetch origin develop failed` and merges nothing. Returns the
+// `scripts/*.nika` the merge brought, space-separated, "" for none.
+fn drive_pull(cause: String, lower: String, build: String, badges: String) -> String throws {
+	let fetched = process::run("git", ["fetch", "-q", "origin", "develop"])
+	if !fetched.ok {
+		println("MERGE skipped: git fetch origin develop failed")
+		return ""
+	}
+	let count = process::run(
+		"git",
+		["rev-list", "--count", "HEAD..FETCH_HEAD"],
+	).stdout.trim().clone()
+	if count == "0" || count == "" { return "" }
+	let mut scripts: Vec[String] = []
+	let diff = process::run(
+		"git",
+		["diff", "--name-only", "HEAD...FETCH_HEAD", "--", "scripts/"],
+	).stdout
+	for line in diff.split("\n") {
+		let p = line.trim().clone()
+		if p.ends_with(".nika") { scripts.push(p) }
+	}
+	let behind = process::run("git", ["merge-base", "--is-ancestor", "HEAD", "FETCH_HEAD"]).ok
+	if behind {
+		let forward = process::run("git", ["merge", "-q", "--ff-only", "--autostash", "FETCH_HEAD"])
+		if !forward.ok {
+			let why = (forward.stderr + forward.stdout).trim().split("\n").collect()[0].clone()
+			drive_escalate(f"{cause}, the fast-forward failed ({why})")
+		}
+		drive_autostash_settle(cause)
+	} else {
+		drive_merge_fetched(cause, lower, build, badges)
+	}
+	let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+	println(f"MERGE {drive_short(head)} pulled {count} commits")
+	return scripts.join(" ")
+}
+
+// drive_pull in the shared checkout, with the commands of a rejected push's
+// merge; when it brought `scripts/*.nika`, the driver goes on with them: a
+// suite still running is handled (drive_settle, in the lane holding the
+// lock), then drive_restart. WHEN says where (`before the next issue`).
+fn drive_pull_or_restart(exe: String, when: String) throws {
+	let real = process::run("realpath", [exe.clone()]).stdout.trim().clone()
+	let scripts = drive_pull(
+		f"merging origin/develop {when}",
+		f"'{real}' lower-std",
+		"cargo build -q --profile fast -p nikaia",
+		"python3 scripts/badges.py",
 	)
-	if out.ok { return "" }
-	return out.stdout + out.stderr
+	if scripts == "" { return }
+	let lane = drive_lock_lane()
+	if lane != "" && drive_testing() != "" { drive_settle(exe.clone(), lane) }
+	drive_restart(exe, f"RESTART drive: the merge brought {scripts}")
 }
 
 // True when this driver's background suite has finished (its exit file is
@@ -550,9 +1179,57 @@ fn drive_suite_done() -> bool throws {
 // merge is committed, so the regeneration below never meets them). A clean
 // merge is regenerated by drive_merge_regenerate with the commands LOWER,
 // BUILD and BADGES (#1333); a conflict only in the generated lowered files is
-// resolved by drive_merge_relower; any other conflict, or a failed
-// resolution, aborts and escalates.
-fn drive_merge_fetched(lower: String, build: String, badges: String) throws {
+// resolved by drive_merge_relower; a merge git refused for generated files in
+// the way moves them aside and is tried once more (#1820); any other conflict,
+// or a failed resolution, aborts and escalates.
+fn drive_merge_fetched(cause: String, lower: String, build: String, badges: String) throws {
+	drive_merge_try(cause.clone(), lower, build, badges, true)
+	drive_autostash_settle(cause)
+}
+
+// After a merge (drive_pull's fast-forward, drive_merge_fetched): git puts
+// the autostash (the other agents' unfinished files) back once the merge is
+// committed, and where one of theirs changed a file the merge changed too
+// that conflicts, yet `git commit` and `git merge --ff-only` still exit 0
+// (#1862: a builder found a conflict marker in its uncommitted `lowered.rs`
+// and its files staged). git then stages each file of the stash it put back
+// cleanly, leaves the conflicted ones unmerged and keeps the stash. A
+// conflict only in lowered files is settled: they take HEAD's copy (the
+// agent's next `lower-std` writes theirs again from its `.nika`, which came
+// back) and the staged files are unstaged, so the tree is as before the merge
+// but for those lowered files; prints `MERGE autostash conflicted in PATHS,
+// took HEAD's copy, stash SHA keeps theirs`. A conflict in sources escalates
+// naming them and the stash.
+fn drive_autostash_settle(cause: String) throws {
+	let unmerged = process::run("git", ["diff", "--name-only", "--diff-filter=U"]).stdout.trim().clone()
+	if unmerged == "" { return }
+	let mut sources: Vec[String] = []
+	let mut lowered: Vec[String] = []
+	for p in unmerged.split("\n") {
+		if drive_is_lowered(p.clone()) { lowered.push(p.clone()) } else { sources.push(p.clone()) }
+	}
+	let stash = process::run("git", ["stash", "list", "-1", "--format=%h"]).stdout.trim().clone()
+	if sources.len() > 0 {
+		drive_escalate(f"{cause}, the merge is committed, but putting the uncommitted files back conflicted in {sources.join(" ")}: resolve them by hand, stash {stash} keeps the uncommitted side")
+	}
+	let mut take: Vec[String] = ["checkout", "HEAD", "--"]
+	for p in lowered.clone() { take.push(p) }
+	let taken = process::run("git", take)
+	if !taken.ok {
+		drive_escalate(f"{cause}, putting the uncommitted files back conflicted in {lowered.join(" ")}, and taking HEAD's copy failed")
+	}
+	let staged = process::run("git", ["diff", "--cached", "--name-only"]).stdout.trim().clone()
+	if staged != "" {
+		let mut unstage: Vec[String] = ["restore", "--staged", "--"]
+		for p in staged.split("\n") { unstage.push(p.clone()) }
+		process::run("git", unstage)
+	}
+	println(f"MERGE autostash conflicted in {lowered.join(" ")}, took HEAD's copy, stash {stash} keeps theirs")
+}
+
+// drive_merge_fetched once; RETRY says whether generated files in the way may
+// still be moved aside and the merge tried again.
+fn drive_merge_try(cause: String, lower: String, build: String, badges: String, retry: bool) throws {
 	let merged = process::run(
 		"git",
 		["merge", "-q", "--no-ff", "--no-commit", "--no-edit", "--autostash", "FETCH_HEAD"],
@@ -561,18 +1238,105 @@ fn drive_merge_fetched(lower: String, build: String, badges: String) throws {
 		let git_dir = process::run("git", ["rev-parse", "--git-dir"]).stdout.trim().clone()
 		// Already up to date: nothing was merged.
 		if !fs::exists(f"{git_dir}/MERGE_HEAD", fs::Root::Anywhere) { return }
-		drive_merge_regenerate("", lower, build, badges)
+		drive_merge_regenerate(cause, "", lower, build, badges)
 		return
 	}
 	let unmerged = process::run(
 		"git",
 		["diff", "--name-only", "--diff-filter=U"],
 	).stdout.trim().split("\n").collect().join(" ")
-	if unmerged == "" { drive_merge_abort() }
-	for p in unmerged.split(" ") {
-		if !p.starts_with(drive_lowered_dir() + "/") { drive_merge_abort() }
+	if unmerged == "" {
+		// Git refused before merging: its own words are the cause (#1820).
+		let said = merged.stderr + merged.stdout
+		let in_way = drive_merge_in_way(said.clone())
+		if retry && in_way.len() > 0 && drive_all_generated(in_way.clone()) {
+			let aside = drive_move_aside(in_way.clone())
+			println(f"MERGE moved aside {in_way.join(" ")} into {aside}, merging again")
+			drive_merge_try(cause, lower, build, badges, false)
+			return
+		}
+		drive_merge_abort_paths(cause, "no unmerged path", f"git said: {drive_git_said(said)}")
 	}
-	drive_merge_relower(unmerged, lower, build, badges)
+	// A conflict in sources escalates naming only them: the lowered files
+	// beside them are re-lowered once the sources are resolved (#1820).
+	let mut sources: Vec[String] = []
+	let mut lowered = false
+	for p in unmerged.split(" ") {
+		if drive_is_lowered(p.clone()) { lowered = true } else { sources.push(p.clone()) }
+	}
+	if sources.len() > 0 {
+		let after = if lowered { " (lowered files re-lowered after)" } else { "" }
+		drive_merge_abort_paths(cause, sources.join(" ") + after, "")
+	}
+	drive_merge_relower(cause, unmerged, lower, build, badges)
+}
+
+// The paths git names as in the way of a merge it refused: the tab-indented
+// lines under "... would be overwritten by merge:" (an untracked file, or a
+// local change `--autostash` did not take).
+fn drive_merge_in_way(said: String) -> Vec[String] {
+	let mut paths: Vec[String] = []
+	let mut listing = false
+	for line in said.split("\n") {
+		if line.ends_with("would be overwritten by merge:") {
+			listing = true
+		} else if listing && line.starts_with("\t") {
+			paths.push(line.trim().clone())
+		} else {
+			listing = false
+		}
+	}
+	return paths
+}
+
+// True for a file the toolchain writes and the merge's regeneration writes
+// again: the lowered files, the badges, and the ledgers of a package.
+fn drive_is_generated(path: String) -> bool {
+	if drive_is_lowered(path.clone()) || path.starts_with("assets/badges/") { return true }
+	for ledger in ["nikaia.lock", "nikaia.proofs", "nikaia.contracts"] {
+		if path == ledger || path.ends_with("/" + ledger) { return true }
+	}
+	return false
+}
+
+fn drive_all_generated(paths: Vec[String]) -> bool {
+	for p in paths {
+		if !drive_is_generated(p.clone()) { return false }
+	}
+	return true
+}
+
+// Moves PATHS into a fresh directory under the git directory, keeping their
+// relative paths, and returns that directory: nothing is deleted.
+fn drive_move_aside(paths: Vec[String]) -> String throws {
+	let git_dir = process::run("git", ["rev-parse", "--git-dir"]).stdout.trim().clone()
+	let stamp = process::run("date", ["+%Y%m%d-%H%M%S"]).stdout.trim().clone()
+	let aside = f"{git_dir}/drive-aside-{stamp}"
+	for p in paths {
+		let dest = f"{aside}/{p}"
+		process::run("mkdir", ["-p", drive_parent(dest.clone())])
+		process::run("mv", [p.clone(), dest])
+	}
+	return aside
+}
+
+fn drive_parent(path: String) -> String {
+	let parts = path.split("/").collect()
+	if parts.len() <= 1 { return "." }
+	return parts[0..<parts.len() - 1].iter().collect().join("/")
+}
+
+// The last lines of git's output, without its autostash notes, on one line.
+fn drive_git_said(said: String) -> String {
+	let mut lines: Vec[String] = []
+	for line in said.split("\n") {
+		let t = line.trim().clone()
+		if t == "" || t == "Aborting" || t.contains("autostash") { continue }
+		lines.push(t)
+	}
+	if lines.len() == 0 { return "nothing" }
+	let from = if lines.len() > 4 { lines.len() - 4 } else { 0 }
+	return lines[from..<lines.len()].iter().collect().join(" / ")
 }
 
 // True when a merge that brought PATHS must be regenerated (#1333): a change
@@ -589,6 +1353,13 @@ fn drive_merge_generates(paths: Vec[String]) -> bool {
 
 fn drive_lowered_dir() -> String {
 	return "crates/nikaia-std/src/compiler/lowered"
+}
+
+// True for a file the lowering writes: one under the lowered directory, or
+// its index `lowered.rs` beside it (a conflict only in the index's digest line
+// escalated on 2026-11-16 before this).
+fn drive_is_lowered(path: String) -> bool {
+	return path.starts_with(drive_lowered_dir() + "/") || path == drive_lowered_dir() + ".rs"
 }
 
 // The lowered files the lowering writes: the directory and its index.
@@ -619,12 +1390,12 @@ fn drive_lowered_print() -> String throws {
 // lowers, regenerates the badges and commits. Prints `MERGE <sha8> re-lowered
 // <paths>`. Any failure aborts the merge and escalates
 // (drive_merge_abort_paths): a partly resolved merge is never left behind.
-fn drive_merge_relower(unmerged: String, lower: String, build: String, badges: String) throws {
+fn drive_merge_relower(cause: String, unmerged: String, lower: String, build: String, badges: String) throws {
 	for p in unmerged.split(" ") {
 		let took = process::run("git", ["checkout", "--theirs", "--", p.clone()])
-		if !took.ok { drive_merge_abort_paths(unmerged, f"re-lowering failed (git checkout --theirs {p})") }
+		if !took.ok { drive_merge_abort_paths(cause, unmerged, f"re-lowering failed (git checkout --theirs {p})") }
 	}
-	drive_merge_regenerate(unmerged, lower, build, badges)
+	drive_merge_regenerate(cause, unmerged, lower, build, badges)
 }
 
 // Finishes a merge left uncommitted (#1333; UNMERGED the lowered paths that
@@ -647,14 +1418,14 @@ fn drive_merge_relower(unmerged: String, lower: String, build: String, badges: S
 // regenerated <paths>` (or `nothing changed`) for a clean merge; a merge of
 // documentation only is committed as it is. Any failure aborts the merge and
 // escalates.
-fn drive_merge_regenerate(unmerged: String, lower: String, build: String, badges: String) throws {
+fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build: String, badges: String) throws {
 	if unmerged == "" {
 		let mut brought: Vec[String] = []
 		let diff = process::run("git", ["diff", "--cached", "--name-only", "HEAD"]).stdout
 		for line in diff.split("\n") { brought.push(line.trim().clone()) }
 		if !drive_merge_generates(brought) {
 			let done = process::run("git", ["commit", "-q", "--no-edit"])
-			if !done.ok { drive_merge_abort_paths("", "the merge commit failed") }
+			if !done.ok { drive_merge_abort_paths(cause, "", "the merge commit failed") }
 			return
 		}
 	}
@@ -719,9 +1490,9 @@ fn drive_merge_regenerate(unmerged: String, lower: String, build: String, badges
 	}
 	let added = process::run("git", add)
 	if failed == "" && !added.ok { failed = "git add of the lowered files" }
-	if failed != "" { drive_merge_abort_paths(unmerged, f"re-lowering failed ({failed})") }
+	if failed != "" { drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({failed})") }
 	let tree = process::run("git", ["write-tree"])
-	if !tree.ok { drive_merge_abort_paths(unmerged, "git write-tree of the merge failed") }
+	if !tree.ok { drive_merge_abort_paths(cause, unmerged, "git write-tree of the merge failed") }
 	let copy = process::run("mktemp", ["-d"]).stdout.trim().clone()
 	let sha = tree.stdout.trim().clone()
 	let made = process::run(
@@ -732,13 +1503,13 @@ fn drive_merge_regenerate(unmerged: String, lower: String, build: String, badges
 		process::run("sh", ["-c", f"cp '{copy}'/assets/badges/*.svg assets/badges/"])
 	}
 	process::run("rm", ["-rf", copy])
-	if !made.ok { drive_merge_abort_paths(unmerged, "the badges failed") }
+	if !made.ok { drive_merge_abort_paths(cause, unmerged, "the badges failed") }
 	let svgs = process::run("git", ["diff", "--name-only", "--", "assets/badges/"]).stdout
 	for line in svgs.split("\n") {
 		if line.trim() != "" { changed.push(line.trim().clone()) }
 	}
 	let staged = process::run("git", ["add", "--", "assets/badges/"])
-	if !staged.ok { drive_merge_abort_paths(unmerged, "git add of the badges failed") }
+	if !staged.ok { drive_merge_abort_paths(cause, unmerged, "git add of the badges failed") }
 	// The ledgers of the merged tree, with the compiler built from it (#1591).
 	let tree_now = process::run("git", ["write-tree"]).stdout.trim().clone()
 	let ledgers = drive_ledgers_refresh(tree_now)
@@ -749,10 +1520,10 @@ fn drive_merge_regenerate(unmerged: String, lower: String, build: String, badges
 			changed.push(p.clone())
 		}
 		let added_ledgers = process::run("git", add_ledgers)
-		if !added_ledgers.ok { drive_merge_abort_paths(unmerged, "git add of the ledgers failed") }
+		if !added_ledgers.ok { drive_merge_abort_paths(cause, unmerged, "git add of the ledgers failed") }
 	}
 	let done = process::run("git", ["commit", "-q", "--no-edit"])
-	if !done.ok { drive_merge_abort_paths(unmerged, "the merge commit failed") }
+	if !done.ok { drive_merge_abort_paths(cause, unmerged, "the merge commit failed") }
 	let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 	if unmerged != "" {
 		println(f"MERGE {drive_short(merge)} re-lowered {unmerged}")
@@ -765,22 +1536,19 @@ fn drive_merge_regenerate(unmerged: String, lower: String, build: String, badges
 // A failed merge must not leave the shared checkout mid-merge: the conflicted
 // paths are noted, `git merge --abort` restores HEAD and applies the autostash
 // back, and the check that no merge is left open and no path is unmerged
-// precedes the escalation. Always escalates.
-fn drive_merge_abort() throws {
-	let unmerged = process::run(
-		"git",
-		["diff", "--name-only", "--diff-filter=U"],
-	).stdout.trim().split("\n").collect().join(" ")
-	let paths = if unmerged == "" { "no unmerged path" } else { unmerged }
-	drive_merge_abort_paths(paths, "")
-}
-
-// drive_merge_abort for PATHS noted before ("" for a clean merge whose
-// regeneration failed, #1333); WHY, when not "", says what failed after the
-// merge (a re-lowering, #1430).
-fn drive_merge_abort_paths(paths: String, why_failed: String) throws {
+// precedes the escalation. Always escalates. PATHS are the conflicted paths
+// noted before ("" for a clean merge whose regeneration failed, #1333; "no
+// unmerged path" for a merge git refused, #1820); WHY, when not "", says what
+// failed (a re-lowering, #1430; git's own words, #1820).
+fn drive_merge_abort_paths(cause: String, paths: String, why_failed: String) throws {
 	let failed = if why_failed == "" { "" } else { f", {why_failed}" }
-	let merged = if paths == "" { "merge clean" } else { f"merge conflicted in {paths}" }
+	let merged = if paths == "" {
+		"merge clean"
+	} else if paths == "no unmerged path" {
+		"merge failed with no unmerged path"
+	} else {
+		f"merge conflicted in {paths}"
+	}
 	let git_dir = process::run("git", ["rev-parse", "--git-dir"]).stdout.trim().clone()
 	let mut why: String = ""
 	let mut aborted = true
@@ -792,9 +1560,9 @@ fn drive_merge_abort_paths(paths: String, why_failed: String) throws {
 	let open = fs::exists(f"{git_dir}/MERGE_HEAD", fs::Root::Anywhere)
 	let left = process::run("git", ["diff", "--name-only", "--diff-filter=U"]).stdout.trim().clone()
 	if !aborted || open || left != "" {
-		drive_escalate(f"merge left open: push rejected, {merged}{failed}, and git merge --abort did not finish ({why}); the shared checkout needs a hand now")
+		drive_escalate(f"merge left open: {cause}, {merged}{failed}, and git merge --abort did not finish ({why}); the shared checkout needs a hand now")
 	}
-	drive_escalate(f"push rejected, {merged}{failed}, merge aborted")
+	drive_escalate(f"{cause}, {merged}{failed}, merge aborted")
 }
 
 fn drive_short(sha: String) -> String throws {
@@ -1025,12 +1793,16 @@ fn drive_tree_exe(tree: String) -> String throws {
 		println(f"LEDGERS not refreshed: {wt} is not a worktree of its own")
 		return ""
 	}
-	let moved = process::run("git", ["-C", wt.clone(), "read-tree", "--reset", "-u", tree.clone()])
+	let moved = process::run("git", ["-C", wt, "read-tree", "--reset", "-u", tree.clone()])
 	if !moved.ok {
 		println(f"LEDGERS not refreshed: the worktree did not take {tree}: {moved.stderr.trim()}")
 		return ""
 	}
-	let target = process::run("realpath", ["-m", "target/ledger-target"]).stdout.trim().clone()
+	let target = process::run("realpath", ["-m", drive_tree_target()]).stdout.trim().clone()
+	// The `crates/` tree the binary was built from, for drive_proved_start;
+	// gone while a build runs, so a failed one is never taken for the tree.
+	let stamp = f"{target}/fast/nikaia.crates"
+	process::run("rm", ["-f", stamp.clone()])
 	let built = process::run(
 		"sh",
 		["-c", f"cd '{want}' && CARGO_TARGET_DIR='{target}' cargo build -q --profile fast -p nikaia 2>&1"],
@@ -1040,8 +1812,13 @@ fn drive_tree_exe(tree: String) -> String throws {
 		println(drive_tail(built.stdout, 20))
 		return ""
 	}
+	let crates = process::run("git", ["rev-parse", f"{tree}:crates"]).stdout.trim().clone()
+	if crates != "" { fs::write(stamp, fs::Root::Anywhere, crates + "\n") }
 	return f"{target}/fast/nikaia"
 }
+
+// The target directory the compiler of a git tree is built in (drive_tree_exe).
+fn drive_tree_target() -> String { return "target/ledger-target" }
 
 // Runs `scripts/ledgers.nika -- --refresh` on the git tree NAME (a commit or
 // tree of this checkout) with the compiler of that tree, in its worktree (drive_tree_exe), and copies the ledger
@@ -1322,6 +2099,7 @@ fn drive_settle(exe: String, dir: String) throws {
 	let qa = drive_qa_brief(dir)
 	let mut rounds: i64 = 0
 	while true {
+		drive_proved_report(dir)
 		let testing = drive_testing()
 		if testing == "" { return }
 		let parts = testing.split(" ").collect()
@@ -1331,16 +2109,22 @@ fn drive_settle(exe: String, dir: String) throws {
 		let exit = f"{drive_lock_dir()}/exit-{sha}"
 		if !fs::exists(exit, fs::Root::Anywhere) {
 			println(f"SUITE {drive_short(sha)} waiting")
-			while !fs::exists(exit, fs::Root::Anywhere) { process::run("sleep", ["10"]) }
+			while !fs::exists(exit, fs::Root::Anywhere) {
+				drive_proved_report(dir)
+				process::run("sleep", ["10"])
+			}
 		}
 		let out = drive_read(f"{dir}/suite.log")
 		let steps = drive_red_steps(out)
 		// A red suite goes to QA in the next run where the time is up.
-		if steps != "" && drive_time_up() { drive_time_stop() }
+		if steps != "" {
+			let why = drive_time_check(dir)
+			if why != "" { drive_time_stop(why) }
+		}
 		process::run("rm", ["-f", exit, drive_lock_dir() + "/testing"])
 		if steps == "" {
 			println(f"SUITE {drive_short(sha)} green")
-			let how = drive_push(sha)
+			let how = drive_push(dir, sha)
 			let mut left: Vec[String] = []
 			let mut seen: i64 = 0
 			for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
@@ -1448,17 +2232,53 @@ fn drive_named_filters(paths: Vec[String]) -> Vec[String] throws {
 fn drive_local_tests(paths: Vec[String]) -> String throws {
 	let filters = drive_named_filters(paths)
 	if filters.len() == 0 { return "" }
-	let bin = drive_exe()
-	let exe = process::run("realpath", [bin]).stdout.trim().clone()
 	let mut args: String = ""
 	for f in filters { args = args + f" --filter '{f}'" }
 	println(f"LOCAL tests {filters.join(" ")}")
+	return drive_tests_run(args)
+}
+
+// `nikaia test ARGS` in tests/compiler, with a copy of the compiler this
+// driver owns (`target/drive-<pid>/nikaia`, removed after), so another lane's
+// rebuild of `target/fast/nikaia` cannot remove it under the tests (#1722).
+// A run that still loses its compiler (`running ... (deleted)`, or `No such
+// file or directory` on running it) is no red suite: `SUITE <sha8> local tests
+// interrupted (compiler rebuilt)`, and the tests once more on a fresh copy.
+// Red: the output, else "".
+fn drive_tests_run(args: String) -> String throws {
+	let own = f"target/drive-{drive_pid()}"
+	let mut out = drive_tests_once(own.clone(), args.clone())
+	if drive_compiler_lost(out.clone()) {
+		let sha = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+		println(f"SUITE {drive_short(sha)} local tests interrupted (compiler rebuilt)")
+		out = drive_tests_once(own.clone(), args)
+	}
+	process::run("rm", ["-rf", own])
+	return out
+}
+
+// One run of drive_tests_run: copies the compiler to OWN/nikaia (the script
+// tests find their toolchain by that basename) and runs the tests with it.
+fn drive_tests_once(own: String, args: String) -> String throws {
+	let bin = drive_exe()
+	process::run("mkdir", ["-p", own.clone()])
+	let copied = process::run("cp", [bin.clone(), own.clone() + "/nikaia.tmp"])
+	if !copied.ok { return f"Error: running {bin}: copy failed\nNo such file or directory\n{copied.stderr}" }
+	process::run("mv", [own.clone() + "/nikaia.tmp", own.clone() + "/nikaia"])
+	let exe = process::run("realpath", [own + "/nikaia"]).stdout.trim().clone()
 	let out = process::run(
 		"sh",
 		["-c", f"cd tests/compiler && NIKAIA_CACHE_LIMIT=2G '{exe}' test{args} 2>&1"],
 	)
 	if out.ok { return "" }
 	return out.stdout + out.stderr
+}
+
+// True when a test run's output says the compiler itself was gone (another
+// lane rebuilt it), not that a test failed.
+fn drive_compiler_lost(out: String) -> bool {
+	if out.contains("nikaia (deleted)") { return true }
+	return out.contains("Error: running ") && out.contains("No such file or directory")
 }
 
 // After the lock and before each suite: another lane may have pushed these
@@ -1508,14 +2328,19 @@ fn drive_suite(exe: String, dry: bool, dir: String) throws {
 	)
 	drive_say(
 		dry,
-		f"builders go on meanwhile; once it has finished (or before a bump, the next suite, the end): handle it; green: git push origin <sha>:develop, drop the tested briefs from {dir}/unpushed.txt, rm -rf target/suite.lock",
+		f"builders go on meanwhile; once it has finished (or before a bump, the next suite, the end): handle it; green: git push origin <sha>:develop, drop the tested briefs from {dir}/unpushed.txt, rm -rf target/suite.lock; then, unless --no-bump or HEAD moved past it, {exe} run scripts/release.nika -- {dir} (RELEASE lines) and WAKE PUSHED",
 	)
 	drive_say(
 		dry,
 		f"red: write {dir}/qa-input.txt, mkdir -p {dir}/qa, copy {drive_qa_template()} to {qa} (its report path made {qa}.report.md), rm -f {qa}.report.md, {exe} run scripts/agent.nika -- {qa} --dir {dir}, its report and run files stay untracked, the suite again and waited for (at most 2 QA rounds)",
 	)
+	drive_say(
+		dry,
+		"git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)",
+	)
 	if dry { return }
-	drive_settle(exe, dir)
+	drive_settle(exe.clone(), dir)
+	drive_pull_or_restart(exe.clone(), "before the suite")
 	process::run("git", ["fetch", "--quiet", "origin", "develop"])
 	let count = process::run(
 		"git",
@@ -1528,7 +2353,7 @@ fn drive_suite(exe: String, dry: bool, dir: String) throws {
 	if drive_docs_only(drive_unpushed_paths()) {
 		let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 		println(f"SUITE {drive_short(head)} docs-only, pushed without the suite")
-		drive_push(head)
+		drive_push(dir, head)
 		fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
 		return
 	}
@@ -1774,6 +2599,8 @@ fn drive_agent(exe: String, dry: bool, dir: String, brief: String, role: String)
 	if done == "" || !out.ok {
 		if first == "" { first = f"agent.nika exited with code {out.code}" }
 		drive_post_run(dir, brief.clone(), cost_from, first)
+		// An escalated run is the supervisor's, not drive_pickup's.
+		process::run("rm", ["-f", f"{brief}.running"])
 		drive_escalate(first)
 	}
 	drive_post_run(dir, brief.clone(), cost_from, "no report")
@@ -1823,7 +2650,9 @@ fn drive_sweep() -> i64 throws {
 
 // The cleanup after each batch, and before agents start when the disk runs
 // low (#1521): target/debug and target/nikaia-example-tests (the driver uses
-// neither), the sandboxes of dead `nikaia test` runs, and `nikaia cache
+// neither; target/debug is kept while a cargo started in this checkout
+// without `--profile`, `--release` or `--target-dir` runs, a builder's
+// clippy, #1800), the sandboxes of dead `nikaia test` runs, and `nikaia cache
 // prune` on target/nikaia-project-tests at the driver's limit, 2G (the tests'
 // cache is pruned, never removed whole); still under 6 GB after that and with
 // no cargo or rustc building into them, cargo's incremental caches (target/fast and
@@ -1832,11 +2661,23 @@ fn drive_sweep() -> i64 throws {
 fn drive_cleanup(exe: String, dry: bool) throws {
 	drive_say(
 		dry,
-		f"rm -rf target/debug target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free",
+		f"rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free",
 	)
 	if dry { return }
 	let before = drive_free()
-	process::run("rm", ["-rf", "target/debug", "target/nikaia-example-tests"])
+	// A cargo building into target/debug: one whose working directory is in
+	// this checkout and that names no other profile or target directory.
+	let debug_busy = process::run(
+		"sh",
+		["-c", "here=$(pwd -P); for p in $(ps -eo pid=,comm= | awk '$2 == \"cargo\" {print $1}'); do d=$(readlink /proc/$p/cwd) || continue; case \"$d/\" in \"$here\"/*) tr '\\0' ' ' < /proc/$p/cmdline | grep -qE -- '--profile|--release|--target-dir' || echo $p;; esac; done"],
+	).stdout.trim() != ""
+	let mut debug: String = "target/debug"
+	if debug_busy {
+		debug = "target/debug kept (a cargo builds into it)"
+	} else {
+		process::run("rm", ["-rf", "target/debug"])
+	}
+	process::run("rm", ["-rf", "target/nikaia-example-tests"])
 	let swept = drive_sweep()
 	let mut pruned: String = "no cache"
 	if exe != "" && fs::exists("target/nikaia-project-tests", fs::Root::Anywhere) {
@@ -1860,7 +2701,7 @@ fn drive_cleanup(exe: String, dry: bool) throws {
 		incremental = ", target/*/incremental"
 	}
 	let after = drive_free()
-	println(f"CLEANUP freed {after - before} MB, {after} MB free: target/debug, target/nikaia-example-tests, {swept} stale sandboxes, {pruned}{incremental}")
+	println(f"CLEANUP freed {after - before} MB, {after} MB free: {debug}, target/nikaia-example-tests, {swept} stale sandboxes, {pruned}{incremental}")
 }
 
 // Free disk before agents start: under 6 GB the cleanup runs at once, and
@@ -1891,11 +2732,32 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 		dry,
 		"a batch's suite that has finished (target/suite.lock/exit-<sha>): handle it (drive_settle) first; one still running: go on, CI runs it",
 	)
-	if !dry && drive_time_up() { drive_time_stop() }
+	if !dry {
+		let why = drive_time_check(dir)
+		if why != "" { drive_time_stop(why) }
+	}
+	drive_say(
+		dry,
+		"git fetch origin develop; new commits there merged into HEAD (MERGE <sha8> pulled <n> commits; scripts/*.nika among them: RESTART)",
+	)
+	if !dry { drive_pull_or_restart(exe.clone(), "before the next issue") }
 	drive_disk(exe.clone(), dry)
 	drive_post_brief(dry, brief)
 	drive_wip_start(dry, brief)
+	drive_say(dry, f"write {brief}.running (the run's start, removed when its follow-up is done)")
+	if !dry {
+		let cost_from = drive_line_count(drive_read(f"{dir}/cost.txt"))
+		fs::write(f"{brief}.running", fs::Root::Anywhere, f"{cost_from}\n")
+	}
 	drive_agent(exe, dry, dir, brief, "builder")
+	drive_builder_after(dry, dir, brief)
+}
+
+// The follow-up of a builder run once its agent ended: its report's `Pushed:`
+// checked, its issue's labels, the tidy, the brief appended to
+// DIR/unpushed.txt, its `Found:`, `Comment:` and improvement lines filed;
+// last, BRIEF.running removed.
+fn drive_builder_after(dry: bool, dir: String, brief: String) throws {
 	drive_report_pushed(dry, brief)
 	drive_wip_end(dry, brief)
 	drive_tidy(dry, dir.clone())
@@ -1907,7 +2769,37 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 		println(found)
 		drive_found_file(dir.clone(), brief.clone())
 	}
-	drive_improve_file(dir, brief)
+	drive_comment_file(dir.clone(), brief.clone())
+	drive_improve_file(dir, brief.clone())
+	process::run("rm", ["-f", f"{brief}.running"])
+}
+
+// At a start (#1885): a builder run the time limit cut off after its report
+// was written (BRIEF.running left beside a report: the harness ended the
+// driver before `builder done`) gets its follow-up now, before the next
+// brief: its run posted on its issue (from the cost.txt line BRIEF.running
+// holds), `builder done <name> (picked up)`, drive_builder_after. A marker
+// without a report is left: that brief has not run to its end, the cycle
+// runs it again (agent.nika resumes its session) and writes the marker anew.
+fn drive_pickup(dir: String) throws {
+	if !fs::exists(dir, fs::Root::Anywhere) { return }
+	let mut briefs: Vec[String] = []
+	for entry in fs::read_dir(dir.clone(), fs::Root::Anywhere) {
+		let path = entry.to_text()
+		let parts: Vec[String] = path.split("/").collect()
+		let name = parts[parts.len() - 1].clone()
+		let stem = name.strip_suffix(".running") ?? ""
+		if stem != "" { briefs.push(f"{dir}/{stem}") }
+	}
+	briefs.sort()
+	for brief in briefs {
+		if drive_report_of(brief.clone()) == "" { continue }
+		let cost_from = text::parse_i64(drive_read(f"{brief}.running").trim()) ?? 0
+		println(f"PICKUP {drive_stem(brief.clone())}: its run was cut off after its report, the follow-up runs now")
+		drive_post_run(dir.clone(), brief.clone(), cost_from, "no report")
+		println(f"builder done {drive_stem(brief.clone())} (picked up)")
+		drive_builder_after(false, dir.clone(), brief.clone())
+	}
 }
 
 // Adds LABEL to issue N (`gh api -X POST .../labels`); true when it went through.
@@ -1940,11 +2832,13 @@ fn drive_wip_start(dry: bool, brief: String) throws {
 // `Result:` and `Fixes:`: `keep` (done and `Fixes:` names #N: `wip` stays
 // until promote closes the issue, so it is not queued again), `block`
 // (blocked: `wip` and `ready` go, `blocked` comes, the supervisor decides),
-// `remove` (anything else, partial or no report: `wip` goes, `ready` stays).
-// A partial report batch.nika auto-accepts (owner, 2026-11-15, #1694) is not
-// queued again: its `#N` line stays in DIR/batch.txt (drive_queue_add skips
-// it) and its report exists; batch.nika lists it in DIR/review.txt, and the
-// supervisor writes the follow-up.
+// `remove` (anything else, partial or no report: `wip` goes, `ready` stays;
+// the `#N` line stays in batch.txt, so drive_queue_add does not queue it again
+// here: the supervisor retries it with a `#N SUFFIX` line, or removes the
+// line and its report so the next queue picks it up again).
+// A partial report batch.nika auto-accepts (owner, 2026-11-15, #1694) is
+// listed by batch.nika in DIR/review.txt, and the supervisor writes the
+// follow-up.
 fn drive_wip_after(result: String, fixes: String, issue: String) -> String {
 	let word = drive_word(result)
 	if word == "done" {
@@ -1980,15 +2874,20 @@ fn drive_wip_end(dry: bool, brief: String) throws {
 	}
 }
 
-// The labels of an issue filed from a report's `Found:` in AREA: `ready`,
-// AREA and `bugs` (the bug lane takes it, owner 2026-11-15; the improvement
-// lane relabels what is no compiler defect), `decision` instead of `ready`
-// when `Needs:` asks for something.
-fn drive_found_labels(needs: String, area: String) -> Vec[String] {
+// The labels of an issue filed from a report's `Found:`: `ready` and `bugs`
+// (the bug lane takes it, owner 2026-11-15; the improvement lane relabels
+// what is no compiler defect), `decision` instead of `ready` when `Needs:`
+// asks for something or the Found itself says `no decision yet` (the words
+// docs/issues.md I6 asks of an issue without its governing decision; #1745:
+// #1731 was filed `ready` from a Found that asked for a decision beside a
+// `Needs: none`). Never a second lane label: one lane label per issue says
+// which lane builds it (owner, 2026-11-15); the body names the run it came
+// from.
+fn drive_found_labels(found: String, needs: String) -> Vec[String] {
 	let mut status: String = "decision"
-	if needs == "" || drive_word(needs) == "none" { status = "ready" }
-	if area == "bugs" { return [status, area] }
-	return [status, area, "bugs"]
+	if (needs == "" || drive_word(needs) == "none")
+		&& !found.to_lowercase().contains("no decision yet") { status = "ready" }
+	return [status, "bugs"]
 }
 
 // The title of an issue filed from FOUND: its first 80 characters, cut at a
@@ -2013,20 +2912,42 @@ fn drive_found_title(found: String) -> String {
 // The body of an issue filed from a report's `Found:`: where it came from (the
 // brief, its issue), the Found, `Needs:` when it asks for something, a *To
 // build* and a *Done when* for the builder that takes it (docs/issues.md),
-// then the footer.
+// then the footer. The fix item names where a non-compiler Found is fixed
+// (#1769: a stale guide example read as a compiler defect to fix). Its first
+// item runs the probe on today's `develop`, since the run may have used an
+// older binary (#1822).
 fn drive_found_body(name: String, issue: String, found: String, needs: String) -> String {
 	let from = if issue == "" { f"the run of `{name}`" } else { f"the run of `{name}` (#{issue})" }
 	let mut body = f"Filed by the driver from the `Found:` of {from} (owner, 2026-11-06).\n\n## Found\n\n{found.trim()}\n"
 	if needs != ""
 		&& drive_word(needs) != "none" { body = body + f"\n## Needs\n\n{needs.trim()}\n" }
+	// A probe named by a path in the run's scratchpad is gone when the
+	// issue is built (#1824: #1751's Found named one): the issue says so,
+	// so its builder takes it from the commit or writes it again.
+	if found.contains("/scratchpad/") {
+		body = body
+			+ "\n## Probe missing\n\nThe Found names a file in the run's scratchpad, which is gone when this issue is built (docs/issues.md I5, #1824): take the probe from the run's commit message if it holds one, else write it again from the Found and its ADR before the first item.\n"
+	}
 	body = body
-		+ "\n## To build\n\n- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`).\n- [ ] Fix it where it lives, with a test in `tests/compiler/tests/`.\n"
-	body = body + "\n## Done when\n\nThe probe gives the specified result and its test is green.\n"
+		+ "\n## To build\n\n- [ ] Run the Found's probe on today's `develop` first: the run that wrote it may have used a binary older than the tip, so it may be fixed already (#1822: #1788 was filed from a probe a fix under #1754 had already made pass). A probe that passes there names the commit that fixed it (`git log -400 --grep` by topic, since a fix often lands under another issue's number), and the run builds only a `tests/compiler/tests/` test that pins it (docs/issues.md I13).
+- [ ] Reproduce the Found: a compiler, lowering or `std` defect with a probe (`nikaia run scripts/probe.nika -- SNIPPET`; a lowered file that differs, with an uncached `lower-std` of a `git archive HEAD` copy, `NIKAIA_LOWER_CACHE_SALT` fresh and `--sysroot COPY/crates`, its `lowered/` diffed against the copy's, never the shared working tree's, #1793), a defect in `docs/`, `guide/`, `website/` or `scripts/` (a stale example, a wrong rule) with the command or check that shows it; a behaviour the code does on purpose (name the function or ADR) closes it as by design. The Found line may lack them (#1710): the commit message, or the report's `Body:` when closed, gives the probe or check with its expected output, the ADR or Part I-III section that says so, and its actual output (docs/issues.md I5, I6), and the cause, file and function, traced or suspected (I7).\n- [ ] Fix it in the file where it lives: a compiler, lowering or `std` defect in the compiler, a stale page example or rule in its page or `docs/` file, a script defect in the script. Add a test in `tests/compiler/tests/` unless a check that already runs turns red on it (name it: pre-push's `page-examples` for `guide/` and `website/`, `check-adr-refs.py` for a docs citation).\n"
+	body = body + "\n## Done when\n\nThe probe or check gives the expected output the first item names from its ADR or Part I-III section, and a `tests/compiler/tests/` test (or the named check) that failed on the unfixed tree is green; or the probe already passes on `develop` and a test pins it, naming the commit that fixed it; or the issue is closed as by design, naming the function or ADR.\n"
 	return body + drive_footer()
 }
 
+// The report's `Needs:` as it goes with each of its COUNT Founds: whole
+// when there is one, "" when there are several, since a report has one
+// `Needs:` and it cannot say which Found it asks for (#1769: #1675's run
+// gave a stale guide example the `Needs:` of its other Found). A Found that
+// waits on a decision says `no decision yet` itself (drive_found_labels); the
+// `Needs:` still reaches the improvement issue (drive_improve_items).
+fn drive_found_needs(count: int, needs: String) -> String {
+	if count == 1 { return needs }
+	return ""
+}
+
 // Files a report's `Found:` as an issue (owner, 2026-11-06): labels
-// drive_found_labels (AREA: the last part of DIR), title drive_found_title,
+// drive_found_labels, title drive_found_title,
 // body drive_found_body; `<brief>: filed #N` goes into DIR/found.txt and
 // `FILED #N <brief>` is printed. A failed call is logged (`file failed for
 // <brief>`), the Found stays in found.txt for the supervisor.
@@ -2034,19 +2955,24 @@ fn drive_found_file(dir: String, brief: String) throws {
 	let report = drive_report_of(brief.clone())
 	if report == "" { return }
 	let text = drive_read(report)
-	let found = drive_field(text.clone(), "Found")
-	if found == "" || drive_word(found.clone()) == "none" { return }
-	let needs = drive_field(text, "Needs")
+	let founds = drive_founds(text.clone())
+	let needs = drive_found_needs(founds.len(), drive_field(text, "Needs"))
 	let name = drive_stem(brief.clone())
-	let area = drive_stem(dir.clone())
-	let body = drive_found_body(name.clone(), drive_issue(brief), found.clone(), needs.clone())
-	let number = drive_issue_new(drive_found_title(found), body, drive_found_labels(needs, area))
-	if number == "" {
-		println(f"file failed for {name}")
-		return
+	let issue = drive_issue(brief)
+	for found in founds {
+		let body = drive_found_body(name.clone(), issue.clone(), found.clone(), needs.clone())
+		let number = drive_issue_new(
+			drive_found_title(found),
+			body,
+			drive_found_labels(found.clone(), needs.clone()),
+		)
+		if number == "" {
+			println(f"file failed for {name}")
+		} else {
+			drive_append(f"{dir}/found.txt", f"{name}: filed #{number}")
+			println(f"FILED #{number} {name}")
+		}
 	}
-	drive_append(f"{dir}/found.txt", f"{name}: filed #{number}")
-	println(f"FILED #{number} {name}")
 }
 
 // Files an issue with TITLE, BODY and LABELS (`gh api .../issues`); its
@@ -2068,27 +2994,443 @@ fn drive_issue_new(title: String, body: String, labels: Vec[String]) -> String t
 }
 
 // What a report says went badly besides its `Found:` (owner, 2026-11-15:
-// nobody has to ask a builder again): `Issue:` when not `complete`,
-// `Deviation:`, `Needs:` and `Friction:` when not `none`, as
-// `<field>: <text>` lines; empty when all is well.
-fn drive_improve_items(text: String) -> Vec[String] {
+// nobody has to ask a builder again), one point each: every open `Issue:`
+// answer (drive_issue_answers), `Needs:` and `Friction:` when not `none`, and
+// a `Comment:` without an issue number, as `<field>: <text>`. `Deviation:` is
+// no point (#1818): it stays in the report, which the supervisor reads when
+// it accepts a cut.
+fn drive_improve_points(text: String) -> Vec[String] {
 	let mut items: Vec[String] = []
-	for key in ["Issue", "Deviation", "Needs", "Friction"] {
+	for answer in drive_issue_answers(drive_field(text.clone(), "Issue")) { items.push(f"Issue: {answer}") }
+	for key in ["Needs", "Friction"] {
 		let value = drive_field(text.clone(), key.clone())
 		let word = drive_word(value.clone())
-		if value == "" || word == "none" || word == "complete" || word == "-" { continue }
+		if value == "" || word == "none" || word == "-" { continue }
+		// A gap filed as the report's Found (drive_founds, #1744).
+		if key == "Needs" && drive_founds(text.clone()) == [drive_needs_gap(text.clone())] { continue }
+		// A `Needs:` that is only a `#N` list is what the issue waits for;
+		// drive_blocked_on holds it until those close (#1899 was filed from
+		// #1857's `Needs: #1848, #1849`).
+		if key == "Needs" && drive_only_hashes(value.clone()) { continue }
 		items.push(f"{key}: {value}")
+	}
+	for c in drive_fields(text, "Comment") {
+		if c != "" && drive_word(c.clone()) != "none" && drive_comment_issue(c.clone()) == "" {
+			items.push(f"Comment (no issue number): {c}")
+		}
 	}
 	return items
 }
 
+// Where each point of a report goes (#1818: eleven improvement issues were
+// closed unworked on 2026-11-16, each a point a rule covered, the run had
+// built, a deviation or a duplicate), one `<where>\t<point>` line per point
+// of drive_improve_points, `Deviation:` first as `drop deviation`:
+//   `comment #N`   an `Issue:` answer that the run's issue N broke a rule
+//                  (`broke I3: ...`, `I4b not followed: ...`): the author
+//                  fixes the issue (docs/issues.md), so it is said there;
+//   `drop settled` the point says the run closed or built it itself
+//                  (drive_improve_settled);
+//   `drop built F` the point names a rules file F (under `docs/`,
+//                  `scripts/`, `.claude/`) the run's own commit changed
+//                  (`Files:`, `Partial:`);
+//   `dup #M`       the point matches the title or a `## Reported` line of
+//                  improvement issue M in EXISTING (drive_improve_existing,
+//                  drive_improve_dup): it is added there as a comment;
+//   `file`         a new point: filed (drive_improve_file).
+// ISSUE is the run's issue, "" for a brief without one (its `broke` answers
+// are then filed, having no issue to go to).
+fn drive_improve_sorted(text: String, issue: String, existing: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	let deviation = drive_field(text.clone(), "Deviation")
+	let word = drive_word(deviation.clone())
+	if deviation != "" && word != "none" && word != "-" { out.push(f"drop deviation\tDeviation: {deviation}") }
+	let touched = drive_improve_touched(text.clone())
+	for point in drive_improve_points(text) {
+		out.push(f"{drive_improve_where(point.clone(), issue.clone(), touched.clone(), existing.clone())}\t{point}")
+	}
+	return out
+}
+
+// The first column of a line of drive_improve_sorted: where its point goes.
+fn drive_improve_place(line: String) -> String {
+	return line.split("\t").collect()[0].clone()
+}
+
+// The point of a line of drive_improve_sorted, after its first column.
+fn drive_improve_point(line: String) -> String {
+	return (line.strip_prefix(drive_improve_place(line.clone()) + "\t") ?? "").clone()
+}
+
+// Where POINT goes, the first column of drive_improve_sorted.
+fn drive_improve_where(point: String, issue: String, touched: Vec[String], existing: String) -> String {
+	if issue != "" && drive_improve_broke(point.clone()) { return f"comment #{issue}" }
+	if drive_improve_settled(point.clone()) { return "drop settled" }
+	let tokens = drive_improve_tokens(point.clone())
+	for path in touched {
+		let parts = path.split("/").collect()
+		let base = parts[parts.len() - 1]
+		if tokens.contains(path.clone()) || tokens.contains(f"{base}") { return f"drop built {path}" }
+	}
+	let dup = drive_improve_dup(point, existing)
+	if dup != "" { return f"dup #{dup}" }
+	return "file"
+}
+
+// The points of drive_improve_sorted that are filed as a new issue (`file`),
+// without their first column.
+fn drive_improve_items(text: String, issue: String, existing: String) -> Vec[String] {
+	let mut items: Vec[String] = []
+	for line in drive_improve_sorted(text, issue, existing) {
+		if drive_improve_place(line.clone()) == "file" { items.push(f"{drive_improve_point(line.clone())}") }
+	}
+	return items
+}
+
+// Whether POINT is an `Issue:` answer saying only that the run's issue broke
+// a rule: its kind (before the first `: `) starts with `broke` or says `not
+// followed`.
+fn drive_improve_broke(point: String) -> bool {
+	let rest = point.strip_prefix("Issue: ") ?? ""
+	if rest == "" { return false }
+	let colon = rest.find(": ") ?? rest.len()
+	let kind = f"{rest[0..<colon]}".trim().to_lowercase()
+	return kind.starts_with("broke") || kind.contains("not followed")
+}
+
+// Whether POINT says the run settled it itself: closed, noise, nothing to
+// build, or built in this run (whole words, any case; `was built already`
+// says the issue asked for what existed and is a point).
+fn drive_improve_settled(point: String) -> bool {
+	let words = drive_improve_words_all(point)
+	let line = f" {words.join(" ")} "
+	for mark in [
+		" closed ",
+		" noise ",
+		" nothing to build ",
+		" built in this run ",
+		" built in the same run ",
+		" this run built ",
+		" built here ",
+		" i built ",
+	] {
+		if line.contains(mark.clone()) { return true }
+	}
+	return false
+}
+
+// The rules files (under `docs/`, `scripts/`, `.claude/`) the run's commit
+// changed, from the report's `Files:` and `Partial:`.
+fn drive_improve_touched(text: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	for key in ["Files", "Partial"] {
+		for value in drive_fields(text.clone(), key.clone()) {
+			for path in value.replace(",", " ").split(" ") {
+				let p = path.trim()
+				if p.starts_with("docs/") || p.starts_with("scripts/") || p.starts_with(".claude/") { out.push(f"{p}") }
+			}
+		}
+	}
+	return out
+}
+
+// The words of POINT as written, split at blanks and stripped of backticks,
+// brackets and the punctuation that ends a word: `docs/issues.md`, `I9`.
+fn drive_improve_tokens(point: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	let mut spaced = point.clone()
+	for c in ["`", ",", ";", "(", ")", "\"", "'"] { spaced = spaced.replace(c.clone(), " ") }
+	for word in spaced.split(" ") {
+		let mut t = f"{word.trim()}"
+		while t.ends_with(".") || t.ends_with(":") { t = f"{t.strip_suffix(".") ?? t.strip_suffix(":") ?? ""}" }
+		if t != "" { out.push(t) }
+	}
+	return out
+}
+
+// The lower-case words of TEXT (runs of letters and digits), in order.
+fn drive_improve_words_all(text: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	let mut word: String = ""
+	for c in f"{text.to_lowercase()} ".chars() {
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
+			word = f"{word}{c}"
+			continue
+		}
+		if word != "" { out.push(word.clone()) }
+		word = ""
+	}
+	return out
+}
+
+// The distinct words of TEXT that carry its meaning for drive_improve_dup:
+// four letters or more, not a word every point has.
+fn drive_improve_words(text: String) -> Vec[String] {
+	let stop: Vec[String] = [
+		"after",
+		"that",
+		"this",
+		"with",
+		"from",
+		"when",
+		"what",
+		"which",
+		"have",
+		"been",
+		"were",
+		"there",
+		"their",
+		"into",
+		"than",
+		"then",
+		"does",
+		"only",
+		"issue",
+		"issues",
+		"friction",
+		"needs",
+		"none",
+	]
+	let mut out: Vec[String] = []
+	for w in drive_improve_words_all(text) {
+		if w.len() >= 4 && !stop.contains(w.clone()) && !out.contains(w.clone()) { out.push(w) }
+	}
+	return out
+}
+
+// Whether the texts A and B say the same point: they share at least four
+// words of drive_improve_words, and those are at least 60 % of the shorter
+// one's.
+fn drive_improve_alike(a: String, b: String) -> bool {
+	let x = drive_improve_words(a)
+	let y = drive_improve_words(b)
+	let mut shared = 0
+	for w in x {
+		if y.contains(w) { shared = shared + 1 }
+	}
+	let fewer = if x.len() < y.len() { x.len() } else { y.len() }
+	return shared >= 4 && shared * 10 >= fewer * 6
+}
+
+// The improvement issue in EXISTING (drive_improve_existing: `#M<TAB>title`
+// lines, each followed by `<TAB>- <field>: <text>` lines of its `##
+// Reported`) whose title or a reported line says POINT
+// (drive_improve_alike), compared without the `<field>: ` and `After #N: `
+// heads; "" when none.
+fn drive_improve_dup(point: String, existing: String) -> String {
+	let said = drive_improve_unheaded(point)
+	let mut number: String = ""
+	for line in existing.split("\n") {
+		if line.starts_with("#") {
+			let tab = line.find("\t") ?? line.len()
+			number = f"{line["#".len()..<tab]}"
+			if tab == line.len() { continue }
+			let title = f"{drive_improve_point(line.clone())}"
+			let colon = title.find(": ") ?? title.len()
+			let text = if title.starts_with("After ") && colon < title.len() { f"{title[colon + ": ".len()..]}" } else { title }
+			if drive_improve_alike(said.clone(), text) { return number }
+		} else if line.starts_with("\t- ") && number != "" {
+			let reported = drive_improve_unheaded(f"{line["\t- ".len()..]}")
+			if drive_improve_alike(said.clone(), reported) { return number }
+		}
+	}
+	return ""
+}
+
+// POINT without its `<field>: ` head (`Friction: x` gives `x`).
+fn drive_improve_unheaded(point: String) -> String {
+	let colon = point.find(": ") ?? point.len()
+	if colon == point.len() || colon > "Comment (no issue number)".len() { return point }
+	return f"{point[colon + ": ".len()..]}"
+}
+
+// The open improvement issues and those closed in the last 14 days, as
+// drive_improve_dup reads them (`gh api`, the pull requests left out); ""
+// when the calls fail, so every point is then filed.
+fn drive_improve_existing() -> String throws {
+	let since = process::run("date", ["-u", "-d", "14 days ago", "+%Y-%m-%dT%H:%M:%SZ"]).stdout.trim().clone()
+	let jq = ".[] | select(.pull_request == null) | select(.state == \"open\" or .closed_at >= \"" + since + "\") | (\"#\" + (.number | tostring) + \"\\t\" + .title), ((.body // \"\") | (split(\"## Reported\")[1] // \"\") | split(\"\\n## \")[0] | split(\"\\n\")[] | select(startswith(\"- \")) | \"\\t\" + .)"
+	let repo = drive_repo()
+	let mut out: String = ""
+	for query in ["state=open", f"state=closed&since={since}"] {
+		let got = process::run(
+			"gh",
+			["api", "--paginate", f"repos/{repo}/issues?labels=improve&per_page=100&{query}", "--jq", jq.clone()],
+		)
+		if got.ok { out = out + got.stdout + "\n" }
+	}
+	return out
+}
+
+// The answers of a report's `Issue:` VALUE (joined with `;`) that are still
+// open: an answer whose kind before its first `: ` ends in `(built)` is
+// left out, and so is one that says nothing was missing in other words than
+// `complete` (`meets I1-I13`, #1753: #1740's run wrote it and it was filed;
+// `fits docs/issues.md`, #1837: #1820's run wrote it, in any case);
+// empty when none is left. A part that does not open with a kind
+// (`complete`, `meets`, `fits`, `none`, `broke`, `rules-gap`, `wrong`,
+// `I<n>`) is the previous answer's prose cut at its own `;` and stays with it (#1827: the
+// second half of #1819's `rules-gap (built)` answer was filed alone).
+fn drive_issue_answers(value: String) -> Vec[String] {
+	let mut parts: Vec[String] = []
+	for raw in value.split(";") {
+		let t = raw.trim()
+		let low = t.to_lowercase()
+		let cs: Vec[scalar] = low.chars().collect()
+		let mut kind = cs.len() > 1 && cs[0] == 'i' && cs[1] >= '0' && cs[1] <= '9'
+		for word in ["complete", "meets", "fits", "none", "broke", "rules-gap", "wrong", "-"] {
+			if low.starts_with(word) { kind = true }
+		}
+		if !kind && parts.len() > 0 {
+			let last = parts.len() - 1
+			parts[last] = f"{parts[last]}; {t}"
+		} else {
+			parts.push(f"{t}")
+		}
+	}
+	let mut open: Vec[String] = []
+	for part in parts {
+		let t = part.trim()
+		let colon = t.find(": ") ?? t.len()
+		if f"{t[0..<colon]}".trim().ends_with("(built)") { continue }
+		let word = drive_word(f"{t}").to_lowercase()
+		if word == "complete" || word == "meets" || word == "fits" || word == "none" || word == "-" { continue }
+		if t != "" { open.push(f"{t}") }
+	}
+	return open
+}
+
+// The issue a report's `Comment:` value names, `#1531 group D waits ...` gives
+// `1531`; "" when it does not start with `#N` and a text.
+fn drive_comment_issue(value: String) -> String {
+	let t = value.trim()
+	if !t.starts_with("#") { return "" }
+	let space = t.find(" ") ?? t.len()
+	if space == t.len() || space < "#0".len() { return "" }
+	let number = f"{t["#".len()..<space]}"
+	for c in number.chars() {
+		if c < '0' || c > '9' { return "" }
+	}
+	return number
+}
+
+// The text of a report's `Comment:` value after its `#N`.
+fn drive_comment_text(value: String) -> String {
+	let t = value.trim()
+	let space = t.find(" ") ?? t.len()
+	return f"{t[space..]}".trim().clone()
+}
+
+// The `Comment:` values of a report that name an issue (`#N <text>`): what a
+// builder without GitHub wants said on an issue its run is not about (#1698).
+fn drive_comments(text: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	for c in drive_fields(text, "Comment") {
+		if drive_comment_issue(c.clone()) != "" { out.push(c) }
+	}
+	return out
+}
+
+// The body of a comment the driver posts for a report's `Comment:` VALUE from
+// the run of NAME (issue ISSUE): where it came from, the text, the footer.
+fn drive_comment_body(name: String, issue: String, value: String) -> String {
+	let from = if issue == "" { f"the run of `{name}`" } else { f"the run of `{name}` (#{issue})" }
+	return f"From the report of {from}:\n\n{drive_comment_text(value)}\n" + drive_footer()
+}
+
+// Posts each `Comment: #N <text>` of a report on issue N (#1698: a `Needs:
+// supervisor: comment on #N` became an improvement issue no builder could
+// do); `<brief>: comment #N` goes into DIR/found.txt (a comment with that
+// line is not posted again) and `COMMENT #N <brief>` is printed.
+fn drive_comment_file(dir: String, brief: String) throws {
+	let report = drive_report_of(brief.clone())
+	if report == "" { return }
+	let name = drive_stem(brief.clone())
+	let issue = drive_issue(brief)
+	for c in drive_comments(drive_read(report)) {
+		let n = drive_comment_issue(c.clone())
+		if drive_read(f"{dir}/found.txt").contains(f"{name}: comment #{n}\n") { continue }
+		if !drive_comment(n.clone(), drive_comment_body(name.clone(), issue.clone(), c)) {
+			println(f"comment failed for {name} on #{n}")
+			continue
+		}
+		drive_append(f"{dir}/found.txt", f"{name}: comment #{n}")
+		println(f"COMMENT #{n} {name}")
+	}
+}
+
+// Where the run behind an improvement issue left its work (#1706: the
+// #1697 run looked for #1694's commit on develop for turns, and it was on no
+// branch): the report at REPORT, and from its TEXT the commit's subject
+// (`Commit:`) and the `Pushed:` it had when the issue was filed, which is
+// `local <sha>` before the batch's suite pushes it. The report itself is
+// quoted whole (drive_improve_quoted): it is untracked and goes when
+// docs/briefs/ is cleaned, so the issue must not depend on it (#1791: #1769's
+// issue named the #1675 report, gone by the time its run read it).
+fn drive_improve_source(report: String, text: String) -> String {
+	let commit = drive_field(text.clone(), "Commit")
+	let pushed = drive_field(text.clone(), "Pushed")
+	let mut out = f"\n## Source\n\nThe run's report: `{report}` (untracked, in the driver's checkout; quoted whole below, since the file may be gone).\n"
+	if commit == "" || drive_word(commit.clone()) == "none" {
+		return out + "The run committed nothing.\n" + drive_improve_quoted(text)
+	}
+	let state = if pushed == "" { "no `Pushed:`" } else { f"`Pushed: {pushed}`" }
+	out = out + f"The run's commit: `{commit}` ({state} when this issue was filed). "
+	return out
+		+ "A `local` commit reaches `develop` only when its batch's suite is green: find it by its subject (`git log -400 --all --grep`); on no branch, it was not pushed, so judge its points from the report and the code as it is.\n"
+		+ drive_improve_quoted(text)
+}
+
+// The report TEXT as a folded block of an issue body, fenced with four
+// backticks so a field's own backticks stay inside it.
+fn drive_improve_quoted(text: String) -> String {
+	return f"\n<details><summary>The run's report</summary>\n\n````text\n{text.trim()}\n````\n\n</details>\n"
+}
+
+// The numbers of the issues filed from the COUNT Founds of the run of NAME,
+// read from DIR/found.txt (`<name>: filed #N`, drive_found_file), in the
+// order of the Founds; empty when not each of them was filed, since a failed
+// call leaves no line and the numbers could not be paired.
+fn drive_filed_numbers(dir: String, name: String, count: int) -> Vec[String] throws {
+	let mut all: Vec[String] = []
+	let prefix = f"{name}: filed #"
+	for line in drive_read(f"{dir}/found.txt").split("\n") {
+		if line.starts_with(prefix) { all.push((line.strip_prefix(prefix) ?? "").trim().clone()) }
+	}
+	let mut out: Vec[String] = []
+	if all.len() < count { return out }
+	for i in all.len() - count..<all.len() { out.push(all[i].clone()) }
+	return out
+}
+
+// The run's Founds for an improvement issue from TEXT, with the issue each
+// was filed as (NUMBERS, drive_filed_numbers, when paired): an item that
+// points at one ("see Found") is then read in the issue itself (#1783:
+// #1749's `Issue:` said "see Found" and the next run had to look the defect
+// up in the report); "" without a Found.
+fn drive_improve_founds(text: String, numbers: Vec[String]) -> String {
+	let founds = drive_founds(text)
+	if founds.len() == 0 { return "" }
+	let mut out = "\n## The run's Found lines\n\nEach is filed as its own issue for the bug lane; an item above that points at a Found means one of these.\n\n"
+	let mut i = 0
+	for f in founds {
+		let filed = if numbers.len() == founds.len() { f" (filed #{numbers[i]})" } else { "" }
+		out = out + f"- Found{filed}: {f}\n"
+		i = i + 1
+	}
+	return out
+}
+
 // The body of an issue filed for the improvement lane from ITEMS of the
-// report of NAME (issue ISSUE): where it came from, the items, a *To build*
-// and a *Done when* for the lane, then the footer.
-fn drive_improve_body(name: String, issue: String, items: Vec[String]) -> String {
+// report of NAME (issue ISSUE): where it came from, the items, where the
+// run's Found lines and where its work is (SOURCE, drive_improve_founds and
+// drive_improve_source), a *To build* and a *Done when* for the lane, then
+// the footer.
+fn drive_improve_body(name: String, issue: String, items: Vec[String], source: String) -> String {
 	let from = if issue == "" { f"the run of `{name}`" } else { f"the run of `{name}` (#{issue})" }
 	let mut body = f"Filed by the driver from the report of {from} for the improvement lane (owner, 2026-11-15).\n\n## Reported\n\n"
 	for item in items { body = body + f"- {item}\n" }
+	body = body + source
 	body = body
 		+ "\n## To build\n\n- [ ] Judge each point: a general fix (a rule in `docs/`, a script, the driver, a template, a check that turns builders red for nothing), a compiler defect (relabel `bugs`), or noise.\n- [ ] Build the general fix, or close the point with a one-line reason.\n"
 	body = body + "\n## Done when\n\nEach point is built as a general fix, moved to the bug lane, or closed as noise with its reason.\n"
@@ -2105,20 +3447,49 @@ fn drive_improve_title(name: String, issue: String, item: String) -> String {
 	return drive_found_title(f"After {from}: {text}")
 }
 
-// Files what a report says went badly (drive_improve_items) as one issue
-// labelled `ready` and `improve` for the improvement lane (owner,
-// 2026-11-15); `<brief>: improve #N` goes into DIR/found.txt (a report with
-// that line is not filed again) and `IMPROVE #N <brief>` is printed.
+// Files what a report says went badly as drive_improve_sorted sorts it
+// (#1818): the `file` points as one issue labelled `ready` and `improve` for
+// the improvement lane (owner, 2026-11-15; `<brief>: improve #N` goes into
+// DIR/found.txt, a report with that line is not filed again, and `IMPROVE #N
+// <brief>` is printed), the points for an issue as one comment there
+// (drive_improve_comment: `IMPROVE-BROKE #N` on the run's issue,
+// `IMPROVE-DUP #M` on an improvement issue that has the point), a dropped
+// point as `IMPROVE-DROP <brief> <why>: <point>`. The existing improvement
+// issues are read only when a point is left to file.
 fn drive_improve_file(dir: String, brief: String) throws {
 	let report = drive_report_of(brief.clone())
 	if report == "" { return }
-	let items = drive_improve_items(drive_read(report))
-	if items.len() == 0 { return }
+	let text = drive_read(report.clone())
 	let name = drive_stem(brief.clone())
-	if drive_read(f"{dir}/found.txt").contains(f"{name}: improve #") { return }
 	let issue = drive_issue(brief)
+	let mut sorted = drive_improve_sorted(text.clone(), issue.clone(), "")
+	if drive_improve_items(text.clone(), issue.clone(), "").len() > 0 {
+		sorted = drive_improve_sorted(text.clone(), issue.clone(), drive_improve_existing())
+	}
+	let mut targets: Vec[String] = []
+	for line in sorted {
+		let place = drive_improve_place(line.clone())
+		if place.starts_with("drop") { println(f"IMPROVE-DROP {name} {place.strip_prefix("drop ") ?? ""}: {drive_improve_point(line.clone())}") }
+		if (place.starts_with("comment #") || place.starts_with("dup #")) && !targets.contains(place.clone()) { targets.push(place) }
+	}
+	for target in targets {
+		let mut points: Vec[String] = []
+		for line in sorted {
+			if drive_improve_place(line.clone()) == target { points.push(f"{drive_improve_point(line.clone())}") }
+		}
+		drive_improve_comment(dir.clone(), name.clone(), issue.clone(), target, points)
+	}
+	let mut items: Vec[String] = []
+	for line in sorted {
+		if drive_improve_place(line.clone()) == "file" { items.push(f"{drive_improve_point(line.clone())}") }
+	}
+	if items.len() == 0 { return }
+	if drive_read(f"{dir}/found.txt").contains(f"{name}: improve #") { return }
 	let title = drive_improve_title(name.clone(), issue.clone(), items[0].clone())
-	let number = drive_issue_new(title, drive_improve_body(name.clone(), issue, items), ["ready", "improve"])
+	let numbers = drive_filed_numbers(dir.clone(), name.clone(), drive_founds(text.clone()).len())
+	let founds = drive_improve_founds(text.clone(), numbers)
+	let body = drive_improve_body(name.clone(), issue, items, founds + drive_improve_source(report, text))
+	let number = drive_issue_new(title, body, ["ready", "improve"])
 	if number == "" {
 		println(f"improve file failed for {name}")
 		return
@@ -2127,26 +3498,78 @@ fn drive_improve_file(dir: String, brief: String) throws {
 	println(f"IMPROVE #{number} {name}")
 }
 
+// The body of the comment for POINTS of the run of NAME (issue ISSUE) that go
+// to an issue (drive_improve_sorted's TARGET): on the run's own issue
+// (`comment #N`), the rules the run found it broke, which its author fixes
+// (docs/issues.md, *How a run judges its issue*); on an improvement issue
+// (`dup #M`), the same points raised again (#1818).
+fn drive_improve_comment_body(name: String, issue: String, target: String, points: Vec[String]) -> String {
+	let from = if issue == "" { f"the run of `{name}`" } else { f"the run of `{name}` (#{issue})" }
+	let mut body = if target.starts_with("comment #") {
+		f"The report of {from} judged this issue against `docs/issues.md`; the author fixes the issue by the rule it names (*How a run judges its issue*):\n\n"
+	} else {
+		f"The report of {from} raised this point again; the driver adds it here instead of filing a new improvement issue (#1818):\n\n"
+	}
+	for p in points { body = body + f"- {p}\n" }
+	return body + drive_footer()
+}
+
+// Posts POINTS on the issue drive_improve_sorted's TARGET names
+// (drive_improve_comment_body); `<name>: improve-comment #N` goes into
+// DIR/found.txt (not posted again) and `IMPROVE-BROKE #N <name>` (the run's
+// issue) or `IMPROVE-DUP #M <name>` is printed.
+fn drive_improve_comment(dir: String, name: String, issue: String, target: String, points: Vec[String]) throws {
+	let n = target.split("#").collect()[1].clone()
+	if drive_read(f"{dir}/found.txt").contains(f"{name}: improve-comment #{n}\n") { return }
+	if !drive_comment(n.clone(), drive_improve_comment_body(name.clone(), issue, target.clone(), points)) {
+		println(f"comment failed for {name} on #{n}")
+		return
+	}
+	drive_append(f"{dir}/found.txt", f"{name}: improve-comment #{n}")
+	let kind = if target.starts_with("dup") { "IMPROVE-DUP" } else { "IMPROVE-BROKE" }
+	println(f"{kind} #{n} {name}")
+}
+
 // A report's `Found:` (a defect outside the builder's step) does not stop the
-// batch (supervisor, 2026-11-06): `<brief>: Found: <text>` is appended to
-// DIR/found.txt (created when missing) for the supervisor to file, and the
-// line to print, `FOUND <brief>: Found: <text>` (at most 160 characters), is
-// returned; "" when the report has none (`none` or no line).
+// batch (supervisor, 2026-11-06): for each `Found:` line (one defect each,
+// #1677) `<brief>: Found: <text>` is appended to DIR/found.txt (created when
+// missing) for the supervisor to file, and the lines to print, `FOUND <brief>:
+// Found: <text>` (each at most 160 characters), are returned joined by
+// newlines; "" when the report has none (`none` or no line).
 fn drive_found(dir: String, brief: String) -> String throws {
 	let report = drive_report_of(brief.clone())
 	if report == "" { return "" }
-	let found = drive_field(drive_read(report), "Found")
-	if found == "" || found == "none" { return "" }
-	let line = f"{drive_stem(brief)}: Found: {found}"
-	drive_append(f"{dir}/found.txt", line.clone())
-	let out = f"FOUND {line}"
-	if out.len() <= 160 { return out }
-	return out.bytes[0..157].text() + "..."
+	let mut lines: Vec[String] = []
+	for found in drive_founds(drive_read(report)) {
+		let line = f"{drive_stem(brief.clone())}: Found: {found}"
+		drive_append(f"{dir}/found.txt", line.clone())
+		let out = f"FOUND {line}"
+		if out.len() <= 160 { lines.push(out) } else { lines.push(out.bytes[0..157].text() + "...") }
+	}
+	return lines.join("\n")
+}
+
+// What the supervisor does at a stop line STOP, the tail of its ESCALATE line
+// (#1887): the work order is the issue, which the driver queues itself.
+fn drive_stop_next(stop: String) -> String {
+	if stop.starts_with("CUT") && stop.contains(": Result: blocked") {
+		return "the supervisor files or decides what `Found:` names and writes its `#M` under the report's `Needs:`; the driver then drops the brief and blocks the issue until `#M` is closed"
+	}
+	if stop.starts_with("CUT") && stop.contains(": brief missing") {
+		return "the supervisor puts the issue's `#N` line in its place or drops the line from batch.txt"
+	}
+	if stop.starts_with("CUT") {
+		return "the supervisor accepts the report with a Supervisor line or files what it names"
+	}
+	if stop.starts_with("RED") {
+		return "the supervisor files the failed jobs as a `ready` issue, its `#N` line first in batch.txt"
+	}
+	return "no ready issue left in the lane, the supervisor decides or files the waiting ones (`ready`)"
 }
 
 // The batch ends at a stop line: its suite runs and is waited for (pushed when
-// green), then the driver stops for the supervisor, who writes the next briefs
-// (a fix-forward for RED). A dry run prints `DRY-RUN STOP <stop>`.
+// green), then the driver stops for the supervisor, who acts on the issues
+// (drive_stop_next; a fix-forward issue queued first for RED). A dry run prints `DRY-RUN STOP <stop>`.
 fn drive_stop(exe: String, dry: bool, dir: String, stop: String) throws {
 	drive_suite(exe, dry, dir)
 	drive_say(dry, "wait for the suite (drive_settle), then stop for the supervisor (exit 2)")
@@ -2156,7 +3579,7 @@ fn drive_stop(exe: String, dry: bool, dir: String, stop: String) throws {
 	}
 	drive_settle(exe, dir)
 	drive_unlock()
-	println(f"ESCALATE {stop}: the supervisor writes the next briefs")
+	drive_wake(dir, f"ESCALATE {stop}: {drive_stop_next(stop.clone())}")
 	if stop.starts_with("CUT") && !stop.ends_with("brief missing") && !stop.contains(": Pushed:") && !stop.contains(": Result: blocked") {
 		println("CLEAR with a line `Supervisor: YYYY-MM-DD: accepted ...` in the report (batch.nika); the builder's lines stay")
 	}
@@ -2513,6 +3936,27 @@ fn drive_queue_add(batch: String, numbers: Vec[String]) -> String {
 	return f"{text}\n"
 }
 
+// Moves the report of brief NAME in DIR aside, to the first free
+// `NAME.run<k>.report.md` (the name drive_last_report reads), so the brief
+// runs again once queued again, and its waits still hold it until then: the
+// open issues HELD it waits for are added as a `Needs:` line, the only field
+// a renamed report holds by (drive_blocked_on, #1881).
+fn drive_report_aside(dir: String, name: String, held: Vec[String]) throws {
+	let mut k = 1
+	while fs::exists(f"{dir}/{name}.run{k}.report.md", fs::Root::Anywhere) { k += 1 }
+	let from = f"{dir}/{name}.report.md"
+	let to = f"{dir}/{name}.run{k}.report.md"
+	process::run("mv", [from, to.clone()])
+	if held.len() == 0 { return }
+	let mut tags: Vec[String] = []
+	for m in held { tags.push(f"#{m}") }
+	let list = tags.join(", ")
+	let mut text = drive_read(to.clone())
+	if text != "" && !text.ends_with("\n") { text.push_str("\n") }
+	text.push_str(f"Needs: {list}\n")
+	fs::write(to, fs::Root::Anywhere, text)
+}
+
 // BATCH without the `#N` lines whose N is in CLOSED (the first word of a
 // line, as drive_queue_add reads it).
 fn drive_queue_drop(batch: String, closed: Vec[String]) -> String {
@@ -2532,12 +3976,25 @@ fn drive_queue_drop(batch: String, closed: Vec[String]) -> String {
 // Drops from DIR/batch.txt the queued issues closed since they were queued
 // (#1388 was queued open, closed by a promote, then run for nothing): each
 // `#N` line without a report whose issue is closed goes; prints
-// `DROPPED #N closed` for each.
+// `DROPPED #N closed` for each. So does one a commit on `develop` finishes
+// since it was queued (`DROPPED #N fixed on develop`, drive_fixed_on_develop;
+// #1682: #1665 was queued, fixed by a commit, then briefed). So does one
+// that waits for an open issue, by its body or its last run ended blocked
+// (`DROPPED #N waits for #M`, drive_waits_of, drive_wait_block; #1819:
+// #1628 was queued again while #1786 and #1634 were open). So does a line
+// whose report ended `Result: blocked` on an open issue it names or the
+// driver filed from its Founds (drive_report_waits), its report moved aside
+// (drive_report_aside), instead of a CUT a Supervisor line cannot clear
+// (#1857).
 fn drive_queue_prune(dir: String) throws {
 	let repo = drive_repo()
 	let path = f"{dir}/batch.txt"
 	let old = drive_read(path.clone())
 	let mut closed: Vec[String] = []
+	let mut waiting: Vec[String] = []
+	let mut waiting_tags: Vec[String] = []
+	let mut blocked: Vec[String] = []
+	let mut blocked_lines: Vec[String] = []
 	for l in old.split("\n") {
 		let w = l.trim().clone()
 		if !w.starts_with("#") { continue }
@@ -2547,19 +4004,391 @@ fn drive_queue_prune(dir: String) throws {
 		if n == "" { continue }
 		let mut name = f"issue-{n}"
 		if words.len() > 1 && words[1].trim() != "" { name = name + "-" + words[1].trim().clone() }
-		if fs::exists(f"{dir}/{name}.md.report.md", fs::Root::Anywhere) { continue }
-		let got = process::run("gh", ["api", f"repos/{repo}/issues/{n}", "--jq", ".state"])
-		if got.ok && got.stdout.trim() == "closed" { closed.push(tag) }
+		let report = f"{dir}/{name}.md.report.md"
+		if fs::exists(report.clone(), fs::Root::Anywhere) {
+			// A run ended blocked on open issues (#1857): dropped, not cut.
+			let mut held: Vec[String] = []
+			for m in drive_report_waits(dir.clone(), f"{name}.md", drive_read(report), false) {
+				if m != n && drive_issue_open(m.clone()) { held.push(m) }
+			}
+			let line = drive_waits_line(n.clone(), held.clone(), held.clone())
+			if line != "" {
+				drive_report_aside(dir.clone(), f"{name}.md", held)
+				blocked.push(tag)
+				blocked_lines.push(line)
+			}
+			continue
+		}
+		let got = process::run("gh", ["api", f"repos/{repo}/issues/{n}", "--jq", ".state + \"\\n\" + (.body // \"\")"])
+		let first: Vec[String] = got.stdout.split("\n").collect()
+		if got.ok && first[0].trim() == "closed" {
+			closed.push(tag)
+			continue
+		}
+		let mut open: Vec[String] = []
+		if got.ok {
+			for m in drive_waits_of(dir.clone(), n.clone(), got.stdout.clone()) {
+				if drive_issue_open(m.clone()) { open.push(m) }
+			}
+		}
+		let line = drive_waits_line(n.clone(), open.clone(), open)
+		if line != "" {
+			blocked.push(tag)
+			blocked_lines.push(line)
+		} else {
+			waiting.push(n)
+			waiting_tags.push(tag)
+		}
 	}
-	if closed.len() == 0 { return }
-	fs::write(path, fs::Root::Anywhere, drive_queue_drop(old, closed.clone()))
+	let fixed = drive_fixed_on_develop(waiting.clone())
+	let mut gone: Vec[String] = closed.clone()
+	for tag in blocked.clone() { gone.push(tag) }
+	for i in 0..<waiting.len() {
+		if fixed.contains(waiting[i].clone()) { gone.push(waiting_tags[i].clone()) }
+	}
+	if gone.len() == 0 { return }
+	fs::write(path, fs::Root::Anywhere, drive_queue_drop(old, gone))
 	for tag in closed { println(f"DROPPED {tag} closed") }
+	for i in 0..<blocked.len() {
+		let line = blocked_lines[i].clone()
+		println(line.replace("SKIPPED", "DROPPED"))
+		let words: Vec[String] = line.split(" ").collect()
+		drive_wait_block((words[1].strip_prefix("#") ?? "").clone(), line)
+	}
+	for i in 0..<waiting.len() {
+		if fixed.contains(waiting[i].clone()) { println(f"DROPPED {waiting_tags[i]} fixed on develop") }
+	}
+}
+
+// The numbers among NUMBERS that a commit message in LOG (the bodies of
+// `git log`) finishes: named on a line `Fixes #N[, #M]` (CLAUDE.md). Such an
+// issue stays open until `promote` brings the commit to `main`, so it is no
+// work for a builder (#1678: #1662 was briefed after eaed1a6f fixed it).
+fn drive_fixed_in(log: String, numbers: Vec[String]) -> Vec[String] {
+	let mut named: Vec[String] = []
+	for l in log.split("\n") {
+		let line = l.trim().clone()
+		if !line.starts_with("Fixes ") { continue }
+		for w in line.replace(",", " ").split(" ") {
+			let n = (w.trim().strip_prefix("#") ?? "").clone()
+			if n != "" { named.push(n) }
+		}
+	}
+	let mut out: Vec[String] = []
+	for n in numbers {
+		if named.contains(n.clone()) { out.push(n.clone()) }
+	}
+	return out
+}
+
+// The numbers among NUMBERS that a commit of the last 400 on HEAD (`develop`)
+// finishes (drive_fixed_in).
+fn drive_fixed_on_develop(numbers: Vec[String]) -> Vec[String] throws {
+	if numbers.len() == 0 { return [] }
+	let got = process::run("git", ["log", "-400", "--format=%B", "--grep=^Fixes "])
+	if !got.ok { return [] }
+	return drive_fixed_in(got.stdout, numbers)
+}
+
+// The issue numbers a text names as `#N` (digits right after the `#`).
+fn drive_hash_numbers(text: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	let pieces: Vec[String] = text.split("#").collect()
+	for i in 1..<pieces.len() {
+		let piece = pieces[i].clone()
+		let mut n = String()
+		for c in piece.chars() {
+			if c < '0' || c > '9' { break }
+			n.push(c)
+		}
+		if n != "" && !out.contains(n.clone()) { out.push(n) }
+	}
+	return out
+}
+
+// The `#N` list a TEXT starts with, after a `:`, `*` or backticks: `: #1,
+// #2 and #3 land` gives 1, 2 and 3; `the #4` gives none.
+fn drive_hash_list(text: String) -> Vec[String] {
+	let rest = text.replace(":", " ").replace("`", " ").replace("*", " ").replace(",", " ")
+	let mut list = ""
+	for w in rest.split(" ") {
+		let t = w.trim()
+		if t == "" || (t == "and" && list != "") { continue }
+		if !t.starts_with("#") { break }
+		list = list + " " + t
+	}
+	return drive_hash_numbers(list)
+}
+
+// Whether TEXT names issues and nothing else: every word (after `,`, `:`,
+// `` ` `` and `*`) is a `#N` or `and`, and there is at least one `#N`.
+fn drive_only_hashes(text: String) -> bool {
+	let rest = text.replace(":", " ").replace("`", " ").replace("*", " ").replace(",", " ")
+	let mut any = false
+	for w in rest.split(" ") {
+		let t = w.trim()
+		if t == "" || t == "and" { continue }
+		if !t.starts_with("#") { return false }
+		any = true
+	}
+	return any
+}
+
+// The issues an issue BODY says it waits for (#1819): on a line starting
+// (after list marks, `[ ]`, `**` and backticks) with `Needs`, `After`,
+// `Blocked by`, `Waits for`, `Waiting for` or `Depends on` (any case, a `:`
+// allowed), and elsewhere in a line after `blocked by`, `waits for`,
+// `waiting for` or `depends on`, the `#N` list right after the words
+// (drive_hash_list). `Needs: supervisor decision` and a prose `after #N` name none.
+// Quoted text names none either (drive_unquoted, #1881).
+fn drive_depends_on(body: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	let starts = ["needs", "after", "blocked by", "waits for", "waiting for", "depends on"]
+	let inside = ["blocked by", "waits for", "waiting for", "depends on"]
+	for raw in drive_unquoted(body).split("\n") {
+		let mut line = raw.trim().to_lowercase()
+		let mut stripping = true
+		while stripping {
+			stripping = false
+			for mark in ["- ", "* ", "> ", "[ ] ", "[x] ", "**", "`"] {
+				if line.starts_with(mark) {
+					line = (line.strip_prefix(mark) ?? "").trim().clone()
+					stripping = true
+				}
+			}
+		}
+		let mut named: Vec[String] = []
+		for word in starts {
+			if line.starts_with(word) { named = drive_hash_list((line.strip_prefix(word) ?? "").clone()) }
+		}
+		for word in inside {
+			let parts: Vec[String] = line.split(word).collect()
+			for i in 1..<parts.len() {
+				for n in drive_hash_list(parts[i].clone()) { named.push(n) }
+			}
+		}
+		for n in named {
+			if !out.contains(n.clone()) { out.push(n.clone()) }
+		}
+	}
+	return out
+}
+
+// BODY without what it quotes (#1881: this issue, #1857 and #1880 were held
+// by the driver lines and the report they quote): the lines of a fenced
+// block (between two ``` lines) and of a `<details>` block are dropped, and
+// so is a backtick span or a "..." span on one line holding a `#` (a span
+// without one, `` `Needs:` ``, keeps its words).
+fn drive_unquoted(body: String) -> String {
+	let mut out: Vec[String] = []
+	let mut fenced = false
+	let mut details = 0
+	for raw in body.split("\n") {
+		let t = raw.trim().to_lowercase()
+		if t.starts_with("```") {
+			fenced = !fenced
+			continue
+		}
+		if fenced { continue }
+		let open_parts: Vec[String] = t.split("<details").collect()
+		let close_parts: Vec[String] = t.split("</details>").collect()
+		let opens = open_parts.len() as i64 - 1
+		let closes = close_parts.len() as i64 - 1
+		let inside = details > 0 || opens > 0
+		details = details + opens - closes
+		if details < 0 { details = 0 }
+		if inside { continue }
+		let pieces: Vec[String] = raw.split("`").collect()
+		let mut line = String()
+		for i in 0..<pieces.len() {
+			let piece = pieces[i].clone()
+			// An odd piece is inside a span, unless it is the last (an unclosed `).
+			if i % 2 == 1 && i + 1 < pieces.len() && piece.contains("#") { continue }
+			line.push_str(piece)
+		}
+		// So is a "..." span holding a `#` (#1903: a quoted driver line,
+		// ("waits for #1611"), held the issue quoting it).
+		let quoted: Vec[String] = line.split("\"").collect()
+		let mut kept = String()
+		for i in 0..<quoted.len() {
+			let piece = quoted[i].clone()
+			if i % 2 == 1 && i + 1 < quoted.len() && piece.contains("#") { continue }
+			kept.push_str(piece)
+		}
+		out.push(kept)
+	}
+	return out.join("\n")
+}
+
+// The issues a BODY says it is part of: the `#N` list after `part of` (any
+// case, quoted text left out, drive_unquoted). An issue never waits for its
+// parent (#1881: mandelbrot #1616 was held by its umbrella #1611).
+fn drive_part_of(body: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	for line in drive_unquoted(body).to_lowercase().split("\n") {
+		let parts: Vec[String] = line.split("part of").collect()
+		for i in 1..<parts.len() {
+			for n in drive_hash_list(parts[i].clone()) {
+				if !out.contains(n.clone()) { out.push(n) }
+			}
+		}
+	}
+	return out
+}
+
+// The issues a REPORT that ended `Result: blocked` names under `Needs:` and
+// `Found:` (#1819: #1628 ran again while #1786 and #1634 were open), and
+// those a `Result: partial` names under `Needs:` (#1827: #1628's last run
+// ended partial, waiting for #1634; a partial's `Found:` cites issues as
+// context, so only its `Needs:` holds it up); none for another result. A
+// HANDLED report (one renamed `NAME.run<k>.report.md`, by the supervisor to
+// re-queue it or by drive_report_aside, which writes what held it under
+// `Needs:`) holds only through its `Needs:` too (#1881: #1616's renamed
+// report cited its parent #1611 in a `Found:` and held it for ever).
+fn drive_blocked_on(report: String, handled: bool) -> Vec[String] {
+	let mut blocked = false
+	let mut partial = false
+	let mut needs: Vec[String] = []
+	let mut found: Vec[String] = []
+	for raw in report.split("\n") {
+		let l = raw.trim().clone()
+		if l.starts_with("Result:") {
+			let word = (l.strip_prefix("Result:") ?? "").trim().to_lowercase()
+			blocked = word.starts_with("blocked")
+			partial = word.starts_with("partial")
+		}
+		if l.starts_with("Needs:") { needs.push(l.clone()) }
+		if l.starts_with("Found:") { found.push(l) }
+	}
+	if partial || (blocked && handled) { return drive_hash_numbers(needs.join(" ")) }
+	if !blocked { return [] }
+	for l in found { needs.push(l.clone()) }
+	return drive_hash_numbers(needs.join(" "))
+}
+
+// The last report of brief NAME in DIR: `NAME.report.md`, else the highest
+// `NAME.run<k>.report.md` (the reports the supervisor renamed to run it
+// again, docs/supervisor.md), else "".
+fn drive_last_report(dir: String, name: String) -> String throws {
+	let now = f"{dir}/{name}.report.md"
+	if fs::exists(now.clone(), fs::Root::Anywhere) { return now }
+	let mut last = ""
+	let mut k = 1
+	while fs::exists(f"{dir}/{name}.run{k}.report.md", fs::Root::Anywhere) {
+		last = f"{dir}/{name}.run{k}.report.md"
+		k += 1
+	}
+	return last
+}
+
+// The issues the run of brief NAME (`issue-N[-suffix].md`) in DIR waits for,
+// by its REPORT text: those it names (drive_blocked_on) and, when it ended
+// `Result: blocked`, those the driver filed from its Founds (`<stem>: filed
+// #M` in DIR/found.txt, drive_found_file, drive_filed_numbers; #1857: #1664's
+// gaps were filed as #1848 and #1849 after the report was written, so it
+// named none, and the driver cut on it again after each restart). HANDLED
+// as in drive_blocked_on.
+fn drive_report_waits(dir: String, name: String, report: String, handled: bool) -> Vec[String] throws {
+	let mut out = drive_blocked_on(report.clone(), handled)
+	if !drive_field(report.clone(), "Result").to_lowercase().starts_with("blocked") { return out }
+	let founds = drive_founds(report)
+	if founds.len() == 0 { return out }
+	for m in drive_filed_numbers(dir, drive_stem(name), founds.len()) {
+		if !out.contains(m.clone()) { out.push(m) }
+	}
+	return out
+}
+
+// What issue N waits for (#1819): the dependencies its BODY names
+// (drive_depends_on) and those its brief's last run in DIR waits for
+// (drive_report_waits, a renamed `run<k>` report as handled), without N
+// itself and the issues the body says it is part of (drive_part_of, #1881).
+fn drive_waits_of(dir: String, n: String, body: String) -> Vec[String] throws {
+	let mut out = drive_depends_on(body.clone())
+	let name = f"issue-{n}.md"
+	let report = drive_last_report(dir.clone(), name.clone())
+	if report != "" {
+		let handled = report != f"{dir}/{name}.report.md"
+		for m in drive_report_waits(dir, name, drive_read(report), handled) {
+			if !out.contains(m.clone()) { out.push(m) }
+		}
+	}
+	let parents = drive_part_of(body)
+	let mut kept: Vec[String] = []
+	for m in out {
+		if m != n && !parents.contains(m.clone()) { kept.push(m.clone()) }
+	}
+	return kept
+}
+
+// Whether issue N is open on GitHub; a failed call counts as not open, so it
+// holds up nothing.
+fn drive_issue_open(n: String) -> bool throws {
+	let got = process::run("gh", ["api", f"repos/{drive_repo()}/issues/{n}", "--jq", ".state"])
+	return got.ok && got.stdout.trim() == "open"
+}
+
+// The `=== #N ===` records of drive_queue's issue list LIST as pairs of the
+// number and the body.
+fn drive_queue_records(list: String) -> Vec[(String, String)] {
+	let mut out: Vec[(String, String)] = []
+	let mut n = String()
+	let mut body: Vec[String] = []
+	for l in list.split("\n") {
+		let t = l.trim()
+		if t.starts_with("=== #") && t.ends_with(" ===") {
+			if n != "" { out.push((n.clone(), body.join("\n"))) }
+			n = (t.strip_prefix("=== #") ?? "").replace(" ===", "").trim().clone()
+			body = []
+		} else {
+			body.push(l.clone())
+		}
+	}
+	if n != "" { out.push((n, body.join("\n"))) }
+	return out
+}
+
+// `SKIPPED #N waits for #A, #B` when any of WAITS is among OPEN, else "".
+fn drive_waits_line(n: String, waits: Vec[String], open: Vec[String]) -> String {
+	let mut named: Vec[String] = []
+	for m in waits {
+		if open.contains(m.clone()) { named.push(f"#{m}") }
+	}
+	if named.len() == 0 { return "" }
+	let list = named.join(", ")
+	return f"SKIPPED #{n} waits for {list}"
+}
+
+// The queue plan of an issue LIST (drive_queue_records) in DIR, OPEN the
+// dependencies still open: a `SKIPPED #N waits for #M` line for each issue
+// that waits for an open one (drive_waits_of), a `QUEUE #N` line for the rest.
+fn drive_queue_plan(dir: String, list: String, open: Vec[String]) -> Vec[String] throws {
+	let mut out: Vec[String] = []
+	for (n, body) in drive_queue_records(list) {
+		let line = drive_waits_line(n.clone(), drive_waits_of(dir.clone(), n.clone(), body), open.clone())
+		if line == "" { out.push(f"QUEUE #{n}") } else { out.push(line) }
+	}
+	return out
+}
+
+// An issue that waits for an open one (#1819): `ready` swapped for
+// `blocked`, with a comment naming what it waits for (LINE, drive_waits_line).
+fn drive_wait_block(n: String, line: String) throws {
+	let what = (line.strip_prefix(f"SKIPPED #{n} ") ?? "").clone()
+	drive_label_remove(n.clone(), "ready")
+	drive_label_add(n.clone(), "blocked")
+	drive_comment(n, f"Driver: not queued, this issue {what}, which is still open (#1819). Set `ready` again when it is closed.{drive_footer()}")
 }
 
 // Queues the lane's ready issues (owner, 2026-11-06): the open issues
 // labelled `ready` and AREA, without `wip` (one being worked on), go into DIR/batch.txt as `#N` lines, oldest
-// first (drive_queue_add); prints `QUEUED #N AREA` for each new one. Closed
-// ones still queued are dropped first (drive_queue_prune).
+// first (drive_queue_add); prints `QUEUED #N AREA` for each new one. One a
+// commit on `develop` already finishes is left out (`SKIPPED #N fixed on
+// develop`, drive_fixed_on_develop, #1678); so is one that waits for an open
+// issue (`SKIPPED #N waits for #M`, drive_queue_plan, #1819), whose `ready`
+// is swapped for `blocked` with a comment naming #M (drive_wait_block), so
+// it is skipped once. Closed ones still queued are dropped first
+// (drive_queue_prune), and so are those that wait for an open issue.
 fn drive_queue(dir: String, area: String) throws {
 	drive_queue_prune(dir.clone())
 	let repo = drive_repo()
@@ -2569,13 +4398,32 @@ fn drive_queue(dir: String, area: String) throws {
 			"api",
 			f"repos/{repo}/issues?state=open&labels=ready,{area}&per_page=100&sort=created&direction=asc",
 			"--jq",
-			".[] | select(.pull_request == null and ([.labels[].name] | index(\"wip\") | not)) | .number",
+			".[] | select(.pull_request == null and ([.labels[].name] | index(\"wip\") | not)) | \"=== #\\(.number) ===\\n\\(.body // \"\")\"",
 		],
 	)
 	if !got.ok { return }
+	let list = got.stdout
+	let mut open: Vec[String] = []
+	let mut waits: Vec[String] = []
+	for (n, body) in drive_queue_records(list.clone()) {
+		open.push(n.clone())
+		for m in drive_waits_of(dir.clone(), n.clone(), body) {
+			if !waits.contains(m.clone()) && drive_issue_open(m.clone()) { waits.push(m) }
+		}
+	}
+	let fixed = drive_fixed_on_develop(open)
 	let mut numbers: Vec[String] = []
-	for n in got.stdout.trim().split("\n") {
-		if n.trim() != "" { numbers.push(n.trim().clone()) }
+	for line in drive_queue_plan(dir.clone(), list, waits) {
+		let n = (line.strip_prefix("QUEUE #") ?? "").clone()
+		if n == "" {
+			println(line.clone())
+			let words: Vec[String] = line.split(" ").collect()
+			drive_wait_block((words[1].strip_prefix("#") ?? "").clone(), line.clone())
+		} else if fixed.contains(n.clone()) {
+			println(f"SKIPPED #{n} fixed on develop")
+		} else {
+			numbers.push(n)
+		}
 	}
 	if numbers.len() == 0 { return }
 	let path = f"{dir}/batch.txt"
@@ -2613,9 +4461,14 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 		let area = drive_focus_current(file)
 		let dir = drive_focus_dir(file, area)
 		if dir == "" { drive_escalate(f"focus: {path} names no area {area}") }
+		if !dry {
+			drive_pickup(bugs)
+			drive_pickup(dir.clone())
+		}
+		if !dry { drive_proved_report(dir) }
 		if !dry && drive_read("scripts/drive.nika") != own {
 			drive_settle(exe, dir)
-			drive_restart(exe.clone())
+			drive_restart(exe.clone(), "RESTART drive: scripts/drive.nika changed")
 		}
 		let block = drive_focus_block(file)
 		let count = drive_focus_count(file)
@@ -2657,7 +4510,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 		if action.starts_with("ESCALATE ") {
 			drive_settle(exe, dir)
 			drive_unlock()
-			println(action)
+			drive_wake(dir, action)
 			process::exit(2)
 		}
 		// Builders go on while CI runs the suite (owner, 2026-11-06); a
@@ -2706,7 +4559,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 		if next == "" {
 			drive_settle(exe, dir)
 			drive_unlock()
-			println("ESCALATE focus: every area empty")
+			drive_wake(dir, "ESCALATE focus: every area empty")
 			process::exit(2)
 		}
 		fs::write(path, fs::Root::Anywhere, drive_focus_set(file, next, 0))
@@ -2776,6 +4629,10 @@ fn main() throws {
 		print(drive_run_comment(args[2], args[3].clone(), 0, "no report"))
 		return
 	}
+	if args.len() >= 3 && args[1] == "--wake" {
+		for k in 3..<args.len() { println(drive_wake_line(args[2], args[k])) }
+		return
+	}
 	if args.len() >= 2 && args[1] == "--issue" {
 		for k in 2..<args.len() {
 			let issue = drive_issue(args[k])
@@ -2791,8 +4648,15 @@ fn main() throws {
 	// The merge of a rejected push, without its checks and push (#1430,
 	// #1333): run in a repository with FETCH_HEAD fetched, LOWER, BUILD and
 	// BADGES the commands.
+	// The merge before an issue or a suite, alone (#1717): run in a
+	// repository with an `origin`; prints the `scripts/*.nika` it brought.
+	if args.len() == 5 && args[1] == "--pull" {
+		let scripts = drive_pull("merging origin/develop", args[2], args[3], args[4])
+		if scripts != "" { println(f"scripts brought: {scripts}") }
+		return
+	}
 	if args.len() == 5 && args[1] == "--merge-fetched" {
-		drive_merge_fetched(args[2], args[3], args[4])
+		drive_merge_fetched("push rejected", args[2], args[3], args[4])
 		return
 	}
 	// The ledger refresh before a suite, alone (#1665): BUILD the command
@@ -2816,25 +4680,103 @@ fn main() throws {
 		print(drive_queue_add(drive_read(args[2]), numbers))
 		return
 	}
+	if args.len() >= 3 && args[1] == "--fixed-in" {
+		let mut numbers: Vec[String] = []
+		let mut i = 3
+		while i < args.len() {
+			numbers.push(args[i].clone())
+			i += 1
+		}
+		println(drive_fixed_in(drive_read(args[2]), numbers).join(" "))
+		return
+	}
+	if args.len() >= 3 && args[1] == "--queue-plan" {
+		let mut open: Vec[String] = []
+		for k in 3..<args.len() { open.push(args[k].clone()) }
+		let dir = process::run("dirname", [args[2].clone()]).stdout.trim().clone()
+		for line in drive_queue_plan(dir, drive_read(args[2]), open) { println(line) }
+		return
+	}
+	if args.len() >= 4 && args[1] == "--report-aside" {
+		let mut held: Vec[String] = []
+		for k in 4..<args.len() { held.push(args[k].clone()) }
+		drive_report_aside(args[2].clone(), args[3].clone(), held)
+		return
+	}
 	if args.len() == 5 && args[1] == "--wip-after" {
 		println(drive_wip_after(args[2].clone(), args[3].clone(), args[4].clone()))
 		return
 	}
 	if args.len() == 6 && args[1] == "--found-issue" {
 		println(drive_found_title(args[4].clone()))
-		println(drive_found_labels(args[5].clone(), "views").join(","))
+		println(drive_found_labels(args[4].clone(), args[5].clone()).join(","))
 		print(drive_found_body(args[2].clone(), args[3].clone(), args[4].clone(), args[5].clone()))
 		return
 	}
-	if args.len() == 5 && args[1] == "--improve-issue" {
-		let items = drive_improve_items(drive_read(args[4]))
+	// Each issue drive_found_file would file from the report REPORT of run
+	// NAME (issue ISSUE): labels, then body (#1769).
+	if args.len() == 5 && args[1] == "--found-issues" {
+		let text = drive_read(args[4].clone())
+		let founds = drive_founds(text.clone())
+		let needs = drive_found_needs(founds.len(), drive_field(text, "Needs"))
+		for found in founds {
+			println(drive_found_labels(found.clone(), needs.clone()).join(","))
+			print(drive_found_body(args[2].clone(), args[3].clone(), found, needs.clone()))
+		}
+		return
+	}
+	if (args.len() == 5 || args.len() == 6) && args[1] == "--improve-issue" {
+		let text = drive_read(args[4].clone())
+		let items = drive_improve_items(text.clone(), args[3].clone(), "")
 		if items.len() == 0 {
 			println("none")
 			return
 		}
 		println(drive_improve_title(args[2].clone(), args[3].clone(), items[0].clone()))
 		println("ready,improve")
-		print(drive_improve_body(args[2].clone(), args[3].clone(), items))
+		// The report is named by the brief, as the lane directory holds it
+		// (`NAME.md.report.md`), so the output does not carry a temp path.
+		// A sixth argument names the batch directory whose found.txt holds
+		// the numbers the Founds were filed as (drive_filed_numbers).
+		let mut numbers: Vec[String] = []
+		if args.len() == 6 { numbers = drive_filed_numbers(args[5].clone(), args[2].clone(), drive_founds(text.clone()).len()) }
+		let founds = drive_improve_founds(text.clone(), numbers)
+		let source = founds + drive_improve_source(f"{args[2]}.md.report.md", text)
+		print(drive_improve_body(args[2].clone(), args[3].clone(), items, source))
+		return
+	}
+	// Where each point of the report REPORT of run NAME (issue N) goes
+	// (drive_improve_sorted, #1818), EXISTING a file of improvement issues
+	// as drive_improve_existing gives them: one `<where>\t<point>` line per
+	// point, then the body of each comment drive_improve_file would post.
+	if args.len() == 6 && args[1] == "--improve-plan" {
+		let sorted = drive_improve_sorted(drive_read(args[4].clone()), args[3].clone(), drive_read(args[5].clone()))
+		if sorted.len() == 0 { println("none") }
+		let mut targets: Vec[String] = []
+		for line in sorted {
+			println(line.clone())
+			let place = drive_improve_place(line.clone())
+			if (place.starts_with("comment #") || place.starts_with("dup #")) && !targets.contains(place.clone()) { targets.push(place) }
+		}
+		for target in targets {
+			let mut points: Vec[String] = []
+			for line in sorted {
+				if drive_improve_place(line.clone()) == target { points.push(f"{drive_improve_point(line.clone())}") }
+			}
+			println(f"== {target}")
+			print(drive_improve_comment_body(args[2].clone(), args[3].clone(), target, points))
+		}
+		return
+	}
+	// The comments a report asks for (#1698), without posting them: per
+	// `Comment: #N <text>` the issue and the body.
+	if args.len() == 5 && args[1] == "--comment-issue" {
+		let comments = drive_comments(drive_read(args[4]))
+		if comments.len() == 0 { println("none") }
+		for c in comments {
+			println(f"#{drive_comment_issue(c.clone())}")
+			print(drive_comment_body(args[2].clone(), args[3].clone(), c))
+		}
 		return
 	}
 	// The cleanup alone (#1521), in the directory it runs in.
@@ -2849,6 +4791,18 @@ fn main() throws {
 	}
 	if args.len() == 2 && args[1] == "--time-up" {
 		if drive_time_up() { println("up") } else { println("not up") }
+		return
+	}
+	// The same judged for an agent of DIR (#1885): `up`, `starts`, or the
+	// minutes left against the length of DIR's runs.
+	if args.len() == 3 && args[1] == "--time-up" {
+		let why = drive_time_check(args[2])
+		println(if why == "" { "starts" } else { why })
+		return
+	}
+	// The follow-up of DIR's runs the time limit cut off (#1885).
+	if args.len() == 3 && args[1] == "--pickup" {
+		drive_pickup(args[2])
 		return
 	}
 	if args.len() == 3 && args[1] == "--blocks" {
@@ -2876,6 +4830,18 @@ fn main() throws {
 		println(drive_rewrite(drive_read(args[2]), drive_read(args[3])))
 		return
 	}
+	if args.len() == 4 && args[1] == "--proved" {
+		drive_proved(args[2], args[3].clone())
+		return
+	}
+	if args.len() == 6 && args[1] == "--proved-lines" {
+		for l in drive_proved_lines(args[2], args[3], args[4], drive_read(args[5])) { println(l) }
+		return
+	}
+	if args.len() == 3 && args[1] == "--proved-report" {
+		drive_proved_report(args[2])
+		return
+	}
 	if args.len() == 5 && args[1] == "--ci-wait" {
 		drive_ci_wait(args[2], args[3], args[4].clone())
 		return
@@ -2889,6 +4855,15 @@ fn main() throws {
 			paths.push(p)
 		}
 		if drive_docs_only(paths) { println("docs-only") } else { println("suite") }
+		return
+	}
+	if args.len() == 3 && args[1] == "--local-tests" {
+		let mut paths: Vec[String] = []
+		for line in drive_read(args[2]).split("\n") {
+			if line.trim() != "" { paths.push(line.trim().clone()) }
+		}
+		let failed = drive_local_tests(paths)
+		if failed == "" { println("LOCAL green") } else { println("LOCAL red\n" + failed.trim()) }
 		return
 	}
 	if args.len() == 3 && args[1] == "--named-filters" {
@@ -2917,9 +4892,11 @@ fn main() throws {
 	let mut bumps: i64 = 0
 	let own = drive_read("scripts/drive.nika")
 	while runs <= max {
+		if !dry { drive_pickup(dir.clone()) }
+		if !dry { drive_proved_report(dir) }
 		if !dry && drive_read("scripts/drive.nika") != own {
 			drive_settle(exe.clone(), dir)
-			drive_restart(exe.clone())
+			drive_restart(exe.clone(), "RESTART drive: scripts/drive.nika changed")
 		}
 		// The lane's ready issues are queued here too, the area being DIR's
 		// last name (docs/briefs/yaml: yaml), as in --focus.
@@ -2938,7 +4915,7 @@ fn main() throws {
 		if action.starts_with("ESCALATE ") {
 			drive_settle(exe.clone(), dir)
 			drive_unlock()
-			println(action)
+			drive_wake(dir, action)
 			process::exit(2)
 		}
 		// A builder of the next batch and a bump wait for the batch's suite, and the cycle is read again (QA may

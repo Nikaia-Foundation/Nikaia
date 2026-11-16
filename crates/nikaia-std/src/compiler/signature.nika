@@ -57,6 +57,27 @@ pub fn translate(written: ref String, crate_word: ref String, parameters: ref Ve
         let inner = translate(element, crate_word, parameters, types, mentioned)
         return Translated { ty: Ty::Named { name: "Array", args: [inner.ty], view: false }, kept: true }
     }
+    // `(A, B)` is the ledger's tuple, part by part, kept where a part is
+    // kept (#1679). `()` is the unit, which `contract` leaves out of the
+    // result; a one-part `(A,)` has no ledger spelling and stays `?`.
+    if text.starts_with("(") && text.ends_with(")") {
+        let c: Vec[scalar] = text.chars().collect()
+        let inside = slice(c, 1, c.len() - 1)
+        let written_parts = split_top_level(inside)
+        if written_parts.len() == 1 {
+            return Translated { ty: Ty::Unknown, kept: true }
+        }
+        let mut parts: Vec[Ty] = []
+        let mut kept = false
+        for part in written_parts {
+            let one = translate(part, crate_word, parameters, types, mentioned)
+            if one.kept {
+                kept = true
+            }
+            parts.push(one.ty)
+        }
+        return Translated { ty: Ty::Tuple(parts), kept: kept }
+    }
     let optional = generic_of(text, "Option")
     if optional != null {
         let inner = translate(optional ?? "", crate_word, parameters, types, mentioned)
@@ -113,7 +134,7 @@ pub fn result_of(written: ref String, crate_word: ref String, parameters: ref Ve
 
 /// A view of a type, which the ledger's language writes with the `&` on the
 /// name.
-pub fn view_of(ty: Ty) -> Ty {
+fn view_of(ty: Ty) -> Ty {
     return match ty {
         Ty::Named { name, args, .. } => Ty::Named { name: name, args: args, view: true },
         Ty::Var { name, .. } => Ty::Var { name: name, view: true },
@@ -215,7 +236,14 @@ pub fn contract(written: ref WrittenFn, crate_word: ref String, types: ref colle
         if resulted.fails != null {
             fails.push(resulted.fails ?? "?")
         }
-        answer = resulted.ty
+        // A unit `()` (as in `Result<(), E>`) is no result in the ledger.
+        let unit = match resulted.ty {
+            Ty::Tuple(parts) => parts.is_empty(),
+            else => false,
+        }
+        if !unit {
+            answer = resulted.ty
+        }
     }
     let mut signature = Signature::empty()
     signature.params = params

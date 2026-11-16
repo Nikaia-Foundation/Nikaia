@@ -61,7 +61,7 @@ pub(crate) fn check_walked_method_facts(state: &mut CheckState) {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_walked_settle(state: &mut CheckState) {
+pub(crate) fn check_walked_settle(state: &mut CheckState) {
     check_walked_unknown_last(state);
     check_walked_articles(state);
     check_walked_method_facts(state);
@@ -84,10 +84,10 @@ pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &
         Expr::Path(segments, _) => {
             if receiver && !args.is_empty() {
                 let first = args.remove(0);
-                Expr::MethodCall { receiver: Box::new(first), method: *nikaia_std::index::get(&segments, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) })), args, config: vec![], id: fresh_id() }
-            } else { Expr::Call { func: Box::new(Expr::Path(segments.copy_owned(), fresh_id())), args, config: vec![], id: fresh_id() } }
+                Expr::MethodCall { receiver: std::boxed::Box::new(first), method: *nikaia_std::index::get(&segments, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) })), args, config: vec![], id: fresh_id() }
+            } else { Expr::Call { func: std::boxed::Box::new(Expr::Path(segments.copy_owned(), fresh_id())), args, config: vec![], id: fresh_id() } }
         },
-        Expr::Variable(name, _) => { let name = *name; Expr::Call { func: Box::new(Expr::Variable(name, fresh_id())), args, config: vec![], id: fresh_id() } },
+        Expr::Variable(name, _) => { let name = *name; Expr::Call { func: std::boxed::Box::new(Expr::Variable(name, fresh_id())), args, config: vec![], id: fresh_id() } },
         _ => panic("a kept function is a name or a path"),
     };
     (names, call)
@@ -95,10 +95,10 @@ pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_walked_unsigned_slots(state: &mut CheckState, proven: &impl Fn(&CheckFacts, &collections::BTreeSet<i64>) -> collections::BTreeSet<i64>) {
+pub(crate) fn check_walked_unsigned_slots(state: &mut CheckState, proven: &impl Fn(&CheckFacts, &collections::BTreeSet<i64>) -> collections::BTreeSet<i64>) {
     let mut slots: Vec<CheckUnsignedSlot> = vec![];
     for (_, held) in state.flow.unsigned_slots.copy_owned() { for slot in held.iter() { slots.push(slot.clone()); } }
-    state.flow.unsigned_slots = collections::BTreeMap::new();
+    state.flow.unsigned_slots.clear();
     if slots.is_empty() { return; }
     let mut nodes: collections::BTreeSet<i64> = collections::BTreeSet::new();
     for slot in slots.copy_owned() { nodes.insert(slot.node); }
@@ -121,7 +121,7 @@ pub fn check_walked_unrolling(walks_fields: &collections::BTreeMap<String, Strin
     out
 }
 
-pub fn check_walked_written(value: &Expr, words: &winnow_grammar::InternerContext) -> String {
+pub(crate) fn check_walked_written(value: &Expr, words: &winnow_grammar::InternerContext) -> String {
     match value {
         Expr::LitInt { value: n, negative, .. } => { let n = *n; let negative = *negative; if negative && n != 0u64 { format!("-{}", n) } else { format!("{}", n) } },
         Expr::LitBool(yes, _) => { let yes = *yes; format!("{}", yes) },
@@ -134,7 +134,7 @@ pub fn check_walked_written(value: &Expr, words: &winnow_grammar::InternerContex
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_walked_seed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+pub(crate) fn check_walked_seed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
     for item in world.here.items.iter() {
         match &item.node {
             Item::Grammar(def) => {
@@ -161,7 +161,7 @@ pub(crate) fn check_walked_prefix_into(key: &str, prefixes: &mut collections::BT
     prefixes.insert(nikaia_std::block::Text::from(nikaia_std::index::get(&key, nikaia_std::index::at(0..cut)).to_string()));
 }
 
-pub fn check_walked_payload_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
+pub(crate) fn check_walked_payload_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
     let here = check_payload_in(&world.here, ty, variant);
     if here.is_some() { return std::convert::identity(here); }
     for view in world.beside.iter() {
@@ -171,7 +171,7 @@ pub fn check_walked_payload_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, t
     None
 }
 
-pub fn check_walked_place_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, place: &str, here: i64) -> CheckPlace {
+pub(crate) fn check_walked_place_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, place: &str, here: i64) -> CheckPlace {
     let none = CheckPlace { at: -1, function: None };
     let rest = nikaia_std::block::Text::from(match place.strip_prefix('@') { Some(__nikaia_value) => __nikaia_value, None => return none }.to_string());
     let colon = match nikaia_std::search::find(&rest, &":", 0) { Some(__nikaia_value) => __nikaia_value, None => return none };
@@ -200,7 +200,7 @@ pub(crate) fn check_walked_function_at(view: &ParsedView<'_, '_, '_, '_, '_, '_>
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_walked_declared(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, span: &Span) -> Ty {
+pub(crate) fn check_walked_declared(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, span: &Span) -> Ty {
     state.spelling(world, ty, span);
     let written = written_ty(world.here.words, world.here.aliases, ty);
     let refused = collect_keys_unordered(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, &written, span);
@@ -210,7 +210,7 @@ pub fn check_walked_declared(state: &mut CheckState, world: &CheckWorld<'_, '_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_walked_proved(state: &mut CheckState, entries: collections::BTreeMap<String, Vec<PreconditionCheck>>, reaches: collections::BTreeMap<(String, String), CallReach>, published: collections::BTreeMap<String, Published>, std_claims: &collections::BTreeMap<(i64, i64), String>, held: &collections::BTreeMap<(i64, i64), ClaimHeld>, outside: collections::BTreeMap<(i64, String), OutsideIndex>) {
+pub(crate) fn check_walked_proved(state: &mut CheckState, entries: collections::BTreeMap<String, Vec<PreconditionCheck>>, reaches: collections::BTreeMap<(String, String), CallReach>, published: collections::BTreeMap<String, Published>, std_claims: &collections::BTreeMap<(i64, i64), String>, held: &collections::BTreeMap<(i64, i64), ClaimHeld>, outside: collections::BTreeMap<(i64, String), OutsideIndex>) {
     state.facts.entries = entries;
     state.facts.outside_indices = outside;
     state.facts.reaches = reaches;

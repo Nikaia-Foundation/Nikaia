@@ -6,7 +6,7 @@ pub(crate) fn emit_keep_numbered(at: i64, lent: bool) -> String {
     format!("__keep_{}", at)
 }
 
-pub fn emit_keep_expr(keep: &KeepAt, lent: bool) -> String {
+pub(crate) fn emit_keep_expr(keep: &KeepAt, lent: bool) -> String {
     match keep {
         KeepAt::Param => return String::from("__keep"),
         KeepAt::Frame => {
@@ -32,7 +32,7 @@ impl EmitState {
         if self.keep_plans.contains_key(&walk.keep_function) { return Some(nikaia_std::block::Text::from(walk.keep_function.to_string())); }
         None
     }
-    pub fn keep_prelude(&self, walk: &EmitWalk, function: &str, at: i64) -> Option<String> {
+    pub(crate) fn keep_prelude(&self, walk: &EmitWalk, function: &str, at: i64) -> Option<String> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -54,30 +54,30 @@ impl EmitState {
         if lines.is_empty() { return None; }
         Some(nikaia_std::block::Text::from(lines.join(" ")))
     }
-    pub fn argument_keep(&self, walk: &EmitWalk, function: &str, statement: i64, callee: &str, i: i64) -> Option<String> {
+    pub(crate) fn argument_keep(&self, walk: &EmitWalk, function: &str, statement: i64, callee: &str, i: i64) -> Option<String> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let keep = match plan.calls.get(&(statement, format!("{}#{}", callee, i))) { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(emit_keep_expr(&keep, true))
     }
-    pub fn keep_handed(&self, walk: &EmitWalk, function: &str, statement: i64, callee: &str) -> Option<String> {
+    pub(crate) fn keep_handed(&self, walk: &EmitWalk, function: &str, statement: i64, callee: &str) -> Option<String> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let keep = match plan.calls.get(&(statement, nikaia_std::block::Text::from(callee.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(emit_keep_expr(&keep, true))
     }
-    pub fn kept_lifetimes(&self, key: &str, lifetimes: &EmitLifetimes) -> Option<EmitLifetimes> {
+    pub(crate) fn kept_lifetimes(&self, key: &str, lifetimes: &EmitLifetimes) -> Option<EmitLifetimes> {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if !takes_a_keep(contract) { return None; }
         if lifetimes.params() == "'a" { return Some(EmitLifetimes::Named); }
         Some(EmitLifetimes::Kept)
     }
-    pub fn tethered_position(&self, key: &str, position: &str) -> bool {
+    pub(crate) fn tethered_position(&self, key: &str, position: &str) -> bool {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         for held in contract.views.iter() { if held.position == position && held.state == State::Tethered { return true; } }
         false
     }
-    pub fn reads_through_handle(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, function: &str, expr: &Expr) -> bool {
+    pub(crate) fn reads_through_handle(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, function: &str, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -89,7 +89,7 @@ impl EmitState {
         }
         false
     }
-    pub fn names_borrowing(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> bool {
+    pub(crate) fn names_borrowing(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> bool {
         let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return self.names_borrowing_written(world, ty) };
         let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         self.names_borrowing(world, result)
@@ -99,7 +99,7 @@ impl EmitState {
         for inner in ty.generics.iter() { if self.names_borrowing(world, inner) { return true; } }
         false
     }
-    pub fn held_field_carries_view(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, function: &str, keeper: &Expr, field: winnow_grammar::Symbol) -> bool {
+    pub(crate) fn held_field_carries_view(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, function: &str, keeper: &Expr, field: winnow_grammar::Symbol) -> bool {
         match keeper {
             Expr::Variable(held, _) => {
                 let held = *held;
@@ -141,7 +141,7 @@ pub(crate) fn emit_returned_by(world: &EmitWorld<'_, '_, '_, '_>, wanted: &str) 
     None
 }
 
-pub fn emit_tethered_type(world: &EmitWorld<'_, '_, '_, '_>, ty: Option<&Type>, value: &Expr) -> Option<Type> {
+pub(crate) fn emit_tethered_type(world: &EmitWorld<'_, '_, '_, '_>, ty: Option<&Type>, value: &Expr) -> Option<Type> {
     if ty.is_some() {
         return match ty {
             Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),

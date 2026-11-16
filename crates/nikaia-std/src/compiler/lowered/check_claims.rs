@@ -26,7 +26,7 @@ pub fn check_claims_unproved(findings: &[CheckFinding], claims: &collections::BT
             _ => { continue; },
         }
         let at = u32::try_from(start).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"));
-        unproved.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: at, end: at + u32::try_from("assert".len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, code: String::from("NK1300"), message, notes: vec![String::from("Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold."), String::from("`nikaia check --asserts` lists every claim and why it is not proved.")], help: Some(String::from("Give the compiler what it needs to prove it, or build with `unproved-claims = \"warn\"` to have it checked when the program runs.")), labels: vec![] });
+        unproved.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: at, end: at + u32::try_from("assert".len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, code: String::from("NK1300"), message, notes: vec![String::from("Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold."), String::from("`nikaia check --asserts` lists every claim and why it is not proved.")], help: Some(String::from("Give the compiler what it needs to prove it, or build with `unproved-claims = \"warn\"` to have it checked when the program runs.")), labels: vec![], edit: None });
     }
     unproved
 }
@@ -42,7 +42,7 @@ pub fn check_claims_assumes_in_std(claims: &collections::BTreeMap<(i64, i64), Fa
         let start = nikaia_std::num::value(start);
         if !claim.assumed { continue; }
         let at = u32::try_from(start).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"));
-        refused.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: at, end: at + u32::try_from("assume".len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, code: String::from("NK1295"), message: String::from("`std` assumes nothing: an `assume` is refused in `std`'s Nikaia."), notes: vec![String::from("`std`'s `unsafe` lives in the small crates of ADR-218, each listed.")], help: Some(String::from("Prove the claim with `assert`, or move the code into a listed crate.")), labels: vec![] });
+        refused.push(CheckFinding { severity: CheckSeverity::Error, span: Span { start: at, end: at + u32::try_from("assume".len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, code: String::from("NK1295"), message: String::from("`std` assumes nothing: an `assume` is refused in `std`'s Nikaia."), notes: vec![String::from("`std`'s `unsafe` lives in the small crates of ADR-218, each listed.")], help: Some(String::from("Prove the claim with `assert`, or move the code into a listed crate.")), labels: vec![], edit: None });
     }
     refused
 }

@@ -1,0 +1,59 @@
+/// A list field of whole numbers one method pushes a value onto that is
+/// not proved at least its last element has no found rule `ascending`
+/// (ADR-306 D21, #1688): the reads its last element would bound keep their
+/// check.
+struct Marks {
+	at: Vec[i64],
+	items: Vec[i64],
+}
+
+impl Marks {
+	fn add(mut self, x: i64) sync {
+		self.items.push(x)
+	}
+
+	fn mark(mut self, x: i64) sync {
+		self.at.push(x)
+	}
+
+	fn show(ref self) throws {
+		let n = self.at.len()
+		if n == 0 {
+			return
+		}
+		let last = self.at[n - 1]
+		if last >= self.items.len() {
+			return
+		}
+		for a in self.at {
+			if a >= 0 {
+				println(self.items[a])
+			}
+		}
+	}
+
+	fn back(mut self) sync throws {
+		let cut = self.at.pop() ?? return
+		if cut > self.items.len() {
+			return
+		}
+		self.items.truncate(cut)
+		for a in self.at {
+			if a > 0 {
+				println(self.items[a - 1])
+			}
+		}
+	}
+}
+
+fn main() throws {
+	let mut m = Marks { at: [], items: [] }
+	m.add(10)
+	m.mark(1)
+	m.add(20)
+	m.add(30)
+	m.mark(3)
+	m.add(40)
+	m.show()
+	m.back()
+}

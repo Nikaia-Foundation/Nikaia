@@ -23,13 +23,13 @@ pub fn written_in(program: &Program, names: &winnow_grammar::InternerContext, un
     found.seen
 }
 
-pub fn seen_in(block: &Block, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, with_names: bool) -> Vec<Seen> {
+pub(crate) fn seen_in(block: &Block, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, with_names: bool) -> Vec<Seen> {
     let mut found = Walked { seen: vec![], with_names };
     block_names(block, names, unaliased, holes_of, root_at, &mut found);
     found.seen
 }
 
-pub fn seen_in_expression(expr: &Expr, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, with_names: bool) -> Vec<Seen> {
+pub(crate) fn seen_in_expression(expr: &Expr, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, with_names: bool) -> Vec<Seen> {
     let mut found = Walked { seen: vec![], with_names };
     let nowhere = Span::nowhere();
     expression_paths(expr, &nowhere, names, unaliased, holes_of, root_at, &mut found);
@@ -292,7 +292,7 @@ pub(crate) fn expression_blocks(expr: &Expr, names: &winnow_grammar::InternerCon
 pub(crate) fn maybe_expression_blocks(expr: Option<&Expr>, names: &winnow_grammar::InternerContext, unaliased: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, root_at: &dyn Fn(&str) -> i64, found: &mut Walked) { expression_blocks(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, names, &unaliased, &holes_of, &root_at, found); }
 
 pub(crate) fn path_name(segments: &[winnow_grammar::Symbol], names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String) -> String {
-    let mut name = unaliased(names.resolve(*nikaia_std::index::get(&segments, 0)));
+    let mut name = unaliased(names.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }));
     for k in 1..segments.len() as i64 {
         let segment = names.resolve(*unsafe { nikaia_std::proven::read(&segments, (k) as usize) });
         name = format!("{}::{}", name, segment);

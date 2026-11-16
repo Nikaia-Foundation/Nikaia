@@ -11,6 +11,7 @@ pub struct BoundsReportFacts {
     pub proven_arithmetic: collections::BTreeSet<i64>,
     pub proven_negations: collections::BTreeSet<i64>,
     pub derived: Vec<String>,
+    pub gates: collections::BTreeMap<String, String>,
     pub outside: collections::BTreeMap<(i64, String), OutsideIndex>,
     pub unproved_warn: bool,
 }
@@ -28,30 +29,39 @@ pub(crate) struct BoundsReportSite {
 pub(crate) struct BoundsReportWalk {
     pub(crate) seen: collections::BTreeSet<i64>,
     pub(crate) sites: Vec<BoundsReportSite>,
-    pub(crate) callers: bool,
+    pub(crate) gate: String,
 }
+
+pub(crate) fn bounds_report_gate(gates: &collections::BTreeMap<String, String>, name: &str) -> String {
+    nikaia_std::index::or(match *nikaia_std::index::get(&gates, name) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || "a function the derivation does not weigh".into())
+}
+
+pub(crate) fn bounds_report_no_function() -> String { String::from("a grammar's action") }
 
 #[allow(clippy::too_many_arguments)]
 pub fn bounds_report_checked(program: &Program, words: &winnow_grammar::InternerContext, source: &str, path: &str, facts: &BoundsReportFacts, bounds: &BoundsChecks, overflow: &OverflowChecks, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> String {
-    let mut walk = BoundsReportWalk { seen: collections::BTreeSet::new(), sites: vec![], callers: false };
+    let mut walk = BoundsReportWalk { seen: collections::BTreeSet::new(), sites: vec![], gate: bounds_report_no_function() };
     let none: Vec<FnArg> = vec![];
-    let callees = derived_callees(program, words);
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { name, args, body, .. } => {
                 let name = *name;
-                walk.callers = callees.contains(words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }));
+                walk.gate = bounds_report_gate(&facts.gates, words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }));
                 bounds_report_function(args, body, words, source, facts, holes_of, &mut walk);
-                walk.callers = false;
+                walk.gate = bounds_report_no_function();
             },
-            Item::Impl { methods, .. } => {
+            Item::Impl { trait_name, methods, .. } => {
+                let trait_name = *trait_name;
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, args, body, .. } => {
                             let name = *name;
-                            walk.callers = callees.contains(words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }));
+                            walk.gate = if trait_name.is_some() { String::from("a method of a trait's `impl`, called wherever the trait is") } else { bounds_report_gate(&facts.gates, words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue })) };
                             bounds_report_function(args, body, words, source, facts, holes_of, &mut walk);
-                            walk.callers = false;
+                            walk.gate = bounds_report_no_function();
                         },
                         _ => { },
                     }
@@ -108,7 +118,10 @@ pub(crate) fn bounds_report_outside(facts: &BoundsReportFacts, source: &str) -> 
         let mut from = String::from("from outside");
         if found.source != "" { from = format!("from `{}`", found.source); }
         let mut verdict = String::from("refused NK1302");
-        if found.proved {
+        if found.operation && !found.proved && found.site >= 0 && facts.proven_arithmetic.contains(&found.site) { verdict = String::from("proved by the bounds walk's ranges"); } else if found.operation && !found.proved {
+            verdict = String::from("checked: not proved, an NK1303 site (ADR-396 D8)");
+            if !found.stated { verdict = String::from("checked: the prover states no bound of it, an NK1303 site (ADR-396 D8)"); }
+        } else if found.proved {
             verdict = String::from("proved");
             if found.guard_at >= 0 { verdict = format!("proved by the guard on line {} (`{}`)", bounds_report_line(source, found.guard_at), found.guard); }
         } else if facts.unproved_warn { verdict = String::from("checked (unproved-claims = warn)"); }
@@ -175,7 +188,7 @@ pub fn bounds_report_trace_rows(asked: &str, rows: &[String]) -> String {
     format!("bounds trace {}:\n{}\n", asked, nikaia_std::block::Text::from(rows.join("\n")))
 }
 
-pub fn bounds_report_line(source: &str, at: i64) -> i64 {
+pub(crate) fn bounds_report_line(source: &str, at: i64) -> i64 {
     let end = at.min(source.as_bytes().len() as i64);
     nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(0..end)).iter().copied().filter(|&b| { b == 10 }).count() as i64 + 1
 }
@@ -212,7 +225,7 @@ pub(crate) fn bounds_report_stmt(stmt: &Stmt, span: &Span, args: &[FnArg], body:
             if bounds_report_checked_op(&which) && bounds_report_seen(facts, at) {
                 let proved = facts.proven_arithmetic.contains(&at);
                 let mut blocked: Option<String> = None;
-                if !proved { blocked = Some(blocked_operation(&which, target, value, args, body, words, source, walk.callers)); }
+                if !proved { blocked = Some(blocked_operation(&which, target, value, args, body, words, source, &walk.gate)); }
                 walk.sites.push(BoundsReportSite { line, text: format!("{} {}= {}", written_expression(words, target), bounds_report_symbol(&which), written_expression(words, value)), index: false, proved, blocked });
             }
         },
@@ -262,7 +275,7 @@ pub(crate) fn bounds_report_site(expr: &Expr, line: i64, args: &[FnArg], body: &
                 walk.seen.insert(key);
                 let proved = facts.proven_indices.contains(&key);
                 let mut blocked: Option<String> = None;
-                if !proved { blocked = Some(blocked_index(base, index, args, body, words, source, walk.callers)); }
+                if !proved { blocked = Some(blocked_index(base, index, args, body, words, source, &walk.gate)); }
                 walk.sites.push(BoundsReportSite { line, text: written_expression(words, expr), index: true, proved, blocked });
             }
         },
@@ -273,7 +286,7 @@ pub(crate) fn bounds_report_site(expr: &Expr, line: i64, args: &[FnArg], body: &
                 walk.seen.insert(key);
                 let proved = facts.proven_indices.contains(&key);
                 let mut blocked: Option<String> = None;
-                if !proved { blocked = Some(blocked_index(receiver, unsafe { nikaia_std::proven::read(&given, (0) as usize) }, args, body, words, source, walk.callers)); }
+                if !proved { blocked = Some(blocked_index(receiver, unsafe { nikaia_std::proven::read(&given, (0) as usize) }, args, body, words, source, &walk.gate)); }
                 walk.sites.push(BoundsReportSite { line, text: written_expression(words, expr), index: true, proved, blocked });
             }
         },
@@ -283,7 +296,7 @@ pub(crate) fn bounds_report_site(expr: &Expr, line: i64, args: &[FnArg], body: &
             if bounds_report_checked_op(op) && bounds_report_seen(facts, at) {
                 let proved = facts.proven_arithmetic.contains(&at);
                 let mut blocked: Option<String> = None;
-                if !proved { blocked = Some(blocked_operation(op, lhs, rhs, args, body, words, source, walk.callers)); }
+                if !proved { blocked = Some(blocked_operation(op, lhs, rhs, args, body, words, source, &walk.gate)); }
                 walk.sites.push(BoundsReportSite { line: bounds_report_line(source, at), text: written_expression(words, expr), index: false, proved, blocked });
             }
         },

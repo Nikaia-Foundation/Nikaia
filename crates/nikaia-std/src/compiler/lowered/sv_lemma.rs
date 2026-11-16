@@ -12,30 +12,38 @@ pub struct SvLemma {
     pub sb: i64,
 }
 
+#[cfg(test)]
 pub(crate) fn sv_lemma(schema: String, def: i64) -> SvLemma { SvLemma { schema, def, other: -1, a: sv_int(0), b: sv_int(0), sa: 0, sb: 0 } }
 
+#[cfg(test)]
 pub(crate) fn sv_lm(k: &SvRat, name: &str) -> Option<SvLin> { sv_lin_scale(&sv_lin_var(name), k) }
 
+#[cfg(test)]
 pub(crate) fn sv_lm_c(k: &SvRat, name: &str, c: &SvRat) -> Option<SvLin> { sv_lin_add(&match sv_lm(k, name) { Some(__nikaia_value) => __nikaia_value, None => return None }, &sv_lin_constant(c.clone())) }
 
+#[cfg(test)]
 pub(crate) fn sv_la(arena: &mut TermArena, rel: &str, d: &SvLin) -> Option<i64> { sv_lin_atom(arena, rel, d) }
 
+#[cfg(test)]
 pub(crate) fn sv_lv(arena: &mut TermArena, rel: &'static str, name: &str, a: &SvRat) -> Option<i64> {
     let minus = match sv_rat_neg(a) { Some(__nikaia_value) => __nikaia_value, None => return None };
     sv_la(arena, rel, &match sv_lm_c(&sv_int(1), name, &minus) { Some(__nikaia_value) => __nikaia_value, None => return None })
 }
 
+#[cfg(test)]
 pub(crate) fn sv_lvv(arena: &mut TermArena, rel: &'static str, x: &str, y: &str) -> Option<i64> {
     let d = match sv_lin_sub(&sv_lin_var(x), &sv_lin_var(y)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     sv_la(arena, rel, &d)
 }
 
+#[cfg(test)]
 pub(crate) fn sv_rat_abs(b: &SvRat) -> Option<SvRat> {
     if b.num < 0 { return sv_rat_neg(b); }
     Some(b.clone())
 }
 
-pub fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma) -> Option<i64> {
+#[cfg(test)]
+pub(crate) fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma) -> Option<i64> {
     if l.def < 0 || l.def >= defs.len() as i64 { return None; }
     let t = (*unsafe { nikaia_std::proven::read(&defs, (l.def) as usize) }).clone();
     let m = nikaia_std::block::Text::from(t.name.to_string());
@@ -180,6 +188,7 @@ pub fn sv_lemma_alethe(schema: &str) -> String {
     String::from("lia_generic")
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum SvNlValue {
     Value(SvRat),
@@ -187,6 +196,7 @@ pub(crate) enum SvNlValue {
     Overflow,
 }
 
+#[cfg(test)]
 pub(crate) fn sv_nl_value(t: &SvNl, values: &collections::BTreeMap<String, SvRat>) -> SvNlValue {
     let a = sv_real_named(values, &t.a);
     let b = sv_real_named(values, &t.b);
@@ -216,7 +226,8 @@ pub(crate) fn sv_nl_value(t: &SvNl, values: &collections::BTreeMap<String, SvRat
     }
 }
 
-pub fn sv_nl_holds(defs: &[SvNl], values: &collections::BTreeMap<String, SvRat>) -> bool {
+#[cfg(test)]
+pub(crate) fn sv_nl_holds(defs: &[SvNl], values: &collections::BTreeMap<String, SvRat>) -> bool {
     for i in 0..defs.len() as i64 {
         let mine = sv_real_named(values, &unsafe { nikaia_std::proven::read(&defs, (i) as usize) }.name);
         match sv_nl_value(unsafe { nikaia_std::proven::read(&defs, (i) as usize) }, values) {
@@ -228,9 +239,11 @@ pub fn sv_nl_holds(defs: &[SvNl], values: &collections::BTreeMap<String, SvRat>)
     true
 }
 
+#[cfg(test)]
 pub(crate) fn sv_nl_same_place(t: &SvNl, u: &SvNl, values: &collections::BTreeMap<String, SvRat>) -> bool { t.op == u.op && sv_rat_cmp(&sv_real_named(values, &t.a), &sv_real_named(values, &u.a)) == 0 && sv_rat_cmp(&sv_real_named(values, &t.b), &sv_real_named(values, &u.b)) == 0 }
 
-pub fn sv_lemma_query(arena: &TermArena, facts: &[i64], goal: i64, reals: &collections::BTreeSet<String>, defs: &[SvNl], lemmas: &[SvLemma]) -> Option<SvCnf> {
+#[cfg(test)]
+pub(crate) fn sv_lemma_query(arena: &TermArena, facts: &[i64], goal: i64, reals: &collections::BTreeSet<String>, defs: &[SvNl], lemmas: &[SvLemma]) -> Option<SvCnf> {
     let mut work = arena.clone();
     let mut all = facts.copy_owned();
     for l in lemmas.iter() { all.push(match sv_lemma_formula(&mut work, defs, l) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
@@ -238,7 +251,8 @@ pub fn sv_lemma_query(arena: &TermArena, facts: &[i64], goal: i64, reals: &colle
     sv_cnf_sorted(&work, &all, goal, reals, &mut why)
 }
 
-pub fn sv_lemma_check(arena: &TermArena, facts: &[i64], goal: i64, reals: &collections::BTreeSet<String>, defs: &[SvNl], lemmas: &[SvLemma], steps: &[SvStep]) -> Option<SvVerdict> {
+#[cfg(test)]
+pub(crate) fn sv_lemma_check(arena: &TermArena, facts: &[i64], goal: i64, reals: &collections::BTreeSet<String>, defs: &[SvNl], lemmas: &[SvLemma], steps: &[SvStep]) -> Option<SvVerdict> {
     let cnf = match sv_lemma_query(arena, facts, goal, reals, defs, lemmas) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(sv_check(&cnf.query, steps))
 }

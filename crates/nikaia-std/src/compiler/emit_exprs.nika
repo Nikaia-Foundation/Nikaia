@@ -96,14 +96,14 @@ fn emit_two(before: ref String, after: ref String) -> (String, String) {
     return (before.clone(), after.clone())
 }
 
-pub fn emit_around(how: ref FactWrap?) -> (String, String) sync throws {
+fn emit_around(how: ref FactWrap?) -> (String, String) sync throws {
     let held = how ?? return emit_two("", "")
     return emit_around_held(held)
 }
 
 /// The words a wrap puts around a value. **Each is one the checker decided**
 /// (#1322): a value of no known type gets no wrap, it is refused (`NK1342`).
-pub fn emit_around_held(held: ref FactWrap) -> (String, String) sync throws {
+fn emit_around_held(held: ref FactWrap) -> (String, String) sync throws {
     return match held {
         FactWrap::Constructor => emit_two("Some(", ")"),
         FactWrap::Path => emit_two("std::path::PathBuf::from(", ")"),
@@ -142,7 +142,7 @@ impl EmitState {
     /// Whether the argument `i` of `callee` is code the callee runs and does
     /// not keep: this unit's entry, or else every method of that name.
     /// Whether every callee the name can mean keeps the code at `i`.
-    pub fn keeps_code_at(ref self, callee: ref String, i: i64) -> bool {
+    fn keeps_code_at(ref self, callee: ref String, i: i64) -> bool {
         let contract = self.own_contracts.functions.get(callee)
         if contract != null {
             return emit_keeps_code(contract ?? return false, i)
@@ -154,7 +154,7 @@ impl EmitState {
         return candidates.iter().all(fn(candidate) { emit_keeps_code(candidate, i) })
     }
 
-    pub fn runs_code_at(ref self, callee: ref String, i: i64) -> bool {
+    fn runs_code_at(ref self, callee: ref String, i: i64) -> bool {
         let contract = self.own_contracts.functions.get(callee)
         if contract != null {
             return emit_runs(contract ?? return false, i)
@@ -173,7 +173,7 @@ impl EmitState {
 
     /// Whether the argument `i` of `callee` is a `mut` parameter, which the
     /// callee changes in place.
-    pub fn changes_at(ref self, callee: ref String, i: i64) -> bool {
+    fn changes_at(ref self, callee: ref String, i: i64) -> bool {
         let contract = self.own_contracts.functions.get(callee)
         if contract != null {
             return emit_changes(contract ?? return false, i)
@@ -191,7 +191,7 @@ impl EmitState {
     }
 
     /// Whether the function `function` takes `name` as a `mut` parameter.
-    pub fn changes_in_place(ref self, function: ref String, name: ref String) -> bool {
+    fn changes_in_place(ref self, function: ref String, name: ref String) -> bool {
         let contract = self.own_contracts.functions.get(function) ?? return false
         let signature = contract.signature?.clone() ?? return false
         for mutable in signature.mutable {
@@ -204,7 +204,7 @@ impl EmitState {
 
     /// Whether `name` is a `mut` parameter of `function` that is a plain
     /// copy, not a view: it is copied in and written back.
-    pub fn copied_in_place(ref self, function: ref String, name: ref String) -> bool {
+    fn copied_in_place(ref self, function: ref String, name: ref String) -> bool {
         if !self.changes_in_place(function, name) {
             return false
         }
@@ -229,7 +229,7 @@ impl EmitState {
 
     /// The name of the first generic parameter of a function: the type a copy
     /// of it walking a shape is made for.
-    pub fn walked_parameter(ref self, world: ref EmitWorld, item: ref Item) -> ref String {
+    fn walked_parameter(ref self, world: ref EmitWorld, item: ref Item) -> ref String {
         return match item {
             Item::Fn { generics, .. } => self.first_generic(world.words, generics),
             else => "",
@@ -244,7 +244,7 @@ impl EmitState {
     }
 
     /// The function's name, if it walks the fields of a shape.
-    pub fn walks_a_shape(ref self, world: ref EmitWorld, item: ref Item) -> String? {
+    fn walks_a_shape(ref self, world: ref EmitWorld, item: ref Item) -> String? {
         match item {
             Item::Fn { name, .. } => {
                 let held = name ?? return null
@@ -259,7 +259,7 @@ impl EmitState {
     }
 
     /// Whether a struct of this name is built by its `new`.
-    pub fn constructs_by_name(ref self, world: ref EmitWorld, name: ref String) -> bool {
+    fn constructs_by_name(ref self, world: ref EmitWorld, name: ref String) -> bool {
         let constructor = f"{name}::new"
         if self.declares_a_struct(name) {
             return self.own_contracts.functions.contains_key(constructor)
@@ -268,13 +268,13 @@ impl EmitState {
     }
 
     /// Whether `x.count()` is the checker's count of a sequence.
-    pub fn is_counted(ref self, receiver: ref Expr, method: ref String, args: ref Vec[Expr]) -> bool {
+    fn is_counted(ref self, receiver: ref Expr, method: ref String, args: ref Vec[Expr]) -> bool {
         return method == "count" && args.len() == 0 && self.facts.counted.contains(node_key(receiver))
     }
 
     /// Whether an expression is written as a cast, so what follows it needs a
     /// parenthesis.
-    pub fn emits_as_cast(ref self, world: ref EmitWorld, expr: ref Expr) -> bool {
+    fn emits_as_cast(ref self, world: ref EmitWorld, expr: ref Expr) -> bool {
         return match expr {
             Expr::Cast { .. } => true,
             Expr::MethodCall { receiver, method, args, .. } => self.method_emits_as_cast(world, receiver, method, args),
@@ -288,7 +288,7 @@ impl EmitState {
     }
 
     /// Whether the right end of an expression is a cast.
-    pub fn ends_in_a_cast(ref self, world: ref EmitWorld, expr: ref Expr) -> bool {
+    fn ends_in_a_cast(ref self, world: ref EmitWorld, expr: ref Expr) -> bool {
         return match expr {
             Expr::Binary { op, rhs, .. } => self.rhs_ends_in_a_cast(world, op, rhs),
             else => self.emits_as_cast(world, expr),
@@ -324,7 +324,7 @@ impl EmitState {
     }
 
     /// As `map_name`, for a path: the last segment is mapped.
-    pub fn mapped_path(ref self, trusting: bool, name: ref String) -> String {
+    fn mapped_path(ref self, trusting: bool, name: ref String) -> String {
         let parts: Vec[String] = name.split("::").collect()
         if parts.len() < 2 {
             return self.map_name(trusting, name)
@@ -341,7 +341,7 @@ impl EmitState {
 impl EmitWalk {
     /// Whether an expression is never negative in `function`: a literal that is
     /// not, a local found to be, or a sum or product of those.
-    pub fn never_negative(ref self, world: ref EmitWorld, function: ref String, expr: ref Expr) -> bool {
+    fn never_negative(ref self, world: ref EmitWorld, function: ref String, expr: ref Expr) -> bool {
         return match expr {
             Expr::LitInt { negative, .. } => !negative,
             Expr::Variable(name, _) => self.local_never_negative(world, function, name),

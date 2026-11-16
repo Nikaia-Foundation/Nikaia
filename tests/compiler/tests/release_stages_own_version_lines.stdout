@@ -1,0 +1,28 @@
+staged: true
+index:
+# Tooling
+
+**Version:** 0.0.2 (Draft)
+**Date:** 2026-11-16
+
+## D14
+
+Old text.
+unstaged:
++
++## D15
++
++Unfinished paragraph.
+working file:
+# Tooling
+
+**Version:** 0.0.2 (Draft)
+**Date:** 2026-11-16
+
+## D14
+
+Old text.
+
+## D15
+
+Unfinished paragraph.
