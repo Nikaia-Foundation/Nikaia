@@ -215,6 +215,10 @@ it, like the checks in `docs/supervisor.md`.
   is the one `where.nika` reports for that function, copied from its
   output, never recalled (#1779: #1628 named `prover_walk.nika` for
   `outside_source`, which lives in `prover_calls.nika`).
+  `nikaia run scripts/drive.nika -- --cause-check N|FILE` checks the marking
+  before `ready` (owner, 2026-11-16; #1917, #1926-#1928 were filed with an
+  unmeasured guess as their cause). A run checks a suspected or unmarked
+  cause first, before it builds on it; one shown false is its `wrong I7`.
   A traced cause is followed outward before filing: the other forms that
   reach the same function (a closure, a `std` method that takes one, the
   same call on a fixed-size `Array`) are run on the binary of the day,

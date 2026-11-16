@@ -486,6 +486,13 @@ probe is filed by the supervisor when it reads the report: a GitHub issue in bri
 `docs/briefs/bugs/batch.txt`, issue labelled `wip`. An open issue that already
 holds the defect gets the new probe as a comment instead.
 
+Before a bug issue gets `ready`, the supervisor runs
+`nikaia run scripts/drive.nika -- --cause-check N` (or a draft `FILE.md`;
+owner, 2026-11-16): it refuses a cause that does not say traced, suspected
+or unknown, and a suspected one that names no check that settles it
+(`docs/issues.md` I7). The driver marks the same in the issues it files
+from a `Found:` (`## Cause not marked`, `## Check missing`).
+
 ## Driver, suite and QA (owner, 2026-10-31)
 
 Builders commit locally and push nothing. After each
