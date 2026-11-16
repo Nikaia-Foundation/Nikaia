@@ -1,11 +1,12 @@
 // #1705: the tests compiled `std` up to four times on a cold cache, once in
 // each target directory a kind of cache had of its own (the program's rlibs,
 // the run bundle, the build-time bundle, the grammar runs' parsers). The
-// bundles and the parsers share one tree now, with one dependency profile, so
-// Cargo compiles `nikaia-std` twice: there and in the program's tree, which a
-// program's Cargo build holds locked while it asks for a bundle. A program
-// with a grammar run and a build-time value, built (its value computed under
-// that lock) and then run on a fresh cache, through a Cargo that counts.
+// bundles and the parsers are built in the program's own tree, with its
+// profile and `--target`, before the program's Cargo build takes the tree's
+// lock, so Cargo compiles `nikaia-std` once. A program with a grammar run and
+// a build-time value, built (its value computed under that lock, from the
+// bundle built before) and then run on a fresh cache, through a Cargo that
+// counts.
 use std::fs
 use std::process
 

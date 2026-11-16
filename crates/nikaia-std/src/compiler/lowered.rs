@@ -3737,7 +3737,7 @@ pub mod cli_commands {
 }
 pub mod comptime_bundle {
     #[allow(unused_imports)]
-    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_artifacts, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
+    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_artifacts, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_host_deps, comptime_bundle_run, comptime_bundle_write_if_changed};
 }
 pub mod comptime_driver {
     #[allow(unused_imports)]
@@ -4408,4 +4408,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "a6bb0f43935c98bc31d560c4080e879f6069e47a55393ccbe4a1c9965d100d6c";
+pub const LOWERED_DIGEST: &str = "40feaca8ef76c14b246f1c3b8e4dddeaa27dfc18e2cf8f4bb39ce634d8cc9f0f";

@@ -20,6 +20,7 @@ use std::process::Command;
 use anyhow::{Context, Result};
 
 use crate::comptime_run::{run_bundle, rustc, unique_beside, write_if_changed};
+use nikaia_std::compiler::comptime_bundle::comptime_bundle_host_deps;
 
 /// What compiling the program came to.
 pub(crate) struct Built {
@@ -118,6 +119,12 @@ pub(crate) fn compile(
         )
         .arg("-L")
         .arg(format!("dependency={}", bundle.deps.display()));
+    // The proc macros the bundle's crates use, built for the host (#1705).
+    if let Some(host_deps) = comptime_bundle_host_deps(&bundle.deps) {
+        command
+            .arg("-L")
+            .arg(format!("dependency={}", host_deps.display()));
+    }
     // **Found where it was built**, by the path written into the program: the
     // program is `exec`ed as it is (#281), with nothing set around it.
     let mut libraries: Vec<PathBuf> = Vec::new();

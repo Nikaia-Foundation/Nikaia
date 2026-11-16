@@ -90,6 +90,9 @@ pub trait ComptimeBundleHost {
     /// The target directory a bundle is built in: the one tree every
     /// build-time sub-build compiles `std` in (#1705).
     fn shared_target(ref self) -> fs::Path sync
+    /// The triple Cargo is told as `--target`: a program's, so that the
+    /// tree's `std` is the one its build compiled (#1705).
+    fn build_target(ref self) -> String sync
     /// The directory Cargo and `rustc` start in.
     fn where_tools_start(ref self) -> fs::Path sync
     /// `rustc -vV`, once.
@@ -163,17 +166,27 @@ fn comptime_bundle_digest(text: String) -> String {
 /// the first `comptime` could run. Cargo's lock on the target directory is what
 /// makes two builds at once wait for one another rather than collide.
 pub fn comptime_bundle_bundle[H: ComptimeBundleHost](host: ref H) -> ComptimeBundle throws {
-    return comptime_bundle_bundle_of(ComptimeBundleFlavour::BuildTime, host)
+    return comptime_bundle_recorded(ComptimeBundleFlavour::BuildTime, host)
 }
 
-/// **The bundle `nikaia run` links a program against**, built once and then
-/// found from its record without starting Cargo: Cargo's start and freshness
-/// check is most of what a fast run saves. The record is trusted while this
-/// compiler, the toolchain and `std`'s sources are what they were when it was
-/// written, and every file it names is still there.
+/// **The bundle `nikaia run` links a program against.**
 pub fn comptime_bundle_run_bundle[H: ComptimeBundleHost](host: ref H) -> ComptimeBundle throws {
-    let (manifest, source) = comptime_bundle_bundle_text(ComptimeBundleFlavour::Run, host)
-    let at = comptime_bundle_bundle_dir(ComptimeBundleFlavour::Run, manifest, source, host)
+    return comptime_bundle_recorded(ComptimeBundleFlavour::Run, host)
+}
+
+/// **A bundle, built once and then found from its record without starting
+/// Cargo**: Cargo's start and freshness check is most of what a fast run
+/// saves. The record is trusted while this compiler, the toolchain and
+/// `std`'s sources are what they were when it was written, and every file it
+/// names is still there.
+///
+/// **The build-time bundle too** (#1705): the driver builds it in the tree a
+/// program's Cargo build then holds locked, before that build starts; the
+/// compiler that build runs as `rustc` finds it here and starts no Cargo of
+/// its own.
+fn comptime_bundle_recorded[H: ComptimeBundleHost](flavour: ComptimeBundleFlavour, host: ref H) -> ComptimeBundle throws {
+    let (manifest, source) = comptime_bundle_bundle_text(flavour, host)
+    let at = comptime_bundle_bundle_dir(flavour, manifest, source, host)
     // **Held before the record is read** (#1128): a program found from the
     // record links against the bundle and loads it, and a prune by a build
     // beside this one removed the bundle unheld under it (rustc then found
@@ -182,13 +195,19 @@ pub fn comptime_bundle_run_bundle[H: ComptimeBundleHost](host: ref H) -> Comptim
     let record = at.join("built")
     let fingerprint = comptime_bundle_run_fingerprint(host)
     let held = fs::read_to_string(record, fs::Root::Anywhere) catch { "" }
+    // **And the tree it was built in**, which is another cache entry
+    // (#1705): `<tree>/<triple>/debug/deps` holds the crates it names.
+    match comptime_bundle_tree_of(held) {
+        null => {},
+        tree => host.use_entry(tree),
+    }
     match comptime_bundle_read_record(held, fingerprint) {
         null => {},
         bundle => {
             return bundle
         },
     }
-    let bundle = comptime_bundle_bundle_of(ComptimeBundleFlavour::Run, host)
+    let bundle = comptime_bundle_bundle_of(flavour, host)
     let mut text = f"{fingerprint}\n{bundle.dylib.display()}\n{bundle.deps.display()}\n{bundle.libdir.display()}\n"
     for (name, rlib) in bundle.rlibs {
         text.push_str(f"{name}={rlib.display()}\n")
@@ -227,6 +246,21 @@ fn comptime_bundle_run_fingerprint[H: ComptimeBundleHost](host: ref H) -> String
     }
     let rustc = env::var("RUSTC") ?? "rustc"
     return comptime_bundle_digest(f"{host.compiler()}\n{host.rustc_version()}\n{rustc}\n{newest}:{count}")
+}
+
+/// The target directory a record's crates were built in: three levels above
+/// its `deps` line (`<tree>/<triple>/debug/deps`).
+fn comptime_bundle_tree_of(text: ref String) -> fs::Path? {
+    let deps: fs::Path = text.lines().nth(2) ?? return null
+    return deps.parent()?.parent()?.parent()?.clone()
+}
+
+/// **Where the bundle's proc macros are** (#1705): built for a named
+/// `--target`, Cargo puts what runs on the host in `<tree>/debug/deps`, beside
+/// the target's `<tree>/<triple>/debug/deps`.
+pub fn comptime_bundle_host_deps(deps: ref fs::Path) -> fs::Path? {
+    let tree: fs::Path = deps.parent()?.parent()?.parent() ?? return null
+    return tree.join("debug").join("deps")
 }
 
 /// The bundle a record names, where it is still the one it names.
@@ -328,12 +362,11 @@ fn comptime_bundle_bundle_of[H: ComptimeBundleHost](flavour: ComptimeBundleFlavo
     let lib_rs = dir.join("src").join("lib.rs")
     comptime_bundle_write_if_changed(lib_rs, bundle_source, host.unique_beside(lib_rs))
     let cargo = env::var("CARGO") ?? "cargo"
-    // **Built in the build-time tree** (#1705): one tree and one dependency
-    // profile, so Cargo compiles `std` once for both bundles and the grammar
-    // runs' parsers. Not the programs' own tree: a program's Cargo build holds
-    // that one locked while its compile asks for a bundle.
+    // **Built in the build-time tree** (#1705): one tree, one dependency
+    // profile and a program's `--target`, so Cargo compiles `std` once for
+    // both bundles, the grammar runs' parsers and a program with no settings.
     let target = host.shared_target()
-    let built = process::run(cargo, ["rustc", "--quiet", "--lib", "--crate-type", "dylib", "--message-format=json", "--manifest-path", cargo_toml.display(), "--target-dir", target.display(), "--", "-C", "prefer-dynamic"]; dir: host.where_tools_start().display()) catch {
+    let built = process::run(cargo, ["rustc", "--quiet", "--lib", "--crate-type", "dylib", "--message-format=json", "--manifest-path", cargo_toml.display(), "--target-dir", target.display(), "--target", host.build_target(), "--", "-C", "prefer-dynamic"]; dir: host.where_tools_start().display()) catch {
         throw ComptimeBundleFailed::Said(f"running cargo: {error}")
     }
     if !built.ok {
@@ -404,6 +437,13 @@ pub fn comptime_bundle_run[H: ComptimeBundleHost](at: ref fs::Path, bundle: ref 
     }
     args.push("-L")
     args.push(f"dependency={bundle.deps.display()}")
+    match comptime_bundle_host_deps(bundle.deps) {
+        null => {},
+        host_deps => {
+            args.push("-L")
+            args.push(f"dependency={host_deps.display()}")
+        },
+    }
     args.push("-o")
     args.push(binary.display())
     args.push(source.display())
