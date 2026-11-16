@@ -1,0 +1,15 @@
+// A non-Copy field copied out of a door's block with `.clone()` takes a
+// plain `String` annotation: the stamp is inferred (ADR-281 D24, #1651).
+struct N { t: String }
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("hi")
+    return g
+}
+
+fn main() throws {
+    let m = SharedMut(N { t: make() })
+    let got: String = m.access fn(open) { open.t.clone() }
+    println(got)
+}
