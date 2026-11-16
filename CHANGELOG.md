@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1406] — 2026-11-16
+
+**Builders' changes (#1554, #1638, #1751, #1811)**
+- Memory budgets: a map sent between tasks now weighs its whole table, and starting tasks no longer charges the runtime's bookkeeping to the task that starts them (#1554).
+- A program can declare its own `Box` type: the compiler's generated code names Rust's box `std::boxed::Box` (#1638).
+- A value put into `SharedMut(…)` or `Locked(…)` counts against the shared value from its creation, not against the task that made it, so a task that creates and drops shared values no longer runs over its memory budget (ADR-327 D9).
+- The bounds walk knows that an HTTP head's `size()` is at least 4 and its `length()` and a buffer's `len()` are never negative, and reads a ledger's `ensures` for a `len()` of a type that is no list, so `buffer.len() - head.size()` is proved.
+
 ## [0.0.1405] — 2026-11-16
 
 **Builders' changes (#1820, #1821, #1822, #1823, #1827, #1837)**
