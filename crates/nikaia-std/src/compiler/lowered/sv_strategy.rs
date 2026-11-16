@@ -20,9 +20,9 @@ pub struct SvParams {
     pub dense_share: i64,
 }
 
-pub fn sv_params() -> SvParams { SvParams { version: String::from("sv-params-1"), pipeline: String::from("search"), theory: String::from("both"), fast: true, pre: true, walk_after: true, walk_first: 250, walk: sv_walk_params(), bland_after: 64, pivot_limit: 100000, gcd_test: true, cut_kind: String::from("gmi"), cut_rounds: 8, dense_width: 4, dense_share: 100 } }
+pub(crate) fn sv_params() -> SvParams { SvParams { version: String::from("sv-params-1"), pipeline: String::from("search"), theory: String::from("both"), fast: true, pre: true, walk_after: true, walk_first: 250, walk: sv_walk_params(), bland_after: 64, pivot_limit: 100000, gcd_test: true, cut_kind: String::from("gmi"), cut_rounds: 8, dense_width: 4, dense_share: 100 } }
 
-pub fn sv_params_set(p: &mut SvParams, name: &str, value: &str) -> bool {
+pub(crate) fn sv_params_set(p: &mut SvParams, name: &str, value: &str) -> bool {
     if name == "pipeline" {
         if value != "search" && value != "walk-first" { return false; }
         p.pipeline = nikaia_std::block::Text::from(value.to_string());
@@ -50,7 +50,7 @@ pub fn sv_params_set(p: &mut SvParams, name: &str, value: &str) -> bool {
     true
 }
 
-pub fn sv_params_set_all(p: &mut SvParams, settings: &str) -> bool {
+pub(crate) fn sv_params_set_all(p: &mut SvParams, settings: &str) -> bool {
     for part in settings.split(',') {
         if part.is_empty() { continue; }
         let (name, value) = match part.split_once("=") { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -79,7 +79,7 @@ pub(crate) fn sv_strategy_size(n: i64) -> i64 {
     nikaia_std::index::or(n.checked_neg(), || 9223372036854775807i64)
 }
 
-pub fn sv_features(cnf: &SvCnf) -> SvFeatures {
+pub(crate) fn sv_features(cnf: &SvCnf) -> SvFeatures {
     let mut f = SvFeatures { columns: cnf.query.columns as i64, reals: cnf.query.reals.len() as i64, atoms: 0, clauses: cnf.query.clauses.len() as i64, disjunctions: 0, nonzeros: 0, interval: 0, difference: 0, max_coefficient: 0, max_constant: 0, boolean: 0 };
     let mut ones: i64 = 0;
     let mut twos: i64 = 0;
@@ -118,9 +118,10 @@ pub fn sv_features(cnf: &SvCnf) -> SvFeatures {
     f
 }
 
-pub fn sv_features_shown(f: &SvFeatures) -> String { format!("columns {} reals {} atoms {} clauses {} disjunctions {} nonzeros {} interval {}‰ difference {}‰ coefficient {} constant {} boolean {}", f.columns, f.reals, f.atoms, f.clauses, f.disjunctions, f.nonzeros, f.interval, f.difference, f.max_coefficient, f.max_constant, f.boolean) }
+#[cfg(test)]
+pub(crate) fn sv_features_shown(f: &SvFeatures) -> String { format!("columns {} reals {} atoms {} clauses {} disjunctions {} nonzeros {} interval {}‰ difference {}‰ coefficient {} constant {} boolean {}", f.columns, f.reals, f.atoms, f.clauses, f.disjunctions, f.nonzeros, f.interval, f.difference, f.max_coefficient, f.max_constant, f.boolean) }
 
-pub fn sv_strategy_pick(f: &SvFeatures, base: &SvParams) -> SvParams {
+pub(crate) fn sv_strategy_pick(f: &SvFeatures, base: &SvParams) -> SvParams {
     let mut p = base.clone();
     if f.reals > 0 {
         p.pipeline = String::from("search");
@@ -133,7 +134,8 @@ pub fn sv_strategy_pick(f: &SvFeatures, base: &SvParams) -> SvParams {
     p
 }
 
-pub fn sv_params_shown(p: &SvParams) -> String {
+#[cfg(test)]
+pub(crate) fn sv_params_shown(p: &SvParams) -> String {
     let first = if p.pipeline == "walk-first" { "walk-first, " } else { "" };
     let after = if p.walk_after { "+walk" } else { "" };
     format!("{}search/{}{}", first, p.theory, after)
@@ -174,7 +176,7 @@ pub(crate) fn sv_strategy_model(arena: &TermArena, facts: &[i64], goal: i64, cnf
     }
 }
 
-pub fn sv_strategy_run(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudget, cnf: &SvCnf, p: &SvParams) -> SvEngineRun {
+pub(crate) fn sv_strategy_run(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudget, cnf: &SvCnf, p: &SvParams) -> SvEngineRun {
     let real = !cnf.query.reals.is_empty();
     let mut spent: i64 = 0;
     let mut phases: Vec<bool> = vec![];

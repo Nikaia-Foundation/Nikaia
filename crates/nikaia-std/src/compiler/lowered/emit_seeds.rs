@@ -54,12 +54,12 @@ impl EmitSeedsTables {
         for g in ty.generics.iter() { if self.mentions_a_struct(words, g) { return true; } }
         false
     }
-    pub fn count_words(&self, words: &[String]) -> i64 {
+    pub(crate) fn count_words(&self, words: &[String]) -> i64 {
         let mut sum: i64 = 0;
         for w in words.iter() { if emit_seeds_is_map(w) { sum += 1; } else { sum += self.arity(w); } }
         sum
     }
-    pub fn count_types(&mut self, declared: &[EmitSeedsDeclared]) {
+    pub(crate) fn count_types(&mut self, declared: &[EmitSeedsDeclared]) {
         self.types.clear();
         for d in declared.iter() { if !self.excluded.contains(&d.name) { self.types.insert(nikaia_std::block::Text::from(d.name.to_string()), 0); } }
         for _ in 0..8 {
@@ -85,7 +85,7 @@ impl EmitSeedsTables {
         for c in calls.iter() { if self.barriers.contains(&c.callee) || self.fixed.contains(&c.callee) || self.private.contains(&c.callee) { for r in c.roots.iter() { if nikaia_std::list::contains(&held, &r) { return true; } } } }
         false
     }
-    pub fn close_barriers(&mut self, bodies: &[EmitSeedsBody]) {
+    pub(crate) fn close_barriers(&mut self, bodies: &[EmitSeedsBody]) {
         for _ in 0..4 {
             let mut changed = false;
             for b in bodies.iter() {
@@ -98,7 +98,7 @@ impl EmitSeedsTables {
             if !changed { break; }
         }
     }
-    pub fn self_handers(&self, impls: &[EmitSeedsBody]) -> Vec<String> {
+    pub(crate) fn self_handers(&self, impls: &[EmitSeedsBody]) -> Vec<String> {
         let mut out: Vec<String> = vec![];
         for i in impls.iter() {
             if self.arity(&i.name) == 0 || nikaia_std::list::contains(&out, &i.name) { continue; }
@@ -435,12 +435,12 @@ pub(crate) fn emit_seeds_root(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, e: &Exp
     out
 }
 
-pub fn emit_seeds_words(words: &winnow_grammar::InternerContext, ty: &Type, out: &mut Vec<String>) {
+pub(crate) fn emit_seeds_words(words: &winnow_grammar::InternerContext, ty: &Type, out: &mut Vec<String>) {
     if (*ty.code).is_none() && !ty.is_tuple { out.push(nikaia_std::block::Text::from(words.resolve(ty.name).to_string())); }
     for g in ty.generics.iter() { emit_seeds_words(words, g, out); }
 }
 
-pub fn emit_seeds_bare(words: &winnow_grammar::InternerContext, ty: &Type) -> i64 {
+pub(crate) fn emit_seeds_bare(words: &winnow_grammar::InternerContext, ty: &Type) -> i64 {
     let mut sum: i64 = 0;
     if (*ty.code).is_none() && !ty.is_tuple && emit_seeds_is_map(&nikaia_std::block::Text::from(words.resolve(ty.name).to_string())) { sum = 1; }
     for g in ty.generics.iter() { sum += emit_seeds_bare(words, g); }
@@ -497,16 +497,16 @@ pub(crate) struct EmitSeedsRun {
     pub(crate) out: Vec<scalar>,
 }
 
-pub fn emit_seeds_place() -> EmitSeedsPlace { EmitSeedsPlace { declaring: false, share: false, next: 0, seen: vec![], has_shape: false, groups: vec![], at: 0, names: vec![], within_target: None, within_params: vec![] } }
+pub(crate) fn emit_seeds_place() -> EmitSeedsPlace { EmitSeedsPlace { declaring: false, share: false, next: 0, seen: vec![], has_shape: false, groups: vec![], at: 0, names: vec![], within_target: None, within_params: vec![] } }
 
-pub fn emit_seeds_declare(place: &mut EmitSeedsPlace, base: i64) {
+pub(crate) fn emit_seeds_declare(place: &mut EmitSeedsPlace, base: i64) {
     place.share = true;
     place.declaring = true;
     place.next = base;
     place.seen.clear();
 }
 
-pub fn emit_seeds_declare_fn(place: &mut EmitSeedsPlace, base: i64, groups: &[i64], within: &[i64], start: i64) {
+pub(crate) fn emit_seeds_declare_fn(place: &mut EmitSeedsPlace, base: i64, groups: &[i64], within: &[i64], start: i64) {
     emit_seeds_declare(place, base);
     place.share = false;
     let mut names: Vec<String> = vec![];
@@ -524,12 +524,12 @@ pub fn emit_seeds_declare_fn(place: &mut EmitSeedsPlace, base: i64, groups: &[i6
     place.names = names;
 }
 
-pub fn emit_seeds_declare_type(place: &mut EmitSeedsPlace, base: i64) {
+pub(crate) fn emit_seeds_declare_type(place: &mut EmitSeedsPlace, base: i64) {
     emit_seeds_declare(place, base);
     place.share = false;
 }
 
-pub fn emit_seeds_finish(place: &mut EmitSeedsPlace, base: i64) -> i64 {
+pub(crate) fn emit_seeds_finish(place: &mut EmitSeedsPlace, base: i64) -> i64 {
     let mut n = place.next - base;
     place.declaring = false;
     place.next = 0;
@@ -542,17 +542,17 @@ pub fn emit_seeds_finish(place: &mut EmitSeedsPlace, base: i64) -> i64 {
     n
 }
 
-pub fn emit_seeds_enter(place: &mut EmitSeedsPlace, target: &str, params: &[String]) {
+pub(crate) fn emit_seeds_enter(place: &mut EmitSeedsPlace, target: &str, params: &[String]) {
     place.within_target = Some(nikaia_std::block::Text::from(target.to_string()));
     place.within_params = params.copy_owned();
 }
 
-pub fn emit_seeds_leave(place: &mut EmitSeedsPlace) {
+pub(crate) fn emit_seeds_leave(place: &mut EmitSeedsPlace) {
     place.within_target = None;
     place.within_params = vec![];
 }
 
-pub fn emit_seeds_within(place: &EmitSeedsPlace) -> bool { place.within_target.is_some() }
+pub(crate) fn emit_seeds_within(place: &EmitSeedsPlace) -> bool { place.within_target.is_some() }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EmitSeedsShape {
@@ -563,7 +563,7 @@ pub struct EmitSeedsShape {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn emit_seeds_begin<H: EmitHost>(tables: &EmitSeedsTables, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, written: &Item, owner_target: Option<&str>, owner_declared: bool) -> EmitSeedsBegin {
+pub(crate) fn emit_seeds_begin<H: EmitHost>(tables: &EmitSeedsTables, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, written: &Item, owner_target: Option<&str>, owner_declared: bool) -> EmitSeedsBegin {
     match written {
         Item::Fn { name, args, ret_type, is_public, .. } => {
             let is_public = *is_public; let name = *name;
@@ -601,7 +601,7 @@ pub fn emit_seeds_begin<H: EmitHost>(tables: &EmitSeedsTables, world: &EmitWorld
     }
 }
 
-pub fn emit_seeds_end(walk: &mut EmitWalk, seeded: bool, base: i64) -> EmitSeedsEnd {
+pub(crate) fn emit_seeds_end(walk: &mut EmitWalk, seeded: bool, base: i64) -> EmitSeedsEnd {
     walk.floor = false;
     let mut hidden: i64 = 0;
     if seeded { hidden = emit_seeds_finish(&mut walk.place, base); }
@@ -655,12 +655,12 @@ pub(crate) fn emit_seeds_between(c: &[scalar], from: i64, to: i64) -> String {
     out
 }
 
-pub fn emit_seeds_last(name: &str) -> String {
+pub(crate) fn emit_seeds_last(name: &str) -> String {
     let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
     emit_seeds_between(&c, emit_seeds_last_start(&c), c.len() as i64)
 }
 
-pub fn emit_seeds_is_map(name: &str) -> bool {
+pub(crate) fn emit_seeds_is_map(name: &str) -> bool {
     let l = emit_seeds_last(name);
     l == "HashMap" || l == "HashSet" || l == "TrustedMap" || l == "TrustedSet"
 }

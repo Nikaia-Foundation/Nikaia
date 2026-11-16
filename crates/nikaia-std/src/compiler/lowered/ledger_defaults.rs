@@ -67,7 +67,7 @@ pub fn attribute_value(ledger: &Ledger, library: &Ledger, words: &winnow_grammar
     Some(format!("{} {{ {} }}", name, joined))
 }
 
-pub fn computed_options(item: &Item) -> Vec<i64> {
+pub(crate) fn computed_options(item: &Item) -> Vec<i64> {
     let mut places: Vec<i64> = vec![];
     match item {
         Item::Fn { config, .. } => {
@@ -82,12 +82,12 @@ pub fn computed_options(item: &Item) -> Vec<i64> {
     places
 }
 
-pub fn apply_attribute(ledger: &mut Ledger, owner: &str, kind: i64, at: i64, text: String) {
+pub(crate) fn apply_attribute(ledger: &mut Ledger, owner: &str, kind: i64, at: i64, text: String) {
     let entry = match nikaia_std::index::get_mut(&mut ledger.types, owner) { Some(__nikaia_value) => __nikaia_value, None => return };
     if kind == 0 { entry.attributes.push(text); } else if kind == 1 { if at < entry.fields.len() as i64 { entry.fields[nikaia_std::index::at(at)].attributes.push(text); } } else if at < entry.variants.len() as i64 { entry.variants[nikaia_std::index::at(at)].attributes.push(text); }
 }
 
-pub fn set_default(ledger: &mut Ledger, key: &str, at: i64, field: bool, text: String) {
+pub(crate) fn set_default(ledger: &mut Ledger, key: &str, at: i64, field: bool, text: String) {
     if field {
         let entry = match nikaia_std::index::get_mut(&mut ledger.types, key) { Some(__nikaia_value) => __nikaia_value, None => return };
         if at < entry.fields.len() as i64 { entry.fields[nikaia_std::index::at(at)].default = text; }
@@ -108,7 +108,7 @@ pub(crate) fn ld_columns(ledger: &Ledger) -> Vec<String> {
     out
 }
 
-pub fn write_result_sources(ledger: &mut Ledger, units: i64, package: &impl Fn(&Ledger) -> ResultPackage, sources: &impl Fn(i64, &Ledger, &ResultPackage) -> Vec<ResultSource>, stored: &impl Fn(i64, &Ledger, &ResultPackage) -> Vec<PlacesStored>) {
+pub(crate) fn write_result_sources(ledger: &mut Ledger, units: i64, package: &impl Fn(&Ledger) -> ResultPackage, sources: &impl Fn(i64, &Ledger, &ResultPackage) -> Vec<ResultSource>, stored: &impl Fn(i64, &Ledger, &ResultPackage) -> Vec<PlacesStored>) {
     let shared = package(&ledger);
     let mut before = ld_columns(&ledger);
     for round in 0..8 {

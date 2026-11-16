@@ -22,7 +22,7 @@ impl CheckState {
     /// absorbed under qualified keys, so a collision would be a program that
     /// declares a type under a dependency's name — refused elsewhere, and not
     /// silently taken from the dependency here.
-    pub fn collect_library_enums(ref mut self, world: ref CheckWorld) sync {
+    fn collect_library_enums(ref mut self, world: ref CheckWorld) sync {
         self.collect_enums_of(world.own)
         self.collect_enums_of(world.library)
     }
@@ -63,7 +63,7 @@ impl CheckState {
     /// built the way `function` builds its own, the anonymous constructor
     /// included - two spellings of one name would make this table silently miss
     /// whichever the call site used.
-    pub fn bounds_declared_by(ref mut self, world: ref CheckWorld, item: ref Item, target: ref String?) sync {
+    fn bounds_declared_by(ref mut self, world: ref CheckWorld, item: ref Item, target: ref String?) sync {
         match item {
             Item::Fn { name, generics, .. } => {
                 let mut bounds: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
@@ -96,7 +96,7 @@ impl CheckState {
 
     /// **What a DSL driver hands back** (ADR-296 D5): `db.prepare(query; id:
     /// 501)`, the parameters that call gave, as a type of that call's own.
-    pub fn a_drivers_row(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    fn a_drivers_row(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
             Expr::MethodCall { method, .. } => self.dsl_drivers.contains(world.words.resolve(method)),
             Expr::Call { func, .. } => match func {
@@ -112,7 +112,7 @@ impl CheckState {
     /// grammar does not have (`Tiny::two(…)`). Each is refused at its line
     /// when it is lowered, naming what is missing, which says more than that
     /// its type is not known.
-    pub fn refused_where_it_is_lowered(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    fn refused_where_it_is_lowered(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
             Expr::Dsl { .. } => true,
             Expr::Call { func, .. } => match func {
@@ -139,7 +139,7 @@ impl CheckState {
     /// type its uses decide, as `hand(7)` is; `(spawn fn { 21 * 2 }).join()`
     /// is the task's open number. Every other way to an unknown argument
     /// passes through a part that was refused itself.
-    pub fn a_member_of_an_open_argument(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    fn a_member_of_an_open_argument(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         let base = match expr {
             Expr::Field { base, .. } => base,
             Expr::Index { base, .. } => base,
@@ -162,7 +162,7 @@ impl CheckState {
 
     /// Whether an expression names something: a binding, a function, or a
     /// call, method, path or operator over such.
-    pub fn names_something_here(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    fn names_something_here(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
             Expr::Variable(name, _) => self.names_a_binding_or_a_function(world, world.words.resolve(name)),
             Expr::Field { base, .. } => self.names_something_here(world, base),
@@ -203,7 +203,7 @@ impl CheckState {
     /// A literal has no type of its own (Part I 2.4), and neither has the name a
     /// bare `let` binds one to - but the constant fold watched both, so the
     /// absence of a type is not the absence of knowledge here.
-    pub fn is_a_number(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    fn is_a_number(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
             Expr::LitInt { .. } => true,
             Expr::LitFloat(_, _) => true,
@@ -219,7 +219,7 @@ impl CheckState {
 
     /// `NK1111`: braces in a plain string that look like a hole. A warning, and
     /// not an error, because `"{ margin: 0 }"` is correct CSS.
-    pub fn warn_migration(ref mut self, span: ref Span, message: String, help: String) sync {
+    fn warn_migration(ref mut self, span: ref Span, message: String, help: String) sync {
         self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1111", message: message, notes: ["Only `f\"…\"` strings fill in `{…}`; a plain string keeps the braces as they are."], help: help, labels: [], edit: null })
     }
 
@@ -257,7 +257,7 @@ fn any_unknown(types: ref Vec[Ty]) -> bool sync {
 /// For `NK1115`'s help line, which has to say `let db: Shared[…] = …` with
 /// the caller's own name in it. A value that is not a name has no such line
 /// to be pointed at, and the message says so instead of inventing one.
-pub fn names_of(world: ref CheckWorld, expr: ref Expr) -> String? sync {
+fn names_of(world: ref CheckWorld, expr: ref Expr) -> String? sync {
     return match expr {
         Expr::Variable(name, _) => world.words.resolve(name).clone(),
         else => null,
@@ -281,7 +281,7 @@ pub fn names_of(world: ref CheckWorld, expr: ref Expr) -> String? sync {
 /// C.4](../../docs/specification/30-nikaia-tooling.md)). It is the same
 /// *under both spellings* arrangement `absorb_renaming` already uses for the
 /// `implementations` map, asked from the reading side.
-pub fn as_this_program_says(world: ref CheckWorld, key: ref String, trait_name: ref String) -> String sync {
+fn as_this_program_says(world: ref CheckWorld, key: ref String, trait_name: ref String) -> String sync {
     if world.own.traits.contains_key(trait_name) {
         return trait_name.clone()
     }
@@ -321,7 +321,7 @@ pub fn as_this_program_says(world: ref CheckWorld, key: ref String, trait_name: 
 /// and this reader agreeing: `bounds_declared_by` skips one too, so a
 /// signature that records `[T]` for a bare parameter answers `None` rather
 /// than an empty claim.
-pub fn bounds_in_a_signature(world: ref CheckWorld, key: ref String) -> collections::BTreeMap[String, Vec[String]]? sync {
+fn bounds_in_a_signature(world: ref CheckWorld, key: ref String) -> collections::BTreeMap[String, Vec[String]]? sync {
     let contract = ledger_function(world, key) ?? return null
     let signature = contract.signature ?? return null
     let mut bounds: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
@@ -342,7 +342,7 @@ pub fn bounds_in_a_signature(world: ref CheckWorld, key: ref String) -> collecti
 }
 
 /// A function's contract by its exact key: this unit's, then the library's.
-pub fn ledger_function(world: ref CheckWorld, key: ref String) -> ref FnContract? sync {
+fn ledger_function(world: ref CheckWorld, key: ref String) -> ref FnContract? sync {
     if world.own.functions.contains_key(key) {
         return world.own.functions[key]
     }
@@ -352,7 +352,7 @@ pub fn ledger_function(world: ref CheckWorld, key: ref String) -> ref FnContract
 impl CheckState {
     /// Whether a type of this name is declared here, in this unit's contracts,
     /// among `std`'s (by its last segment), or is `Self`.
-    pub fn declares_a_type(ref self, world: ref CheckWorld, name: ref String) -> bool sync {
+    fn declares_a_type(ref self, world: ref CheckWorld, name: ref String) -> bool sync {
         if self.structs.contains_key(name) || world.own.types.contains_key(name) {
             return true
         }

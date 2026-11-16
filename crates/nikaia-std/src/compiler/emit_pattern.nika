@@ -7,7 +7,7 @@
 
 impl EmitState {
     /// One pattern, its span recorded in the source map.
-    pub fn emit_pattern[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref Spanned[Pattern]) sync throws {
+    fn emit_pattern[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref Spanned[Pattern]) sync throws {
         let st = out.mark()
         // **An unbound `text(p)` where `p` binds names** is written as the
         // bound one with a label of the lowering's own (#1039), so that what

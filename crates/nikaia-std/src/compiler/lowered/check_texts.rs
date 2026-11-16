@@ -14,7 +14,7 @@ pub(crate) fn ascii_scalar(n: i64) -> Option<scalar> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn literal_is_a_byte(written: &str) -> bool {
+pub(crate) fn literal_is_a_byte(written: &str) -> bool {
     if a_high_byte(written).is_some() { return true; }
     let text = match decoded(written, &|n| { ascii_scalar(n) }) { Some(__nikaia_value) => __nikaia_value, None => return false };
     (text.chars().count() as i64) == 1 && text.len() == 1
@@ -22,7 +22,7 @@ pub fn literal_is_a_byte(written: &str) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_byte_literal(written: &str) -> String {
+pub(crate) fn check_byte_literal(written: &str) -> String {
     let text = nikaia_std::index::or(decoded(written, &|n| { ascii_scalar(n) }), || "".into());
     let mut byte: i64 = nikaia_std::index::or(a_high_byte(written), || -1);
     for b in text.bytes() { if byte < 0 { byte = b as i64; } }
@@ -57,7 +57,7 @@ pub(crate) fn check_texts_ends_in_a_jump(block: &Block) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn ends_in_text(expr: &Expr) -> bool {
+pub(crate) fn ends_in_text(expr: &Expr) -> bool {
     match expr {
         Expr::LitStr { .. } => true,
         Expr::If { then_branch, else_branch, .. } => if else_branch.is_none() { false } else { both_tails_text(then_branch, match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false }) },
@@ -106,7 +106,7 @@ pub(crate) fn check_texts_ends_in_a_throw(block: &Block) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn ends_in_null(expr: &Expr) -> bool {
+pub(crate) fn ends_in_null(expr: &Expr) -> bool {
     match expr {
         Expr::LitNull(_) => true,
         Expr::Block(block, _) => tail_is_null(block),
@@ -175,12 +175,12 @@ pub(crate) fn check_texts_ends_in_literal(expr: &Expr, text: bool) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn a_text_literal_expr(expr: &Expr) -> bool { matches!(expr, Expr::LitStr { .. }) }
+pub(crate) fn a_text_literal_expr(expr: &Expr) -> bool { matches!(expr, Expr::LitStr { .. }) }
 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn text_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, want: &Ty, value: &Expr, owned: bool) -> Option<Ty> {
+    pub(crate) fn text_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, want: &Ty, value: &Expr, owned: bool) -> Option<Ty> {
         match want {
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); return self.text_literal(world, inner, value, owned); },
             _ => { },
@@ -298,7 +298,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn some_at_the_tails(&mut self, arm: &Expr) {
+    pub(crate) fn some_at_the_tails(&mut self, arm: &Expr) {
         match arm {
             Expr::If { then_branch, else_branch, .. } => {
                 if else_branch.is_some() {
@@ -332,7 +332,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn tuple_list_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
+    pub(crate) fn tuple_list_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let element: Ty = match want {
             Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { return None; },
             _ => return None,
@@ -356,7 +356,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn tuple_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
+    pub(crate) fn tuple_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let wants: Vec<Ty> = match want {
             Ty::Tuple(parts) => parts.copy_owned(),
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
@@ -423,7 +423,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn list_of_tuple_literals(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
+    pub(crate) fn list_of_tuple_literals(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let name = match want {
             Ty::Named { name, view, .. } => { let view = *view; if view { return None; } else { nikaia_std::block::Text::from(name.to_string()) } },
             _ => return None,
@@ -447,7 +447,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn ends_in_tuple(expr: &Expr) -> bool {
+pub(crate) fn ends_in_tuple(expr: &Expr) -> bool {
     let ends = tuple_ends(expr);
     if ends.is_empty() { return false; }
     let mut tuples = 0; #[allow(clippy::redundant_locals)] let ends = ends;
@@ -464,7 +464,7 @@ pub fn ends_in_tuple(expr: &Expr) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn tuple_ends(expr: &Expr) -> Vec<&Expr> {
+pub(crate) fn tuple_ends(expr: &Expr) -> Vec<&Expr> {
     let mut out: Vec<&Expr> = vec![];
     match expr {
         Expr::If { then_branch, else_branch, .. } => {
@@ -540,7 +540,7 @@ pub(crate) fn check_texts_a_byte_as_a_scalar(written: &str, name: Option<&str>, 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn chars_typed_by_their_uses(&mut self) {
+    pub(crate) fn chars_typed_by_their_uses(&mut self) {
         for (_, open) in self.flow.open_chars.iter() {
             let mut first_byte: Option<Span> = None;
             let mut first_scalar: Option<Span> = None;

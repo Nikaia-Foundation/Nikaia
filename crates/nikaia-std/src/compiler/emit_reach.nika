@@ -28,13 +28,13 @@ pub struct ReachIndex {
 }
 
 /// The index of the ledger's functions that may pause (`pausing_edges`).
-pub fn reach_pausing_index(contracts: ref Ledger) -> ReachIndex {
+fn reach_pausing_index(contracts: ref Ledger) -> ReachIndex {
     return reach_index_of(reach_pausing_keys(contracts))
 }
 
 /// The index of the ledger's functions that run a `sync` code parameter
 /// (`code_cycle_edges`).
-pub fn reach_running_index(contracts: ref Ledger) -> ReachIndex {
+fn reach_running_index(contracts: ref Ledger) -> ReachIndex {
     let mut running: collections::BTreeSet[String] = collections::BTreeSet()
     for name in contracts.functions.keys() {
         let contract = contracts.functions.get(name) ?? continue
@@ -63,7 +63,7 @@ fn reach_index_of(keys: collections::BTreeSet[String]) -> ReachIndex {
 /// a package gives its edges, and `pausing_reach` closes them all: a cycle
 /// may pass through several files (`impl S` in two of them). `index` is
 /// `reach_pausing_index` of the ledger.
-pub fn pausing_edges(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], items: ref Vec[Spanned[Item]], index: ref ReachIndex) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+fn pausing_edges(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], items: ref Vec[Spanned[Item]], index: ref ReachIndex) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
     let empty: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     if index.keys.len() == 0 {
         return empty
@@ -95,7 +95,7 @@ pub fn pausing_edges(words: ref winnow_grammar::InternerContext, aliases: ref co
 
 /// A function key to the pausing keys it reaches, from the edges of every
 /// file of the unit (`pausing_edges`).
-pub fn pausing_reach(graph: ref collections::BTreeMap[String, collections::BTreeSet[String]], contracts: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+fn pausing_reach(graph: ref collections::BTreeMap[String, collections::BTreeSet[String]], contracts: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
     let pausing = reach_pausing_keys(contracts)
     // Reachability to a fixpoint.
     let mut reaches = graph.clone()
@@ -196,7 +196,7 @@ fn reach_set_for(reaches: ref collections::BTreeMap[String, collections::BTreeSe
 /// A code-running function key of one file to the code-running keys it
 /// calls (`code_on_a_cycle`, #1129). `index` is `reach_running_index` of the
 /// ledger.
-pub fn code_cycle_edges(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], items: ref Vec[Spanned[Item]], index: ref ReachIndex) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+fn code_cycle_edges(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], items: ref Vec[Spanned[Item]], index: ref ReachIndex) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
     let mut graph: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     for item in items {
         match item.node {
@@ -239,7 +239,7 @@ pub fn code_cycle_edges(words: ref winnow_grammar::InternerContext, aliases: ref
 ///
 /// Each file of a package gives its edges (`code_cycle_edges`), merged over
 /// the file and its `beside` units (#1129): a cycle may pass through two files.
-pub fn code_on_a_cycle(graph: ref collections::BTreeMap[String, collections::BTreeSet[String]], contracts: ref Ledger, key: ref String) -> bool {
+fn code_on_a_cycle(graph: ref collections::BTreeMap[String, collections::BTreeSet[String]], contracts: ref Ledger, key: ref String) -> bool {
     let own = contracts.functions.get(key) ?? return false
     if !reach_runs_code(own) {
         return false

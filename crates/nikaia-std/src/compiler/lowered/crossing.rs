@@ -21,7 +21,7 @@ pub fn crosses(fields: &[String]) -> Crosses {
     Crosses::May
 }
 
-pub fn plainly_sendable(written: &str) -> bool {
+pub(crate) fn plainly_sendable(written: &str) -> bool {
     let ty = written.trim();
     if ty.starts_with('&') { return false; }
     for wrapper in PASSES_THROUGH.iter() {
@@ -35,7 +35,7 @@ pub fn plainly_sendable(written: &str) -> bool {
     is_plain(ty) || ty == "String"
 }
 
-pub fn is_plain(name: &str) -> bool {
+pub(crate) fn is_plain(name: &str) -> bool {
     for plain in PLAIN.iter() {
         let plain = *plain;
         if name == plain { return true; }
@@ -136,7 +136,7 @@ pub(crate) fn is_a_sink(call: &str) -> bool {
     false
 }
 
-pub fn promise_lines(promises: &[String]) -> Vec<String> {
+pub(crate) fn promise_lines(promises: &[String]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     if promises.is_empty() { return out; }
     out.push(String::from("**This crate makes promises the toolchain cannot check** (ADR-290 D10). A tool"));
@@ -146,7 +146,7 @@ pub fn promise_lines(promises: &[String]) -> Vec<String> {
     out
 }
 
-pub fn thread_lines(name: &str, bound: &[String], way: Option<&Vec<String>>) -> Vec<String> {
+pub(crate) fn thread_lines(name: &str, bound: &[String], way: Option<&Vec<String>>) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     if !bound.is_empty() {
         let listed = a_list(bound, "the parameter", "the parameters");
@@ -176,7 +176,7 @@ pub fn thread_lines(name: &str, bound: &[String], way: Option<&Vec<String>>) -> 
     out
 }
 
-pub fn type_entry(fields: &[String], derives: &collections::BTreeSet<String>) -> TypeContract {
+pub(crate) fn type_entry(fields: &[String], derives: &collections::BTreeSet<String>) -> TypeContract {
     let mut entry = TypeContract::empty();
     entry.public = true;
     entry.crosses = crosses(fields);

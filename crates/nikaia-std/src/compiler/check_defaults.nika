@@ -74,7 +74,7 @@ fn check_defaults_a_text_for_string(value: ref Expr, want: ref Ty) -> bool {
 /// be. A number, text, a `bool`, and a struct or a variant of those, is what
 /// the ledger records; a list as a default is not built yet, and is said to be
 /// rather than handed to the language below empty.
-pub fn check_defaults_a_computed_default[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, option: ref ConfigParam) sync {
+fn check_defaults_a_computed_default[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, option: ref ConfigParam) sync {
     let name = world.here.text(option.name)
     let declared = host.type_of(option.ty)
     check_defaults_computed_value(state, world, host, name, declared, option.default, option.default_span, CheckComputing::Option)
@@ -83,7 +83,7 @@ pub fn check_defaults_a_computed_default[H: CheckHost](mut state: CheckState, wo
 /// **A field's default** (ADR-331 D5): a literal is checked against the
 /// field's type as a literal's value is, and anything else is computed as an
 /// option's default is, under the same codes.
-pub fn check_defaults_a_field_default[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, field: ref FieldDef) sync {
+fn check_defaults_a_field_default[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, field: ref FieldDef) sync {
     let given: FieldDefault? = field.default?.clone()
     if given == null {
         return
@@ -123,7 +123,7 @@ pub fn check_defaults_a_field_default[H: CheckHost](mut state: CheckState, world
 
 /// [`check_defaults_a_computed_default`] over a type already read, which an
 /// attribute's argument has: its field may be another package's (ADR-331 D4).
-pub fn check_defaults_computed_value[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: ref String, ty: ref Ty, default: ref Expr, span: ref Span, kind: CheckComputing) sync {
+fn check_defaults_computed_value[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: ref String, ty: ref Ty, default: ref Expr, span: ref Span, kind: CheckComputing) sync {
     if a_literal(default) {
         return
     }
@@ -199,7 +199,7 @@ pub fn check_defaults_computed_value[H: CheckHost](mut state: CheckState, world:
 /// The bodies go through `check_core_comptime_binding`, the same function the
 /// statement form uses, so the fold, the refusal and the spelling the emitter
 /// is handed are one thing in one place (ADR-287 D3).
-pub fn check_defaults_item_constants[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
+fn check_defaults_item_constants[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
     state.scope.push([])
     // **Every name first, because a constant is an item.** A function declared
     // below its caller has always been callable - items are order-independent
@@ -254,7 +254,7 @@ pub fn check_defaults_item_constants[H: CheckHost](mut state: CheckState, world:
 /// A `merge` is handed two accumulators. An `init` or a `merge` written as a
 /// function's name is a call the fold makes, so it is asked the same question
 /// of the function it names.
-pub fn check_defaults_fold[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, gram: ref GrammarDef, spec: ref FoldSpec, span: ref Span) sync {
+fn check_defaults_fold[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, gram: ref GrammarDef, spec: ref FoldSpec, span: ref Span) sync {
     let item = check_defaults_item_of(host, gram, spec)
     let named: Ty? = state.a_named_fold_part_that_may_pause(world, spec.init, span)
     let built = check_core_expr(state, world, host, spec.init, span)
@@ -323,7 +323,7 @@ fn check_defaults_fold_part[H: CheckHost](mut state: CheckState, world: ref Chec
 }
 
 /// Every fold in a pattern, typed.
-pub fn check_defaults_folds_in[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, gram: ref GrammarDef, pattern: ref Pattern, span: ref Span) sync {
+fn check_defaults_folds_in[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, gram: ref GrammarDef, pattern: ref Pattern, span: ref Span) sync {
     match pattern {
         Pattern::Fold(spec) => check_defaults_fold(state, world, host, gram, spec, span),
         Pattern::Seq(parts) => {

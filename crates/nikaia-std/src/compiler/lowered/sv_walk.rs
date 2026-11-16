@@ -229,7 +229,7 @@ pub(crate) fn sv_walk_start(query: &SvQuery, carried: &[Vec<u32>]) -> Option<SvW
     Some(w)
 }
 
-pub fn sv_walk(query: &SvQuery, carried: &[Vec<u32>], params: &SvWalkParams, moves: i64) -> SvWalkRun {
+pub(crate) fn sv_walk(query: &SvQuery, carried: &[Vec<u32>], params: &SvWalkParams, moves: i64) -> SvWalkRun {
     if !query.reals.is_empty() || moves <= 0 { return sv_walk_none(); }
     let mut w = match sv_walk_start(query, carried) { Some(__nikaia_value) => __nikaia_value, None => return sv_walk_none() };
     let mut rng = sv_random(params.seed);
@@ -286,9 +286,9 @@ pub fn sv_walk(query: &SvQuery, carried: &[Vec<u32>], params: &SvWalkParams, mov
     SvWalkRun { found: w.unsat.is_empty(), values: w.values.copy_owned(), moves: step, least, phases }
 }
 
-pub fn sv_walk_params() -> SvWalkParams { SvWalkParams { moves_per_unit: 100, noise: 100, tenure: 3, bound: 1000000000, seed: 1 } }
+pub(crate) fn sv_walk_params() -> SvWalkParams { SvWalkParams { moves_per_unit: 100, noise: 100, tenure: 3, bound: 1000000000, seed: 1 } }
 
-pub fn sv_walk_units(moves: i64, params: &SvWalkParams) -> i64 {
+pub(crate) fn sv_walk_units(moves: i64, params: &SvWalkParams) -> i64 {
     if moves <= 0 || params.moves_per_unit <= 0 { return 0; }
     (unsafe { nikaia_std::proven::sub::<i64>(moves, 1) }) / params.moves_per_unit + 1
 }

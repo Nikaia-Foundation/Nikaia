@@ -51,14 +51,14 @@ pub(crate) fn emit_callee_text(world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -
     None
 }
 
-pub fn integer_limit_below(path: &str) -> String {
+pub(crate) fn integer_limit_below(path: &str) -> String {
     if path == "int::MIN" { return String::from("i64::MIN"); }
     if path == "int::MAX" { return String::from("i64::MAX"); }
     nikaia_std::block::Text::from(path.to_string())
 }
 
 impl EmitState {
-    pub fn enters_a_grammar(&self, world: &EmitWorld<'_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol) -> bool {
+    pub(crate) fn enters_a_grammar(&self, world: &EmitWorld<'_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol) -> bool {
         match receiver {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -83,7 +83,7 @@ impl EmitState {
         }
         false
     }
-    pub fn a_tail_that_enters_a_grammar(&self, world: &EmitWorld<'_, '_, '_, '_>, stmt: &Stmt) -> bool {
+    pub(crate) fn a_tail_that_enters_a_grammar(&self, world: &EmitWorld<'_, '_, '_, '_>, stmt: &Stmt) -> bool {
         let mut inside: Vec<&Expr> = vec![];
         match stmt {
             Stmt::Expr(expr) => { inside = visited_in_expr(expr); },
@@ -99,8 +99,8 @@ impl EmitState {
         }
         false
     }
-    pub fn uses_driver(&self, world: &EmitWorld<'_, '_, '_, '_>) -> bool { emit_uses_driver(world, &self.grammars) }
-    pub fn either_param(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, at: i64) -> bool {
+    pub(crate) fn uses_driver(&self, world: &EmitWorld<'_, '_, '_, '_>) -> bool { emit_uses_driver(world, &self.grammars) }
+    pub(crate) fn either_param(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, at: i64) -> bool {
         let own = emit_base(callee);
         let mut seen = 0;
         for item in world.items.iter() {
@@ -121,7 +121,7 @@ impl EmitState {
         }
         seen > 0
     }
-    pub fn either_result(&self, world: &EmitWorld<'_, '_, '_, '_>, value: &Expr) -> bool {
+    pub(crate) fn either_result(&self, world: &EmitWorld<'_, '_, '_, '_>, value: &Expr) -> bool {
         let func = match value {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); func },
             _ => return false,
@@ -143,7 +143,7 @@ impl EmitState {
         }
         false
     }
-    pub fn either_field(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str, field: winnow_grammar::Symbol) -> bool {
+    pub(crate) fn either_field(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str, field: winnow_grammar::Symbol) -> bool {
         let wanted = world.words.resolve(field);
         let own = emit_base(owner);
         for item in world.items.iter() {
@@ -157,7 +157,7 @@ impl EmitState {
         }
         false
     }
-    pub fn is_variant(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str, variant: &str) -> bool {
+    pub(crate) fn is_variant(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str, variant: &str) -> bool {
         for item in world.items.iter() {
             match &item.node {
                 Item::Enum { name, variants, .. } => {
@@ -171,7 +171,7 @@ impl EmitState {
         for each in entry.variants.iter() { if each.name == variant { return true; } }
         false
     }
-    pub fn opens_a_paused_scope(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr, args: &[Expr]) -> bool {
+    pub(crate) fn opens_a_paused_scope(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr, args: &[Expr]) -> bool {
         match func {
             Expr::Path(_, _) => { },
             _ => { return false; },
@@ -180,11 +180,11 @@ impl EmitState {
         if unaliased_in(world.aliases, &name) != "task::scope" || args.is_empty() { return false; }
         self.facts.paused_scopes.contains(&node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) }))
     }
-    pub fn decided_by_its_lambda(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> bool {
+    pub(crate) fn decided_by_its_lambda(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> bool {
         let name = match emit_callee_text(world, func) { Some(__nikaia_value) => __nikaia_value, None => return false };
         self.lambda_decides(&unaliased_in(world.aliases, &name))
     }
-    pub fn count_at(&self, crossings: bool, function: &str, value: &str) -> Count {
+    pub(crate) fn count_at(&self, crossings: bool, function: &str, value: &str) -> Count {
         if !crossings { return Count::Plain; }
         let key = format!("{}::{}", function, value);
         let found = match self.shared.get(&key).copied() { Some(__nikaia_value) => __nikaia_value, None => return Count::Atomic };
@@ -276,7 +276,7 @@ impl EmitState {
         let joined = nikaia_std::block::Text::from(mapped.join("::"));
         unaliased_in(world.aliases, &joined)
     }
-    pub fn written_name(&self, world: &EmitWorld<'_, '_, '_, '_>, crossings: bool, trusting: bool, name: &str, count: &Count) -> String {
+    pub(crate) fn written_name(&self, world: &EmitWorld<'_, '_, '_, '_>, crossings: bool, trusting: bool, name: &str, count: &Count) -> String {
         if name == "Shared" { return rust_name(&count); }
         if name == "Locked" {
             if !crossings { return lock_name(&Count::Plain); }
@@ -286,13 +286,13 @@ impl EmitState {
         let mapped = self.mapped_path(trusting, name);
         unaliased_in(world.aliases, &mapped)
     }
-    pub fn hull_new(&self, world: &EmitWorld<'_, '_, '_, '_>, crossings: bool, trusting: bool, name: &str, count: &Count) -> Option<Vec<String>> {
+    pub(crate) fn hull_new(&self, world: &EmitWorld<'_, '_, '_, '_>, crossings: bool, trusting: bool, name: &str, count: &Count) -> Option<Vec<String>> {
         if name == "Shared" { return Some(vec![self.written_name(world, crossings, trusting, "Shared", &count)]); }
         if name == "Locked" { return Some(vec![self.written_name(world, crossings, trusting, "Locked", &count)]); }
         if name == "SharedMut" { return Some(vec![self.written_name(world, crossings, trusting, "Shared", &count), self.written_name(world, crossings, trusting, "Locked", &count)]); }
         None
     }
-    pub fn attributes_read(&self, world: &EmitWorld<'_, '_, '_, '_>, wanted: &str, args: &[Expr], texts: &[String]) -> String {
+    pub(crate) fn attributes_read(&self, world: &EmitWorld<'_, '_, '_, '_>, wanted: &str, args: &[Expr], texts: &[String]) -> String {
         let mut written: String = String::from("");
         if !args.is_empty() { written = nikaia_std::index::or(emit_callee_text(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }), || "".into()); }
         let asked = unaliased_in(world.aliases, &written);
@@ -313,7 +313,7 @@ impl EmitState {
     }
 }
 
-pub fn emit_is_a_shape_bound(world: &EmitWorld<'_, '_, '_, '_>, bound: &str) -> bool {
+pub(crate) fn emit_is_a_shape_bound(world: &EmitWorld<'_, '_, '_, '_>, bound: &str) -> bool {
     if bound != "Struct" && bound != "Enum" { return false; }
     for item in world.items.iter() {
         match &item.node {
@@ -341,7 +341,7 @@ pub(crate) fn emit_is_the_hash_bound(world: &EmitWorld<'_, '_, '_, '_>, bound: &
     true
 }
 
-pub fn emit_bounded(world: &EmitWorld<'_, '_, '_, '_>, param: &GenericParam) -> String {
+pub(crate) fn emit_bounded(world: &EmitWorld<'_, '_, '_, '_>, param: &GenericParam) -> String {
     let name = escaped_name(world.words.resolve(param.name));
     let mut bounds: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for bound in param.bounds.iter() {
@@ -385,7 +385,7 @@ pub(crate) fn emit_enters_a_parallel_rule(grammars: &collections::BTreeMap<Strin
     false
 }
 
-pub fn emit_uses_driver(world: &EmitWorld<'_, '_, '_, '_>, grammars: &collections::BTreeMap<String, GrammarDef>) -> bool {
+pub(crate) fn emit_uses_driver(world: &EmitWorld<'_, '_, '_, '_>, grammars: &collections::BTreeMap<String, GrammarDef>) -> bool {
     for item in world.items.iter() {
         match &item.node {
             Item::Fn { body, .. } => { for expr in visited_in_block(body) { if emit_enters_a_parallel_rule(grammars, world, expr) { return true; } } },

@@ -294,7 +294,7 @@ pub fn project_settings_switches_path(root: &std::path::Path, variant: Option<&s
 
 pub fn project_settings_ledger_path(root: &std::path::Path) -> fs::Path { nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.contracts"))) }
 
-pub fn project_settings_switches_beside(gen_dir: &std::path::Path) -> Option<fs::Path> {
+pub(crate) fn project_settings_switches_beside(gen_dir: &std::path::Path) -> Option<fs::Path> {
     let path = nikaia_std::fs::path::join(&(gen_dir), std::path::Path::new(&("switches")));
     let found = match fs::metadata(&path, &fs::Root::Anywhere) {
         Ok(value) => value,

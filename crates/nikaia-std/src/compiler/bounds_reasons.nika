@@ -15,7 +15,7 @@
 ///
 /// `callers` says the function is private and called only where the walk
 /// sees it (ADR-391 D1): its parameters are bounded by its callers or not.
-pub fn blocked_index(
+fn blocked_index(
 	base: ref Expr,
 	index: ref Expr,
 	args: ref Vec[FnArg],
@@ -56,7 +56,7 @@ pub fn blocked_index(
 /// **The shape that kept an operation's check**, read off the site. A side
 /// the walk has no fact for at all - a field, a list of lists, a call - is
 /// named before the product: it would block the sum of the two as well.
-pub fn blocked_operation(
+fn blocked_operation(
 	op: BinaryOp,
 	lhs: ref Expr,
 	rhs: ref Expr,

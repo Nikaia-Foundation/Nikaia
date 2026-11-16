@@ -99,7 +99,7 @@ impl PreClaim {
     }
 
     /// Whether it was carried back from the call `site`.
-    pub fn carried_from(ref self, site: ref CarriedFrom) -> bool {
+    fn carried_from(ref self, site: ref CarriedFrom) -> bool {
         let mine = carried_site_of(self.site) ?? return false
         return mine == site
     }
@@ -185,7 +185,7 @@ pub struct ForeignShape {
 }
 
 /// The shape of `contract`'s function, read from its signature.
-pub fn foreign_shape(contract: ref FnContract) -> ForeignShape {
+fn foreign_shape(contract: ref FnContract) -> ForeignShape {
     let mut shape = ForeignShape { params: [], names: collections::BTreeSet(), whole_result: false }
     shape.names.insert(result_name())
     let signature = contract.signature ?? return shape
@@ -219,7 +219,7 @@ fn whole_result_of(result: ref Ty?) -> bool {
 /// `requires` and `ensures` hold, for each condition the ledger states, its
 /// term - or `-1` where it did not read back, which is left out and only
 /// ever proves less. Each claim keeps the `assert` it came from.
-pub fn foreign_from(contract: ref FnContract, shape: ForeignShape, requires: ref Vec[i64], ensures: ref Vec[i64]) -> Foreign {
+fn foreign_from(contract: ref FnContract, shape: ForeignShape, requires: ref Vec[i64], ensures: ref Vec[i64]) -> Foreign {
     let mut foreign = Foreign { params: shape.params, whole_result: shape.whole_result, requires: [], ensures: [] }
     for at in 0..<requires.len() {
         let term = requires[at]

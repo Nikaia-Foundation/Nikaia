@@ -108,7 +108,7 @@ pub fn type_name(parameters: ref Vec[String]) -> String sync {
 
 /// Every distinct shadow type a program needs, with the field order of the
 /// body that first asked for it.
-pub fn shadow_types(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeMap[String, Vec[String]] {
+fn shadow_types(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeMap[String, Vec[String]] {
     let mut statements: Vec[(String, String)] = []
     for item in items {
         match item.node {
@@ -144,7 +144,7 @@ pub fn shadow_types(words: ref winnow_grammar::InternerContext, items: ref Vec[S
 /// The functions of this program that accept a DSL's parameters, by name: a
 /// call carrying a `;` is an ordinary options call unless the callee declared
 /// the typed spread, and this is what tells the two apart.
-pub fn drivers(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> Vec[String] {
+fn drivers(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> Vec[String] {
     let mut names: Vec[String] = []
     for item in items {
         match item.node {

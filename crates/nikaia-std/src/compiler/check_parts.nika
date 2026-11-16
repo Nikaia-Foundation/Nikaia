@@ -10,7 +10,7 @@ use std::collections
 impl CheckState {
     /// `p.name` extends the read of `p` it stands on: what is read is the part
     /// (ADR-293 D32).
-    pub fn a_read_of_a_part(ref mut self, base: ref Expr, expr: ref Expr, field: ref String, span: ref Span) sync {
+    fn a_read_of_a_part(ref mut self, base: ref Expr, expr: ref Expr, field: ref String, span: ref Span) sync {
         // Once per expression, as the read it extends: an argument walked a
         // second time would otherwise read `self.path.path`.
         let own = (id_of(expr) as i64, span.start as i64)
@@ -29,7 +29,7 @@ impl CheckState {
     /// `Summary::merge` or `Summary` in a fold: a function the fold calls, so
     /// a pausing one is refused as a call in an action is. What the function
     /// hands back, where its signature says.
-    pub fn a_named_fold_part_that_may_pause(ref mut self, world: ref CheckWorld, part: ref Expr, span: ref Span) -> Ty? sync {
+    fn a_named_fold_part_that_may_pause(ref mut self, world: ref CheckWorld, part: ref Expr, span: ref Span) -> Ty? sync {
         let mut name: String = ""
         match part {
             Expr::Variable(written, _) => {
@@ -56,7 +56,7 @@ impl CheckState {
 
     /// The function type of `on`'s field called `method`, where `on` is a
     /// struct with such a field and no method of that name.
-    pub fn a_field_that_is_code(ref self, world: ref CheckWorld, on: ref Ty, method: winnow_grammar::Symbol) -> Ty? sync {
+    fn a_field_that_is_code(ref self, world: ref CheckWorld, on: ref Ty, method: winnow_grammar::Symbol) -> Ty? sync {
         let mut name: String = ""
         match on {
             Ty::Named { name: written, .. } => {
@@ -82,7 +82,7 @@ impl CheckState {
 
     /// **The integer type a use asks of a call on a number written as its
     /// receiver is the number's** (#417), where the number is one of it.
-    pub fn literal_receivers_take(ref mut self, want: ref Ty) sync {
+    fn literal_receivers_take(ref mut self, want: ref Ty) sync {
         let mut wanted: Ty = want.clone()
         match want {
             Ty::Nullable(inner) => {

@@ -67,7 +67,7 @@ pub fn written_in(program: ref Program, names: ref winnow_grammar::InternerConte
 /// `with_names` asks for every bare name and every `spawn` too, which a
 /// reader of what a body keeps needs (`contracts::keep`, `contracts::keeps`)
 /// and a build's every-file walk does not pay for.
-pub fn seen_in(block: ref Block, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, with_names: bool) -> Vec[Seen] {
+fn seen_in(block: ref Block, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, with_names: bool) -> Vec[Seen] {
     let mut found = Walked { seen: [], with_names: with_names }
     block_names(block, names, unaliased, holes_of, root_at, found)
     return found.seen
@@ -75,7 +75,7 @@ pub fn seen_in(block: ref Block, names: ref winnow_grammar::InternerContext, una
 
 /// The same walk from one expression: its own expressions, then the blocks
 /// it holds.
-pub fn seen_in_expression(expr: ref Expr, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, with_names: bool) -> Vec[Seen] {
+fn seen_in_expression(expr: ref Expr, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, with_names: bool) -> Vec[Seen] {
     let mut found = Walked { seen: [], with_names: with_names }
     let nowhere = Span::nowhere()
     expression_paths(expr, nowhere, names, unaliased, holes_of, root_at, found)

@@ -98,7 +98,7 @@ pub fn attribute_value(ledger: ref Ledger, library: ref Ledger, words: ref winno
 }
 
 /// The places of `item`'s options whose default is an expression to evaluate.
-pub fn computed_options(item: ref Item) -> Vec[i64] {
+fn computed_options(item: ref Item) -> Vec[i64] {
     let mut places: Vec[i64] = []
     match item {
         Item::Fn { config, .. } => {
@@ -117,7 +117,7 @@ pub fn computed_options(item: ref Item) -> Vec[i64] {
 
 /// Where each attribute value goes: the type itself (0), a field (1) or a
 /// variant (2), by its place.
-pub fn apply_attribute(mut ledger: Ledger, owner: ref String, kind: i64, at: i64, text: String) {
+fn apply_attribute(mut ledger: Ledger, owner: ref String, kind: i64, at: i64, text: String) {
     let mut entry = ledger.types[owner] ?? return
     if kind == 0 {
         entry.attributes.push(text)
@@ -132,7 +132,7 @@ pub fn apply_attribute(mut ledger: Ledger, owner: ref String, kind: i64, at: i64
 
 /// Writes a computed default's text where it goes: a struct's field (`field`,
 /// `key` is the type) or a function's option.
-pub fn set_default(mut ledger: Ledger, key: ref String, at: i64, field: bool, text: String) {
+fn set_default(mut ledger: Ledger, key: ref String, at: i64, field: bool, text: String) {
     if field {
         let mut entry = ledger.types[key] ?? return
         if at < entry.fields.len() {
@@ -163,7 +163,7 @@ fn ld_columns(ledger: ref Ledger) -> Vec[String] {
 /// write what the one before read (#727, #740), at most eight. `sources` and
 /// `stored` ask the workshop for one unit by its place; `package` makes what
 /// every unit reads alike once, as the rounds write nothing it reads (#1277).
-pub fn write_result_sources(mut ledger: Ledger, units: i64, package: fn(ref Ledger) -> ResultPackage sync, sources: fn(i64, ref Ledger, ref ResultPackage) -> Vec[ResultSource] sync, stored: fn(i64, ref Ledger, ref ResultPackage) -> Vec[PlacesStored] sync) {
+fn write_result_sources(mut ledger: Ledger, units: i64, package: fn(ref Ledger) -> ResultPackage sync, sources: fn(i64, ref Ledger, ref ResultPackage) -> Vec[ResultSource] sync, stored: fn(i64, ref Ledger, ref ResultPackage) -> Vec[PlacesStored] sync) {
     let shared = package(ledger)
     let mut before = ld_columns(ledger)
     for round in 0..<8 {

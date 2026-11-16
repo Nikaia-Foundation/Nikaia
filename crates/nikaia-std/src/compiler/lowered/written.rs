@@ -147,7 +147,7 @@ pub(crate) fn unary_word(op: &UnaryOp) -> &'static str {
     }
 }
 
-pub fn written_pattern(names: &winnow_grammar::InternerContext, pattern: &MatchPattern) -> String {
+pub(crate) fn written_pattern(names: &winnow_grammar::InternerContext, pattern: &MatchPattern) -> String {
     match pattern {
         MatchPattern::Path(path) => path_written(names, path),
         MatchPattern::Tuple { path, .. } => format!("{}(…)", path_written(names, path)),

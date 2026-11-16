@@ -40,7 +40,7 @@ pub enum BuildValue {
 /// refused where it crosses), Part I 4.7's `+` over text and a comparison of
 /// decoded text, and the logic of truth values. Nothing where the shape is
 /// not one this evaluator reads.
-pub fn operated(op: ref BinaryOp, left: ref BuildValue, right: ref BuildValue) -> BuildValue? {
+fn operated(op: ref BinaryOp, left: ref BuildValue, right: ref BuildValue) -> BuildValue? {
     return match left {
         BuildValue::Int(a) => match right {
             BuildValue::Int(b) => integers_operated(op, a, b),
@@ -137,7 +137,7 @@ pub enum ElementRead {
 }
 
 /// One element of a list value, by an index that is a value.
-pub fn element_at(on: ref BuildValue, at: ref BuildValue) -> ElementRead {
+fn element_at(on: ref BuildValue, at: ref BuildValue) -> ElementRead {
     let items = match on {
         BuildValue::List(items) => items,
         else => return ElementRead::Unreadable,

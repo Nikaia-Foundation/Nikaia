@@ -151,7 +151,7 @@ pub(crate) fn check_arguments_named_for_positional(state: &CheckState, world: &C
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], keeps: &[(String, bool, String)], span: &Span) -> Ty {
+pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], keeps: &[(String, bool, String)], span: &Span) -> Ty {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     let wanted = call_arguments(signature);
     if (wanted.len() as i64) != found.len() as i64 {
@@ -535,7 +535,7 @@ pub(crate) fn check_arguments_mut_differs(found: &Ty, want: &Ty) -> i64 {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn lends_where_a_function_type_reads(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: Option<&Expr>, found: &Ty, want: &Ty) -> bool {
+    pub(crate) fn lends_where_a_function_type_reads(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: Option<&Expr>, found: &Ty, want: &Ty) -> bool {
         let value = match given { Some(__nikaia_value) => __nikaia_value, None => return false };
         let name = match value {
             Expr::Variable(ident, _) => { let ident = *ident; nikaia_std::block::Text::from(world.words.resolve(ident).to_string()) },

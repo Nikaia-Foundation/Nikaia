@@ -10,7 +10,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn not_unescapable(&mut self, name: &str, span: &Span, what: &str) {
+    pub(crate) fn not_unescapable(&mut self, name: &str, span: &Span, what: &str) {
         if name != "crate" && name != "super" && name != "Self" { return; }
         let mut instead: &'static str = "own";
         if name == "crate" { instead = "package"; }
@@ -19,13 +19,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn nameable(&mut self, name: &str, span: &Span, what: &str) {
+    pub(crate) fn nameable(&mut self, name: &str, span: &Span, what: &str) {
         self.not_self(name, span, what);
         self.not_unescapable(name, span, what);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_module_used_before_it_is_introduced(&mut self, name: &str, span: &Span) {
+    pub(crate) fn a_module_used_before_it_is_introduced(&mut self, name: &str, span: &Span) {
         let at = match nikaia_std::search::find(&name, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
         let module = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string());
         if !self.std_modules.contains(&module) || self.std_in_scope.contains(&module) { return; }
@@ -35,7 +35,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_prelude_name_with_a_module_in_front(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
+    pub(crate) fn a_prelude_name_with_a_module_in_front(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let at = match nikaia_std::search::find(&name, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
         let module = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string());
         let last = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(at + 2..)).to_string());
@@ -45,7 +45,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_bit_operator_on_something_else(&mut self, op: &BinaryOp, left: &Ty, right: &Ty, at: &Span) {
+    pub(crate) fn a_bit_operator_on_something_else(&mut self, op: &BinaryOp, left: &Ty, right: &Ty, at: &Span) {
         let written: &'static str = match op {
             BinaryOp::BitAnd => "&",
             BinaryOp::BitOr => "|",
@@ -78,14 +78,14 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn an_integer_limit(ty: &str, member: &str) -> bool {
+pub(crate) fn an_integer_limit(ty: &str, member: &str) -> bool {
     if member != "MIN" && member != "MAX" { return false; }
     ty == "int" || integer_named(&Ty::Named { name: nikaia_std::block::Text::from(ty.to_string()), args: vec![], view: false }).is_some()
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn integer_named(ty: &Ty) -> Option<String> {
+pub(crate) fn integer_named(ty: &Ty) -> Option<String> {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; if args.is_empty() && !view && (name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64") { Some(nikaia_std::block::Text::from(name.to_string())) } else { None } },
         _ => None,
@@ -94,5 +94,5 @@ pub fn integer_named(ty: &Ty) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn is_a_literal(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. } | Expr::LitFloat(_, _) | Expr::LitStr { .. } | Expr::LitInterpolated { .. } | Expr::LitChar(_, _) | Expr::LitBool(_, _)) }
+pub(crate) fn is_a_literal(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. } | Expr::LitFloat(_, _) | Expr::LitStr { .. } | Expr::LitInterpolated { .. } | Expr::LitChar(_, _) | Expr::LitBool(_, _)) }
 

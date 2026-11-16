@@ -53,7 +53,7 @@ fn check_core_call_on_view(ty: ref Ty) -> i64 {
 
 /// **What a call reached, filed for the function around it** (ADR-308):
 /// `reached_method`. `null` is a method nothing describes.
-pub fn check_core_call_on_reached(mut state: CheckState, key: String?) sync {
+fn check_core_call_on_reached(mut state: CheckState, key: String?) sync {
     let have = key != null
     let written: String = (key ?? "").clone()
     if !have && state.flow.guarded != null {
@@ -469,7 +469,7 @@ fn check_core_call_on_takes(state: ref CheckState, world: ref CheckWorld, contra
 /// literals as one open number decided by its uses (D34), and a later write
 /// is a use of that number. `give_value` is `false` where the assignment that
 /// writes the value already hands it to the open number.
-pub fn check_core_call_on_map_written(mut state: CheckState, world: ref CheckWorld, map_name: ref String, key: ref Expr, key_ty: ref Ty, entry_key: bool, value: ref Expr, value_ty: ref Ty, give_value: bool, span: ref Span) sync {
+fn check_core_call_on_map_written(mut state: CheckState, world: ref CheckWorld, map_name: ref String, key: ref Expr, key_ty: ref Ty, entry_key: bool, value: ref Expr, value_ty: ref Ty, give_value: bool, span: ref Span) sync {
     let local = state.binding(map_name) ?? return
     let id = local.id
     let mut parts: Vec[Ty] = []
@@ -645,7 +645,7 @@ fn check_core_call_on_now_expected(state: ref CheckState, world: ref CheckWorld,
 
 /// A key read out of a map whose keys are open: a number in it is that
 /// number, and its literals are written with its type.
-pub fn check_core_call_on_key_read(mut state: CheckState, world: ref CheckWorld, map: ref Expr, key: ref Expr, span: ref Span) sync {
+fn check_core_call_on_key_read(mut state: CheckState, world: ref CheckWorld, map: ref Expr, key: ref Expr, span: ref Span) sync {
     let name: String = match map {
         Expr::Variable(n, _) => world.words.resolve(n).clone(),
         else => return,
@@ -658,7 +658,7 @@ pub fn check_core_call_on_key_read(mut state: CheckState, world: ref CheckWorld,
 }
 
 /// The binding's type, now a map of these parts.
-pub fn check_core_call_on_retyped(mut state: CheckState, bound_name: ref String, parts: Vec[Ty]) sync {
+fn check_core_call_on_retyped(mut state: CheckState, bound_name: ref String, parts: Vec[Ty]) sync {
     let mut frame = state.scope.len()
     while frame > 0 {
         frame = frame - 1
@@ -700,7 +700,7 @@ fn check_core_call_on_entry_key(world: ref CheckWorld, receiver: ref Expr) -> Ex
 
 /// **The open number a map's values are, reached through `m.entry(k)`**
 /// (ADR-285 D43), or `-1`.
-pub fn check_core_call_on_entry_values(state: ref CheckState, world: ref CheckWorld, receiver: ref Expr) -> i64 sync {
+fn check_core_call_on_entry_values(state: ref CheckState, world: ref CheckWorld, receiver: ref Expr) -> i64 sync {
     match receiver {
         Expr::MethodCall { receiver, method, args, .. } => {
             if world.words.resolve(method) != "entry" || args.len() != 1 {
@@ -1489,7 +1489,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
 /// the receiver's type, for a `?.` the type inside; `entry` is the name the
 /// ledger knows the call by (`set(after)` at a witness door), `method` the
 /// one the program wrote.
-pub fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, on: Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], entry: ref String, span: ref Span) -> Ty sync {
+fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, on: Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], entry: ref String, span: ref Span) -> Ty sync {
     // **`full()` is `Error`'s own, on every type that implements it** (#497).
     if entry == "full" && args.len() == 0 {
         let mut an_error = false
@@ -1580,7 +1580,7 @@ pub fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckW
 /// **`x?.m(…)` over a `T?`** (Part I 3.5): the same call, on the value
 /// inside, and the result flattened (ADR-278). A witness of `join` is its
 /// `within`, of a door's `set` its `after`.
-pub fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, inner: Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], witness: i64, span: ref Span) -> Ty sync {
+fn check_core_a_safe_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, inner: Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], witness: i64, span: ref Span) -> Ty sync {
     let name: String = f"{world.words.resolve(method)}"
     let read_within = witness >= 0 && check_core_method_connection(inner) && name == "read"
     let within = (witness >= 0 && check_core_call_on_task_handle(inner) && name == "join") || read_within
@@ -1816,7 +1816,7 @@ fn check_core_call_on_parameters_in(state: ref CheckState, ty: ref Ty) -> collec
 /// writes the bound, since the weight is the language's and no Nikaia bound
 /// says it. `new` is the hull `SharedMut(x)` or `Locked(x)`, whose value's
 /// weight moves to the shared value at its creation (#1751).
-pub fn check_core_call_on_weighs(mut state: CheckState, on: ref Ty, entry: ref String) sync {
+fn check_core_call_on_weighs(mut state: CheckState, on: ref Ty, entry: ref String) sync {
     let current = (state.current ?? return).clone()
     let base = match on.unseen() {
         Ty::Named { name, .. } => type_last_segment(name),
@@ -1838,7 +1838,7 @@ pub fn check_core_call_on_weighs(mut state: CheckState, on: ref Ty, entry: ref S
 /// **A generic call that hands the caller's own type parameter on** (#1559):
 /// where the callee weighs its parameter, the caller weighs its own in what
 /// binds it (`EmitState` reads `CheckFacts::weighed_of`).
-pub fn check_core_call_on_weighed_through(mut state: CheckState, key: ref String, bound: ref collections::BTreeMap[String, Ty]) sync {
+fn check_core_call_on_weighed_through(mut state: CheckState, key: ref String, bound: ref collections::BTreeMap[String, Ty]) sync {
     let current = (state.current ?? return).clone()
     let mut edges: collections::BTreeSet[(String, String, String)] = collections::BTreeSet()
     for (param, ty) in bound {

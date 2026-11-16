@@ -92,13 +92,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn collect_field_walks(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+    pub(crate) fn collect_field_walks(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
         self.field_walks_in(&world.here);
         for other in world.beside.iter() { self.field_walks_in(other); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn collect_comparisons(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+    pub(crate) fn collect_comparisons(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
         let found = check_function_compared(world, &world.parts_beside, &self.structs, &self.enums, &self.enum_payloads, &self.struct_parameters);
         self.facts.compares.extend(found.compares.iter().cloned());
         self.facts.compares_totally.extend(found.totally.iter().cloned());
@@ -148,7 +148,7 @@ pub(crate) fn check_function_grown_in(here: &ParsedView<'_, '_, '_, '_, '_, '_>,
     }
 }
 
-pub fn check_function_grown_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block) -> collections::BTreeSet<String> {
+pub(crate) fn check_function_grown_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     check_function_grown_in(here, body, &mut out);
     out
@@ -203,7 +203,7 @@ pub(crate) fn check_function_fielded_in(here: &ParsedView<'_, '_, '_, '_, '_, '_
     }
 }
 
-pub fn check_function_mixed_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, grown: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+pub(crate) fn check_function_mixed_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body: &Block, grown: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut fielded: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut both: collections::BTreeSet<String> = collections::BTreeSet::new();
     check_function_fielded_in(here, body, &mut fielded, &mut both);
@@ -214,7 +214,7 @@ pub fn check_function_mixed_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef) {
+pub(crate) fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef) {
     let named = nikaia_std::block::Text::from(world.words.resolve(gram.name).to_string());
     let mut results: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     let mut rules: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -381,7 +381,7 @@ pub(crate) fn check_function_every_end_is_a_value(expr: &Expr) -> bool {
     }
 }
 
-pub fn check_function_is_branching(expr: &Expr) -> bool {
+pub(crate) fn check_function_is_branching(expr: &Expr) -> bool {
     match expr {
         Expr::If { .. } => check_function_every_end_is_a_value(expr),
         Expr::Match { .. } => check_function_every_end_is_a_value(expr),
@@ -535,7 +535,7 @@ pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, w
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_function_wrap_tail<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, shown: &Ty, expected: &Ty, value: &Expr, span: &Span) {
+pub(crate) fn check_function_wrap_tail<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, shown: &Ty, expected: &Ty, value: &Expr, span: &Span) {
     let nullable = check_function_is_nullable(expected);
     let branches = check_function_is_branching(value);
     let how = check_widened_slot(state, world, host, shown, expected, Some(value), span);
@@ -566,7 +566,7 @@ pub(crate) fn check_function_hands_nothing(state: &mut CheckState, body: &Block,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_function_function<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, item: &Item, at: &Span, target: Option<&str>) {
+pub(crate) fn check_function_function<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, item: &Item, at: &Span, target: Option<&str>) {
     match item {
         Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, can_throw, is_sync, sync_by, is_extern, .. } => {
             let can_throw = *can_throw; let is_extern = *is_extern; let is_sync = *is_sync; let name = *name; let spread = *spread;

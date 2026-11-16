@@ -60,7 +60,7 @@ pub struct ProofsWhere {
     pub breaks: Vec<i64>,
 }
 
-pub fn proofs_nowhere() -> ProofsWhere { ProofsWhere { file: None, source: String::from(""), breaks: vec![] } }
+pub(crate) fn proofs_nowhere() -> ProofsWhere { ProofsWhere { file: None, source: String::from(""), breaks: vec![] } }
 
 pub fn proofs_where(path: &std::path::Path, source: &str) -> ProofsWhere {
     let mut breaks: Vec<i64> = vec![];
@@ -129,7 +129,7 @@ pub fn proofs_shown(place: &(Option<String>, Option<i64>, Option<String>), root:
     String::from("a place the compiler did not name")
 }
 
-pub fn proofs_written(arena: &TermArena, facts: &[i64], goal: i64) -> String {
+pub(crate) fn proofs_written(arena: &TermArena, facts: &[i64], goal: i64) -> String {
     let mut out: String = String::from("");
     for fact in facts.iter() {
         let fact = nikaia_std::num::value(fact);

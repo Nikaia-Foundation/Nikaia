@@ -249,7 +249,7 @@ pub(crate) fn if_empty(first: &[String], second: &[String]) -> Vec<String> {
     out
 }
 
-pub fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> i64) -> ParseReading {
+pub(crate) fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> i64) -> ParseReading {
     let c: Vec<scalar> = nikaia_std::list::chars(source.chars());
     let mut at = error.offset;
     if at > c.len() as i64 { at = c.len() as i64; }
@@ -293,7 +293,7 @@ pub fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> 
     ParseReading { at, word, message, notes, help }
 }
 
-pub fn unclosed_block_comment(error: &Failure, source: &str) -> Option<ParseReading> {
+pub(crate) fn unclosed_block_comment(error: &Failure, source: &str) -> Option<ParseReading> {
     if !lists(&error.expected, "`*/`") { return None; }
     let at = opening_of_an_unclosed_comment(source);
     if at < 0 { return None; }

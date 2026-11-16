@@ -9,7 +9,7 @@ use std::collections
 
 /// The note every `NK25xx` carries, because it is the reason the code exists:
 /// the verdict may not depend on `user_parallelism`.
-pub fn same_at_both() -> String {
+fn same_at_both() -> String {
     return "This is checked even when the program runs on one thread, so code stays correct when `user-parallelism` is turned on."
 }
 
@@ -28,7 +28,7 @@ impl CheckState {
     /// **`NK2501`: everything a task takes has to be able to cross a thread.**
     /// Over-approximate in the direction that costs nothing: every name the
     /// body mentions is asked, and one that is not in scope says nothing.
-    pub fn crosses_into_a_task(ref mut self, world: ref CheckWorld, body: ref Expr, span: ref Span) sync {
+    fn crosses_into_a_task(ref mut self, world: ref CheckWorld, body: ref Expr, span: ref Span) sync {
         let mut named: collections::BTreeSet[String] = collections::BTreeSet()
         names_in(body, world.words, named)
         for name in named {

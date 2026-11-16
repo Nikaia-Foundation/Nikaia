@@ -54,7 +54,7 @@ pub fn type_name(parameters: &[String]) -> String {
     format!("NikaiaDslParams_{}", joined)
 }
 
-pub fn shadow_types(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeMap<String, Vec<String>> {
+pub(crate) fn shadow_types(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeMap<String, Vec<String>> {
     let mut statements: Vec<(String, String)> = vec![];
     for item in items.iter() {
         match &item.node {
@@ -84,7 +84,7 @@ pub fn shadow_types(words: &winnow_grammar::InternerContext, items: &[Spanned<It
     types
 }
 
-pub fn drivers(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> Vec<String> {
+pub(crate) fn drivers(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> Vec<String> {
     let mut names: Vec<String> = vec![];
     for item in items.iter() {
         match &item.node {

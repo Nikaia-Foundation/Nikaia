@@ -72,7 +72,7 @@ pub(crate) const COMPTIME_BUNDLE_RUN_SOURCE: &str = "// GENERATED: the library `
 
 pub(crate) const COMPTIME_BUNDLE_NAMED: [&str; 3] = ["nikaia_std", "winnow", "winnow_grammar"];
 
-pub fn comptime_bundle_artifacts(messages: &str, named: &[String], library: &str) -> ComptimeBundleArtifacts {
+pub(crate) fn comptime_bundle_artifacts(messages: &str, named: &[String], library: &str) -> ComptimeBundleArtifacts {
     let mut dylib: Option<fs::Path> = None;
     let mut rlibs: Vec<(String, fs::Path)> = vec![];
     for message in cargo_json_lines(messages) {
@@ -224,8 +224,8 @@ pub(crate) fn comptime_bundle_read_record(text: &str, fingerprint: &str) -> Opti
     let dylib: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (1) as usize) });
     let deps: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (2) as usize) });
     let libdir: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (3) as usize) });
-    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(4).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple13658| {
-        let (name, rlib) = __nikaia_tuple13658;
+    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(4).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple13654| {
+        let (name, rlib) = __nikaia_tuple13654;
         (nikaia_std::block::Text::from(name.to_string()), comptime_bundle_path(nikaia_std::either_text::either(rlib)))
     }).collect::<Vec<_>>();
     if (rlibs.len() as i64) != COMPTIME_BUNDLE_NAMED.len() as i64 { return None; }

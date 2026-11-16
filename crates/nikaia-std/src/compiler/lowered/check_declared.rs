@@ -13,13 +13,13 @@ pub enum CheckDeclared {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn declared_binding(&mut self, id: i64, span: &Span, name: &str) { self.facts.bound_at.insert(id, (span.clone(), nikaia_std::block::Text::from(name.to_string()))); }
+    pub(crate) fn declared_binding(&mut self, id: i64, span: &Span, name: &str) { self.facts.bound_at.insert(id, (span.clone(), nikaia_std::block::Text::from(name.to_string()))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn declared_use(&mut self, expr: &Expr, what: CheckDeclared) { self.facts.declared.insert(node_key(expr), what); }
+    pub(crate) fn declared_use(&mut self, expr: &Expr, what: CheckDeclared) { self.facts.declared.insert(node_key(expr), what); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn declared_callee(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, func: &Expr, name: &str) {
+    pub(crate) fn declared_callee(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, func: &Expr, name: &str) {
         let bound: Option<i64> = match func {
             Expr::Variable(_, _) => self.binding_id(name),
             _ => None,
@@ -40,7 +40,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn declared_callee_at(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, func: &Expr) {
+    pub(crate) fn declared_callee_at(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, func: &Expr) {
         let node = node_key(func);
         if (*nikaia_std::index::get(&world.here.spans, &(u32::try_from(node).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"))))).is_some() { return; }
         let at = match *nikaia_std::index::get(&world.here.spans, &(u32::try_from(node_key(call)).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")))) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -53,7 +53,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn declared_path(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, name: &str) {
+    pub(crate) fn declared_path(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, name: &str) {
         if self.declared_a_variant(expr, name) { return; }
         match resolve_call(world, name) {
             None => { },
@@ -62,7 +62,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn declared_a_variant(&mut self, expr: &Expr, name: &str) -> bool {
+    pub(crate) fn declared_a_variant(&mut self, expr: &Expr, name: &str) -> bool {
         let at = match nikaia_std::search::rfind(&name, &"::") { Some(__nikaia_value) => __nikaia_value, None => return false };
         let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string());
         let member = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(at + 2..)).to_string());

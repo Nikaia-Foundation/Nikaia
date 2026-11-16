@@ -253,7 +253,7 @@ together with the specification section and an example test.
 * A new `VcAsk` field also needs the Rust adapters `view_changes.rs` `analyse`, `check/host.rs` `view_change_findings` and `contracts/keep.rs` `buffer_plans`, plus `emit_contracts.nika` and the `check_walked.nika` trait. (issue-1478)
 * `views_what_it_is_called_on` (`tiers.nika`) is the existing list of text methods whose result is a view of their receiver; reuse it, don't write a new list. (issue-1478)
 * A list whose items come from `split()`/`map()` is a list of views of the argument, so a probe of "owned items" must build them with `a + "…"` or `push_str`. (issue-1481)
-* Files of one package share one namespace: call a sibling file's `pub fn` by its bare name, since `mod x` is a parse error. (issue-1481)
+* Files of one package share one namespace: call a sibling file's `fn` by its bare name, private or not (`mod x` is a parse error). Mark a `fn` `pub` only where another package or the Rust host (`crates/nikaia/src`, `crates/orchestrator`) calls it: the bounds walk derives no precondition for a `pub fn` (ADR-391 D4), so a needless `pub` leaves its sites checked. (issue-1481, #1831)
 * A `??` whose left side reads a map value (`m[k] ?? []`) is NK1185 in tools code; write `m[k]?.clone() ?? []` behind a `contains_key` check. (issue-1485)
 * A heredoc report or edit script with backticks needs a quoted delimiter (`<<'EOF'`); unquoted, each backticked word runs as a shell command and silently drops out of the text. (issue-1485)
 * A new `.stderr` expectation is written only when the file is absent before `--bless-stderr`. (issue-1490)

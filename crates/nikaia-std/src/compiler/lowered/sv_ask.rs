@@ -7,7 +7,7 @@ pub const SV_LOG_PREFIX: &str = "sv:";
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn sv_ask(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudget) -> SvDriven {
+pub(crate) fn sv_ask(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudget) -> SvDriven {
     let fm = lg_check(arena, facts, goal, budget);
     if env::var(SV_ASK_COMPARE).is_some() { return sv_ask_compared(arena, facts, goal, budget, fm); }
     match fm {
@@ -63,13 +63,13 @@ pub(crate) fn sv_ask_new_kind(arena: &TermArena, facts: &[i64], goal: i64, new: 
     }
 }
 
-pub fn sv_log_verified(arena: &TermArena, facts: &[i64], goal: i64, log: &[SvStep]) -> bool {
+pub(crate) fn sv_log_verified(arena: &TermArena, facts: &[i64], goal: i64, log: &[SvStep]) -> bool {
     let mut why = lg_why();
     let cnf = match sv_cnf(arena, facts, goal, &mut why) { Some(__nikaia_value) => __nikaia_value, None => return false };
     sv_check(&cnf.query, log).ok
 }
 
-pub fn sv_log_text(log: &[SvStep]) -> String {
+pub(crate) fn sv_log_text(log: &[SvStep]) -> String {
     let mut steps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for step in log.iter() { steps.push(sv_step_text(step)); }
     format!("{}{}", SV_LOG_PREFIX, nikaia_std::block::Text::from(steps.join(",")))
@@ -120,7 +120,7 @@ pub(crate) fn sv_srcs_text(srcs: &[SvSrc]) -> String {
 
 pub(crate) fn sv_row_word(row: &SvRow) -> String { format!("{}:{}:{}", sv_u32s_text(&row.cols), sv_i64s_text(&row.ks), row.constant) }
 
-pub fn sv_log_of(text: &str) -> Option<Vec<SvStep>> {
+pub(crate) fn sv_log_of(text: &str) -> Option<Vec<SvStep>> {
     let body = match text.strip_prefix(AsRef::<str>::as_ref(SV_LOG_PREFIX)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut steps: Vec<SvStep> = vec![];
     if body.is_empty() { return Some(steps); }

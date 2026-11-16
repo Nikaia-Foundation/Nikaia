@@ -111,7 +111,7 @@ pub fn candidates(export: &Export, name: &str) -> Vec<String> {
     out
 }
 
-pub fn imported(items: &[RustItem<'_>], out: &mut collections::BTreeMap<String, String>) {
+pub(crate) fn imported(items: &[RustItem<'_>], out: &mut collections::BTreeMap<String, String>) {
     for item in items.iter() {
         match item {
             RustItem::Used(text) => { let text = *text; imports_of(text, out); },

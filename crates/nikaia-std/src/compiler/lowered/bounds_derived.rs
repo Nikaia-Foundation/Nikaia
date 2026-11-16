@@ -50,9 +50,9 @@ pub(crate) fn most_claims() -> i64 { 12 }
 
 pub(crate) fn derived_scan() -> DerivedScan { DerivedScan { calls: collections::BTreeMap::new(), values: collections::BTreeSet::new(), locals: vec![] } }
 
-pub fn no_derived() -> Derived { Derived { functions: collections::BTreeMap::new(), order: vec![], walked: 0, answers: collections::BTreeMap::new(), entry: collections::BTreeMap::new() } }
+pub(crate) fn no_derived() -> Derived { Derived { functions: collections::BTreeMap::new(), order: vec![], walked: 0, answers: collections::BTreeMap::new(), entry: collections::BTreeMap::new() } }
 
-pub fn derived_of(program: &Program, beside: &[&BoundsBeside], words: &winnow_grammar::InternerContext) -> Derived {
+pub(crate) fn derived_of(program: &Program, beside: &[&BoundsBeside], words: &winnow_grammar::InternerContext) -> Derived {
     let mut derived = no_derived();
     let mut everywhere = derived_scan();
     let mut called: Vec<collections::BTreeSet<String>> = vec![];
@@ -130,7 +130,7 @@ pub(crate) fn derived_candidate(derived: &mut Derived, item: &Item, position: i6
     }
 }
 
-pub fn derived_key(args: &[FnArg], body: &Block) -> Option<i64> {
+pub(crate) fn derived_key(args: &[FnArg], body: &Block) -> Option<i64> {
     if !args.is_empty() { return Some(nikaia_std::index::get(&args, 0).span.start as i64); }
     if body.stmts.is_empty() { return None; }
     Some(nikaia_std::index::get(&body.stmts, 0).span.start as i64)
@@ -516,14 +516,14 @@ pub(crate) fn derived_element_lets(block: &Block, words: &winnow_grammar::Intern
     }
 }
 
-pub fn derived_order(around: &Around, starts: &[i64]) -> Vec<i64> {
+pub(crate) fn derived_order(around: &Around, starts: &[i64]) -> Vec<i64> {
     if (around.derived.order.len() as i64) == starts.len() as i64 { return around.derived.order.copy_owned(); }
     let mut out: Vec<i64> = vec![];
     for k in 0..starts.len() as i64 { out.push(k as i64); }
     out
 }
 
-pub fn derived_note(around: &mut Around, walked: &BoundsProven) {
+pub(crate) fn derived_note(around: &mut Around, walked: &BoundsProven) {
     for (node, proved) in walked.derived.iter() {
         let node = nikaia_std::num::value(node);
         if around.derived.answers.contains_key(&node) {
@@ -564,7 +564,7 @@ pub fn derived_note(around: &mut Around, walked: &BoundsProven) {
     }
 }
 
-pub fn derived_written(claim: &DerivedClaim) -> String {
+pub(crate) fn derived_written(claim: &DerivedClaim) -> String {
     let mut left = if claim.left == "" { String::from("0") } else { nikaia_std::block::Text::from(claim.left.to_string()) };
     if claim.each && claim.left != "" { left = format!("{}[..]", left); }
     let op = if claim.strict { "<" } else { "<=" };
@@ -578,7 +578,7 @@ pub(crate) fn derived_written_length(claim: &DerivedClaim) -> String {
     out
 }
 
-pub fn derived_rows(around: &Around) -> Vec<String> {
+pub(crate) fn derived_rows(around: &Around) -> Vec<String> {
     let mut rows: Vec<String> = vec![];
     for (name, function) in around.derived.functions.iter() {
         let held = match *nikaia_std::index::get(&around.derived.entry, &function.key) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -591,7 +591,7 @@ pub fn derived_rows(around: &Around) -> Vec<String> {
     rows
 }
 
-pub fn derived_callees(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+pub(crate) fn derived_callees(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let none: Vec<&BoundsBeside> = vec![];
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (name, _) in derived_of(program, &none, words).functions.iter() { out.insert(nikaia_std::block::Text::from(name.to_string())); }

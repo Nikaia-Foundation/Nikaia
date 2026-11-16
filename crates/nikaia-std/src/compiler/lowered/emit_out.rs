@@ -34,15 +34,15 @@ pub struct EmitOut {
 impl EmitOut {
     pub fn empty() -> EmitOut { EmitOut { buf: String::from(""), entries: vec![], unsafe_depth: 0 } }
     pub fn push(&mut self, text: &str) { self.buf.push_str(text); }
-    pub fn open_unsafe(&mut self) {
+    pub(crate) fn open_unsafe(&mut self) {
         if self.unsafe_depth == 0 { self.buf.push_str("unsafe { "); }
         self.unsafe_depth += 1;
     }
-    pub fn close_unsafe(&mut self) {
+    pub(crate) fn close_unsafe(&mut self) {
         self.unsafe_depth -= 1;
         if self.unsafe_depth == 0 { self.buf.push_str(" }"); }
     }
-    pub fn block_headed_from(&self, start: i64) -> bool {
+    pub(crate) fn block_headed_from(&self, start: i64) -> bool {
         let text = match nikaia_std::index::get(&self.buf.as_bytes(), nikaia_std::index::at(start..)).text() {
             Ok(value) => value,
             Err(_error) => { return false; },
@@ -65,29 +65,29 @@ impl EmitOut {
         let end = self.buf.len() as i64;
         self.entries.push(EmitMapEntry { start, end, source: Span { start: span.start, end: span.end }, unit: 0 });
     }
-    pub fn shift_entries(&mut self, at: i64, by: i64) {
+    pub(crate) fn shift_entries(&mut self, at: i64, by: i64) {
         for entry in self.entries.iter_mut() {
             if (*entry).start >= at { (*entry).start += by; }
             if (*entry).end >= at { (*entry).end += by; }
         }
     }
-    pub fn take_lend(&mut self) -> bool {
+    pub(crate) fn take_lend(&mut self) -> bool {
         if self.buf.ends_with('&') && !self.buf.ends_with("&&") {
             self.buf.pop();
             return true;
         }
         false
     }
-    pub fn insert_after_first_brace(&mut self, text: &str) {
+    pub(crate) fn insert_after_first_brace(&mut self, text: &str) {
         let at = (match nikaia_std::search::find(&self.buf, &"{", 0) { Some(__nikaia_value) => __nikaia_value, None => return }) + 1;
         self.buf.insert_str(nikaia_std::count::of(at), text);
         self.shift_entries(at, text.len() as i64);
     }
-    pub fn insert_at(&mut self, at: i64, text: &str) {
+    pub(crate) fn insert_at(&mut self, at: i64, text: &str) {
         self.buf.insert_str(nikaia_std::count::of(at), text);
         self.shift_entries(at, text.len() as i64);
     }
-    pub fn insert_before_last_brace(&mut self, text: &str) {
+    pub(crate) fn insert_before_last_brace(&mut self, text: &str) {
         let at = match nikaia_std::search::rfind(&self.buf, &"}") { Some(__nikaia_value) => __nikaia_value, None => return };
         self.buf.insert_str(nikaia_std::count::of(at), text);
         self.shift_entries(at, text.len() as i64);

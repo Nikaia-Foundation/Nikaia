@@ -56,7 +56,7 @@ pub(crate) fn check_core_expr_char_scalars<H: CheckHost>(state: &mut CheckState,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
+pub(crate) fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
     let reaching: Option<String> = match state.flow.reaching.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -167,7 +167,7 @@ pub(crate) fn check_core_expr_flat_get(state: &mut CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
+pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
     match expr {
         Expr::LitInt { .. } => Ty::Unknown,
         Expr::LitFloat(_, _) => check_core_expr_named("f64"),
@@ -721,7 +721,7 @@ pub(crate) fn check_core_async_crash<H: CheckHost>(state: &mut CheckState, world
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_walk_timed_out(state: &mut CheckState, span: &Span) {
+pub(crate) fn check_core_walk_timed_out(state: &mut CheckState, span: &Span) {
     let function = nikaia_std::index::or(match state.current.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,

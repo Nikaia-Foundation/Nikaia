@@ -46,7 +46,7 @@ pub(crate) fn a_type_named(ty: &Ty, wanted: &str, viewed: bool) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn two_number_types(&mut self, op: &BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> Option<String> {
+    pub(crate) fn two_number_types(&mut self, op: &BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> Option<String> {
         if *op == BinaryOp::Shl || *op == BinaryOp::Shr { return None; }
         let held_left = held_name(left);
         let held_right = held_name(right);
@@ -80,7 +80,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_integer_beside_a_float(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> bool {
+    pub(crate) fn an_integer_beside_a_float(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> bool {
         let l = value_of_a_copy(&left.unseen());
         let r = value_of_a_copy(&right.unseen());
         let mut float: String = String::from("");
@@ -94,7 +94,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn two_integer_types_compared(&mut self, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) {
+    pub(crate) fn two_integer_types_compared(&mut self, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) {
         if is_a_literal(lhs) || is_a_literal(rhs) { return; }
         let l = match an_integer_named(left) { Some(__nikaia_value) => __nikaia_value, None => return };
         let r = match an_integer_named(right) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -110,7 +110,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn a_compound_over_two_integer_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, target: &Expr, into: &Ty, value: &Expr, found: &Ty, span: &Span) {
+    pub(crate) fn a_compound_over_two_integer_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, target: &Expr, into: &Ty, value: &Expr, found: &Ty, span: &Span) {
         let x = match an_integer_named(into) { Some(__nikaia_value) => __nikaia_value, None => return };
         let v = match an_integer_named(found) { Some(__nikaia_value) => __nikaia_value, None => return };
         if x == v || is_a_literal(value) { return; }
@@ -132,7 +132,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn widen_operands(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str, within: &Span) -> bool {
+    pub(crate) fn widen_operands(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str, within: &Span) -> bool {
         match value {
             Expr::Binary { op, lhs, rhs, span, .. } => {
                 let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
@@ -170,7 +170,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn widened_elements(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
+    pub(crate) fn widened_elements(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
         let from = match found {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return None,
@@ -195,7 +195,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn array_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
+    pub(crate) fn array_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
         if !is_a_list_literal(value) { return None; }
         let name = match want {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
@@ -249,7 +249,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn collect_by_use(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
+    pub(crate) fn collect_by_use(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let receiver = collect_receiver(value);
         if receiver.len() != 1 || !a_collect_call(world, value) { return None; }
         let made = named_arguments_of(found);
@@ -289,7 +289,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn a_collect_into_an_option(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> bool {
+pub(crate) fn a_collect_into_an_option(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> bool {
     if !a_collect_call(world, value) { return false; }
     let made = named_arguments_of(found);
     let found_name = match found {
@@ -321,7 +321,7 @@ pub(crate) fn collect_receiver(value: &Expr) -> Vec<&Expr> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn is_a_list_literal(value: &Expr) -> bool { matches!(value, Expr::ListLit { .. } | Expr::ListRepeat { .. }) }
+pub(crate) fn is_a_list_literal(value: &Expr) -> bool { matches!(value, Expr::ListLit { .. } | Expr::ListRepeat { .. }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.

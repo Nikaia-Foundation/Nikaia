@@ -8,7 +8,7 @@ pub enum SolverAnswer {
     NotProved,
 }
 
-pub fn refuting_values(arena: &mut TermArena, facts: &[i64], claim: i64, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Option<collections::BTreeMap<String, i64>> {
+pub(crate) fn refuting_values(arena: &mut TermArena, facts: &[i64], claim: i64, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Option<collections::BTreeMap<String, i64>> {
     let negation = arena.not(claim);
     match ask(&arena, facts, negation) {
         SolverAnswer::Proved => { },
@@ -21,7 +21,7 @@ pub fn refuting_values(arena: &mut TermArena, facts: &[i64], claim: i64, ask: &i
     Some(values_of(&names, &values))
 }
 
-pub fn breaking_values(arena: &mut TermArena, scope: &ProverScope, claim: i64, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Option<collections::BTreeMap<String, i64>> {
+pub(crate) fn breaking_values(arena: &mut TermArena, scope: &ProverScope, claim: i64, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Option<collections::BTreeMap<String, i64>> {
     let names = match scope.pinned_names(&arena, claim) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let values = match model(&arena, &scope.facts, claim) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let shown = values_of(&names, &values);

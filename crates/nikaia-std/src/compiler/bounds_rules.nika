@@ -58,7 +58,7 @@ fn rules_rounds() -> i64 {
 
 /// **Every candidate of the program**, read with the frames `context`
 /// holds.
-pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words: ref winnow_grammar::InternerContext) -> Vec[BoundsRule] {
+fn rules_candidates(program: ref Program, context: ref BoundsContext, words: ref winnow_grammar::InternerContext) -> Vec[BoundsRule] {
     // The private list fields of each struct that is not generic, and of
     // those, the lists of whole numbers (`T.f`) and what a literal leaving
     // a field out builds.

@@ -71,7 +71,7 @@ pub fn unused_entries(allowed: ref collections::BTreeSet[String], taken: ref col
 }
 
 /// What `NK1175` notes about a refused read (ADR-310 D4, D6).
-pub fn why_not_read(why: ref Denied, path: ref String) -> String {
+fn why_not_read(why: ref Denied, path: ref String) -> String {
     return match why {
         Denied::NoList => "A build reads no files unless it's given a list of the files it may read.",
         Denied::NotListed { list } => f"`{list}` is the list of files this build may read, and `{path}` isn't in it.",
@@ -84,7 +84,7 @@ pub fn why_not_read(why: ref Denied, path: ref String) -> String {
 /// The way out of a refused read that can actually be taken (Part III C.2):
 /// *add the flag* is not the answer to a path missing from the list, and *add
 /// the line* is not the answer to a build run with the reads switched off.
-pub fn way_out_of_a_read(why: ref Denied, path: ref String) -> String {
+fn way_out_of_a_read(why: ref Denied, path: ref String) -> String {
     return match why {
         Denied::NoList => "Pass `--allow-read-from-list=<file>`, and put this path in that file.",
         Denied::NotListed { list } => f"Add `{path}` as a line in `{list}`.",

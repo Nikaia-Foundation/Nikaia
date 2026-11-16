@@ -7,7 +7,7 @@ pub(crate) fn check_is_fatal(ledger: &Ledger, error: &str) -> bool {
 }
 
 impl CheckState {
-    pub fn a_fatal_error_passes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, guarded: &CheckGuarded, handler: &Block, span: &Span) {
+    pub(crate) fn a_fatal_error_passes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, guarded: &CheckGuarded, handler: &Block, span: &Span) {
         let named = fatal_named(handler, world.words);
         #[allow(unused_mut)] let mut passing: Vec<String> = vec![];
         for error in guarded.thrown.iter() { if (check_is_fatal(world.own, error) || check_is_fatal(world.library, error)) && !named.contains(error) { passing.push(nikaia_std::block::Text::from(error.to_string())); } }
@@ -33,7 +33,7 @@ impl CheckState {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_throw_here(&mut self, thrown: &Ty, span: &Span) {
+    pub(crate) fn a_throw_here(&mut self, thrown: &Ty, span: &Span) {
         if self.flow.throwing || self.flow.caught || self.inside_an_action.is_some() { return; }
         let function = match match self.current.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -49,7 +49,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn may_fail_here<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, contract: &FnContract, span: &Span) {
+    pub(crate) fn may_fail_here<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, contract: &FnContract, span: &Span) {
         if !contract.fails_with.is_empty() {
             let word = type_last_segment(key);
             self.a_way_out("fails", &word, span);

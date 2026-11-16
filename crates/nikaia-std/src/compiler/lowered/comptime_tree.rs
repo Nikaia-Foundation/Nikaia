@@ -39,7 +39,7 @@ pub const TURN_MARK: &str = "__nikaia_comptime_turn";
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn comptime_turn_marked(on: &str, field: &str, local: &str, value: &Expr) -> Expr {
+pub(crate) fn comptime_turn_marked(on: &str, field: &str, local: &str, value: &Expr) -> Expr {
     let texts: Vec<Expr> = vec![on, field, local].iter().map(|text| { Expr::LitStr { text: nikaia_std::block::Text::from(text.to_string()), id: fresh_id() } }).collect::<Vec<_>>();
     let mut args = texts;
     args.push(value.clone());
@@ -281,7 +281,7 @@ pub fn comptime_as_built(ty: Ty) -> Ty {
     }
 }
 
-pub fn comptime_undeclared_callee(words: &winnow_grammar::InternerContext, value: &Expr, library: &Ledger, declared_in_files: &impl Fn(&str) -> bool) -> Option<String> {
+pub(crate) fn comptime_undeclared_callee(words: &winnow_grammar::InternerContext, value: &Expr, library: &Ledger, declared_in_files: &impl Fn(&str) -> bool) -> Option<String> {
     for expr in visited_in_expr(value) {
         match expr {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
@@ -298,7 +298,7 @@ pub fn comptime_undeclared_callee(words: &winnow_grammar::InternerContext, value
     None
 }
 
-pub fn comptime_declares(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext, name: &str) -> bool { items.iter().any(|item| { comptime_declared_as(&item.node, words) == name }) }
+pub(crate) fn comptime_declares(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext, name: &str) -> bool { items.iter().any(|item| { comptime_declared_as(&item.node, words) == name }) }
 
 pub(crate) fn comptime_declared_as(item: &Item, words: &winnow_grammar::InternerContext) -> String {
     match item {
@@ -309,7 +309,7 @@ pub(crate) fn comptime_declared_as(item: &Item, words: &winnow_grammar::Interner
     }
 }
 
-pub fn comptime_culprit(words: &winnow_grammar::InternerContext, value: &Expr, derived: &Ledger, forbidden: &impl Fn(&str) -> bool) -> Option<String> {
+pub(crate) fn comptime_culprit(words: &winnow_grammar::InternerContext, value: &Expr, derived: &Ledger, forbidden: &impl Fn(&str) -> bool) -> Option<String> {
     for expr in visited_in_expr(value) {
         let key = match comptime_key_of(words, expr, derived, forbidden) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if forbidden(&key) { return Some(key); }

@@ -133,7 +133,7 @@ pub(crate) const KNOWN_KINDS: [&str; 6] = ["file", "stdout", "stderr", "args", "
 
 pub fn accounted(stmt: &Stmt, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Accounted { accounted_as(stmt, words, walking, false) }
 
-pub fn accounted_beside(stmt: &Stmt, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Accounted { accounted_as(stmt, words, walking, true) }
+pub(crate) fn accounted_beside(stmt: &Stmt, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Accounted { accounted_as(stmt, words, walking, true) }
 
 pub(crate) fn accounted_as(stmt: &Stmt, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>, beside: bool) -> Accounted {
     match stmt {
@@ -412,7 +412,7 @@ pub(crate) fn joined_segments(segments: &[winnow_grammar::Symbol], names: &winno
     nikaia_std::block::Text::from(parts.join("::"))
 }
 
-pub fn diverts_within(stmts: &[Spanned<Stmt>], bound: bool) -> bool {
+pub(crate) fn diverts_within(stmts: &[Spanned<Stmt>], bound: bool) -> bool {
     for stmt in stmts.iter() {
         let leaves = match &stmt.node {
             Stmt::Return(_) => true,

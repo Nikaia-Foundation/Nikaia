@@ -12,16 +12,16 @@ pub enum CheckCopyable {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_asset_outside_a_comptime(&mut self, span: &Span) { self.findings.push(check_refusal("NK1177", span, String::from("`asset` reads a file while the program is built, so it only works in a `comptime`."), vec![String::from("`comptime` says when, `asset(\"…\")` says where the bytes come from, and the call around it says what to do with them.")], Some(String::from("Write `comptime NAME = …` to build the bytes into the program, or `fs::read(…, root)` to read the file while it runs.")))); }
+    pub(crate) fn an_asset_outside_a_comptime(&mut self, span: &Span) { self.findings.push(check_refusal("NK1177", span, String::from("`asset` reads a file while the program is built, so it only works in a `comptime`."), vec![String::from("`comptime` says when, `asset(\"…\")` says where the bytes come from, and the call around it says what to do with them.")], Some(String::from("Write `comptime NAME = …` to build the bytes into the program, or `fs::read(…, root)` to read the file while it runs.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_path_that_is_not_a_literal(&mut self, span: &Span) { self.findings.push(check_refusal("NK1176", span, String::from("`asset` needs the path written out, not computed."), vec![String::from("The list of files a build may read is checked against the path as written, so a reader can see from the line which file is read.")], Some(String::from("Write the path out. For two files, write two `asset(\"…\")` calls.")))); }
+    pub(crate) fn a_path_that_is_not_a_literal(&mut self, span: &Span) { self.findings.push(check_refusal("NK1176", span, String::from("`asset` needs the path written out, not computed."), vec![String::from("The list of files a build may read is checked against the path as written, so a reader can see from the line which file is read.")], Some(String::from("Write the path out. For two files, write two `asset(\"…\")` calls.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_with_that_changes_nothing(&mut self, ty: &str, span: &Span) { self.findings.push(check_refusal("NK1174", span, format!("This `with` changes no field, so it's just a copy of the `{}`.", ty), vec![String::from("`with` means \"this value, with these fields different\", so one without fields makes a reader look for a change that isn't there.")], Some(String::from("Name the fields that change, or remove the `with`.")))); }
+    pub(crate) fn a_with_that_changes_nothing(&mut self, ty: &str, span: &Span) { self.findings.push(check_refusal("NK1174", span, format!("This `with` changes no field, so it's just a copy of the `{}`.", ty), vec![String::from("`with` means \"this value, with these fields different\", so one without fields makes a reader look for a change that isn't there.")], Some(String::from("Name the fields that change, or remove the `with`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_with_over_something_else(&mut self, ty: &str, why: &CheckCopyable, span: &Span) {
+    pub(crate) fn a_with_over_something_else(&mut self, ty: &str, why: &CheckCopyable, span: &Span) {
         let mut message: String = String::from("");
         let mut note: String = String::from("");
         let mut way_out: String = String::from("");
@@ -51,7 +51,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn no_such_field(&mut self, ty: &str, field: &str, declared: &[FieldContract], span: &Span) {
+    pub(crate) fn no_such_field(&mut self, ty: &str, field: &str, declared: &[FieldContract], span: &Span) {
         let mut names: Vec<String> = vec![];
         for one in declared.iter() { names.push(nikaia_std::block::Text::from(one.name.to_string())); }
         let near = nearest_name(field, &names);
@@ -61,13 +61,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn nothing_here_can_fail(&mut self, guarded: &CheckGuarded, span: &Span) {
+    pub(crate) fn nothing_here_can_fail(&mut self, guarded: &CheckGuarded, span: &Span) {
         if guarded.fallible || guarded.unanswered { return; }
         self.findings.push(check_refusal("NK1134", span, String::from("Nothing here can fail, so the `catch` has nothing to handle."), vec![String::from("Only a call to a function declared with `throws` can fail."), String::from("None of the calls here is declared with `throws`."), String::from("(A call the compiler knows nothing about would not be reported here.)")], Some(String::from("Remove the `catch` and its handler."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn the_witness_takes_no_reference(&mut self, seen: &Expr, span: &Span) {
+    pub(crate) fn the_witness_takes_no_reference(&mut self, seen: &Expr, span: &Span) {
         let written = match seen {
             Expr::Unary { op, .. } => matches!(op, UnaryOp::Ref),
             _ => false,
@@ -77,7 +77,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn nothing_follows_a_jump(&mut self, jump: &Stmt, span: &Span) {
+    pub(crate) fn nothing_follows_a_jump(&mut self, jump: &Stmt, span: &Span) {
         let word: &'static str = match jump {
             Stmt::Break => "break",
             _ => "continue",

@@ -118,7 +118,8 @@ pub(crate) fn sv_row_eliminate(r: &SvRow, s: &SvRow, col: u32) -> Option<SvRow> 
     sv_row_combine(*nikaia_std::index::get(&ab, 0), r, *nikaia_std::index::get(&ab, 1), s)
 }
 
-pub fn sv_row_pick(r: &SvRow, s: &SvRow, opposite: bool) -> Option<u32> {
+#[cfg(test)]
+pub(crate) fn sv_row_pick(r: &SvRow, s: &SvRow, opposite: bool) -> Option<u32> {
     let mut best: Option<u32> = None;
     let mut best_cost: i64 = 0;
     let mut i: i64 = 0;
@@ -141,7 +142,8 @@ pub fn sv_row_pick(r: &SvRow, s: &SvRow, opposite: bool) -> Option<u32> {
     best
 }
 
-pub fn sv_row_eval(r: &SvRow, values: &[SvRat]) -> Option<SvRat> {
+#[cfg(test)]
+pub(crate) fn sv_row_eval(r: &SvRow, values: &[SvRat]) -> Option<SvRat> {
     let mut sum = sv_int(r.constant);
     let mut i: i64 = 0;
     while ((i) as usize) < r.cols.len() {

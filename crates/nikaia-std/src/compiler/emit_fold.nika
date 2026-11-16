@@ -32,7 +32,7 @@ impl EmitState {
         return self.facts.in_place_folds.get(id_of(part) as i64) ?? 0
     }
 
-    pub fn emit_fold[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, spec: ref FoldSpec) sync throws {
+    fn emit_fold[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, spec: ref FoldSpec) sync throws {
         let rule = emit_text(world, spec.rule)
         let name = if spec.merge != null { "par_fold" } else { "fold" }
         out.push(f"{name}({rule}, ")

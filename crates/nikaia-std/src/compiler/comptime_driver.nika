@@ -13,7 +13,7 @@ use std::collections
 /// against `std` dynamically uses the allocator of the library it links;
 /// `unsafe` because an allocator is, and generated because `std` has none
 /// (ADR-218).
-pub fn cr_bundle_source() -> String {
+fn cr_bundle_source() -> String {
     return "// GENERATED (ADR-321 D3, D10).
 pub extern crate nikaia_std;
 pub extern crate winnow;
@@ -58,7 +58,7 @@ static HEAP: Heap = Heap;
 /// (#1705), and a dynamic library's file there carries no hash: two crates
 /// of one name would each overwrite the other's library. Its dependencies get
 /// the profile a program gives them (`CR_DEPENDENCY_PROFILE`).
-pub fn cr_bundle_manifest(name: ref String, dependencies: ref Vec[(String, String)]) -> String {
+fn cr_bundle_manifest(name: ref String, dependencies: ref Vec[(String, String)]) -> String {
     let mut manifest: String = "# GENERATED. The library build-time code links against (ADR-321 D3).
 
 [workspace]
@@ -93,7 +93,7 @@ panic = \"unwind\"
 /// `CR_DEPENDENCY_PROFILE`: a sub-build's own code - a parser, the
 /// build-time bundle's allocator - is checked as it was before its
 /// dependencies took the program's profile.
-pub fn cr_own_profile(name: ref String) -> String {
+fn cr_own_profile(name: ref String) -> String {
     return f"
 [profile.dev.package.{name}]
 overflow-checks = true
@@ -142,7 +142,7 @@ struct CrRow {
 /// **A stop names the byte it came from**, where the program's own table names a
 /// `.nika` line (ADR-300 D9): the sub-program has no file of its own, and the
 /// checker turns the byte back into a place in the file it is checking.
-pub fn cr_with_driver(rust: ref String, rows: ref Vec[(i64, i64, i64)], value_fn: ref String, dump: ref String, helpers: ref String, stopped_at: ref String, budget: u64, memory: u64) -> String? {
+fn cr_with_driver(rust: ref String, rows: ref Vec[(i64, i64, i64)], value_fn: ref String, dump: ref String, helpers: ref String, stopped_at: ref String, budget: u64, memory: u64) -> String? {
     let start = rust.find("\nfn main() {\n") ?? return null
     let close = rust.find("\n}\n"; from: start + "\n".len()) ?? return null
     let end = close + "\n}\n".len()

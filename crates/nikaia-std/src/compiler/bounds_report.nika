@@ -337,7 +337,7 @@ pub fn bounds_report_trace_rows(asked: ref String, rows: ref Vec[String]) -> Str
 }
 
 /// The line of a byte offset, counted from 1.
-pub fn bounds_report_line(source: ref String, at: i64) -> i64 {
+fn bounds_report_line(source: ref String, at: i64) -> i64 {
 	let end = at.min(source.bytes.len())
 	return source.bytes[0..<end].iter().filter(fn(b) { b == 10 }).count() + 1
 }

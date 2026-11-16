@@ -12,7 +12,7 @@ pub struct BoundsRule {
 
 pub(crate) fn rules_rounds() -> i64 { 8 }
 
-pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winnow_grammar::InternerContext) -> Vec<BoundsRule> {
+pub(crate) fn rules_candidates(program: &Program, context: &BoundsContext, words: &winnow_grammar::InternerContext) -> Vec<BoundsRule> {
     let mut lists: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     let mut whole: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut nested: collections::BTreeSet<String> = collections::BTreeSet::new();

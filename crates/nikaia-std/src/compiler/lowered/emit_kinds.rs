@@ -9,8 +9,8 @@ pub enum EmitTail {
 }
 
 impl EmitTail {
-    pub fn is_value(&self) -> bool { !matches!(self, EmitTail::Statement) }
-    pub fn at(&self, i: i64, last: i64) -> EmitTail {
+    pub(crate) fn is_value(&self) -> bool { !matches!(self, EmitTail::Statement) }
+    pub(crate) fn at(&self, i: i64, last: i64) -> EmitTail {
         if i == last { return *self; }
         EmitTail::Statement
     }
@@ -95,7 +95,7 @@ impl EmitLifetimes {
             EmitLifetimes::Call => String::from("'call"),
         }
     }
-    pub fn over_the_input(&self) -> EmitLifetimes {
+    pub(crate) fn over_the_input(&self) -> EmitLifetimes {
         match self {
             EmitLifetimes::Elided => EmitLifetimes::Inner,
             EmitLifetimes::Static => EmitLifetimes::StaticIn,
@@ -114,7 +114,7 @@ impl EmitLifetimes {
             _ => EmitLifetimes::Named,
         }
     }
-    pub fn of_the_input(&self) -> EmitLifetimes {
+    pub(crate) fn of_the_input(&self) -> EmitLifetimes {
         match self {
             EmitLifetimes::Elided => EmitLifetimes::OfInputElided,
             EmitLifetimes::Static => EmitLifetimes::OfInputStatic,
@@ -142,7 +142,7 @@ pub enum EmitPointer {
     Handle { give: bool },
 }
 
-pub fn emit_pointer_for(ty: &Type) -> Option<EmitPointer> {
+pub(crate) fn emit_pointer_for(ty: &Type) -> Option<EmitPointer> {
     if ty.is_slice { return Some(EmitPointer::Run { mutable: ty.is_mut }); }
     if ty.is_view { return Some(EmitPointer::Reference { mutable: ty.is_mut }); }
     None
@@ -162,7 +162,7 @@ pub struct EmitMethod {
 }
 
 impl EmitMethod {
-    pub fn mutates_in_place(&self) -> bool {
+    pub(crate) fn mutates_in_place(&self) -> bool {
         if self.returns_value { return false; }
         let receiver = match self.receiver { Some(__nikaia_value) => __nikaia_value, None => return false };
         receiver.is_ref && receiver.is_mut
@@ -217,12 +217,12 @@ pub struct EmitFlow {
 
 impl EmitFlow {
     pub fn plain() -> EmitFlow { EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false, breaks_to: -1, subject_copies: false } }
-    pub fn inside_a_loop(self) -> EmitFlow { EmitFlow { in_loop: true, ..self } }
+    pub(crate) fn inside_a_loop(self) -> EmitFlow { EmitFlow { in_loop: true, ..self } }
     pub fn guarded(self) -> EmitFlow { EmitFlow { caught: true, ..self } }
-    pub fn joined_here(self) -> EmitFlow { EmitFlow { caught: true, handled_here: true, ..self } }
+    pub(crate) fn joined_here(self) -> EmitFlow { EmitFlow { caught: true, handled_here: true, ..self } }
     pub fn place(self) -> EmitFlow { EmitFlow { in_a_place: true, ..self } }
     pub fn handling(self, named: bool) -> EmitFlow { EmitFlow { caught_named: named, ..self } }
-    pub fn at(self, statement: i64) -> EmitFlow { EmitFlow { statement: statement, ..self } }
+    pub(crate) fn at(self, statement: i64) -> EmitFlow { EmitFlow { statement: statement, ..self } }
     pub fn widened(self) -> EmitFlow { EmitFlow { widen: true, ..self } }
     pub fn inferred(self) -> EmitFlow { EmitFlow { inferred: true, ..self } }
 }

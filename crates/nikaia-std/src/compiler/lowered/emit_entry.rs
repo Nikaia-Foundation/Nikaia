@@ -2,7 +2,7 @@
 // Edit emit_entry.nika in the directory above, not this file.
 
 impl EmitState {
-    pub fn user_main(&self, world: &EmitWorld<'_, '_, '_, '_>) -> Option<bool> {
+    pub(crate) fn user_main(&self, world: &EmitWorld<'_, '_, '_, '_>) -> Option<bool> {
         if !self.entry { return None; }
         for item in world.items.iter() {
             match &item.node {
@@ -16,13 +16,13 @@ impl EmitState {
         }
         None
     }
-    pub fn as_a_module(&self) -> bool { !self.is_std && self.crate_root != "crate" }
-    pub fn named_by_main(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> bool {
+    pub(crate) fn as_a_module(&self) -> bool { !self.is_std && self.crate_root != "crate" }
+    pub(crate) fn named_by_main(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> bool {
         if !self.as_a_module() || self.user_main(world).is_none() { return false; }
         let contract = match self.own_contracts.functions.get("main") { Some(__nikaia_value) => __nikaia_value, None => return false };
         nikaia_std::list::contains(&contract.fails_with, &name)
     }
-    pub fn entry_point(&self, world: &EmitWorld<'_, '_, '_, '_>, concurrent: bool, channel: &str, types: &[String], passing: &[String]) -> String {
+    pub(crate) fn entry_point(&self, world: &EmitWorld<'_, '_, '_, '_>, concurrent: bool, channel: &str, types: &[String], passing: &[String]) -> String {
         let fails = match self.user_main(world) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         let (reads, passed) = self.main_words(world, types, passing);
         let mut user_code: &'static str = "Sequential";
@@ -182,7 +182,7 @@ impl EmitState {
         }
         text
     }
-    pub fn held_structs(&self, world: &EmitWorld<'_, '_, '_, '_>) -> String {
+    pub(crate) fn held_structs(&self, world: &EmitWorld<'_, '_, '_, '_>) -> String {
         let mut pays = false;
         for (_, plan) in self.keep_plans.iter() { if !plan.element_keepers.is_empty() || plan.task_keep { pays = true; } }
         if !pays { return String::from(""); }

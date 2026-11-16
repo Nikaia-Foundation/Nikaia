@@ -20,7 +20,7 @@ pub(crate) fn check_exprs_package_type(world: &CheckWorld<'_, '_, '_, '_, '_, '_
     None
 }
 
-pub fn a_plain_string(ty: &Ty) -> bool {
+pub(crate) fn a_plain_string(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
         _ => false,
@@ -60,7 +60,7 @@ pub(crate) fn width_of_method(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, re
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn narrow_by_width(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str, span: &Span) -> bool {
+    pub(crate) fn narrow_by_width(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str, span: &Span) -> bool {
         let found = width_dependent(world, value, into);
         if found.is_empty() { return false; }
         let what = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&found, (0) as usize) }).to_string());
@@ -74,7 +74,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_bit_operation_beside_a_comparison(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span) {
+    pub(crate) fn a_bit_operation_beside_a_comparison(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span) {
         let left_bare = a_bare_bit_operation(lhs);
         let right_bare = a_bare_bit_operation(rhs);
         if !left_bare && !right_bare { return; }
@@ -88,13 +88,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_collection_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, spec: Option<&str>, span: &Span) {
+    pub(crate) fn a_collection_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, spec: Option<&str>, span: &Span) {
         if spec.is_some() && nikaia_std::index::or(spec, || "").contains('?') { return; }
         self.a_value_with_no_text(world, hole, held, span, false);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_value_with_no_text_printed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, held: &Ty, span: &Span) { self.a_value_with_no_text(world, value, held, span, true); }
+    pub(crate) fn a_value_with_no_text_printed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, held: &Ty, span: &Span) { self.a_value_with_no_text(world, value, held, span, true); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_value_with_no_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, span: &Span, printed: bool) {
@@ -241,7 +241,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_loop_over_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
+    pub(crate) fn a_loop_over_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
         let inner = match over {
             Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held.text() },
             _ => return,
@@ -253,7 +253,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_loop_over_what_holds_no_elements(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
+    pub(crate) fn a_loop_over_what_holds_no_elements(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
         let name: String = match over {
             Ty::Named { name, args, .. } => if args.is_empty() { nikaia_std::block::Text::from(name.to_string()) } else { return; },
             _ => return,
@@ -269,7 +269,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_fallback_beside_what_a_map_holds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, read: &Expr, held: &Ty, fallback: &Ty, span: &Span) {
+    pub(crate) fn a_fallback_beside_what_a_map_holds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, read: &Expr, held: &Ty, fallback: &Ty, span: &Span) {
         if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) { return; }
         let name = match held {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
@@ -284,7 +284,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn mixed_text_assigned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, found: &Ty) -> bool {
+    pub(crate) fn mixed_text_assigned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, found: &Ty) -> bool {
         let name = match target {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => return false,
@@ -309,7 +309,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn owned_text_into_a_literal_binding(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, found: &Ty, into: &Ty, span: &Span) -> bool {
+    pub(crate) fn owned_text_into_a_literal_binding(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, found: &Ty, into: &Ty, span: &Span) -> bool {
         let name = match target {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => return false,
@@ -325,7 +325,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn expect_bool(&mut self, found: &Ty, span: &Span, why: &str) {
+    pub(crate) fn expect_bool(&mut self, found: &Ty, span: &Span, why: &str) {
         let wanted = Ty::Named { name: String::from("bool"), args: vec![], view: false };
         if found.fits(&wanted) { return; }
         let help: String = String::from("Compare it to get a `bool`: `x != 0`, `text != \"\"`, `xs.len() > 0`.");
@@ -349,7 +349,7 @@ pub struct CheckKept {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_view_kept(&self, found: &Ty, want: &Ty, named: Option<&str>, keeper: &str) -> Option<CheckKept> {
+    pub(crate) fn a_view_kept(&self, found: &Ty, want: &Ty, named: Option<&str>, keeper: &str) -> Option<CheckKept> {
         if !a_plain_str_view(found) || !a_plain_string(want) { return None; }
         let cost = "Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.";
         let said = capitalised(keeper);
@@ -387,7 +387,7 @@ pub(crate) fn a_variant_path(state: &CheckState, world: &CheckWorld<'_, '_, '_, 
 }
 
 impl CheckState {
-    pub fn a_value_written_out(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &Expr) -> bool {
+    pub(crate) fn a_value_written_out(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &Expr) -> bool {
         match written {
             Expr::Path(segments, _) => a_variant_path(self, world, segments),
             Expr::StructLit { .. } => true,

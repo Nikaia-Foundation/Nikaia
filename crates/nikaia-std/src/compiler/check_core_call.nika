@@ -156,7 +156,7 @@ fn check_core_call_declared(contract: ref FnContract) -> Ty? {
 
 /// What a `ref` parameter of code takes is lent to it (D20), unless it is a
 /// view already: a map's read past a jump is.
-pub fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref Vec[Expr], params: ref Vec[Ty], found: ref Vec[Ty], name: ref String, span: ref Span) sync {
+fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref Vec[Expr], params: ref Vec[Ty], found: ref Vec[Ty], name: ref String, span: ref Span) sync {
     let mut i = -1
     for given in args {
         i += 1
@@ -542,7 +542,7 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
 /// through the package's own functions) was built by a caller this package
 /// does not see (`check_handed_follow`). A value read out of a shared value is
 /// a view in its door, `NK1102` already.
-pub fn check_core_call_rust_owner(mut state: CheckState, world: ref CheckWorld, name: ref String, contract: ref FnContract, args: ref Vec[Expr], span: ref Span) sync {
+fn check_core_call_rust_owner(mut state: CheckState, world: ref CheckWorld, name: ref String, contract: ref FnContract, args: ref Vec[Expr], span: ref Span) sync {
     if !contract.described {
         return
     }
@@ -689,7 +689,7 @@ fn check_core_call_options_handed_over(mut state: CheckState, world: ref CheckWo
 /// The options of a call that move what they are handed (#1595): those the
 /// callee does not lend, nor takes `mut`; none across the C boundary
 /// (ADR-302 D5). Each one's name and the type it was handed.
-pub fn check_core_call_moving_options(state: ref CheckState, contract: ref FnContract, written: ref String, passed: ref Vec[(String, Ty)]) -> Vec[(String, Ty)] sync {
+fn check_core_call_moving_options(state: ref CheckState, contract: ref FnContract, written: ref String, passed: ref Vec[(String, Ty)]) -> Vec[(String, Ty)] sync {
     let signature = contract.signature ?? return []
     if state.foreign_names.contains(written) {
         return []
@@ -935,7 +935,7 @@ fn check_core_call_hands_back_a_variable(contract: ref FnContract) -> bool {
 }
 
 /// **`f(a, b)`, `Stats(first)`, `io::read_to_string()`**: a free call.
-pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
     // **`T::attribute(X)` and `T::attributes(X)`, a walked type's own**
     // (ADR-331 D6): `X` is a type, not a value, and is not walked as one.
     let member = check_core_call_attribute_member(state, world, func)
@@ -1151,7 +1151,7 @@ fn check_core_call_type_parameters(world: ref CheckWorld, name: ref String) -> V
 
 /// **The type parameters a ledger's signature names**, each once, in the
 /// order its parameters and then its result first name them.
-pub fn signature_type_variables(signature: ref Signature) -> Vec[String] sync {
+fn signature_type_variables(signature: ref Signature) -> Vec[String] sync {
     let mut found: Vec[String] = []
     for param in signature.params {
         check_core_call_variables_in(param.1, found)
@@ -1227,7 +1227,7 @@ fn check_core_call_ty_names(ty: ref Ty, parameter: ref String) -> bool sync {
 }
 
 /// **The arm `Call`**: the prelude's `assert`, or a free call.
-pub fn check_core_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+fn check_core_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
     if check_core_call_the_prelude_claim(state, world, func, "assert") {
         return check_core_an_assert(state, world, host, args, config, span, false)
     }
@@ -1241,7 +1241,7 @@ pub fn check_core_call[H: CheckHost](mut state: CheckState, world: ref CheckWorl
 }
 
 /// **The arm `Tuple`**: each part walked, then handed over.
-pub fn check_core_tuple[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, parts: ref Vec[Expr], span: ref Span) -> Ty sync {
+fn check_core_tuple[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, parts: ref Vec[Expr], span: ref Span) -> Ty sync {
     let mut found: Vec[Ty] = []
     for part in parts {
         found.push(check_core_expr(state, world, host, part, span))

@@ -16,9 +16,9 @@ pub struct ReachIndex {
     pub by_last: collections::BTreeMap<String, Vec<String>>,
 }
 
-pub fn reach_pausing_index(contracts: &Ledger) -> ReachIndex { reach_index_of(reach_pausing_keys(contracts)) }
+pub(crate) fn reach_pausing_index(contracts: &Ledger) -> ReachIndex { reach_index_of(reach_pausing_keys(contracts)) }
 
-pub fn reach_running_index(contracts: &Ledger) -> ReachIndex {
+pub(crate) fn reach_running_index(contracts: &Ledger) -> ReachIndex {
     let mut running: collections::BTreeSet<String> = collections::BTreeSet::new();
     for name in contracts.functions.keys() {
         let contract = match contracts.functions.get(nikaia_std::index::as_text(&name)) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -38,7 +38,7 @@ pub(crate) fn reach_index_of(keys: collections::BTreeSet<String>) -> ReachIndex 
     ReachIndex { keys, by_last }
 }
 
-pub fn pausing_edges(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, items: &[Spanned<Item>], index: &ReachIndex) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
+pub(crate) fn pausing_edges(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, items: &[Spanned<Item>], index: &ReachIndex) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
     let empty: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     if index.keys.is_empty() { return empty; }
     let mut graph: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
@@ -68,7 +68,7 @@ pub fn pausing_edges(words: &winnow_grammar::InternerContext, aliases: &collecti
     graph
 }
 
-pub fn pausing_reach(graph: &collections::BTreeMap<String, collections::BTreeSet<String>>, contracts: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
+pub(crate) fn pausing_reach(graph: &collections::BTreeMap<String, collections::BTreeSet<String>>, contracts: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
     let pausing = reach_pausing_keys(contracts);
     let mut reaches = graph.copy_owned();
     loop {
@@ -153,7 +153,7 @@ pub(crate) fn reach_set_for(reaches: &collections::BTreeMap<String, collections:
     found.copy_owned()
 }
 
-pub fn code_cycle_edges(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, items: &[Spanned<Item>], index: &ReachIndex) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
+pub(crate) fn code_cycle_edges(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, items: &[Spanned<Item>], index: &ReachIndex) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
     let mut graph: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for item in items.iter() {
         match &item.node {
@@ -184,7 +184,7 @@ pub fn code_cycle_edges(words: &winnow_grammar::InternerContext, aliases: &colle
     graph
 }
 
-pub fn code_on_a_cycle(graph: &collections::BTreeMap<String, collections::BTreeSet<String>>, contracts: &Ledger, key: &str) -> bool {
+pub(crate) fn code_on_a_cycle(graph: &collections::BTreeMap<String, collections::BTreeSet<String>>, contracts: &Ledger, key: &str) -> bool {
     let own = match contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if !reach_runs_code(own) { return false; }
     if !graph.contains_key(key) { return false; }

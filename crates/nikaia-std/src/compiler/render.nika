@@ -315,7 +315,7 @@ fn package_and_function(callee: ref String) -> (String, String) {
 
 /// `an` before a word that starts with a vowel the way these names are
 /// written, `a` otherwise.
-pub fn an_or_a(word: ref String) -> String {
+fn an_or_a(word: ref String) -> String {
     let first: Vec[scalar] = word.chars().collect()
     if first.len() > 0 && (first[0] == 'i' || first[0] == 'a' || first[0] == 'e' || first[0] == 'o' || first[0] == 'I' || first[0] == 'A' || first[0] == 'E' || first[0] == 'O') {
         return "an"

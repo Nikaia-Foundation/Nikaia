@@ -8,14 +8,14 @@
 use std::collections
 
 /// The names `expr` reads, as the prover asks.
-pub fn claim_names_in(expr: ref Expr, words: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> collections::BTreeSet[String] {
+fn claim_names_in(expr: ref Expr, words: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> collections::BTreeSet[String] {
     let mut names: collections::BTreeSet[String] = collections::BTreeSet()
     collect_names(expr, words, holes_of, names)
     return names
 }
 
 /// Whether a name of the proof is one of `params`, or the length of one.
-pub fn is_a_parameter(name: ref String, params: ref collections::BTreeSet[String]) -> bool {
+fn is_a_parameter(name: ref String, params: ref collections::BTreeSet[String]) -> bool {
     if params.contains(name) {
         return true
     }

@@ -121,7 +121,7 @@ pub(crate) fn check_core_method_witness(world: &CheckWorld<'_, '_, '_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_method_on_timeout(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: &str, config: &[ConfigArg], witness: i64) -> i64 {
+pub(crate) fn check_core_method_on_timeout(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: &str, config: &[ConfigArg], witness: i64) -> i64 {
     if method != "join" || witness < 0 { return -1; }
     let mut at: i64 = 0;
     while at < config.len() as i64 {
@@ -150,7 +150,7 @@ pub(crate) fn check_core_method_literal(state: &mut CheckState, receiver: &Expr,
     on
 }
 
-pub fn check_core_method_counted(on: &Ty) -> bool {
+pub(crate) fn check_core_method_counted(on: &Ty) -> bool {
     match on {
         Ty::Named { name, .. } => {
             let b = check_core_method_base(name);
@@ -263,7 +263,7 @@ pub(crate) fn check_core_method_task_handle(ty: &Ty) -> bool {
     }
 }
 
-pub fn check_core_method_connection(ty: &Ty) -> bool {
+pub(crate) fn check_core_method_connection(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, .. } => name == "net::Connection",
         _ => false,
@@ -703,7 +703,7 @@ pub(crate) fn check_core_method_one_item(name: &str) -> bool { name == "filter" 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+pub(crate) fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     let name: String = format!("{}", world.words.resolve(method));
     let adds = name == "push" || name == "insert" || name == "push_front" || name == "push_back" || name == "extend" || name == "append";
     let mut code_keys: Vec<String> = vec![];
@@ -740,7 +740,7 @@ pub(crate) fn check_core_method_deadline(state: &CheckState, world: &CheckWorld<
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_method_code_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr) {
+pub(crate) fn check_core_method_code_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr) {
     match arg {
         Expr::Variable(bound, _) => {
             let bound = *bound;

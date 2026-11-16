@@ -425,7 +425,7 @@ fn if_empty(first: ref Vec[String], second: ref Vec[String]) -> Vec[String] {
 /// the grammar is a message written for the reader: its first sentence is the
 /// headline and the rest is the help. Everywhere else the headline is made
 /// from what the parser expected and what it found.
-pub fn a_parse_error(error: ref Failure, source: ref String, stops_at: fn(ref String) -> i64 sync) -> ParseReading {
+fn a_parse_error(error: ref Failure, source: ref String, stops_at: fn(ref String) -> i64 sync) -> ParseReading {
     let c: Vec[scalar] = source.chars().collect()
     let mut at = error.offset
     if at > c.len() {
@@ -492,7 +492,7 @@ pub fn a_parse_error(error: ref Failure, source: ref String, stops_at: fn(ref St
 /// parse that has already failed with `*/` missing. Nothing where the counts
 /// come out even, which is a `*/` the grammar wanted for some other reason
 /// and whose own message is the better one.
-pub fn unclosed_block_comment(error: ref Failure, source: ref String) -> ParseReading? {
+fn unclosed_block_comment(error: ref Failure, source: ref String) -> ParseReading? {
     if !lists(error.expected, "`*/`") {
         return null
     }

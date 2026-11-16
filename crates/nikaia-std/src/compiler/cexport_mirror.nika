@@ -10,7 +10,7 @@ use std::collections
 /// **One field's, or one element's, conversion** between the mirror and the
 /// struct: the type in the mirror, what `of` is in the language - `None` where
 /// C's value is none - and what it is in the mirror.
-pub fn cx_converted(part: ref CxPart, records: ref Vec[CxRecord], plains: ref Vec[CxPlain], of: ref String) -> (String, String, String) {
+fn cx_converted(part: ref CxPart, records: ref Vec[CxRecord], plains: ref Vec[CxPlain], of: ref String) -> (String, String, String) {
     return match part {
         CxPart::Value(shape) => cx_converted_value(shape, of),
         CxPart::Choice(at) => cx_converted_choice(plains[at], of),
@@ -60,7 +60,7 @@ fn cx_field_mirror(part: ref CxPart, records: ref Vec[CxRecord], plains: ref Vec
 
 /// The mirror of a [`CxRecord`] the wrapper takes and hands back, and its two
 /// conversions: `None` where C's value is no value of the struct.
-pub fn cx_mirror(record: ref CxRecord, records: ref Vec[CxRecord], plains: ref Vec[CxPlain]) -> String {
+fn cx_mirror(record: ref CxRecord, records: ref Vec[CxRecord], plains: ref Vec[CxPlain]) -> String {
     let ty = record.name.clone()
     let mut fields: String = ""
     let mut into: Vec[String] = []
@@ -78,7 +78,7 @@ pub fn cx_mirror(record: ref CxRecord, records: ref Vec[CxRecord], plains: ref V
 /// **The mirror of a `pub extern enum`** (D32): the tag as a C `int` and a
 /// union with one struct per variant that has fields, as `#[repr(C)]` lays out
 /// the enum - and its conversions, `None` for a tag that names no variant.
-pub fn cx_tagged_mirror(record: ref CxRecord, records: ref Vec[CxRecord], plains: ref Vec[CxPlain]) -> String {
+fn cx_tagged_mirror(record: ref CxRecord, records: ref Vec[CxRecord], plains: ref Vec[CxPlain]) -> String {
     let ty = record.name.clone()
     let mut out: String = ""
     let mut members: Vec[String] = []

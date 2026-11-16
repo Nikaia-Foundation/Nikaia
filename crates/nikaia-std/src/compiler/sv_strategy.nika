@@ -64,7 +64,7 @@ pub struct SvParams {
 }
 
 /// The set's defaults.
-pub fn sv_params() -> SvParams {
+fn sv_params() -> SvParams {
 	return SvParams {
 		version: "sv-params-1",
 		pipeline: "search",
@@ -86,7 +86,7 @@ pub fn sv_params() -> SvParams {
 
 /// Sets parameter `name` to `value`; `false` where there is no such
 /// parameter or the value is not one it takes.
-pub fn sv_params_set(mut p: SvParams, name: String, value: String) -> bool {
+fn sv_params_set(mut p: SvParams, name: String, value: String) -> bool {
 	if name == "pipeline" {
 		if value != "search" && value != "walk-first" {
 			return false
@@ -158,7 +158,7 @@ pub fn sv_params_set(mut p: SvParams, name: String, value: String) -> bool {
 
 /// Sets each `name=value` of `settings`, comma-separated; `false` at the
 /// first one that does not take.
-pub fn sv_params_set_all(mut p: SvParams, settings: String) -> bool {
+fn sv_params_set_all(mut p: SvParams, settings: String) -> bool {
 	for part in settings.split(",") {
 		if part.len() == 0 {
 			continue
@@ -198,7 +198,7 @@ fn sv_strategy_size(n: i64) -> i64 {
 
 /// The features of `cnf`'s query: its theory atoms (a definition's atom
 /// counts as Boolean structure, not as an atom) and its clauses.
-pub fn sv_features(cnf: ref SvCnf) -> SvFeatures {
+fn sv_features(cnf: ref SvCnf) -> SvFeatures {
 	let mut f = SvFeatures {
 		columns: cnf.query.columns as i64,
 		reals: cnf.query.reals.len(),
@@ -259,7 +259,7 @@ pub fn sv_features(cnf: ref SvCnf) -> SvFeatures {
 }
 
 /// The features as one line.
-pub fn sv_features_shown(f: ref SvFeatures) -> String {
+fn sv_features_shown(f: ref SvFeatures) -> String {
 	return f"columns {f.columns} reals {f.reals} atoms {f.atoms} clauses {f.clauses} disjunctions {f.disjunctions} nonzeros {f.nonzeros} interval {f.interval}‰ difference {f.difference}‰ coefficient {f.max_coefficient} constant {f.max_constant} boolean {f.boolean}"
 }
 
@@ -273,7 +273,7 @@ pub fn sv_features_shown(f: ref SvFeatures) -> String {
 ///   walk tends to satisfy, so `walk-first`; the search follows on what the
 ///   walk left.
 /// * Else the search, and the walk after it where it ends unknown.
-pub fn sv_strategy_pick(f: ref SvFeatures, base: ref SvParams) -> SvParams {
+fn sv_strategy_pick(f: ref SvFeatures, base: ref SvParams) -> SvParams {
 	let mut p = base.clone()
 	if f.reals > 0 {
 		p.pipeline = "search"
@@ -290,7 +290,7 @@ pub fn sv_strategy_pick(f: ref SvFeatures, base: ref SvParams) -> SvParams {
 
 /// The pipeline `p` names, for a line: `walk-first`, `search` and its
 /// theory, `+walk` where the walk follows an unknown search.
-pub fn sv_params_shown(p: ref SvParams) -> String {
+fn sv_params_shown(p: ref SvParams) -> String {
 	let first = if p.pipeline == "walk-first" { "walk-first, " } else { "" }
 	let after = if p.walk_after { "+walk" } else { "" }
 	return f"{first}search/{p.theory}{after}"
@@ -356,7 +356,7 @@ fn sv_strategy_model(
 
 /// **The pipeline** `p` on `cnf`, within `budget`: the walk first where
 /// `p` says so, the search, the walk after an unknown search.
-pub fn sv_strategy_run(
+fn sv_strategy_run(
 	arena: ref TermArena,
 	facts: ref Vec[i64],
 	goal: i64,

@@ -445,5 +445,5 @@ pub fn bt_known_default(ledger: &Ledger, package: Option<&str>, key: &str, at: i
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn bt_is_the_builds_own(touch: &Touch) -> bool { touch.text() == "args read" }
+pub(crate) fn bt_is_the_builds_own(touch: &Touch) -> bool { touch.text() == "args read" }
 

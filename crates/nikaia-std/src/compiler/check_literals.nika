@@ -6,12 +6,12 @@
 impl CheckState {
     /// `NK1169`: a fixed table that holds a key twice. `first` and `again` are
     /// the places of the two pairs, counted from 0.
-    pub fn a_table_with_one_key_twice(ref mut self, bound: ref String, key: ref String, first: i64, again: i64, span: ref Span) sync {
+    fn a_table_with_one_key_twice(ref mut self, bound: ref String, key: ref String, first: i64, again: i64, span: ref Span) sync {
         self.findings.push(check_refusal("NK1169", span, f"`{bound}` has the key `{key}` twice.", [f"Pairs {first + 1} and {again + 1} both use it, and a table holds one value per key."], "Remove one of them, or give them different keys."))
     }
 
     /// `NK1170`: a fixed table whose keys are not text.
-    pub fn a_table_key_that_is_not_text(ref mut self, bound: ref String, key: ref String, span: ref Span) sync {
+    fn a_table_key_that_is_not_text(ref mut self, bound: ref String, key: ref String, span: ref Span) sync {
         self.findings.push(check_refusal("NK1170", span, f"`{bound}` uses `{key}` as its keys, but a fixed table's keys are text.", ["A fixed table looks up text keys. Numbers or `bool`s as keys need a different kind of table, which isn't available yet."], "Write the keys as text, or use a `collections::HashMap` built while the program runs."))
     }
 
@@ -23,7 +23,7 @@ impl CheckState {
     /// this sentence at run time, and saying *this compiler cannot evaluate it*
     /// instead would send the reader looking for a missing feature rather than
     /// at the line ([Part III C.2](../../docs/specification/30-nikaia-tooling.md)).
-    pub fn a_build_time_index_is_not_there(ref mut self, at: ref Integer, len: i64, span: ref Span) sync {
+    fn a_build_time_index_is_not_there(ref mut self, at: ref Integer, len: i64, span: ref Span) sync {
         let help: String = match len {
             0 => "The array is empty, so there's nothing to read.",
             else => f"The indexes go from 0 to {len - 1}.",
@@ -52,7 +52,7 @@ impl CheckState {
     /// `rustc` answered *the trait bound `str: Error` is not satisfied* about a
     /// file nobody wrote. It had been writable since `throw` existed and no
     /// program in the tree had written one.
-    pub fn a_thrown_value_that_is_not_an_error(ref mut self, value: ref Expr, thrown: ref Ty, span: ref Span) sync {
+    fn a_thrown_value_that_is_not_an_error(ref mut self, value: ref Expr, thrown: ref Ty, span: ref Span) sync {
         let what = element_kind(value, thrown) ?? return
         self.findings.push(check_refusal("NK1161", span, f"You can only throw an error, and this throws {what}.", ["An error is a type with an `impl Error` for it, which says what its message is."], "Declare one, such as `enum Refused { NotFound }` with `impl Error for Refused { fn message(ref self) -> String { … } }`, and throw a value of it."))
     }
@@ -61,7 +61,7 @@ impl CheckState {
     /// `struct` or `enum` this package declares, with no `impl Error` in any of
     /// its files. The checker reads the package's ledger, so an `impl` in
     /// another file counts; a type from another package is left alone (C.4).
-    pub fn a_thrown_type_with_no_error(ref mut self, world: ref CheckWorld, thrown: ref Ty, span: ref Span) sync {
+    fn a_thrown_type_with_no_error(ref mut self, world: ref CheckWorld, thrown: ref Ty, span: ref Span) sync {
         let name: String = match thrown {
             Ty::Named { name, view, .. } => if view { "" } else { name.clone() },
             else => "",
@@ -97,7 +97,7 @@ impl CheckState {
     /// what `rustc` would say about a field of a `#[repr(transparent)]` newtype
     /// is about a file nobody wrote, and it would name the wrapper rather than
     /// the handle.
-    pub fn a_handle_has_nothing_inside(ref mut self, handle: ref String, what: ref String, span: ref Span) sync {
+    fn a_handle_has_nothing_inside(ref mut self, handle: ref String, what: ref String, span: ref Span) sync {
         self.findings.push(check_refusal("NK1160", span, f"You can't look inside `{handle}`: it's a handle, and {what} reaches into it.", [f"`{handle}` is declared `opaque`: what it points at belongs to the C library that made it."], "Pass the handle to a function declared in the `extern \"C\"` block."))
     }
 
@@ -115,7 +115,7 @@ impl CheckState {
     /// record does not answer, and it is in
     /// the former `open-decisions.md` rather than guessed
     /// at here.
-    pub fn a_handle_is_not_made_here(ref mut self, handle: ref String, span: ref Span) sync {
+    fn a_handle_is_not_made_here(ref mut self, handle: ref String, span: ref Span) sync {
         self.findings.push(check_refusal("NK1160", span, f"You can't make a `{handle}` yourself: it's a handle a C library gives you.", [f"`{handle}` is declared `opaque`: only a C function can hand one out."], f"Call the function in the `extern \"C\"` block that returns a `{handle}`."))
     }
 
@@ -127,7 +127,7 @@ impl CheckState {
     /// else is refused rather than guessed at, which is the polarity every
     /// check at this boundary keeps — the alternative is the operating system
     /// answering, about memory the program did not mean to touch.
-    pub fn a_length_that_may_not_fit(ref mut self, world: ref CheckWorld, written: ref String, buffer: ref Expr, span: ref Span) sync {
+    fn a_length_that_may_not_fit(ref mut self, world: ref CheckWorld, written: ref String, buffer: ref Expr, span: ref Span) sync {
         let named = match buffer {
             Expr::Variable(name, _) => world.words.resolve(name).clone(),
             else => "the buffer",
@@ -146,7 +146,7 @@ impl CheckState {
 /// `i64` and `f64` are one kind here, deliberately: this is a **coarse** answer
 /// used only to refuse, and a finer one would refuse `[1, 1.5]` on a reading of
 /// the literals rather than of the program.
-pub fn element_kind(expr: ref Expr, ty: ref Ty) -> String? sync {
+fn element_kind(expr: ref Expr, ty: ref Ty) -> String? sync {
     match expr {
         Expr::LitInt { .. } => return "a number",
         Expr::LitFloat(_, _) => return "a number",

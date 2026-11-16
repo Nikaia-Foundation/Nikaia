@@ -27,7 +27,7 @@ impl TermArena {
         return self.nodes.len() - 1
     }
 
-    pub fn at(ref self, id: i64) -> SolverTerm {
+    fn at(ref self, id: i64) -> SolverTerm {
         return self.nodes[id].clone()
     }
 
@@ -101,7 +101,7 @@ impl TermArena {
     }
 
     /// Whether `id` reads the variable `name`.
-    pub fn mentions(ref self, id: i64, name: ref String) -> bool {
+    fn mentions(ref self, id: i64, name: ref String) -> bool {
         return match self.nodes[id] {
             SolverTerm::Var(n) => n == name,
             SolverTerm::Neg(a) => self.mentions(a, name),
@@ -132,7 +132,7 @@ impl TermArena {
     }
 
     /// Every variable `id` reads, added to `names`.
-    pub fn variables(ref self, id: i64, mut names: collections::BTreeSet[String]) {
+    fn variables(ref self, id: i64, mut names: collections::BTreeSet[String]) {
         match self.nodes[id] {
             SolverTerm::Var(name) => {
                 names.insert(name.clone())
@@ -169,7 +169,7 @@ impl TermArena {
     }
 
     /// The value of an integer term that reads no variable, where it fits.
-    pub fn constant(ref self, id: i64) -> i64? {
+    fn constant(ref self, id: i64) -> i64? {
         return match self.nodes[id] {
             SolverTerm::Int(n) => n,
             SolverTerm::Neg(a) => {
@@ -201,7 +201,7 @@ impl TermArena {
 
     /// An integer term's value under `values`, where it has one: every
     /// variable it reads is given, and nothing leaves `i64`.
-    pub fn int_value(ref self, id: i64, values: ref collections::BTreeMap[String, i64]) -> i64? {
+    fn int_value(ref self, id: i64, values: ref collections::BTreeMap[String, i64]) -> i64? {
         return match self.nodes[id] {
             SolverTerm::Int(n) => n,
             SolverTerm::Var(name) => {
@@ -238,7 +238,7 @@ impl TermArena {
     /// **`id` with each variable `given` names replaced by its term**; a
     /// variable it does not name stays. Built anew at every node that is not
     /// a leaf, changed or not, as `nikaia-logic`'s arena builds it.
-    pub fn substitute(ref mut self, id: i64, given: ref collections::BTreeMap[String, i64]) -> i64 {
+    fn substitute(ref mut self, id: i64, given: ref collections::BTreeMap[String, i64]) -> i64 {
         let node = self.nodes[id].clone()
         return match node {
             SolverTerm::Var(name) => given.get(name) ?? id,
@@ -320,7 +320,7 @@ impl TermArena {
     }
 
     /// How many terms `id` is made of, counting a shared one each time.
-    pub fn size(ref self, id: i64) -> i64 {
+    fn size(ref self, id: i64) -> i64 {
         return 1 + match self.nodes[id] {
             SolverTerm::Neg(a) => self.size(a),
             SolverTerm::Not(a) => self.size(a),
@@ -382,7 +382,7 @@ impl TermArena {
         return self.nodes.len() - 1
     }
 
-    pub fn is_the_variable(ref self, id: i64, name: ref String) -> bool {
+    fn is_the_variable(ref self, id: i64, name: ref String) -> bool {
         return match self.nodes[id] {
             SolverTerm::Var(n) => n == name,
             else => false,

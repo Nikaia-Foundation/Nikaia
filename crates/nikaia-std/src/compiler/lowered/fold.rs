@@ -127,7 +127,7 @@ pub(crate) fn fold_shifted(lhs: &Expr, rhs: &Expr, x: &Integer, y: &Integer, lef
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn written_in_literals(expr: &Expr) -> bool {
+pub(crate) fn written_in_literals(expr: &Expr) -> bool {
     match expr {
         Expr::LitInt { .. } => true,
         Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); *op == UnaryOp::Neg && written_in_literals(expr) },
@@ -138,7 +138,7 @@ pub fn written_in_literals(expr: &Expr) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn shifts_literals(expr: &Expr) -> bool {
+pub(crate) fn shifts_literals(expr: &Expr) -> bool {
     match expr {
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); shifts_literals(expr) },
         Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); (*op == BinaryOp::Shl || *op == BinaryOp::Shr) && written_in_literals(lhs) && written_in_literals(rhs) || shifts_literals(lhs) || shifts_literals(rhs) },

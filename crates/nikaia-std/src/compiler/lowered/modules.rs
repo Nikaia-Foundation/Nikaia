@@ -101,7 +101,7 @@ pub(crate) fn inferred_sync(claim: &Sync) -> bool { matches!(claim, Sync::Inferr
 
 pub(crate) fn no_sync(claim: &Sync) -> bool { matches!(claim, Sync::No) }
 
-pub fn pause_path(chain: &[String]) -> String {
+pub(crate) fn pause_path(chain: &[String]) -> String {
     #[allow(unused_mut)] let mut steps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps;
     while ((k + 1) as usize) < chain.len() {
@@ -146,7 +146,7 @@ pub struct ModulesPause {
     pub site: Option<Site>,
 }
 
-pub fn lost_sync_unplaced(message: &str, help: &str) -> String { format!("warning[NK2211]: {}\n   = note: a method call it makes, or one of the calls it leads to, can pause.\n   = help: {}\n", message, help) }
+pub(crate) fn lost_sync_unplaced(message: &str, help: &str) -> String { format!("warning[NK2211]: {}\n   = note: a method call it makes, or one of the calls it leads to, can pause.\n   = help: {}\n", message, help) }
 
 pub fn declared_once(paths: &[String], declared: &[Vec<(String, Span)>]) -> Option<(i64, Finding)> {
     let mut seen: collections::BTreeMap<String, String> = collections::BTreeMap::new();
@@ -176,7 +176,7 @@ pub fn groups(packages: &[Option<String>]) -> Vec<(i64, i64)> {
     out
 }
 
-pub fn as_promised(ledger: &mut Ledger, another: &impl Fn(&str) -> bool) {
+pub(crate) fn as_promised(ledger: &mut Ledger, another: &impl Fn(&str) -> bool) {
     let mut unpromised: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (key, contract) in ledger.functions.iter() { if inferred_sync(&contract.sync_claim) && another(key) { unpromised.push(nikaia_std::block::Text::from(key.to_string())); } }
     for key in unpromised.iter() {
@@ -236,7 +236,7 @@ pub fn dependency_ledgers(library: &mut Ledger, contracts: &mut Ledger, describe
     as_its_own
 }
 
-pub fn absorb_own(contracts: &mut Ledger, renames: &collections::BTreeMap<String, String>, own: &Ledger) {
+pub(crate) fn absorb_own(contracts: &mut Ledger, renames: &collections::BTreeMap<String, String>, own: &Ledger) {
     contracts.sources = own.sources.copy_owned();
     let module: Option<String> = None;
     absorb_into(contracts, (module).as_deref(), renames, own);
@@ -264,7 +264,7 @@ pub fn package_names(packages: &[Option<String>]) -> collections::BTreeSet<Strin
 
 pub fn is_single_file(units: i64) -> bool { units == 1 }
 
-pub fn test_function(k: i64) -> String { format!("__nikaia_test_{}", k) }
+pub(crate) fn test_function(k: i64) -> String { format!("__nikaia_test_{}", k) }
 
 pub fn test_dispatcher(cli: &str, with_use: bool, count: i64, dispatch: &str) -> String {
     let mut text: String = String::from("");
@@ -357,7 +357,7 @@ pub fn modules_test_wrappers(titles: &[String], first: i64) -> String {
     text
 }
 
-pub fn modules_test_only_mark() -> String { String::from("cfg(test)") }
+pub(crate) fn modules_test_only_mark() -> String { String::from("cfg(test)") }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModulesReach {

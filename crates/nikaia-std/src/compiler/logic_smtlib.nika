@@ -35,7 +35,7 @@ pub fn lg_smtlib_write(arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> 
 
 /// A name as an SMT-LIB symbol: bare where it may be, quoted otherwise -
 /// `xs.len()` is `|xs.len()|`.
-pub fn lg_symbol(name: ref String) -> String {
+fn lg_symbol(name: ref String) -> String {
     let mut simple = name.len() > 0
     let mut first = true
     for c in name.chars() {
@@ -73,7 +73,7 @@ fn lg_smt_list(op: ref String, arena: ref TermArena, parts: ref Vec[i64], empty:
     return f"({op} {written.join(" ")})"
 }
 
-pub fn lg_term(arena: ref TermArena, id: i64) -> String {
+fn lg_term(arena: ref TermArena, id: i64) -> String {
     let node = arena.at(id)
     return match node {
         SolverTerm::Bool(b) => if b { "true" } else { "false" },

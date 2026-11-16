@@ -134,7 +134,7 @@ pub fn result_of(written: ref String, crate_word: ref String, parameters: ref Ve
 
 /// A view of a type, which the ledger's language writes with the `&` on the
 /// name.
-pub fn view_of(ty: Ty) -> Ty {
+fn view_of(ty: Ty) -> Ty {
     return match ty {
         Ty::Named { name, args, .. } => Ty::Named { name: name, args: args, view: true },
         Ty::Var { name, .. } => Ty::Var { name: name, view: true },

@@ -29,12 +29,12 @@ pub fn in_this_language(message: &str) -> String {
     out
 }
 
-pub fn is_rust_internal(note: &str) -> bool {
+pub(crate) fn is_rust_internal(note: &str) -> bool {
     for internal in ["#[deny(", "#[warn(", "#[allow(", "#[forbid(", "Cargo.toml", "cargo add", "RUST_BACKTRACE", "rustc --explain", "consider using the type `u32`", "consider using the type `u64`", "consider using the type `usize`", "consider calling `.as_ref()`", "consider calling `.as_mut()`", "you can `clone` the value and consume it"] { if note.contains(AsRef::<str>::as_ref(internal)) { return true; } }
     false
 }
 
-pub fn both_sides_the_same(message: &str) -> Option<String> {
+pub(crate) fn both_sides_the_same(message: &str) -> Option<String> {
     let expected = match backticked_after(message, "expected ") { Some(__nikaia_value) => __nikaia_value, None => return None };
     let found = match backticked_after(message, "found ") { Some(__nikaia_value) => __nikaia_value, None => return None };
     if expected == found { return Some(expected); }
@@ -134,12 +134,12 @@ pub fn said(text: &str) -> String {
     out
 }
 
-pub fn headed(level: &str, code: &str) -> String {
+pub(crate) fn headed(level: &str, code: &str) -> String {
     if code.is_empty() { return nikaia_std::block::Text::from(level.to_string()); }
     format!("{}[{}]", level, code)
 }
 
-pub fn word_in(line: &str, column: i64, word: &str) -> (i64, i64) {
+pub(crate) fn word_in(line: &str, column: i64, word: &str) -> (i64, i64) {
     let c: Vec<scalar> = nikaia_std::list::chars(line.chars());
     let w: Vec<scalar> = nikaia_std::list::chars(word.chars());
     if w.is_empty() { return (column, 1); }

@@ -14,7 +14,7 @@ pub fn spelled(wrote: &Wrote) -> String {
     }
 }
 
-pub fn written_root(names: &winnow_grammar::InternerContext, arg: &Expr) -> Option<Wrote> {
+pub(crate) fn written_root(names: &winnow_grammar::InternerContext, arg: &Expr) -> Option<Wrote> {
     match arg {
         Expr::Path(segments, _) => if ends_with_variant(names, segments, "Anywhere") { Some(Wrote::Anywhere) } else { None },
         Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); the_whole_filesystem(names, func, args) },
@@ -46,7 +46,7 @@ pub struct Reason {
     pub marked_at: String,
 }
 
-pub fn says_trusted(names: &winnow_grammar::InternerContext, config: &[ConfigArg]) -> bool {
+pub(crate) fn says_trusted(names: &winnow_grammar::InternerContext, config: &[ConfigArg]) -> bool {
     for option in config.iter() {
         if names.resolve(option.name) == "trusted" {
             return match &option.value {

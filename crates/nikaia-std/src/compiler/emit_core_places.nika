@@ -138,7 +138,7 @@ impl EmitState {
     /// be whatever a call is. `None => None` and not `.map(..)`'s implicit one,
     /// for the flattened case: where the method's own result is a `T?`, the
     /// `Some` arm hands it back as it is and the reach does not nest.
-    pub fn emit_core_safe_method[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_safe_method[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let flattens = self.facts.flattened_reaches.contains(node_key(receiver))
         // **The scrutinee is lent where the call changes nothing** (ADR-278
         // D18): what comes out is the **call's** result, so nothing about the
@@ -210,7 +210,7 @@ impl EmitState {
     }
 
     /// `(a, b)`.
-    pub fn emit_core_tuple[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, parts: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_tuple[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, parts: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let sliced: Vec[bool] = []
         self.emit_core_tuple_sliced(world, walk, out, host, parts, sliced, depth, flow, scope)
     }
@@ -218,7 +218,7 @@ impl EmitState {
     /// A tuple whose parts at the positions `sliced` marks are lent as
     /// slices, `&(part)[..]`: a match subject whose arms put a list pattern
     /// there (ADR-355 D5, #896).
-    pub fn emit_core_tuple_sliced[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, parts: ref Vec[Expr], sliced: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_tuple_sliced[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, parts: ref Vec[Expr], sliced: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         out.push("(")
         let mut i = 0
         for part in parts {
@@ -277,7 +277,7 @@ impl EmitState {
     /// the checker placed in the task's block** (ADR-327 D9,
     /// `check_core_place_in_block`) is built there: `Place::Block`, from an
     /// array so that its items take the list's element type.
-    pub fn emit_core_list_lit[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, items: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_list_lit[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, items: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let placed = self.facts.placed_in_block.contains(node_key(node))
         if placed && items.len() == 0 {
             out.push("nikaia_std::block::list(nikaia_std::block::Place::Block)")
@@ -310,7 +310,7 @@ impl EmitState {
     /// asked for an array, whose length the checker found equal to the type's,
     /// and `vec![v; n]` for a `Vec`, where a count not written in literals goes
     /// through `count::of`, which aborts on a negative one (D2).
-    pub fn emit_core_list_repeat[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, value: ref Expr, count: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_list_repeat[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, value: ref Expr, count: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         if self.facts.array_literals.contains(node_key(node)) {
             out.push("[")
             self.emit_expr(world, walk, out, host, value, depth, flow, scope)
@@ -332,7 +332,7 @@ impl EmitState {
 
     /// `base.name`, and a `?.` after a value that cannot be absent, which is the
     /// same (ADR-279 D13).
-    pub fn emit_core_field[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_field[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **`field.name` is the field's own name as text** (ADR-304 D2): a
         // literal, because the turn this copy stands at is known.
         let named = walk.reflected(world, base, name, "name")
@@ -425,7 +425,7 @@ impl EmitState {
     /// Part I 3.5: `x?.name` reaches the field only where there is something to
     /// reach it on. **`map` or `and_then`, and the checker says which**: over a
     /// field that is *itself* a `T?` `map` would make an `Option<Option<T>>`.
-    pub fn emit_core_safe_field[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_safe_field[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, name: winnow_grammar::Symbol, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let field = emit_text(world, name)
         let flattens = self.facts.flattened_reaches.contains(node_key(base))
         let mut how: String = "map"
@@ -459,7 +459,7 @@ impl EmitState {
     /// written. **A read is a call and a place is brackets** (ADR-293 D4): the
     /// **left of an assignment** is not a read, so the brackets there stay the
     /// language below's own.
-    pub fn emit_core_index[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, index: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_index[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, index: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **An element taken out of a `mut` place** to be given back
         // (ADR-views-1 D3, #1208): the brackets are the place, and the
         // element's empty value or stand-in stays there until it is.
@@ -596,7 +596,7 @@ impl EmitState {
     /// (ADR-182 D1): `num::value` and not a `*`, which is the identity for a
     /// number that is already a number, so the rule cannot be written onto the
     /// wrong operand.
-    pub fn emit_core_cast[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, operand: ref Expr, ty: ref Type, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_cast[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, operand: ref Expr, ty: ref Type, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let into = self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, EmitLifetimes::Elided)
         let mut viewed = false
         match operand {
@@ -655,7 +655,7 @@ impl EmitState {
 
     /// `Name(field: value, ..)`: a struct built, its cleanup, its nullable,
     /// boxed and text-of-either fields, and the defaults of the fields left out.
-    pub fn emit_core_struct_lit[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, name: winnow_grammar::Symbol, fields: ref Vec[FieldInit], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_struct_lit[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, name: winnow_grammar::Symbol, fields: ref Vec[FieldInit], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // `unaliased`, the same as a type: `h::Request(path: ..)` builds
         // `http::Request` (ADR-286 D12).
         let owner = unaliased_in(world.aliases, emit_text(world, name))
@@ -797,7 +797,7 @@ impl EmitState {
     /// **`V()` for a struct every field of which has a default** (ADR-384
     /// D1): what `or_default` puts in where the language below has no
     /// `Default` for `V`.
-    pub fn emit_place_all_defaults(ref self, world: ref EmitWorld, name: ref String) -> String {
+    fn emit_place_all_defaults(ref self, world: ref EmitWorld, name: ref String) -> String {
         let owner = unaliased_in(world.aliases, name)
         let mut parts: Vec[String] = []
         for (field, default, ty) in self.field_defaults(world, owner) {
@@ -810,7 +810,7 @@ impl EmitState {
     /// the named fields, then `..base`, from which every field the program did
     /// not name comes **by move**. The type is the checker's answer, read back
     /// under the node's id.
-    pub fn emit_core_with[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, fields: ref Vec[FieldInit], at: u32, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_with[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, base: ref Expr, fields: ref Vec[FieldInit], at: u32, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let known = self.facts.with_types.get(node_key(node))
         if known == null {
             throw EmitRefused { message: "The type of this `with` is unknown. This is a compiler bug: the check should have reported it first.", at: at as i64 }

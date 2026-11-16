@@ -27,7 +27,7 @@ impl CheckState {
     /// `f"…"` whose names are, and `join` or `with_extension` over them.
     /// Anything else - a parameter, a field, what `walk` handed over - may be
     /// the operating system's, and is not.
-    pub fn made_from_text(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    fn made_from_text(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
             Expr::LitStr { .. } => true,
             Expr::Variable(symbol, _) => {
@@ -91,7 +91,7 @@ impl CheckState {
     /// `to_text()` or `display()`. Whether it was one is whether it is
     /// answered: `true` where `value` is an `f"…"` that wants text and was
     /// looked at.
-    pub fn a_name_in_text(ref mut self, world: ref CheckWorld, want: ref Ty, value: ref Expr?, span: ref Span) -> bool sync {
+    fn a_name_in_text(ref mut self, world: ref CheckWorld, want: ref Ty, value: ref Expr?, span: ref Span) -> bool sync {
         let literal = value ?? return false
         return match literal {
             Expr::LitInterpolated { parts, .. } => {

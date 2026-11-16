@@ -12,7 +12,7 @@ use std::collections
 /// it can fail, it changes what it is called on, it touches something outside
 /// the program's values, it takes a lock. `null` for a contract that does
 /// none of them.
-pub fn check_not_pure_because(contract: ref FnContract) -> String? {
+fn check_not_pure_because(contract: ref FnContract) -> String? {
     if !contract.sync_claim.is_sync() {
         return "can pause"
     }
@@ -332,7 +332,7 @@ impl CheckState {
     /// **The branches of an `overlap` meet on nothing** (`NK2104`, ADR-292 D2):
     /// a branch that binds is refused on its own, and two that depend on each
     /// other are refused at the later one - one finding per branch.
-    pub fn branches_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block, changed_by: ref Vec[collections::BTreeSet[String]]) sync {
+    fn branches_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block, changed_by: ref Vec[collections::BTreeSet[String]]) sync {
         for stmt in block.stmts {
             match stmt.node {
                 Stmt::Let { names, .. } => {
@@ -394,7 +394,7 @@ impl CheckState {
     /// finding per task, at the later one; a task inside another is that task's.
     /// Nor does a task meet the main-line statements in its window
     /// (`check_walks_window`, Part I 8.1.2, #1259).
-    pub fn tasks_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block, group: i64) sync {
+    fn tasks_meet_on_nothing(ref mut self, world: ref CheckWorld, block: ref Block, group: i64) sync {
         let mut count = 0
         for (_, wait) in self.facts.async_waits {
             if wait.group == group {
@@ -457,7 +457,7 @@ impl CheckState {
     /// records which of them the guard reads and which of those are copied out
     /// for it (a number, a `bool`, a `char`, and a view, which is a copy too:
     /// the guard compares the `&str`, not the `&&str` the box lends, #680).
-    pub fn a_guard_reading_inside_a_box[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, pattern: ref MatchPattern, body: ref Expr, guard: ref Expr) sync {
+    fn a_guard_reading_inside_a_box[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, pattern: ref MatchPattern, body: ref Expr, guard: ref Expr) sync {
         let mut inside: Vec[String] = []
         self.names_inside_boxes(world, pattern, inside)
         if inside.len() == 0 {
@@ -484,7 +484,7 @@ impl CheckState {
 
     /// **The free calls and the forms in a claim that are not a read**
     /// (ADR-269 D3). Methods are the frame's; this is what the tree says.
-    pub fn a_claim_reaches[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, condition: ref Expr, mut not_pure: Vec[String]) sync {
+    fn a_claim_reaches[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, condition: ref Expr, mut not_pure: Vec[String]) sync {
         let mut found: Vec[String] = []
         for each in check_visit_preorder(condition) {
             self.a_claim_looks_at(world, host, each, found)

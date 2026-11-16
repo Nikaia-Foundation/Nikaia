@@ -253,7 +253,7 @@ pub(crate) fn check_core_comptime_all_turned(state: &CheckState, world: &CheckWo
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: winnow_grammar::Symbol, ty: Option<&Type>, value: &Expr, bounds: &[ConfigArg], span: &Span) -> Ty {
+pub(crate) fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: winnow_grammar::Symbol, ty: Option<&Type>, value: &Expr, bounds: &[ConfigArg], span: &Span) -> Ty {
     let raised: Option<CheckRaised> = state.raised_bounds(world, bounds, span);
     let outside = state.flow.inside_a_comptime;
     state.flow.inside_a_comptime = true;
@@ -441,7 +441,7 @@ pub fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_a_block_over_a_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Expr, target: winnow_grammar::Symbol, content: &str, span: &Span) -> Ty {
+pub(crate) fn check_core_a_block_over_a_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Expr, target: winnow_grammar::Symbol, content: &str, span: &Span) -> Ty {
     let owner = nikaia_std::block::Text::from(world.words.resolve(target).to_string());
     let mut entry: String = String::from("");
     let mut any = false;

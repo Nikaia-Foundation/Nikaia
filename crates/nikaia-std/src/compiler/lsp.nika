@@ -51,7 +51,7 @@ impl Error for LspRefusal {
 /// **One message's body**: the header lines up to the blank one, then exactly
 /// the bytes its `Content-Length` names (Part III 17.1's `read_line` and
 /// `read_exact`); nothing where the input ends before a header.
-pub fn lsp_read_message() -> String? throws {
+fn lsp_read_message() -> String? throws {
     let mut length = -1
     while true {
         let line = io::read_line() ?? return null
@@ -74,40 +74,40 @@ pub fn lsp_read_message() -> String? throws {
 /// **One message to the editor**: its header and its body. Standard output is
 /// flushed before the next read waits (`io::read_line`), so the editor has the
 /// answer before this waits for the next question.
-pub fn lsp_write_message(body: ref json::Value) throws {
+fn lsp_write_message(body: ref json::Value) throws {
     let text = json::to_string(body)
     print(f"Content-Length: {text.len()}\r\n\r\n{text}")
 }
 
 /// An object, its members in the order given.
-pub fn lsp_object(members: Vec[(ref String, json::Value)]) -> json::Value {
+fn lsp_object(members: Vec[(ref String, json::Value)]) -> json::Value {
     return json::Value::Object(members.iter().map(fn(member) { json::Member { key: member.0.clone(), value: member.1.clone() } }).collect())
 }
 
 /// A string value.
-pub fn lsp_string(text: ref String) -> json::Value {
+fn lsp_string(text: ref String) -> json::Value {
     return json::Value::Str(text.clone())
 }
 
 /// A whole number value.
-pub fn lsp_number(n: i64) -> json::Value {
+fn lsp_number(n: i64) -> json::Value {
     return json::Value::Number(f"{n}")
 }
 
 /// The answer to the request `id`.
-pub fn lsp_respond(id: ref json::Value, result: json::Value) throws {
+fn lsp_respond(id: ref json::Value, result: json::Value) throws {
     lsp_write_message(lsp_object([("jsonrpc", lsp_string("2.0")), ("id", id.clone()), ("result", result)]))
 }
 
 /// The request `id` refused with `code` and `message` (JSON-RPC 2.0, 5.1).
-pub fn lsp_refuse(id: ref json::Value, code: i64, message: ref String) throws {
+fn lsp_refuse(id: ref json::Value, code: i64, message: ref String) throws {
     let error = lsp_object([("code", lsp_number(code)), ("message", lsp_string(message))])
     lsp_write_message(lsp_object([("jsonrpc", lsp_string("2.0")), ("id", id.clone()), ("error", error)]))
 }
 
 /// What `initialize` answers: the whole text of a document is sent on each
 /// change (`textDocumentSync` 1), and "go to definition" is offered (#1396).
-pub fn lsp_capabilities() -> json::Value {
+fn lsp_capabilities() -> json::Value {
     return lsp_object([("capabilities", lsp_object([("textDocumentSync", lsp_number(1)), ("definitionProvider", json::Value::Bool(true))]))])
 }
 
@@ -197,7 +197,7 @@ pub fn lsp_serve[H: LspHost](host: ref H) -> i64 throws {
 /// **The path a `file://` URI names**, each `%XX` decoded as the byte it
 /// writes; nothing for a URI of another scheme or one whose bytes are not
 /// UTF-8.
-pub fn lsp_uri_path(uri: ref String) -> String? {
+fn lsp_uri_path(uri: ref String) -> String? {
     let rest = uri.strip_prefix("file://") ?? return null
     let given: Vec[u8] = rest.bytes().collect()
     let mut decoded: Vec[u8] = []
@@ -287,7 +287,7 @@ fn lsp_text_of(path: ref String, open: ref collections::BTreeMap[String, String]
 /// **The byte of `source` at LSP's place** `line`, `character` (both from 0,
 /// the column in UTF-16 code units): `lsp_position` turned around. A column
 /// past the line's end is its end.
-pub fn lsp_offset(source: ref String, line: i64, character: i64) -> i64 {
+fn lsp_offset(source: ref String, line: i64, character: i64) -> i64 {
     let mut at_line = 0
     let mut column = 0
     let mut byte = 0
@@ -391,7 +391,7 @@ fn lsp_uri_of(path: ref String, uris: ref collections::BTreeMap[String, String])
 
 /// **The `file://` URI of a path**: every byte but a letter, a digit, `-`,
 /// `.`, `_`, `~` and `/` written as `%XX` (RFC 3986 2.3).
-pub fn lsp_path_uri(path: ref String) -> String {
+fn lsp_path_uri(path: ref String) -> String {
     let mut out: String = "file://"
     let digits: Vec[scalar] = "0123456789ABCDEF".chars().collect()
     for b in path.bytes() {
@@ -413,7 +413,7 @@ pub fn lsp_path_uri(path: ref String) -> String {
 /// help as lines of their own, the range of the place it marks (the one
 /// `nikaia check`'s `-->` names), and each place that explains it as
 /// `relatedInformation`.
-pub fn lsp_diagnostic(shown: ref Shown, source: ref String, uri: ref String) -> json::Value {
+fn lsp_diagnostic(shown: ref Shown, source: ref String, uri: ref String) -> json::Value {
     let mut message = said(shown.message)
     for note in shown.notes {
         message.push_str(ref f"\nnote: {said(note)}")
@@ -452,7 +452,7 @@ pub fn lsp_diagnostic(shown: ref Shown, source: ref String, uri: ref String) -> 
 /// it: the line `span` starts on, `word` found from there (`word_in`), or
 /// for no word the span's first line without its trailing space; at least one
 /// character. Lines from 0, columns in UTF-16 code units from 0.
-pub fn lsp_range(source: ref String, span: ref Span, word: ref String) -> json::Value {
+fn lsp_range(source: ref String, span: ref Span, word: ref String) -> json::Value {
     let lines: Vec[ref String] = source.split("\n").collect()
     let at = span.start as i64
     let end = span.end as i64

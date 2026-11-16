@@ -509,7 +509,7 @@ fn changed_falls(mut out: BoundsChanged, name: ref String) {
 /// assuming itself larger is dropped. The passes that only collect prove
 /// nothing. The pass that checks proves too, and when it keeps every bound it
 /// assumed, what it proved stands.
-pub fn bounds_aggressive(
+fn bounds_aggressive(
 	args: ref Vec[FnArg],
 	body: ref Block,
 	nonnegative: collections::BTreeSet[String],
@@ -621,7 +621,7 @@ fn bounds_rounds(
 /// found assumed; then each round keeps of the assumed bounds those every
 /// write held, with them assumed, until none is dropped. Not settled, no
 /// field has one.
-pub fn bounds_fields(
+fn bounds_fields(
 	mut context: BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
@@ -1152,7 +1152,7 @@ fn bounding_relations_push(mut walk: BoundsWalk, mut facts: BoundsFacts, name: r
 /// **The interval a body's every value handed back lies in** (ADR-306 D32):
 /// a grammar action's, walked with `context` as its alternative's bindings
 /// give it; nothing where one value has none.
-pub fn bounds_action_range(
+fn bounds_action_range(
 	body: ref Block,
 	context: ref BoundsContext,
 	program: ref Program,
@@ -10071,7 +10071,7 @@ fn changed_by_frame(
 /// takes a loop's: every one is assumed, then each walk keeps those proved
 /// at every return under the assumption, until none is dropped. A name
 /// two free functions share has none.
-pub fn bounds_returns(
+fn bounds_returns(
 	mut context: BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,

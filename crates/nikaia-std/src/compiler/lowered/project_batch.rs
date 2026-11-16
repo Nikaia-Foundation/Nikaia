@@ -3,14 +3,14 @@
 
 pub fn project_batch_var() -> String { String::from("NIKAIA_TEST_BATCH") }
 
-pub fn project_batch_module(k: i64, rust: &str) -> Option<String> {
+pub(crate) fn project_batch_module(k: i64, rust: &str) -> Option<String> {
     if !rust.starts_with("pub fn main(") && !rust.contains("\npub fn main(") { return None; }
     Some(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(format!("pub mod p{} ", k), "{\n")), rust)), "\n}\n")))
 }
 
 pub(crate) fn project_batch_header() -> String { String::from("#![allow(warnings)]\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n") }
 
-pub fn project_batch_ranges(names: &[String], modules: &[String]) -> String {
+pub(crate) fn project_batch_ranges(names: &[String], modules: &[String]) -> String {
     let mut first = project_batch_header().lines().count() as i64 + 1;
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (name, module) in names.iter().zip(modules.iter()) {
@@ -21,7 +21,7 @@ pub fn project_batch_ranges(names: &[String], modules: &[String]) -> String {
     nikaia_std::block::Text::from(parts.join(""))
 }
 
-pub fn project_batch_cited(said: &str, ranges: &str, file: &str) -> Vec<String> {
+pub(crate) fn project_batch_cited(said: &str, ranges: &str, file: &str) -> Vec<String> {
     let mut lines: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for piece in said.split(&*format!("{}.rs:", file)).skip(1) {
         let digits: String = piece.chars().take_while(|&c| { c.is_ascii_digit() }).collect();
@@ -39,7 +39,7 @@ pub fn project_batch_cited(said: &str, ranges: &str, file: &str) -> Vec<String> 
     cited
 }
 
-pub fn project_batch_crate(names: &[String], ks: &[i64], modules: &[String]) -> String {
+pub(crate) fn project_batch_crate(names: &[String], ks: &[i64], modules: &[String]) -> String {
     let mut parts: Vec<String> = nikaia_std::block::List::from_array_in([project_batch_header()], nikaia_std::block::Place::Block);
     for module in modules.iter() { parts.push(nikaia_std::block::Text::from(module.to_string())); }
     parts.push(String::from("fn main() -> std::process::ExitCode {\n    match std::env::args().nth(1).as_deref().unwrap_or(\"\") {\n"));
@@ -48,7 +48,7 @@ pub fn project_batch_crate(names: &[String], ks: &[i64], modules: &[String]) -> 
     nikaia_std::block::Text::from(parts.join(""))
 }
 
-pub async fn project_batch_lowered<H: ProjectDriveWrapperHost>(host: &H, list: &std::path::Path, no_cache: bool) -> Result<(String, Vec<fs::Path>), nikaia_std::error::Thrown<ProjectDriveRefusal>> {
+pub(crate) async fn project_batch_lowered<H: ProjectDriveWrapperHost>(host: &H, list: &std::path::Path, no_cache: bool) -> Result<(String, Vec<fs::Path>), nikaia_std::error::Thrown<ProjectDriveRefusal>> {
     let text = match fs::read_to_string(list, &fs::Root::Anywhere).await {
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::throwing(ProjectDriveRefusal::Failed(format!("reading the batch list {}: {}", nikaia_std::fs::path::display(&(list)), error)), &"project_batch_lowered")) },

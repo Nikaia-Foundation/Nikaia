@@ -93,7 +93,7 @@ pub(crate) fn vc_index(methods: &mut collections::BTreeMap<String, Vec<(bool, St
     methods.entry(String::from(name)).or_insert(vec![]).push((own, nikaia_std::block::Text::from(key.to_string())));
 }
 
-pub fn vc_coalesced(facts: &CheckFacts) -> collections::BTreeSet<i64> {
+pub(crate) fn vc_coalesced(facts: &CheckFacts) -> collections::BTreeSet<i64> {
     let mut ids: collections::BTreeSet<i64> = collections::BTreeSet::new();
     ids.extend(facts.lent_coalesces.keys().copied());
     ids.extend(facts.view_coalesces.iter().cloned());
@@ -106,7 +106,7 @@ pub fn vc_coalesced(facts: &CheckFacts) -> collections::BTreeSet<i64> {
     ids
 }
 
-pub fn vc_mut_viewed(facts: &CheckFacts) -> collections::BTreeSet<i64> {
+pub(crate) fn vc_mut_viewed(facts: &CheckFacts) -> collections::BTreeSet<i64> {
     let mut ids: collections::BTreeSet<i64> = collections::BTreeSet::new();
     ids.extend(facts.mut_view_reads.keys().copied());
     ids

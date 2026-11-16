@@ -128,7 +128,7 @@ comptime COMPTIME_BUNDLE_NAMED: Array[ref String, 3] = ["nikaia_std", "winnow", 
 /// **The library and the crates Cargo's JSON messages name** (#1163): the
 /// `library` target's dynamic library (`.so`, `.dylib` or `.dll`, as the
 /// platform names one) and each named crate's `rlib`.
-pub fn comptime_bundle_artifacts(messages: String, named: ref Vec[String], library: ref String) -> ComptimeBundleArtifacts {
+fn comptime_bundle_artifacts(messages: String, named: ref Vec[String], library: ref String) -> ComptimeBundleArtifacts {
     let mut dylib: fs::Path? = null
     let mut rlibs: Vec[(String, fs::Path)] = []
     for message in cargo_json_lines(messages) {

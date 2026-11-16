@@ -178,7 +178,7 @@ pub fn bounds_report_trace_rows(asked: &str, rows: &[String]) -> String {
     format!("bounds trace {}:\n{}\n", asked, nikaia_std::block::Text::from(rows.join("\n")))
 }
 
-pub fn bounds_report_line(source: &str, at: i64) -> i64 {
+pub(crate) fn bounds_report_line(source: &str, at: i64) -> i64 {
     let end = at.min(source.as_bytes().len() as i64);
     nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(0..end)).iter().copied().filter(|&b| { b == 10 }).count() as i64 + 1
 }

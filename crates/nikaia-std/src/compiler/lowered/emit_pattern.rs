@@ -4,7 +4,7 @@
 impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn emit_pattern<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &Spanned<Pattern>) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    pub(crate) fn emit_pattern<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &Spanned<Pattern>) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         let st = out.mark();
         if emit_is_a_binding_text(world, &walk, &pattern.node) {
             match &pattern.node {

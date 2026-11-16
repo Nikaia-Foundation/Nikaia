@@ -42,7 +42,7 @@ pub struct ProverWalk {
 
 /// **Every body of the program, walked once**: each function and method,
 /// and each test and bench, which have no callers.
-pub fn prover_bodies(mut walk: ProverWalk, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) sync {
+fn prover_bodies(mut walk: ProverWalk, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) sync {
     for item in program.items {
         match item.node {
             Item::Fn { .. } => prover_function(walk, item, null, false, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition),
@@ -2515,7 +2515,7 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
 /// is proved, by the guard `guard` where one proves it; an `operation` (a
 /// `/`, `%`, `+`, `-` or `*`, D7) likewise, and whether its goal was
 /// `stated` at all.
-pub fn prover_outside_record(mut walk: ProverWalk, span: Span, written: String, name: ref String, source: ref String?, guard: (i64, String)?, proved: bool, operation: bool, stated: bool, site: i64) {
+fn prover_outside_record(mut walk: ProverWalk, span: Span, written: String, name: ref String, source: ref String?, guard: (i64, String)?, proved: bool, operation: bool, stated: bool, site: i64) {
     let mut guard_at: i64 = -1
     let mut condition: String = ""
     match guard {
@@ -3098,7 +3098,7 @@ fn prover_qualified(segments: ref Vec[winnow_grammar::Symbol], words: ref winnow
 }
 
 /// Whether a call is one of the checker's `assert`s.
-pub fn prover_an_assert_call(func: ref Expr, args: ref Vec[Expr], span: Span, claims: ref collections::BTreeSet[(i64, i64)]) -> bool {
+fn prover_an_assert_call(func: ref Expr, args: ref Vec[Expr], span: Span, claims: ref collections::BTreeSet[(i64, i64)]) -> bool {
     let named = match func {
         Expr::Variable(_, _) => true,
         else => false,
@@ -3112,7 +3112,7 @@ pub fn prover_an_assert_call(func: ref Expr, args: ref Vec[Expr], span: Span, cl
 /// **The claims of an `unsafe` block of nothing but `assume`s** (ADR-376
 /// D1), which hold after it: a block that does anything else may change what
 /// they speak of, and keeps them to itself.
-pub fn prover_assumed_in_unsafe(block: ref Block, words: ref winnow_grammar::InternerContext) -> Vec[Expr] {
+fn prover_assumed_in_unsafe(block: ref Block, words: ref winnow_grammar::InternerContext) -> Vec[Expr] {
     let mut out: Vec[Expr] = []
     for stmt in block.stmts {
         match stmt.node {
@@ -3134,7 +3134,7 @@ pub fn prover_assumed_in_unsafe(block: ref Block, words: ref winnow_grammar::Int
 }
 
 /// Whether a claim the checker kept is an `assume` (ADR-376 D1).
-pub fn prover_an_assume(func: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+fn prover_an_assume(func: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
     return match func {
         Expr::Variable(name, _) => words.resolve(name) == "assume",
         else => false,

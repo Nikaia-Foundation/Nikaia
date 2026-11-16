@@ -45,7 +45,7 @@ fn emit_held_all(items: ref Vec[Expr], lazy: bool, called: bool) -> (Vec[ref Exp
 /// runs (not lazy, and no call ran before it in the statement), and whether a
 /// call has run by the end of `expr`. The caller keeps the receivers the
 /// checker marked as held reaches.
-pub fn emit_held_in(expr: ref Expr, lazy: bool, called: bool) -> (Vec[ref Expr], EmitHeldFound) {
+fn emit_held_in(expr: ref Expr, lazy: bool, called: bool) -> (Vec[ref Expr], EmitHeldFound) {
     let mut found: Vec[ref Expr] = []
     let mut flags: Vec[bool] = []
     let mut ran = called
@@ -213,7 +213,7 @@ fn emit_mentions(world: ref EmitWorld, expr: ref Expr, name: ref String) -> bool
 
 /// Whether `declared` is `let mut xs = []` and `next` is `xs.resize(n, v)` with
 /// `std`'s `resize`: one allocation of a known length, `vec![v; n]`.
-pub fn emit_filled_at_once(world: ref EmitWorld, own: ref Ledger, own_methods: ref MethodIndex, declared: ref Stmt, next: ref Stmt) -> bool {
+fn emit_filled_at_once(world: ref EmitWorld, own: ref Ledger, own_methods: ref MethodIndex, declared: ref Stmt, next: ref Stmt) -> bool {
     let name = emit_declared_empty(world, declared) ?? return false
     return match next {
         Stmt::Expr(inner) => emit_resizes(world, own, own_methods, name, inner),
@@ -249,7 +249,7 @@ fn emit_resizes(world: ref EmitWorld, own: ref Ledger, own_methods: ref MethodIn
 }
 
 /// The arguments of a `resize(n, v)` statement, length first: empty for any other statement.
-pub fn emit_resize_args(next: ref Stmt) -> Vec[ref Expr] {
+fn emit_resize_args(next: ref Stmt) -> Vec[ref Expr] {
     let mut out: Vec[ref Expr] = []
     match next {
         Stmt::Expr(inner) => {
@@ -270,7 +270,7 @@ pub fn emit_resize_args(next: ref Stmt) -> Vec[ref Expr] {
 }
 
 /// The expressions an `overlap`'s statements are.
-pub fn emit_branch_values(block: ref Block) -> Vec[ref Expr] {
+fn emit_branch_values(block: ref Block) -> Vec[ref Expr] {
     let mut out: Vec[ref Expr] = []
     for stmt in block.stmts {
         match stmt.node {
@@ -324,7 +324,7 @@ impl EmitState {
     /// The options a call by name has, from the contract that declares them:
     /// this unit's own first, then its constructor's, then `std`'s. Empty where
     /// the callee has none, and where it cannot be resolved at all.
-    pub fn options_of(ref self, world: ref EmitWorld, func: ref Expr) -> Vec[ConfigContract] {
+    fn options_of(ref self, world: ref EmitWorld, func: ref Expr) -> Vec[ConfigContract] {
         let name = call_written_name(world.words, func) ?? return []
         let constructor = f"{name}::new"
         if self.own_contracts.functions.contains_key(name) {
@@ -367,7 +367,7 @@ impl EmitState {
 
     /// Whether the channel a `catch` guards is a named error's. Only the
     /// outermost call, and only a call by name.
-    pub fn caught_channel_is_named(ref self, world: ref EmitWorld, expr: ref Expr) -> bool {
+    fn caught_channel_is_named(ref self, world: ref EmitWorld, expr: ref Expr) -> bool {
         let joined = self.emit_joined_set(world, expr)
         if joined != null {
             return self.named_error_of(world, joined ?? return false) != 0
@@ -385,7 +385,7 @@ impl EmitState {
     }
 
     /// The sum an expression a `catch` guards fails in, where it is one.
-    pub fn caught_sum(ref self, world: ref EmitWorld, expr: ref Expr) -> String? {
+    fn caught_sum(ref self, world: ref EmitWorld, expr: ref Expr) -> String? {
         let joined = self.emit_joined_set(world, expr)
         if joined != null {
             let sum = self.sums.get(joined ?? return null) ?? return null
@@ -416,7 +416,7 @@ impl EmitState {
 
     /// Whether a **`catch` handler** can pause (#1715): any call in it by
     /// the key it resolves to, or a method call the checker said pauses.
-    pub fn block_pauses(ref self, world: ref EmitWorld, block: ref Block) -> bool {
+    fn block_pauses(ref self, world: ref EmitWorld, block: ref Block) -> bool {
         for each in visited_in_block(block) {
             if self.expr_pauses(world, each) {
                 return true
@@ -451,7 +451,7 @@ impl EmitState {
     }
 
     /// Declare the keeps a statement needs, once.
-    pub fn write_keep_prelude(ref self, mut walk: EmitWalk, mut out: EmitOut, function: ref String, at: i64, depth: i64) {
+    fn write_keep_prelude(ref self, mut walk: EmitWalk, mut out: EmitOut, function: ref String, at: i64, depth: i64) {
         if walk.preluded.contains(at) {
             return
         }
@@ -466,7 +466,7 @@ impl EmitState {
 
     /// The ledger key a written callee resolves to, the way the keep plan
     /// resolved it, where the callee takes a keep.
-    pub fn keeping_callee(ref self, world: ref EmitWorld, func: ref Expr) -> String? {
+    fn keeping_callee(ref self, world: ref EmitWorld, func: ref Expr) -> String? {
         let name = emit_written_callee(world, func) ?? return null
         if self.own_contracts.functions.contains_key(name) {
             if emit_ledger_takes_a_keep(self.own_contracts, name) {
@@ -482,14 +482,14 @@ impl EmitState {
 
     /// How the checker said this key goes into a map's brackets, where the
     /// map's keys are owned (ADR-293 D1).
-    pub fn map_key(ref self, index: ref Expr, written: bool) -> FactKeyForm? {
+    fn map_key(ref self, index: ref Expr, written: bool) -> FactKeyForm? {
         let form = self.facts.map_keys.get((node_key(index), written)) ?? return null
         return form.clone()
     }
 
     /// Whether `place` is a `mut` parameter of `function`, or a field of one: a
     /// value that stays the caller's (ADR-094 D3).
-    pub fn stays_the_callers(ref self, world: ref EmitWorld, function: ref String, place: ref Expr) -> bool {
+    fn stays_the_callers(ref self, world: ref EmitWorld, function: ref String, place: ref Expr) -> bool {
         return match place {
             Expr::Variable(name, _) => self.changes_in_place(function, emit_text(world, name)),
             Expr::Field { base, .. } => self.stays_the_callers(world, function, base),
@@ -500,7 +500,7 @@ impl EmitState {
     /// **The boxed parts a guard reads, read through the box** (ADR-246 D5
     /// item 2): the guard runs before the arm opens them, so each name it reads
     /// is bound again to a view of what its box holds.
-    pub fn emit_core_guard_reopening[H: EmitHost](ref self, world: ref EmitWorld, host: ref H, pattern: ref MatchPattern, guard: ref Expr) -> String {
+    fn emit_core_guard_reopening[H: EmitHost](ref self, world: ref EmitWorld, host: ref H, pattern: ref MatchPattern, guard: ref Expr) -> String {
         let boxed = self.boxed_bindings(world, pattern)
         let mut read: Vec[String] = []
         for each in self.emit_holes_names_read(world, host, guard) {

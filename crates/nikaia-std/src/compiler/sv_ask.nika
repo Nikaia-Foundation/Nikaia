@@ -40,7 +40,7 @@ pub comptime SV_LOG_PREFIX: ref String = "sv:"
 /// one, else the new engine's: a proof is its log (`SvDriven::Proved`), a
 /// model or an unknown an `LgAnswer` as `lg_check` gives them. Nothing here
 /// is checked yet: the caller checks what it keeps.
-pub fn sv_ask(arena: ref TermArena, facts: ref Vec[i64], goal: i64, budget: ref LgBudget) -> SvDriven sync {
+fn sv_ask(arena: ref TermArena, facts: ref Vec[i64], goal: i64, budget: ref LgBudget) -> SvDriven sync {
 	let fm = lg_check(arena, facts, goal, budget)
 	if env::var(SV_ASK_COMPARE) != null {
 		return sv_ask_compared(arena, facts, goal, budget, fm)
@@ -117,14 +117,14 @@ fn sv_ask_new_kind(arena: ref TermArena, facts: ref Vec[i64], goal: i64, new: re
 
 /// **Whether `log` refutes the query of `facts` and `goal`'s negation**:
 /// the clauses `sv_cnf` makes of them, the log replayed by `sv_check`.
-pub fn sv_log_verified(arena: ref TermArena, facts: ref Vec[i64], goal: i64, log: ref Vec[SvStep]) -> bool {
+fn sv_log_verified(arena: ref TermArena, facts: ref Vec[i64], goal: i64, log: ref Vec[SvStep]) -> bool {
 	let mut why = lg_why()
 	let cnf = sv_cnf(arena, facts, goal, why) ?? return false
 	return sv_check(cnf.query, log).ok
 }
 
 /// **The log as the book writes it**: `SV_LOG_PREFIX` and its steps.
-pub fn sv_log_text(log: ref Vec[SvStep]) -> String {
+fn sv_log_text(log: ref Vec[SvStep]) -> String {
 	let mut steps: Vec[String] = []
 	for step in log {
 		steps.push(sv_step_text(step))
@@ -177,7 +177,7 @@ fn sv_row_word(row: ref SvRow) -> String {
 }
 
 /// **`sv_log_text` read back**, or nothing for text it did not write.
-pub fn sv_log_of(text: ref String) -> Vec[SvStep]? {
+fn sv_log_of(text: ref String) -> Vec[SvStep]? {
 	let body = text.strip_prefix(SV_LOG_PREFIX) ?? return null
 	let mut steps: Vec[SvStep] = []
 	if body.len() == 0 {

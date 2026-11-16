@@ -38,20 +38,20 @@ pub(crate) struct LoopEnd {
 
 pub(crate) fn loop_paths_most() -> i64 { 32 }
 
-pub fn loop_before_name(name: &str, start: i64) -> String { format!("{}@{}", name, start) }
+pub(crate) fn loop_before_name(name: &str, start: i64) -> String { format!("{}@{}", name, start) }
 
 pub(crate) fn loop_head_name(name: &str, start: i64) -> String { format!("{}#{}", name, start) }
 
 pub(crate) fn loop_after_name(name: &str, start: i64) -> String { format!("{}${}", name, start) }
 
 #[allow(clippy::too_many_arguments)]
-pub fn loop_record(arena: &mut TermArena, start: i64, state: &[String], facts: &[i64], ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, cond: &Expr, body: &Block, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &impl Fn(&Expr) -> bool, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<LoopRecord> {
+pub(crate) fn loop_record(arena: &mut TermArena, start: i64, state: &[String], facts: &[i64], ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, cond: &Expr, body: &Block, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &impl Fn(&Expr) -> bool, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<LoopRecord> {
     let condition = claim_term(cond, words, &|name| { ints.contains(name) }, pinned, &mut arena.nodes);
     loop_record_of(arena, start, state, facts, ints, pinned, condition, "", -1, body, words, claims, throwing, holes_of)
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn loop_record_range(arena: &mut TermArena, start: i64, state: &[String], facts: &[i64], ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, counter: &str, low: i64, high: i64, inclusive: bool, body: &Block, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &impl Fn(&Expr) -> bool, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<LoopRecord> {
+pub(crate) fn loop_record_range(arena: &mut TermArena, start: i64, state: &[String], facts: &[i64], ints: &collections::BTreeSet<String>, pinned: &impl Fn(&str) -> Option<i64>, counter: &str, low: i64, high: i64, inclusive: bool, body: &Block, words: &winnow_grammar::InternerContext, claims: &collections::BTreeSet<(i64, i64)>, throwing: &impl Fn(&Expr) -> bool, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<LoopRecord> {
     let here = arena.var(counter);
     let mut condition = arena.lt(here, high);
     if inclusive { condition = arena.le(here, high); }
@@ -327,7 +327,7 @@ pub(crate) fn loop_expr_stmt(arena: &mut TermArena, expr: &Expr, span: &Span, pa
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn loop_candidates(arena: &mut TermArena, record: &LoopRecord, proved: &impl Fn(&TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Vec<(i64, String)> {
+pub(crate) fn loop_candidates(arena: &mut TermArena, record: &LoopRecord, proved: &impl Fn(&TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Vec<(i64, String)> {
     let mut found: Vec<(i64, String)> = vec![];
     let start = record.start;
     let mut steady: Vec<(String, i64)> = vec![];
@@ -705,7 +705,7 @@ pub(crate) fn loop_known_value(arena: &TermArena, facts: &[i64], name: &str) -> 
     None
 }
 
-pub fn loop_found(arena: &mut TermArena, record: &LoopRecord, proved: &impl Fn(&TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Option<LoopFound> {
+pub(crate) fn loop_found(arena: &mut TermArena, record: &LoopRecord, proved: &impl Fn(&TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Option<LoopFound> {
     let mut kept: Vec<(i64, String)> = vec![];
     let mut most_rounds: i64 = 4;
     for (term, origin) in loop_candidates(arena, record, proved, asked) {
@@ -763,7 +763,7 @@ pub(crate) fn loop_proved_each(arena: &TermArena, facts: &[i64], goal: i64, prov
     }
 }
 
-pub fn loop_facts(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound) -> Vec<i64> {
+pub(crate) fn loop_facts(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound) -> Vec<i64> {
     let start = record.start;
     let mut renamed: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut ghosts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -792,9 +792,9 @@ pub fn loop_facts(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound)
     facts
 }
 
-pub fn loop_turn_name(name: &str, start: i64) -> String { format!("{}^{}", name, start) }
+pub(crate) fn loop_turn_name(name: &str, start: i64) -> String { format!("{}^{}", name, start) }
 
-pub fn loop_turn_facts(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound) -> Vec<i64> {
+pub(crate) fn loop_turn_facts(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound) -> Vec<i64> {
     let start = record.start;
     let mut renamed: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut ghosts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -819,9 +819,9 @@ pub fn loop_turn_facts(arena: &mut TermArena, record: &LoopRecord, found: &LoopF
     facts
 }
 
-pub fn loop_found_text(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound) -> String { loop_said(arena, record, found, "through") }
+pub(crate) fn loop_found_text(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound) -> String { loop_said(arena, record, found, "through") }
 
-pub fn loop_said(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound, place: &str) -> String {
+pub(crate) fn loop_said(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound, place: &str) -> String {
     let mut known: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for name in record.problem.state.iter() {
         let ghost = loop_before_name(name, record.start);
@@ -845,13 +845,13 @@ pub fn loop_said(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound, 
     format!("proved {} the loop that changes `{}`, with the invariant `{}`, found by {} and checked by three queries", place, changes, nikaia_std::block::Text::from(parts.join(" && ")), nikaia_std::block::Text::from(origins.join(" and ")))
 }
 
-pub fn loop_open_text(records: &[LoopRecord]) -> String {
+pub(crate) fn loop_open_text(records: &[LoopRecord]) -> String {
     let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for record in records.iter() { for n in record.problem.state.iter() { if !nikaia_std::list::contains(&names, &n) { names.push(nikaia_std::block::Text::from(n.to_string())); } } }
     format!("nothing before it shows it; no invariant found for the loop that changes `{}` carries it", nikaia_std::block::Text::from(names.join("`, `")))
 }
 
-pub fn loop_reads(arena: &TermArena, facts: &[i64], claim: i64, records: &[LoopRecord]) -> bool {
+pub(crate) fn loop_reads(arena: &TermArena, facts: &[i64], claim: i64, records: &[LoopRecord]) -> bool {
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
     arena.variables(claim, &mut names);
     let mut used: collections::BTreeSet<i64> = collections::BTreeSet::new();
@@ -884,7 +884,7 @@ pub fn loop_reads(arena: &TermArena, facts: &[i64], claim: i64, records: &[LoopR
     false
 }
 
-pub fn loop_key(arena: &TermArena, record: &LoopRecord) -> String {
+pub(crate) fn loop_key(arena: &TermArena, record: &LoopRecord) -> String {
     let mut parts: Vec<String> = nikaia_std::block::List::from_array_in([format!("{}", record.start)], nikaia_std::block::Place::Block);
     for fact in record.problem.fixed.iter() {
         let fact = nikaia_std::num::value(fact);
@@ -900,7 +900,7 @@ pub fn loop_key(arena: &TermArena, record: &LoopRecord) -> String {
     nikaia_std::block::Text::from(parts.join(" ; "))
 }
 
-pub fn loop_parts_text(arena: &TermArena, found: &LoopFound) -> String {
+pub(crate) fn loop_parts_text(arena: &TermArena, found: &LoopFound) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (term, origin) in found.parts.iter() {
         let term = nikaia_std::num::value(term);
@@ -1017,7 +1017,7 @@ pub(crate) fn loop_built(arena: &mut TermArena, op: &str, args: Vec<i64>) -> Opt
     None
 }
 
-pub fn loop_recorded(arena: &mut TermArena, record: &LoopRecord, recorded: &str, proved: &impl Fn(&TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Option<LoopFound> {
+pub(crate) fn loop_recorded(arena: &mut TermArena, record: &LoopRecord, recorded: &str, proved: &impl Fn(&TermArena, &[i64], i64) -> bool, asked: &mut Vec<i64>) -> Option<LoopFound> {
     let mut parts: Vec<(i64, String)> = vec![];
     let mut all: Vec<i64> = vec![];
     for part in recorded.split(';') {

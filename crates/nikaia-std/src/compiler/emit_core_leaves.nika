@@ -89,7 +89,7 @@ fn emit_leaf_par_fold(rule: ref GrammarRule) -> bool {
 impl EmitState {
     /// A hole of an `f"..."`, as every reader sees it: what the tier pass hands
     /// over inside it (ADR-229 D1), and the node itself where it hands nothing.
-    pub fn emit_core_hole[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, at: i64, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_hole[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, at: i64, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         if self.hole_wraps.contains_key(at) {
             let wraps = self.hole_wraps.get(at) ?? return
             let wrapped = host.wrap_hole(node, wraps)
@@ -101,7 +101,7 @@ impl EmitState {
 
     /// A key, handed over as it is, lent with a `&`, or read as the `str` it
     /// holds (#659).
-    pub fn emit_core_key[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, form: FactKeyForm, index: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_key[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, form: FactKeyForm, index: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let kind = match form {
             FactKeyForm::Lent => 2,
             FactKeyForm::Viewed => 3,
@@ -138,7 +138,7 @@ impl EmitState {
 
     /// The base of a postfix (`.m()`, `.f`, `[i]`), in parentheses where its
     /// own shape binds looser than a postfix.
-    pub fn emit_core_postfix_base[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_postfix_base[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **A read through the brackets is a `*`**, which binds looser than a
         // postfix: `*get(..).len()` is the deref of the length (ADR-293 D33); and
         // so is a `mut` parameter read as its number (`copied_in_place`).
@@ -197,7 +197,7 @@ impl EmitState {
     /// An operand of an operator, parenthesised only where it binds looser than
     /// the position it stands in (`needs` is the precedence it must keep, `255`
     /// for a unary operator's).
-    pub fn emit_core_nested[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, needs: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_nested[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, needs: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let parenthesise = match node {
             // **A sum that ends in a conversion** reads the same way at the left
             // of a comparison: `at + w.len() as i64 < n` is `i64<n>` to Rust.
@@ -221,7 +221,7 @@ impl EmitState {
     /// One side of a text `+`: a side read out of a list, or a field at any
     /// depth (#897: through a lent parameter it is not the function's to
     /// move), is lent as `&str`, so that it is not moved out of its place.
-    pub fn emit_core_concatenated[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, side: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_concatenated[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, side: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let indexed = match side {
             Expr::Index { .. } => true,
             Expr::Field { .. } => true,
@@ -246,7 +246,7 @@ impl EmitState {
 
     /// What a `return` or a tail hands back: the nullable wrap, the `Either`
     /// text, and the `&` of a value lent out of a field (ADR-282 D5).
-    pub fn emit_core_handed_back[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, at: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_handed_back[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, at: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let (before, after) = emit_leaf_wrapped(self.facts.nullable_sites, at)
         out.push(before)
         // `null` is no text of either kind (ADR-282 D5), and goes as `None`.
@@ -272,7 +272,7 @@ impl EmitState {
     /// An `f"..."` with a file's name in it, as one name (ADR-319 D4): each text
     /// part and each hole that is not a name as its text, each name as its
     /// bytes.
-    pub fn emit_core_joined_name[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, parts: ref Vec[FPart], names: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_joined_name[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, parts: ref Vec[FPart], names: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         out.push("nikaia_std::fs::path::joined(&[")
         let mut hole = 0
         let mut n = 0
@@ -308,7 +308,7 @@ impl EmitState {
 
     /// The literal as a Rust format string, with its holes as arguments
     /// (ADR-309 D6, D9).
-    pub fn emit_core_format_string[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, parts: ref Vec[FPart], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_format_string[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, parts: ref Vec[FPart], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **A hole a log sink escapes** (ADR-398 D3) is formatted by its own
         // spec first and escaped whole, so the head reads it as `{}`.
         let mut head: String = "\""
@@ -386,7 +386,7 @@ impl EmitState {
 
     /// A string literal. Which of the two it is decides what comes out, and
     /// that is read off the syntax rather than the text (ADR-309 D2).
-    pub fn emit_core_string[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_string[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         match node {
             // Inert text, transcribed; **unless its use wants text of its own**
             // (ADR-282 D4), and then it is constructed there.
@@ -430,7 +430,7 @@ impl EmitState {
 
     /// ADR-296 D5: the shadow struct a call to a DSL driver builds. A struct
     /// literal names its fields, so a call may write them in any order.
-    pub fn emit_core_dsl_parameters[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, callee: ref String, args: i64, config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_dsl_parameters[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, callee: ref String, args: i64, config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         if config.len() == 0 || !self.dsl_drivers.contains(callee) {
             return
         }
@@ -456,7 +456,7 @@ impl EmitState {
 
     /// Kap 5.1 at a **method** call: the options become positional, in the order
     /// the declaration gives, and one that was left out becomes its default.
-    pub fn emit_core_method_options[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, method: winnow_grammar::Symbol, on_node: i64, args: i64, config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_method_options[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, method: winnow_grammar::Symbol, on_node: i64, args: i64, config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let name = emit_text(world, method)
         if self.dsl_drivers.contains(name) {
             return
@@ -491,7 +491,7 @@ impl EmitState {
     }
 
     /// The guard, with the boxed parts it reads opened for it.
-    pub fn emit_core_guard_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, guard: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_guard_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, pattern: ref MatchPattern, guard: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let reopening = self.emit_core_guard_reopening(world, host, pattern, guard)
         if reopening.len() == 0 {
             self.emit_expr(world, walk, out, host, guard, depth, flow, scope)
@@ -506,7 +506,7 @@ impl EmitState {
     /// `Measurements.file(data)` - the whole of what a user writes to run a
     /// grammar (ADR-296 D1, D2). `parallelism` is how the build asks the driver
     /// to cut the input.
-    pub fn emit_core_grammar_entry[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: ref Expr, values: ref Vec[Expr], config: ref Vec[ConfigArg], parallelism: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_grammar_entry[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: ref Expr, values: ref Vec[Expr], config: ref Vec[ConfigArg], parallelism: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **The `?` is the call's, and a `catch` is what takes it away.**
         let question = match flow.caught {
             true => "",
@@ -689,7 +689,7 @@ impl EmitState {
     }
 
     /// The pieces of a template, appended to `__html` in order.
-    pub fn emit_core_template_segments[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, site: i64, segments: ref Vec[Segment], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_template_segments[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, site: i64, segments: ref Vec[Segment], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let pad = "    ".repeat(depth)
         for segment in segments {
             match segment {
@@ -723,7 +723,7 @@ impl EmitState {
 
     /// A `dsl ... { ... } eod` body: the `html` template compiled here
     /// (ADR-017), or a statement whose holes the call site fills (ADR-296 D5).
-    pub fn emit_core_template[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, context: winnow_grammar::Symbol?, content: ref String, site: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_template[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, context: winnow_grammar::Symbol?, content: ref String, site: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // ADR-296 D5: a body with `:name` holes and a target this compiler is not
         // itself the grammar for is a *statement*, and its value is its own text.
         if is_deferred(name, content) {
@@ -767,13 +767,13 @@ impl EmitState {
     }
 
     /// A block: its statements with nothing written before them.
-    pub fn emit_core_block[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail) sync throws {
+    fn emit_core_block[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail) sync throws {
         self.emit_stmt_block_opening_with(world, walk, out, host, block, depth, flow, scope, tail, null)
     }
 
     /// `if c { ... } else { ... }`, where `tail` says what the whole thing is in
     /// the position of: the branches are in the same position the `if` is.
-    pub fn emit_core_if_expr[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, condition: ref Expr, then_block: ref Block, else_block: ref Block?, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail) sync throws {
+    fn emit_core_if_expr[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, condition: ref Expr, then_block: ref Block, else_block: ref Block?, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail) sync throws {
         out.push("if ")
         self.emit_expr(world, walk, out, host, condition, depth, flow, scope)
         out.push(" ")
@@ -810,14 +810,14 @@ impl EmitState {
 /// **The name the copy of grammar `name` over bytes is lowered under**
 /// (ADR-366 D1): the backend's grammar is one input, so a grammar entered with
 /// both is two.
-pub fn emit_bytes_grammar(name: ref String) -> String {
+fn emit_bytes_grammar(name: ref String) -> String {
     return f"{name}OverBytes"
 }
 
 /// The function beside a grammar that makes the options its `par_fold` entry
 /// `rule` of grammar `book` names (ADR-372 D6): a sibling of the grammar's module, which the
 /// backend writes and nothing can be added to.
-pub fn emit_fold_options(book: ref String, rule: ref String) -> String {
+fn emit_fold_options(book: ref String, rule: ref String) -> String {
     return f"__nk_fold_{book}_{rule}"
 }
 

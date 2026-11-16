@@ -744,7 +744,7 @@ fn project_drive_published_key(key: ref String) -> bool {
 /// the renaming the consumer's resolution follows (D27). Its one Rust file is
 /// there because Cargo wants a target; it is never built, nothing lowered is
 /// published, and the consuming compiler lowers the sources itself.
-pub fn project_drive_publish_stub(file: ref ManifestFile) -> String {
+fn project_drive_publish_stub(file: ref ManifestFile) -> String {
     let name = file.name ?? "package"
     let crate_name = f"nikaia_{name.replace("-", "_")}"
     let mut out = f"# Written by `nikaia build`: `cargo publish` on this file publishes the Nikaia\n# package `{name}` (ADR-286 D25). Cargo only finds it; nothing here is built.\n[package]\nname = \"{crate_name}\"\nversion = \"{file.version}\"\nedition = \"2024\"\n"
@@ -860,7 +860,7 @@ fn project_drive_artifact[H: ProjectDriveHost](host: ref H) -> String sync {
 
 /// The crate a package is offered to Rust as (ADR-286 D23): `nikaia_<name>`,
 /// `-` written `_`.
-pub fn project_drive_rust_crate(name: ref String) -> String {
+fn project_drive_rust_crate(name: ref String) -> String {
     return f"nikaia_{name.replace("-", "_")}"
 }
 
@@ -993,7 +993,7 @@ fn project_drive_splice_checked[H: ProjectDriveHost](host: ref H, rust_library: 
 
 /// Where a refusal of `[rust-library]` stands in `nikaia.toml`: at `key` in
 /// the table where it is written there, else at the table's header.
-pub fn project_drive_splice_span(toml: ref String, key: ref String) -> Span {
+fn project_drive_splice_span(toml: ref String, key: ref String) -> Span {
     let mut offset = 0
     let mut inside = false
     let mut header = 0
@@ -1091,7 +1091,7 @@ fn project_drive_features_refused[H: ProjectDriveHost](host: ref H, refusal: ref
 /// package it depends on the crate `nikaia_<name>` beside it, and a
 /// `[workspace]` of its own, so that a Rust crate in any workspace takes it by
 /// path. `generated` is as `CargoProject::render` writes it.
-pub fn project_drive_rust_manifest(generated: ref String, crate_name: ref String, members: ref Vec[ProjectMembersMember]) -> String {
+fn project_drive_rust_manifest(generated: ref String, crate_name: ref String, members: ref Vec[ProjectMembersMember]) -> String {
     let mut out = "# Written by `nikaia build` (`artifact = \"rust-library\"`, ADR-393 D1) from\n# `nikaia.toml`. Do not edit: every build rewrites it.\n"
     let mut section: String = ""
     for line in generated.lines() {

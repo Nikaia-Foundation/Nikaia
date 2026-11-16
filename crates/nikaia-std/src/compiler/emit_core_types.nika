@@ -10,7 +10,7 @@
 
 /// The queues a settle point drains: at `user_parallelism = yes` only the one
 /// whose work may cross threads, so the settle point may too (ADR-297 D2).
-pub fn emit_settle_kind(overlaps: bool) -> String {
+fn emit_settle_kind(overlaps: bool) -> String {
     if overlaps {
         return "nikaia_std::cleanup::Sent"
     }
@@ -19,7 +19,7 @@ pub fn emit_settle_kind(overlaps: bool) -> String {
 
 /// The wrapper a value with a cleanup is held in: the one whose parked work
 /// may move with its task where tasks run on threads (ADR-297 D1).
-pub fn emit_cleaned(overlaps: bool) -> String {
+fn emit_cleaned(overlaps: bool) -> String {
     if overlaps {
         return "nikaia_std::cleanup::CleanedSend"
     }
@@ -28,7 +28,7 @@ pub fn emit_cleaned(overlaps: bool) -> String {
 
 /// The future a kept function that may pause hands back: one that crosses
 /// threads where tasks run on them.
-pub fn emit_boxed_future(overlaps: bool) -> String {
+fn emit_boxed_future(overlaps: bool) -> String {
     if overlaps {
         return "nikaia_std::func::SendBoxed"
     }
@@ -37,7 +37,7 @@ pub fn emit_boxed_future(overlaps: bool) -> String {
 
 /// The same future, over a lifetime it may borrow for: `BoxedIn<'call, T>`
 /// in a kept type, `as BoxedIn<'_, _>` where a closure is made.
-pub fn emit_boxed_future_in(overlaps: bool) -> String {
+fn emit_boxed_future_in(overlaps: bool) -> String {
     if overlaps {
         return "nikaia_std::func::SendBoxedIn"
     }
@@ -46,7 +46,7 @@ pub fn emit_boxed_future_in(overlaps: bool) -> String {
 
 /// **A turn of a loop is a step of a build-time run** (ADR-321 D7): the count,
 /// in front of whatever else a loop's body opens with.
-pub fn emit_counted_turn(counts_steps: bool, opening: String?) -> String? {
+fn emit_counted_turn(counts_steps: bool, opening: String?) -> String? {
     if !counts_steps {
         return opening
     }
@@ -61,7 +61,7 @@ pub fn emit_counted_turn(counts_steps: bool, opening: String?) -> String? {
 impl EmitState {
     /// Which shape a declared parameter takes at the C boundary, or `null`
     /// where it is an ordinary value (ADR-302 D5, D7).
-    pub fn pointer_for(ref self, world: ref EmitWorld, callee: ref String, ty: ref Type) -> EmitPointer? {
+    fn pointer_for(ref self, world: ref EmitWorld, callee: ref String, ty: ref Type) -> EmitPointer? {
         let name = world.words.resolve(ty.name)
         if self.opaque_handles.contains_key(name) && !ty.is_view && !ty.is_slice {
             let release = self.opaque_handles.get(name) ?? ""
@@ -80,7 +80,7 @@ impl EmitState {
 
     /// The same, where the count a `Shared` in this position was given is
     /// known. The count rides down through the arguments.
-    pub fn emit_core_ty_counted(ref self, world: ref EmitWorld, mut walk: EmitWalk, crossings: bool, overlaps: bool, ty: ref Type, lifetimes: EmitLifetimes, count: Count) -> String {
+    fn emit_core_ty_counted(ref self, world: ref EmitWorld, mut walk: EmitWalk, crossings: bool, overlaps: bool, ty: ref Type, lifetimes: EmitLifetimes, count: Count) -> String {
         let written = world.words.resolve(ty.name).clone()
         // **`int` is an `i64` in memory until a narrowing is built** (ADR-285
         // D37): the representation is the compiler's, and today it is this one.
@@ -420,7 +420,7 @@ impl EmitState {
     /// The `Views` type one tethered binding is held by (ADR-283 D11, ADR-218
     /// D4), declared once per type: the value over any lifetime, and
     /// `shorten`, which `rustc` only accepts where the type is covariant.
-    pub fn emit_core_tether_wrapper(ref self, world: ref EmitWorld, mut walk: EmitWalk, crossings: bool, overlaps: bool, ty: ref Type) -> String {
+    fn emit_core_tether_wrapper(ref self, world: ref EmitWorld, mut walk: EmitWalk, crossings: bool, overlaps: bool, ty: ref Type) -> String {
         let any = self.emit_core_ty(world, walk, crossings, overlaps, ty, EmitLifetimes::Named)
         let long = self.emit_core_ty(world, walk, crossings, overlaps, ty, EmitLifetimes::Long)
         let shortened = self.emit_core_ty(world, walk, crossings, overlaps, ty, EmitLifetimes::Shortened)

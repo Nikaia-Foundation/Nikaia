@@ -14,7 +14,7 @@ impl EmitState {
     /// receiver and no returned value, whose parameters are the command line
     /// (ADR-360 D1) - and `None` for anything else. A `main` this does not recognise is emitted as
     /// written and keeps its name.
-    pub fn user_main(ref self, world: ref EmitWorld) -> bool? {
+    fn user_main(ref self, world: ref EmitWorld) -> bool? {
         if !self.entry {
             return null
         }
@@ -37,7 +37,7 @@ impl EmitState {
     /// batch build lowers each program into the module `p{k}` of one crate.
     /// Then `main` and what its signature names are `pub`, since the crate's
     /// own `main` calls it, and the allocator is the crate's, declared once.
-    pub fn as_a_module(ref self) -> bool {
+    fn as_a_module(ref self) -> bool {
         return !self.is_std && self.crate_root != "crate"
     }
 
@@ -45,7 +45,7 @@ impl EmitState {
     /// it fails with, where the program is lowered as a module
     /// ([`as_a_module`]). The crate root calling `main` needs it `pub`, as
     /// Rust refuses a value whose type it may not name.
-    pub fn named_by_main(ref self, world: ref EmitWorld, name: ref String) -> bool {
+    fn named_by_main(ref self, world: ref EmitWorld, name: ref String) -> bool {
         if !self.as_a_module() || self.user_main(world) == null {
             return false
         }
@@ -58,7 +58,7 @@ impl EmitState {
     /// whether user code may run on a pool; `types` are the types of
     /// `main`'s parameters in the language below, subjects then options, and
     /// `passing` how each is handed to the body, `{}` standing for the local.
-    pub fn entry_point(ref self, world: ref EmitWorld, concurrent: bool, channel: ref String, types: ref Vec[String], passing: ref Vec[String]) -> String {
+    fn entry_point(ref self, world: ref EmitWorld, concurrent: bool, channel: ref String, types: ref Vec[String], passing: ref Vec[String]) -> String {
         let fails = self.user_main(world) ?? return ""
         let (reads, passed) = self.main_words(world, types, passing)
         let mut user_code: String = "Sequential"
@@ -299,7 +299,7 @@ impl EmitState {
     /// the file that holds a view and has no type parameters, the `Views`,
     /// `Rebase` and `Hold` implementations. Nothing, unless some plan keeps an
     /// element or a task's keep.
-    pub fn held_structs(ref self, world: ref EmitWorld) -> String {
+    fn held_structs(ref self, world: ref EmitWorld) -> String {
         let mut pays = false
         for (_, plan) in self.keep_plans {
             if plan.element_keepers.len() > 0 || plan.task_keep {

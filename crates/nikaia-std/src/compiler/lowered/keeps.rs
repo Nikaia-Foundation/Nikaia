@@ -255,7 +255,7 @@ pub(crate) fn a_position_the_result_points_into(callee: Option<&str>, at: i64, o
     points_into_at(match *nikaia_std::index::get(&library.functions, &known) { Some(__nikaia_value) => __nikaia_value, None => return false }, at)
 }
 
-pub fn keeps_its_bytes(contract: &FnContract, at: i64) -> bool {
+pub(crate) fn keeps_its_bytes(contract: &FnContract, at: i64) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if at < 0 || at >= signature.params.len() as i64 { return false; }
     let parameter = &unsafe { nikaia_std::proven::read(&signature.params, (at) as usize) }.0;
@@ -1101,7 +1101,7 @@ pub(crate) fn keeps_a_copied_scalar(ty: &Ty) -> bool {
     }
 }
 
-pub fn keeps_a_copy_type(ty: &Ty, copies: &collections::BTreeSet<String>) -> bool { keeps_copied_field(ty, copies) }
+pub(crate) fn keeps_a_copy_type(ty: &Ty, copies: &collections::BTreeSet<String>) -> bool { keeps_copied_field(ty, copies) }
 
 pub(crate) fn keeps_type_name(ty: &Ty) -> Option<String> {
     match ty {
@@ -1111,7 +1111,7 @@ pub(crate) fn keeps_type_name(ty: &Ty) -> Option<String> {
     }
 }
 
-pub fn keeps_copy_types(view: &ParsedView<'_, '_, '_, '_, '_, '_>) -> collections::BTreeSet<String> {
+pub(crate) fn keeps_copy_types(view: &ParsedView<'_, '_, '_, '_, '_, '_>) -> collections::BTreeSet<String> {
     let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new();
     for item in view.items.iter() {
         match &item.node {

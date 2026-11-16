@@ -78,7 +78,7 @@ fn an_offered_number_name(name: ref String) -> bool sync {
 /// the entry's (`item*`, `item+`, a counted repeat, `list(item, sep)`). What
 /// stands around it is matched and dropped, so nothing is built from the
 /// items and each can be handed over as it is parsed.
-pub fn grammar_stream_refused(world: ref CheckWorld, rule: ref GrammarRule, results: ref collections::BTreeMap[String, Ty], rules: ref collections::BTreeSet[String]) -> CheckFinding? {
+fn grammar_stream_refused(world: ref CheckWorld, rule: ref GrammarRule, results: ref collections::BTreeMap[String, Ty], rules: ref collections::BTreeSet[String]) -> CheckFinding? {
     let entry = world.words.resolve(rule.name).clone()
     let wanted: Ty = results[entry]?.clone() ?? Ty::Unknown
     if wanted.is_unknown() {
@@ -166,7 +166,7 @@ fn grammar_stream_item(world: ref CheckWorld, pattern: ref Pattern, wanted: ref 
 
 impl CheckState {
     /// **The type a pattern's result has** in a rule's action.
-    pub fn pattern_type(ref self, world: ref CheckWorld, pattern: ref Pattern, rules: ref collections::BTreeSet[String]) -> Ty sync {
+    fn pattern_type(ref self, world: ref CheckWorld, pattern: ref Pattern, rules: ref collections::BTreeSet[String]) -> Ty sync {
         return match pattern {
             Pattern::Repeat { pat, rep } => self.repeat_type(world, pat.node, rep, rules),
             Pattern::Group(pat) => self.pattern_type(world, pat.node, rules),
@@ -285,7 +285,7 @@ impl CheckState {
     /// label hand on what they hold, and so do `text(..)`, bound or not, and
     /// a bound `span(..)`; below a repeat, a counted repeat, a choice or any
     /// other built-in's argument a name stays there (Part II 10).
-    pub fn bindings_of(ref mut self, world: ref CheckWorld, pattern: ref Pattern, rules: ref collections::BTreeSet[String]) -> Vec[CheckLocal] sync {
+    fn bindings_of(ref mut self, world: ref CheckWorld, pattern: ref Pattern, rules: ref collections::BTreeSet[String]) -> Vec[CheckLocal] sync {
         let mut out: Vec[CheckLocal] = []
         match pattern {
             Pattern::Bind { name, pat } => {
@@ -408,7 +408,7 @@ fn grammar_position_in_view(world: ref CheckWorld, view: ref ParsedView, named: 
 /// D1, #557): over a `Bytes` they are a `text::Span` and a `u32`; over text
 /// they are a `text::Match` and a `text::Pos`, which wait for #743. Asked
 /// where an entry of the grammar `named` is handed text.
-pub fn grammar_positions_over_text(world: ref CheckWorld, key: ref String, named: ref String, span: ref Span) -> CheckFinding? {
+fn grammar_positions_over_text(world: ref CheckWorld, key: ref String, named: ref String, span: ref Span) -> CheckFinding? {
     let written = grammar_position_of(world, named)
     if written == "" {
         return null
@@ -420,7 +420,7 @@ pub fn grammar_positions_over_text(world: ref CheckWorld, key: ref String, named
 impl CheckState {
     /// **The values a rule takes** (ADR-grammar-1 D2): its parameters and its
     /// options, each a local of its patterns and of its actions.
-    pub fn rule_values[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, rule: ref GrammarRule) -> Vec[CheckLocal] sync {
+    fn rule_values[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, rule: ref GrammarRule) -> Vec[CheckLocal] sync {
         let mut out: Vec[CheckLocal] = []
         for arg in rule.args {
             self.next_binding = self.next_binding + 1
@@ -442,7 +442,7 @@ impl CheckState {
     /// What the pattern inside a `text(..)`, bound or not, binds is handed on
     /// as well (#1013, #1039): a guard after `s:text(d:P+)` or `text(d:P+)`
     /// reads `d`, as the action does.
-    pub fn grammar_values[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, gram: ref GrammarDef, pattern: ref Spanned[Pattern], rules: ref collections::BTreeSet[String], scope: Vec[CheckLocal]) -> Vec[CheckLocal] sync {
+    fn grammar_values[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, gram: ref GrammarDef, pattern: ref Spanned[Pattern], rules: ref collections::BTreeSet[String], scope: Vec[CheckLocal]) -> Vec[CheckLocal] sync {
         match pattern.node {
             Pattern::Seq(parts) => {
                 let mut now = scope

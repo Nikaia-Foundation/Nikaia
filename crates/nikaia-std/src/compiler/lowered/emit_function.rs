@@ -191,7 +191,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_function<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>, depth: i64, lifetimes: EmitLifetimes, carries_input: &collections::BTreeSet<String>, owner_target: Option<&str>, owner_declared_by: Option<&str>, owner_bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_function<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, written: &Spanned<Item>, depth: i64, lifetimes: EmitLifetimes, carries_input: &collections::BTreeSet<String>, owner_target: Option<&str>, owner_declared_by: Option<&str>, owner_bridged: Option<bool>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         match &written.node {
             Item::Fn { name, generics, receiver, args: written_args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
                 let can_throw = *can_throw; let is_public = *is_public; let is_sync = *is_sync; let name = *name; let spread = *spread;

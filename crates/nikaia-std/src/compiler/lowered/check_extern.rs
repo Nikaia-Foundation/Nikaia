@@ -12,7 +12,7 @@ pub(crate) fn ext_an_enum_note() -> String { String::from("An `extern` enum is a
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_entry_point(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span, of_a_trait: bool) {
+    pub(crate) fn an_entry_point(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span, of_a_trait: bool) {
         match item {
             Item::Fn { name, generics, args, ret_type, is_public, is_extern, .. } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
@@ -56,7 +56,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_extern_struct(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span) {
+    pub(crate) fn an_extern_struct(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span) {
         match item {
             Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
@@ -81,7 +81,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_extern_enum(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span) {
+    pub(crate) fn an_extern_enum(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span) {
         match item {
             Item::Enum { name, variants, is_public, is_extern } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
@@ -119,7 +119,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn crosses_to_c(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, out: bool) -> Option<String> {
+    pub(crate) fn crosses_to_c(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, out: bool) -> Option<String> {
         let name = nikaia_std::block::Text::from(world.words.resolve(ty.name).to_string());
         if (*ty.code).is_some() { return self.a_callback_crosses(world, ty, out); }
         if ty.is_tuple { return Some(String::from("Hand a tuple's parts over one by one, or as a `pub extern struct`.")); }

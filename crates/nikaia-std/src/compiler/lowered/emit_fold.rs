@@ -20,7 +20,7 @@ impl EmitState {
     pub(crate) fn emit_in_place_fold(&self, part: &Expr) -> i64 { nikaia_std::index::or(self.facts.in_place_folds.get(&(id_of(part) as i64)), || 0) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn emit_fold<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, spec: &FoldSpec) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    pub(crate) fn emit_fold<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, spec: &FoldSpec) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         let rule = emit_text(world, spec.rule);
         let name = if spec.merge.is_some() { "par_fold" } else { "fold" };
         out.push(&format!("{}({}, ", name, rule));

@@ -2649,7 +2649,7 @@ pub(crate) fn untyped_text_list(base: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '
 
 pub(crate) fn own_text_items(value: &Expr, kinds: &Kinds) -> bool { own_text_items_written(value) && kinds.owned && !kinds.view && !kinds.either && !kinds.lasting }
 
-pub fn own_text_items_written(value: &Expr) -> bool {
+pub(crate) fn own_text_items_written(value: &Expr) -> bool {
     let items = match value {
         Expr::ListLit { items, .. } => items,
         _ => return false,
@@ -6759,7 +6759,7 @@ pub(crate) fn hb_plain_self(receiver: Option<&Receiver>) -> bool {
     !word.is_mut && !word.is_keep
 }
 
-pub fn hands_back_a_piece_of_self(item: &Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>) -> bool {
+pub(crate) fn hands_back_a_piece_of_self(item: &Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>) -> bool {
     match item {
         Item::Fn { receiver, args, ret_type, body, is_extern, ret_from, .. } => {
             let is_extern = *is_extern;
@@ -6792,7 +6792,7 @@ pub(crate) fn hb_nullable_may_be_a_view(ty: Option<&Type>, words: &winnow_gramma
     hb_type_may_be_a_view(&held, words, plain)
 }
 
-pub fn hb_type_may_be_a_view(t: &Type, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>) -> bool {
+pub(crate) fn hb_type_may_be_a_view(t: &Type, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>) -> bool {
     if t.is_nullable || t.is_tuple || t.is_slice || t.is_mut || (*t.code).is_some() || t.count.is_some() || t.either || t.lasting { return false; }
     let name = words.resolve(t.name);
     if plain.contains(name) { return false; }
@@ -6931,7 +6931,7 @@ pub(crate) fn hb_private_structs(items: &[Spanned<Item>], words: &winnow_grammar
     out
 }
 
-pub fn hb_plain_enums(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+pub(crate) fn hb_plain_enums(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let mut plain: collections::BTreeSet<String> = collections::BTreeSet::new();
     for item in items.iter() {
         match &item.node {

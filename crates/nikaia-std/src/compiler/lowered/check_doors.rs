@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lock_inside_a_lock(&mut self, called: &str, holds: &Lock, span: &Span) {
+    pub(crate) fn a_lock_inside_a_lock(&mut self, called: &str, holds: &Lock, span: &Span) {
         if !self.inside_a_door || !holds.holds() { return; }
         let parts: Vec<&str> = called.split("::").collect::<Vec<_>>();
         let method = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string()); ::core::mem::drop(parts);
@@ -15,14 +15,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_async_inside_a_door(&mut self, span: &Span) -> bool {
+    pub(crate) fn an_async_inside_a_door(&mut self, span: &Span) -> bool {
         if !self.inside_a_door { return false; }
         self.findings.push(check_refusal("NK2203", span, String::from("This `async` starts a task while you're holding a lock here."), vec![String::from("The block waits for its tasks before it lets the lock go, so a task that needs the held lock would wait for the block that is waiting for it.")], Some(String::from("Start the tasks before the block, or compute what the block needs first and pass it in."))));
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn io_inside_a_door(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, what: &str, span: &Span) {
+    pub(crate) fn io_inside_a_door(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, what: &str, span: &Span) {
         if !self.inside_a_door { return; }
         let name = match on {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
@@ -36,7 +36,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_update_block_returns_nothing(&mut self, body: &Block, span: &Span) {
+    pub(crate) fn an_update_block_returns_nothing(&mut self, body: &Block, span: &Span) {
         let mut hands_back = false;
         let mut at: i64 = 0;
         while at < body.stmts.len() as i64 {
@@ -52,7 +52,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_shared_name_changed_in_parallel(&mut self, name: &str, span: &Span) {
+    pub(crate) fn a_shared_name_changed_in_parallel(&mut self, name: &str, span: &Span) {
         let depth = match self.in_parallel { Some(__nikaia_value) => __nikaia_value, None => return };
         let mut declared: i64 = -1;
         let mut frame_at: i64 = 0;
@@ -73,7 +73,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_task_changes_an_outer_name(&mut self, name: &str, span: &Span) {
+    pub(crate) fn a_task_changes_an_outer_name(&mut self, name: &str, span: &Span) {
         let message = format!("You're changing `{}` in an `async` task, and `{}` is bound outside it.", name, name);
         let note = format!("A task runs at the same time as everything after its start, so it would write `{}` while the rest of the program reads or writes it.", name);
         let help = format!("Have the task produce a value, `let n = async count()`, and use it after, or keep `{}` in a `SharedMut` and change it through `update`.", name);
@@ -81,7 +81,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn withdrawn_automatic_name(&mut self, name: &str, span: &Span) -> bool {
+    pub(crate) fn withdrawn_automatic_name(&mut self, name: &str, span: &Span) -> bool {
         let mut in_a_lambda = false;
         for around in self.repeats.iter() { if around.what == "lambda" { in_a_lambda = true; } }
         if name != "a" && name != "b" && name != "c" || !in_a_lambda { return false; }
@@ -90,19 +90,19 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_foreign_call_outside_unsafe(&mut self, name: &str, span: &Span) {
+    pub(crate) fn a_foreign_call_outside_unsafe(&mut self, name: &str, span: &Span) {
         if self.inside_unsafe || !self.foreign_names.contains(name) { return; }
         self.findings.push(check_refusal("NK1143", span, format!("`{}` is a C function, so calling it has to happen inside an `unsafe` block.", name), vec![String::from("C isn't memory-safe, so every call into it is marked where it happens."), String::from("Everything inside the block is still checked as usual.")], Some(format!("Write `unsafe {{ {}(…) }}`.", name))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_assume_outside_unsafe(&mut self, span: &Span) {
+    pub(crate) fn an_assume_outside_unsafe(&mut self, span: &Span) {
         if self.inside_unsafe { return; }
         self.findings.push(check_refusal("NK1294", span, String::from("`assume` is written only inside an `unsafe` block."), vec![String::from("An `assume` is a claim the program vouches for: the compiler takes it as a fact without a proof, and a build that removes checks does not check it."), String::from("`unsafe` marks the place that has to be right; `assert` is the claim that is proved or checked.")], Some(String::from("Write `unsafe { assume(…) }`, or `assert(…)` to have the claim checked."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_door_that_is_not_written(&mut self, on: &Ty, written: &str, span: &Span) {
+    pub(crate) fn a_door_that_is_not_written(&mut self, on: &Ty, written: &str, span: &Span) {
         if written != "set_after" { return; }
         let held = match on {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
@@ -117,7 +117,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_set_that_reads_what_it_writes(&mut self, on: &Ty, written: &str, found: &[Ty], span: &Span) {
+    pub(crate) fn a_set_that_reads_what_it_writes(&mut self, on: &Ty, written: &str, found: &[Ty], span: &Span) {
         if written != "set" { return; }
         let held = match on {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),

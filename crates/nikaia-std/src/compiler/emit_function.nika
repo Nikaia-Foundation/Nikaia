@@ -315,7 +315,7 @@ impl EmitState {
     }
 
     /// A function or a method, with its signature and body.
-    pub fn emit_function[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, written: ref Spanned[Item], depth: i64, lifetimes: EmitLifetimes, carries_input: ref collections::BTreeSet[String], owner_target: String?, owner_declared_by: String?, owner_bridged: bool?) sync throws {
+    fn emit_function[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, written: ref Spanned[Item], depth: i64, lifetimes: EmitLifetimes, carries_input: ref collections::BTreeSet[String], owner_target: String?, owner_declared_by: String?, owner_bridged: bool?) sync throws {
         match written.node {
             Item::Fn { name, generics, receiver, args: written_args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
                 let throws_ = can_throw

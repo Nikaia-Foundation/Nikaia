@@ -122,7 +122,7 @@ impl Sharing {
 
 /// Every count plain, because nothing can cross (ADR-312 D10). Applied to the
 /// finished answer, so the duplication sites are kept as they were found.
-pub fn every_count_plain(mut sharing: Sharing) {
+fn every_count_plain(mut sharing: Sharing) {
     for mut decision in sharing.decisions {
         decision.count = Count::Plain
         decision.why = null
@@ -236,7 +236,7 @@ pub fn slot(function: ref String, name: ref String) -> String {
 }
 
 /// `Counter::record` back into its two halves.
-pub fn split_slot(key: ref String) -> (String, String) {
+fn split_slot(key: ref String) -> (String, String) {
     let parts: Vec[ref String] = key.split("::").collect()
     if parts.len() < 2 {
         return ("", key.clone())
@@ -250,7 +250,7 @@ pub fn split_slot(key: ref String) -> (String, String) {
 }
 
 /// **A `SharedMut` of a value that fits a machine word** (ADR-281 D8).
-pub fn holds_a_word(ty: ref Ty) -> bool {
+fn holds_a_word(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, view } => !view && name == "SharedMut" && args.len() == 1 && a_word(args[0]),
         else => false,
@@ -268,7 +268,7 @@ fn a_word(ty: ref Ty) -> bool {
 
 /// What a `SharedMut` holds, where it does not copy cheaply (ADR-281 D16); a
 /// hull whose content nobody named says nothing.
-pub fn held_that_does_not_copy(ty: ref Ty) -> String? {
+fn held_that_does_not_copy(ty: ref Ty) -> String? {
     return match ty {
         Ty::Named { name, args, .. } => a_held_value(ty, name, args),
         else => null,
@@ -283,7 +283,7 @@ fn a_held_value(ty: ref Ty, name: ref String, args: ref Vec[Ty]) -> String? {
 }
 
 /// The type a literal is: a word-sized one, or text.
-pub fn literal_type(expr: ref Expr) -> String? {
+fn literal_type(expr: ref Expr) -> String? {
     return match expr {
         Expr::LitStr { .. } => "String",
         Expr::LitInterpolated { .. } => "String",
@@ -306,7 +306,7 @@ fn held_type(expr: ref Expr, asked: ref Asked) -> String? {
 }
 
 /// The sentence a published position gets.
-pub fn published_reason(key: ref String, at: ref String) -> String {
+fn published_reason(key: ref String, at: ref String) -> String {
     if at == RESULT_POSITION {
         return f"`{key}` is public and hands a `Shared` back, so what the caller does with it is in a unit this build cannot see"
     }
@@ -315,7 +315,7 @@ pub fn published_reason(key: ref String, at: ref String) -> String {
 
 /// The sentence a duplication at a call gets: the callee and the position it
 /// takes the handle in, which are enough to find the line.
-pub fn handed_on_to(key: ref String, param: ref String) -> String {
+fn handed_on_to(key: ref String, param: ref String) -> String {
     return f"handed to `{key}` as `{param}`, which takes a handle of its own"
 }
 
@@ -328,7 +328,7 @@ pub fn unseen(callee: ref String?) -> String {
 /// Whether a position takes a handle on a shared value **by value**
 /// (ADR-312 D1): a view of one hands no handle on, and a type that merely
 /// holds one is carried by whatever holds it.
-pub fn by_value_shared(ty: ref Ty) -> bool {
+fn by_value_shared(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, view, .. } => !view && (name == "Shared" || name == "SharedMut"),
         else => false,
@@ -337,12 +337,12 @@ pub fn by_value_shared(ty: ref Ty) -> bool {
 
 /// The three types a program makes a hull of by calling their name
 /// (ADR-281 D2).
-pub fn is_hull(name: ref String) -> bool {
+fn is_hull(name: ref String) -> bool {
     return name == "Shared" || name == "SharedMut" || name == "Locked"
 }
 
 /// Whether a type is, or holds, a `Shared`.
-pub fn holds_shared(ty: ref Ty) -> bool {
+fn holds_shared(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, .. } => name == "Shared" || name == "SharedMut" || any_holds_shared(args),
         Ty::Tuple(parts) => any_holds_shared(parts),
@@ -363,7 +363,7 @@ fn any_holds_shared(types: ref Vec[Ty]) -> bool {
 
 /// The `<struct>.<field>` slots a type reaches that hold a `Shared`, through
 /// the ledger's `fields` (ADR-024).
-pub fn shared_fields(ty: ref String, asked: ref Asked) -> Vec[String] {
+fn shared_fields(ty: ref String, asked: ref Asked) -> Vec[String] {
     let name = without_a_view(ty)
     let contract = ledger_type(name, asked.own, asked.library) ?? return []
     let mut out: Vec[String] = []
@@ -376,7 +376,7 @@ pub fn shared_fields(ty: ref String, asked: ref Asked) -> Vec[String] {
 }
 
 /// One field's declared type, through the same lookup.
-pub fn declared_field_type(ty: ref String, field: ref String, asked: ref Asked) -> Ty? {
+fn declared_field_type(ty: ref String, field: ref String, asked: ref Asked) -> Ty? {
     let contract = ledger_type(without_a_view(ty), asked.own, asked.library) ?? return null
     for declared in contract.fields {
         if declared.name == field {
@@ -763,7 +763,7 @@ comptime PARALLEL: Array[ref String, 4] = ["par_iter", "par_pieces", "par_fold",
 /// enums, its functions, its `impl` targets and their methods as
 /// `Type::method`. A slot whose owner is not here belongs to another file
 /// (`Fallback::ForeignFile`).
-pub fn declared_here(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
+fn declared_here(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     for item in items {
         match item.node {
@@ -809,7 +809,7 @@ fn method_name(names: ref winnow_grammar::InternerContext, item: ref Item) -> St
 /// construction; a hull's own constructor is the allocation; and a call is
 /// one only where a ledger gives it a known result that holds no `Shared`.
 /// Everything else is no, the polarity this analysis runs on.
-pub fn allocates_here(expr: ref Expr, asked: ref Asked) -> bool {
+fn allocates_here(expr: ref Expr, asked: ref Asked) -> bool {
     return match expr {
         Expr::LitInt { .. } => true,
         Expr::LitFloat(_, _) => true,
@@ -834,7 +834,7 @@ fn a_call_that_allocates(path: ref String?, asked: ref Asked) -> bool {
 /// Whether a ledger says this callee's result is a value and not a handle:
 /// the program's entry first, then `std`'s, by the name or by its last
 /// segment.
-pub fn hands_back_a_plain_value(callee: ref String, asked: ref Asked) -> bool {
+fn hands_back_a_plain_value(callee: ref String, asked: ref Asked) -> bool {
     let suffix = f"::{callee}"
     if has_an_entry(asked.own, callee, suffix) {
         return plain_in(asked.own, callee, suffix)
@@ -876,7 +876,7 @@ fn a_plain_result(contract: ref FnContract?) -> bool {
 
 /// What is said of a handle whose allocation this analysis did not watch
 /// being made (`Fallback::UnseenOrigin`): where it came from.
-pub fn origin_reason(expr: ref Expr, names: ref winnow_grammar::InternerContext) -> String {
+fn origin_reason(expr: ref Expr, names: ref winnow_grammar::InternerContext) -> String {
     let from = where_it_came_from(expr, names)
     return f"{from}, so this analysis did not watch the allocation being made - and the count belongs to the allocation. A call handed to another thread hands its result back across one (ADR-292)"
 }
@@ -899,7 +899,7 @@ fn a_call_that_hands_it_back(path: ref String?) -> String {
 
 /// The handle an expression names in this function's own scope: a name whose
 /// type holds a `Shared`, or the tail of a block that is one.
-pub fn named_handle(expr: ref Expr, names: ref winnow_grammar::InternerContext, scope: ref collections::BTreeMap[String, Ty]) -> String? {
+fn named_handle(expr: ref Expr, names: ref winnow_grammar::InternerContext, scope: ref collections::BTreeMap[String, Ty]) -> String? {
     return match expr {
         Expr::Variable(name, _) => a_handle_in_scope(names.resolve(name), scope),
         Expr::Block(block, _) => a_handle_at_the_tail(block, names, scope),
@@ -927,7 +927,7 @@ fn a_handle_at_the_tail(block: ref Block, names: ref winnow_grammar::InternerCon
 }
 
 /// The name of the type a name in scope has, without its view.
-pub fn named_type(expr: ref Expr, names: ref winnow_grammar::InternerContext, scope: ref collections::BTreeMap[String, Ty]) -> String? {
+fn named_type(expr: ref Expr, names: ref winnow_grammar::InternerContext, scope: ref collections::BTreeMap[String, Ty]) -> String? {
     return match expr {
         Expr::Variable(name, _) => scope_type_name(names.resolve(name), scope),
         else => null,
@@ -941,7 +941,7 @@ fn scope_type_name(name: ref String, scope: ref collections::BTreeMap[String, Ty
 
 /// Whether a receiver is a walk that runs in parallel (ADR-235 D1): a
 /// `par_iter()`, a name bound to one, or a walk chained onto either.
-pub fn walks_in_parallel(receiver: ref Expr, names: ref winnow_grammar::InternerContext, parallel: ref collections::BTreeSet[String]) -> bool {
+fn walks_in_parallel(receiver: ref Expr, names: ref winnow_grammar::InternerContext, parallel: ref collections::BTreeSet[String]) -> bool {
     return match receiver {
         Expr::Variable(name, _) => parallel.contains(names.resolve(name)),
         Expr::MethodCall { receiver, method, .. } => a_parallel_method(names.resolve(method)) || walks_in_parallel(receiver, names, parallel),
@@ -949,7 +949,7 @@ pub fn walks_in_parallel(receiver: ref Expr, names: ref winnow_grammar::Interner
     }
 }
 
-pub fn a_parallel_method(method: ref String) -> bool {
+fn a_parallel_method(method: ref String) -> bool {
     for one in PARALLEL {
         if one == method {
             return true
@@ -959,7 +959,7 @@ pub fn a_parallel_method(method: ref String) -> bool {
 }
 
 /// The name a call is written with: a bare name, or a path joined by `::`.
-pub fn call_path(func: ref Expr, names: ref winnow_grammar::InternerContext) -> String? {
+fn call_path(func: ref Expr, names: ref winnow_grammar::InternerContext) -> String? {
     return match func {
         Expr::Variable(name, _) => names.resolve(name).clone(),
         Expr::Path(segments, _) => joined_segments(segments, names),
@@ -1643,7 +1643,7 @@ fn an_argument_that_is_not_a_handle(called: ref SharingCall, described: ref Desc
 /// The internal slot of the hull a constructor call makes in place, by the
 /// node of the value put into it: the emitter asks it for the count the
 /// constructor is written with (#1638).
-pub fn made_slot(value: i64) -> String {
+fn made_slot(value: i64) -> String {
     return f"<made {value}>"
 }
 

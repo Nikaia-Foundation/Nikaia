@@ -9,7 +9,7 @@
 /// The expressions an expression holds directly, outside its blocks: what a
 /// walk descends into. A `spawn` holds none here, being a detached context
 /// (Part I, 5.4).
-pub fn child_exprs_of(expr: ref Expr) -> Vec[ref Expr] {
+fn child_exprs_of(expr: ref Expr) -> Vec[ref Expr] {
     let mut out: Vec[ref Expr] = []
     match expr {
         Expr::Call { func, args, config, .. } => {
@@ -124,7 +124,7 @@ pub fn child_exprs_of(expr: ref Expr) -> Vec[ref Expr] {
 /// … }` is not deferred - so what it calls, the function around it calls. The
 /// one shape that is different is `spawn`, whose body runs later and elsewhere;
 /// it is a detached context (Part I, 5.4) and is not walked here.
-pub fn blocks_of_expr(expr: ref Expr) -> Vec[ref Block] {
+fn blocks_of_expr(expr: ref Expr) -> Vec[ref Block] {
     let mut out: Vec[ref Block] = []
     match expr {
         // An `unsafe` block is part of the function that writes it
@@ -195,7 +195,7 @@ fn match_body(arm: ref MatchArm) -> ref Expr {
 
 /// Every block a statement holds: the body of a loop, and the blocks of the
 /// expressions it holds.
-pub fn blocks_of_stmt(stmt: ref Stmt) -> Vec[ref Block] {
+fn blocks_of_stmt(stmt: ref Stmt) -> Vec[ref Block] {
     let mut out: Vec[ref Block] = []
     match stmt {
         Stmt::For { body, .. } => out.push(body),

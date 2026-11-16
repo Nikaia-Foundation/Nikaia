@@ -3,19 +3,19 @@
 
 pub fn is_reserved(name: &str) -> bool { matches!(name, "abstract" | "async" | "await" | "become" | "box" | "const" | "do" | "dyn" | "extern" | "final" | "gen" | "loop" | "macro" | "mod" | "move" | "override" | "priv" | "ref" | "static" | "trait" | "try" | "type" | "typeof" | "unsafe" | "unsized" | "virtual" | "where" | "yield") }
 
-pub fn escaped_name(name: &str) -> String {
+pub(crate) fn escaped_name(name: &str) -> String {
     if is_reserved(name) { return format!("r#{}", name); }
     nikaia_std::block::Text::from(name.to_string())
 }
 
-pub fn emit_local_name(comptimes: &collections::BTreeSet<String>, name: &str) -> String {
+pub(crate) fn emit_local_name(comptimes: &collections::BTreeSet<String>, name: &str) -> String {
     if comptimes.contains(name) { return format!("{}__nikaia_local", name); }
     escaped_name(name)
 }
 
-pub fn opaque_type_text(name: &str, release: &str) -> String { format!("#[repr(transparent)]\n#[derive(Debug)]\n// A C type keeps the name its header gives it, which is not the\n// shape Rust's own lint expects (Part III, C.1: what `rustc` would\n// say here is about a file nobody wrote).\n#[allow(non_camel_case_types)]\npub struct {}(core::ptr::NonNull<core::ffi::c_void>);\n\n#[allow(dead_code)]\nimpl {} {{\n    /// What a declaration that says `-> {}` hands back\n    /// (ADR-302 D12): the address, or an abort naming the\n    /// declaration that claimed it would be one.\n    #[track_caller]\n    fn from_c(declaration: &str, address: *mut core::ffi::c_void) -> {} {{\n        match core::ptr::NonNull::new(address) {{\n            Some(address) => {}(address),\n            None => nikaia_std::foreign::nothing_came_back(declaration),\n        }}\n    }}\n\n    /// The same, where the declaration **does** say `?` (D1).\n    fn maybe(address: *mut core::ffi::c_void) -> Option<{}> {{\n        core::ptr::NonNull::new(address).map({})\n    }}\n\n    /// The same address, without giving the handle away\n    /// (ADR-302 D7): what a C function is handed is the\n    /// pointer, and this handle stays the caller's to close.\n    fn lent(&self) -> {} {{\n        {}(self.0)\n    }}\n}}\n\nimpl Drop for {} {{\n    fn drop(&mut self) {{\n        let _released = unsafe {{ {}(self.lent()) }};\n    }}\n}}\n\n", name, name, name, name, name, name, name, name, name, name, release) }
+pub(crate) fn opaque_type_text(name: &str, release: &str) -> String { format!("#[repr(transparent)]\n#[derive(Debug)]\n// A C type keeps the name its header gives it, which is not the\n// shape Rust's own lint expects (Part III, C.1: what `rustc` would\n// say here is about a file nobody wrote).\n#[allow(non_camel_case_types)]\npub struct {}(core::ptr::NonNull<core::ffi::c_void>);\n\n#[allow(dead_code)]\nimpl {} {{\n    /// What a declaration that says `-> {}` hands back\n    /// (ADR-302 D12): the address, or an abort naming the\n    /// declaration that claimed it would be one.\n    #[track_caller]\n    fn from_c(declaration: &str, address: *mut core::ffi::c_void) -> {} {{\n        match core::ptr::NonNull::new(address) {{\n            Some(address) => {}(address),\n            None => nikaia_std::foreign::nothing_came_back(declaration),\n        }}\n    }}\n\n    /// The same, where the declaration **does** say `?` (D1).\n    fn maybe(address: *mut core::ffi::c_void) -> Option<{}> {{\n        core::ptr::NonNull::new(address).map({})\n    }}\n\n    /// The same address, without giving the handle away\n    /// (ADR-302 D7): what a C function is handed is the\n    /// pointer, and this handle stays the caller's to close.\n    fn lent(&self) -> {} {{\n        {}(self.0)\n    }}\n}}\n\nimpl Drop for {} {{\n    fn drop(&mut self) {{\n        let _released = unsafe {{ {}(self.lent()) }};\n    }}\n}}\n\n", name, name, name, name, name, name, name, name, name, name, release) }
 
-pub fn emit_slot_in(world: &EmitWorld<'_, '_, '_, '_>, item: &Item) -> i64 {
+pub(crate) fn emit_slot_in(world: &EmitWorld<'_, '_, '_, '_>, item: &Item) -> i64 {
     match item {
         Item::Fn { args, .. } => {
             let mut at: i64 = 0;
@@ -29,7 +29,7 @@ pub fn emit_slot_in(world: &EmitWorld<'_, '_, '_, '_>, item: &Item) -> i64 {
     -1
 }
 
-pub fn emit_values_name(world: &EmitWorld<'_, '_, '_, '_>, item: &Item, parameter: &str) -> bool {
+pub(crate) fn emit_values_name(world: &EmitWorld<'_, '_, '_, '_>, item: &Item, parameter: &str) -> bool {
     match item {
         Item::Fn { args, .. } => { for each in args.iter() { if emit_text(world, each.name) != "" && emit_type_names(world, &each.ty, parameter) { return true; } } },
         _ => { },
@@ -43,7 +43,7 @@ pub(crate) fn emit_type_names(world: &EmitWorld<'_, '_, '_, '_>, ty: &Type, para
     false
 }
 
-pub fn emit_field_slot_in(world: &EmitWorld<'_, '_, '_, '_>, item: &Item) -> i64 {
+pub(crate) fn emit_field_slot_in(world: &EmitWorld<'_, '_, '_, '_>, item: &Item) -> i64 {
     match item {
         Item::Fn { args, .. } => {
             let mut at: i64 = 0;
@@ -57,7 +57,7 @@ pub fn emit_field_slot_in(world: &EmitWorld<'_, '_, '_, '_>, item: &Item) -> i64
     -1
 }
 
-pub fn emit_field_slot_of(world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> i64 {
+pub(crate) fn emit_field_slot_of(world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> i64 {
     for item in world.items.iter() {
         match &item.node {
             Item::Fn { name: written, .. } => {
@@ -71,9 +71,9 @@ pub fn emit_field_slot_of(world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> i64 
     -1
 }
 
-pub fn emit_field_copy_name(function: &str, on: &str, field: &str) -> String { check_specialised(function, &format!("{}::{}", on, field)) }
+pub(crate) fn emit_field_copy_name(function: &str, on: &str, field: &str) -> String { check_specialised(function, &format!("{}::{}", on, field)) }
 
-pub fn emit_slot_of(world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> i64 {
+pub(crate) fn emit_slot_of(world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> i64 {
     for item in world.items.iter() {
         match &item.node {
             Item::Fn { name: written, .. } => {
@@ -87,7 +87,7 @@ pub fn emit_slot_of(world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> i64 {
     -1
 }
 
-pub fn emit_generic_fn(world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> bool {
+pub(crate) fn emit_generic_fn(world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> bool {
     for item in world.items.iter() {
         match &item.node {
             Item::Fn { name: written, generics, .. } => {
@@ -107,9 +107,9 @@ pub(crate) fn emit_field_type(contract: Option<&FieldContract>) -> Ty {
 }
 
 impl EmitState {
-    pub fn method_pauses(&self, on: i64) -> bool { self.facts.pausing_methods.contains(&on) }
-    pub fn method_can_fail(&self, on: i64) -> bool { self.facts.fallible_methods.contains(&on) }
-    pub fn emit_call_fails(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn method_pauses(&self, on: i64) -> bool { self.facts.pausing_methods.contains(&on) }
+    pub(crate) fn method_can_fail(&self, on: i64) -> bool { self.facts.fallible_methods.contains(&on) }
+    pub(crate) fn emit_call_fails(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Call { func, .. } => {
                 let func = nikaia_std::boxed::open(func);
@@ -124,7 +124,7 @@ impl EmitState {
             _ => return false,
         }
     }
-    pub fn emit_catch_nests_a_failure(&self, world: &EmitWorld<'_, '_, '_, '_>, guarded: &Expr) -> bool {
+    pub(crate) fn emit_catch_nests_a_failure(&self, world: &EmitWorld<'_, '_, '_, '_>, guarded: &Expr) -> bool {
         let mut apart: collections::BTreeSet<i64> = collections::BTreeSet::new();
         for each in visited_in_expr(guarded) {
             match each {
@@ -160,16 +160,16 @@ impl EmitState {
         }
         false
     }
-    pub fn lambda_decides(&self, key: &str) -> bool {
+    pub(crate) fn lambda_decides(&self, key: &str) -> bool {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         matches!(contract.sync_claim, Sync::From(_))
     }
-    pub fn lowered_pausing(&self, key: &str) -> bool { call_pauses(&self.own_contracts, key) || self.lambda_decides(key) }
-    pub fn closes_a_pausing_cycle(&self, caller: &str, callee: &str) -> bool {
+    pub(crate) fn lowered_pausing(&self, key: &str) -> bool { call_pauses(&self.own_contracts, key) || self.lambda_decides(key) }
+    pub(crate) fn closes_a_pausing_cycle(&self, caller: &str, callee: &str) -> bool {
         let seen = match self.pausing_reach.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false };
         seen.contains(caller)
     }
-    pub fn method_closes_a_pausing_cycle(&self, caller: &str, method: &str) -> bool {
+    pub(crate) fn method_closes_a_pausing_cycle(&self, caller: &str, method: &str) -> bool {
         let suffix = format!("::{}", method);
         for key in self.pausing_reach.keys() {
             if !key.ends_with(AsRef::<str>::as_ref(&suffix)) { continue; }
@@ -178,7 +178,7 @@ impl EmitState {
         }
         false
     }
-    pub fn a_package_grammar_entry(&self, key: &str) -> bool {
+    pub(crate) fn a_package_grammar_entry(&self, key: &str) -> bool {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         if contract.fails_with.len() != 1 || *unsafe { nikaia_std::proven::read(&contract.fails_with, (0) as usize) } != "ParseError" { return false; }
         let signature = match match contract.signature.as_ref() {
@@ -187,25 +187,25 @@ impl EmitState {
         } { Some(__nikaia_value) => __nikaia_value, None => return false };
         !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "input"
     }
-    pub fn copy_substitutes(&self, on: &str) -> bool {
+    pub(crate) fn copy_substitutes(&self, on: &str) -> bool {
         let kind = match self.facts.type_kinds.get(on) { Some(__nikaia_value) => __nikaia_value, None => return true };
         kind == "Struct" || kind == "Enum" || kind == "Opaque"
     }
-    pub fn type_named(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, head: &str) -> String {
+    pub(crate) fn type_named(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, head: &str) -> String {
         let bound = walk.type_names.get(head);
         if bound.is_some() { return nikaia_std::block::Text::from(nikaia_std::index::or(bound, || "").to_string()); }
         let pair = match walk.specialising.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(head.to_string()) };
         if pair.first == head { return nikaia_std::block::Text::from(pair.second.to_string()); }
         nikaia_std::block::Text::from(head.to_string())
     }
-    pub fn kind_subject(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, side: &Expr) -> String {
+    pub(crate) fn kind_subject(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, side: &Expr) -> String {
         match side {
             Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; nikaia_std::index::or(self.reflected_field_type(world, walk, base, name, "ty::kind"), || "".into()) },
             Expr::Path(segments, _) => self.type_named(world, walk, &emit_text(world, *nikaia_std::index::get(&segments, 0))),
             _ => String::from(""),
         }
     }
-    pub fn kind_named(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, side: &Expr) -> String {
+    pub(crate) fn kind_named(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, side: &Expr) -> String {
         match side {
             Expr::Field { base, name, .. } => {
                 let base = nikaia_std::boxed::open(base); let name = *name;
@@ -227,7 +227,7 @@ impl EmitState {
         }
         String::from("")
     }
-    pub fn reflected_field_type(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, base: &Expr, member: winnow_grammar::Symbol, wanted: &str) -> Option<String> {
+    pub(crate) fn reflected_field_type(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, base: &Expr, member: winnow_grammar::Symbol, wanted: &str) -> Option<String> {
         if walk.reflected(world, base, member, wanted).is_none() { return None; }
         match base {
             Expr::Variable(name, _) => { let name = *name; match walk.field_types.get(&emit_text(world, name)) {
@@ -237,11 +237,11 @@ impl EmitState {
             _ => None,
         }
     }
-    pub fn enclosing_shape_walk(&self, on: &str) -> Option<String> {
+    pub(crate) fn enclosing_shape_walk(&self, on: &str) -> Option<String> {
         for key in self.facts.unrolled.keys() { if key.1 == on { return Some(nikaia_std::block::Text::from(key.0.to_string())); } }
         None
     }
-    pub fn unrolled_owner(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, on: &str, iter: &Expr) -> String {
+    pub(crate) fn unrolled_owner(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, on: &str, iter: &Expr) -> String {
         match iter {
             Expr::Field { base, name: member, .. } => { let base = nikaia_std::boxed::open(base); let member = *member; nikaia_std::index::or(self.reflected_field_type(world, walk, base, member, "ty::fields"), || "".into()) },
             Expr::Path(segments, _) => nikaia_std::index::or(match walk.type_names.get(world.words.resolve(*nikaia_std::index::get(&segments, 0))) {
@@ -251,7 +251,7 @@ impl EmitState {
             _ => nikaia_std::block::Text::from(on.to_string()),
         }
     }
-    pub fn unrolls_here(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, name: &str, on: &str, iter: &Expr) -> Option<Vec<FieldContract>> {
+    pub(crate) fn unrolls_here(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, name: &str, on: &str, iter: &Expr) -> Option<Vec<FieldContract>> {
         match iter {
             Expr::Field { base, name: member, .. } => {
                 let base = nikaia_std::boxed::open(base); let member = *member;
@@ -284,7 +284,7 @@ impl EmitState {
         }
         None
     }
-    pub fn boxed_bindings(&self, world: &EmitWorld<'_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
+    pub(crate) fn boxed_bindings(&self, world: &EmitWorld<'_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
         let mut out: Vec<String> = vec![];
         match pattern {
             MatchPattern::Tuple { path, parts } => {
@@ -339,7 +339,7 @@ impl EmitState {
         let found = match self.facts.narrowing_casts.get(&node_key(operand)).copied() { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(found.clone())
     }
-    pub fn a_code_parameter_taken_whole(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, name: &str) -> bool {
+    pub(crate) fn a_code_parameter_taken_whole(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, name: &str) -> bool {
         let contract = match self.own_contracts.functions.get(function) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let signature = match match contract.signature.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -354,7 +354,7 @@ impl EmitState {
         }
         false
     }
-    pub fn attribute_in_rust(&self, world: &EmitWorld<'_, '_, '_, '_>, written: &str) -> String {
+    pub(crate) fn attribute_in_rust(&self, world: &EmitWorld<'_, '_, '_, '_>, written: &str) -> String {
         let pieces: Vec<&str> = written.split(" { ").collect::<Vec<_>>();
         let name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).to_string());
         let mut inside: String = String::from("");

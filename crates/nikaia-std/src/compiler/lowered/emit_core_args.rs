@@ -27,7 +27,7 @@ pub(crate) fn emit_arg_opening_inside(inner: &Ty) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn emit_rust_owner(ty: &Ty) -> String {
+pub(crate) fn emit_rust_owner(ty: &Ty) -> String {
     if emit_rust_crossing(ty, true, 0).is_none() { return String::from(""); }
     emit_rust_owner_word(ty)
 }
@@ -62,7 +62,7 @@ pub(crate) fn emit_ty_holds_text(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn emit_rust_crossing(ty: &Ty, toward: bool, depth: i64) -> Option<(String, String)> {
+pub(crate) fn emit_rust_crossing(ty: &Ty, toward: bool, depth: i64) -> Option<(String, String)> {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; emit_rust_crossing_named(name, args, view, toward, depth) },
         Ty::Nullable(inner) => {
@@ -141,7 +141,7 @@ pub(crate) fn emit_rust_crossing_tuple(parts: &[Ty], toward: bool, depth: i64) -
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn emit_rust_owner_param(described: &Ledger, callee: &str, i: i64, inside: bool) -> Option<(String, String)> {
+pub(crate) fn emit_rust_owner_param(described: &Ledger, callee: &str, i: i64, inside: bool) -> Option<(String, String)> {
     let contract = match described.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     let params = call_arguments(signature);
@@ -343,7 +343,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_args<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, args: &[Expr], takes_a_handle: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_args<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, args: &[Expr], takes_a_handle: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let boxed_mask: Vec<bool> = nikaia_std::index::or(match walk.boxed_args.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -696,7 +696,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_arg_named_fn_bound<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_arg_named_fn_bound<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         if !self.facts.named_fn_values.contains_key(&node_key(value)) { return Ok(false); }
         let wanted = match value {
             Expr::Variable(name, _) => { let name = *name; emit_text(world, name) },
@@ -740,7 +740,7 @@ pub(crate) fn emit_arg_passing(names: &[String], lent: &[i64]) -> String {
     nikaia_std::block::Text::from(passed.join(", "))
 }
 
-pub fn emit_call_on_the_pool(key: &str) -> bool { key == "net::serve" || key == "net::Listener::serve" || key == "supervisor::child" || key == "supervisor::run" || key == "task::scope" }
+pub(crate) fn emit_call_on_the_pool(key: &str) -> bool { key == "net::serve" || key == "net::Listener::serve" || key == "supervisor::child" || key == "supervisor::run" || key == "task::scope" }
 
 pub(crate) fn emit_call_tasks_channel(flow: &EmitFlow, scope: &EmitScope) -> String {
     if flow.handled_here { return String::from("std::boxed::Box<dyn std::error::Error>"); }
@@ -763,18 +763,18 @@ pub(crate) fn emit_async_wait(gates: &[i64]) -> String {
     out
 }
 
-pub fn emit_async_line(gates: &[i64]) -> String {
+pub(crate) fn emit_async_line(gates: &[i64]) -> String {
     if gates.is_empty() { return String::from(""); }
     format!("{}_waiting", emit_async_group_name(*unsafe { nikaia_std::proven::read(&gates, (nikaia_std::proven::sub::<i64>(gates.len() as i64, 1)) as usize) }))
 }
 
-pub fn emit_async_pause(walk: &EmitWalk) -> String {
+pub(crate) fn emit_async_pause(walk: &EmitWalk) -> String {
     let line = emit_async_line(&walk.async_gates);
     if line == "" { return String::from(".await"); }
     format!(".on_line(&{}).await", line)
 }
 
-pub fn emit_async_during(line: &str, wait: &str) -> String {
+pub(crate) fn emit_async_during(line: &str, wait: &str) -> String {
     if line == "" { return format!("{}.await", wait); }
     format!("{}.during({}).await", line, wait)
 }
@@ -829,7 +829,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_called<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_called<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let path_types = nikaia_std::block::Text::from(walk.path_types.to_string());
         walk.path_types = String::from("");
         if self.emit_call_special(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(()); }
@@ -994,7 +994,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn emit_async_tasks_channel(&self, channel: &str) -> String {
+    pub(crate) fn emit_async_tasks_channel(&self, channel: &str) -> String {
         if self.emit_channel_holds_a_crash(channel) { return nikaia_std::block::Text::from(channel.to_string()); }
         format!("nikaia_std::task::OrCrash<{}>", channel)
     }
@@ -1016,7 +1016,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_async_task<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, task: &Expr, id: i64, kind: &str, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_async_task<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, task: &Expr, id: i64, kind: &str, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let group = self.emit_async_group_of(id);
         if !walk.async_groups.contains(&group) { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet where its group is a block inside the function (#988): put it in `async { … }` or in the function's own body."), at: emit_async_at(flow.statement) }, &"emit_async_task")); }
         let outer = emit_call_tasks_channel(&flow, scope);
@@ -1141,7 +1141,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_async_gate_options<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, name: &str, limit: Option<&Expr>, admission: Option<&Expr>, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<String, nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_async_gate_options<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, name: &str, limit: Option<&Expr>, admission: Option<&Expr>, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<String, nikaia_std::error::Thrown<EmitRefused>> {
         let n = self.emit_async_option(world, walk, host, limit, depth, &flow, scope)?;
         let s = self.emit_async_option(world, walk, host, admission, depth, &flow, scope)?;
         if n == "" && s == "" && !walk.async_pausing { return Ok(String::from("")); }
@@ -1154,7 +1154,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_async_option<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, option: Option<&Expr>, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<String, nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_async_option<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, option: Option<&Expr>, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<String, nikaia_std::error::Thrown<EmitRefused>> {
         let value = match option { Some(__nikaia_value) => __nikaia_value, None => return Ok(String::from("")) };
         let mut text = EmitOut::empty();
         self.emit_expr(world, walk, &mut text, host, value, depth, EmitFlow::plain().at(flow.statement), scope)?;
@@ -1163,7 +1163,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_async_deadline<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, within: Option<&Expr>, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<String, nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_async_deadline<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, within: Option<&Expr>, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<String, nikaia_std::error::Thrown<EmitRefused>> {
         let d = match within { Some(__nikaia_value) => __nikaia_value, None => return Ok(String::from("")) };
         let mut text = EmitOut::empty();
         self.emit_expr(world, walk, &mut text, host, d, depth, EmitFlow::plain().at(flow.statement), scope)?;
@@ -1177,7 +1177,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn emit_async_kind(&self, id: i64) -> String {
+    pub(crate) fn emit_async_kind(&self, id: i64) -> String {
         let wait = match self.facts.async_waits.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         match wait.at {
             CheckAsyncWaitAt::Before(_) => String::from("join"),
@@ -1188,14 +1188,14 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn emit_child_kind(&self, id: i64, flow: &EmitFlow) -> Result<String, nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_child_kind(&self, id: i64, flow: &EmitFlow) -> Result<String, nikaia_std::error::Thrown<EmitRefused>> {
         let kind = self.emit_async_kind(id);
         if kind == "" { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async(handle)` here yet: put it in `async { … }` or in the function's own body."), at: emit_async_at(flow.statement) }, &"emit_child_kind")); }
         Ok(kind)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn emit_async_waits_before(&self, id: i64) -> i64 {
+    pub(crate) fn emit_async_waits_before(&self, id: i64) -> i64 {
         let wait = match self.facts.async_waits.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
         match wait.at {
             CheckAsyncWaitAt::BeforeStatement(at) => at,
@@ -1205,7 +1205,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_async_group<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, id: i64, within: Option<&Expr>, limit: Option<&Expr>, admission: Option<&Expr>, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_async_group<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, block: &Block, id: i64, within: Option<&Expr>, limit: Option<&Expr>, admission: Option<&Expr>, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if flow.handled_here { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async { … }` under a `catch` yet (#988)."), at: emit_async_at(flow.statement) }, &"emit_async_group")); }
         let outer = emit_call_tasks_channel(&flow, scope);
         let channel = self.emit_async_tasks_channel(&outer);
@@ -1261,7 +1261,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_async_binding<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Stmt, span: &Span, depth: i64, tail: &EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_async_binding<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Stmt, span: &Span, depth: i64, tail: &EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         let mut tasks: Vec<(Expr, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         #[allow(unused_mut)] let mut deadlines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         #[allow(unused_mut)] let mut admissions: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines;
@@ -1363,7 +1363,7 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn emit_async_joins(&self, walk: &mut EmitWalk, out: &mut EmitOut, start: i64, pad: &str) {
+    pub(crate) fn emit_async_joins(&self, walk: &mut EmitWalk, out: &mut EmitOut, start: i64, pad: &str) {
         let mut rest: Vec<(String, String, i64)> = vec![];
         for each in walk.async_pending.iter() { if each.2 == start { out.push(&format!("{}\n{}", each.0, pad)); } else { rest.push(each.clone()); } }
         walk.async_pending = rest;
@@ -1565,7 +1565,7 @@ impl EmitState {
         out.push(")");
         Ok(true)
     }
-    pub fn emit_call_path_types(&self, world: &EmitWorld<'_, '_, '_, '_>, base: &Expr, index: &Expr) -> Option<String> {
+    pub(crate) fn emit_call_path_types(&self, world: &EmitWorld<'_, '_, '_, '_>, base: &Expr, index: &Expr) -> Option<String> {
         let segments = match base {
             Expr::Path(segments, _) => segments,
             _ => return None,

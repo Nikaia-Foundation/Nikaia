@@ -53,7 +53,7 @@ pub async fn fix_run<H: LspHost>(host: &H, named: &[String], dry_run: bool) -> R
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn fix_planned(path: &str, source: &str, found: &[Shown]) -> FixPlan {
+pub(crate) fn fix_planned(path: &str, source: &str, found: &[Shown]) -> FixPlan {
     for shown in found.iter() { if !shown.warning { return FixPlan { text: nikaia_std::block::Text::from(source.to_string()), said: vec![format!("{}: not fixed: its check has errors", path)], left: true }; } }
     let size = source.as_bytes().len() as i64;
     let mut edits: Vec<FixEdit> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -91,7 +91,7 @@ pub(crate) fn fix_off_characters(path: &str, source: &str) -> FixPlan { FixPlan 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn fix_diff(path: &str, old: &str, new: &str) -> String {
+pub(crate) fn fix_diff(path: &str, old: &str, new: &str) -> String {
     let was: Vec<&str> = old.split("\n").collect::<Vec<_>>();
     let now: Vec<&str> = new.split("\n").collect::<Vec<_>>(); #[allow(clippy::redundant_locals)] let was = was;
     let mut out = format!("--- {}\n+++ {}\n", path, path); #[allow(clippy::redundant_locals)] let was = was; #[allow(clippy::redundant_locals)] let now = now;

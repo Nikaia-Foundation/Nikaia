@@ -454,7 +454,7 @@ fn any_names_borrowing(names: ref winnow_grammar::InternerContext, types: ref Ve
 // written below with no lifetime of its own (0.0.405). **Unless the result
 // is one of two views it was handed** (#730): that one is the call's too
 // (`for<'call>`), and the type holds nothing.
-pub fn holds_view(ty: ref Type) -> bool {
+fn holds_view(ty: ref Type) -> bool {
     let code = ty.code ?? return holds_view_written(ty)
     let result = code.result ?? return false
     if views_the_call_s(ty, 0) {
@@ -468,7 +468,7 @@ pub fn holds_view(ty: ref Type) -> bool {
 /// `for<'call> Fn(&'call A, &'call B) -> &'call R`, and code that may pause
 /// hands it back from a future that lives `'call` (#1048, #1061). `borrowing`
 /// counts the parameters that name a type holding a view.
-pub fn views_the_call_s(ty: ref Type, borrowing: i64) -> bool {
+fn views_the_call_s(ty: ref Type, borrowing: i64) -> bool {
     if ty.code == null {
         return false
     }
@@ -566,7 +566,7 @@ fn view_fields(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanne
 
 /// A type as the source writes it, for a message to quote back: `ref X` is a
 /// view of an `X` (ADR-184 D1), and a view of `str` is a view of text (D2).
-pub fn written_type(names: ref winnow_grammar::InternerContext, ty: ref Type) -> String {
+fn written_type(names: ref winnow_grammar::InternerContext, ty: ref Type) -> String {
     let mut out: String = ""
     if ty.is_view {
         out.push_str("ref ")
@@ -1065,7 +1065,7 @@ fn views_a_local_struct(unit: ref Unit, asked: ref Asked, block: ref Block, at: 
 /// **A struct bound at statement `at` and read only through its fields, or
 /// handed back by a `return` of its name in this block** (#585, #678): how
 /// often it is handed back, and -1 where the name goes anywhere else.
-pub fn local_struct_handed_back(names: ref winnow_grammar::InternerContext, block: ref Block, at: i64, name: ref String) -> i64 {
+fn local_struct_handed_back(names: ref winnow_grammar::InternerContext, block: ref Block, at: i64, name: ref String) -> i64 {
     let nowhere: collections::BTreeSet[String] = collections::BTreeSet()
     return struct_handed_back(names, block, at, name, "", nowhere, nowhere)
 }
@@ -1962,7 +1962,7 @@ pub struct FieldsHeld {
 
 /// What every declared struct and enum holds - an enum's fields are those of
 /// all its variants together.
-pub fn fields_held(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> Vec[FieldsHeld] {
+fn fields_held(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> Vec[FieldsHeld] {
     let mut out: Vec[FieldsHeld] = []
     for item in items {
         match item.node {

@@ -10,7 +10,7 @@
 use std::collections
 
 /// The field of `self` that `value` reads, where it is `self.<field>`.
-pub fn check_core_field_of_self(world: ref CheckWorld, value: ref Expr) -> String? {
+fn check_core_field_of_self(world: ref CheckWorld, value: ref Expr) -> String? {
     return match value {
         Expr::Field { base, name, .. } => match base {
             Expr::Variable(subject, _) => if world.words.resolve(subject) == "self" { world.words.resolve(name).clone() } else { null },
@@ -23,13 +23,13 @@ pub fn check_core_field_of_self(world: ref CheckWorld, value: ref Expr) -> Strin
 /// **`NK1131`: a field of `self` given away where the method only borrows
 /// `self`** (ADR-083 D2). Where it is handed back, a declared view is the
 /// third way out.
-pub fn check_core_a_field_of_a_borrowed_subject[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span, what: ref String) sync {
+fn check_core_a_field_of_a_borrowed_subject[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span, what: ref String) sync {
     check_core_a_field_of_a_borrowed_subject_given(state, world, host, value, span, what, false)
 }
 
 /// The same, where `read` says the callee only reads what it is given: text
 /// it only reads is lent to it, not given away (ADR-282 D2, ADR-094 D2, #936).
-pub fn check_core_a_field_of_a_borrowed_subject_given[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span, what: ref String, read: bool) sync {
+fn check_core_a_field_of_a_borrowed_subject_given[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span, what: ref String, read: bool) sync {
     if !state.borrowing_self {
         return
     }
@@ -62,7 +62,7 @@ pub fn check_core_a_field_of_a_borrowed_subject_given[H: CheckHost](mut state: C
 /// #576): a field of a `ref` parameter, of a `for` binding over a list or of a
 /// `let` over a place, handed back by value, where the function does not
 /// declare a view.
-pub fn check_core_a_field_of_a_lent_place_handed_back[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span) sync {
+fn check_core_a_field_of_a_lent_place_handed_back[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span) sync {
     let expected: Ty? = state.expected?.clone()
     if expected != null {
         let declared = expected ?? return
@@ -80,7 +80,7 @@ pub fn check_core_a_field_of_a_lent_place_handed_back[H: CheckHost](mut state: C
 /// parameter: `NK1131`, as `if c { return h.name }` is (was an internal
 /// compiler error). A result both kinds flow into lends such an arm instead
 /// (`lent_arms_handed_back`), and a view takes it as it is.
-pub fn check_core_lent_places_in_arms_handed_back[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span) sync {
+fn check_core_lent_places_in_arms_handed_back[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span) sync {
     if !is_a_choice(value) || state.flow.expected_either {
         return
     }
@@ -99,7 +99,7 @@ pub fn check_core_lent_places_in_arms_handed_back[H: CheckHost](mut state: Check
 /// **`NK1131` for a place that is lent here, passed to a parameter that owns
 /// its value** (#792): `k(v[0])` or `k(v[0].u)` out of `v: ref Vec[T]`.
 /// Text is `NK1102`'s, which says what it views.
-pub fn check_core_a_lent_place_passed[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, keeps: bool, span: ref Span) sync {
+fn check_core_a_lent_place_passed[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, keeps: bool, span: ref Span) sync {
     check_core_a_lent_place_given_away(state, world, host, value, span, false, keeps)
 }
 
@@ -107,7 +107,7 @@ pub fn check_core_a_lent_place_passed[H: CheckHost](mut state: CheckState, world
 /// out of its owner. A view, text (ADR-282) and a function value (Part I 5.4)
 /// are not such a value, nor a type that copies here or in the package.
 impl CheckState {
-    pub fn does_not_copy(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
+    fn does_not_copy(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
         if ty.is_unknown() || copies_plainly(ty) || ty.is_a_view() || self.copied(world, ty) {
             return false
         }
@@ -342,7 +342,7 @@ fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world
 /// and one that may pause hands back a boxed future. An element of a list is
 /// kept by the list (Part I 5.3), and a function of this program, named, is
 /// the closure that calls it: the call is typed here.
-pub fn check_core_a_kept_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, want: ref Ty, value: ref Expr, span: ref Span) sync {
+fn check_core_a_kept_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, want: ref Ty, value: ref Expr, span: ref Span) sync {
     let inner: Ty = match want {
         Ty::Nullable(held) => held.clone(),
         else => want.clone(),
@@ -456,7 +456,7 @@ fn check_core_a_kept_function[H: CheckHost](mut state: CheckState, world: ref Ch
 /// **A literal takes the use's type, whichever literal it is**: an array where
 /// an `Array[T, N]` is wanted (ADR-152 D4), and text of its own where a
 /// `String` is (ADR-282 D4). One entry for every position that is a use.
-pub fn check_core_literal_by_use[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) -> Ty? sync {
+fn check_core_literal_by_use[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, found: ref Ty, want: ref Ty, value: ref Expr, span: ref Span) -> Ty? sync {
     check_core_a_kept_lambda(state, world, host, want, value, span)
     return state.array_literal(world, found, want, value, span) ?? state.text_literal(world, want, value, true) ?? state.tuple_literal(world, found, want, value) ?? state.list_of_tuple_literals(world, found, want, value) ?? state.collect_by_use(world, found, want, value) ?? number_where_no_number_is(want, value)
 }
@@ -484,7 +484,7 @@ fn check_core_element_of(held: ref Ty?) -> Ty {
 /// template's `<for>` declares a name (ADR-017), bound in a frame around the
 /// holes inside it; the collection it walks is a hole of its own, walked first
 /// (#524).
-pub fn check_core_holes[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, literal: ref Expr, span: ref Span) sync {
+fn check_core_holes[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, literal: ref Expr, span: ref Span) sync {
     let mut interpolated = false
     let mut specs: Vec[String?] = []
     match literal {
@@ -545,7 +545,7 @@ pub fn check_core_holes[H: CheckHost](mut state: CheckState, world: ref CheckWor
 /// names are bound in order to what the signature hands the lambda. What it
 /// comes to is what its body comes to (ADR-293 D5), beside whether it paused
 /// (ADR-233 D1).
-pub fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], body: ref Block, given: ref Vec[Ty], promised: ref CheckPromises, span: ref Span) -> (Ty, bool) sync {
+fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, params: ref Vec[winnow_grammar::Symbol], mutable: ref Vec[winnow_grammar::Symbol], body: ref Block, given: ref Vec[Ty], promised: ref CheckPromises, span: ref Span) -> (Ty, bool) sync {
     let mut frame: Vec[CheckLocal] = []
     let mut at = 0
     for p in params {
@@ -593,7 +593,7 @@ pub fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWo
 
 /// **Into a lambda's body** (#758): a `return` there is the lambda's, not
 /// the enclosing function's; what the function declares is set aside.
-pub fn check_core_lambda_enter(mut state: CheckState) -> Ty? sync {
+fn check_core_lambda_enter(mut state: CheckState) -> Ty? sync {
     let outer: Ty? = state.expected?.clone()
     state.expected = null
     state.flow.lambda_returns.push([])
@@ -603,7 +603,7 @@ pub fn check_core_lambda_enter(mut state: CheckState) -> Ty? sync {
 /// **Out of a lambda's body** (#758): its result is read from its `return`s
 /// as well as from its last value, and they agree, as a named function's do
 /// (`NK1104`). A body that ends in a `return` comes to what that hands back.
-pub fn check_core_lambda_leave(mut state: CheckState, outer: ref Ty?, tail: ref Ty, body: ref Block) -> Ty sync {
+fn check_core_lambda_leave(mut state: CheckState, outer: ref Ty?, tail: ref Ty, body: ref Block) -> Ty sync {
     state.expected = outer?.clone()
     let returns: Vec[CheckLambdaReturn] = state.flow.lambda_returns.pop() ?? []
     state.flow.last_lambda_returns = returns.clone()
@@ -711,7 +711,7 @@ fn check_core_lambda_a_unit(ty: ref Ty) -> bool {
 }
 
 /// Whether an expression reads a field.
-pub fn check_core_a_field(value: ref Expr) -> bool {
+fn check_core_a_field(value: ref Expr) -> bool {
     return match value {
         Expr::Field { .. } => true,
         else => false,
@@ -719,7 +719,7 @@ pub fn check_core_a_field(value: ref Expr) -> bool {
 }
 
 /// Whether a type is nullable.
-pub fn check_core_a_nullable(ty: ref Ty) -> bool {
+fn check_core_a_nullable(ty: ref Ty) -> bool {
     return match ty {
         Ty::Nullable(_) => true,
         else => false,
@@ -731,7 +731,7 @@ pub fn check_core_a_nullable(ty: ref Ty) -> bool {
 /// of a view of the map's own text (`Option<&String>` below), and the result
 /// is the option of a text view (`Option<&str>`); the emitter writes the view
 /// of each, which is the same `Option<&str>` where it is one already.
-pub fn check_core_a_text_option_into_a_view(found: ref Ty, expected: ref Ty) -> bool {
+fn check_core_a_text_option_into_a_view(found: ref Ty, expected: ref Ty) -> bool {
     let wanted = match expected {
         Ty::Nullable(inner) => match inner {
             Ty::Named { name, args, view } => view && args.is_empty() && (name == TEXT_VIEW || name == TEXT),
@@ -762,7 +762,7 @@ fn check_core_lambda_held(ty: ref Ty) -> Ty {
 /// **A `return`**: what it hands back is checked against what the function
 /// declares, after the refusals of giving away what is only borrowed
 /// (ADR-083), and a view of the subject is lent rather than given (D1).
-pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, span: ref Span, in_an_expression: bool) sync {
+fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr?, span: ref Span, in_an_expression: bool) sync {
     // **No jump leaves an `async` form** (ADR-async-5 D10); a lambda's
     // `return`, `async fn { … }`'s included, ends the lambda.
     if state.flow.async_depth > 0 {
@@ -941,7 +941,7 @@ fn check_core_shown_operand(world: ref CheckWorld, operand: ref Expr) -> String?
 /// changes nothing (`NK1194`), an optional text message, and the claim as
 /// written kept for the run. An `assume` (ADR-376 D1), as `assumed` says, is
 /// read the same way and kept as one.
-pub fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span, assumed: bool) -> Ty sync {
+fn check_core_an_assert[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span, assumed: bool) -> Ty sync {
     let unit = Ty::Named { name: "()", args: [], view: false }
     if args.len() != 1 {
         state.an_assert_of_another_shape(f"`assert` claims one condition, and this hands it {args.len()}", span)

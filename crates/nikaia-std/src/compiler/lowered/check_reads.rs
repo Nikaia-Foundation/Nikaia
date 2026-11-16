@@ -5,7 +5,7 @@ pub(crate) fn check_counts_first(key: &str) -> bool { key == "Seq::take" || key 
 
 pub(crate) fn check_counts_second(key: &str) -> bool { key == "Vec::swap" || key == "Array::swap" }
 
-pub fn check_numeric(name: &str) -> bool { name == "i32" || name == "i64" || name == "f32" || name == "f64" || name == "u8" || name == "u32" || name == "u64" }
+pub(crate) fn check_numeric(name: &str) -> bool { name == "i32" || name == "i64" || name == "f32" || name == "f64" || name == "u8" || name == "u32" || name == "u64" }
 
 pub(crate) fn check_owned_text(ty: &Ty) -> bool {
     match ty {
@@ -47,13 +47,13 @@ pub(crate) fn check_number_literal(side: &Expr) -> bool { matches!(side, Expr::L
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn counts_in_usize(&mut self, key: &str, args: &[Expr]) {
+    pub(crate) fn counts_in_usize(&mut self, key: &str, args: &[Expr]) {
         if check_counts_first(key) && !args.is_empty() { let added = self.facts.count_args.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64); }
         if check_counts_second(key) && args.len() > 1 { let second = self.facts.count_args.insert(id_of(unsafe { nikaia_std::proven::read(&args, (1) as usize) }) as i64); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_map_read_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) {
+    pub(crate) fn a_map_read_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) {
         match value {
             Expr::Match { arms, .. } => {
                 for arm in arms.iter() { self.a_map_read_kept(world, found, want, &arm.body, span); }
@@ -102,7 +102,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_map_read_handed_back(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, body: &Block) {
+    pub(crate) fn a_map_read_handed_back(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, body: &Block) {
         for value in block_tail(body) {
             let node = id_of(value) as i64;
             if !self.flow.map_read_sites.contains(&node) || self.facts.copied_walks.contains(&node) { return; }
@@ -116,7 +116,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_map_read_assigned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, into: &Ty, value: &Expr, span: &Span) {
+    pub(crate) fn a_map_read_assigned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, into: &Ty, value: &Expr, span: &Span) {
         match value {
             Expr::Coalesce { value: read, fallback, .. } => {
                 let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback);
@@ -133,7 +133,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_view_that_copies(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
+    pub(crate) fn a_view_that_copies(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
         if copies_as_a_view(ty) { return true; }
         match ty {
             Ty::Named { name, args, view } => {
@@ -150,7 +150,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_cast_over_a_lent_binding(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, operand: &Expr, span: &Span) {
+    pub(crate) fn a_cast_over_a_lent_binding(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, operand: &Expr, span: &Span) {
         match operand {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -206,7 +206,7 @@ impl CheckState {
     pub(crate) fn a_side_is_a_value(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, ty: &Ty) -> bool { !ty.is_unknown() && !ty.is_a_view() && !self.a_lent_name(world, side) && !self.a_side_is_lent(world, side, ty) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_view_compared_with_a_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) {
+    pub(crate) fn a_view_compared_with_a_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) {
         let read_left = self.a_side_is_a_view(world, lhs, left) && self.a_side_is_a_value(world, rhs, right);
         let read_right = self.a_side_is_a_view(world, rhs, right) && self.a_side_is_a_value(world, lhs, left);
         let number_left = left.is_unknown() && self.a_lent_name(world, lhs) && self.a_number_beside(world, rhs, right);
@@ -240,7 +240,7 @@ impl CheckState {
     pub(crate) fn a_number_beside(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, ty: &Ty) -> bool { check_copied(ty) && self.a_side_is_a_value(world, side, ty) || check_number_by_form(side) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lookup_key_lent(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, on: &Ty, args: &[Expr], found: &[Ty]) {
+    pub(crate) fn a_lookup_key_lent(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, on: &Ty, args: &[Expr], found: &[Ty]) {
         if !is_a_lookup(key) || !world.library.functions.contains_key(key) { return; }
         if args.len() != 1 || found.len() != 1 { return; }
         let given = unsafe { nikaia_std::proven::read(&args, (0) as usize) };
@@ -279,7 +279,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_read(&mut self, expr: &Expr, path: &str, span: &Span) {
+    pub(crate) fn a_read(&mut self, expr: &Expr, path: &str, span: &Span) {
         let key = (id_of(expr) as i64, span.start as i64);
         if self.flow.read_index.contains_key(&key) { return; }
         self.read_seq = self.read_seq + 1;
@@ -290,7 +290,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn parts_taken_out_of_a_mut_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &str, body: &Expr, subject: &Ty, parts: &collections::BTreeMap<String, Ty>, handed_from: i64, from: i64) {
+    pub(crate) fn parts_taken_out_of_a_mut_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &str, body: &Expr, subject: &Ty, parts: &collections::BTreeMap<String, Ty>, handed_from: i64, from: i64) {
         for repeat in self.repeats.iter() { if repeat.what == "lambda" { return; } }
         if self.scope.is_empty() { return; }
         let frame = (*unsafe { nikaia_std::proven::read(&self.scope, (nikaia_std::proven::sub::<i64>(self.scope.len() as i64, 1)) as usize) }).copy_owned();
@@ -333,7 +333,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn record_cast(&mut self, from: &Ty, into: &Ty, operand: i64) {
+    pub(crate) fn record_cast(&mut self, from: &Ty, into: &Ty, operand: i64) {
         let from_name = match from {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return,

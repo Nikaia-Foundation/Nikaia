@@ -66,7 +66,7 @@ impl CheckState {
     /// function type without `-> R`, as a named function without a result
     /// type does, so `s.spawn fn { 1 }` runs its body and hands back
     /// nothing.
-    pub fn a_lambda_hands_back_nothing(ref mut self, id: i64, result: ref Ty?) sync {
+    fn a_lambda_hands_back_nothing(ref mut self, id: i64, result: ref Ty?) sync {
         if result == null {
             self.facts.valueless_lambdas.insert(id)
         }
@@ -75,7 +75,7 @@ impl CheckState {
     /// **A pausing kept lambda's integer result is recorded** (#1029): its
     /// boxed future is cast to `BoxedIn<'_, i64>`, not `<'_, _>`, or each bare
     /// literal it hands back is `rustc`'s `i32`. One that may fail keeps `_`.
-    pub fn a_kept_lambdas_result(ref mut self, id: i64, result: ref Ty?, pauses: bool, fails: bool) sync {
+    fn a_kept_lambdas_result(ref mut self, id: i64, result: ref Ty?, pauses: bool, fails: bool) sync {
         if !pauses || fails {
             return
         }
@@ -88,7 +88,7 @@ impl CheckState {
     /// ADR-312 D5): handing a hull on duplicates the count, so the name outside
     /// is still there on the next line. Asked wherever a lambda is kept - a
     /// field, a `let`, and a parameter the callee keeps (#536).
-    pub fn a_kept_lambdas_hulls(ref mut self, world: ref CheckWorld, value: ref Expr) sync {
+    fn a_kept_lambdas_hulls(ref mut self, world: ref CheckWorld, value: ref Expr) sync {
         match value {
             Expr::Closure { params, body, .. } => {
                 self.hulls_of_a_lambda(world, value, params, body)
@@ -132,7 +132,7 @@ impl CheckState {
     /// future must own what it reads - which the emitter writes from
     /// `kept_owned`: no copy.
     /// `who` says in words who keeps it.
-    pub fn a_kept_lambda_takes_these(ref mut self, world: ref CheckWorld, value: ref Expr, pauses: bool, who: ref String, span: ref Span) sync {
+    fn a_kept_lambda_takes_these(ref mut self, world: ref CheckWorld, value: ref Expr, pauses: bool, who: ref String, span: ref Span) sync {
         match value {
             Expr::Closure { params, body, .. } => {
                 self.takes_of_a_lambda(world, value, params, body, pauses, who, span)
@@ -176,7 +176,7 @@ impl CheckState {
     /// statement: at its last use the handle is moved into the task (ADR-312
     /// D2 as revised by #1502). A value a move takes away goes with it. `who` is the
     /// task as `NK2101` names it: a `spawn`ed or an `async(detached)` one.
-    pub fn a_task_takes_these(ref mut self, world: ref CheckWorld, body: ref Expr, task: i64, who: ref String, span: ref Span) sync {
+    fn a_task_takes_these(ref mut self, world: ref CheckWorld, body: ref Expr, task: i64, who: ref String, span: ref Span) sync {
         let mut named: collections::BTreeSet[String] = collections::BTreeSet()
         names_in(body, world.words, named)
         for name in named {
@@ -200,7 +200,7 @@ impl CheckState {
     /// **`NK1229`: a supervisor's child that would not start fresh** (ADR-328
     /// D7, Part II 12.8): its function is called again for every attempt, so a
     /// `mut` binding it captures carries one attempt's changes into the next.
-    pub fn a_child_that_keeps_state(ref mut self, world: ref CheckWorld, body: ref Expr, span: ref Span) sync {
+    fn a_child_that_keeps_state(ref mut self, world: ref CheckWorld, body: ref Expr, span: ref Span) sync {
         match body {
             Expr::Closure { params, body, .. } => {
                 self.state_of_a_child(world, params, body, span)
@@ -236,7 +236,7 @@ impl CheckState {
     /// (ADR-282 D8) - or a `String` the lambda captures is refused, as a
     /// named function's view is where that type is wanted, with the help
     /// `.clone()` (ADR-282 D10).
-    pub fn a_lambda_hands_back_text_it_does_not_own(ref mut self, world: ref CheckWorld, code: ref Ty, params: ref Vec[winnow_grammar::Symbol], body: ref Block, tail: ref Ty, span: ref Span) sync {
+    fn a_lambda_hands_back_text_it_does_not_own(ref mut self, world: ref CheckWorld, code: ref Ty, params: ref Vec[winnow_grammar::Symbol], body: ref Block, tail: ref Ty, span: ref Span) sync {
         let result: Ty = match code {
             Ty::Fn { result, .. } => result?.clone() ?? return,
             else => return,
@@ -286,7 +286,7 @@ impl CheckState {
     /// `fn() -> i64` is refused here, not by `rustc`. Asked only where the
     /// result is wholly known; text against text is the views check's
     /// (`a_lambda_hands_back_text_it_does_not_own`).
-    pub fn a_lambdas_result_is_its_types(ref mut self, world: ref CheckWorld, code: ref Ty, body: ref Block, tail: ref Ty, span: ref Span) sync {
+    fn a_lambdas_result_is_its_types(ref mut self, world: ref CheckWorld, code: ref Ty, body: ref Block, tail: ref Ty, span: ref Span) sync {
         let result: Ty = match code {
             Ty::Fn { result, .. } => result?.clone() ?? return,
             else => return,

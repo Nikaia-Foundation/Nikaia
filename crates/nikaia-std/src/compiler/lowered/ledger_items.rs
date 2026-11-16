@@ -5,7 +5,7 @@ pub(crate) fn is_offered(name: &str) -> bool { name == "i32" || name == "i64" ||
 
 pub fn types_this_file_declares(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> { types_declared_in(&program.items, words) }
 
-pub fn types_declared_in(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+pub(crate) fn types_declared_in(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let mut declared: collections::BTreeSet<String> = collections::BTreeSet::new();
     for item in items.iter() {
         match &item.node {
@@ -53,7 +53,7 @@ pub fn a_literal(expr: &Expr) -> bool {
 
 pub(crate) fn is_a_number(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. } | Expr::LitFloat(_, _)) }
 
-pub fn declared_extern(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, declarations: &[Spanned<TraitMethod>]) -> Vec<DeclaredFn> {
+pub(crate) fn declared_extern(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, declarations: &[Spanned<TraitMethod>]) -> Vec<DeclaredFn> {
     let mut out: Vec<DeclaredFn> = vec![];
     for declaration in declarations.iter() {
         let mut declared = declared_trait_method(words, aliases, "", &declaration.node, false);
@@ -64,7 +64,7 @@ pub fn declared_extern(words: &winnow_grammar::InternerContext, aliases: &collec
     out
 }
 
-pub fn declared_grammar(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, definition: &GrammarDef) -> Vec<DeclaredFn> {
+pub(crate) fn declared_grammar(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, definition: &GrammarDef) -> Vec<DeclaredFn> {
     let owner = nikaia_std::block::Text::from(words.resolve(definition.name).to_string());
     let mut out: Vec<DeclaredFn> = vec![];
     for rule in definition.rules.iter() {
@@ -96,7 +96,7 @@ pub fn declared_grammar(words: &winnow_grammar::InternerContext, aliases: &colle
     out
 }
 
-pub fn grammar_entry_interns(words: &winnow_grammar::InternerContext, definition: &GrammarDef, entry: &str) -> bool {
+pub(crate) fn grammar_entry_interns(words: &winnow_grammar::InternerContext, definition: &GrammarDef, entry: &str) -> bool {
     let mut rules: collections::BTreeSet<String> = collections::BTreeSet::new();
     for r in definition.rules.iter() { rules.insert(nikaia_std::block::Text::from(words.resolve(r.name).to_string())); }
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -220,7 +220,7 @@ pub struct PublishedEnsures {
     pub condition: String,
 }
 
-pub fn expression_ensures(item: &Item, words: &winnow_grammar::InternerContext, ledger: &Ledger, reads_back: &impl Fn(&str, &collections::BTreeSet<String>) -> bool) -> Option<PublishedEnsures> {
+pub(crate) fn expression_ensures(item: &Item, words: &winnow_grammar::InternerContext, ledger: &Ledger, reads_back: &impl Fn(&str, &collections::BTreeSet<String>) -> bool) -> Option<PublishedEnsures> {
     let (name, receiver, args, config, ret_type, body) = match item {
         Item::Fn { name, receiver, args, config, ret_type, body, .. } => { let name = *name; (name, receiver, args, config, ret_type, body) },
         _ => return None,
@@ -260,7 +260,7 @@ pub struct ComputedAt {
     pub field: bool,
 }
 
-pub fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[collections::BTreeSet<String>], ledger: &mut Ledger) -> Vec<ComputedAt> {
+pub(crate) fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[collections::BTreeSet<String>], ledger: &mut Ledger) -> Vec<ComputedAt> {
     let declared: collections::BTreeSet<String> = units.iter().flat_map(|u| { types_declared_in(u.items, u.words) }).collect();
     let mut defaults: Vec<ComputedAt> = vec![];
     for (u, view) in units.iter().enumerate().map(|(at, item)| (at as i64, item)) {

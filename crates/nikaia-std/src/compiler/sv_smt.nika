@@ -82,7 +82,7 @@ fn sv_smt_stats_none() -> SvSmtStats {
 }
 
 /// The counters as `--stats` prints them.
-pub fn sv_smt_stats_text(st: ref SvSmtStats) -> String {
+fn sv_smt_stats_text(st: ref SvSmtStats) -> String {
 	return f"conflicts {st.conflicts}, theory conflicts {st.theory_conflicts}, lemmas {st.lemmas} (repeated {st.repeated}), decisions {st.decisions}, restarts {st.restarts}"
 }
 

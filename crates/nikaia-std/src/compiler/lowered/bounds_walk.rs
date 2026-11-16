@@ -182,7 +182,7 @@ pub(crate) fn changed_falls(out: &mut BoundsChanged, name: &str) {
     out.bare_falls.insert(nikaia_std::block::Text::from(name.to_string()));
 }
 
-pub fn bounds_aggressive(args: &[FnArg], body: &Block, nonnegative: collections::BTreeSet<String>, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> BoundsProven {
+pub(crate) fn bounds_aggressive(args: &[FnArg], body: &Block, nonnegative: collections::BTreeSet<String>, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> BoundsProven {
     let mut walk = bounding_new(args, body, nonnegative, context, program, words);
     bounds_rounds(&mut walk, args, body, context, program, words, ask)
 }
@@ -252,7 +252,7 @@ pub(crate) fn bounds_rounds(walk: &mut BoundsWalk, args: &[FnArg], body: &Block,
     walk.proven.clone()
 }
 
-pub fn bounds_fields(context: &mut BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+pub(crate) fn bounds_fields(context: &mut BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
     context.around.field_bounds.clear();
     if context.around.fields.is_empty() { return; }
     let writers = context.around.field_writers.copy_owned();
@@ -534,7 +534,7 @@ pub(crate) fn bounding_relations_push(walk: &mut BoundsWalk, facts: &mut BoundsF
     }
 }
 
-pub fn bounds_action_range(body: &Block, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> Option<Range> {
+pub(crate) fn bounds_action_range(body: &Block, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> Option<Range> {
     let none: Vec<FnArg> = vec![];
     let mut walk = bounding_new(&none, body, bp_names(&nonnegative_locals(body), words), context, program, words);
     walk.return_ranging = true;
@@ -5799,7 +5799,7 @@ pub(crate) fn changed_by_frame(frame: &BoundsChanged, on: &Expr, args: &[Expr], 
     bounding_extend(out, &frame_at_call(frame, (path_of(on, words)).as_deref(), &frame_handed(args, words)));
 }
 
-pub fn bounds_returns(context: &mut BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+pub(crate) fn bounds_returns(context: &mut BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
     let mut assumed: collections::BTreeMap<String, BoundsReturns> = collections::BTreeMap::new();
     let mut bodies: Vec<&Spanned<Item>> = vec![];
     #[allow(unused_mut)] let mut keys: Vec<String> = vec![];

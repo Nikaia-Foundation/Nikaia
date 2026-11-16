@@ -421,7 +421,7 @@ fn a_position_the_result_points_into(callee: ref String?, at: i64, own: ref Ledg
 /// count, and each call hands over the `Bytes` it has, a mapping's at a count
 /// and a run of bytes copied into one. A `ref Bytes` only read, or one the
 /// result views, stays a run of bytes, which any caller lends as it is.
-pub fn keeps_its_bytes(contract: ref FnContract, at: i64) -> bool {
+fn keeps_its_bytes(contract: ref FnContract, at: i64) -> bool {
     let signature = contract.signature ?? return false
     if at < 0 || at >= signature.params.len() {
         return false
@@ -1706,7 +1706,7 @@ fn keeps_a_copied_scalar(ty: ref Ty) -> bool {
 /// such a value that may be `null`. Kept below, it is handed over by value
 /// all the same, so no caller's value goes with it and no `keep` is written
 /// or asked for.
-pub fn keeps_a_copy_type(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> bool {
+fn keeps_a_copy_type(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> bool {
     return keeps_copied_field(ty, copies)
 }
 
@@ -1723,7 +1723,7 @@ fn keeps_type_name(ty: ref Ty) -> String? {
 /// **The file's copy types** (ADR-294 D9.1): a data-less enum, and a struct
 /// whose every field is a copied scalar or such a type, asked again until
 /// nothing more joins; never one with a `Drop`.
-pub fn keeps_copy_types(view: ref ParsedView) -> collections::BTreeSet[String] {
+fn keeps_copy_types(view: ref ParsedView) -> collections::BTreeSet[String] {
     let mut dropped: collections::BTreeSet[String] = collections::BTreeSet()
     for item in view.items {
         match item.node {

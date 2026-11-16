@@ -9,7 +9,7 @@
 use std::collections
 
 /// The last segment of a path: `a::b::c` is `c`.
-pub fn emit_base(name: ref String) -> String {
+fn emit_base(name: ref String) -> String {
     let mut last: String = name.clone()
     for part in name.split("::") {
         last = part.clone()
@@ -44,7 +44,7 @@ fn emit_type_contract(own: ref Ledger, library: ref Ledger, owner: ref String) -
 
 impl EmitState {
     /// Whether the member `member` of `owner` is built in a box (ADR-246).
-    pub fn is_boxed(ref self, owner: ref String, member: ref String) -> bool {
+    fn is_boxed(ref self, owner: ref String, member: ref String) -> bool {
         let bare = emit_base(owner)
         let members = self.facts.boxed_members.get(bare) ?? return false
         return members.contains(member)
@@ -52,7 +52,7 @@ impl EmitState {
 
     /// As `is_boxed`, for a named field: of a struct, or of a variant written
     /// `Type::Variant`.
-    pub fn is_boxed_field(ref self, owner: ref String, field: ref String) -> bool {
+    fn is_boxed_field(ref self, owner: ref String, field: ref String) -> bool {
         let parts: Vec[String] = owner.split("::").collect()
         if parts.len() >= 2 {
             let ty = parts[parts.len() - 2].clone()
@@ -65,7 +65,7 @@ impl EmitState {
     }
 
     /// The type of a member, in a `Box` where it is boxed.
-    pub fn boxed_ty(ref self, owner: ref String, member: ref String, lowered: String) -> String {
+    fn boxed_ty(ref self, owner: ref String, member: ref String, lowered: String) -> String {
         if self.is_boxed(owner, member) {
             return f"std::boxed::Box<{lowered}>"
         }
@@ -73,7 +73,7 @@ impl EmitState {
     }
 
     /// Whether the part `at` of the variant a pattern's path names is boxed.
-    pub fn boxed_part(ref self, world: ref EmitWorld, path: ref Vec[winnow_grammar::Symbol], at: i64) -> bool {
+    fn boxed_part(ref self, world: ref EmitWorld, path: ref Vec[winnow_grammar::Symbol], at: i64) -> bool {
         if path.len() < 2 {
             return false
         }
@@ -85,7 +85,7 @@ impl EmitState {
 
     /// Whether a pattern reaches into a boxed part, other than by binding the
     /// whole of it.
-    pub fn looks_inside_a_box(ref self, world: ref EmitWorld, pattern: ref MatchPattern) -> bool {
+    fn looks_inside_a_box(ref self, world: ref EmitWorld, pattern: ref MatchPattern) -> bool {
         return match pattern {
             MatchPattern::Tuple { path, parts } => self.looks_inside_parts(world, path, parts),
             MatchPattern::Or(alternatives) => self.looks_inside_any(world, alternatives),
@@ -122,7 +122,7 @@ impl EmitState {
 
     /// Whether a type carries a view anywhere in it: a view, a type that
     /// borrows, or a function type's result that does.
-    pub fn carries_a_view(ref self, world: ref EmitWorld, ty: ref Type) -> bool {
+    fn carries_a_view(ref self, world: ref EmitWorld, ty: ref Type) -> bool {
         let code = ty.code ?? return self.carries_a_written_view(world, ty)
         let result = code.result ?? return false
         return self.carries_a_view(world, result)
@@ -141,13 +141,13 @@ impl EmitState {
     }
 
     /// Whether a struct of this name is declared in this file or beside it.
-    pub fn declares_a_struct(ref self, name: ref String) -> bool {
+    fn declares_a_struct(ref self, name: ref String) -> bool {
         return self.structs.contains(name) || self.structs_beside.contains(name)
     }
 
     /// Which arguments of `callee` are handles to a shared value: its contract
     /// in this unit's ledger or `std`'s, by name or by the last segment.
-    pub fn takes_a_handle(ref self, world: ref EmitWorld, callee: ref String) -> Vec[bool] {
+    fn takes_a_handle(ref self, world: ref EmitWorld, callee: ref String) -> Vec[bool] {
         let mut found = self.handles_in(self.own_contracts, self.own_methods, callee)
         if found == null {
             found = self.handles_in(world.library, self.library_methods, callee)
@@ -177,7 +177,7 @@ impl EmitState {
 
     /// As `takes_a_handle`, for a call's callee: a struct's constructor is
     /// its `new`.
-    pub fn takes_a_handle_at(ref self, world: ref EmitWorld, func: ref Expr) -> Vec[bool] {
+    fn takes_a_handle_at(ref self, world: ref EmitWorld, func: ref Expr) -> Vec[bool] {
         let name = call_written_name(world.words, func) ?? return []
         if self.declares_a_struct(name) {
             return self.takes_a_handle(world, f"{name}::new")
@@ -187,7 +187,7 @@ impl EmitState {
 
     /// Whether the argument `at` of the `extern` function `callee` is a size
     /// (a `usize`).
-    pub fn takes_a_size(ref self, world: ref EmitWorld, callee: ref String, at: i64) -> bool {
+    fn takes_a_size(ref self, world: ref EmitWorld, callee: ref String, at: i64) -> bool {
         let params = self.foreign_params.get(callee) ?? return false
         if at < 0 || at >= params.len() {
             return false
@@ -198,7 +198,7 @@ impl EmitState {
 
     /// The name of an `extern` type that is a handle (a declared opaque type,
     /// or `CStr`), if the type is one.
-    pub fn handle_named(ref self, world: ref EmitWorld, ty: ref Type) -> String? {
+    fn handle_named(ref self, world: ref EmitWorld, ty: ref Type) -> String? {
         if ty.is_view || ty.is_slice {
             return null
         }
@@ -210,7 +210,7 @@ impl EmitState {
     }
 
     /// The handle an `extern` function hands back, by the function's name.
-    pub fn handle_from(ref self, world: ref EmitWorld, func: ref Expr) -> String? {
+    fn handle_from(ref self, world: ref EmitWorld, func: ref Expr) -> String? {
         match func {
             Expr::Variable(name, _) => {
                 let declared = self.foreign_results.get(world.words.resolve(name)) ?? return null
@@ -222,7 +222,7 @@ impl EmitState {
     }
 
     /// Whether that handle may be null (the result is a `T?`).
-    pub fn handle_from_may_be_null(ref self, world: ref EmitWorld, func: ref Expr) -> bool {
+    fn handle_from_may_be_null(ref self, world: ref EmitWorld, func: ref Expr) -> bool {
         match func {
             Expr::Variable(name, _) => {
                 let declared = self.foreign_results.get(world.words.resolve(name)) ?? return false
@@ -234,7 +234,7 @@ impl EmitState {
     }
 
     /// What a pointer to this `extern` type points at.
-    pub fn pointed_at(ref self, world: ref EmitWorld, ty: ref Type) -> String {
+    fn pointed_at(ref self, world: ref EmitWorld, ty: ref Type) -> String {
         if emit_base(world.words.resolve(ty.name)) == "CStr" {
             return "core::ffi::c_char"
         }
@@ -242,12 +242,12 @@ impl EmitState {
     }
 
     /// Whether an `extern` parameter of this type is written as a run.
-    pub fn writes_a_run(ref self, world: ref EmitWorld, ty: ref Type) -> bool {
+    fn writes_a_run(ref self, world: ref EmitWorld, ty: ref Type) -> bool {
         return ty.is_slice || (ty.is_view && world.words.resolve(ty.name) == "Array" && ty.generics.len() == 1)
     }
 
     /// The name a call's callee is written with where it is a variable.
-    pub fn called_name(ref self, words: ref winnow_grammar::InternerContext, func: ref Expr) -> ref String {
+    fn called_name(ref self, words: ref winnow_grammar::InternerContext, func: ref Expr) -> ref String {
         match func {
             Expr::Variable(name, _) => {
                 return words.resolve(name)
@@ -278,7 +278,7 @@ impl EmitState {
     }
 
     /// The contract of `owner`'s field `field`.
-    pub fn field_contract(ref self, world: ref EmitWorld, owner: ref String, field: ref String) -> FieldContract? {
+    fn field_contract(ref self, world: ref EmitWorld, owner: ref String, field: ref String) -> FieldContract? {
         let contract = emit_type_contract(self.own_contracts, world.library, owner) ?? return null
         for candidate in contract.fields {
             if candidate.name == field {
@@ -289,7 +289,7 @@ impl EmitState {
     }
 
     /// The contract of the type `owner`.
-    pub fn type_contract(ref self, world: ref EmitWorld, owner: ref String) -> TypeContract? {
+    fn type_contract(ref self, world: ref EmitWorld, owner: ref String) -> TypeContract? {
         return emit_type_contract(self.own_contracts, world.library, owner)
     }
 

@@ -27,7 +27,7 @@ pub(crate) fn not_a_module(name: &str) -> bool { name == "f64" || name == "i32" 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_import_that_brings_a_name_in(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], span: &Span) {
+    pub(crate) fn an_import_that_brings_a_name_in(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], span: &Span) {
         let mut segments: Vec<String> = vec![];
         for part in path.iter() {
             let part = *part;
@@ -62,7 +62,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_std_module_nobody_declared(&mut self, module: &str, segments: &[String], span: &Span) {
+    pub(crate) fn a_std_module_nobody_declared(&mut self, module: &str, segments: &[String], span: &Span) {
         let mut offered: Vec<String> = vec![];
         for name in self.std_modules.iter() { if !starts_with_a_capital(name) && !not_a_module(name) { offered.push(nikaia_std::block::Text::from(name.to_string())); } }
         offered.sort();
@@ -77,7 +77,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_name_the_page_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Spanned<Pattern>) {
+    pub(crate) fn a_name_the_page_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Spanned<Pattern>) {
         match &pattern.node {
             Pattern::Ref { name, args, .. } => {
                 let name = *name;
@@ -103,7 +103,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lambda_the_promise_names(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, named: &str, args: &[FnArg], at: &Span) {
+    pub(crate) fn a_lambda_the_promise_names(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, named: &str, args: &[FnArg], at: &Span) {
         let mut why: Option<String> = None;
         let mut found = false;
         for arg in args.iter() {

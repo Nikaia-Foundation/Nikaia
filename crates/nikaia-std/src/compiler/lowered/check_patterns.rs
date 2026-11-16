@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn pattern_parts(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, on: &Ty) -> collections::BTreeMap<String, Ty> {
+    pub(crate) fn pattern_parts(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, on: &Ty) -> collections::BTreeMap<String, Ty> {
         let mut out: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
         match pattern {
             MatchPattern::Or(alternatives) => {
@@ -141,7 +141,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn named_pattern_key(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], on: &Ty) -> String {
+    pub(crate) fn named_pattern_key(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], on: &Ty) -> String {
         let (owner, plain) = match on {
             Ty::Named { name, args, .. } => (nikaia_std::block::Text::from(name.to_string()), args.is_empty()),
             _ => return String::from(""),
@@ -152,7 +152,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn pattern_variant(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], owner: &str) -> String {
+    pub(crate) fn pattern_variant(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], owner: &str) -> String {
         let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for part in path.iter() {
             let part = *part;
@@ -176,7 +176,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn pattern_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
+pub(crate) fn pattern_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
     match pattern {
         MatchPattern::Path(segments) => if segments.len() == 1 { vec![nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string())] } else { vec![] },
         MatchPattern::Tuple { parts, .. } => names_of_parts(world, parts),
@@ -204,9 +204,9 @@ pub(crate) fn names_of_fields(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, fi
     out
 }
 
-pub fn pattern_is_rest(part: &MatchPattern) -> bool { matches!(part, MatchPattern::Rest | MatchPattern::RestNamed(_)) }
+pub(crate) fn pattern_is_rest(part: &MatchPattern) -> bool { matches!(part, MatchPattern::Rest | MatchPattern::RestNamed(_)) }
 
-pub fn pattern_list_element(on: &Ty) -> Option<Ty> {
+pub(crate) fn pattern_list_element(on: &Ty) -> Option<Ty> {
     match on {
         Ty::Named { name, args, .. } => { if (name == "Vec" || name == "Array" || name == "List") && !args.is_empty() { return Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone()); } },
         _ => { },
@@ -217,7 +217,7 @@ pub fn pattern_list_element(on: &Ty) -> Option<Ty> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_struct_pattern_that_leaves_fields_out(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, on: &Ty, span: &Span) {
+    pub(crate) fn a_struct_pattern_that_leaves_fields_out(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, on: &Ty, span: &Span) {
         match pattern {
             MatchPattern::Or(alternatives) => {
                 for alternative in alternatives.iter() { self.a_struct_pattern_that_leaves_fields_out(world, alternative, on, span); }

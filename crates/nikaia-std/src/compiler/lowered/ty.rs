@@ -99,14 +99,14 @@ pub(crate) fn code_params_listed(params: &[Ty]) -> String {
     out
 }
 
-pub fn lent_mut(ty: &Ty) -> Option<Ty> {
+pub(crate) fn lent_mut(ty: &Ty) -> Option<Ty> {
     match ty {
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; if mutable && !slice { Some(item.clone()) } else { None } },
         _ => None,
     }
 }
 
-pub fn unlent_each(params: &[Ty]) -> Vec<Ty> {
+pub(crate) fn unlent_each(params: &[Ty]) -> Vec<Ty> {
     let mut out: Vec<Ty> = vec![];
     for part in params.iter() { out.push(nikaia_std::index::or(lent_mut(part), || part.clone().into())); }
     out
@@ -209,7 +209,7 @@ pub fn split_args(written: &str) -> Vec<String> {
     parts
 }
 
-pub fn a_view_of(written: &str) -> Option<String> {
+pub(crate) fn a_view_of(written: &str) -> Option<String> {
     if written.starts_with("ref(") {
         let c: Vec<scalar> = nikaia_std::list::chars(written.chars());
         let close = closing(&c, 4, ')');
@@ -449,7 +449,7 @@ pub enum Sync {
 
 impl Sync {
     pub fn is_sync(&self) -> bool { !matches!(self, Sync::No | Sync::Unpromised) }
-    pub fn is_unpromised(&self) -> bool { matches!(self, Sync::Unpromised) }
+    pub(crate) fn is_unpromised(&self) -> bool { matches!(self, Sync::Unpromised) }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -517,7 +517,7 @@ pub struct Touch {
 }
 
 impl Touch {
-    pub fn names_a_lock(&self) -> bool { self.kind == "lock" }
+    pub(crate) fn names_a_lock(&self) -> bool { self.kind == "lock" }
     pub fn text(&self) -> String {
         if self.named.is_some() {
             let access = if self.write { "write" } else { "read" };
@@ -671,8 +671,8 @@ pub struct Signature {
 
 impl Signature {
     pub fn empty() -> Signature { Signature { bounds: vec![], params: vec![], mutable: vec![], config: vec![], result: None } }
-    pub fn takes_a_receiver(&self) -> bool { !self.params.is_empty() && unsafe { nikaia_std::proven::read(&self.params, (0) as usize) }.0 == "self" }
-    pub fn result_or_unit(&self) -> Ty {
+    pub(crate) fn takes_a_receiver(&self) -> bool { !self.params.is_empty() && unsafe { nikaia_std::proven::read(&self.params, (0) as usize) }.0 == "self" }
+    pub(crate) fn result_or_unit(&self) -> Ty {
         nikaia_std::index::or(match self.result.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -815,13 +815,13 @@ pub const SEEN: &str = "Seen";
 
 impl Ty {
     pub fn is_unknown(&self) -> bool { matches!(self, Ty::Unknown) }
-    pub fn as_a_view(&self) -> Ty {
+    pub(crate) fn as_a_view(&self) -> Ty {
         match self {
             Ty::Named { name, args, view } => { let view = *view; viewed_name(name, args, view) },
             _ => self.clone(),
         }
     }
-    pub fn is_seen(&self) -> bool {
+    pub(crate) fn is_seen(&self) -> bool {
         match self {
             Ty::Named { name, args, .. } => name == SEEN && args.len() == 1,
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.is_seen() },
@@ -921,7 +921,7 @@ impl Ty {
             _ => self.clone(),
         }
     }
-    pub fn parameterise(&self, parameters: &collections::BTreeSet<String>) -> Ty {
+    pub(crate) fn parameterise(&self, parameters: &collections::BTreeSet<String>) -> Ty {
         match self {
             Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; Ty::Pointed { item: std::boxed::Box::new(item.parameterise(parameters)), slice, mutable } },
             Ty::Tuple(parts) => Ty::Tuple(parameterised_each(parts, parameters)),
@@ -1183,7 +1183,7 @@ pub(crate) fn substituted(name: &str, view: bool, bound: &collections::BTreeMap<
     found.clone()
 }
 
-pub fn views_text_slots(ty: &Ty, bound: &collections::BTreeMap<String, Ty>, owned: bool) -> bool {
+pub(crate) fn views_text_slots(ty: &Ty, bound: &collections::BTreeMap<String, Ty>, owned: bool) -> bool {
     match ty {
         Ty::Var { name, view } => { let view = *view; view && text_bound(name, bound, owned) },
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); views_text_slots(inner, bound, owned) },
@@ -1312,7 +1312,7 @@ pub fn method_index(ledger: &Ledger) -> MethodIndex {
     MethodIndex { keys }
 }
 
-pub fn method_keys(index: &MethodIndex, method: &str) -> Vec<String> {
+pub(crate) fn method_keys(index: &MethodIndex, method: &str) -> Vec<String> {
     let last = nikaia_std::index::or(method.rsplit("::").next(), || "");
     let bucket = match *nikaia_std::index::get(&index.keys, last) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let suffix = format!("::{}", method); #[allow(clippy::redundant_locals)] let bucket = bucket;

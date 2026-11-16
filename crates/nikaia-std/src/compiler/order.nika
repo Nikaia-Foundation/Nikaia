@@ -245,7 +245,7 @@ pub fn accounted(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, wal
 /// statement in a task's window (ADR-async-5 D7, #1354): a failure nobody
 /// catches leaves the function, but what runs beside it has run by then
 /// already, so it is no reason to leave the statement unaccounted for.
-pub fn accounted_beside(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, walking: ref Walking) -> Accounted {
+fn accounted_beside(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, walking: ref Walking) -> Accounted {
     return accounted_as(stmt, words, walking, true)
 }
 
@@ -644,7 +644,7 @@ fn joined_segments(segments: ref Vec[winnow_grammar::Symbol], names: ref winnow_
 /// - a `return` or a `throw` anywhere in it, and a `break` or `continue` not
 /// bound to a loop written inside it. `bound` says such a loop stands between
 /// here and the block's end.
-pub fn diverts_within(stmts: ref Vec[Spanned[Stmt]], bound: bool) -> bool {
+fn diverts_within(stmts: ref Vec[Spanned[Stmt]], bound: bool) -> bool {
     for stmt in stmts {
         let leaves = match stmt.node {
             Stmt::Return(_) => true,

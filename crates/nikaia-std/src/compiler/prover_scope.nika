@@ -128,7 +128,7 @@ impl ProverScope {
     }
 
     /// A function's entry: nothing known yet, and every state reaches it.
-    pub fn at_the_entry() -> ProverScope {
+    fn at_the_entry() -> ProverScope {
         let mut scope = ProverScope::unknown()
         scope.path = []
         scope.exact = true
@@ -136,7 +136,7 @@ impl ProverScope {
     }
 
     /// `name` is bound again: nothing known about the old binding holds.
-    pub fn rebind(ref mut self, arena: ref TermArena, name: ref String) {
+    fn rebind(ref mut self, arena: ref TermArena, name: ref String) {
         // **The paths of fields from it go with it** (ADR-306 D17).
         let under = f"{name}."
         // **And its elements, and the elements it indexes** (ADR-306 D33).
@@ -273,7 +273,7 @@ impl ProverScope {
     /// **The guard that proves `goal`, where one does** (ADR-396 D5): the
     /// last fact a guard made that reads a name the goal reads, as
     /// `guards` has it - its byte and its condition, written.
-    pub fn guard_of(ref self, arena: ref TermArena, goal: i64) -> (i64, String)? {
+    fn guard_of(ref self, arena: ref TermArena, goal: i64) -> (i64, String)? {
         let mut names: collections::BTreeSet[String] = collections::BTreeSet()
         arena.variables(goal, names)
         let mut found: (i64, String)? = null
@@ -290,7 +290,7 @@ impl ProverScope {
 
     /// **Whether the history can say anything about `claim`**: it reads a
     /// name the claim reads, or one the facts tie to it.
-    pub fn history_reads(ref self, arena: ref TermArena, claim: i64) -> bool {
+    fn history_reads(ref self, arena: ref TermArena, claim: i64) -> bool {
         if self.history.is_empty() {
             return false
         }
@@ -319,7 +319,7 @@ impl ProverScope {
     }
 
     /// The facts and the history together.
-    pub fn with_history(ref self) -> Vec[i64] {
+    fn with_history(ref self) -> Vec[i64] {
         let mut all = self.facts.clone()
         all.extend(self.history.clone())
         return all
@@ -328,7 +328,7 @@ impl ProverScope {
     /// `name` is a list or text that does not change, so `name.len()` is a
     /// variable of the proof: a length is never negative, and a literal's is
     /// known.
-    pub fn has_length(ref mut self, mut arena: TermArena, name: ref String, known: i64?) {
+    fn has_length(ref mut self, mut arena: TermArena, name: ref String, known: i64?) {
         let length = length_of(name)
         self.ints.insert(length.clone())
         let len = arena.var(length)
@@ -344,7 +344,7 @@ impl ProverScope {
     }
 
     /// `name` is a whole number that is never negative.
-    pub fn not_negative(ref mut self, mut arena: TermArena, name: ref String) {
+    fn not_negative(ref mut self, mut arena: TermArena, name: ref String) {
         let n = arena.var(name)
         let zero = arena.int(0)
         self.facts.push(arena.ge(n, zero))
@@ -353,7 +353,7 @@ impl ProverScope {
     /// `term` at the function's entry: each name it reads replaced by its
     /// value there. Nothing where it reads a name whose value at the entry is
     /// not known - the result of a call, a mutable binding.
-    pub fn at_entry(ref self, mut arena: TermArena, term: i64) -> i64? {
+    fn at_entry(ref self, mut arena: TermArena, term: i64) -> i64? {
         let mut read: collections::BTreeSet[String] = collections::BTreeSet()
         arena.variables(term, read)
         let mut values: collections::BTreeMap[String, i64] = collections::BTreeMap()
@@ -366,7 +366,7 @@ impl ProverScope {
 
     /// A branch taken or a guard passed: `condition` at the entry joins the
     /// path, and a condition the walk cannot carry there ends it.
-    pub fn on_the_path(ref mut self, mut arena: TermArena, condition: i64?) {
+    fn on_the_path(ref mut self, mut arena: TermArena, condition: i64?) {
         let at = condition ?? {
             self.path = null
             return
@@ -383,7 +383,7 @@ impl ProverScope {
     /// lengths of its lists, and the result is no larger than a fixed number
     /// of terms - counted, so that whether a claim is a precondition does not
     /// depend on the machine.
-    pub fn precondition_at(ref self, mut arena: TermArena, claim: i64, params: ref collections::BTreeSet[String]) -> i64? {
+    fn precondition_at(ref self, mut arena: TermArena, claim: i64, params: ref collections::BTreeSet[String]) -> i64? {
         let path = copied_path(self.path) ?? return null
         let at_entry = self.at_entry(arena, claim) ?? return null
         let mut term = at_entry
@@ -409,7 +409,7 @@ impl ProverScope {
     /// there (a condition on a value the body made): what a `pub` function
     /// that leaves the check open must still state (ADR-396 D6) - no path,
     /// so it asks for more than the body needs, never less.
-    pub fn claim_at_entry(ref self, mut arena: TermArena, claim: i64, params: ref collections::BTreeSet[String]) -> i64? {
+    fn claim_at_entry(ref self, mut arena: TermArena, claim: i64, params: ref collections::BTreeSet[String]) -> i64? {
         let term = self.at_entry(arena, claim) ?? return null
         if !only_parameters(arena, term, params) || arena.size(term) > precondition_terms() {
             return null
@@ -425,7 +425,7 @@ impl ProverScope {
     /// `claim` as a postcondition: `returned` is `result`, every other name
     /// its value at the entry; nothing where that leaves a name that is not a
     /// parameter or the length of one.
-    pub fn postcondition_at(ref self, mut arena: TermArena, claim: i64, returned: ref String, params: ref collections::BTreeSet[String]) -> i64? {
+    fn postcondition_at(ref self, mut arena: TermArena, claim: i64, returned: ref String, params: ref collections::BTreeSet[String]) -> i64? {
         let mut read: collections::BTreeSet[String] = collections::BTreeSet()
         arena.variables(claim, read)
         let result = arena.var(result_name())
@@ -453,7 +453,7 @@ impl ProverScope {
     /// claim's, and every name a fact ties them to - where the facts are
     /// exactly what reaches here and pin each of them, no parameter, no
     /// call's result, nothing they lean on. Nothing anywhere else.
-    pub fn pinned_names(ref self, arena: ref TermArena, claim: i64) -> collections::BTreeSet[String]? {
+    fn pinned_names(ref self, arena: ref TermArena, claim: i64) -> collections::BTreeSet[String]? {
         if !self.exact {
             return null
         }
@@ -481,7 +481,7 @@ impl ProverScope {
 
     /// **`name` is a whole number inside `bits`** (#776): a mask's or a
     /// shift's value, of which nothing more is known.
-    pub fn bounded_bits(ref mut self, mut arena: TermArena, name: ref String, bits: ref ProverBits) {
+    fn bounded_bits(ref mut self, mut arena: TermArena, name: ref String, bits: ref ProverBits) {
         self.ints.insert(name.clone())
         self.loose.insert(name.clone())
         let named = arena.var(name)
@@ -521,13 +521,13 @@ pub fn length_of(name: ref String) -> String {
 }
 
 /// The name a postcondition gives the value handed back.
-pub fn result_name() -> String {
+fn result_name() -> String {
     return "result"
 }
 
 /// How many terms a precondition carried back to the entry may have
 /// (ADR-269 D16).
-pub fn precondition_terms() -> i64 {
+fn precondition_terms() -> i64 {
     return 64
 }
 
@@ -537,7 +537,7 @@ fn pushed(path: Vec[i64]?, c: i64) -> Vec[i64]? {
     return p
 }
 
-pub fn copied_path(path: ref Vec[i64]?) -> Vec[i64]? {
+fn copied_path(path: ref Vec[i64]?) -> Vec[i64]? {
     let p = path ?? return null
     return p.clone()
 }

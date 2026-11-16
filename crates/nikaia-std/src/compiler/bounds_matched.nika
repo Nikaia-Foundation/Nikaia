@@ -20,7 +20,7 @@ pub struct BmMatched {
     pub rule_binds: collections::BTreeMap[String, String],
 }
 
-pub fn bm_empty() -> BmMatched {
+fn bm_empty() -> BmMatched {
     return BmMatched { given: collections::BTreeMap(), classes: collections::BTreeMap(), text_lengths: collections::BTreeMap(), text_classes: collections::BTreeMap(), rule_binds: collections::BTreeMap() }
 }
 
@@ -62,7 +62,7 @@ fn bm_is_digit(class: ref Range?) -> bool {
 }
 
 /// What the bindings of `pattern` matched, added to `found`.
-pub fn bm_matched(words: ref winnow_grammar::InternerContext, rules: ref collections::BTreeSet[String], pattern: ref Pattern, mut found: BmMatched) {
+fn bm_matched(words: ref winnow_grammar::InternerContext, rules: ref collections::BTreeSet[String], pattern: ref Pattern, mut found: BmMatched) {
     match pattern {
         Pattern::Seq(parts) => {
             for part in parts {
@@ -173,7 +173,7 @@ fn bm_most(rep: ref Repeat) -> i64? {
 /// its parameters and `result`, by the name a call writes. The first ledger that
 /// has an entry answers; a condition that does not read back is left out, which
 /// only ever proves less.
-pub fn bm_ensured(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> collections::BTreeMap[String, Ensured] {
+fn bm_ensured(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> collections::BTreeMap[String, Ensured] {
     let mut out: collections::BTreeMap[String, Ensured] = collections::BTreeMap()
     for ledger in ledgers {
         for (key, contract) in ledger.functions {
@@ -215,7 +215,7 @@ pub fn bm_ensured(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collect
 /// the ledger's key (`str::split`): what a list it is collected into holds of
 /// its length. The first ledger that has an entry answers; a condition that
 /// does not read back is left out.
-pub fn bm_collected(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> collections::BTreeMap[String, Ensured] {
+fn bm_collected(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> collections::BTreeMap[String, Ensured] {
     let mut out: collections::BTreeMap[String, Ensured] = collections::BTreeMap()
     for ledger in ledgers {
         for (key, contract) in ledger.functions {
@@ -258,7 +258,7 @@ pub fn bm_collected(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref colle
 /// read back over its parameters, by the ledger's key. The first ledger that
 /// has an entry answers; an entry with a condition that does not read back is
 /// left out whole, since proving the rest would not prove it.
-pub fn bm_required(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> collections::BTreeMap[String, Ensured] {
+fn bm_required(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> collections::BTreeMap[String, Ensured] {
     let mut out: collections::BTreeMap[String, Ensured] = collections::BTreeMap()
     let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
     for ledger in ledgers {
@@ -303,7 +303,7 @@ pub fn bm_required(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collec
 /// (ADR-375 D5), read back over the parameters, the options, `self.len()` and
 /// `item`, by the ledger's key (`Bytes::find_all`). The first ledger that has
 /// an entry answers; a condition that does not read back is left out.
-pub fn bm_each(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> collections::BTreeMap[String, Ensured] {
+fn bm_each(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) -> collections::BTreeMap[String, Ensured] {
     let mut out: collections::BTreeMap[String, Ensured] = collections::BTreeMap()
     for ledger in ledgers {
         for (key, contract) in ledger.functions {
@@ -348,7 +348,7 @@ pub fn bm_each(ledgers: ref Vec[ref Ledger], read: fn(ref String, ref collection
 /// that takes a parameter other than its receiver `mut` (ADR-094 D3), by its
 /// last name (`fs::File::read`). Every other argument a method is handed is
 /// `ref` and keeps its length across the call.
-pub fn bm_changing_methods(ledgers: ref Vec[ref Ledger]) -> collections::BTreeSet[String] {
+fn bm_changing_methods(ledgers: ref Vec[ref Ledger]) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     for ledger in ledgers {
         for (key, contract) in ledger.functions {

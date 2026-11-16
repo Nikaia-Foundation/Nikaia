@@ -209,7 +209,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_pattern_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wild: bool, lent_key: i64, collect: bool, found: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_pattern_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wild: bool, lent_key: i64, collect: bool, found: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, nikaia_std::error::Thrown<EmitRefused>> {
         let mut n = found;
         match pattern {
             MatchPattern::Otherwise => { out.push("_"); },
@@ -330,7 +330,7 @@ impl EmitState {
                         if !own.is_empty() {
                             let written: Option<i64> = self.emit_core_set_pattern_written(world, walk, out, host, alternative, &own, wild, lent_key, collect, n, depth, flow, scope)?;
                             if written.is_some() {
-                                n = nikaia_std::index::or(written, || n.into());
+                                n = nikaia_std::index::or(written, || n);
                                 continue;
                             }
                         }
@@ -409,7 +409,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_nest_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wanted: i64, before: i64, wild: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_nest_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, wanted: i64, before: i64, wild: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<i64, nikaia_std::error::Thrown<EmitRefused>> {
         let mut n = before;
         match pattern {
             MatchPattern::Tuple { path, parts } => {
@@ -495,7 +495,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_arm_body_led<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, nest_count: i64, body: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope, lead: &str) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_arm_body_led<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, pattern: &MatchPattern, nest_count: i64, body: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope, lead: &str) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let mut taken_apart = nikaia_std::block::Text::from(lead.to_string());
         for at in 0..nest_count {
             let mut written = EmitOut::empty();
@@ -585,7 +585,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_match_over_a_sum<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, sum: &str, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_match_over_a_sum<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, sum: &str, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let listed = self.sum_members(sum);
         if listed.is_none() { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("There's no error set called `{}`.", sum), at: Some(flow.statement) }, &"emit_core_match_over_a_sum")); }
         let members = match listed { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
@@ -667,7 +667,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_match_over_a_box<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_match_over_a_box<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         #[allow(unused_mut)] let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut home: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut catch_all = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
@@ -741,7 +741,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn emit_core_match<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_match<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if self.facts.kind_matches.contains(&node_key(value)) {
             self.emit_kind_match(world, walk, out, host, value, arms, depth, flow, scope)?;
             return Ok(());

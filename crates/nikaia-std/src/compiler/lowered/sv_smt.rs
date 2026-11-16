@@ -29,7 +29,8 @@ pub struct SvSmtStats {
 
 pub(crate) fn sv_smt_stats_none() -> SvSmtStats { SvSmtStats { conflicts: 0, theory_conflicts: 0, lemmas: 0, repeated: 0, decisions: 0, restarts: 0 } }
 
-pub fn sv_smt_stats_text(st: &SvSmtStats) -> String { format!("conflicts {}, theory conflicts {}, lemmas {} (repeated {}), decisions {}, restarts {}", st.conflicts, st.theory_conflicts, st.lemmas, st.repeated, st.decisions, st.restarts) }
+#[cfg(test)]
+pub(crate) fn sv_smt_stats_text(st: &SvSmtStats) -> String { format!("conflicts {}, theory conflicts {}, lemmas {} (repeated {}), decisions {}, restarts {}", st.conflicts, st.theory_conflicts, st.lemmas, st.repeated, st.decisions, st.restarts) }
 
 pub(crate) fn sv_engine_unknown(why: LgUnknown, work: i64) -> SvEngineRun { SvEngineRun { driven: SvDriven::Answer(LgAnswer::Unknown { why }), work, path: String::from(""), carried: vec![], stats: sv_smt_stats_none() } }
 
@@ -544,6 +545,7 @@ pub(crate) fn sv_real_value(arena: &TermArena, id: i64, values: &collections::BT
     }
 }
 
+#[cfg(test)]
 pub(crate) fn sv_real_named(values: &collections::BTreeMap<String, SvRat>, name: &str) -> SvRat { nikaia_std::index::or(*nikaia_std::index::get(&values, name), || sv_int(0).into()) }
 
 pub(crate) fn sv_real_truth(arena: &TermArena, id: i64, values: &collections::BTreeMap<String, SvRat>) -> Option<bool> {

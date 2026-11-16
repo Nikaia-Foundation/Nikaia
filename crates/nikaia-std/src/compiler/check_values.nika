@@ -9,7 +9,7 @@ impl CheckState {
     /// [`moves_away`], where a type the library says **copies** is copied
     /// ([ADR-294](../../docs/specification/adr/adr-294.md) D9.1, the reading):
     /// a `winnow_grammar::Symbol` handed on is still there to hand on again.
-    pub fn takes_away(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
+    fn takes_away(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
         return moves_away(ty) && !a_ledger_copies(ty, [world.library]) && !self.a_package_copy(world, ty)
     }
 
@@ -19,7 +19,7 @@ impl CheckState {
     /// taken out of a loan (`NK2106`), and a `Count` declared in another file
     /// as used after it was kept (`NK2105`) - found moving `sharing`'s classes
     /// into Nikaia (#125).
-    pub fn a_package_copy(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
+    fn a_package_copy(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
         return match ty {
             Ty::Named { name, args, view } => !view && args.len() == 0 && self.copies_in_the_package.contains(name),
             Ty::Nullable(inner) => self.a_package_copy(world, inner) || !self.takes_away(world, inner),
@@ -48,7 +48,7 @@ impl CheckState {
     /// declares is one too** (#1246): `time::Duration` is made with
     /// `20.millis()`, never written as `20` (Part II, `select`). A name this
     /// checker does not know - a type parameter - is not claimed.
-    pub fn no_number_is(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
+    fn no_number_is(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
         return match ty {
             Ty::Named { name, args, .. } => name == "String" || name == "str" || name == "bool" || name == "char" || (args.len() > 0 && !a_number_name(name)) || self.structs.contains_key(name) || self.enums.contains_key(name) || world.library.types.contains_key(name),
             Ty::Tuple(_) => true,
@@ -59,7 +59,7 @@ impl CheckState {
     /// **A type no integer is** (Part I 2.2, 2.4): one no number is, and a
     /// float, whose literal is written with a decimal point. A number takes
     /// its type among the integer types.
-    pub fn no_integer_is(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
+    fn no_integer_is(ref self, world: ref CheckWorld, ty: ref Ty) -> bool sync {
         return self.no_number_is(world, ty) || a_float_type(ty)
     }
 
@@ -69,7 +69,7 @@ impl CheckState {
     /// is lent, as it is to any `ref String` parameter (ADR-094 D1): the
     /// argument is recorded in `owned_patterns`, the call writes `&` in front of
     /// it, and the value stays the caller's. A list is refused (D17).
-    pub fn a_pattern_of_owned_text(ref mut self, key: ref String, given: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
+    fn a_pattern_of_owned_text(ref mut self, key: ref String, given: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
         let mut param: String = ""
         if key == "str::starts_with" {
             param = "prefix"
@@ -142,7 +142,7 @@ impl CheckState {
     /// fits, and the call reached `rustc` as *expected `P`, found `&P`* about
     /// a file nobody wrote (Part III C.1). Text has its own sentence above; a
     /// view of what copies is copied out at the call (ADR-233 D4).
-    pub fn a_view_of_what_does_not_copy(ref self, world: ref CheckWorld, found: ref Ty, want: ref Ty) -> bool sync {
+    fn a_view_of_what_does_not_copy(ref self, world: ref CheckWorld, found: ref Ty, want: ref Ty) -> bool sync {
         return match found {
             Ty::Named { name, args, view } => view && self.is_a_view_of(world, name, args, want),
             else => false,
@@ -157,7 +157,7 @@ impl CheckState {
     }
 
     /// The refusal [`Checker::a_view_of_what_does_not_copy`] answers with.
-    pub fn a_view_kept_whole(ref mut self, key: ref String, name: ref String, found: ref Ty, want: ref Ty, span: ref Span) sync {
+    fn a_view_kept_whole(ref mut self, key: ref String, name: ref String, found: ref Ty, want: ref Ty, span: ref Span) sync {
         self.findings.push(check_refusal("NK1102", span, f"`{key}` expects `{name}` to be `{want.text()}` here, but you're passing `{found.text()}`.", [f"This is a view: it points into a `{want.text()}` that something else owns.", f"`{key}` keeps its `{name}` after the call returns, so it needs a `{want.text()}` of its own."], "Write `.clone()` to copy it here."))
     }
 
@@ -183,7 +183,7 @@ impl CheckState {
     /// ([Part III C.4](../../../docs/specification/30-nikaia-tooling.md)): a
     /// refusal on a guess is a correct program refused, and it is the worse of
     /// the two mistakes.
-    pub fn a_handler_that_does_more_than_the_type_allows(ref mut self, promised: ref CheckPromises, seen: ref CheckHanded, span: ref Span) sync {
+    fn a_handler_that_does_more_than_the_type_allows(ref mut self, promised: ref CheckPromises, seen: ref CheckHanded, span: ref Span) sync {
         if seen.pauses && !promised.may_pause {
             self.findings.push(check_refusal("NK2206", span, "This lambda can pause, but the parameter it's passed to is `sync`.", ["A function type says what the code passed in may do, and `sync` means it must never pause.", "A lambda that does less fits a type that allows more, never the other way round."], "Do the pausing work outside the lambda and pass the result in, or remove `sync` from the parameter's type."))
         }
@@ -197,7 +197,7 @@ impl CheckState {
     /// says the code it names never fails; a lambda that does is not of that
     /// type, as a value of another type is not. `NK2606` is the same mistake
     /// where the place is a parameter.
-    pub fn a_failing_lambda_where_the_type_does_not_fail(ref mut self, place: ref Ty, span: ref Span) sync {
+    fn a_failing_lambda_where_the_type_does_not_fail(ref mut self, place: ref Ty, span: ref Span) sync {
         let shown = place.text()
         let wanted: String = match place {
             Ty::Fn { params, result, is_sync, .. } => Ty::Fn { params: params.clone(), result: result?.clone(), is_sync: is_sync, can_throw: true }.text(),
@@ -222,7 +222,7 @@ impl CheckState {
     /// type - `x.to_string()` in a body generic over `x` among them.
     ///
     /// Not where the program declares a method of that name itself.
-    pub fn a_copy_under_another_name(ref mut self, world: ref CheckWorld, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], span: ref Span) sync {
+    fn a_copy_under_another_name(ref mut self, world: ref CheckWorld, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], span: ref Span) sync {
         let written = world.words.resolve(method).clone()
         if args.len() != 0 || written != "to_owned" || ledger_candidates(world.own, world.own_methods, written).len() != 0 {
             return
@@ -239,7 +239,7 @@ impl CheckState {
     ///
     /// The literal is already the text wherever text is wanted; the call adds
     /// nothing. An f-string with holes and a local are not this.
-    pub fn a_call_on_a_literal_that_adds_nothing(ref mut self, world: ref CheckWorld, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], span: ref Span) sync {
+    fn a_call_on_a_literal_that_adds_nothing(ref mut self, world: ref CheckWorld, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], span: ref Span) sync {
         let written = world.words.resolve(method).clone()
         if args.len() != 0 || (written != "to_string" && written != "clone") {
             return
@@ -260,7 +260,7 @@ impl CheckState {
     /// `xs.push(p.name)` with `p` a view takes the field out of a value this
     /// body does not own: the language below said *cannot move out of
     /// `p.name` which is behind a shared reference*, about a file nobody wrote.
-    pub fn a_part_of_a_loan_handed_over(ref mut self, path: ref String, root: ref String, to: ref String, span: ref Span) sync {
+    fn a_part_of_a_loan_handed_over(ref mut self, path: ref String, root: ref String, to: ref String, span: ref Span) sync {
         // **`mut self` is changed in place, not only borrowed** (ADR-views-3
         // D3, #1208): a part reaching here could not be taken out and given
         // back (inside a lambda, or a type with no stand-in).
@@ -276,7 +276,7 @@ impl CheckState {
 /// signature takes no `self` is a function a call names by its path, and
 /// `x.lines()` never reaches `io::lines()`. An entry with no signature is still
 /// a candidate - what it takes is unknown.
-pub fn ledger_candidates(ledger: ref Ledger, methods: ref MethodIndex, method: ref String) -> Vec[String] sync {
+fn ledger_candidates(ledger: ref Ledger, methods: ref MethodIndex, method: ref String) -> Vec[String] sync {
     let mut out: Vec[String] = []
     for entry_name in method_keys(methods, method) {
         let entry_value = ledger.functions[entry_name] ?? continue

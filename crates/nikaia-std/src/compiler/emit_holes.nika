@@ -211,7 +211,7 @@ pub struct EmitHoleTables {
 /// **Every hole of every template in the file's functions and methods**, asked
 /// of the parser once, so every reader shares the trees; what was said of the
 /// ones that did not parse beside them.
-pub fn emit_holes_tables[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> EmitHoleTables sync {
+fn emit_holes_tables[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> EmitHoleTables sync {
     let mut errors: collections::BTreeMap[(i64, String), String] = collections::BTreeMap()
     for item in items {
         match item.node {
@@ -283,7 +283,7 @@ fn emit_holes_fold_steps(pattern: ref Pattern) -> Vec[ref Expr] {
 /// grammar this unit declares. By name, because the step's receiver is the
 /// accumulator, whose type this emitter does not know (ADR-296 D17) - and a
 /// method of another type with the same name gains a hint, nothing more.
-pub fn emit_holes_fold_callees[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, grammars: ref collections::BTreeMap[String, GrammarDef]) -> collections::BTreeSet[String] sync {
+fn emit_holes_fold_callees[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, grammars: ref collections::BTreeMap[String, GrammarDef]) -> collections::BTreeSet[String] sync {
     let mut found: Vec[String] = []
     for (_, def) in grammars {
         for rule in def.rules {
@@ -339,7 +339,7 @@ fn emit_holes_comptimes[H: EmitHolesHost](host: ref H, words: ref winnow_grammar
 /// reach the Rust as literals, so the Rust may never call them, and `rustc`
 /// would say *never used* about a function the program used. Each gets
 /// `#[allow(dead_code)]`; a function nothing calls is still warned.
-pub fn emit_holes_built_at_build_time[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] sync {
+fn emit_holes_built_at_build_time[H: EmitHolesHost](host: ref H, words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] sync {
     let mut waiting: Vec[String] = []
     // A free function's place among the items, by name; the last one written
     // wins, as a second definition would.
@@ -419,7 +419,7 @@ impl EmitState {
     /// **Every name read anywhere inside `expr`**, string holes and the
     /// statements of its blocks included (a copy an arm body reads in a
     /// statement is still read), in the order the walk meets them.
-    pub fn emit_holes_names_read[H: EmitHost](ref self, world: ref EmitWorld, host: ref H, expr: ref Expr) -> Vec[String] sync {
+    fn emit_holes_names_read[H: EmitHost](ref self, world: ref EmitWorld, host: ref H, expr: ref Expr) -> Vec[String] sync {
         let mut out: Vec[String] = []
         self.emit_holes_read_deep(world, host, expr, out)
         return out

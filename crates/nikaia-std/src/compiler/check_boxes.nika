@@ -22,7 +22,7 @@ pub enum CheckDepth {
 impl CheckState {
     /// **`NK1193`: a pattern that looks inside a part the compiler boxed,
     /// further than the lowering reaches** (ADR-246 D4, D5).
-    pub fn a_pattern_inside_a_box(ref mut self, world: ref CheckWorld, pattern: ref MatchPattern, span: ref Span) sync {
+    fn a_pattern_inside_a_box(ref mut self, world: ref CheckWorld, pattern: ref MatchPattern, span: ref Span) sync {
         self.a_pattern_inside_a_box_at(world, pattern, span, CheckDepth::Arm)
     }
 
@@ -73,7 +73,7 @@ impl CheckState {
     /// The names a pattern binds **whole** to a boxed part: `a` in
     /// `Expr::Add(a, b)`, which the arm opens and a guard reads through the
     /// box.
-    pub fn boxed_names(ref self, world: ref CheckWorld, pattern: ref MatchPattern) -> Vec[String] sync {
+    fn boxed_names(ref self, world: ref CheckWorld, pattern: ref MatchPattern) -> Vec[String] sync {
         let mut out: Vec[String] = []
         match pattern {
             MatchPattern::Tuple { path, parts } => {
@@ -104,7 +104,7 @@ impl CheckState {
     /// The types of the names bound inside the boxed parts a pattern looks
     /// into, where the variant says them: each part is typed by the path its
     /// own pattern names, which is the boxed type.
-    pub fn typed_inside_boxes(ref self, world: ref CheckWorld, pattern: ref MatchPattern, mut out: collections::BTreeMap[String, Ty]) sync {
+    fn typed_inside_boxes(ref self, world: ref CheckWorld, pattern: ref MatchPattern, mut out: collections::BTreeMap[String, Ty]) sync {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..<parts.len() {
@@ -146,7 +146,7 @@ impl CheckState {
     }
 
     /// The names a pattern binds inside the boxed parts it looks into.
-    pub fn names_inside_boxes(ref self, world: ref CheckWorld, pattern: ref MatchPattern, mut out: Vec[String]) sync {
+    fn names_inside_boxes(ref self, world: ref CheckWorld, pattern: ref MatchPattern, mut out: Vec[String]) sync {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..<parts.len() {
@@ -170,7 +170,7 @@ impl CheckState {
     }
 
     /// **Whether part `at` of a variant's tuple is behind a box** (ADR-246 D1).
-    pub fn boxed_part(ref self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], at: i64) -> bool sync {
+    fn boxed_part(ref self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], at: i64) -> bool sync {
         if path.len() < 2 {
             return false
         }
@@ -186,7 +186,7 @@ impl CheckState {
     /// **Whether an arm's pattern looks inside a boxed part**: such an arm is
     /// lowered with a guard (ADR-246 D5), and like any guarded arm it covers
     /// no variant on its own (`NK1151`).
-    pub fn looks_inside_a_box(ref self, world: ref CheckWorld, pattern: ref MatchPattern) -> bool sync {
+    fn looks_inside_a_box(ref self, world: ref CheckWorld, pattern: ref MatchPattern) -> bool sync {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..<parts.len() {
@@ -224,7 +224,7 @@ impl CheckState {
     /// **Over `error`, a type named whole covers that type** (ADR-357 D1,
     /// #673): its bare name or its path, and the `match` is complete when
     /// every type that can arrive is covered.
-    pub fn a_match_that_misses_a_case(ref mut self, world: ref CheckWorld, on: ref Ty, arms: ref Vec[MatchArm], over_error: bool, span: ref Span) sync {
+    fn a_match_that_misses_a_case(ref mut self, world: ref CheckWorld, on: ref Ty, arms: ref Vec[MatchArm], over_error: bool, span: ref Span) sync {
         match on {
             Ty::Nullable(inner) => {
                 if shapes_has_a_null_arm(arms) {
@@ -342,7 +342,7 @@ impl CheckState {
     /// one of the program's types, or a path that is a type of the program's
     /// or of a library's (`regex::Error`). `null` for a binding, a variant
     /// and every other pattern.
-    pub fn a_type_named_whole(ref self, world: ref CheckWorld, pattern: ref MatchPattern) -> String? sync {
+    fn a_type_named_whole(ref self, world: ref CheckWorld, pattern: ref MatchPattern) -> String? sync {
         let mut parts: Vec[String] = []
         match pattern {
             MatchPattern::Path(path) => {

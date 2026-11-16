@@ -196,7 +196,7 @@ fn check_arguments_named_for_positional(state: ref CheckState, world: ref CheckW
 /// `written` is the callee as the source writes it, which is what the emitter
 /// matches a recorded argument against; `keeps` is what moved in the callee's
 /// `keeps` since the committed ledger.
-pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, key: ref String, written: ref String, contract: ref FnContract, given: ref Vec[Expr], found: ref Vec[Ty], passed: ref Vec[(String, Ty)], keeps: ref Vec[(String, bool, String)], span: ref Span) -> Ty sync {
+fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, key: ref String, written: ref String, contract: ref FnContract, given: ref Vec[Expr], found: ref Vec[Ty], passed: ref Vec[(String, Ty)], keeps: ref Vec[(String, bool, String)], span: ref Span) -> Ty sync {
     // No signature is no claim. The hand-written half of `std.contracts`
     // has some, and an entry that says nothing is checked against nothing.
     let signature = contract.signature ?? return Ty::Unknown
@@ -813,7 +813,7 @@ impl CheckState {
     /// below takes both as `&str`. A parameter the function keeps does not
     /// fit there, nor does a result of its own (D14: a `from` result is a
     /// view, and an owned one is no view of what the caller lent).
-    pub fn lends_where_a_function_type_reads(ref self, world: ref CheckWorld, given: ref Expr?, found: ref Ty, want: ref Ty) -> bool sync {
+    fn lends_where_a_function_type_reads(ref self, world: ref CheckWorld, given: ref Expr?, found: ref Ty, want: ref Ty) -> bool sync {
         let value = given ?? return false
         let name = match value {
             Expr::Variable(ident, _) => world.words.resolve(ident).clone(),

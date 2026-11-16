@@ -41,7 +41,7 @@ pub fn diagnostics_read_json(json: &str) -> Vec<DiagnosticsRead> {
     read
 }
 
-pub fn diagnostics_libraries_in(messages: &str) -> Vec<fs::Path> {
+pub(crate) fn diagnostics_libraries_in(messages: &str) -> Vec<fs::Path> {
     cargo_json_lines(messages).iter().filter(|&value| { cargo_json_an_artifact(value) }).filter(|&value| {
         cargo_json_items((cargo_json_member((cargo_json_member(Some(&value.clone()), "target")).as_ref(), "kind")).as_ref()).iter().any(|kind| {
             let named = nikaia_std::index::or(cargo_json_text(Some(&kind.clone())), || "".into());
@@ -50,7 +50,7 @@ pub fn diagnostics_libraries_in(messages: &str) -> Vec<fs::Path> {
     }).flat_map(|value| { cargo_json_filenames(value) }).collect::<Vec<_>>()
 }
 
-pub fn diagnostics_executable_in(messages: &str) -> Option<fs::Path> { cargo_json_lines(messages).iter().filter(|&value| { cargo_json_an_artifact(value) }).filter_map(|value| { cargo_json_text((cargo_json_member(Some(&value.clone()), "executable")).as_ref()) }).map(|file| { cargo_json_path(file) }).last() }
+pub(crate) fn diagnostics_executable_in(messages: &str) -> Option<fs::Path> { cargo_json_lines(messages).iter().filter(|&value| { cargo_json_an_artifact(value) }).filter_map(|value| { cargo_json_text((cargo_json_member(Some(&value.clone()), "executable")).as_ref()) }).map(|file| { cargo_json_path(file) }).last() }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DiagnosticsPlaced {

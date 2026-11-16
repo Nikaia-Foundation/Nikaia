@@ -28,7 +28,7 @@ fn sv_nl_rounds() -> i64 {
 
 /// The engine `sv_smt_engine_set` on facts with non-linear terms `defs`.
 /// `null` where a setting does not take.
-pub fn sv_nl_engine(
+fn sv_nl_engine(
 	arena: ref TermArena,
 	facts: ref Vec[i64],
 	goal: i64,

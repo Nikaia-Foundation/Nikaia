@@ -7,7 +7,7 @@ pub(crate) fn check_handed_key(function: &str, name: &str) -> String { format!("
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_handed_follow(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeMap<String, String> {
+pub(crate) fn check_handed_follow(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeMap<String, String> {
     let alone = world.here_at < 0;
     let mut held: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     let mut closed: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -636,7 +636,7 @@ pub(crate) fn check_handed_root(view: &ParsedView<'_, '_, '_, '_, '_, '_>, place
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_handed_carries(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, expr: &Expr, held: &collections::BTreeMap<String, String>) -> Option<String> {
+pub(crate) fn check_handed_carries(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, expr: &Expr, held: &collections::BTreeMap<String, String>) -> Option<String> {
     match expr {
         Expr::Variable(name, id) => { let id = *id; let name = *name; return check_handed_holds(view, key, name, id.get(), held); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); return check_handed_carries(world, view, key, base, held); },
@@ -706,7 +706,7 @@ pub(crate) fn check_handed_carries_block(world: &CheckWorld<'_, '_, '_, '_, '_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_handed_written(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, expr: &Expr, held: &collections::BTreeMap<String, String>) -> Option<String> {
+pub(crate) fn check_handed_written(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, expr: &Expr, held: &collections::BTreeMap<String, String>) -> Option<String> {
     match expr {
         Expr::Variable(name, id) => {
             let id = *id; let name = *name;

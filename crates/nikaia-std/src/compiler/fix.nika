@@ -85,7 +85,7 @@ pub fn fix_run[H: LspHost](host: ref H, named: ref Vec[String], dry_run: bool) -
 /// **The edits of `found` made in `source`** (the findings of the file at
 /// `path`): none where one of them is an error. The edits are made in the
 /// order of the file; one that overlaps the one before it is left, and said.
-pub fn fix_planned(path: ref String, source: ref String, found: ref Vec[Shown]) -> FixPlan sync {
+fn fix_planned(path: ref String, source: ref String, found: ref Vec[Shown]) -> FixPlan sync {
     for shown in found {
         if !shown.warning {
             return FixPlan { text: source.clone(), said: [f"{path}: not fixed: its check has errors"], left: true }
@@ -139,7 +139,7 @@ fn fix_off_characters(path: ref String, source: ref String) -> FixPlan sync {
 /// **The diff of `old` to `new`, as `diff -u` writes it**, one hunk per run of
 /// changed lines, with no lines of context: the lines that differ between a
 /// common head and a common tail of each changed stretch.
-pub fn fix_diff(path: ref String, old: ref String, new: ref String) -> String sync {
+fn fix_diff(path: ref String, old: ref String, new: ref String) -> String sync {
     let was: Vec[ref String] = old.split("\n").collect()
     let now: Vec[ref String] = new.split("\n").collect()
     let mut out = f"--- {path}\n+++ {path}\n"

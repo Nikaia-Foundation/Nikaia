@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_field_that_owns_memory(&mut self, bound: &str, field: &str, held: &str, holder: &str, span: &Span) {
+    pub(crate) fn a_field_that_owns_memory(&mut self, bound: &str, field: &str, held: &str, holder: &str, span: &Span) {
         let carries = field.contains("::");
         let mut message: String = format!("`{}.{}` is a `{}`, which {} can't hold.", bound, field, held, holder);
         let mut note: String = String::from("A value computed at build time can't own memory, so every field has to be one that doesn't.");
@@ -18,7 +18,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_constant_that_owns_memory(&mut self, bound: &str, held: &Ty, computed: &BuildValue, holder: &str, span: &Span) {
+    pub(crate) fn a_constant_that_owns_memory(&mut self, bound: &str, held: &Ty, computed: &BuildValue, holder: &str, span: &Span) {
         let mut owns: String = String::from("a `String`");
         let mut fixed: &'static str = "a `String`, as a view";
         let mut way_out: String = String::from("Declare it as `String`: the text is built into the program, and a `comptime` `String` is a view of it.");
@@ -39,7 +39,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_list_whose_elements_disagree(&mut self, first_kind: &str, first: &str, other_kind: &str, other: &Ty, span: &Span) {
+    pub(crate) fn a_list_whose_elements_disagree(&mut self, first_kind: &str, first: &str, other_kind: &str, other: &Ty, span: &Span) {
         let mut one = nikaia_std::block::Text::from(first_kind.to_string());
         if first != "?" && !first.is_empty() { one = format!("`{}`", first); }
         let other_text = other.text();
@@ -49,7 +49,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_empty_list_with_no_element_type(&mut self, name: &str, span: &Span) {
+    pub(crate) fn an_empty_list_with_no_element_type(&mut self, name: &str, span: &Span) {
         if self.flow.empty_maps.contains(&(span.start as i64)) {
             self.findings.push(check_refusal("NK1153", span, format!("`{}` is a map, and nothing says what it holds.", name), vec![String::from("A map gets its key and value types from what is written into it, and nothing is written into it here.")], Some(format!("Write the type, `let {}: collections::HashMap[String, i64] = collections::HashMap()`, or write a first entry into it.", name))));
             return;
@@ -58,14 +58,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_constructor_written_as_new(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
+    pub(crate) fn a_constructor_written_as_new(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let ty = match name.strip_suffix("::new") { Some(__nikaia_value) => __nikaia_value, None => return };
         if !world.own.functions.contains_key(name) && !world.library.functions.contains_key(name) { return; }
         self.findings.push(check_refusal("NK1149", span, format!("Make a `{}` with `{}(…)`, not `{}::new`.", ty, ty, ty), vec![String::from("In Nikaia a type's constructor has no name: it's called as the type itself.")], Some(format!("Write `{}(…)`, or just `{}` where you pass the constructor itself.", ty, ty))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_shape_that_is_not_reachable_yet(&mut self, ty: &str, member: &str, span: &Span) {
+    pub(crate) fn a_shape_that_is_not_reachable_yet(&mut self, ty: &str, member: &str, span: &Span) {
         let mut bound: &'static str = "Struct";
         if member == "variants" { bound = "Enum"; }
         let mut note: String = format!("A type's fields and variants are reached through a bound, not by the type's name: `fn describe[T: {}](value: T)`, and then `T::{}` inside it.", bound, member);
@@ -74,34 +74,34 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_let_that_binds_nothing(&mut self, span: &Span) { self.findings.push(check_refusal("NK1144", span, String::from("`let _ = …` binds nothing, so there's no reason for the `let`."), vec![String::from("A call made for its effect is written as the call on its own, `f()`."), String::from("`_` would also throw the value away on the spot, so its cleanup would run right here instead of at the end of the block.")], Some(String::from("Write the expression on its own, or give it a name.")))); }
+    pub(crate) fn a_let_that_binds_nothing(&mut self, span: &Span) { self.findings.push(check_refusal("NK1144", span, String::from("`let _ = …` binds nothing, so there's no reason for the `let`."), vec![String::from("A call made for its effect is written as the call on its own, `f()`."), String::from("`_` would also throw the value away on the spot, so its cleanup would run right here instead of at the end of the block.")], Some(String::from("Write the expression on its own, or give it a name.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_field_written_twice(&mut self, ty: &str, field: &str, span: &Span) { self.findings.push(check_refusal("NK1172", span, format!("You're setting `{}.{}` twice.", ty, field), vec![String::from("Each field gets its value once; Nikaia won't silently pick one of the two.")], Some(format!("Remove one of the two `{}`.", field)))); }
+    pub(crate) fn a_field_written_twice(&mut self, ty: &str, field: &str, span: &Span) { self.findings.push(check_refusal("NK1172", span, format!("You're setting `{}.{}` twice.", ty, field), vec![String::from("Each field gets its value once; Nikaia won't silently pick one of the two.")], Some(format!("Remove one of the two `{}`.", field)))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_copy_the_source_did_not_write(&mut self, name: &str, want: &str, span: &Span) { self.findings.push(check_refusal("NK1183", span, format!("`{}` is a view of a `{}`, but this `let` declares a `{}` of its own.", name, want, want), vec![format!("A `for` lends each element, so `{}` points at an element the collection still owns. A `{}` of its own would be a copy, and Nikaia never copies behind your back.", name, want)], Some(format!("Remove the type: `let … = {}` keeps the view, which reads the same. If you want a copy, write `{}.clone()`.", name, name)))); }
+    pub(crate) fn a_copy_the_source_did_not_write(&mut self, name: &str, want: &str, span: &Span) { self.findings.push(check_refusal("NK1183", span, format!("`{}` is a view of a `{}`, but this `let` declares a `{}` of its own.", name, want, want), vec![format!("A `for` lends each element, so `{}` points at an element the collection still owns. A `{}` of its own would be a copy, and Nikaia never copies behind your back.", name, want)], Some(format!("Remove the type: `let … = {}` keeps the view, which reads the same. If you want a copy, write `{}.clone()`.", name, name)))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_reflected_variant_has_two_members(&mut self, member: &str, span: &Span) { self.findings.push(check_refusal("NK1180", span, format!("A variant from `T::variants` has no `{}`.", member), vec![String::from("A variant from `T::variants` has `.name`, its name as text, `.is(value)`, whether a value is that variant, and `.attribute(X)` and `.attributes(X)`, what its attributes say.")], Some(String::from("Use `.name`, `.is(value)`, `.attribute(X)` or `.attributes(X)`. To read what a variant carries, use a `match`.")))); }
+    pub(crate) fn a_reflected_variant_has_two_members(&mut self, member: &str, span: &Span) { self.findings.push(check_refusal("NK1180", span, format!("A variant from `T::variants` has no `{}`.", member), vec![String::from("A variant from `T::variants` has `.name`, its name as text, `.is(value)`, whether a value is that variant, and `.attribute(X)` and `.attributes(X)`, what its attributes say.")], Some(String::from("Use `.name`, `.is(value)`, `.attribute(X)` or `.attributes(X)`. To read what a variant carries, use a `match`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_kind_kept_at_run_time(&mut self, written: &str, span: &Span) { self.findings.push(check_refusal("NK1231", span, format!("`{}` is a `meta::Type`, which exists only while the program is built.", written), vec![String::from("A `meta::Type` carries types, and the running program holds no types: it cannot be kept in a value or handed to code that runs then.")], Some(String::from("Decide it while building: compare it, `T::kind == meta::Type::I64`, or print `T::name`.")))); }
+    pub(crate) fn a_kind_kept_at_run_time(&mut self, written: &str, span: &Span) { self.findings.push(check_refusal("NK1231", span, format!("`{}` is a `meta::Type`, which exists only while the program is built.", written), vec![String::from("A `meta::Type` carries types, and the running program holds no types: it cannot be kept in a value or handed to code that runs then.")], Some(String::from("Decide it while building: compare it, `T::kind == meta::Type::I64`, or print `T::name`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_kind_arm_names_no_case(&mut self, written: &str, span: &Span) { self.findings.push(check_refusal("NK1171", span, format!("`meta::Type` has no variant called `{}`.", written), vec![String::from("`meta::Type` is `I64`, `I32`, `U8`, `U64`, `U32`, `F64`, `Bool`, `Text`, `Bytes`, `Scalar`, `Maybe(A)`, `List(A)`, `Map(K, V)`, `Array(A, N)`, `Tuple(parts)`, `Struct(T)`, `Enum(T)`, `Fn(F)` or `Opaque(T)`.")], Some(String::from("Name one of its cases, or `else`.")))); }
+    pub(crate) fn a_kind_arm_names_no_case(&mut self, written: &str, span: &Span) { self.findings.push(check_refusal("NK1171", span, format!("`meta::Type` has no variant called `{}`.", written), vec![String::from("`meta::Type` is `I64`, `I32`, `U8`, `U64`, `U32`, `F64`, `Bool`, `Text`, `Bytes`, `Scalar`, `Maybe(A)`, `List(A)`, `Map(K, V)`, `Array(A, N)`, `Tuple(parts)`, `Struct(T)`, `Enum(T)`, `Fn(F)` or `Opaque(T)`.")], Some(String::from("Name one of its cases, or `else`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_reflected_field_has_two_members(&mut self, member: &str, span: &Span) { self.findings.push(check_refusal("NK1180", span, format!("A field from `T::fields` has no `{}`.", member), vec![String::from("A field from `T::fields` has `.name`, its name as text, `.of(value)`, what that field holds in a value, `.default`, its default as a `T?`, `.ty`, its type, and `.attribute(X)` and `.attributes(X)`, what its attributes say.")], Some(String::from("Use `.name`, `.of(value)`, `.default`, `.ty::kind`, `.ty::name`, `.attribute(X)` or `.attributes(X)`.")))); }
+    pub(crate) fn a_reflected_field_has_two_members(&mut self, member: &str, span: &Span) { self.findings.push(check_refusal("NK1180", span, format!("A field from `T::fields` has no `{}`.", member), vec![String::from("A field from `T::fields` has `.name`, its name as text, `.of(value)`, what that field holds in a value, `.default`, its default as a `T?`, `.ty`, its type, and `.attribute(X)` and `.attributes(X)`, what its attributes say.")], Some(String::from("Use `.name`, `.of(value)`, `.default`, `.ty::kind`, `.ty::name`, `.attribute(X)` or `.attributes(X)`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_field_type_as_a_value(&mut self, span: &Span) { self.findings.push(check_refusal("NK1230", span, String::from("`.ty` of a field from `T::fields` is a type, not a value."), vec![String::from("A reflected field's `.ty` is the field's type, and a type is asked what it is with `::`.")], Some(String::from("Ask it: `field.ty::kind`, `field.ty::name`, or `field.ty::fields` where it is a struct.")))); }
+    pub(crate) fn a_field_type_as_a_value(&mut self, span: &Span) { self.findings.push(check_refusal("NK1230", span, String::from("`.ty` of a field from `T::fields` is a type, not a value."), vec![String::from("A reflected field's `.ty` is the field's type, and a type is asked what it is with `::`.")], Some(String::from("Ask it: `field.ty::kind`, `field.ty::name`, or `field.ty::fields` where it is a struct.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_field_type_has_no_member(&mut self, member: &str, span: &Span) { self.findings.push(check_refusal("NK1180", span, format!("A field's `.ty` has no `::{}`.", member), vec![String::from("A reflected field's `.ty` is its type: it answers `::kind`, `::name`, and `::fields` where it is a struct.")], Some(String::from("Use `.ty::kind`, `.ty::name` or `.ty::fields`.")))); }
+    pub(crate) fn a_field_type_has_no_member(&mut self, member: &str, span: &Span) { self.findings.push(check_refusal("NK1180", span, format!("A field's `.ty` has no `::{}`.", member), vec![String::from("A reflected field's `.ty` is its type: it answers `::kind`, `::name`, and `::fields` where it is a struct.")], Some(String::from("Use `.ty::kind`, `.ty::name` or `.ty::fields`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_path_after_a_value(&mut self, written: &str, span: &Span) {
+    pub(crate) fn a_path_after_a_value(&mut self, written: &str, span: &Span) {
         let head: String = nikaia_std::index::or(match written.split("::").next() {
             Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
@@ -110,7 +110,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_run_this_body_owns(&mut self, owner: &str, field: &str, held: &str, span: &Span) {
+    pub(crate) fn a_run_this_body_owns(&mut self, owner: &str, field: &str, held: &str, span: &Span) {
         let known = held != "?";
         let mut owned: String = String::from("a value this body owns");
         let mut way_out: String = format!("Declare `{}` as `Vec[T]`, which is what parsing builds. If you need a view, run the grammar in a `comptime` declared `&[T]`.", field);
@@ -122,7 +122,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn walls_a_refusal_explains(&mut self) {
+    pub(crate) fn walls_a_refusal_explains(&mut self) {
         let mut other_errors = false;
         for found in self.findings.iter() {
             if !did_not_build(found) {

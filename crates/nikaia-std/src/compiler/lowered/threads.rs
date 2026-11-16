@@ -162,7 +162,7 @@ pub(crate) fn all_of(parts: &[Ty], walking: &Walking<'_, '_>, seen: &mut collect
     worst
 }
 
-pub fn worst_of(worst: Crossing, answer: Crossing) -> Crossing {
+pub(crate) fn worst_of(worst: Crossing, answer: Crossing) -> Crossing {
     match worst {
         Crossing::MayNot { .. } => worst,
         Crossing::Undecided { .. } => match answer {

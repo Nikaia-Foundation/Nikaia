@@ -29,7 +29,7 @@ impl KeepContext {
         }
         KeepContext { borrowing: borrowing_types(names, items), structs }
     }
-    pub fn not_held(&self, names: &winnow_grammar::InternerContext, ty: &Type, seen: &mut Vec<String>) -> Option<String> {
+    pub(crate) fn not_held(&self, names: &winnow_grammar::InternerContext, ty: &Type, seen: &mut Vec<String>) -> Option<String> {
         let name = names.resolve(ty.name);
         if ty.is_view {
             if name == "String" && ty.generics.is_empty() { return None; }
@@ -47,7 +47,7 @@ impl KeepContext {
         }
         Some(format!("a `{}` of views", name))
     }
-    pub fn struct_not_held(&self, names: &winnow_grammar::InternerContext, name: &str, seen: &mut Vec<String>) -> Option<String> {
+    pub(crate) fn struct_not_held(&self, names: &winnow_grammar::InternerContext, name: &str, seen: &mut Vec<String>) -> Option<String> {
         let declared = match *nikaia_std::index::get(&self.structs, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if declared.generic { return Some(format!("`{}`, a struct of views with type parameters", name)); }
         for one in seen.iter() { if one == name { return None; } }
@@ -68,7 +68,7 @@ impl KeepContext {
     }
 }
 
-pub fn struct_in(names: &winnow_grammar::InternerContext, ty: &Type, borrowing: &collections::BTreeSet<String>) -> Option<String> {
+pub(crate) fn struct_in(names: &winnow_grammar::InternerContext, ty: &Type, borrowing: &collections::BTreeSet<String>) -> Option<String> {
     let name = names.resolve(ty.name);
     if borrowing.contains(name) { return Some(nikaia_std::block::Text::from(name.to_string())); }
     for argument in ty.generics.iter() {
@@ -78,13 +78,13 @@ pub fn struct_in(names: &winnow_grammar::InternerContext, ty: &Type, borrowing: 
     None
 }
 
-pub fn names_a_struct_of_views(names: &winnow_grammar::InternerContext, ty: &Type, borrowing: &collections::BTreeSet<String>) -> bool {
+pub(crate) fn names_a_struct_of_views(names: &winnow_grammar::InternerContext, ty: &Type, borrowing: &collections::BTreeSet<String>) -> bool {
     if borrowing.contains(names.resolve(ty.name)) { return true; }
     for argument in ty.generics.iter() { if names_a_struct_of_views(names, argument, borrowing) { return true; } }
     false
 }
 
-pub fn a_ledger_type_with_a_view(ty: &Ty) -> bool {
+pub(crate) fn a_ledger_type_with_a_view(ty: &Ty) -> bool {
     match ty {
         Ty::Named { view, args, .. } => { let view = *view; view || any_with_a_view(args) },
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); a_ledger_type_with_a_view(inner) },
@@ -104,7 +104,7 @@ pub fn takes_a_keep(contract: &FnContract) -> bool {
     false
 }
 
-pub fn keeping_method_key(ledger: &Ledger, methods: &MethodIndex, target: Option<&str>, on_self: bool, method: &str) -> Option<String> {
+pub(crate) fn keeping_method_key(ledger: &Ledger, methods: &MethodIndex, target: Option<&str>, on_self: bool, method: &str) -> Option<String> {
     if on_self && target.is_some() {
         let owner = nikaia_std::index::or(target, || "");
         let key = format!("{}::{}", owner, method);
@@ -142,7 +142,7 @@ pub fn root_of(names: &winnow_grammar::InternerContext, expr: &Expr) -> Option<S
     }
 }
 
-pub fn taken_from(names: &winnow_grammar::InternerContext, value: &Expr) -> Option<String> {
+pub(crate) fn taken_from(names: &winnow_grammar::InternerContext, value: &Expr) -> Option<String> {
     match value {
         Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; if hands_back_what_it_removes(names.resolve(method)) { root_of(names, receiver) } else { None } },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); taken_from(names, inner) },
@@ -160,7 +160,7 @@ pub(crate) const SHEDS: [&str; 9] = ["clear", "remove", "drain", "pop", "truncat
 
 pub(crate) const TAKES: [&str; 6] = ["remove", "pop", "pop_front", "pop_back", "swap_remove", "take"];
 
-pub fn hands_back_its_own(method: &str) -> bool {
+pub(crate) fn hands_back_its_own(method: &str) -> bool {
     for one in OWNED.iter() {
         let one = *one;
         if one == method { return true; }
@@ -168,7 +168,7 @@ pub fn hands_back_its_own(method: &str) -> bool {
     false
 }
 
-pub fn keeps_what_it_is_given(method: &str) -> bool {
+pub(crate) fn keeps_what_it_is_given(method: &str) -> bool {
     for one in KEEPS.iter() {
         let one = *one;
         if one == method { return true; }
@@ -176,7 +176,7 @@ pub fn keeps_what_it_is_given(method: &str) -> bool {
     false
 }
 
-pub fn drops_entries(method: &str) -> bool {
+pub(crate) fn drops_entries(method: &str) -> bool {
     for one in SHEDS.iter() {
         let one = *one;
         if one == method { return true; }
@@ -184,7 +184,7 @@ pub fn drops_entries(method: &str) -> bool {
     false
 }
 
-pub fn hands_back_what_it_removes(method: &str) -> bool {
+pub(crate) fn hands_back_what_it_removes(method: &str) -> bool {
     for one in TAKES.iter() {
         let one = *one;
         if one == method { return true; }
@@ -192,7 +192,7 @@ pub fn hands_back_what_it_removes(method: &str) -> bool {
     false
 }
 
-pub fn capitalised(text: &str) -> String {
+pub(crate) fn capitalised(text: &str) -> String {
     let mut out: String = String::from("");
     let mut first = true;
     for c in text.chars() {

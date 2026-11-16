@@ -994,7 +994,7 @@ grammar SignatureText {
 /// **A signature read back from either spelling**, with what the file's
 /// spelling says beside it: the receiver as the type `key` is on, a bracket
 /// list's names as variables, and where the result points.
-pub fn spelled_signature(written: ref String, key: ref String) -> Spelling throws {
+fn spelled_signature(written: ref String, key: ref String) -> Spelling throws {
     let parts = SignatureText::signature(written) catch {
         throw Refused::Because(f"a signature is `[T](a: A; o: O = v) -> R`, found `{written}`")
     }

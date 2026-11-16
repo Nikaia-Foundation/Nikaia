@@ -21,7 +21,7 @@ pub fn callee_of(names: &winnow_grammar::InternerContext, expr: &Expr, own: &Led
     callee_named(names, name, own, library, items)
 }
 
-pub fn callee_named(names: &winnow_grammar::InternerContext, name: String, own: &Ledger, library: &Ledger, items: &[Spanned<Item>]) -> Option<Callee> {
+pub(crate) fn callee_named(names: &winnow_grammar::InternerContext, name: String, own: &Ledger, library: &Ledger, items: &[Spanned<Item>]) -> Option<Callee> {
     if own.functions.contains_key(&name) { return Some(Callee::Own(name)); }
     let constructed = format!("{}::new", name);
     if own.functions.contains_key(&constructed) { return Some(Callee::Own(constructed)); }

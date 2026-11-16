@@ -13,7 +13,7 @@ use std::collections
 
 /// The name of the copy of `function` that is specialised on the type `on`:
 /// the emitter writes the same name at the call and at the definition.
-pub fn check_specialised(function: ref String, on: ref String) -> String {
+fn check_specialised(function: ref String, on: ref String) -> String {
     // A type with parts is spelled into a name the language below accepts
     // (ADR-330 D2): `Vec[i64]` is `Vec_i64_`, `i64?` is `i64_maybe`.
     let mut tail: String = on.clone()
@@ -30,7 +30,7 @@ pub fn check_specialised(function: ref String, on: ref String) -> String {
 /// (ADR-366 D1): the argument decides, and a `Bytes` one is kept in
 /// `bytes_entries` and its grammar in `bytes_grammars`, for the lowering to
 /// compile the grammar over bytes too. The result and `throws` are as for text.
-pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, key: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
+fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, key: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty sync {
     // **The input first, then the values the entry takes** (ADR-grammar-1
     // D2), checked against its contract as a function's arguments are.
     let declared: FnContract? = world.own.functions[key]?.clone()
@@ -131,7 +131,7 @@ pub fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref C
 /// D2): itself, or in a field, an element, a variant's payload, a part of a
 /// tuple or behind `?`, at any depth. `seen` keeps a type that holds itself
 /// from being walked twice.
-pub fn check_holds_a_symbol(state: ref CheckState, world: ref CheckWorld, ty: ref Ty, mut seen: collections::BTreeSet[String]) -> bool sync {
+fn check_holds_a_symbol(state: ref CheckState, world: ref CheckWorld, ty: ref Ty, mut seen: collections::BTreeSet[String]) -> bool sync {
     match ty {
         Ty::Named { name, args, .. } => {
             for arg in args {
@@ -183,7 +183,7 @@ pub fn check_holds_a_symbol(state: ref CheckState, world: ref CheckWorld, ty: re
 /// **Whether the entry `key` (`Grammar::rule`) interns** (ADR-388 D1): its
 /// pattern, or a rule it reaches, calls `ident` or `intern(p)`. `null` where
 /// the grammar is in none of this program's files.
-pub fn check_grammar_entry_interns(world: ref CheckWorld, key: ref String) -> bool? {
+fn check_grammar_entry_interns(world: ref CheckWorld, key: ref String) -> bool? {
     let cut = key.find("::") ?? return null
     let owner = key[0..<cut].clone()
     let rule = key[cut + 2..].clone()
@@ -220,7 +220,7 @@ fn check_grammar_interns_in(view: ref ParsedView, owner: ref String, entry: ref 
 /// the slot and writes it, and the read is a `T?`, so the form has to say what
 /// an absent key counts as. A sequence is untouched: `xs[i] += 1` reads a `T`
 /// (D3).
-pub fn check_core_a_compound_write_to_a_map_slot[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, target: ref Expr, span: ref Span) sync {
+fn check_core_a_compound_write_to_a_map_slot[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, target: ref Expr, span: ref Span) sync {
     match target {
         Expr::Index { base, index, .. } => {
             // Only where the read is nullable, which is only a map. Where the
@@ -245,7 +245,7 @@ pub fn check_core_a_compound_write_to_a_map_slot[H: CheckHost](mut state: CheckS
 /// **A call that is an instantiation of a function the program walks the
 /// fields of** (ADR-304): the type of its first argument decides the copy, and
 /// the fields it is unrolled over are kept for the emitter.
-pub fn check_core_an_instantiation[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: ref String, call: i64, args: ref Vec[Expr], span: ref Span) sync {
+fn check_core_an_instantiation[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: ref String, call: i64, args: ref Vec[Expr], span: ref Span) sync {
     if !state.walks_fields.contains_key(name) {
         return
     }
@@ -282,7 +282,7 @@ pub fn check_core_an_instantiation[H: CheckHost](mut state: CheckState, world: r
 
 /// The copy of `name` for the type `given`, kept for the emitter under the
 /// call `call`; `literal` where the type is an integer literal's.
-pub fn check_core_instantiate(mut state: CheckState, world: ref CheckWorld, name: ref String, call: i64, given: ref Ty, literal: bool) sync {
+fn check_core_instantiate(mut state: CheckState, world: ref CheckWorld, name: ref String, call: i64, given: ref Ty, literal: bool) sync {
     // **A type of no shape is a copy too** (ADR-330 D2): a function that asks
     // `T::kind` or `T::name` is written once per type, with no field to walk.
     let named: String = match given {
@@ -322,7 +322,7 @@ pub fn check_core_instantiate(mut state: CheckState, world: ref CheckWorld, name
 /// **Where a function's parameter list holds a type** (ADR-330 D1), `-1`
 /// where it holds none: the parameter written as a type alone, which has no
 /// name.
-pub fn check_core_slot_index(world: ref CheckWorld, name: ref String) -> i64 sync {
+fn check_core_slot_index(world: ref CheckWorld, name: ref String) -> i64 sync {
     let resolved: CheckResolved = resolve_call(world, name) ?? return -1
     let signature: Signature = resolved.contract.signature?.clone() ?? return -1
     let mut at: i64 = 0
@@ -339,7 +339,7 @@ pub fn check_core_slot_index(world: ref CheckWorld, name: ref String) -> i64 syn
 /// D1): a type's name is that type; a type parameter, a type a `match` arm
 /// binds and a reflected field's `.ty` are `Ty::Unknown`, decided per copy.
 /// A value there is `NK1230`, as a type where a value belongs is.
-pub fn check_core_type_argument(mut state: CheckState, world: ref CheckWorld, arg: ref Expr, callee: ref String, span: ref Span) -> Ty sync {
+fn check_core_type_argument(mut state: CheckState, world: ref CheckWorld, arg: ref Expr, callee: ref String, span: ref Span) -> Ty sync {
     match arg {
         Expr::Variable(symbol, _) => {
             let name = world.words.resolve(symbol).clone()
@@ -385,7 +385,7 @@ pub fn check_core_type_argument(mut state: CheckState, world: ref CheckWorld, ar
 /// It is passed as `ref mut`, so the function borrows it as a method borrows
 /// `ref self`, and giving it away is a field of a borrowed subject's shape one
 /// position over.
-pub fn check_core_a_mut_parameter_given_away[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span, what: ref String) sync {
+fn check_core_a_mut_parameter_given_away[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, value: ref Expr, span: ref Span, what: ref String) sync {
     let name: String = match value {
         Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
         else => return,
@@ -438,7 +438,7 @@ fn check_reflect_bare_kind(case: ref String) -> bool {
 /// **What `T::kind` is for a type** (ADR-330 D3, ADR-332 D1): the case of
 /// `meta::Type` it takes. `ref A`, `Shared[A]` and `SharedMut[A]` have the kind
 /// of `A`; what the program cannot see inside is `Opaque`.
-pub fn check_reflect_kind(state: ref CheckState, ty: ref Ty) -> String {
+fn check_reflect_kind(state: ref CheckState, ty: ref Ty) -> String {
     return match ty {
         Ty::Nullable(_) => "Maybe",
         Ty::Tuple(_) => "Tuple",
@@ -464,7 +464,7 @@ fn check_reflect_named_kind(state: ref CheckState, name: ref String, args: ref V
 /// **The kind of a type the language itself names** (Part II 10.3, the table
 /// of `T::kind`): `Opaque` for any other name. Shared with the copies of a
 /// grammar rule that chooses by kind (`grammar_types.nika`).
-pub fn check_reflect_builtin_kind(name: ref String) -> String {
+fn check_reflect_builtin_kind(name: ref String) -> String {
     return match name {
         "i64" => "I64",
         "i32" => "I32",
@@ -506,7 +506,7 @@ fn check_reflect_plain(ty: ref Ty) -> Ty {
 }
 
 /// The text of [`check_reflect_plain`], `""` where the type is not known.
-pub fn check_reflect_written(ty: ref Ty) -> String {
+fn check_reflect_written(ty: ref Ty) -> String {
     return match ty {
         Ty::Var { .. } => "",
         else => check_reflect_plain(ty).text(),
@@ -558,7 +558,7 @@ fn check_reflect_kind_of(mut state: CheckState, world: ref CheckWorld, side: ref
 /// **`T::kind == meta::Type::X`, decided while the program is built**
 /// (ADR-330 D3, D6): both sides are kinds, and the comparison is a `bool` the
 /// emitter writes per copy. `null` where it is not such a comparison.
-pub fn check_reflect_compared(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, op: BinaryOp, lhs: ref Expr, rhs: ref Expr) -> Ty? sync {
+fn check_reflect_compared(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, op: BinaryOp, lhs: ref Expr, rhs: ref Expr) -> Ty? sync {
     let equality = match op {
         BinaryOp::Eq | BinaryOp::Ne => true,
         else => false,
@@ -578,7 +578,7 @@ pub fn check_reflect_compared(mut state: CheckState, world: ref CheckWorld, expr
 /// **`T::name` and `T::kind` as a value** (ADR-330 D2, D6): the name is text
 /// known while building; a kind anywhere but beside `==` would reach the
 /// running program, `NK1231`. `null` where the path is not one of them.
-pub fn check_reflect_path(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, segments: ref Vec[winnow_grammar::Symbol], span: ref Span) -> Ty? sync {
+fn check_reflect_path(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, segments: ref Vec[winnow_grammar::Symbol], span: ref Span) -> Ty? sync {
     let meta = Ty::Named { name: "meta::Type", args: [], view: false }
     if segments.len() == 3 {
         if world.words.resolve(segments[0]) == "meta" && world.words.resolve(segments[1]) == "Type" && check_reflect_bare_kind(world.words.resolve(segments[2])) {
@@ -609,7 +609,7 @@ pub fn check_reflect_path(mut state: CheckState, world: ref CheckWorld, expr: re
 /// **`field.ty::member`, a reflected field's type asked** (ADR-330 D2, D5):
 /// `::name` is text known while building, `::kind` a `meta::Type` that only a
 /// comparison or a `match` may take (D6), `::fields` the fields of a struct.
-pub fn check_reflect_field_type(mut state: CheckState, expr: ref Expr, member: ref String, span: ref Span) -> Ty sync {
+fn check_reflect_field_type(mut state: CheckState, expr: ref Expr, member: ref String, span: ref Span) -> Ty sync {
     if member == "name" {
         state.facts.reflected_names.insert(id_of(expr) as i64)
         return Ty::Named { name: "str", args: [], view: true }
@@ -637,7 +637,7 @@ pub fn check_reflect_field_type(mut state: CheckState, expr: ref Expr, member: r
 }
 
 /// Whether `ty` is a reflected field's, `meta::Field` (Part II 10.3).
-pub fn check_reflect_a_field(ty: ref Ty) -> bool {
+fn check_reflect_a_field(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, .. } => name == "meta::Field",
         else => false,
@@ -649,7 +649,7 @@ pub fn check_reflect_a_field(ty: ref Ty) -> bool {
 /// so the call is made with the turn's field and goes to the copy for it. A
 /// copy for each field of the turn's struct and of each struct that one is
 /// made of, which a walk over `field.ty::fields` reaches.
-pub fn check_core_field_copies(mut state: CheckState, world: ref CheckWorld, name: ref String, callee: ref FnContract?) sync {
+fn check_core_field_copies(mut state: CheckState, world: ref CheckWorld, name: ref String, callee: ref FnContract?) sync {
     let contract: FnContract = callee?.clone() ?? return
     let signature: Signature = contract.signature?.clone() ?? return
     let mut takes = false
@@ -674,7 +674,7 @@ pub fn check_core_field_copies(mut state: CheckState, world: ref CheckWorld, nam
 /// **`NK1320`: a reflected field kept past the build** (Part II 10.3,
 /// ADR-grammar-2 D4): `meta::Field` stands only as a parameter's type, so
 /// `parameter` says the outermost name of `ty` may be it.
-pub fn check_reflected_field_kept(mut state: CheckState, world: ref CheckWorld, ty: ref Type, span: ref Span, parameter: bool) sync {
+fn check_reflected_field_kept(mut state: CheckState, world: ref CheckWorld, ty: ref Type, span: ref Span, parameter: bool) sync {
     let plain = parameter && !ty.is_nullable && !ty.is_slice
     if !plain && world.words.resolve(ty.name) == "meta::Field" {
         state.findings.push(check_refusal("NK1320", span, "A reflected field exists only while the program is built, so it can't be kept here.", ["`meta::Field` stands only as a parameter's type: each call is made with the field of an unrolled turn (Part II 10.3)."], "Take the field as a parameter, `fn f(field: meta::Field)`, and keep what you read of it, such as `field.name`."))
@@ -775,7 +775,7 @@ fn check_reflect_case_parts(case: ref String) -> i64 {
 /// (ADR-330 D4): `Text`, `meta::Type::Text`, `List(it)`; `""` for `else`, `_`
 /// for a part the arm leaves unnamed, `Struct(_)`.
 /// `null` for a pattern of another shape.
-pub fn check_reflect_arm(words: ref winnow_grammar::InternerContext, pattern: ref MatchPattern) -> (String, Vec[String])? {
+fn check_reflect_arm(words: ref winnow_grammar::InternerContext, pattern: ref MatchPattern) -> (String, Vec[String])? {
     return match pattern {
         MatchPattern::Otherwise => {
             let case: String = ""
@@ -843,7 +843,7 @@ fn check_reflect_kind_subject(mut state: CheckState, world: ref CheckWorld, valu
 /// kind it names, with the names it binds standing for types (`s::fields`
 /// reachable in `Struct(s)`, `it::kind` in `List(it)`); the emitter writes
 /// the one arm each copy's type takes. `null` where the subject is no kind.
-pub fn check_reflect_match[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) -> Ty? sync {
+fn check_reflect_match[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) -> Ty? sync {
     if !check_reflect_kind_subject(state, world, value) {
         return null
     }

@@ -275,7 +275,7 @@ impl EmitState {
     /// A grammar, and where a call enters it with a `Bytes`, its copy over
     /// bytes after it (ADR-366 D1): the backend reads one input per grammar
     /// (winnow-grammar ADR 25).
-    pub fn emit_grammar[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef) sync throws {
+    fn emit_grammar[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef) sync throws {
         let name = emit_text(world, def.name)
         self.emit_grammar_over(world, walk, out, host, def, name, false)
         if self.facts.bytes_grammars.contains(name) {
@@ -809,7 +809,7 @@ fn emit_stream_walks(def: ref GrammarDef, offered_to_rust: bool) -> Vec[GrammarR
 
 /// The function beside grammar `book` another package walks its `@stream`
 /// entry `rule` with; `emit_call_grammar` in `emit_core_calls.nika` calls it.
-pub fn emit_stream_walk_name(book: ref String, rule: ref String) -> String {
+fn emit_stream_walk_name(book: ref String, rule: ref String) -> String {
     return f"__nikaia_walk_{book}__{rule}"
 }
 

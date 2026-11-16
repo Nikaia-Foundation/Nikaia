@@ -500,7 +500,7 @@ fn host_ring(world: ref CheckWorld, value: ref Expr) -> Vec[String] {
 impl CheckState {
     /// **`NK1175`: a file this build may not read** (ADR-310), with the way out
     /// that can actually be taken.
-    pub fn a_file_this_build_may_not_read(ref mut self, path: ref String, why: ref Denied, span: ref Span) sync {
+    fn a_file_this_build_may_not_read(ref mut self, path: ref String, why: ref Denied, span: ref Span) sync {
         let note = why_not_read(why, path)
         let way_out = way_out_of_a_read(why, path)
         self.findings.push(check_refusal("NK1175", span, f"This build isn't allowed to read `{path}`.", [note], way_out))
@@ -509,7 +509,7 @@ impl CheckState {
     /// **A `{..}` in a plain string that would have inserted a value** before
     /// plain strings stopped doing so: a warning, only where the braces hold an
     /// expression that resolves to something that is here.
-    pub fn unmarked_hole[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, text: ref String, span: ref Span) sync {
+    fn unmarked_hole[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, text: ref String, span: ref Span) sync {
         let collapsed = collapsed_doubled_braces(text)
         if collapsed != null {
             let single = collapsed ?? ""
@@ -532,7 +532,7 @@ impl CheckState {
 
     /// **What an initialiser of literals folds to** (ADR-321 D1), and the
     /// refusal the build gave where it gave one. Nothing here runs a call.
-    pub fn build_time_value[H: CheckHost](ref mut self, host: ref H, value: ref Expr, bound: ref String, span: ref Span) -> (BuildValue?, bool) sync {
+    fn build_time_value[H: CheckHost](ref mut self, host: ref H, value: ref Expr, bound: ref String, span: ref Span) -> (BuildValue?, bool) sync {
         // **Read off the scope before the evaluation starts**: later bindings of
         // a name go in after earlier ones, so the innermost is the one that
         // answers.
@@ -572,7 +572,7 @@ impl CheckState {
     /// **The rule is asked first** (D2): each function the initialiser calls is
     /// read off the ledger, and one that may not run is `NK1152` before
     /// anything is compiled.
-    pub fn compiled_build_time_value[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, value: ref Expr, found: ref Ty, bound: ref String, span: ref Span) -> CheckCompiled sync {
+    fn compiled_build_time_value[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, value: ref Expr, found: ref Ty, bound: ref String, span: ref Span) -> CheckCompiled sync {
         if !self.flow.computes {
             return CheckCompiled { answered: true, value: null, said: true }
         }
@@ -669,7 +669,7 @@ impl CheckState {
     /// (ADR-321 D19): a value that runs code is computed by compiling it and
     /// running it, and a caller is never told a program is checked when one
     /// of its values was never computed.
-    pub fn a_build_time_value_with_nowhere_to_compile(ref mut self, bound: ref String, span: ref Span) sync {
+    fn a_build_time_value_with_nowhere_to_compile(ref mut self, bound: ref String, span: ref Span) sync {
         let mut help: String = f"Check it with `nikaia check` or `nikaia build`, which have one, or write `let {bound} = …` to compute it while the program runs."
         if self.computing_default {
             help = f"Check it with `nikaia check` or `nikaia build`, which have one, or make `{bound}` a `T?` and compute it in the body."
@@ -679,7 +679,7 @@ impl CheckState {
 
     /// **`NK1127` where this compiler builds no program for a value** (ADR-321
     /// D1): it is not computed, and nothing interprets it instead.
-    pub fn a_build_time_value_not_compiled(ref mut self, bound: ref String, why: ref String, span: ref Span) sync {
+    fn a_build_time_value_not_compiled(ref mut self, bound: ref String, why: ref String, span: ref Span) sync {
         let mut help: String = f"Write `let {bound} = …` to compute it while the program runs."
         if self.computing_default {
             help = f"Make `{bound}` a `T?` and compute it in the body."
@@ -690,7 +690,7 @@ impl CheckState {
     /// **A build-time run that stopped as the program would** (ADR-321 D1): the
     /// same code stops the program the same way. In its own words, at the place
     /// it stopped where the run named one.
-    pub fn a_build_time_run_that_stopped[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, bound: ref String, said: ref String, here: i64, span: ref Span) sync {
+    fn a_build_time_run_that_stopped[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, bound: ref String, said: ref String, here: i64, span: ref Span) sync {
         for line in said.lines() {
             if line.starts_with("nikaia-build-time: ") {
                 let over = line.strip_prefix("nikaia-build-time: ") ?? ""
@@ -718,7 +718,7 @@ impl CheckState {
     /// known only once the arm is walked; the arguments recorded meanwhile are
     /// found again by their ids. Only where nothing in the arm binds the name
     /// again.
-    pub fn a_lent_part_is_handed_on_as_it_is[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, body: ref Expr, lent: ref collections::BTreeSet[String]) sync {
+    fn a_lent_part_is_handed_on_as_it_is[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, body: ref Expr, lent: ref collections::BTreeSet[String]) sync {
         let mut is_block = false
         let mut empty = false
         match body {

@@ -499,7 +499,7 @@ pub(crate) fn project_drive_cargo_env<H: ProjectDriveHost>(host: &H, link_flags:
 
 pub(crate) fn project_drive_published_key(key: &str) -> bool { key == "description" || key == "license" || key == "authors" || key == "repository" || key == "homepage" || key == "documentation" || key == "keywords" || key == "categories" }
 
-pub fn project_drive_publish_stub(file: &ManifestFile) -> String {
+pub(crate) fn project_drive_publish_stub(file: &ManifestFile) -> String {
     let name = nikaia_std::index::or(file.name.as_deref(), || "package");
     let crate_name = format!("nikaia_{}", nikaia_std::block::Text::from(name.replace('-', "_")));
     let mut out = format!("# Written by `nikaia build`: `cargo publish` on this file publishes the Nikaia\n# package `{}` (ADR-286 D25). Cargo only finds it; nothing here is built.\n[package]\nname = \"{}\"\nversion = \"{}\"\nedition = \"2024\"\n", name, crate_name, file.version);
@@ -625,7 +625,7 @@ pub(crate) fn project_drive_artifact<H: ProjectDriveHost>(host: &H) -> String {
     String::from("program")
 }
 
-pub fn project_drive_rust_crate(name: &str) -> String { format!("nikaia_{}", nikaia_std::block::Text::from(name.replace('-', "_"))) }
+pub(crate) fn project_drive_rust_crate(name: &str) -> String { format!("nikaia_{}", nikaia_std::block::Text::from(name.replace('-', "_"))) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -736,7 +736,7 @@ pub(crate) fn project_drive_splice_checked<H: ProjectDriveHost>(host: &H, rust_l
     1
 }
 
-pub fn project_drive_splice_span(toml: &str, key: &str) -> Span {
+pub(crate) fn project_drive_splice_span(toml: &str, key: &str) -> Span {
     let mut offset: i64 = 0;
     let mut inside = false;
     let mut header: i64 = 0;
@@ -840,7 +840,7 @@ pub(crate) fn project_drive_features_refused<H: ProjectDriveHost>(host: &H, refu
     1
 }
 
-pub fn project_drive_rust_manifest(generated: &str, crate_name: &str, members: &[ProjectMembersMember]) -> String {
+pub(crate) fn project_drive_rust_manifest(generated: &str, crate_name: &str, members: &[ProjectMembersMember]) -> String {
     let mut out = String::from("# Written by `nikaia build` (`artifact = \"rust-library\"`, ADR-393 D1) from\n# `nikaia.toml`. Do not edit: every build rewrites it.\n");
     let mut section: String = String::from("");
     for line in generated.lines() {
@@ -939,8 +939,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple67555| {
-        let (a, b) = __nikaia_tuple67555;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple67539| {
+        let (a, b) = __nikaia_tuple67539;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {

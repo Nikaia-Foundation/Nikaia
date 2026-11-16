@@ -130,7 +130,7 @@ fn sysroot_package_has_for(text: ref String, at: i64) -> bool {
 /// to it. Every top-level `fn`, `const`, `static`, `struct`, `enum`, `type`
 /// and `trait` that stands at the start of a line outside any string, comment
 /// or brace becomes `pub(crate)`.
-pub fn sysroot_package_shared(text: ref String) -> String {
+fn sysroot_package_shared(text: ref String) -> String {
     let keywords: Vec[String] = ["fn ", "const ", "static ", "struct ", "enum ", "type ", "trait ", "unsafe fn ", "async fn "]
     let method_keywords: Vec[String] = ["fn ", "const ", "unsafe fn ", "async fn "]
     let n = text.bytes.len()
@@ -270,7 +270,7 @@ fn sysroot_package_raw_string(text: ref String, at: i64) -> i64? {
 /// **One file's names, as a path into the package**: `pub mod ty { pub use
 /// super::{Ty, …}; }`. What the file declares `pub`, its grammars, and what
 /// `lib.rs` writes for it by hand (`SYSROOT_PACKAGE_HAND_WRITTEN`).
-pub fn sysroot_package_facade(file: ref String, unit: ref ParsedView) -> String {
+fn sysroot_package_facade(file: ref String, unit: ref ParsedView) -> String {
     let mut names: Vec[String] = []
     for item in unit.items {
         let name: String = match item.node {

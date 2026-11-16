@@ -94,7 +94,7 @@ impl CheckState {
     /// not exist is [Part III
     /// C.4](../../docs/specification/30-nikaia-tooling.md)'s correct program
     /// refused.
-    pub fn an_import_that_brings_a_name_in(ref mut self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], span: ref Span) sync {
+    fn an_import_that_brings_a_name_in(ref mut self, world: ref CheckWorld, path: ref Vec[winnow_grammar::Symbol], span: ref Span) sync {
         let mut segments: Vec[String] = []
         for part in path {
             segments.push(world.words.resolve(part).clone())
@@ -163,7 +163,7 @@ impl CheckState {
     /// starts at: `use std::db::postgres` is `db`'s question and
     /// `use std::backend::x86` is `backend`'s, which is the reading
     /// [ADR-140](../../docs/specification/adr/adr-140.md) already gave them.
-    pub fn a_std_module_nobody_declared(ref mut self, module: ref String, segments: ref Vec[String], span: ref Span) sync {
+    fn a_std_module_nobody_declared(ref mut self, module: ref String, segments: ref Vec[String], span: ref Span) sync {
         let mut offered: Vec[String] = []
         for name in self.std_modules {
             if !starts_with_a_capital(name) && !not_a_module(name) {
@@ -207,7 +207,7 @@ impl CheckState {
     /// The surface and the engine's own spelling are allowed to differ, as they
     /// already do for `dec[i64]`; what this closes is a second way to write one
     /// thing.
-    pub fn a_name_the_page_does_not_have(ref mut self, world: ref CheckWorld, pattern: ref Spanned[Pattern]) sync {
+    fn a_name_the_page_does_not_have(ref mut self, world: ref CheckWorld, pattern: ref Spanned[Pattern]) sync {
         match pattern.node {
             Pattern::Ref { name, args, .. } => {
                 let written = world.words.resolve(name).clone()
@@ -250,7 +250,7 @@ impl CheckState {
     /// no parameter, a parameter that is not a function, and one the function
     /// keeps - hands to a task or stores - so that its lambda runs after the
     /// call, where nobody the caller counts is waiting on it (ADR-288 D16).
-    pub fn a_lambda_the_promise_names(ref mut self, world: ref CheckWorld, key: ref String, named: ref String, args: ref Vec[FnArg], at: ref Span) sync {
+    fn a_lambda_the_promise_names(ref mut self, world: ref CheckWorld, key: ref String, named: ref String, args: ref Vec[FnArg], at: ref Span) sync {
         let mut why: String? = null
         let mut found = false
         for arg in args {

@@ -329,7 +329,7 @@ pub(crate) fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, op: &BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span, span: &Span) -> Ty {
+pub(crate) fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, op: &BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span, span: &Span) -> Ty {
     let arithmetic = check_core_ops_arithmetic(&op);
     let reached: Option<String> = match state.flow.reached.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -608,7 +608,7 @@ pub(crate) fn check_core_ops_a_word(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, fallback: &Expr, span: &Span) -> Ty {
+pub(crate) fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, fallback: &Expr, span: &Span) -> Ty {
     let outer = state.flow.read_a_map;
     state.flow.read_a_map = false;
     let lending = state.flow.lending_let;
@@ -798,7 +798,7 @@ pub(crate) fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckW
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_ops_none_named(state: &mut CheckState, declared: Option<&Ty>, params: &[winnow_grammar::Symbol], span: &Span) {
+pub(crate) fn check_core_ops_none_named(state: &mut CheckState, declared: Option<&Ty>, params: &[winnow_grammar::Symbol], span: &Span) {
     if !params.is_empty() { return; }
     let ty: &Ty = match declared { Some(__nikaia_value) => __nikaia_value, None => return };
     let handed: i64 = match ty {
@@ -841,7 +841,7 @@ pub(crate) fn check_core_ops_promised(declared: Option<&Ty>) -> Option<CheckProm
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
+pub(crate) fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, span: &Span) -> Ty {
     let declared: Option<Ty> = match state.flow.lambda_expected.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -974,7 +974,7 @@ pub(crate) fn check_core_ops_task<H: CheckHost>(state: &mut CheckState, world: &
 
 pub const CHILD_HANDLE: &str = "task::ChildHandle";
 
-pub fn a_child_handle(ty: &Ty) -> bool {
+pub(crate) fn a_child_handle(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, .. } => name == CHILD_HANDLE,
         _ => false,
@@ -983,7 +983,7 @@ pub fn a_child_handle(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_ops_spawn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, spawned: &Expr, detached: bool, child: bool, span: &Span) -> Ty {
+pub(crate) fn check_core_ops_spawn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, spawned: &Expr, detached: bool, child: bool, span: &Span) -> Ty {
     if !child { state.crosses_into_a_task(world, spawned, span); }
     let task = id_of(spawned) as i64;
     match spawned {

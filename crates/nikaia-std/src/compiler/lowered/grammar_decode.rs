@@ -180,7 +180,7 @@ pub fn gr_manifest(key: &str, dependencies: &[(String, String)]) -> String {
     out
 }
 
-pub fn gr_dump_helpers() -> String {
+pub(crate) fn gr_dump_helpers() -> String {
     String::from("
 fn __nikaia_text(out: &mut String, s: &str) {
     out.push_str(\"(s \\\"\");
@@ -199,5 +199,5 @@ fn __nikaia_text(out: &mut String, s: &str) {
 ")
 }
 
-pub fn gr_main(named: &str, entry: &str, dump: &str) -> String { format!("\nfn main() {{\n    let path = std::env::args().nth(1).expect(\"the input path\");\n    let text = std::fs::read_to_string(&path).expect(\"reading the input\");\n    let outcome = {{\n        use winnow::Parser;\n        let _source = &*text;\n        let mut stream = winnow_grammar::ParseInput::<()> {{\n            state: winnow_grammar::ParseContext::<()>::default(),\n            input: winnow::stream::LocatingSlice::new(_source),\n        }};\n        {}::parse_{}().parse_next(&mut stream).map_err(|e| e.render(_source))\n    }};\n    match outcome {{\n        Ok(value) => {{\n            let mut out = String::new();\n{}            println!(\"{{out}}\");\n        }}\n        Err(message) => {{\n            eprint!(\"{{message}}\");\n            std::process::exit(2);\n        }}\n    }}\n}}\n", named, entry, dump) }
+pub(crate) fn gr_main(named: &str, entry: &str, dump: &str) -> String { format!("\nfn main() {{\n    let path = std::env::args().nth(1).expect(\"the input path\");\n    let text = std::fs::read_to_string(&path).expect(\"reading the input\");\n    let outcome = {{\n        use winnow::Parser;\n        let _source = &*text;\n        let mut stream = winnow_grammar::ParseInput::<()> {{\n            state: winnow_grammar::ParseContext::<()>::default(),\n            input: winnow::stream::LocatingSlice::new(_source),\n        }};\n        {}::parse_{}().parse_next(&mut stream).map_err(|e| e.render(_source))\n    }};\n    match outcome {{\n        Ok(value) => {{\n            let mut out = String::new();\n{}            println!(\"{{out}}\");\n        }}\n        Err(message) => {{\n            eprint!(\"{{message}}\");\n            std::process::exit(2);\n        }}\n    }}\n}}\n", named, entry, dump) }
 

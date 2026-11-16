@@ -3775,7 +3775,7 @@ fn own_text_items(value: ref Expr, kinds: ref Kinds) -> bool {
 /// `f"…"` or a literal, one at least no literal (#1368): read off the
 /// syntax alone, so `untethered_let` in `buffers.nika` puts the same lists
 /// into the caller's keep that this pass makes an element of a view of.
-pub fn own_text_items_written(value: ref Expr) -> bool {
+fn own_text_items_written(value: ref Expr) -> bool {
     let items = match value {
         Expr::ListLit { items, .. } => items,
         else => return false,
@@ -9352,7 +9352,7 @@ fn hb_plain_self(receiver: ref Receiver?) -> bool {
 /// (D2): the migration does not change what the program means. A result
 /// the pass already made a view counts, since the migration reads the
 /// file after the pass ran.
-pub fn hands_back_a_piece_of_self(item: ref Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String]) -> bool {
+fn hands_back_a_piece_of_self(item: ref Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String]) -> bool {
     match item {
         Item::Fn { receiver, args, ret_type, body, is_extern, ret_from, .. } => {
             if is_extern || ret_from.len() > 0 || !hb_plain_self(receiver) {
@@ -9404,7 +9404,7 @@ fn hb_nullable_may_be_a_view(ty: ref Type?, words: ref winnow_grammar::InternerC
 /// already: not text, not a word copied at a read, nothing a place cannot be.
 /// `Bytes` can: a piece of a lent `Bytes` handed back is a view of it, as a
 /// piece of an `Array[T]` is (ADR-views-3 D15, D11).
-pub fn hb_type_may_be_a_view(t: ref Type, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String]) -> bool {
+fn hb_type_may_be_a_view(t: ref Type, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String]) -> bool {
     if t.is_nullable || t.is_tuple || t.is_slice || t.is_mut || t.code != null || t.count != null || t.either || t.lasting {
         return false
     }
@@ -9601,7 +9601,7 @@ fn hb_private_structs(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::
 }
 
 /// The enums whose variants hold nothing: copied at a read, never a view.
-pub fn hb_plain_enums(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+fn hb_plain_enums(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
     let mut plain: collections::BTreeSet[String] = collections::BTreeSet()
     for item in items {
         match item.node {

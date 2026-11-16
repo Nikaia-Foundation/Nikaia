@@ -97,7 +97,7 @@ pub struct Uses {
     pub passed: Vec<Passed>,
 }
 
-pub fn kept_by(graph: &collections::BTreeMap<String, Uses>, own: &Ledger, library: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
+pub(crate) fn kept_by(graph: &collections::BTreeMap<String, Uses>, own: &Ledger, library: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
     let mut kept: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for (name, uses) in graph.iter() { kept.insert(nikaia_std::block::Text::from(name.to_string()), uses.kept.copy_owned()); }
     let mut changed = true;
@@ -164,7 +164,7 @@ pub(crate) fn parameter_at(contract: &FnContract, at: i64) -> Option<String> {
     None
 }
 
-pub fn option_at(contract: &FnContract, name: &str) -> Option<i64> {
+pub(crate) fn option_at(contract: &FnContract, name: &str) -> Option<i64> {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut position = signature.params.len() as i64;
     for option in signature.config.iter() {
@@ -174,7 +174,7 @@ pub fn option_at(contract: &FnContract, name: &str) -> Option<i64> {
     None
 }
 
-pub fn lends_option(contract: &FnContract, option: &ConfigContract) -> bool {
+pub(crate) fn lends_option(contract: &FnContract, option: &ConfigContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if signature.takes_a_receiver() || nikaia_std::list::contains(&contract.keeps, &option.name) { return false; }
     lends_option_type(&option.ty)
@@ -191,7 +191,7 @@ pub(crate) fn lends_option_type(ty: &Ty) -> bool {
     }
 }
 
-pub fn lowered_options(contract: &FnContract) -> Vec<ConfigContract> {
+pub(crate) fn lowered_options(contract: &FnContract) -> Vec<ConfigContract> {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let mut out: Vec<ConfigContract> = vec![];
     for option in signature.config.iter() {

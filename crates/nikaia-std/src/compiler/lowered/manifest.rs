@@ -19,7 +19,7 @@ pub(crate) fn moved(key: &str) -> String {
     String::from("")
 }
 
-pub fn build_key(key: &str) -> Result<Switch, nikaia_std::error::Thrown<Refused>> {
+pub(crate) fn build_key(key: &str) -> Result<Switch, nikaia_std::error::Thrown<Refused>> {
     let gone = withdrawn(key);
     if !gone.is_empty() { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` in `[build]` is no longer supported: {}", key, gone)), &"build_key")); }
     if !contains(&known(), key) {
@@ -33,14 +33,14 @@ pub fn build_key(key: &str) -> Result<Switch, nikaia_std::error::Thrown<Refused>
 
 pub fn targets() -> Vec<String> { vec![String::from("x86_64-linux"), String::from("aarch64-linux"), String::from("wasm32-unknown")] }
 
-pub fn codegen_keys() -> Vec<String> { vec![String::from("opt-level"), String::from("lto"), String::from("codegen-units"), String::from("incremental"), String::from("debug")] }
+pub(crate) fn codegen_keys() -> Vec<String> { vec![String::from("opt-level"), String::from("lto"), String::from("codegen-units"), String::from("incremental"), String::from("debug")] }
 
 pub fn codegen_units(target: &str, units: Option<i64>, written: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
     if nikaia_std::index::or(units, || 0) < 1 { return Err(nikaia_std::error::throwing(Refused::Because(format!("`codegen-units` in `[build.{}]` is a whole number from 1, the number of pieces rustc cuts each crate into, not `{}`.", target, written)), &"codegen_units")); }
     Ok(())
 }
 
-pub fn codegen_table(target: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+pub(crate) fn codegen_table(target: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
     if !contains(&targets(), target) {
         let expected = choices(&targets());
         return Err(nikaia_std::error::throwing(Refused::Because(format!("`[build.{}]` isn't a machine Nikaia builds for. The machines are: {}.", target, expected)), &"codegen_table"));
@@ -48,7 +48,7 @@ pub fn codegen_table(target: &str) -> Result<(), nikaia_std::error::Thrown<Refus
     Ok(())
 }
 
-pub fn codegen_key(target: &str, key: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+pub(crate) fn codegen_key(target: &str, key: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
     if !contains(&codegen_keys(), key) {
         let expected = choices(&codegen_keys());
         return Err(nikaia_std::error::throwing(Refused::Because(format!("`[build.{}]` has no key called `{}`. The keys are: {}.", target, key, expected)), &"codegen_key"));

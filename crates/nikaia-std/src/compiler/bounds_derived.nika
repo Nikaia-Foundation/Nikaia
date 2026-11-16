@@ -96,7 +96,7 @@ fn derived_scan() -> DerivedScan {
 }
 
 /// Nothing derived, for a program not walked through.
-pub fn no_derived() -> Derived {
+fn no_derived() -> Derived {
 	return Derived {
 		functions: collections::BTreeMap(),
 		order: [],
@@ -109,7 +109,7 @@ pub fn no_derived() -> Derived {
 /// **The candidates and their call sites** in `program`; `beside` is what
 /// the package's other files say (`bounds_beside`): a name met there is a
 /// call this file's walk does not see.
-pub fn derived_of(
+fn derived_of(
 	program: ref Program,
 	beside: ref Vec[ref BoundsBeside],
 	words: ref winnow_grammar::InternerContext,
@@ -230,7 +230,7 @@ fn derived_candidate(
 /// **Where a candidate's entry facts are kept**: its first parameter's byte,
 /// or, of a method that takes none but `self` (ADR-306 D34), its first
 /// statement's; none for an empty body, which reads nothing.
-pub fn derived_key(args: ref Vec[FnArg], body: ref Block) -> i64? {
+fn derived_key(args: ref Vec[FnArg], body: ref Block) -> i64? {
 	if !args.is_empty() {
 		return args[0].span.start as i64
 	}
@@ -837,7 +837,7 @@ fn derived_element_lets(
 /// **The order the bodies are walked in**, as positions into `starts` (the
 /// byte each body starts at): every caller before its callees, so that a
 /// callee's walk has the answers of all its call sites.
-pub fn derived_order(around: ref Around, starts: ref Vec[i64]) -> Vec[i64] {
+fn derived_order(around: ref Around, starts: ref Vec[i64]) -> Vec[i64] {
 	if around.derived.order.len() == starts.len() {
 		return around.derived.order.clone()
 	}
@@ -851,7 +851,7 @@ pub fn derived_order(around: ref Around, starts: ref Vec[i64]) -> Vec[i64] {
 /// **What one walk proved at its call sites**, kept for the callees walked
 /// after it; and where the next body is a function every call of which is
 /// answered, the claims all of them proved are the facts at its entry.
-pub fn derived_note(mut around: Around, walked: ref BoundsProven) {
+fn derived_note(mut around: Around, walked: ref BoundsProven) {
 	for (node, proved) in walked.derived {
 		if around.derived.answers.contains_key(node) {
 			let was = around.derived.answers[node]?.clone() ?? collections::BTreeSet()
@@ -897,7 +897,7 @@ pub fn derived_note(mut around: Around, walked: ref BoundsProven) {
 }
 
 /// A claim as `--bounds` writes it.
-pub fn derived_written(claim: ref DerivedClaim) -> String {
+fn derived_written(claim: ref DerivedClaim) -> String {
 	let mut left = if claim.left == "" { "0" } else { claim.left.clone() }
 	if claim.each && claim.left != "" {
 		left = f"{left}[..]"
@@ -925,7 +925,7 @@ fn derived_written_length(claim: ref DerivedClaim) -> String {
 /// **The derived preconditions and the call sites that prove each**, one
 /// row each, for `--bounds` (D4): the function, its claims, and the bytes
 /// its calls' statements start at, apart by tabs.
-pub fn derived_rows(around: ref Around) -> Vec[String] {
+fn derived_rows(around: ref Around) -> Vec[String] {
 	let mut rows: Vec[String] = []
 	for (name, function) in around.derived.functions {
 		let held = around.derived.entry[function.key] ?? continue
@@ -945,7 +945,7 @@ pub fn derived_rows(around: ref Around) -> Vec[String] {
 /// **The private functions this file calls and names nowhere else**, for
 /// `--bounds`'s reasons: a parameter of one is bounded by its callers or by
 /// nothing.
-pub fn derived_callees(
+fn derived_callees(
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
 ) -> collections::BTreeSet[String] {

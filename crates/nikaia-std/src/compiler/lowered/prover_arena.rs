@@ -12,7 +12,7 @@ impl TermArena {
         self.nodes.push(node);
         unsafe { nikaia_std::proven::sub::<i64>(self.nodes.len() as i64, 1) }
     }
-    pub fn at(&self, id: i64) -> SolverTerm { (*nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id))).clone() }
+    pub(crate) fn at(&self, id: i64) -> SolverTerm { (*nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id))).clone() }
     pub fn boolean(&mut self, value: bool) -> i64 { self.push(SolverTerm::Bool(value)) }
     pub fn int(&mut self, value: i64) -> i64 { self.push(SolverTerm::Int(value)) }
     pub fn var(&mut self, name: &str) -> i64 { self.push(SolverTerm::Var(nikaia_std::block::Text::from(name.to_string()))) }
@@ -30,7 +30,7 @@ impl TermArena {
     pub fn and(&mut self, parts: Vec<i64>) -> i64 { self.push(SolverTerm::And(parts)) }
     pub fn or(&mut self, parts: Vec<i64>) -> i64 { self.push(SolverTerm::Or(parts)) }
     pub fn not(&mut self, a: i64) -> i64 { self.push(SolverTerm::Not(a)) }
-    pub fn mentions(&self, id: i64, name: &str) -> bool {
+    pub(crate) fn mentions(&self, id: i64, name: &str) -> bool {
         match nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id)) {
             SolverTerm::Var(n) => n == name,
             SolverTerm::Neg(a) => { let a = *a; self.mentions(a, name) },
@@ -57,7 +57,7 @@ impl TermArena {
         }
         false
     }
-    pub fn variables(&self, id: i64, names: &mut collections::BTreeSet<String>) {
+    pub(crate) fn variables(&self, id: i64, names: &mut collections::BTreeSet<String>) {
         match nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id)) {
             SolverTerm::Var(name) => { names.insert(nikaia_std::block::Text::from(name.to_string())); },
             SolverTerm::Neg(a) => { let a = *a; self.variables(a, names); },
@@ -91,7 +91,7 @@ impl TermArena {
         self.variables(a, names);
         self.variables(b, names);
     }
-    pub fn constant(&self, id: i64) -> Option<i64> {
+    pub(crate) fn constant(&self, id: i64) -> Option<i64> {
         match nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id)) {
             SolverTerm::Int(n) => { let n = *n; Some(n) },
             SolverTerm::Neg(a) => {
@@ -125,7 +125,7 @@ impl TermArena {
             _ => None,
         }
     }
-    pub fn int_value(&self, id: i64, values: &collections::BTreeMap<String, i64>) -> Option<i64> {
+    pub(crate) fn int_value(&self, id: i64, values: &collections::BTreeMap<String, i64>) -> Option<i64> {
         match nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id)) {
             SolverTerm::Int(n) => { let n = *n; Some(n) },
             SolverTerm::Var(name) => {
@@ -163,10 +163,10 @@ impl TermArena {
             _ => None,
         }
     }
-    pub fn substitute(&mut self, id: i64, given: &collections::BTreeMap<String, i64>) -> i64 {
+    pub(crate) fn substitute(&mut self, id: i64, given: &collections::BTreeMap<String, i64>) -> i64 {
         let node = (*nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id))).clone();
         match node {
-            SolverTerm::Var(ref name) => nikaia_std::index::or(given.get(name), || id.into()),
+            SolverTerm::Var(ref name) => nikaia_std::index::or(given.get(name), || id),
             SolverTerm::Bool(_) => id,
             SolverTerm::Int(_) => id,
             SolverTerm::Neg(a) => {
@@ -245,7 +245,7 @@ impl TermArena {
             _ => id,
         }
     }
-    pub fn size(&self, id: i64) -> i64 {
+    pub(crate) fn size(&self, id: i64) -> i64 {
         1 + match nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id)) {
             SolverTerm::Neg(a) => { let a = *a; self.size(a) },
             SolverTerm::Not(a) => { let a = *a; self.size(a) },
@@ -297,7 +297,7 @@ impl TermArena {
         }
         unsafe { nikaia_std::proven::sub::<i64>(self.nodes.len() as i64, 1) }
     }
-    pub fn is_the_variable(&self, id: i64, name: &str) -> bool {
+    pub(crate) fn is_the_variable(&self, id: i64, name: &str) -> bool {
         match nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id)) {
             SolverTerm::Var(n) => n == name,
             _ => false,

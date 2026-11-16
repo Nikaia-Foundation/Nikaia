@@ -175,7 +175,7 @@ fn sv_row_eliminate(r: ref SvRow, s: ref SvRow, col: u32) -> SvRow? {
 /// The column to eliminate between `r` and `s`: one both hold (of opposite
 /// signs where `opposite`), a unit coefficient first, then the smallest
 /// product of the multipliers; `null` where there is none.
-pub fn sv_row_pick(r: ref SvRow, s: ref SvRow, opposite: bool) -> u32? {
+fn sv_row_pick(r: ref SvRow, s: ref SvRow, opposite: bool) -> u32? {
 	let mut best: u32? = null
 	let mut best_cost: i64 = 0
 	let mut i = 0
@@ -204,7 +204,7 @@ pub fn sv_row_pick(r: ref SvRow, s: ref SvRow, opposite: bool) -> u32? {
 
 /// The row's value where column `c` is `values[c]`; `null` where a column
 /// has no value or a step leaves `i64`.
-pub fn sv_row_eval(r: ref SvRow, values: ref Vec[SvRat]) -> SvRat? {
+fn sv_row_eval(r: ref SvRow, values: ref Vec[SvRat]) -> SvRat? {
 	let mut sum = sv_int(r.constant)
 	let mut i = 0
 	while i < r.cols.len() {

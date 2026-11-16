@@ -3306,31 +3306,28 @@ pub use written_lowered::*;
 
 pub mod assets {
     #[allow(unused_imports)]
-    pub use super::{Denied, allowlist_entries, leaves_the_root, unused_entries, why_not_read, way_out_of_a_read};
+    pub use super::{Denied, allowlist_entries, leaves_the_root, unused_entries};
 }
 pub mod ast {
     #[allow(unused_imports)]
-    pub use super::{Span, Spanned, Attribute, Program, Item, Block, Stmt, Expr, id_of, node_key, fresh_id, numbered_id, FPart, Type, ExternMember, OpaqueType, Code, EnumVariant, VariantFields, SelectArm, MatchArm, PatternField, MatchPattern, GenericParam, TraitMethod, FnArg, ConfigArg, ConfigParam, FieldDef, FieldDefault, AsmBinding, FieldInit, UnaryOp, BinaryOp, GrammarDef, GrammarRule, FrameAttr, GrammarAlt, Pattern, GrammarMember, GrammarArm, Repeat, FoldSpec, Receiver, FnParams, ConfigZone, LONGEST_SOURCE, offset};
+    pub use super::{Span, Spanned, Attribute, Program, Item, Block, Stmt, Expr, id_of, FPart, Type, ExternMember, OpaqueType, Code, EnumVariant, VariantFields, SelectArm, MatchArm, PatternField, MatchPattern, GenericParam, TraitMethod, FnArg, ConfigArg, ConfigParam, FieldDef, FieldDefault, AsmBinding, FieldInit, UnaryOp, BinaryOp, GrammarDef, GrammarRule, FrameAttr, GrammarAlt, Pattern, GrammarMember, GrammarArm, Repeat, FoldSpec, Receiver, FnParams, ConfigZone, LONGEST_SOURCE, offset};
 }
 pub mod boundaries {
     #[allow(unused_imports)]
     pub use super::{Boundary, Reported, restated};
 }
-pub mod bounds_basic {
-    #[allow(unused_imports)]
-    pub use super::{basic_indices, keeps_length, bytes_word_width, length_stays, elements_change, elements_stay, rebinds_in_statement, values_read, rebinds, path_of, path_root, path_within};
-}
+pub mod bounds_basic {}
 pub mod bounds_body {
     #[allow(unused_imports)]
-    pub use super::{breaks, turn_jumps, pinned_in, assigned_in_statement, assigned_in, assigned_in_expr, follows_only, untracked_in, filled_once, changes_length_in_statement, changes_length_in_expr, changes_length_in};
+    pub use super::{breaks};
 }
 pub mod bounds_derived {
     #[allow(unused_imports)]
-    pub use super::{DerivedClaim, DerivedFunction, Derived, no_derived, derived_of, derived_key, derived_order, derived_note, derived_written, derived_rows, derived_callees};
+    pub use super::{DerivedClaim, DerivedFunction, Derived};
 }
 pub mod bounds_frame {
     #[allow(unused_imports)]
-    pub use super::{bounds_around, frame_at_call, frame_writes, FieldsSeen, BoundsBeside, bounds_beside, fields_seen};
+    pub use super::{FieldsSeen, BoundsBeside, bounds_beside};
 }
 pub mod bounds_interval {
     #[allow(unused_imports)]
@@ -3338,31 +3335,28 @@ pub mod bounds_interval {
 }
 pub mod bounds_matched {
     #[allow(unused_imports)]
-    pub use super::{BmMatched, bm_empty, bm_matched, bm_ensured, bm_collected, bm_required, bm_each, bm_changing_methods};
+    pub use super::{BmMatched};
 }
 pub mod bounds_proven {
     #[allow(unused_imports)]
     pub use super::{BoundsAllProven, bounds_proven};
 }
-pub mod bounds_reasons {
-    #[allow(unused_imports)]
-    pub use super::{blocked_index, blocked_operation};
-}
+pub mod bounds_reasons {}
 pub mod bounds_report {
     #[allow(unused_imports)]
-    pub use super::{BoundsReportFacts, bounds_report_checked, bounds_report_derived, bounds_report_trace, bounds_report_trace_rows, bounds_report_line};
+    pub use super::{BoundsReportFacts, bounds_report_checked, bounds_report_derived, bounds_report_trace, bounds_report_trace_rows};
 }
 pub mod bounds_rules {
     #[allow(unused_imports)]
-    pub use super::{BoundsRule, rules_candidates};
+    pub use super::{BoundsRule};
 }
 pub mod bounds_shape {
     #[allow(unused_imports)]
-    pub use super::{BodyShape, Around, shape_of, elements_key, tracks, writes_a_value, only_adds, only_removes, key_root, root_name, is_unsigned, is_whole_number, is_empty_map};
+    pub use super::{BodyShape, Around, tracks};
 }
 pub mod bounds_walk {
     #[allow(unused_imports)]
-    pub use super::{BoundsContext, BoundsReturns, Ensured, BoundsProven, BoundsChanged, bounds_aggressive, bounds_fields, bounds_action_range, bounds_returns};
+    pub use super::{BoundsContext, BoundsReturns, Ensured, BoundsProven, BoundsChanged};
 }
 pub mod buffers {
     #[allow(unused_imports)]
@@ -3370,31 +3364,25 @@ pub mod buffers {
 }
 pub mod build_eval {
     #[allow(unused_imports)]
-    pub use super::{BtRan, BtRead, BtHost, BtRefusal, bt_evaluate, bt_may_not_run, bt_known_default, bt_is_the_builds_own};
+    pub use super::{BtRan, BtRead, BtHost, BtRefusal, bt_evaluate, bt_may_not_run, bt_known_default};
 }
 pub mod build_values {
     #[allow(unused_imports)]
-    pub use super::{BuildValue, operated, ElementRead, element_at};
+    pub use super::{BuildValue, ElementRead};
 }
 pub mod calls {
     #[allow(unused_imports)]
-    pub use super::{Callee, callee_of, callee_named};
+    pub use super::{Callee, callee_of};
 }
-pub mod cargo_json {
-    #[allow(unused_imports)]
-    pub use super::{cargo_json_lines, cargo_json_member, cargo_json_text, cargo_json_bool, cargo_json_number, cargo_json_items, cargo_json_an_artifact, cargo_json_filenames, cargo_json_path, cargo_json_extension};
-}
+pub mod cargo_json {}
 pub mod cexport {
     #[allow(unused_imports)]
     pub use super::{CX_LEDGER_DIGEST, CxExported, CxCtx, CxBuild, cx_export};
 }
-pub mod cexport_mirror {
-    #[allow(unused_imports)]
-    pub use super::{cx_converted, cx_mirror, cx_tagged_mirror};
-}
+pub mod cexport_mirror {}
 pub mod cexport_model {
     #[allow(unused_imports)]
-    pub use super::{CxRefused, CxByValue, CxIn, CxLent, CxOut, cx_out_index, CxRecord, CxAlternative, CxPart, cx_element, CxPlain, CxHold, CxVariantOf, CxEntry, CxHandled, CxShown, CxRaising, CxCode, cx_escaped, cx_not_yet, cx_nothing_exported, cx_by_value, cx_records, cx_record_of, cx_records_in_order, cx_plain_enums, cx_choice, cx_handle_of, cx_taken, cx_handed, cx_parameter_names, cx_handled_structs, cx_result_of, CxResult, cx_entries_in, cx_entries_bound, cx_variant_codes, cx_std_codes, cx_errno};
+    pub use super::{CxRefused, CxByValue, CxIn, CxLent, CxOut, CxRecord, CxAlternative, CxPart, CxPlain, CxHold, CxVariantOf, CxEntry, CxHandled, CxShown, CxRaising, CxCode, cx_nothing_exported, CxResult, cx_entries_in, cx_entries_bound, cx_std_codes};
 }
 pub mod cexport_node {
     #[allow(unused_imports)]
@@ -3407,138 +3395,84 @@ pub mod cexport_python {
 }
 pub mod check_access {
     #[allow(unused_imports)]
-    pub use super::{names_the_argument, dotted_path, variants_named, check_access_inside_std};
+    pub use super::{check_access_inside_std};
 }
-pub mod check_arguments {
-    #[allow(unused_imports)]
-    pub use super::{check_arguments};
-}
-pub mod check_arith {
-    #[allow(unused_imports)]
-    pub use super::{an_or_a_named, arith_shown, is_a_bool_type, text_or_bool_in_arithmetic};
-}
-pub mod check_arm_leaves {
-    #[allow(unused_imports)]
-    pub use super::{check_span_at};
-}
+pub mod check_arguments {}
+pub mod check_arith {}
+pub mod check_arm_leaves {}
 pub mod check_arms {
     #[allow(unused_imports)]
-    pub use super::{CheckArm, arms_meet_with_holes, arms_that_disagree};
+    pub use super::{CheckArm};
 }
 pub mod check_attributes {
     #[allow(unused_imports)]
-    pub use super::{CheckAttributesMark, check_attributes_mark_name, check_attributes_mark_text, check_attributes_all, check_attributes_an_attribute_read, check_attributes_literal_misfit, check_attributes_inline_written};
+    pub use super::{CheckAttributesMark};
 }
 pub mod check_binds {
     #[allow(unused_imports)]
-    pub use super::{CheckBoundary, binds_hands_a_view};
+    pub use super::{CheckBoundary};
 }
-pub mod check_boundary {
-    #[allow(unused_imports)]
-    pub use super::{element_of};
-}
+pub mod check_boundary {}
 pub mod check_boxes {
     #[allow(unused_imports)]
     pub use super::{CheckDepth};
 }
 pub mod check_buildtime {}
 pub mod check_buildtime2 {}
-pub mod check_calls {
-    #[allow(unused_imports)]
-    pub use super::{call_arguments, expected_arguments, receiver_bindings, argument_bindings, walks_by_value, shape_through, shape_timed, a_paused_chain, a_pausing_sequence};
-}
+pub mod check_calls {}
 pub mod check_claims {
     #[allow(unused_imports)]
     pub use super::{check_claims_unproved, check_claims_assumes_in_std};
 }
-pub mod check_collect {
-    #[allow(unused_imports)]
-    pub use super::{collect_keys_unordered};
-}
+pub mod check_collect {}
 pub mod check_compare {
     #[allow(unused_imports)]
-    pub use super::{CompareStrength, CheckComparable, compare_refusal, CompareDeclared, compare_declared, compare_standard_bounds, compare_keys_with_no_order, compare_keys_that_do_not_hash, compare_language_impls};
+    pub use super::{CompareStrength, CheckComparable, CompareDeclared};
 }
 pub mod check_consts {
     #[allow(unused_imports)]
-    pub use super::{rust_value, rust_array_type, CheckCrossing, CheckTable, unwritable_in, tuple_spelled, written_below};
+    pub use super::{rust_array_type, CheckCrossing, CheckTable};
 }
 pub mod check_copies {
     #[allow(unused_imports)]
     pub use super::{check_parts_beside};
 }
-pub mod check_core_args {
-    #[allow(unused_imports)]
-    pub use super::{check_core_args_runs, check_core_arguments_given, check_core_arguments_to_code, check_core_arguments_bound, check_core_fold_form, check_core_locks, check_core_list_literal, check_core_list_repeat, check_core_args_a_field_called, check_core_args_code_said, check_core_a_called_field, check_core_fold_option};
-}
-pub mod check_core_call {
-    #[allow(unused_imports)]
-    pub use super::{check_core_call_lent, check_core_call_rust_owner, check_core_call_moving_options, check_core_free_call, signature_type_variables, check_core_call, check_core_tuple};
-}
-pub mod check_core_call_on {
-    #[allow(unused_imports)]
-    pub use super::{check_core_call_on_reached, check_core_call_on_map_written, check_core_call_on_key_read, check_core_call_on_retyped, check_core_call_on_entry_values, check_core_call_on, check_core_a_safe_call, check_core_call_on_weighs, check_core_call_on_weighed_through};
-}
-pub mod check_core_comptime {
-    #[allow(unused_imports)]
-    pub use super::{check_core_comptime_binding, check_core_a_block_over_a_grammar};
-}
-pub mod check_core_expr {
-    #[allow(unused_imports)]
-    pub use super::{check_core_expr, check_core_value_of, check_core_walk_timed_out};
-}
+pub mod check_core_args {}
+pub mod check_core_call {}
+pub mod check_core_call_on {}
+pub mod check_core_comptime {}
+pub mod check_core_expr {}
 pub mod check_core_flow {
     #[allow(unused_imports)]
     pub use super::{check_core_flow_meet, check_core_flow_unsafe, check_core_flow_overlap, check_core_flow_select, check_core_flow_if, check_core_flow_match, check_core_flow_try_catch};
 }
-pub mod check_core_leaves {
-    #[allow(unused_imports)]
-    pub use super::{check_core_field_of_self, check_core_a_field_of_a_borrowed_subject, check_core_a_field_of_a_borrowed_subject_given, check_core_a_field_of_a_lent_place_handed_back, check_core_lent_places_in_arms_handed_back, check_core_a_lent_place_passed, check_core_a_kept_lambda, check_core_literal_by_use, check_core_holes, check_core_lambda, check_core_lambda_enter, check_core_lambda_leave, check_core_a_field, check_core_a_nullable, check_core_a_text_option_into_a_view, check_core_returns, check_core_an_assert};
-}
-pub mod check_core_method {
-    #[allow(unused_imports)]
-    pub use super::{check_core_method_on_timeout, check_core_method_counted, check_core_method_connection, check_core_method, check_core_method_code_lent};
-}
+pub mod check_core_leaves {}
+pub mod check_core_method {}
 pub mod check_core_ops {
     #[allow(unused_imports)]
-    pub use super::{check_core_ops_binary, check_core_ops_coalesce, check_core_ops_none_named, check_core_ops_closure, CHILD_HANDLE, a_child_handle, check_core_ops_spawn};
+    pub use super::{CHILD_HANDLE};
 }
-pub mod check_core_pilot {
-    #[allow(unused_imports)]
-    pub use super::{check_specialised, check_core_grammar_call, check_holds_a_symbol, check_grammar_entry_interns, check_core_a_compound_write_to_a_map_slot, check_core_an_instantiation, check_core_instantiate, check_core_slot_index, check_core_type_argument, check_core_a_mut_parameter_given_away, check_reflect_kind, check_reflect_builtin_kind, check_reflect_written, check_reflect_compared, check_reflect_path, check_reflect_field_type, check_reflect_a_field, check_core_field_copies, check_reflected_field_kept, check_reflect_arm, check_reflect_match};
-}
-pub mod check_core_places {
-    #[allow(unused_imports)]
-    pub use super::{check_core_places_beyond_f32, check_core_field, check_core_places_array_length, check_core_places_stored, check_core_places_stored_keys, check_core_places_code_keys, check_core_places_code_into, check_core_places_store_handle, check_core_places_give_handle, check_core_struct_literal, check_core_with, check_core_places_text_key, check_core_places_text_position, check_core_index, check_core_cast, check_core_range};
-}
-pub mod check_core_stmt {
-    #[allow(unused_imports)]
-    pub use super::{check_core_stmt_element_view, check_core_stmt_holds_code, check_core_stmt_let, check_core_stmt_assign, check_core_stmt_while, check_core_stmt_for, check_core_stmt_return, check_core_stmt_jump, check_core_stmt, check_core_stmt_body_discarded, check_core_block};
-}
+pub mod check_core_pilot {}
+pub mod check_core_places {}
+pub mod check_core_stmt {}
 pub mod check_crossings {
     #[allow(unused_imports)]
-    pub use super::{CheckCrossingsPath, check_crossings_a_bound_handle_is_taken, check_crossings_a_value_with_a_cleanup_made, check_crossings_a_value_with_a_cleanup_dying, check_crossings_a_value_with_a_cleanup_bound, check_crossings_a_type_that_does_not_compare, check_crossings_a_standard_bound_not_met, check_crossings_language_impls, check_crossings_a_task_of_a_scope, check_crossings_a_scope_that_pauses, check_crossings_a_lambda_that_pauses_at_an_entry, check_crossings_a_call_that_hands_its_number_back, check_crossings_arguments};
+    pub use super::{CheckCrossingsPath};
 }
 pub mod check_declared {
     #[allow(unused_imports)]
     pub use super::{CheckDeclared, declared_site};
 }
-pub mod check_decls {
-    #[allow(unused_imports)]
-    pub use super::{a_type_base, a_part_one_type};
-}
+pub mod check_decls {}
 pub mod check_defaults {
     #[allow(unused_imports)]
-    pub use super::{CheckComputing, check_defaults_a_computed_default, check_defaults_a_field_default, check_defaults_computed_value, check_defaults_item_constants, check_defaults_fold, check_defaults_folds_in};
+    pub use super::{CheckComputing};
 }
 pub mod check_doors {}
-pub mod check_expect {
-    #[allow(unused_imports)]
-    pub use super::{several_errors_of, check_float_literal_fits, check_floats_written};
-}
+pub mod check_expect {}
 pub mod check_exprs {
     #[allow(unused_imports)]
-    pub use super::{a_plain_string, CheckKept};
+    pub use super::{CheckKept};
 }
 pub mod check_extern {}
 pub mod check_facts {
@@ -3549,30 +3483,18 @@ pub mod check_fallible {
     #[allow(unused_imports)]
     pub use super::{CheckCleanup};
 }
-pub mod check_fields {
-    #[allow(unused_imports)]
-    pub use super::{check_fields_map_first_written};
-}
+pub mod check_fields {}
 pub mod check_flow {
     #[allow(unused_imports)]
     pub use super::{CheckConstant, CheckOpenNumber, CheckOpenChar, CheckUnsignedSlot, CheckUnrolling, CheckLambdaReturn, CheckFlow, CheckClone};
 }
-pub mod check_function {
-    #[allow(unused_imports)]
-    pub use super::{check_function_grown_text, check_function_mixed_text, check_function_grammar, check_function_is_branching, check_function_wrap_tail, check_function_function};
-}
+pub mod check_function {}
 pub mod check_glue {
     #[allow(unused_imports)]
     pub use super::{check_char_literal, check_accepted_dump_name};
 }
-pub mod check_grammar {
-    #[allow(unused_imports)]
-    pub use super::{grammar_stream_refused, grammar_positions_over_text};
-}
-pub mod check_handed {
-    #[allow(unused_imports)]
-    pub use super::{check_handed_follow, check_handed_carries, check_handed_written};
-}
+pub mod check_grammar {}
+pub mod check_handed {}
 pub mod check_host {
     #[allow(unused_imports)]
     pub use super::{CheckBuilt, CheckComputed, CheckCompiled, CheckPlace, CheckHost};
@@ -3580,155 +3502,92 @@ pub mod check_host {
 pub mod check_imports {}
 pub mod check_items {
     #[allow(unused_imports)]
-    pub use super::{declares_a_type, declared_with_no_arithmetic, either_param, either_field, imports_a_package, imports_exactly, a_field_of_static_text, an_extern_struct_named, a_c_value, implements_error, fields_by_base, check_payload_in, ItemGeneric};
+    pub use super::{fields_by_base, ItemGeneric};
 }
 pub mod check_keep_marks {
     #[allow(unused_imports)]
-    pub use super::{keep_marks_check, keep_marks_opted_in_items};
+    pub use super::{keep_marks_check};
 }
 pub mod check_kinds {
     #[allow(unused_imports)]
-    pub use super::{CheckRaised, kind_a_number_name};
+    pub use super::{CheckRaised};
 }
 pub mod check_lambdas {}
-pub mod check_literals {
-    #[allow(unused_imports)]
-    pub use super::{element_kind};
-}
-pub mod check_lookups {
-    #[allow(unused_imports)]
-    pub use super::{names_of, as_this_program_says, bounds_in_a_signature, ledger_function};
-}
-pub mod check_main {
-    #[allow(unused_imports)]
-    pub use super::{main_word_type, main_option_word};
-}
+pub mod check_literals {}
+pub mod check_lookups {}
+pub mod check_main {}
 pub mod check_may_fail {}
 pub mod check_members {}
 pub mod check_name_in_text {}
-pub mod check_names {
-    #[allow(unused_imports)]
-    pub use super::{an_integer_limit, integer_named, is_a_literal};
-}
+pub mod check_names {}
 pub mod check_narrow {
     #[allow(unused_imports)]
     pub use super::{CheckNarrow, CheckPathRead, CheckNarrowTurn, CheckNarrowing, CheckLost, CheckBoundAt, CheckProved, check_narrow_proved_names, check_narrow_proofs_for, check_narrow_proved_here, check_narrow_proved_from_here, check_narrow_ends, check_narrow_reads_of_the_maybe, check_narrow_read_as_proved, check_narrow_path_read, check_narrow_handed, check_narrow_written_through, check_narrow_turn_begins, check_narrow_turn_ends, check_narrow_a_proof_taken_back};
 }
 pub mod check_notes {}
-pub mod check_numbers {
-    #[allow(unused_imports)]
-    pub use super::{a_number_that_does_not_fit};
-}
-pub mod check_numbers2 {
-    #[allow(unused_imports)]
-    pub use super::{a_collect_into_an_option, is_a_list_literal};
-}
+pub mod check_numbers {}
+pub mod check_numbers2 {}
 pub mod check_numbers3 {}
-pub mod check_numbers4 {
-    #[allow(unused_imports)]
-    pub use super::{an_operation_of_one_type, number_branches, literals_in};
-}
+pub mod check_numbers4 {}
 pub mod check_numbers5 {
     #[allow(unused_imports)]
     pub use super::{CheckOpenComptime};
 }
-pub mod check_overflow {
-    #[allow(unused_imports)]
-    pub use super::{check_wrap_for, check_wrap_undecided, check_widened_slot, check_overflow_list_into_nullables, check_overflow_tuple_into_nullables, check_overflow_ends_into_nullables, check_overflow_a_nullable, check_unsigned_slot_refused};
-}
+pub mod check_overflow {}
 pub mod check_parts {}
-pub mod check_patterns {
-    #[allow(unused_imports)]
-    pub use super::{pattern_names, pattern_is_rest, pattern_list_element};
-}
+pub mod check_patterns {}
 pub mod check_pauses {
     #[allow(unused_imports)]
     pub use super::{CheckPause};
 }
-pub mod check_places {
-    #[allow(unused_imports)]
-    pub use super::{members_named, a_root_is_one_of_two};
-}
-pub mod check_program {
-    #[allow(unused_imports)]
-    pub use super::{check_program_program, check_program_instantiations_beside, check_program_unroll, check_program_reached};
-}
-pub mod check_reads {
-    #[allow(unused_imports)]
-    pub use super::{check_numeric};
-}
-pub mod check_references {
-    #[allow(unused_imports)]
-    pub use super::{check_gives_back, check_gives_back_parts};
-}
-pub mod check_refusals {
-    #[allow(unused_imports)]
-    pub use super::{drop_help, left_out_text};
-}
+pub mod check_places {}
+pub mod check_program {}
+pub mod check_reads {}
+pub mod check_references {}
+pub mod check_refusals {}
 pub mod check_reports {
     #[allow(unused_imports)]
     pub use super::{CheckWall};
 }
 pub mod check_result_from {
     #[allow(unused_imports)]
-    pub use super::{result_from_check, result_from_as_written, result_from_of_code};
+    pub use super::{result_from_check};
 }
 pub mod check_scope {
     #[allow(unused_imports)]
-    pub use super::{CheckResolved, resolve_call, resolve_method};
+    pub use super::{CheckResolved};
 }
-pub mod check_send {
-    #[allow(unused_imports)]
-    pub use super::{same_at_both};
-}
+pub mod check_send {}
 pub mod check_shapes {
     #[allow(unused_imports)]
-    pub use super::{roots_in_a_binding, shapes_lends_from_a_binding, shapes_is_null, shapes_has_a_null_arm, shapes_is_otherwise, catches_everything, plainly_a_value, an_element_beneath, rust_constant_type, element_below, slice_element, is_fixed, is_growable, constructed};
+    pub use super::{is_fixed, constructed};
 }
-pub mod check_simd {
-    #[allow(unused_imports)]
-    pub use super::{check_simd_kind, check_simd_bits_of, check_simd_count_of, check_simd_bytes, check_simd_method_result, check_simd_a_call, check_simd_made, simd_written};
-}
+pub mod check_simd {}
 pub mod check_state {
     #[allow(unused_imports)]
-    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, CheckHeldTaking, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
+    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, CheckRepeats, CheckHeldTaking, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
 }
 pub mod check_takes {
     #[allow(unused_imports)]
     pub use super::{CheckUse};
 }
 pub mod check_task_pauses {}
-pub mod check_texts {
-    #[allow(unused_imports)]
-    pub use super::{literal_is_a_byte, check_byte_literal, ends_in_text, ends_in_null, a_text_literal_expr, ends_in_tuple, tuple_ends};
-}
+pub mod check_texts {}
 pub mod check_types {
     #[allow(unused_imports)]
-    pub use super::{a_number_name, a_float_type, an_integer_literal, type_last_segment, view_of_type, viewed_from_type, unviewed_type, hands_a_run, hands_a_run_view, copies_as_a_view, value_of_a_copy, is_a_view_of_a_string, a_copy_by_value, moves_away, copies_plainly, holds_an_array, is_a_list_type, is_a_collection_type, is_text_type, is_a_hull, locked_content_of, is_a_handle, locked_content, becomes_shared, way_out_of_a_mismatch, element_walked, the_command_line, elements_walked, wholly_known, a_map_type, is_a_literal_other_than, a_copied_part, tail_value_of, check_peeled};
+    pub use super::{moves_away};
 }
-pub mod check_values {
-    #[allow(unused_imports)]
-    pub use super::{ledger_candidates};
-}
-pub mod check_visit {
-    #[allow(unused_imports)]
-    pub use super::{check_visit_children, check_visit_preorder, check_visit_has_holes, check_visit_stmt, check_visit_expr_blocks, check_visit_stmt_blocks};
-}
-pub mod check_walk {
-    #[allow(unused_imports)]
-    pub use super::{child_exprs_of, blocks_of_expr, blocks_of_stmt};
-}
+pub mod check_values {}
+pub mod check_visit {}
+pub mod check_walk {}
 pub mod check_walked {
     #[allow(unused_imports)]
-    pub use super::{check_walked_settle, check_walked_kept_call, check_walked_unsigned_slots, check_walked_unrolling, check_walked_written, check_walked_seed, check_walked_payload_of, check_walked_place_of, check_walked_declared, check_walked_proved, CheckWalkedProved, CheckWalkedPasses, check_walked_walk, check_walked_with_described, CheckMultiLock};
+    pub use super::{check_walked_kept_call, check_walked_unrolling, CheckWalkedProved, CheckWalkedPasses, check_walked_walk, check_walked_with_described, CheckMultiLock};
 }
-pub mod check_walks {
-    #[allow(unused_imports)]
-    pub use super::{check_not_pure_because};
-}
+pub mod check_walks {}
 pub mod check_widen {
     #[allow(unused_imports)]
-    pub use super::{common_integer, widened_into, an_integer_that_does_not_widen, unsigned_from_signed, number_where_no_number_is, names_a_path, text_as_a_path, mapped_as_bytes, views_into_nullable_text, views_into_text, binary_op_text, a_number_asked_for_two_types, a_map_number_asked_for_two_types, a_list_the_wrong_length_for_its_array, a_repeat_count_unknown_for_its_array, a_repeated_value_that_does_not_copy, two_integer_types_for_one_variable};
+    pub use super::{common_integer};
 }
 pub mod check_with {
     #[allow(unused_imports)]
@@ -3736,27 +3595,24 @@ pub mod check_with {
 }
 pub mod check_words {
     #[allow(unused_imports)]
-    pub use super::{reserved_elsewhere, nearest_name, with_article, article, counted, names_listed, indented_text, brace_groups, collapsed_doubled_braces, not_promised_note, is_a_lookup, boxed_member, articles};
+    pub use super::{article, counted, indented_text, articles};
 }
-pub mod claim_names {
-    #[allow(unused_imports)]
-    pub use super::{claim_names_in, is_a_parameter};
-}
+pub mod claim_names {}
 pub mod cli_commands {
     #[allow(unused_imports)]
     pub use super::{CliCommandsRefusal, CliTestHost, cli_commands_test, CliDescribed, cli_commands_describe_root, cli_commands_described, cli_commands_lowered, cli_commands_lowered_std, cli_commands_bind_refusal};
 }
 pub mod comptime_bundle {
     #[allow(unused_imports)]
-    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_artifacts, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_host_deps, comptime_bundle_run, comptime_bundle_write_if_changed};
+    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_host_deps, comptime_bundle_run, comptime_bundle_write_if_changed};
 }
 pub mod comptime_driver {
     #[allow(unused_imports)]
-    pub use super::{cr_bundle_source, cr_bundle_manifest, CR_DEPENDENCY_PROFILE, cr_own_profile, cr_with_driver};
+    pub use super::{CR_DEPENDENCY_PROFILE};
 }
 pub mod comptime_tree {
     #[allow(unused_imports)]
-    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, TURN_MARK, comptime_turn_marked, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_readers_dropped, comptime_value_fn_names, comptime_declared_of, comptime_as_built, comptime_undeclared_callee, comptime_declares, comptime_culprit, ComptimeLowerHost, comptime_lowered_units, comptime_without_foreign, comptime_dependency_modules, comptime_by_package, COMPTIME_NOT_LOWERED, COMPTIME_NOT_READ, COMPTIME_NOT_CARRIED, NOWHERE, ComptimeDriven, COMPTIME_STOPPED_AT, ComptimeLowered, ComptimeDeclared, ComptimeComputeHost, comptime_computed};
+    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, TURN_MARK, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_readers_dropped, comptime_value_fn_names, comptime_declared_of, comptime_as_built, ComptimeLowerHost, comptime_lowered_units, comptime_without_foreign, comptime_dependency_modules, comptime_by_package, COMPTIME_NOT_LOWERED, COMPTIME_NOT_READ, COMPTIME_NOT_CARRIED, NOWHERE, ComptimeDriven, COMPTIME_STOPPED_AT, ComptimeLowered, ComptimeDeclared, ComptimeComputeHost, comptime_computed};
 }
 pub mod contract_changes {
     #[allow(unused_imports)]
@@ -3768,11 +3624,11 @@ pub mod contracts_core {
 }
 pub mod crossing {
     #[allow(unused_imports)]
-    pub use super::{crosses, plainly_sendable, is_plain, generic_of, bounds_send, a_list, reaches_a_thread, the_crates_own, promise_lines, thread_lines, type_entry};
+    pub use super::{crosses, generic_of, bounds_send, a_list, reaches_a_thread, the_crates_own};
 }
 pub mod declared {
     #[allow(unused_imports)]
-    pub use super::{DeclaredFn, written_ty, code_as_read, code_lends_at, code_lends_unmarked, code_writes_from, code_reads, declared_function, default_text, declared_trait_method, declared_enum, declared_fields, tethered_fields};
+    pub use super::{DeclaredFn, written_ty, code_writes_from};
 }
 pub mod describe {
     #[allow(unused_imports)]
@@ -3780,7 +3636,7 @@ pub mod describe {
 }
 pub mod diagnostics {
     #[allow(unused_imports)]
-    pub use super::{DiagnosticsRead, DiagnosticsChild, diagnostics_read_json, diagnostics_libraries_in, diagnostics_executable_in, DiagnosticsPlaced, diagnostics_placed};
+    pub use super::{DiagnosticsRead, DiagnosticsChild, diagnostics_read_json, DiagnosticsPlaced, diagnostics_placed};
 }
 pub mod diffs {
     #[allow(unused_imports)]
@@ -3788,94 +3644,61 @@ pub mod diffs {
 }
 pub mod dsl {
     #[allow(unused_imports)]
-    pub use super::{parameters, is_deferred, type_name, shadow_types, drivers, check};
+    pub use super::{parameters, is_deferred, type_name, check};
 }
 pub mod dump {
     #[allow(unused_imports)]
-    pub use super::{VariantShape, FieldShape, Shapes, Uncrossable, dump, is_whole};
+    pub use super::{VariantShape, FieldShape, Shapes, Uncrossable, dump};
 }
-pub mod emit_below {
-    #[allow(unused_imports)]
-    pub use super::{integer_limit_below, emit_is_a_shape_bound, emit_bounded, emit_uses_driver};
-}
+pub mod emit_below {}
 pub mod emit_build {
     #[allow(unused_imports)]
-    pub use super::{UserParallelism, ReentrancyCheck, Target, emit_build_targets, emit_build_rust_targets, BoundsChecks, OverflowChecks};
+    pub use super::{UserParallelism, ReentrancyCheck, Target, BoundsChecks, OverflowChecks};
 }
-pub mod emit_calls {
-    #[allow(unused_imports)]
-    pub use super::{call_written_name, call_pausing_key, call_library_pauses, call_pauses, call_can_fail, call_callee_name, call_joined_throws, call_returns_either};
-}
+pub mod emit_calls {}
 pub mod emit_contracts {
     #[allow(unused_imports)]
     pub use super::{EmitContractsProven, EmitContractsBuild, EmitContractsMade, EmitContractsHost, emit_contracts_state, EmitReachGraphs, emit_contracts_package_graphs};
 }
-pub mod emit_core_args {
-    #[allow(unused_imports)]
-    pub use super::{emit_rust_owner, emit_rust_crossing, emit_rust_owner_param, emit_call_on_the_pool, emit_async_line, emit_async_pause, emit_async_during};
-}
+pub mod emit_core_args {}
 pub mod emit_core_below {
     #[allow(unused_imports)]
-    pub use super::{EmitHeldFound, emit_held_in, emit_filled_at_once, emit_resize_args, emit_branch_values};
+    pub use super::{EmitHeldFound};
 }
-pub mod emit_core_calls {
-    #[allow(unused_imports)]
-    pub use super::{emit_tuple_part_copies};
-}
+pub mod emit_core_calls {}
 pub mod emit_core_flow {}
-pub mod emit_core_leaves {
-    #[allow(unused_imports)]
-    pub use super::{emit_bytes_grammar, emit_fold_options};
-}
+pub mod emit_core_leaves {}
 pub mod emit_core_match {}
 pub mod emit_core_places {}
 pub mod emit_core_reads {}
-pub mod emit_core_types {
-    #[allow(unused_imports)]
-    pub use super::{emit_settle_kind, emit_cleaned, emit_boxed_future, emit_boxed_future_in, emit_counted_turn};
-}
+pub mod emit_core_types {}
 pub mod emit_entry {}
 pub mod emit_expr {}
-pub mod emit_exprs {
-    #[allow(unused_imports)]
-    pub use super::{emit_around, emit_around_held};
-}
+pub mod emit_exprs {}
 pub mod emit_fold {}
 pub mod emit_function {
     #[allow(unused_imports)]
     pub use super::{EmitSeedsBegin, EmitSeedsEnd, EmitSplit, EmitSig};
 }
-pub mod emit_function_body {
-    #[allow(unused_imports)]
-    pub use super::{emit_a_body_that_leaves};
-}
-pub mod emit_grammar {
-    #[allow(unused_imports)]
-    pub use super::{emit_stream_walk_name};
-}
+pub mod emit_function_body {}
+pub mod emit_grammar {}
 pub mod emit_holes {
     #[allow(unused_imports)]
-    pub use super::{EmitHole, EmitHolesHost, emit_holes_literal_bound, emit_holes_literal, EmitHoleTables, emit_holes_tables, emit_holes_fold_callees, emit_holes_built_at_build_time};
+    pub use super::{EmitHole, EmitHolesHost, emit_holes_literal_bound, emit_holes_literal, EmitHoleTables};
 }
 pub mod emit_host {
     #[allow(unused_imports)]
     pub use super::{EmitHost};
 }
-pub mod emit_item {
-    #[allow(unused_imports)]
-    pub use super::{emit_seeds_declared, emit_seeds_applied};
-}
+pub mod emit_item {}
 pub mod emit_items {
     #[allow(unused_imports)]
-    pub use super::{foreign_params, opaque_handles, foreign_results, foreign_traits, declared_errors, sum_name, sum_variant, variant_slot, dsl_name, error_kind, sum_member_type, library_error_path, member_of};
+    pub use super::{opaque_handles};
 }
-pub mod emit_keeps {
-    #[allow(unused_imports)]
-    pub use super::{emit_keep_expr, emit_tethered_type};
-}
+pub mod emit_keeps {}
 pub mod emit_kinds {
     #[allow(unused_imports)]
-    pub use super::{EmitTail, EmitLifetimes, EmitPointer, emit_pointer_for, EmitNamed, EmitMethod, EmitRefused, EmitBuild, EmitFlow, EmitScope};
+    pub use super::{EmitTail, EmitLifetimes, EmitPointer, EmitNamed, EmitMethod, EmitRefused, EmitBuild, EmitFlow, EmitScope};
 }
 pub mod emit_locals {
     #[allow(unused_imports)]
@@ -3883,15 +3706,15 @@ pub mod emit_locals {
 }
 pub mod emit_misc {
     #[allow(unused_imports)]
-    pub use super::{is_reserved, escaped_name, emit_local_name, opaque_type_text, emit_slot_in, emit_values_name, emit_field_slot_in, emit_field_slot_of, emit_field_copy_name, emit_slot_of, emit_generic_fn};
+    pub use super::{is_reserved};
 }
 pub mod emit_needs {
     #[allow(unused_imports)]
-    pub use super::{block_types_import, block_text_open, block_text_close, emit_callee_is_std_text, answers_rust_text, EmitNeeds, emit_needs_abort_table};
+    pub use super::{EmitNeeds, emit_needs_abort_table};
 }
 pub mod emit_ops {
     #[allow(unused_imports)]
-    pub use super::{precedence, binary_op, unary_op, repeat_suffix, pointing, jumps, jumps_at_the_end, never_a_value, a_number, only_literals, a_negation_inside, is_length, is_count, a_list_read_as_a_slice, frame_attribute, is_a_place, binds_a_part};
+    pub use super::{precedence, unary_op, pointing, jumps, is_count};
 }
 pub mod emit_order {
     #[allow(unused_imports)]
@@ -3905,40 +3728,34 @@ pub mod emit_pattern {}
 pub mod emit_program {}
 pub mod emit_reach {
     #[allow(unused_imports)]
-    pub use super::{ReachIndex, reach_pausing_index, reach_running_index, pausing_edges, pausing_reach, code_cycle_edges, code_on_a_cycle};
+    pub use super::{ReachIndex};
 }
 pub mod emit_seeds {
     #[allow(unused_imports)]
-    pub use super::{EmitSeedsTables, emit_seeds_tables, EmitSeedsCall, EmitSeedsBody, EmitSeedsDeclared, EmitSeedsHost, emit_seeds_read, emit_seeds_fill_calls, emit_seeds_words, emit_seeds_bare, emit_seeds_key, EmitSeedsSeen, EmitSeedsPlace, emit_seeds_place, emit_seeds_declare, emit_seeds_declare_fn, emit_seeds_declare_type, emit_seeds_finish, emit_seeds_enter, emit_seeds_leave, emit_seeds_within, EmitSeedsShape, emit_seeds_begin, emit_seeds_end, emit_seeds_seeded, emit_seeds_last, emit_seeds_is_map, emit_seeds_write};
+    pub use super::{EmitSeedsTables, emit_seeds_tables, EmitSeedsCall, EmitSeedsBody, EmitSeedsDeclared, EmitSeedsHost, emit_seeds_read, emit_seeds_fill_calls, emit_seeds_key, EmitSeedsSeen, EmitSeedsPlace, EmitSeedsShape, emit_seeds_seeded, emit_seeds_write};
 }
 pub mod emit_state {
     #[allow(unused_imports)]
     pub use super::{EmitPair, EmitKeptCall, EmitWorld, EmitState, EmitWalk};
 }
 pub mod emit_stmt {}
-pub mod emit_sums {
-    #[allow(unused_imports)]
-    pub use super::{emit_sums_written};
-}
+pub mod emit_sums {}
 pub mod emit_tables {
     #[allow(unused_imports)]
-    pub use super::{emit_tables_names_outside, emit_tables_names_borrowing, emit_tables_borrowing_structs_beside, emit_tables_view_slots, EmitTablesItems, emit_tables_items, emit_tables_structs_beside, emit_tables_declared_errors, emit_tables_tethered, emit_tables_read_view_slots, emit_tables_described_maps, emit_tables_package_borrowing};
+    pub use super::{emit_tables_borrowing_structs_beside, EmitTablesItems, emit_tables_described_maps, emit_tables_package_borrowing};
 }
 pub mod emit_text {
     #[allow(unused_imports)]
-    pub use super::{rust_string, rust_format_escape, top_level_parts, format_of, truncating, checked, held_literal, plain_rust_spelling};
+    pub use super::{format_of, truncating, checked};
 }
-pub mod emit_types {
-    #[allow(unused_imports)]
-    pub use super::{emit_base};
-}
+pub mod emit_types {}
 pub mod emit_walk {
     #[allow(unused_imports)]
-    pub use super::{visited_in_block, visited_in_stmt, visited_in_expr, template_holes_bound};
+    pub use super::{visited_in_block};
 }
 pub mod escapes {
     #[allow(unused_imports)]
-    pub use super::{NotAnEscape, an_escape_nothing_names, decoded, as_a_literal, a_high_byte, hex_of};
+    pub use super::{NotAnEscape, an_escape_nothing_names, decoded, as_a_literal};
 }
 pub mod findings {
     #[allow(unused_imports)]
@@ -3946,7 +3763,7 @@ pub mod findings {
 }
 pub mod fix {
     #[allow(unused_imports)]
-    pub use super::{FixPlan, fix_run, fix_planned, fix_diff};
+    pub use super::{FixPlan, fix_run};
 }
 pub mod fixed {
     #[allow(unused_imports)]
@@ -3958,19 +3775,19 @@ pub mod fmt {
 }
 pub mod fold {
     #[allow(unused_imports)]
-    pub use super::{Constant, Folded, fits, integer_fits, constant_of, written_in_literals, shifts_literals, wants_widening};
+    pub use super::{Constant, Folded, fits, integer_fits, constant_of, wants_widening};
 }
 pub mod fold_bound {
     #[allow(unused_imports)]
-    pub use super::{fb_literal_bytes, FbHost, FbSource, fb_least_width, fb_rule_width, fb_most_steps, fb_invariant_checked, fb_folds, FbTy, FbIndex, FbUses, fb_uses, fb_whole_changes_itself, fb_fold_counters, fb_index};
+    pub use super::{FbHost, FbSource, fb_least_width, fb_most_steps, fb_folds, FbTy, FbIndex, FbUses, fb_uses, fb_whole_changes_itself, fb_fold_counters, fb_index};
 }
 pub mod foreign {
     #[allow(unused_imports)]
-    pub use super::{Seen, written_in, seen_in, seen_in_expression};
+    pub use super::{Seen, written_in};
 }
 pub mod grammar_decode {
     #[allow(unused_imports)]
-    pub use super::{GrDecoded, gr_decode, gr_manifest, gr_dump_helpers, gr_main};
+    pub use super::{GrDecoded, gr_decode, gr_manifest};
 }
 pub mod grammar_run {
     #[allow(unused_imports)]
@@ -3978,11 +3795,11 @@ pub mod grammar_run {
 }
 pub mod grammar_types {
     #[allow(unused_imports)]
-    pub use super::{GrammarTypesCall, grammar_types_copy_name, GrammarTypesRefusal, GrammarTypesExpanded, grammar_types_wanted, grammar_types_put, GrammarTypesGeneric, grammar_types_generic, GrammarTypesAsked, grammar_types_asked, grammar_types_written, grammar_types_value_refused, grammar_types_plain, grammar_types_whole};
+    pub use super::{GrammarTypesCall, GrammarTypesRefusal, GrammarTypesExpanded, GrammarTypesGeneric, GrammarTypesAsked, grammar_types_whole};
 }
 pub mod integers {
     #[allow(unused_imports)]
-    pub use super::{Integer, integer, integer_of_count, integer_as_count, integer_text, integer_negated, integer_sum, integer_difference, integer_product, integer_quotient, integer_order, integer_bits, integer_shifted};
+    pub use super::{Integer, integer, integer_of_count, integer_as_count};
 }
 pub mod interpreter {
     #[allow(unused_imports)]
@@ -3990,27 +3807,24 @@ pub mod interpreter {
 }
 pub mod keep {
     #[allow(unused_imports)]
-    pub use super::{KeepContext, DeclaredStruct, struct_in, names_a_struct_of_views, a_ledger_type_with_a_view, takes_a_keep, keeping_method_key, written_callee, root_of, taken_from, hands_back_its_own, keeps_what_it_is_given, drops_entries, hands_back_what_it_removes, capitalised};
+    pub use super::{KeepContext, DeclaredStruct, takes_a_keep, written_callee, root_of};
 }
 pub mod keeps {
     #[allow(unused_imports)]
-    pub use super::{KeepsBody, uses_in, keeps_its_bytes, KeepsHost, KeepsColumn, KeepsKeeper, KeepsImplRow, KeepsIndexes, KeepsFound, keeps_a_copy_type, keeps_copy_types, keeps_infer, keeps_uses_of};
+    pub use super::{KeepsBody, uses_in, KeepsHost, KeepsColumn, KeepsKeeper, KeepsImplRow, KeepsIndexes, KeepsFound, keeps_infer, keeps_uses_of};
 }
-pub mod leaves {
-    #[allow(unused_imports)]
-    pub use super::{leaves_stmt, leaves_block, leaves_expr};
-}
+pub mod leaves {}
 pub mod ledger {
     #[allow(unused_imports)]
-    pub use super::{LedgerLine, Refused, LedgerText, LedgerValue, unquote, list, read, touch_of, held_of, class_of, variant_of, signature_of, Spelling, SignatureText, spelled_signature, Spelled, spell};
+    pub use super::{LedgerLine, Refused, LedgerText, LedgerValue, unquote, list, read, touch_of, held_of, class_of, variant_of, signature_of, Spelling, SignatureText, Spelled, spell};
 }
 pub mod ledger_defaults {
     #[allow(unused_imports)]
-    pub use super::{attribute_value, computed_options, apply_attribute, set_default, write_result_sources};
+    pub use super::{attribute_value};
 }
 pub mod ledger_items {
     #[allow(unused_imports)]
-    pub use super::{types_this_file_declares, types_declared_in, impl_parameters, a_literal, declared_extern, declared_grammar, grammar_entry_interns, literal_of, PublishedEnsures, expression_ensures, ComputedAt, declare_items, attribute_values, ledger_items_stored, LedgerInferHost, ledger_infer_package};
+    pub use super::{types_this_file_declares, impl_parameters, a_literal, literal_of, PublishedEnsures, ComputedAt, attribute_values, ledger_items_stored, LedgerInferHost, ledger_infer_package};
 }
 pub mod ledger_ops {
     #[allow(unused_imports)]
@@ -4022,7 +3836,7 @@ pub mod ledger_text {
 }
 pub mod lends {
     #[allow(unused_imports)]
-    pub use super::{lends_in, lends_in_own, a_ledger_copies, moves, Passed, Uses, kept_by, keeps_its, option_at, lends_option, lowered_options};
+    pub use super::{lends_in, lends_in_own, a_ledger_copies, moves, Passed, Uses, keeps_its};
 }
 pub mod libraries {
     #[allow(unused_imports)]
@@ -4038,11 +3852,11 @@ pub mod logic_alethe {
 }
 pub mod logic_horn {
     #[allow(unused_imports)]
-    pub use super::{LgExit, LgLoop, LgQuery, LgLoopVerdict, lg_primed, lg_loop_primed, lg_loop_entry_query, lg_loop_turn_query, lg_loop_exit_queries, lg_loop_check, lg_proved, lg_horn_write};
+    pub use super::{LgExit, LgLoop, LgQuery, LgLoopVerdict, lg_primed, lg_loop_check, lg_proved, lg_horn_write};
 }
 pub mod logic_lia {
     #[allow(unused_imports)]
-    pub use super::{LgUnknown, LgWhy, lg_why, LgBudget, lg_budget, LgStep, LgRefutation, LgCertificate, LgModel, LgAnswer, LgRejected, LgLin, lg_add, lg_scale, lg_tightened, lg_terms_cmp, LgItem, LgIndexed, lg_indexed};
+    pub use super::{LgUnknown, LgWhy, LgBudget, LgStep, LgRefutation, LgCertificate, LgModel, LgAnswer, LgRejected, LgLin, LgItem, LgIndexed};
 }
 pub mod logic_normal {
     #[allow(unused_imports)]
@@ -4050,19 +3864,19 @@ pub mod logic_normal {
 }
 pub mod logic_search {
     #[allow(unused_imports)]
-    pub use super::{lg_check, lg_bool_value, lg_verify_model, lg_verify};
+    pub use super::{lg_check, lg_verify_model, lg_verify};
 }
 pub mod logic_smtlib {
     #[allow(unused_imports)]
-    pub use super::{lg_smtlib_write, lg_symbol, lg_term, LgScript, LgReadError, LgRead, lg_smtlib_read};
+    pub use super::{lg_smtlib_write, LgScript, LgReadError, LgRead, lg_smtlib_read};
 }
 pub mod lsp {
     #[allow(unused_imports)]
-    pub use super::{LspHost, LspRefusal, lsp_read_message, lsp_write_message, lsp_object, lsp_string, lsp_number, lsp_respond, lsp_refuse, lsp_capabilities, lsp_serve, lsp_uri_path, lsp_position, lsp_offset, lsp_path_uri, lsp_diagnostic, lsp_range};
+    pub use super::{LspHost, LspRefusal, lsp_serve, lsp_position};
 }
 pub mod manifest {
     #[allow(unused_imports)]
-    pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_units, codegen_table, codegen_key, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, ManifestFeature, ManifestRustLibrary, manifest_parse, manifest_has_build_section, manifest_foreign_crates};
+    pub use super::{Switch, known, targets, codegen_units, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, ManifestFeature, ManifestRustLibrary, manifest_parse, manifest_has_build_section, manifest_foreign_crates};
 }
 pub mod maps {
     #[allow(unused_imports)]
@@ -4078,7 +3892,7 @@ pub mod migrate_views3 {
 }
 pub mod modules {
     #[allow(unused_imports)]
-    pub use super::{declared_at, a_use_refused, could_promise, pause_path, lost_sync, ModulesPause, lost_sync_unplaced, declared_once, groups, as_promised, contracts_as_promised, dependency_ledgers, absorb_own, shown_paths, package_names, is_single_file, test_function, test_dispatcher, modules_test_count, modules_cli_word, modules_dispatcher_as_main, modules_tests_as_functions, modules_test_wrappers, modules_test_only_mark, ModulesReach, modules_reach_of, modules_only_tests_package, modules_mark_test_only, modules_names_in, ModulesHost, ModulesRefusal, ModulesUnit, ModulesStanding, modules_qualify, modules_collect_with, modules_collect_program_test, modules_collect_one, modules_project_root, ModulesLedgerHost, modules_sources_of, modules_believed, ModulesProgramHost, ModulesProgramParts, modules_program_of, ModulesEmitHost, modules_emit_reading};
+    pub use super::{declared_at, a_use_refused, could_promise, lost_sync, ModulesPause, declared_once, groups, contracts_as_promised, dependency_ledgers, shown_paths, package_names, is_single_file, test_dispatcher, modules_test_count, modules_cli_word, modules_dispatcher_as_main, modules_tests_as_functions, modules_test_wrappers, ModulesReach, modules_reach_of, modules_only_tests_package, modules_mark_test_only, modules_names_in, ModulesHost, ModulesRefusal, ModulesUnit, ModulesStanding, modules_qualify, modules_collect_with, modules_collect_program_test, modules_collect_one, modules_project_root, ModulesLedgerHost, modules_sources_of, modules_believed, ModulesProgramHost, ModulesProgramParts, modules_program_of, ModulesEmitHost, modules_emit_reading};
 }
 pub mod names {
     #[allow(unused_imports)]
@@ -4090,7 +3904,7 @@ pub mod node_numbers {
 }
 pub mod order {
     #[allow(unused_imports)]
-    pub use super::{Operation, Accounted, Verdict, verdict, group_verdict, group_of, accounted, accounted_beside, OneCall, diverts_within, overlap_report};
+    pub use super::{Operation, Accounted, Verdict, verdict, group_verdict, group_of, accounted, OneCall, overlap_report};
 }
 pub mod panics {
     #[allow(unused_imports)]
@@ -4098,16 +3912,13 @@ pub mod panics {
 }
 pub mod parse_errors {
     #[allow(unused_imports)]
-    pub use super::{Failure, ParseReading, RESERVED_WORDS, a_parse_error, unclosed_block_comment};
+    pub use super::{Failure, ParseReading, RESERVED_WORDS};
 }
 pub mod parse_findings {
     #[allow(unused_imports)]
     pub use super::{ParseFindingsRefusal, parse_findings_too_long, parse_findings_char_of, parse_findings_at, parse_findings_parse_error, parse_findings_failure, parse_findings_mut_name_in_a_tuple, parse_findings_misplaced_async, parse_findings_one_task_limit, parse_findings_refusal, parse_findings_types_refusal};
 }
-pub mod parse_notes {
-    #[allow(unused_imports)]
-    pub use super::{previous_token, unclosed_quote, unclosed_bracket, opening_of_an_unclosed_comment, first_sentence, the_spelling_ref_replaced_note, an_effect_on_a_lambda_note, coalesce_fallback_note};
-}
+pub mod parse_notes {}
 pub mod parse_numbers {
     #[allow(unused_imports)]
     pub use super::{Number, Scale, float_end, number_at};
@@ -4134,35 +3945,35 @@ pub mod paths {
 }
 pub mod project_batch {
     #[allow(unused_imports)]
-    pub use super::{project_batch_var, project_batch_module, project_batch_ranges, project_batch_cited, project_batch_crate, project_batch_lowered};
+    pub use super::{project_batch_var};
 }
 pub mod project_check {
     #[allow(unused_imports)]
-    pub use super::{project_check_summary, project_check_let_refuted_claims_through, project_check_let_unproved_claims_through, project_check_lint_where_nothing_crosses, project_check_locked_proofs, project_check_locked_ledger_missing, project_check_locked_ledger_changed, ProjectCheckHost, ProjectCheckSaid, project_check_check, project_check_gained, ProjectCheckKept, project_check_keeps_that_moved, ProjectCheckExplainHost, project_check_explain, project_check_explain_kinds};
+    pub use super::{project_check_lint_where_nothing_crosses, ProjectCheckHost, ProjectCheckSaid, project_check_check, project_check_gained, ProjectCheckKept, project_check_keeps_that_moved, ProjectCheckExplainHost, project_check_explain, project_check_explain_kinds};
 }
 pub mod project_drive {
     #[allow(unused_imports)]
-    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_fresh, project_drive_record, project_drive_no_std_for, project_drive_publish_stub, project_drive_publishable, project_drive_rust_crate, project_drive_splice_span, project_drive_spliced, project_drive_rust_manifest, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
+    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_fresh, project_drive_record, project_drive_no_std_for, project_drive_publishable, project_drive_spliced, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
 }
 pub mod project_features {
     #[allow(unused_imports)]
-    pub use super::{FeaturesMade, FeaturesRefusal, features_name_ok, features_lists_checked, features_chosen_checked, features_applied, features_kept, features_readers_dropped, features_manifest, features_blamed, features_first_error, features_span};
+    pub use super::{FeaturesMade, FeaturesRefusal, features_kept};
 }
 pub mod project_lower {
     #[allow(unused_imports)]
-    pub use super::{ProjectLowerArtifacts, ProjectLowerOut, CheckUnit, UnitSaid, ProjectLowerHost, project_lower_reading, project_lower_check, project_lower_published};
+    pub use super::{ProjectLowerArtifacts, ProjectLowerOut, CheckUnit, UnitSaid, ProjectLowerHost, project_lower_reading, project_lower_check};
 }
 pub mod project_members {
     #[allow(unused_imports)]
-    pub use super::{ProjectMembersManifest, ProjectMembersHost, project_members_official, ProjectMembersRefusal, ProjectMembersDependency, project_members_packages_of, ProjectMembersMember, project_members_dependencies_first, project_members_members_of, project_members_fetched_variable, project_members_fetched_text, project_members_fetched_of, project_members_canonical, ProjectMembersForeignHost, ProjectMembersForeign, project_members_no_foreign, project_members_foreign_of, project_members_proofs_digest, project_members_unnamed, project_members_project_unnamed};
+    pub use super::{ProjectMembersManifest, ProjectMembersHost, ProjectMembersRefusal, ProjectMembersDependency, project_members_packages_of, ProjectMembersMember, project_members_members_of, project_members_canonical, ProjectMembersForeignHost, ProjectMembersForeign, project_members_no_foreign, project_members_foreign_of, project_members_proofs_digest, project_members_unnamed, project_members_project_unnamed};
 }
 pub mod project_settings {
     #[allow(unused_imports)]
-    pub use super::{ProjectSettingsRefusal, ProjectWords, refuted_claims, unproved_claims, optimizations, prove_through_loops, skip_free_at_exit, artifact, cpu_config, choices_key, panic_strategy, encoded_with_cpu, ProjectSettingsHost, project_settings_resolve, project_settings_from_env, project_settings_refutations, project_settings_chosen_cpu, project_settings_cpu_key, project_settings_cpu_rustflags, project_settings_as_env, project_settings_no_project, project_settings_unbuildable, project_settings_own_dir, project_settings_build_dir, project_settings_gen_dir, project_settings_switches_path, project_settings_ledger_path, project_settings_switches_beside, project_settings_program_name, project_settings_root_tag, project_settings_own_copy, project_settings_trace};
+    pub use super::{ProjectSettingsRefusal, ProjectWords, refuted_claims, unproved_claims, optimizations, prove_through_loops, skip_free_at_exit, artifact, cpu_config, choices_key, panic_strategy, encoded_with_cpu, ProjectSettingsHost, project_settings_resolve, project_settings_from_env, project_settings_refutations, project_settings_chosen_cpu, project_settings_cpu_key, project_settings_cpu_rustflags, project_settings_as_env, project_settings_no_project, project_settings_unbuildable, project_settings_own_dir, project_settings_build_dir, project_settings_gen_dir, project_settings_switches_path, project_settings_ledger_path, project_settings_program_name, project_settings_root_tag, project_settings_own_copy, project_settings_trace};
 }
 pub mod project_tests {
     #[allow(unused_imports)]
-    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, shown_path, output_tests, copy_into, project_tests_is_program, project_tests_program_manifest, program_tests, project_tests_stray_bounds, project_tests_bounds_report, project_tests_asserts_report, project_tests_bounds_outcome, project_tests_explain_bounds, is_refusal, does_not_compile, named_by, project_tests_difference, project_tests_agree, project_tests_verdict, project_tests_running, project_tests_result, project_tests_output_label, project_tests_program_label, project_tests_output_outcome, project_tests_stopped, project_tests_block_outcome, project_tests_refused_outcome, project_tests_ran_outcome, ProjectTestsRefusal, ProjectTestsRan, project_tests_time_limit, project_tests_build_time_limit, project_tests_timed_out_outcome, project_tests_build_timed_out_outcome, ProjectTestsProgramHost, ProjectTestsBatchBuilt, ProjectTestsBatched, project_tests_times_file, project_tests_places, project_tests_order, project_tests_remember, project_tests_batches, ProjectTestsReports, project_tests_reports, project_tests_program_test, ProjectTestsBlessed, project_tests_blessed_line, project_tests_bless_program, project_tests_explain_said, project_tests_explain_output, project_tests_bless, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
+    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, output_tests, copy_into, project_tests_is_program, project_tests_program_manifest, program_tests, project_tests_stray_bounds, is_refusal, project_tests_result, project_tests_output_outcome, project_tests_block_outcome, ProjectTestsRefusal, ProjectTestsRan, ProjectTestsProgramHost, ProjectTestsBatchBuilt, ProjectTestsBatched, project_tests_times_file, project_tests_places, project_tests_order, project_tests_remember, project_tests_batches, ProjectTestsReports, project_tests_reports, project_tests_program_test, ProjectTestsBlessed, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
 }
 pub mod project_write {
     #[allow(unused_imports)]
@@ -4170,11 +3981,11 @@ pub mod project_write {
 }
 pub mod proofs_answers {
     #[allow(unused_imports)]
-    pub use super::{PROOFS_FILE, PROOFS_LONG_DIR, PROOFS_LONG, PROOFS_ANSWERED, PROOFS_SOLVER, ProofsAsked, ProofsEntry, ProofsBook, proofs_book_empty, ProofsSoFar, ProofsKnown, ProofsWhere, proofs_nowhere, proofs_where, ProofsThread, proofs_thread, proofs_shown, proofs_written, proofs_ask, PROOFS_DUMP, ProofsSearch, proofs_invariants_here, proofs_record_at, proofs_asked_so_far, proofs_ask_again_from, proofs_book_for_worker, proofs_book_merge, proofs_place_of, proofs_byte_of, proofs_book_read, proofs_book_render, proofs_book_write, proofs_book_as_recorded, proofs_book_len};
+    pub use super::{PROOFS_FILE, PROOFS_LONG_DIR, PROOFS_LONG, PROOFS_ANSWERED, PROOFS_SOLVER, ProofsAsked, ProofsEntry, ProofsBook, proofs_book_empty, ProofsSoFar, ProofsKnown, ProofsWhere, proofs_where, ProofsThread, proofs_thread, proofs_shown, proofs_ask, PROOFS_DUMP, ProofsSearch, proofs_invariants_here, proofs_record_at, proofs_asked_so_far, proofs_ask_again_from, proofs_book_for_worker, proofs_book_merge, proofs_place_of, proofs_byte_of, proofs_book_read, proofs_book_render, proofs_book_write, proofs_book_as_recorded, proofs_book_len};
 }
 pub mod proofs_book {
     #[allow(unused_imports)]
-    pub use super::{PbLine, pb_read, PbRendered, pb_render};
+    pub use super::{PbLine, PbRendered};
 }
 pub mod prove_run {
     #[allow(unused_imports)]
@@ -4182,11 +3993,11 @@ pub mod prove_run {
 }
 pub mod prove_terms {
     #[allow(unused_imports)]
-    pub use super::{lin_term, text_literal_length, length_path, element_name, element_index, divisor_name, call_result_name, claim_term, claim_parts, nothing_pinned, folded_whole};
+    pub use super::{claim_term};
 }
 pub mod prove_text {
     #[allow(unused_imports)]
-    pub use super::{rust_of, rust_of_name, term_text, term_ledger_text, shown, lowered_first, has_a_length};
+    pub use super::{shown};
 }
 pub mod prover_arena {
     #[allow(unused_imports)]
@@ -4194,15 +4005,15 @@ pub mod prover_arena {
 }
 pub mod prover_calls {
     #[allow(unused_imports)]
-    pub use super::{FreeFunction, free_function, own_method, arguments_in_order, may_throw, from_outside, outside_source, ProverOutside, prover_outside};
+    pub use super::{FreeFunction, ProverOutside};
 }
 pub mod prover_claims {
     #[allow(unused_imports)]
-    pub use super::{UnwrittenCheck, OutsideIndex, PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape, foreign_shape, foreign_from};
+    pub use super::{UnwrittenCheck, OutsideIndex, PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape};
 }
 pub mod prover_loops {
     #[allow(unused_imports)]
-    pub use super::{LoopRecord, LoopTurn, LoopFound, loop_before_name, loop_record, loop_record_range, loop_candidates, loop_found, loop_facts, loop_turn_name, loop_turn_facts, loop_found_text, loop_said, loop_open_text, loop_reads, loop_key, loop_parts_text, loop_recorded};
+    pub use super::{LoopRecord, LoopTurn, LoopFound};
 }
 pub mod prover_passes {
     #[allow(unused_imports)]
@@ -4214,23 +4025,23 @@ pub mod prover_results {
 }
 pub mod prover_scope {
     #[allow(unused_imports)]
-    pub use super::{ProverScope, ProverBits, length_of, result_name, precondition_terms, copied_path};
+    pub use super::{ProverScope, ProverBits, length_of};
 }
 pub mod prover_solver {
     #[allow(unused_imports)]
-    pub use super::{SolverAnswer, refuting_values, breaking_values};
+    pub use super::{SolverAnswer};
 }
 pub mod prover_state {
     #[allow(unused_imports)]
-    pub use super::{ProverState, postconditions_for, summed_read, leaned_notes, summed_facts, length_given, prover_pinned, ProverWhere, GoalAtCall, CallOutcome, outside_note, outside_help, can_be, AssertOutcome};
+    pub use super::{ProverState, ProverWhere, GoalAtCall, CallOutcome, AssertOutcome};
 }
 pub mod prover_walk {
     #[allow(unused_imports)]
-    pub use super::{ProverWalk, prover_bodies, prover_outside_record, prover_an_assert_call, prover_assumed_in_unsafe, prover_an_assume};
+    pub use super::{ProverWalk};
 }
 pub mod render {
     #[allow(unused_imports)]
-    pub use super::{Marked, Shown, rendered, rendered_in, Pause, paused, an_or_a, Relayed, relayed};
+    pub use super::{Marked, Shown, rendered, rendered_in, Pause, paused, Relayed, relayed};
 }
 pub mod rust {
     #[allow(unused_imports)]
@@ -4238,24 +4049,21 @@ pub mod rust {
 }
 pub mod rustc_words {
     #[allow(unused_imports)]
-    pub use super::{in_this_language, is_rust_internal, both_sides_the_same, said, headed, word_in};
+    pub use super::{in_this_language, said};
 }
 pub mod sharing {
     #[allow(unused_imports)]
-    pub use super::{Fallback, every_fallback, Decision, Sharing, every_count_plain, sharing_report, slot, split_slot, holds_a_word, held_that_does_not_copy, literal_type, published_reason, handed_on_to, unseen, by_value_shared, is_hull, holds_shared, shared_fields, declared_field_type, rust_name, lock_name, FIELDS, Handle, Forced, Slots, decided, declared_here, allocates_here, hands_back_a_plain_value, origin_reason, named_handle, named_type, walks_in_parallel, a_parallel_method, call_path, SharingWalk, SharingMoves, sharing_moves_unknown, sharing_moves_of, sharing_of, made_slot};
+    pub use super::{Fallback, every_fallback, Decision, Sharing, sharing_report, slot, unseen, rust_name, lock_name, FIELDS, Handle, Forced, Slots, decided, SharingWalk, SharingMoves, sharing_moves_unknown, sharing_moves_of, sharing_of};
 }
 pub mod signature {
     #[allow(unused_imports)]
-    pub use super::{Translated, Resulted, translate, result_of, view_of, sent_across, sends, WrittenFn, contract};
+    pub use super::{Translated, Resulted, translate, result_of, sent_across, sends, WrittenFn, contract};
 }
 pub mod solver_terms {
     #[allow(unused_imports)]
     pub use super::{SolverTerm};
 }
-pub mod sources {
-    #[allow(unused_imports)]
-    pub use super::{rust_sources};
-}
+pub mod sources {}
 pub mod specbook {
     #[allow(unused_imports)]
     pub use super::{SpecBlock, blocks_in, discusses_a_refusal, is_a_sketch, Reading, readings, opening, SpecReached, SpecHost, SpecBest, specbook_furthest, SpecLine, specbook_report};
@@ -4266,11 +4074,11 @@ pub mod spelling {
 }
 pub mod surface {
     #[allow(unused_imports)]
-    pub use super::{Arg, Function, Surface, empty, read_items, resolve, offered, candidates, imported};
+    pub use super::{Arg, Function, Surface, empty, read_items, resolve, offered, candidates};
 }
 pub mod sv_ask {
     #[allow(unused_imports)]
-    pub use super::{SV_ASK_COMPARE, SV_LOG_PREFIX, sv_ask, sv_log_verified, sv_log_text, sv_log_of};
+    pub use super::{SV_ASK_COMPARE, SV_LOG_PREFIX};
 }
 pub mod sv_check {
     #[allow(unused_imports)]
@@ -4287,15 +4095,15 @@ pub mod sv_fast {
 }
 pub mod sv_lemma {
     #[allow(unused_imports)]
-    pub use super::{SvLemma, sv_lemma_formula, sv_lemma_alethe, sv_nl_holds, sv_lemma_query, sv_lemma_check};
+    pub use super::{SvLemma, sv_lemma_alethe};
 }
 pub mod sv_nl {
     #[allow(unused_imports)]
-    pub use super::{SvNlRun, sv_nl_engine};
+    pub use super::{SvNlRun};
 }
 pub mod sv_num {
     #[allow(unused_imports)]
-    pub use super::{SvUnknown, sv_fits32, sv_reduced, sv_max_abs, sv_dense_combine, sv_dense_eliminate, sv_pick_column, SvRat, sv_rat_text, SvDelta, sv_delta_sub, sv_delta_text};
+    pub use super::{SvUnknown, SvRat, SvDelta};
 }
 pub mod sv_pre {
     #[allow(unused_imports)]
@@ -4308,11 +4116,11 @@ pub mod sv_proof {
 pub mod sv_rod_line {}
 pub mod sv_row {
     #[allow(unused_imports)]
-    pub use super::{SvRow, SvTerm, sv_row_pick, sv_row_eval, SvVars};
+    pub use super::{SvRow, SvTerm, SvVars};
 }
 pub mod sv_sat {
     #[allow(unused_imports)]
-    pub use super::{SvSatAnswer, SvSatStats, SvSat, sv_sat, sv_sat_of};
+    pub use super::{SvSatAnswer, SvSatStats, SvSat, sv_sat};
 }
 pub mod sv_simplex {
     #[allow(unused_imports)]
@@ -4320,15 +4128,15 @@ pub mod sv_simplex {
 }
 pub mod sv_smt {
     #[allow(unused_imports)]
-    pub use super::{SvDriven, SvEngineRun, SvSmtStats, sv_smt_stats_text, SvBoth, SvSmt, SvSmtEnd};
+    pub use super::{SvDriven, SvEngineRun, SvSmtStats, SvBoth, SvSmt, SvSmtEnd};
 }
 pub mod sv_smtlib {
     #[allow(unused_imports)]
-    pub use super::{SvReadWhy, SvNl, SvSorts, SvSmtRead, sv_smtlib_script, sv_smtlib_read};
+    pub use super::{SvReadWhy, SvNl, SvSorts, SvSmtRead, sv_smtlib_read};
 }
 pub mod sv_strategy {
     #[allow(unused_imports)]
-    pub use super::{SvParams, sv_params, sv_params_set, sv_params_set_all, SvFeatures, sv_features, sv_features_shown, sv_strategy_pick, sv_params_shown, sv_strategy_run};
+    pub use super::{SvParams, SvFeatures};
 }
 pub mod sv_theory {
     #[allow(unused_imports)]
@@ -4336,7 +4144,7 @@ pub mod sv_theory {
 }
 pub mod sv_walk {
     #[allow(unused_imports)]
-    pub use super::{SvWalkParams, SvRandom, SvWalkRun, sv_walk, sv_walk_params, sv_walk_units};
+    pub use super::{SvWalkParams, SvRandom, SvWalkRun};
 }
 pub mod sync {
     #[allow(unused_imports)]
@@ -4348,7 +4156,7 @@ pub mod sysroot_cache {
 }
 pub mod sysroot_package {
     #[allow(unused_imports)]
-    pub use super::{SysrootPackageHand, SysrootPackageHost, sysroot_package_every_refusal, sysroot_package_render, sysroot_package_without_bodies, sysroot_package_shared, sysroot_package_facade, sysroot_package_assemble, sysroot_package_with_dependencies};
+    pub use super::{SysrootPackageHand, SysrootPackageHost, sysroot_package_every_refusal, sysroot_package_render, sysroot_package_without_bodies, sysroot_package_assemble, sysroot_package_with_dependencies};
 }
 pub mod template {
     #[allow(unused_imports)]
@@ -4356,27 +4164,24 @@ pub mod template {
 }
 pub mod tether {
     #[allow(unused_imports)]
-    pub use super::{RESULT_POSITION, INPUT_POSITION, Buffer, PackageTypes, declare_unit, a_parse_that_views, function_views, carries_a_view, declares_text, makes_a_buffer, is_a_buffer, tethers_report};
+    pub use super::{RESULT_POSITION, INPUT_POSITION, Buffer, PackageTypes, declare_unit, a_parse_that_views, function_views, makes_a_buffer, tethers_report};
 }
 pub mod text_tiers {
     #[allow(unused_imports)]
-    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, tier_beside_calls, tier_beside_fields, HoleWrap, TextTiers, TierRefusal, TierForced, TierAdopted, unaliased_in, own_text_items_written, text_tiers, TierWritten, tier_write, tier_hand_back, SliceFills, tier_slice_fills, hands_back_a_piece_of_self, hb_type_may_be_a_view, hb_plain_enums};
+    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, tier_beside_calls, tier_beside_fields, HoleWrap, TextTiers, TierRefusal, TierForced, TierAdopted, unaliased_in, text_tiers, TierWritten, tier_write, tier_hand_back, SliceFills, tier_slice_fills};
 }
 pub mod threads {
     #[allow(unused_imports)]
-    pub use super::{Going, Refusal, Crossing, crossing, Walking, worst_of, held_across_a_pause};
+    pub use super::{Going, Refusal, Crossing, crossing, Walking, held_across_a_pause};
 }
 pub mod throws {
     #[allow(unused_imports)]
-    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, error_type, Thrown, Contribution, thrown_by, throws_handler_passes_on, fatal_named};
+    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, error_type, Thrown, Contribution};
 }
-pub mod tiers {
-    #[allow(unused_imports)]
-    pub use super::{owns_its_text, views_what_it_is_called_on, hands_back_an_element, changes_its_text, puts_its_argument, is_a_map_name, is_a_container_name, plain_string, container_of};
-}
+pub mod tiers {}
 pub mod touch {
     #[allow(unused_imports)]
-    pub use super::{Reached, touches_of, Reach, TouchGraph, unit_touches, touches_of_graph};
+    pub use super::{Reached, Reach, TouchGraph, unit_touches, touches_of_graph};
 }
 pub mod traits {
     #[allow(unused_imports)]
@@ -4388,31 +4193,31 @@ pub mod tree_build {
 }
 pub mod trust {
     #[allow(unused_imports)]
-    pub use super::{Wrote, spelled, written_root, Reason, says_trusted, SourceCall, source_calls, mark_trusted, main_parameters_source, takes_the_command_line, Place, render, MapPlan, trusted_maps, EscapePlan, EscapedCall, no_escapes, escaped_sinks, render_escapes};
+    pub use super::{Wrote, spelled, Reason, SourceCall, source_calls, mark_trusted, main_parameters_source, takes_the_command_line, Place, render, MapPlan, trusted_maps, EscapePlan, EscapedCall, no_escapes, escaped_sinks, render_escapes};
 }
 pub mod ty {
     #[allow(unused_imports)]
-    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, lent_mut, unlent_each, parse, split_args, a_view_of, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, bind, substitute, views_text_slots, qualify, renamed, MethodIndex, method_index, method_keys};
+    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, bind, substitute, qualify, renamed, MethodIndex, method_index};
 }
 pub mod type_rules {
     #[allow(unused_imports)]
-    pub use super::{tr_given, TrRule, TrRuled, TrRefusal, TrFound, TrMethods, TrDeclared, tr_binding_of, tr_a_rule, tr_renumbered, tr_on, tr_asserts_as, tr_asserts, tr_part, tr_collect, tr_methods_of, tr_fails_changed, tr_changed_outside, tr_built_elsewhere, tr_reads, tr_kept_by, tr_declared_rules, tr_expand, tr_check_literals, tr_check_literals_in, tr_drop_given};
+    pub use super::{TrRule, TrRuled, TrRefusal, TrFound, TrMethods, TrDeclared, tr_binding_of, tr_a_rule, tr_changed_outside, tr_built_elsewhere, tr_declared_rules, tr_expand, tr_check_literals_in, tr_drop_given};
 }
 pub mod types {
     #[allow(unused_imports)]
-    pub use super::{types_checked, nobody_knows};
+    pub use super::{types_checked};
 }
 pub mod view_changes {
     #[allow(unused_imports)]
-    pub use super::{VcGiveUps, VcAnswer, VcAsk, vc_analyse, vc_coalesced, vc_mut_viewed};
+    pub use super::{VcGiveUps, VcAnswer, VcAsk, vc_analyse};
 }
 pub mod views {
     #[allow(unused_imports)]
-    pub use super::{Stored, Destination, Asked, ResultPackage, result_package, views_stored, views_checked, holds_view, views_the_call_s, written_type, local_struct_handed_back, FieldsHeld, fields_held, carrying, ResultSource, result_sources, result_sources_in, result_sources_inferred, PlacesStored, places_stored, places_stored_in};
+    pub use super::{Stored, Destination, Asked, ResultPackage, result_package, views_stored, views_checked, FieldsHeld, carrying, ResultSource, result_sources, result_sources_in, result_sources_inferred, PlacesStored, places_stored, places_stored_in};
 }
 pub mod written {
     #[allow(unused_imports)]
-    pub use super::{written_expression, written_pattern};
+    pub use super::{written_expression};
 }
 pub mod json {
     #[allow(unused_imports)]
@@ -4423,4 +4228,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "beb3c179d37daf6d34b1ed828f02e8e001ab0497c9ea8d4f049c0b806ad03fff";
+pub const LOWERED_DIGEST: &str = "5bd622d6fe123361e374a5f6623ffee47990ded5c5836f89b11e39f4d83207f7";

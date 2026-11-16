@@ -50,7 +50,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn condition_constant(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, cond: &Expr) -> Option<bool> {
+    pub(crate) fn condition_constant(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, cond: &Expr) -> Option<bool> {
         match cond {
             Expr::LitBool(value, _) => { let value = *value; Some(value) },
             Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.condition_negated(world, op, expr) },
@@ -72,7 +72,7 @@ impl CheckState {
             let left = self.condition_constant(world, lhs);
             let right = self.condition_constant(world, rhs);
             let and = *op == BinaryOp::And;
-            if nikaia_std::index::or(left, || and.into()) != and || nikaia_std::index::or(right, || and.into()) != and { return Some(!and); }
+            if nikaia_std::index::or(left, || and) != and || nikaia_std::index::or(right, || and) != and { return Some(!and); }
             let a = match left { Some(__nikaia_value) => __nikaia_value, None => return None };
             let b = match right { Some(__nikaia_value) => __nikaia_value, None => return None };
             return Some(if and { a && b } else { a || b });
@@ -110,7 +110,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_open_comptime_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<CheckOpenComptime> {
+    pub(crate) fn an_open_comptime_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<CheckOpenComptime> {
         match expr {
             Expr::Variable(name, _) => { let name = *name; self.an_open_comptime_named(world, name) },
             Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); self.an_open_comptime_either(world, lhs, rhs) },
@@ -134,7 +134,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn constant_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, want: Option<&Ty>, span: &Span) {
+    pub(crate) fn constant_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, want: Option<&Ty>, span: &Span) {
         self.number_asked_beside(world, value, want, span);
         let open = self.open_numbers_in(world, value);
         if want.is_none() && !open.is_empty() { return; }
@@ -174,7 +174,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_open_shift_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    pub(crate) fn an_open_shift_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
         for number in self.open_numbers_in(world, value) {
             let root = self.open_root(number);
             for (at, entry) in self.flow.open_numbers.iter() {
@@ -186,7 +186,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_shift_asked_as(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &str, span: &Span) {
+    pub(crate) fn a_shift_asked_as(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &str, span: &Span) {
         let literals = literals_in(value);
         let mut done = !literals.is_empty();
         for literal in literals.iter() { if nikaia_std::index::or(self.facts.unsigned_literals.get(&literal.0), || "") != ty { done = false; } }
@@ -240,7 +240,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn open_number_given(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, number: i64, value: &Expr, span: &Span) {
+    pub(crate) fn open_number_given(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, number: i64, value: &Expr, span: &Span) {
         let mut joined: Vec<i64> = vec![number];
         for at in self.open_numbers_in(world, value) { joined.push(at); }
         self.open_numbers_joined(&joined);

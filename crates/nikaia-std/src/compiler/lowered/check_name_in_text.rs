@@ -18,7 +18,7 @@ pub(crate) fn check_name_wants_text(want: &Ty) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn made_from_text(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn made_from_text(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::LitStr { .. } => true,
             Expr::Variable(symbol, _) => {
@@ -68,7 +68,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_name_in_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, want: &Ty, value: Option<&Expr>, span: &Span) -> bool {
+    pub(crate) fn a_name_in_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, want: &Ty, value: Option<&Expr>, span: &Span) -> bool {
         let literal = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
         match literal {
             Expr::LitInterpolated { parts, .. } => {

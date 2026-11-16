@@ -17,7 +17,7 @@ pub(crate) const SETS: [&str; 3] = ["HashSet", "BTreeSet", "Set"];
 
 pub(crate) const MAPS: [&str; 3] = ["HashMap", "BTreeMap", "Map"];
 
-pub fn owns_its_text(method: &str) -> bool {
+pub(crate) fn owns_its_text(method: &str) -> bool {
     for one in OWNS.iter() {
         let one = *one;
         if one == method { return true; }
@@ -25,7 +25,7 @@ pub fn owns_its_text(method: &str) -> bool {
     false
 }
 
-pub fn views_what_it_is_called_on(method: &str) -> bool {
+pub(crate) fn views_what_it_is_called_on(method: &str) -> bool {
     for one in VIEWS.iter() {
         let one = *one;
         if one == method { return true; }
@@ -33,7 +33,7 @@ pub fn views_what_it_is_called_on(method: &str) -> bool {
     false
 }
 
-pub fn hands_back_an_element(method: &str) -> bool {
+pub(crate) fn hands_back_an_element(method: &str) -> bool {
     for one in ELEMENTS.iter() {
         let one = *one;
         if one == method { return true; }
@@ -41,7 +41,7 @@ pub fn hands_back_an_element(method: &str) -> bool {
     false
 }
 
-pub fn changes_its_text(method: &str) -> bool {
+pub(crate) fn changes_its_text(method: &str) -> bool {
     for one in CHANGES.iter() {
         let one = *one;
         if one == method { return true; }
@@ -49,7 +49,7 @@ pub fn changes_its_text(method: &str) -> bool {
     false
 }
 
-pub fn puts_its_argument(method: &str) -> bool {
+pub(crate) fn puts_its_argument(method: &str) -> bool {
     for one in PUTS.iter() {
         let one = *one;
         if one == method { return true; }
@@ -57,7 +57,7 @@ pub fn puts_its_argument(method: &str) -> bool {
     false
 }
 
-pub fn is_a_map_name(name: &str) -> bool {
+pub(crate) fn is_a_map_name(name: &str) -> bool {
     for one in MAPS.iter() {
         let one = *one;
         if one == name { return true; }
@@ -65,7 +65,7 @@ pub fn is_a_map_name(name: &str) -> bool {
     false
 }
 
-pub fn is_a_container_name(callee: &str) -> bool {
+pub(crate) fn is_a_container_name(callee: &str) -> bool {
     let name = last_segment(callee);
     for one in RUNS.iter() {
         let one = *one;
@@ -78,9 +78,9 @@ pub fn is_a_container_name(callee: &str) -> bool {
     is_a_map_name(&name)
 }
 
-pub fn plain_string(names: &winnow_grammar::InternerContext, ty: &Type) -> bool { names.resolve(ty.name) == "String" && ty.generics.is_empty() && !ty.is_view && !ty.is_tuple && !ty.is_slice && (*ty.code).is_none() }
+pub(crate) fn plain_string(names: &winnow_grammar::InternerContext, ty: &Type) -> bool { names.resolve(ty.name) == "String" && ty.generics.is_empty() && !ty.is_view && !ty.is_tuple && !ty.is_slice && (*ty.code).is_none() }
 
-pub fn container_of(names: &winnow_grammar::InternerContext, ty: &Type) -> Option<String> {
+pub(crate) fn container_of(names: &winnow_grammar::InternerContext, ty: &Type) -> Option<String> {
     if ty.is_view || ty.is_nullable || ty.is_tuple || (*ty.code).is_some() { return None; }
     let name = last_segment(names.resolve(ty.name));
     if is_a_container_name(&name) { return Some(name); }

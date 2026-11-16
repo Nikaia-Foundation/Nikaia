@@ -274,7 +274,7 @@ fn all_of(parts: ref Vec[Ty], walking: ref Walking, mut seen: collections::BTree
 /// The worse of two answers, with `MayNot` worse than `Undecided`, and the
 /// first refusal kept: a refusal a reader can act on beats an admission of
 /// ignorance (ADR-292 D2's rule, applied to the same kind of choice).
-pub fn worst_of(worst: Crossing, answer: Crossing) -> Crossing {
+fn worst_of(worst: Crossing, answer: Crossing) -> Crossing {
     return match worst {
         Crossing::MayNot { .. } => worst,
         Crossing::Undecided { .. } => match answer {

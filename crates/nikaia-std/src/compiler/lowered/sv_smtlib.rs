@@ -830,7 +830,7 @@ pub enum SvSmtRead {
     Failed(SvReadWhy),
 }
 
-pub fn sv_smtlib_script(source: &str) -> SvSmtRead {
+pub(crate) fn sv_smtlib_script(source: &str) -> SvSmtRead {
     let commands = match lg_parse(source) {
         LgParsedSexps::Done(ref read) => read.copy_owned(),
         LgParsedSexps::Failed(ref why) => {

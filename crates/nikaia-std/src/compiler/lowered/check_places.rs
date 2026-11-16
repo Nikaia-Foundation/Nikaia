@@ -3,7 +3,7 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn members_named(members: &[Ty]) -> String {
+pub(crate) fn members_named(members: &[Ty]) -> String {
     let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for member in members.iter() { names.push(format!("`{}`", member.text())); }
     nikaia_std::block::Text::from(names.join(", "))
@@ -11,7 +11,7 @@ pub fn members_named(members: &[Ty]) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn a_root_is_one_of_two(wanted: &[(String, Ty)]) -> String {
+pub(crate) fn a_root_is_one_of_two(wanted: &[(String, Ty)]) -> String {
     for one in wanted.iter() {
         let text = one.1.text();
         let mut bare: String = nikaia_std::block::Text::from(text.to_string());
@@ -24,10 +24,10 @@ pub fn a_root_is_one_of_two(wanted: &[(String, Ty)]) -> String {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn no_door(&mut self, written: &str, shape: &str, wanted: &str, span: &Span) { self.findings.push(check_refusal("NK1124", span, format!("Write `{}` like this: `{}`.", written, shape), vec![nikaia_std::block::Text::from(wanted.to_string())], None)); }
+    pub(crate) fn no_door(&mut self, written: &str, shape: &str, wanted: &str, span: &Span) { self.findings.push(check_refusal("NK1124", span, format!("Write `{}` like this: `{}`.", written, shape), vec![nikaia_std::block::Text::from(wanted.to_string())], None)); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn stamped_through(&self, contract: &FnContract, given: &[Ty], result: Ty) -> Ty {
+    pub(crate) fn stamped_through(&self, contract: &FnContract, given: &[Ty], result: Ty) -> Ty {
         let mut any_seen = false;
         for one in given.iter() { if one.is_seen() { any_seen = true; } }
         if result.is_seen() || !any_seen { return result; }
@@ -38,7 +38,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_jump_with_nowhere_to_go(&mut self, word: &str, span: &Span) {
+    pub(crate) fn a_jump_with_nowhere_to_go(&mut self, word: &str, span: &Span) {
         let mut does: &'static str = "starts the innermost loop's next turn";
         if word == "break" { does = "leaves the innermost loop around it"; }
         if self.flow.barrier.is_some() {
@@ -50,22 +50,22 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_async_inside_a_loop(&mut self, span: &Span) { self.findings.push(check_refusal("NK2120", span, String::from("This `async` stands inside a loop's body, but `async` starts only tasks whose number stands in the source."), vec![String::from("A loop would start one task each time round, and a group's tasks are counted where they are written.")], Some(String::from("To run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`.")))); }
+    pub(crate) fn an_async_inside_a_loop(&mut self, span: &Span) { self.findings.push(check_refusal("NK2120", span, String::from("This `async` stands inside a loop's body, but `async` starts only tasks whose number stands in the source."), vec![String::from("A loop would start one task each time round, and a group's tasks are counted where they are written.")], Some(String::from("To run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_task_with_nothing_beside_it(&mut self, span: &Span, why: &str) { self.findings.push(check_refusal("NK2110", span, format!("This `async` starts a task with nothing beside it: {}.", why), vec![String::from("A task runs beside the code between its start and its wait point; here that is nothing, so it would only be waited for.")], Some(String::from("Remove the word `async`: the expression runs on the main line with the same value.")))); }
+    pub(crate) fn a_task_with_nothing_beside_it(&mut self, span: &Span, why: &str) { self.findings.push(check_refusal("NK2110", span, format!("This `async` starts a task with nothing beside it: {}.", why), vec![String::from("A task runs beside the code between its start and its wait point; here that is nothing, so it would only be waited for.")], Some(String::from("Remove the word `async`: the expression runs on the main line with the same value.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_group_with_no_task(&mut self, span: &Span) { self.findings.push(check_refusal("NK2111", span, String::from("This `async { … }` starts no task, so it waits for nothing."), vec![String::from("Its statements run in order, as any block's; only an `async` inside it starts a task its end waits for.")], Some(String::from("Remove the word `async`. For one task of several steps, write `async fn { … }`.")))); }
+    pub(crate) fn a_group_with_no_task(&mut self, span: &Span) { self.findings.push(check_refusal("NK2111", span, String::from("This `async { … }` starts no task, so it waits for nothing."), vec![String::from("Its statements run in order, as any block's; only an `async` inside it starts a task its end waits for.")], Some(String::from("Remove the word `async`. For one task of several steps, write `async fn { … }`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_child_handle_leaving_its_group(&mut self, span: &Span, why: &str) { self.findings.push(check_refusal("NK2122", span, format!("A child handle (`async(handle)`) leaves its group here: {}.", why), vec![String::from("A child task is bound to the group it starts in: it may borrow from it, and the group waits for it at its end, so its handle cannot outlive the group.")], Some(String::from("Write `async(detached) fn { … }` for a task whose handle outlives its group.")))); }
+    pub(crate) fn a_child_handle_leaving_its_group(&mut self, span: &Span, why: &str) { self.findings.push(check_refusal("NK2122", span, format!("A child handle (`async(handle)`) leaves its group here: {}.", why), vec![String::from("A child task is bound to the group it starts in: it may borrow from it, and the group waits for it at its end, so its handle cannot outlive the group.")], Some(String::from("Write `async(detached) fn { … }` for a task whose handle outlives its group.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_return_out_of_an_async_form(&mut self, span: &Span) { self.findings.push(check_refusal("NK1132", span, String::from("`return` leaves the function, but it stands inside an `async` form."), vec![String::from("A task is a boundary no jump leaves, and an `async { … }` waits for its tasks at its end.")], Some(String::from("For a task of several steps that can end early, write `async fn { … }`: `return` in it ends the task with its value.")))); }
+    pub(crate) fn a_return_out_of_an_async_form(&mut self, span: &Span) { self.findings.push(check_refusal("NK1132", span, String::from("`return` leaves the function, but it stands inside an `async` form."), vec![String::from("A task is a boundary no jump leaves, and an `async { … }` waits for its tasks at its end.")], Some(String::from("For a task of several steps that can end early, write `async fn { … }`: `return` in it ends the task with its value.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn arguments_of(&self, on: &Ty) -> collections::BTreeMap<String, Ty> {
+    pub(crate) fn arguments_of(&self, on: &Ty) -> collections::BTreeMap<String, Ty> {
         let mut bound: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
         match on {
             Ty::Named { name, args, .. } => {
@@ -82,7 +82,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_owned_place(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, on: &Ty) -> bool {
+    pub(crate) fn an_owned_place(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, on: &Ty) -> bool {
         let a_name = matches!(on, Ty::Named { .. });
         if on.is_a_view() || !a_name { return false; }
         let mut root = value;
@@ -109,7 +109,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(non_snake_case)]
-    pub fn decided_by_this_argument__unchecked(&self, signature: &Signature, wanted: &[(String, Ty)], at: i64) -> bool {
+    pub(crate) fn decided_by_this_argument__unchecked(&self, signature: &Signature, wanted: &[(String, Ty)], at: i64) -> bool {
         ();
         if at >= wanted.len() as i64 { return false; }
         let name = match &unsafe { nikaia_std::proven::read(&wanted, (at) as usize) }.1 {
@@ -130,10 +130,10 @@ impl CheckState {
         true
     }
     #[allow(dead_code)]
-    pub fn decided_by_this_argument(&self, signature: &Signature, wanted: &[(String, Ty)], at: i64) -> bool { if !((0i128) <= (at.clone() as i128)) { nikaia_std::abort::assertion_failed("precondition of `CheckState::decided_by_this_argument`: `0 <= at`", None, &[("at", (&&nikaia_std::abort::Operand(&(at.clone() as i128))).shown()), ]) } self.decided_by_this_argument__unchecked(signature, wanted, at) }
+    pub(crate) fn decided_by_this_argument(&self, signature: &Signature, wanted: &[(String, Ty)], at: i64) -> bool { if !((0i128) <= (at.clone() as i128)) { nikaia_std::abort::assertion_failed("precondition of `CheckState::decided_by_this_argument`: `0 <= at`", None, &[("at", (&&nikaia_std::abort::Operand(&(at.clone() as i128))).shown()), ]) } self.decided_by_this_argument__unchecked(signature, wanted, at) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn kept_arguments_are_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty]) {
+    pub(crate) fn kept_arguments_are_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty]) {
         let mut at: i64 = 0;
         while at < args.len() as i64 && at < params.len() as i64 {
             let built = self.text_literal(world, unsafe { nikaia_std::proven::read(&params, (at) as usize) }, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, true);
@@ -142,7 +142,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_match_over_several_error_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+    pub(crate) fn a_match_over_several_error_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
         if !self.flow.caught_several || !several_errors_of(on).is_empty() { return; }
         let is_error = match value {
             Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == "error" },

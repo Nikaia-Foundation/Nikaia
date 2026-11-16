@@ -169,7 +169,7 @@ pub(crate) fn emit_parallel_fold(spec: &FoldSpec) -> Option<FoldSpec> {
 impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn emit_grammar<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, def: &GrammarDef) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    pub(crate) fn emit_grammar<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, def: &GrammarDef) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         let name = emit_text(world, def.name);
         self.emit_grammar_over(world, walk, out, host, def, &name, false)?;
         if self.facts.bytes_grammars.contains(&name) {
@@ -521,7 +521,7 @@ pub(crate) fn emit_stream_walks(def: &GrammarDef, offered_to_rust: bool) -> Vec<
     found
 }
 
-pub fn emit_stream_walk_name(book: &str, rule: &str) -> String { format!("__nikaia_walk_{}__{}", book, rule) }
+pub(crate) fn emit_stream_walk_name(book: &str, rule: &str) -> String { format!("__nikaia_walk_{}__{}", book, rule) }
 
 pub(crate) fn emit_stream_reader_name(book: &str, rule: &str) -> String { format!("__nikaia_reader_{}__{}", book, rule) }
 

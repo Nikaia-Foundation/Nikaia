@@ -182,7 +182,7 @@ impl EmitState {
     /// A call. `Stats(temp)` is the anonymous constructor of Kap 4.2 - Rust has
     /// no such thing, so the declaration decides: a name that is a struct is a
     /// call to the `new` its `impl` provides.
-    pub fn emit_core_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **An argument that uses what an earlier one lends to a `mut`
         // parameter is bound before the call**: Rust holds that
         // `&mut` from the first argument to the call, so `f(w, g(w))` is
@@ -476,7 +476,7 @@ impl EmitState {
 
     /// A call, past `call`'s precondition check: to the unchecked entry where
     /// `unchecked` says so (ADR-269 D20).
-    pub fn emit_core_call_inner[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_call_inner[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **An `assert` is a claim checked here** (ADR-269 D2, D4) unless it was
         // proved, and the failure is written with what only this compiler knew -
         // the claim as written and its operands by name.
@@ -881,7 +881,7 @@ impl EmitState {
     /// arguments, Kap 5.1's deferred parameters, ADR-055 D2's `.await` and
     /// ADR-023 D8's `?`. `receiver` is `null` for the safe form, where the
     /// receiver is the name the enclosing `match` already bound.
-    pub fn emit_core_method_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, on_node: i64, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_method_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, on_node: i64, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **An argument that lends the receiver's local to a `mut` parameter
         // is bound before the call**, as a call's is (`emit_core_call`): Rust
         // borrows the receiver from before the arguments to the call, so
@@ -1690,7 +1690,7 @@ impl EmitState {
 
     /// The `MethodCall` arm of `expr_as_written` (and the `?.` that is a plain
     /// call, ADR-279 D13): the forms that are not the call itself, then the call.
-    pub fn emit_core_method_arm[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_method_arm[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let name = emit_text(world, method)
         // **`s.find(needle; from:)` on text is `std`'s search** (ADR-320 D6): the
         // language below's `str::find` takes one argument and answers a `usize`.
@@ -1926,7 +1926,7 @@ fn emit_tuple_part_copy(i: i64, word: ref String) -> String {
     return f"__nikaia_tuple.{i}.{word}()"
 }
 
-pub fn emit_tuple_part_copies(parts: ref Vec[String]) -> String {
+fn emit_tuple_part_copies(parts: ref Vec[String]) -> String {
     let copies: Vec[String] = parts.iter().enumerate().map(fn((i, word)) { emit_tuple_part_copy(i, word) }).collect()
     if copies.len() == 1 {
         return f"({copies[0]},)"

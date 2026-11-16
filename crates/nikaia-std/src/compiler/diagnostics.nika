@@ -88,7 +88,7 @@ pub fn diagnostics_read_json(json: String) -> Vec[DiagnosticsRead] {
 /// **The shared and the static library a `c-library` build made** (ADR-284
 /// D4), as the files of each `compiler-artifact` whose target is a `cdylib`
 /// or a `staticlib` (#1163).
-pub fn diagnostics_libraries_in(messages: String) -> Vec[fs::Path] {
+fn diagnostics_libraries_in(messages: String) -> Vec[fs::Path] {
     return cargo_json_lines(messages).iter().filter(fn(value) { cargo_json_an_artifact(value) }).filter(fn(value) { cargo_json_items(cargo_json_member(cargo_json_member(value.clone(), "target"), "kind")).iter().any(fn(kind) { let named = cargo_json_text(kind.clone()) ?? ""; named == "cdylib" || named == "staticlib" }) }).flat_map(fn(value) { cargo_json_filenames(value) }).collect()
 }
 
@@ -100,7 +100,7 @@ pub fn diagnostics_libraries_in(messages: String) -> Vec[fs::Path] {
 /// worked those rules out would have to keep agreeing with Cargo forever.
 /// `null` where nothing says, which is not an error: the caller falls back to
 /// `cargo run`.
-pub fn diagnostics_executable_in(messages: String) -> fs::Path? {
+fn diagnostics_executable_in(messages: String) -> fs::Path? {
     return cargo_json_lines(messages).iter().filter(fn(value) { cargo_json_an_artifact(value) }).filter_map(fn(value) { cargo_json_text(cargo_json_member(value.clone(), "executable")) }).map(fn(file) { cargo_json_path(file) }).last()
 }
 

@@ -1319,7 +1319,7 @@ pub enum SvSmtRead {
 }
 
 /// Read a script with its variables' sorts.
-pub fn sv_smtlib_script(source: String) -> SvSmtRead {
+fn sv_smtlib_script(source: String) -> SvSmtRead {
 	let commands = match lg_parse(source) {
 		LgParsedSexps::Done(read) => read.clone(),
 		LgParsedSexps::Failed(why) => {

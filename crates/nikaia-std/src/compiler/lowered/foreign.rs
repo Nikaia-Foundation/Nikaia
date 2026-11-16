@@ -23,13 +23,13 @@ pub fn written_in(program: &Program, names: &winnow_grammar::InternerContext, un
     found.seen
 }
 
-pub fn seen_in(block: &Block, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, with_names: bool) -> Vec<Seen> {
+pub(crate) fn seen_in(block: &Block, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, with_names: bool) -> Vec<Seen> {
     let mut found = Walked { seen: vec![], with_names };
     block_names(block, names, unaliased, holes_of, root_at, &mut found);
     found.seen
 }
 
-pub fn seen_in_expression(expr: &Expr, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, with_names: bool) -> Vec<Seen> {
+pub(crate) fn seen_in_expression(expr: &Expr, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, root_at: &impl Fn(&str) -> i64, with_names: bool) -> Vec<Seen> {
     let mut found = Walked { seen: vec![], with_names };
     let nowhere = Span::nowhere();
     expression_paths(expr, &nowhere, names, unaliased, holes_of, root_at, &mut found);

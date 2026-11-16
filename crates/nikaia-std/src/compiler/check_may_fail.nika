@@ -15,7 +15,7 @@ fn check_is_fatal(ledger: ref Ledger, error: ref String) -> bool {
 impl CheckState {
     /// **`NK2605`: a fatal error passes a `catch`** whose handler names it in
     /// no `match` arm (ADR-345 D2); an outer `catch` is given it to handle.
-    pub fn a_fatal_error_passes(ref mut self, world: ref CheckWorld, guarded: ref CheckGuarded, handler: ref Block, span: ref Span) {
+    fn a_fatal_error_passes(ref mut self, world: ref CheckWorld, guarded: ref CheckGuarded, handler: ref Block, span: ref Span) {
         let named = fatal_named(handler, world.words)
         let mut passing: Vec[String] = []
         for error in guarded.thrown {
@@ -49,7 +49,7 @@ impl CheckState {
     /// **A `throw` in a function that does not say `throws`** (`NK2605`, Part
     /// I 7.1, #1627): it fails the function as a failing call does, and the
     /// language below has no `Result` to give it to.
-    pub fn a_throw_here(ref mut self, thrown: ref Ty, span: ref Span) sync {
+    fn a_throw_here(ref mut self, thrown: ref Ty, span: ref Span) sync {
         if self.flow.throwing || self.flow.caught || self.inside_an_action != null {
             return
         }
@@ -71,7 +71,7 @@ impl CheckState {
     /// Reported only where the callee's contract says it can fail, which is
     /// what makes this need no guess: the ledger is the fact, and a callee no
     /// ledger describes says nothing here.
-    pub fn may_fail_here[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, key: ref String, contract: ref FnContract, span: ref Span) sync {
+    fn may_fail_here[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, key: ref String, contract: ref FnContract, span: ref Span) sync {
         // **`NK2108`: a call that can fail stands between a part taken out of
         // a `mut` parameter and its giving back.** Asked of the ledger's word,
         // as everything here is; a callee nothing describes says nothing.

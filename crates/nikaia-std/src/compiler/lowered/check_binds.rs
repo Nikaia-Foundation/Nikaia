@@ -15,13 +15,13 @@ pub struct CheckBoundary {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_new_binding(&mut self) -> i64 {
+    pub(crate) fn a_new_binding(&mut self) -> i64 {
         self.next_binding = self.next_binding + 1;
         self.next_binding
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn bind_local(&mut self, local: CheckLocal) {
+    pub(crate) fn bind_local(&mut self, local: CheckLocal) {
         if local.ty.is_unknown() { self.flow.unknown_bound.insert(local.id); }
         if !self.scope.is_empty() {
             let at = unsafe { nikaia_std::proven::sub::<i64>(self.scope.len() as i64, 1) };
@@ -30,7 +30,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn bind_with(&mut self, name: String, ty: Ty, constant: Option<Integer>) {
+    pub(crate) fn bind_with(&mut self, name: String, ty: Ty, constant: Option<Integer>) {
         let id = self.a_new_binding();
         let mut local = CheckLocal::free(name, ty, id);
         local.constant = constant;
@@ -75,7 +75,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_tuple_pattern_that_does_not_fit(&mut self, found: &Ty, width: i64, site: &str, span: &Span) -> bool {
+    pub(crate) fn a_tuple_pattern_that_does_not_fit(&mut self, found: &Ty, width: i64, site: &str, span: &Span) -> bool {
         let what: String = match self.binds_no_tuple_of(found, width) { Some(__nikaia_value) => __nikaia_value, None => return false };
         self.findings.push(check_refusal("NK1283", span, format!("{} takes {} parts apart, but the value is {}.", site, width, what), vec![String::from("A tuple pattern names one part of a tuple each, so the value has to be a tuple of exactly that many.")], Some(String::from("Bind one name and read the value from it, or write as many names as the tuple has parts."))));
         true
@@ -92,7 +92,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn nested_pattern_parts(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, top: &[Ty], shape: &[i64], count: i64, site: &str, span: &Span) -> Vec<Ty> {
+    pub(crate) fn nested_pattern_parts(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, top: &[Ty], shape: &[i64], count: i64, site: &str, span: &Span) -> Vec<Ty> {
         let mut out: Vec<Ty> = vec![];
         if shape.len() == 1 && *unsafe { nikaia_std::proven::read(&shape, (0) as usize) } == -1 {
             self.findings.push(check_refusal("NK1259", span, format!("{} can't take a variant apart.", site), vec![String::from("A variant may not be the one the value holds, and a binding has no other branch to go to.")], Some(String::from("Take the value apart with a `match`, which has an arm for each case."))));
@@ -125,7 +125,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn lent_walk_params(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, entry: &str, receiver: &Expr, args: &[Expr]) -> collections::BTreeSet<String> {
+    pub(crate) fn lent_walk_params(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, entry: &str, receiver: &Expr, args: &[Expr]) -> collections::BTreeSet<String> {
         let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out };
         let held = match open_walk_variable(signature) { Some(__nikaia_value) => __nikaia_value, None => return out };
@@ -140,7 +140,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_walk_that_lends(&self, contract: &FnContract, receiver: &Expr) -> bool {
+    pub(crate) fn a_walk_that_lends(&self, contract: &FnContract, receiver: &Expr) -> bool {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         let result: Ty = match match signature.result.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -189,7 +189,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn enter_boundary(&mut self, what: &str) -> CheckBoundary {
+    pub(crate) fn enter_boundary(&mut self, what: &str) -> CheckBoundary {
         let saved = CheckBoundary { loops: self.flow.loops, barrier: match self.flow.barrier.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -212,7 +212,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn leave_boundary(&mut self, saved: &CheckBoundary) {
+    pub(crate) fn leave_boundary(&mut self, saved: &CheckBoundary) {
         self.inside_a_sync_function = match saved.promised.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -245,7 +245,7 @@ pub(crate) fn binds_tuple_parts(found: &Ty, count: i64) -> Vec<Ty> {
     unknown
 }
 
-pub fn binds_hands_a_view(method: &str) -> bool { method == "filter" || method == "find" || method == "take_while" || method == "skip_while" || method == "min_by_key" || method == "max_by_key" }
+pub(crate) fn binds_hands_a_view(method: &str) -> bool { method == "filter" || method == "find" || method == "take_while" || method == "skip_while" || method == "min_by_key" || method == "max_by_key" }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.

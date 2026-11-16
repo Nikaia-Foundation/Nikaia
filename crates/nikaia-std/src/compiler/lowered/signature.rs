@@ -81,7 +81,7 @@ pub fn result_of(written: &str, crate_word: &str, parameters: &[String], types: 
     Resulted { ty: fine.ty, fails: Some(fails) }
 }
 
-pub fn view_of(ty: Ty) -> Ty {
+pub(crate) fn view_of(ty: Ty) -> Ty {
     match ty {
         Ty::Named { name, args, .. } => Ty::Named { name, args, view: true },
         Ty::Var { name, .. } => Ty::Var { name, view: true },

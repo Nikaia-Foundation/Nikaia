@@ -11,7 +11,7 @@ use std::collections
 /// `const` can hold. Nothing where one cannot be written down, which sends the
 /// caller to `NK1127`: a struct or a tuple is only as writable as its parts. `float_text` writes a finite
 /// float as the language below does; a float that is not finite has no literal.
-pub fn rust_value(value: ref BuildValue, float_text: fn(f64) -> String sync) -> String? sync {
+fn rust_value(value: ref BuildValue, float_text: fn(f64) -> String sync) -> String? sync {
     match value {
         BuildValue::Int(n) => return integer_text(n),
         BuildValue::Float(n) => {
@@ -222,7 +222,7 @@ impl CheckState {
     /// fixed type its declaration names** (ADR-311 D1, D8; ADR-179 D1). Only
     /// for a value that evaluated: one nothing computed has no length, and
     /// `NK1166` says the rest. A list the wrong length is `NK1157`.
-    pub fn crosses_as_fixed(ref mut self, found: ref Ty, want: ref Ty, evaluated: ref BuildValue?, span: ref Span) -> CheckCrossing sync {
+    fn crosses_as_fixed(ref mut self, found: ref Ty, want: ref Ty, evaluated: ref BuildValue?, span: ref Span) -> CheckCrossing sync {
         let kind = computed_kind(evaluated)
         // **A list of pairs crossing as a table** (ADR-311 D8).
         if is_fixed(want) {
@@ -352,7 +352,7 @@ fn unwritable_payload(state: ref CheckState, world: ref CheckWorld, ty: ref Stri
 /// **A field or a payload a `const` cannot hold**, anywhere in a computed
 /// value (`NK1127`): the struct or variant and the type; empty when there is
 /// none. A pair is what a table's rows are (ADR-311 D8, D13).
-pub fn unwritable_in(state: ref CheckState, world: ref CheckWorld, value: ref BuildValue, payloads: fn(ref String, ref String) -> Vec[Ty]? sync) -> Vec[String] sync {
+fn unwritable_in(state: ref CheckState, world: ref CheckWorld, value: ref BuildValue, payloads: fn(ref String, ref String) -> Vec[Ty]? sync) -> Vec[String] sync {
     match value {
         BuildValue::Struct { name, fields } => {
             let own = state.unwritable_field(world, Ty::Named { name: name.clone(), args: [], view: false })
@@ -407,14 +407,14 @@ pub fn unwritable_in(state: ref CheckState, world: ref CheckWorld, value: ref Bu
 /// is `rust_value`.
 /// **A tuple as Rust spells one**, a value or a type: `(a, b)`, and `(a,)`
 /// for one part.
-pub fn tuple_spelled(parts: ref Vec[String]) -> String sync {
+fn tuple_spelled(parts: ref Vec[String]) -> String sync {
     if parts.len() == 1 {
         return f"({parts[0]},)"
     }
     return f"({parts.join(", ")})"
 }
 
-pub fn written_below(state: ref CheckState, world: ref CheckWorld, value: ref BuildValue, want: ref Ty?, payloads: fn(ref String, ref String) -> Vec[Ty]? sync, float_text: fn(f64) -> String sync) -> String? sync {
+fn written_below(state: ref CheckState, world: ref CheckWorld, value: ref BuildValue, want: ref Ty?, payloads: fn(ref String, ref String) -> Vec[Ty]? sync, float_text: fn(f64) -> String sync) -> String? sync {
     if want == null {
         return rust_value(value, float_text)
     }
@@ -490,7 +490,7 @@ impl CheckState {
     /// type and its `Fixed::new(…)`. Text keys, and the rest by name; a number
     /// wants a dense array, which is a different table. A duplicate key is
     /// refused at the build.
-    pub fn a_table_that_crosses(ref mut self, world: ref CheckWorld, bound: ref String, want: ref Ty, pairs: ref Vec[BuildValue], span: ref Span, payloads: fn(ref String, ref String) -> Vec[Ty]? sync, float_text: fn(f64) -> String sync) -> CheckTable sync {
+    fn a_table_that_crosses(ref mut self, world: ref CheckWorld, bound: ref String, want: ref Ty, pairs: ref Vec[BuildValue], span: ref Span, payloads: fn(ref String, ref String) -> Vec[Ty]? sync, float_text: fn(f64) -> String sync) -> CheckTable sync {
         let args = type_arguments(want)
         if args.len() != 2 {
             return no_table(false)

@@ -965,7 +965,7 @@ impl CheckFacts {
     /// **The type parameters of `key` that are weighed** (ADR-327 D9,
     /// #1559): those a std operation in its body weighs, and those it hands
     /// to a generic callee that weighs them, to a fixed point.
-    pub fn weighed_of(ref self, key: ref String) -> collections::BTreeSet[String] {
+    fn weighed_of(ref self, key: ref String) -> collections::BTreeSet[String] {
         let mut all: collections::BTreeMap[String, collections::BTreeSet[String]] = self.weighed.clone()
         let mut changed = true
         while changed {

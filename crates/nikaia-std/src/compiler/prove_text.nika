@@ -14,7 +14,7 @@ use std::collections
 /// (Part I 2.2) - the prover reads numbers without a limit, and so does this.
 /// A name is the escaped name the emitter writes (`escape`); `xs.len()` the
 /// length.
-pub fn rust_of(id: i64, term_of: fn(i64) -> SolverTerm sync, escape: fn(ref String) -> String sync) -> String {
+fn rust_of(id: i64, term_of: fn(i64) -> SolverTerm sync, escape: fn(ref String) -> String sync) -> String {
     return match term_of(id) {
         SolverTerm::Bool(b) => if b { "true" } else { "false" },
         SolverTerm::Int(n) => f"({n}i128)",
@@ -49,7 +49,7 @@ fn rust_joined(op: ref String, parts: ref Vec[i64], empty: ref String, term_of: 
 }
 
 /// A name of the proof as the language below reads it, in `i128`.
-pub fn rust_of_name(name: ref String, escape: fn(ref String) -> String sync) -> String {
+fn rust_of_name(name: ref String, escape: fn(ref String) -> String sync) -> String {
     if name.ends_with(".len()") {
         let c: Vec[scalar] = name.chars().collect()
         let mut base: String = ""
@@ -63,13 +63,13 @@ pub fn rust_of_name(name: ref String, escape: fn(ref String) -> String sync) -> 
 
 /// A term as a reader writes it, in the language's operators, with `→` for
 /// the implication a branch makes of a precondition: `mode == 1 → x - 1 > 0`.
-pub fn term_text(id: i64, term_of: fn(i64) -> SolverTerm sync) -> String {
+fn term_text(id: i64, term_of: fn(i64) -> SolverTerm sync) -> String {
     return term_whole(id, true, term_of)
 }
 
 /// A term in the language's own syntax, as the ledger writes it and reads it
 /// back (ADR-251 D4): the implication is `!(taken) || claim`.
-pub fn term_ledger_text(id: i64, term_of: fn(i64) -> SolverTerm sync) -> String {
+fn term_ledger_text(id: i64, term_of: fn(i64) -> SolverTerm sync) -> String {
     return term_whole(id, false, term_of)
 }
 
@@ -164,7 +164,7 @@ pub fn shown(values: ref collections::BTreeMap[String, i64]) -> String {
 }
 
 /// `"A method can't …"` as the rest of a sentence.
-pub fn lowered_first(text: ref String) -> String {
+fn lowered_first(text: ref String) -> String {
     let c: Vec[scalar] = text.chars().collect()
     if c.is_empty() {
         return ""
@@ -179,7 +179,7 @@ pub fn lowered_first(text: ref String) -> String {
 }
 
 /// A type whose `len()` the prover reads: a list, text, an array.
-pub fn has_a_length(ty: ref String) -> bool {
+fn has_a_length(ty: ref String) -> bool {
     return match ty {
         "Vec" => true, "String" => true, "str" => true, "Array" => true, "Bytes" => true,
         else => false,

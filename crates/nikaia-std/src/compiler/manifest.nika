@@ -62,7 +62,7 @@ fn moved(key: ref String) -> String {
 
 /// What a `[build]` key does: kept, moved with a note, or refused - as
 /// withdrawn in its own words, or as a typo naming the keys there are.
-pub fn build_key(key: ref String) -> Switch throws {
+fn build_key(key: ref String) -> Switch throws {
     let gone = withdrawn(key)
     if gone.len() > 0 {
         throw Refused::Because(f"`{key}` in `[build]` is no longer supported: {gone}")
@@ -88,7 +88,7 @@ pub fn targets() -> Vec[String] {
 /// `[build]`: a silently ignored `opt_level` leaves a build at a setting its
 /// author believed they had changed. `incremental` and `debug` are ADR-002 D5,
 /// `codegen-units` D6.
-pub fn codegen_keys() -> Vec[String] {
+fn codegen_keys() -> Vec[String] {
     return ["opt-level", "lto", "codegen-units", "incremental", "debug"]
 }
 
@@ -102,7 +102,7 @@ pub fn codegen_units(target: ref String, units: i64?, written: String) throws {
 }
 
 /// `[build.<target>]` names a machine, or is refused naming the ones there are.
-pub fn codegen_table(target: ref String) throws {
+fn codegen_table(target: ref String) throws {
     if !contains(targets(), target) {
         let expected = choices(targets())
         throw Refused::Because(f"`[build.{target}]` isn't a machine Nikaia builds for. The machines are: {expected}.")
@@ -110,7 +110,7 @@ pub fn codegen_table(target: ref String) throws {
 }
 
 /// A key of `[build.<target>]` is one it may carry, or is refused.
-pub fn codegen_key(target: ref String, key: ref String) throws {
+fn codegen_key(target: ref String, key: ref String) throws {
     if !contains(codegen_keys(), key) {
         let expected = choices(codegen_keys())
         throw Refused::Because(f"`[build.{target}]` has no key called `{key}`. The keys are: {expected}.")

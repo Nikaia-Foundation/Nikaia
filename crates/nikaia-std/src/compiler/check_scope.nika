@@ -32,7 +32,7 @@ impl CheckState {
     }
 
     /// The innermost frame a name is bound in, or -1.
-    pub fn frame_holding(ref self, name: ref String) -> i64 sync {
+    fn frame_holding(ref self, name: ref String) -> i64 sync {
         let mut frame_at = self.scope.len()
         while frame_at > 0 {
             frame_at = frame_at - 1
@@ -48,7 +48,7 @@ impl CheckState {
     /// **What a `let mut` holds here, where it is followed** (Part III C.4):
     /// not inside a loop or a lambda that began after it was bound, which may
     /// run after a later assignment.
-    pub fn followed_here(ref self, id: i64, name: ref String) -> Integer? sync {
+    fn followed_here(ref self, id: i64, name: ref String) -> Integer? sync {
         let value = self.flow.followed[id]?.clone() ?? return null
         let count = self.repeats.len()
         if count > 0 && self.repeats[count - 1].frame > self.frame_holding(name) {
@@ -61,7 +61,7 @@ impl CheckState {
     /// in, what it now holds where that folds; in a nested block (a branch,
     /// a loop, a lambda), forgotten, since the code after it may or may not
     /// have run it.
-    pub fn assigned_followed(ref mut self, world: ref CheckWorld, target: ref Expr, op: ref BinaryOp?, value: ref Expr) sync {
+    fn assigned_followed(ref mut self, world: ref CheckWorld, target: ref Expr, op: ref BinaryOp?, value: ref Expr) sync {
         let name: String = match target {
             Expr::Variable(written, _) => world.words.resolve(written).clone(),
             else => return,
@@ -105,7 +105,7 @@ impl CheckState {
 
 /// A function by the name a call wrote: this unit's, then a constructor, then a
 /// library's - the same order the `sync` check resolves in.
-pub fn resolve_call(world: ref CheckWorld, name: ref String) -> CheckResolved? sync {
+fn resolve_call(world: ref CheckWorld, name: ref String) -> CheckResolved? sync {
     if world.own.functions.contains_key(name) {
         let contract = check_scope_found(world.own.functions, name) ?? return null
         return CheckResolved { key: name.clone(), contract: contract }
@@ -139,7 +139,7 @@ pub fn resolve_call(world: ref CheckWorld, name: ref String) -> CheckResolved? s
 /// put a type in one: a value of `collections::HashMap` has its methods keyed
 /// `HashMap::len`, because the module is where the **type** lives and the method
 /// belongs to the type.
-pub fn resolve_method(world: ref CheckWorld, key: ref String) -> CheckResolved? sync {
+fn resolve_method(world: ref CheckWorld, key: ref String) -> CheckResolved? sync {
     if world.own.functions.contains_key(key) {
         let contract = check_scope_found(world.own.functions, key) ?? return null
         return CheckResolved { key: key.clone(), contract: contract }

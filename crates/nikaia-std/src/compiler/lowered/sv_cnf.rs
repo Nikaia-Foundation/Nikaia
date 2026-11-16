@@ -77,7 +77,7 @@ impl SvTseitin {
         let normal = sv_row_tightened(&le);
         let key = sv_row_text(&normal);
         let missing: u32 = 4294967295u32;
-        let known: u32 = nikaia_std::index::or(self.known.get(&key), || missing.into());
+        let known: u32 = nikaia_std::index::or(self.known.get(&key), || missing);
         if known != missing { return Some(sv_lit(known, false) as i64); }
         let a = match u32::try_from(self.atoms.len() as i64).ok() { Some(__nikaia_value) => __nikaia_value, None => return None };
         self.atoms.push(SvAtom { row: normal, rel: SvRel::Le });
@@ -98,7 +98,7 @@ impl SvTseitin {
         let rel = if strict { SvRel::Lt } else { SvRel::Le };
         let key = format!("{} {}", sv_row_text(&normal), sv_rel_text(&rel));
         let missing: u32 = 4294967295u32;
-        let known: u32 = nikaia_std::index::or(self.known.get(&key), || missing.into());
+        let known: u32 = nikaia_std::index::or(self.known.get(&key), || missing);
         if known != missing { return Some(sv_lit(known, false) as i64); }
         let a = match u32::try_from(self.atoms.len() as i64).ok() { Some(__nikaia_value) => __nikaia_value, None => return None };
         self.atoms.push(SvAtom { row: normal, rel });

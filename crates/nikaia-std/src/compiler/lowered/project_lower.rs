@@ -153,7 +153,7 @@ pub fn project_lower_check<H: ProjectLowerHost>(host: &H) -> Result<String, std:
     Ok(warnings)
 }
 
-pub fn project_lower_published(ledger: Ledger, published: &collections::BTreeMap<String, Published>) -> Ledger {
+pub(crate) fn project_lower_published(ledger: Ledger, published: &collections::BTreeMap<String, Published>) -> Ledger {
     let mut ledger = ledger;
     for (key, found) in published.iter() {
         let contract = match nikaia_std::index::get_mut(&mut ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };

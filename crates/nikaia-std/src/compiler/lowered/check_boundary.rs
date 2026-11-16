@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn declared_below(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
+    pub(crate) fn declared_below(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
         match ty {
             Ty::Named { name, args, view } => { let view = *view; self.a_declared_name(world, name, args, view) },
             Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; if slice && !mutable { self.a_run_of(world, item, "&[", "]") } else { None } },
@@ -33,7 +33,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn unwritable_field(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Vec<String> {
+    pub(crate) fn unwritable_field(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Vec<String> {
         let name = match ty {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return vec![],
@@ -60,7 +60,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_count_at_the_boundary(&self, written: &str, want: &Ty, found: &Ty) -> bool {
+    pub(crate) fn a_count_at_the_boundary(&self, written: &str, want: &Ty, found: &Ty) -> bool {
         if !self.foreign_names.contains(written) { return false; }
         let wants_a_size = match want {
             Ty::Named { name, args, .. } => name == "usize" && args.is_empty(),
@@ -75,7 +75,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn only_reads_its_receiver(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: &str) -> bool {
+    pub(crate) fn only_reads_its_receiver(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: &str) -> bool {
         let mut candidates: Vec<FnContract> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for key in ledger_candidates(world.own, world.own_methods, method) {
             candidates.push(nikaia_std::index::or(match *nikaia_std::index::get(&world.own.functions, &key) {
@@ -99,7 +99,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_word_by_its_kind(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
+    pub(crate) fn a_word_by_its_kind(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
         match ty {
             Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && (a_number_name(name) || name == "bool" || name == "char" || name == "scalar" || self.a_payloadless_enum(name) || a_ledger_copies(ty, &vec![world.library])) },
             _ => false,
@@ -124,7 +124,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_coalesce_that_may_lend(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, left: &Ty, fallback: &Expr, other: &Ty) -> Option<String> {
+    pub(crate) fn a_coalesce_that_may_lend(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, left: &Ty, fallback: &Expr, other: &Ty) -> Option<String> {
         let held = match left {
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
             _ => return None,
@@ -158,7 +158,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn hands_back_a_view_of_the_subject(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    pub(crate) fn hands_back_a_view_of_the_subject(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
         let expected = match match self.expected.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -168,7 +168,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_made_element_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, expected: &Ty) -> bool {
+    pub(crate) fn a_made_element_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, expected: &Ty) -> bool {
         let viewed = match expected {
             Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && (a_type_base(name) == "str" || a_type_base(name) == "String") },
             _ => false,
@@ -178,7 +178,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn an_element_of_a_made_list(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    pub(crate) fn an_element_of_a_made_list(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
         let (base, index) = match value {
             Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); (base, index) },
             _ => return false,
@@ -206,7 +206,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_get_off_a_lent_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    pub(crate) fn a_get_off_a_lent_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
         let expected = match match self.expected.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -249,7 +249,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_from_call_of_a_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    pub(crate) fn a_from_call_of_a_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
         let expected = match match self.expected.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -279,7 +279,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_place_of_a_lent_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    pub(crate) fn a_place_of_a_lent_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
         let a_place = matches!(value, Expr::Field { .. } | Expr::Index { .. });
         if !a_place { return false; }
         let root = match self.rooted_at(world, value) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -298,10 +298,10 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn place_path(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> { dotted_path(world, expr) }
+    pub(crate) fn place_path(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> { dotted_path(world, expr) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_mut_parameter_place(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, subject: &Expr) -> Option<String> {
+    pub(crate) fn a_mut_parameter_place(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, subject: &Expr) -> Option<String> {
         let path = match dotted_path(world, subject) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
         let found = match self.binding(*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None }; ::core::mem::drop(parts);
@@ -312,7 +312,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn element_of(ty: &Ty) -> Ty {
+pub(crate) fn element_of(ty: &Ty) -> Ty {
     match ty {
         Ty::Named { name, args, .. } => if name == "Array" && !args.is_empty() { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { ty.clone() },
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; if slice && !mutable { item.clone() } else { ty.clone() } },

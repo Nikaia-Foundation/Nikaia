@@ -16,7 +16,7 @@ pub struct ProverWalk {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn prover_bodies(walk: &mut ProverWalk, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
+pub(crate) fn prover_bodies(walk: &mut ProverWalk, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) {
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { .. } => { prover_function(walk, item, None, false, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
@@ -1874,7 +1874,7 @@ pub(crate) fn prover_outside_index(walk: &mut ProverWalk, expr: &Expr, base: &Ex
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn prover_outside_record(walk: &mut ProverWalk, span: &Span, written: String, name: &str, source: Option<&str>, guard: Option<(i64, String)>, proved: bool, operation: bool, stated: bool, site: i64) {
+pub(crate) fn prover_outside_record(walk: &mut ProverWalk, span: &Span, written: String, name: &str, source: Option<&str>, guard: Option<(i64, String)>, proved: bool, operation: bool, stated: bool, site: i64) {
     let mut guard_at: i64 = -1;
     let mut condition: String = String::from("");
     match guard {
@@ -2306,13 +2306,13 @@ pub(crate) fn prover_qualified(segments: &[winnow_grammar::Symbol], words: &winn
     unaliased(&joined)
 }
 
-pub fn prover_an_assert_call(func: &Expr, args: &[Expr], span: &Span, claims: &collections::BTreeSet<(i64, i64)>) -> bool {
+pub(crate) fn prover_an_assert_call(func: &Expr, args: &[Expr], span: &Span, claims: &collections::BTreeSet<(i64, i64)>) -> bool {
     let named = matches!(func, Expr::Variable(_, _));
     if !named || args.len() != 1 { return false; }
     claims.contains(&(span.start as i64, node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) })))
 }
 
-pub fn prover_assumed_in_unsafe(block: &Block, words: &winnow_grammar::InternerContext) -> Vec<Expr> {
+pub(crate) fn prover_assumed_in_unsafe(block: &Block, words: &winnow_grammar::InternerContext) -> Vec<Expr> {
     let mut out: Vec<Expr> = vec![];
     for stmt in block.stmts.iter() {
         match &stmt.node {
@@ -2332,7 +2332,7 @@ pub fn prover_assumed_in_unsafe(block: &Block, words: &winnow_grammar::InternerC
     out
 }
 
-pub fn prover_an_assume(func: &Expr, words: &winnow_grammar::InternerContext) -> bool {
+pub(crate) fn prover_an_assume(func: &Expr, words: &winnow_grammar::InternerContext) -> bool {
     match func {
         Expr::Variable(name, _) => { let name = *name; words.resolve(name) == "assume" },
         _ => false,

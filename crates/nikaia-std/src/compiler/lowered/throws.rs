@@ -299,7 +299,7 @@ pub struct Contribution {
     pub result: Option<String>,
 }
 
-pub fn thrown_by(body: &Block, names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, contribution_of: &impl Fn(&Expr) -> Contribution) -> Thrown {
+pub(crate) fn thrown_by(body: &Block, names: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, contribution_of: &impl Fn(&Expr) -> Contribution) -> Thrown {
     let mut out = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new() };
     thrown_in_block(body, names, holes_of, contribution_of, false, &mut out);
     out
@@ -523,7 +523,7 @@ pub(crate) fn passes_on(handler: &Block, names: &winnow_grammar::InternerContext
     seen.passes_on
 }
 
-pub fn throws_handler_passes_on(handler: &Block, names: &winnow_grammar::InternerContext) -> bool {
+pub(crate) fn throws_handler_passes_on(handler: &Block, names: &winnow_grammar::InternerContext) -> bool {
     for stmt in handler.stmts.iter() {
         for expr in check_visit_stmt(&stmt.node) { if the_caught_error(expr, names) { return true; } }
         for block in check_visit_stmt_blocks(&stmt.node) { if throws_handler_passes_on(block, names) { return true; } }
@@ -531,7 +531,7 @@ pub fn throws_handler_passes_on(handler: &Block, names: &winnow_grammar::Interne
     false
 }
 
-pub fn fatal_named(handler: &Block, names: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+pub(crate) fn fatal_named(handler: &Block, names: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for stmt in handler.stmts.iter() {
         match &stmt.node {

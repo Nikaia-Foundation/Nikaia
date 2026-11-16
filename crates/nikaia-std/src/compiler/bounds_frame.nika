@@ -41,7 +41,7 @@ fn frame_rounds() -> i64 {
 /// by its name or by `Type::method` (ADR-391 D2). `beside` is what each of
 /// the package's other files says ([`bounds_beside`]): a private function's
 /// call sites may stand there (ADR-391 D1).
-pub fn bounds_around(
+fn bounds_around(
 	program: ref Program,
 	beside: ref Vec[ref BoundsBeside],
 	ledgers: ref Vec[ref Ledger],
@@ -491,7 +491,7 @@ fn frame_pattern_names(
 /// onto the receiver's path and the arguments' (`handed`, none where one is
 /// not a path of fields). A value written is a value changed otherwise than
 /// by a step, and its length with it.
-pub fn frame_at_call(
+fn frame_at_call(
 	frame: ref BoundsChanged,
 	receiver: ref String?,
 	handed: ref Vec[String?],
@@ -550,7 +550,7 @@ fn frame_list(entry: ref String) -> String {
 }
 
 /// **Whether a frame writes anything from `root`** (`#self`, `#0`, ...).
-pub fn frame_writes(frame: ref BoundsChanged, root: ref String) -> bool {
+fn frame_writes(frame: ref BoundsChanged, root: ref String) -> bool {
 	return frame.values.iter().any(fn(e) { frame_from(e, root) })
 		|| frame.lengths.iter().any(fn(e) { frame_from(e, root) })
 		|| frame.parts.iter().any(fn(e) { frame_from(e, root) })
@@ -634,7 +634,7 @@ pub fn bounds_beside(program: ref Program, words: ref winnow_grammar::InternerCo
 	return BoundsBeside { names, declared, reached, has_main, lost: scan.lost }
 }
 
-pub fn fields_seen(
+fn fields_seen(
 	program: ref Program,
 	beside: ref Vec[ref BoundsBeside],
 	words: ref winnow_grammar::InternerContext,

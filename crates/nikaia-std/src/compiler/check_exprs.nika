@@ -39,7 +39,7 @@ fn check_exprs_package_type(world: ref CheckWorld, std_in_scope: ref collections
 }
 
 /// Whether a type is exactly `String`, held.
-pub fn a_plain_string(ty: ref Ty) -> bool {
+fn a_plain_string(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, view } => !view && args.len() == 0 && name == "String",
         else => false,
@@ -97,7 +97,7 @@ impl CheckState {
     /// is put into** (ADR-285 D9): `a & b` and the `wrapping_` family depend on
     /// the width, so widening before and after give different numbers. True
     /// where it said so.
-    pub fn narrow_by_width(ref mut self, world: ref CheckWorld, value: ref Expr, into: ref String, span: ref Span) -> bool sync {
+    fn narrow_by_width(ref mut self, world: ref CheckWorld, value: ref Expr, into: ref String, span: ref Span) -> bool sync {
         let found = width_dependent(world, value, into)
         if found.len() == 0 {
             return false
@@ -115,7 +115,7 @@ impl CheckState {
     /// `NK1197`: a bit operation next to a comparison without parentheses
     /// (ADR-285 D9). Nikaia binds the bit operations tighter than a comparison
     /// and C looser, so the line can be read two ways.
-    pub fn a_bit_operation_beside_a_comparison(ref mut self, world: ref CheckWorld, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, at: ref Span) sync {
+    fn a_bit_operation_beside_a_comparison(ref mut self, world: ref CheckWorld, op: BinaryOp, lhs: ref Expr, rhs: ref Expr, at: ref Span) sync {
         let left_bare = a_bare_bit_operation(lhs)
         let right_bare = a_bare_bit_operation(rhs)
         if !left_bare && !right_bare {
@@ -136,7 +136,7 @@ impl CheckState {
 
     /// `NK1201`: a list, map or set in an `f"…"` hole, which has no text form.
     /// `spec` is the hole's format spec, where it has one.
-    pub fn a_collection_in_a_hole(ref mut self, world: ref CheckWorld, hole: ref Expr, held: ref Ty, spec: ref String?, span: ref Span) sync {
+    fn a_collection_in_a_hole(ref mut self, world: ref CheckWorld, hole: ref Expr, held: ref Ty, spec: ref String?, span: ref Span) sync {
         if spec != null && (spec ?? "").contains("?") {
             return
         }
@@ -146,7 +146,7 @@ impl CheckState {
     /// **`NK1201`: a value with no text form handed to a print call**
     /// (#873): `println(x)` writes `x`'s text as `println(f"{x}")` does, so
     /// what a hole refuses a print call refuses, with the same way out.
-    pub fn a_value_with_no_text_printed(ref mut self, world: ref CheckWorld, value: ref Expr, held: ref Ty, span: ref Span) sync {
+    fn a_value_with_no_text_printed(ref mut self, world: ref CheckWorld, value: ref Expr, held: ref Ty, span: ref Span) sync {
         self.a_value_with_no_text(world, value, held, span, true)
     }
 
@@ -343,7 +343,7 @@ impl CheckState {
     }
 
     /// `NK1206`: a `for` over a `T?`.
-    pub fn a_loop_over_a_nullable(ref mut self, world: ref CheckWorld, over: ref Ty, iter: ref Expr, span: ref Span) sync {
+    fn a_loop_over_a_nullable(ref mut self, world: ref CheckWorld, over: ref Ty, iter: ref Expr, span: ref Span) sync {
         let inner = match over {
             Ty::Nullable(held) => held.text(),
             else => return,
@@ -359,7 +359,7 @@ impl CheckState {
     /// `for` walks a sequence; no `impl` gives a type one, NK1117). Without it
     /// the lowering asked rustc for `.iter()` and NK1343 came back (#1421).
     /// Fail-open: a type with arguments or one not known here passes.
-    pub fn a_loop_over_what_holds_no_elements(ref mut self, world: ref CheckWorld, over: ref Ty, iter: ref Expr, span: ref Span) sync {
+    fn a_loop_over_what_holds_no_elements(ref mut self, world: ref CheckWorld, over: ref Ty, iter: ref Expr, span: ref Span) sync {
         let name: String = match over {
             Ty::Named { name, args, .. } => if args.len() == 0 { name.clone() } else { return },
             else => return,
@@ -379,7 +379,7 @@ impl CheckState {
     /// `NK1185`: a `??` whose left side is a view of what a map keeps and whose
     /// fallback is a value of its own. Fail-open: only where the held type is a
     /// declared one that moves.
-    pub fn a_fallback_beside_what_a_map_holds(ref mut self, world: ref CheckWorld, read: ref Expr, held: ref Ty, fallback: ref Ty, span: ref Span) sync {
+    fn a_fallback_beside_what_a_map_holds(ref mut self, world: ref CheckWorld, read: ref Expr, held: ref Ty, fallback: ref Ty, span: ref Span) sync {
         if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) {
             return
         }
@@ -401,7 +401,7 @@ impl CheckState {
     /// views and text of its own** (ADR-282 D13, D14, #840) goes in as an
     /// `EitherText`: wrapped on its own, a field read through a `ref`
     /// parameter lent. True where the name is such.
-    pub fn mixed_text_assigned(ref mut self, world: ref CheckWorld, target: ref Expr, value: ref Expr, found: ref Ty) -> bool sync {
+    fn mixed_text_assigned(ref mut self, world: ref CheckWorld, target: ref Expr, value: ref Expr, found: ref Ty) -> bool sync {
         let name = match target {
             Expr::Variable(name, _) => world.words.resolve(name).clone(),
             else => return false,
@@ -434,7 +434,7 @@ impl CheckState {
 
     /// `NK1105`: text of its own given to a name that started as a literal, so
     /// can only hold a view. True where it said so.
-    pub fn owned_text_into_a_literal_binding(ref mut self, world: ref CheckWorld, target: ref Expr, found: ref Ty, into: ref Ty, span: ref Span) -> bool sync {
+    fn owned_text_into_a_literal_binding(ref mut self, world: ref CheckWorld, target: ref Expr, found: ref Ty, into: ref Ty, span: ref Span) -> bool sync {
         let name = match target {
             Expr::Variable(name, _) => world.words.resolve(name).clone(),
             else => return false,
@@ -452,7 +452,7 @@ impl CheckState {
     }
 
     /// `NK1108`: a condition that is not a `bool`; `why` is the note.
-    pub fn expect_bool(ref mut self, found: ref Ty, span: ref Span, why: ref String) sync {
+    fn expect_bool(ref mut self, found: ref Ty, span: ref Span, why: ref String) sync {
         let wanted = Ty::Named { name: "bool", args: [], view: false }
         if found.fits(wanted) {
             return
@@ -482,7 +482,7 @@ impl CheckState {
     /// sentences by what the value is - a name bound to a literal, a `ref
     /// String` parameter, or any other view. `named` is the name where `value`
     /// is one.
-    pub fn a_view_kept(ref self, found: ref Ty, want: ref Ty, named: ref String?, keeper: ref String) -> CheckKept? sync {
+    fn a_view_kept(ref self, found: ref Ty, want: ref Ty, named: ref String?, keeper: ref String) -> CheckKept? sync {
         if !a_plain_str_view(found) || !a_plain_string(want) {
             return null
         }
@@ -532,7 +532,7 @@ fn a_variant_path(state: ref CheckState, world: ref CheckWorld, segments: ref Ve
 impl CheckState {
     /// **A value written out**: a variant, a struct literal or the call of a
     /// variant - a value of its own, not a place.
-    pub fn a_value_written_out(ref self, world: ref CheckWorld, written: ref Expr) -> bool {
+    fn a_value_written_out(ref self, world: ref CheckWorld, written: ref Expr) -> bool {
         return match written {
             Expr::Path(segments, _) => a_variant_path(self, world, segments),
             Expr::StructLit { .. } => true,

@@ -23,7 +23,7 @@ impl Reached {
         } { Some(__nikaia_value) => __nikaia_value, None => return true };
         mine == theirs
     }
-    pub fn conflicts_with(&self, other: &Reached) -> bool { (self.write || other.write) && self.might_be_same(other) }
+    pub(crate) fn conflicts_with(&self, other: &Reached) -> bool { (self.write || other.write) && self.might_be_same(other) }
 }
 
 pub(crate) fn family(kind: &str) -> String {
@@ -31,7 +31,7 @@ pub(crate) fn family(kind: &str) -> String {
     nikaia_std::block::Text::from(kind.to_string())
 }
 
-pub fn touches_of(unknown: &collections::BTreeMap<String, bool>, outside: &collections::BTreeMap<String, Vec<Touch>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>) -> collections::BTreeMap<String, Vec<Touch>> {
+pub(crate) fn touches_of(unknown: &collections::BTreeMap<String, bool>, outside: &collections::BTreeMap<String, Vec<Touch>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>) -> collections::BTreeMap<String, Vec<Touch>> {
     let mut known: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
     for (name, lost) in unknown.iter() {
         let lost = nikaia_std::num::value(lost);
