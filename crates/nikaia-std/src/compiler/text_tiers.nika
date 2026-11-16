@@ -1238,13 +1238,12 @@ fn going_into(owner: ref TextOwner, ty: ref Type, path: Vec[i64], wrap: bool) ->
 }
 
 /// **An empty list going whole into a position is linked to it** (ADR-282
-/// D16): the `let` that bound it is declared with the position's type.
+/// D16): the `let` that bound it is declared with the position's type. So is
+/// a copy of it going there (#1759): `f(v.clone())` declares `v` as `f(v)`
+/// does, else a list of literals handed only as copies stays a list of views.
 fn adopt(value: ref Expr?, going: ref TierGoing, ask: ref TierAsk, mut walk: TierWalk) {
     let given = value ?? return
-    let name = match given {
-        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
-        else => return,
-    }
+    let name = adopted_name(given, ask) ?? return
     let local = tier_local(name, walk) ?? return
     // **And a list literal going whole into a published position** (#1449):
     // that position keeps text of its own (ADR-282 D22), so the literal's
@@ -1281,6 +1280,25 @@ fn adopt(value: ref Expr?, going: ref TierGoing, ask: ref TierAsk, mut walk: Tie
         return
     }
     walk.flows.adopted.insert(at, Declaring { owner: going.owner.clone(), ty: going.ty.clone() })
+}
+
+/// The name of the list a value going whole into a position is, or is a copy
+/// of: `v` for `v`, `v.clone()`, `v.to_owned()` and `v.to_vec()`.
+fn adopted_name(given: ref Expr, ask: ref TierAsk) -> String? {
+    return match given {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let called = ask.names.resolve(method)
+            if args.len() != 0 || (called != "clone" && called != "to_owned" && called != "to_vec") {
+                return null
+            }
+            match receiver {
+                Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+                else => null,
+            }
+        }
+        else => null,
+    }
 }
 
 /// **A list of the function's own lent whole to a `ref` list is declared as
@@ -5864,7 +5882,7 @@ fn std_container_args(callee: ref String, args: ref Vec[Expr], ask: ref TierAsk,
             std_whole_list(arg, params[at].1, ask, walk)
         }
         at += 1
-        let whole = source_of(arg, ask, walk)
+        let whole = source_of(extend_source(arg, ask), ask, walk)
         if whole != null {
             let found = whole ?? return
             if a_followed(ask.names, found.ty) && holds_text(ask.names, found.ty) {
@@ -5895,7 +5913,8 @@ fn std_option_lists(func: ref Expr, config: ref Vec[ConfigArg], ask: ref TierAsk
                 continue
             }
             std_whole_list(option.value, declared.ty, ask, walk)
-            let whole = source_of(option.value, ask, walk) ?? continue
+            // A copy (`e.clone()`) holds the same text as the list (#1759).
+            let whole = source_of(extend_source(option.value, ask), ask, walk) ?? continue
             if a_followed(ask.names, whole.ty) && holds_text(ask.names, whole.ty) {
                 demote_inside(whole.owner, whole.ty, [], ask, walk)
             }
@@ -5925,12 +5944,10 @@ fn program_option_texts(func: ref Expr, config: ref Vec[ConfigArg], ask: ref Tie
 /// of text of its own, is declared as that list** (#1592), as one handed to
 /// this program's function is (#1501): `let e = [("A", "0"), ("B", f"{x}")]`
 /// handed to `process::run`'s `env: Vec[(String, String)]` builds its
-/// literals' text there, as the same list written at the call does (#1269).
+/// literals' text there, as the same list written at the call does (#1269),
+/// and so does a copy of it, `env: e.clone()` (#1759).
 fn std_whole_list(value: ref Expr, want: ref Ty, ask: ref TierAsk, mut walk: TierWalk) {
-    let name = match value {
-        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
-        else => return,
-    }
+    let name = adopted_name(value, ask) ?? return
     let local = tier_local(name, walk) ?? return
     let at = local.listed
     if at < 0 || walk.flows.adopted.contains_key(at) || !std_owns_text_inside(want) {

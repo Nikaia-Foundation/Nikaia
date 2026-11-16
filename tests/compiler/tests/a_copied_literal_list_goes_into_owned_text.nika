@@ -1,0 +1,35 @@
+// #1759: a list of text literals handed only as copies (`v.clone()`) into a
+// place that holds text of its own was refused (NK1102, NK1106: `Vec[ref
+// String]` where `Vec[String]` was wanted), while handing the list itself was
+// accepted. A copy declares the list as the list does (ADR-282 D16).
+use std::process
+
+fn count(names: Vec[String]) -> i64 {
+	return names.len()
+}
+
+fn pairs(env: Vec[(String, String)]) -> String {
+	let mut out = ""
+	for (key, value) in env {
+		out = f"{out}{key}={value} "
+	}
+	return out
+}
+
+fn main() throws {
+	let names = ["a", "b"]
+	println(f"{count(names.clone())} {count(names.clone())}")
+	let label = f"x{count(names.clone())}"
+	let env = [("A", "1"), ("B", label.clone())]
+	println(pairs(env.clone()))
+	println(pairs(env.clone()))
+	let shell = [("NIKAIA_PROBE", "on")]
+	let a = process::run("sh", ["-c", "echo $NIKAIA_PROBE"]; env: shell.clone())
+	let b = process::run("sh", ["-c", "echo $NIKAIA_PROBE"]; env: shell.clone())
+	println(f"{a.stdout.trim()} {b.stdout.trim()}")
+	let words = ["-n", "said"]
+	let c = process::run("echo", words.clone())
+	let d = process::run("echo", words.clone())
+	println(f"{c.stdout} {d.stdout}")
+	println(f"{names.len()} {env.len()} {shell.len()} {words.len()}")
+}
