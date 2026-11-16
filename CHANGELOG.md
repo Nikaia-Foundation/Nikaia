@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1398] — 2026-11-16
+
+**Bounds walk: a method's found facts through self; the driver accepts a cut itself (#1667, #1694)**
+- The bounds walk carries a method's found facts through self: a fact a method's body proves about its own fields is kept at its calls (#1667).
+- scripts/drive.nika, batch.nika, release.nika: a report with Result done or partial, a green gate, Needs: none and Owner: none no longer stops the driver; it is marked auto-accepted, listed in review.txt and released with the next version (#1694).
+
 ## [0.0.1397] — 2026-11-15
 
 **Builders' changes (#1441, #1459, #1464, #1505, #1509, #1512, #1515, #1516, #1517, #1519, #1520, #1523, #1535, #1539, #1546)**
