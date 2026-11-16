@@ -101,5 +101,14 @@ fn main() throws {
     let fresh = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--dir", f"{tmp}/res", "--claude", failing.clone()]; dir: repo.clone(), env: [("CLAUDE_CONFIG_DIR", conf.clone())])
     let flines = fresh.stdout.trim().split("\n").collect()
     println(f"fallback: code={fresh.code} {flines[0].contains("starting fresh")} {flines[flines.len() - 1].split(' ').collect()[0]} {fs::read_to_string(f"{tmp}/b.md.run.json", fs::Root::Anywhere).contains("old-sid")}")
+
+    // A session whose claude still runs (a killed driver's) is neither resumed
+    // nor started again beside it (#1796).
+    fs::remove(f"{tmp}/b.report.md", fs::Root::Anywhere)
+    process::run("sh", ["-c", "(sleep 60; : live-sid-1796) > /dev/null 2>&1 &"])
+    fs::write(f"{tmp}/b.md.session", fs::Root::Anywhere, f"live-sid-1796 {sum}\n")
+    let busy = process::run(nikaia.clone(), ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp}/b.md", "--dir", f"{tmp}/res", "--claude", fake.clone()]; dir: repo.clone(), env: [("CLAUDE_CONFIG_DIR", conf.clone())])
+    println(f"live session: code={busy.code} {busy.stdout.contains("is still running")} report={fs::exists(f"{tmp}/b.report.md", fs::Root::Anywhere)}")
+    process::run("pkill", ["-f", "live-sid-1796"])
     process::run("rm", ["-rf", tmp])
 }
