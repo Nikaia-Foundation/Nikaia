@@ -1,3 +1,5 @@
+hunks of the listed sources (each must be yours: a file with another agent's hunk goes under Partial: with only yours staged):
+  a.txt new file
 git add a.txt
 a subject
 

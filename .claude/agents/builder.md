@@ -248,7 +248,13 @@ You build one small slice of an issue in the Nikaia repository and end.
   `Fixes: #N[, #M]` or `Part: #N` (never `Fixes: none`: the script writes
   it into the message as `Fixes none`, y2c 2026-10-31; leave the line out or
   write `Part: #N`); then run `target/fast/nikaia run
-  scripts/commit.nika -- REPORT` (`--dry-run` shows the message). It refuses an
+  scripts/commit.nika -- --dry-run REPORT` and read the hunks it lists for
+  each listed source: one you did not write is another agent's, so that file
+  goes under `Partial:` (below); `git status` shows no sign of an edit that
+  arrived mid-cycle (#1888's commit swept another agent's hunks in, #1918).
+  The dry run writes `Reviewed:` into the report; then run `target/fast/nikaia
+  run scripts/commit.nika -- REPORT`, which refuses when a listed file
+  changed since that review (dry-run again and re-read). It refuses an
   unchanged listed file, commits through a private index (a file another
   agent staged stays staged and is named, never committed, #1792), adds exactly the listed
   files, writes the message (subject, `Changelog:`, `Fixes`, the trailer
