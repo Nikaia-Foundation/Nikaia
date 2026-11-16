@@ -97,13 +97,32 @@ impl Text {
     }
 
     /// Append one character.
+    ///
+    /// **Small enough to inline at every call site** (#1864): only an ASCII
+    /// character with room left is written here; a wider one, or a full
+    /// `Vec`, goes out of line through [`Text::push_slow`]. With the
+    /// encoding and the growth inlined, the body kept six callee-saved
+    /// registers and was called out of line from fasta's loops.
     #[inline]
     pub fn push(&mut self, c: char) {
-        if c.is_ascii() {
-            self.bytes.push_or_end(c as u8);
+        let len = self.bytes.len();
+        if c.is_ascii() && len < self.bytes.capacity() {
+            // SAFETY: `len < capacity`, so the byte at `len` is allocated,
+            // and an ASCII byte keeps the text UTF-8.
+            unsafe {
+                self.bytes.as_mut_ptr().add(len).write(c as u8);
+                self.bytes.set_len(len + 1);
+            }
         } else {
-            self.push_str(c.encode_utf8(&mut [0; 4]));
+            self.push_slow(c);
         }
+    }
+
+    /// `push`'s other paths: a character wider than a byte, or no room left.
+    #[cold]
+    #[inline(never)]
+    fn push_slow(&mut self, c: char) {
+        self.push_str(c.encode_utf8(&mut [0; 4]));
     }
 
     /// The text, unchecked: it only ever grew by whole `str`s.
