@@ -625,7 +625,7 @@ pub(crate) fn vc_kept_in_places(at: &Span, func: &Expr, args: &[Expr], ask: &VcA
         let pieces: Vec<&str> = entry.split(':').collect::<Vec<_>>();
         if pieces.len() < 2 { continue; }
         let place = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).to_string()); ::core::mem::drop(pieces);
-        let source = match nikaia_std::index::get(&entry.as_bytes(), nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(place.len() as i64, 1) }..)).text() {
+        let source = match nikaia_std::bytes::text_of_a_cut(&*entry, nikaia_std::index::get(&entry.as_bytes(), nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(place.len() as i64, 1) }..))) {
             Ok(value) => value,
             Err(_error) => { continue; },
         };

@@ -43,7 +43,7 @@ impl EmitOut {
         if self.unsafe_depth == 0 { self.buf.push_str(" }"); }
     }
     pub(crate) fn block_headed_from(&self, start: i64) -> bool {
-        let text = match nikaia_std::index::get(&self.buf.as_bytes(), nikaia_std::index::at(start..)).text() {
+        let text = match nikaia_std::bytes::text_of_a_cut(&*self.buf, nikaia_std::index::get(&self.buf.as_bytes(), nikaia_std::index::at(start..))) {
             Ok(value) => value,
             Err(_error) => { return false; },
         };

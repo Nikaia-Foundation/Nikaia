@@ -42,13 +42,13 @@ pub fn sysroot_package_without_bodies(source: &str, items: &[Spanned<Item>]) -> 
     for (start, end) in cut.iter() {
         let start = nikaia_std::num::value(start);let end = nikaia_std::num::value(end);
         if start < at || end > n { return nikaia_std::block::Text::from(source.to_string()); }
-        kept.push_str(match nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(at..start)).text() {
+        kept.push_str(match nikaia_std::bytes::text_of_a_cut(&*source, nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(at..start))) {
             Ok(value) => value,
             Err(_error) => { return nikaia_std::block::Text::from(source.to_string()); },
         });
         at = end;
     }
-    kept.push_str(match nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(at..n)).text() {
+    kept.push_str(match nikaia_std::bytes::text_of_a_cut(&*source, nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(at..n))) {
         Ok(value) => value,
         Err(_error) => { return nikaia_std::block::Text::from(source.to_string()); },
     });
@@ -78,7 +78,7 @@ pub(crate) fn sysroot_package_bodies(item: &Spanned<Item>, cut: &mut Vec<(i64, i
 pub(crate) fn sysroot_package_at(text: &str, at: i64, word: &str) -> bool {
     let n = word.as_bytes().len() as i64;
     if at < 0 || at + n > text.as_bytes().len() as i64 { return false; }
-    let head = match unsafe { nikaia_std::proven::cut(&text.as_bytes(), (at) as usize, (nikaia_std::proven::add::<i64>(at, n)) as usize) }.text() {
+    let head = match nikaia_std::bytes::text_of_a_cut(&*text, unsafe { nikaia_std::proven::cut(&text.as_bytes(), (at) as usize, (nikaia_std::proven::add::<i64>(at, n)) as usize) }) {
         Ok(value) => value,
         Err(_error) => { return false; },
     };
@@ -86,7 +86,7 @@ pub(crate) fn sysroot_package_at(text: &str, at: i64, word: &str) -> bool {
 }
 
 pub(crate) fn sysroot_package_slice(text: &str, a: i64, b: i64) -> &str {
-    match nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(a..b)).text() {
+    match nikaia_std::bytes::text_of_a_cut(&*text, nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(a..b))) {
         Ok(value) => value,
         Err(_error) => { "" },
     }
