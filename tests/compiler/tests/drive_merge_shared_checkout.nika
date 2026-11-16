@@ -1,0 +1,83 @@
+// scripts/drive.nika --merge-fetched LOWER BUILD BADGES in a checkout shared
+// with another driver and a builder (#1916), in a temp repository with a bare
+// remote. A merge waits while another live driver holds `target/merge.lock`,
+// and while `.git/index.lock` is there, then merges; an `index.lock` that
+// stays past NIKAIA_DRIVE_MERGE_WAIT escalates before any merge starts. The
+// regeneration lowers the merged tree in the tree worktree, so a source a
+// builder writes in the checkout while the merge runs (here the stub BUILD
+// writes it) stays out of the merge's lowered file.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn sh(dir: String, script: String) -> String throws {
+    let out = process::run("sh", ["-c", f"set -e; {script}"]; dir: dir)
+    if !out.ok { println(f"setup failed: {script}\n{out.stderr}") }
+    return out.stdout.trim().clone()
+}
+
+// A repository `work` and a clone `other`, both from the bare `origin`;
+// `other` pushes a new source, `work` commits another file and fetches.
+fn setup(tmp: String, name: String) -> String throws {
+    let base = f"{tmp}/{name}"
+    let low = "crates/nikaia-std/src/compiler/lowered"
+    let id = "git config user.email t@t; git config user.name t; git config commit.gpgsign false"
+    sh(tmp.clone(), f"mkdir -p {name}; cd {name}; git init -q --bare origin.git; git init -q -b develop work")
+    let work = f"{base}/work"
+    sh(work.clone(), f"{id}; mkdir -p {low} crates/src; echo base > {low}/a.rs; echo index > {low}.rs; echo base > crates/src/a.nika; mkdir -p assets/badges; echo old > assets/badges/self-hosted.svg; git add -A; git commit -q -m base; git remote add origin ../origin.git; git push -q origin develop; echo target/ >> .git/info/exclude")
+    sh(base.clone(), "git clone -q -b develop origin.git other")
+    sh(f"{base}/other", f"{id}; echo theirs > crates/src/b.nika; git add -A; git commit -q -m theirs; git push -q origin develop")
+    sh(work.clone(), "echo ours > ours.txt; git add -A; git commit -q -m ours; git fetch -q origin develop")
+    return work
+}
+
+// BEFORE runs in `work` first (a lock to wait for); WAIT is
+// NIKAIA_DRIVE_MERGE_WAIT; BUILD the stub build.
+fn case(nikaia: String, repo: String, tmp: String, name: String, before: String, wait: String, build: String) throws {
+    let work = setup(tmp.clone(), name.replace(" ", "-").replace(",", ""))
+    if before != "" { sh(work.clone(), before) }
+    let low = "crates/nikaia-std/src/compiler/lowered"
+    let lower = f"cat crates/src/*.nika > {low}/a.rs"
+    let badges = "ls crates/src | tr '\\n' ' ' > assets/badges/self-hosted.svg"
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--merge-fetched", lower, build, badges]; dir: work.clone(), env: [("NIKAIA_DRIVE_MERGE_WAIT", wait)])
+    let head = sh(work.clone(), "git rev-parse HEAD").bytes[0..<8].text().clone()
+    println(f"== {name}")
+    let pid = sh(work.clone(), "cat pid.txt 2>/dev/null || true")
+    let mut said = out.stdout.trim().replace(head, "SHA")
+    if pid != "" { said = said.replace(pid, "PID") }
+    println(said)
+    println(f"exit ok: {out.ok}")
+    let state = sh(work, f"git log --format=%s -1; test -f .git/MERGE_HEAD && echo merge open || echo no merge open; test -d target/merge.lock && echo lock held || echo lock free; git status --porcelain | grep -v pid.txt || true; echo committed:; git show HEAD:{low}/a.rs")
+    println(state)
+}
+
+fn main() throws {
+    let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    // Another live driver holds the merge lock for a few seconds.
+    let held = "mkdir -p target/merge.lock; sleep 6 >/dev/null 2>&1 & echo \"$! other lane\" > target/merge.lock/owner; echo $! > pid.txt; (sleep 6; rm -rf target/merge.lock) >/dev/null 2>&1 &"
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "another driver merges", held, "60", "true")
+    // Another git command holds the index for a few seconds.
+    let index = "touch .git/index.lock; (sleep 3; rm -f .git/index.lock) >/dev/null 2>&1 &"
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "the index is locked", index, "60", "true")
+    // An index lock nobody removes.
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "the index stays locked", "touch .git/index.lock", "2", "true")
+    // A builder writes a source in the checkout while the merge builds.
+    let foreign = "w=$(git rev-parse --path-format=absolute --git-common-dir)/..; echo half-done > \"$w/crates/src/a.nika\""
+    case(nikaia, repo, tmp.clone(), "a builder writes a source meanwhile", "", "60", foreign)
+    process::run("rm", ["-rf", tmp])
+}

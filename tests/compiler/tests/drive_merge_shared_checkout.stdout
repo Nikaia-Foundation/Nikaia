@@ -1,0 +1,40 @@
+== another driver merges
+MERGE waiting for target/merge.lock: PID other lane
+MERGE SHA regenerated crates/nikaia-std/src/compiler/lowered/a.rs assets/badges/self-hosted.svg
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+no merge open
+lock free
+committed:
+base
+theirs
+== the index is locked
+MERGE waiting for .git/index.lock
+MERGE SHA regenerated crates/nikaia-std/src/compiler/lowered/a.rs assets/badges/self-hosted.svg
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+no merge open
+lock free
+committed:
+base
+theirs
+== the index stays locked
+MERGE waiting for .git/index.lock
+ESCALATE drive: push rejected: .git/index.lock stayed for 2 s; another merge or commit in this checkout did not finish
+WAKE ESCALATE read=- do=fix the cause it names, then restart the driver: ESCALATE drive: push rejected: .git/index.lock stayed for 2 s; another merge or commit in this checkout did not finish
+exit ok: false
+ours
+no merge open
+lock free
+committed:
+base
+== a builder writes a source meanwhile
+MERGE SHA regenerated crates/nikaia-std/src/compiler/lowered/a.rs assets/badges/self-hosted.svg
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+no merge open
+lock free
+ M crates/src/a.nika
+committed:
+base
+theirs
