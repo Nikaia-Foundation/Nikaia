@@ -9374,7 +9374,7 @@ fn bounding_if_join(
 	else_facts: ref BoundsFacts,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
-	if changed.values.is_empty() {
+	if changed.values.is_empty() && changed.lengths.is_empty() {
 		return
 	}
 	let mut kept: Vec[i64] = []
@@ -9410,7 +9410,7 @@ fn bounding_match_join(
 	bound: ref Vec[Vec[String]],
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
-	if changed.values.is_empty() || ends.len() < 2 {
+	if (changed.values.is_empty() && changed.lengths.is_empty()) || ends.len() < 2 {
 		return
 	}
 	let mut kept: Vec[i64] = []
@@ -9527,8 +9527,8 @@ fn bounding_pinned_lengths(
 	return out
 }
 
-/// The facts of a branch's end that read a name the `if` changed and do
-/// not hold past it already.
+/// The facts of a branch's end that read a name, or the length of a list,
+/// the `if` changed and do not hold past it already.
 ///
 /// **A name the walk made inside the branch, pinned there to a number, is
 /// read as that number** (#1655): a loop's entry length (`#29:cols.len()
@@ -9546,11 +9546,22 @@ fn bounding_join_candidates(
 		if facts.facts.contains(fact) || out.contains(fact) {
 			continue
 		}
+		let mut touched = false
 		for name in changed.values {
 			if bounding_touches(walk, fact, name) {
-				out.push(fact)
+				touched = true
 				break
 			}
+		}
+		// A list both ends grew or shrank (#1755): `if c { b.push(1) } else
+		// { b.push(2) }` keeps `a.len() == b.len()` where both ends hold it.
+		for name in changed.lengths {
+			if !touched && bounding_touches(walk, fact, length_of(name)) {
+				touched = true
+			}
+		}
+		if touched {
+			out.push(fact)
 		}
 	}
 	let pinned = bounding_pinned(walk, branch)

@@ -1,0 +1,76 @@
+// #1755: a list both branches of an `if` grow keeps what both ends hold of
+// its length. `both` reads `b[a.len() - 1]` after `b.push` in each arm, and
+// `matched` after one in each arm of a `match`; `Sx::new_var` pushes
+// `forms` in both arms, so `cols.len() == forms.len()` is one of `Sx`'s
+// rules and `self.forms[s]` is proved. `once` grows `b` in one arm only,
+// so its read stays checked.
+fn both(mut a: Vec[i64], mut b: Vec[i64], c: bool) -> i64 {
+	if a.len() != b.len() {
+		return 0
+	}
+	a.push(1)
+	if c {
+		b.push(1)
+	} else {
+		b.push(2)
+	}
+	return b[a.len() - 1]
+}
+
+fn matched(mut a: Vec[i64], mut b: Vec[i64], k: i64) -> i64 {
+	if a.len() != b.len() {
+		return 0
+	}
+	a.push(1)
+	match k {
+		0 => {
+			b.push(1)
+		},
+		else => {
+			b.push(2)
+		},
+	}
+	return b[a.len() - 1]
+}
+
+fn once(mut a: Vec[i64], mut b: Vec[i64], c: bool) -> i64 {
+	if a.len() != b.len() {
+		return 0
+	}
+	a.push(1)
+	if c {
+		b.push(1)
+	} else {
+		a.push(2)
+	}
+	return b[a.len() - 1]
+}
+
+struct Sx {
+	cols: Vec[i64],
+	forms: Vec[i64],
+}
+
+impl Sx {
+	fn new_var(ref mut self, col: i64) -> i64 {
+		let v = self.cols.len()
+		self.cols.push(col)
+		if col >= 0 {
+			self.forms.push(col)
+		} else {
+			self.forms.push(0)
+		}
+		return v
+	}
+
+	fn slack(ref mut self) -> i64 {
+		let s = self.new_var(-1)
+		self.forms[s] = 4
+		return s
+	}
+}
+
+fn main() throws {
+	let mut x = Sx { cols: [], forms: [] }
+	println(f"{both([], [], true)} {matched([], [], 0)} {once([], [], true)} {x.slack()}")
+}
