@@ -610,7 +610,7 @@ impl EmitState {
             }
             return Ok(());
         }
-        let bare = a_number(fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(&node_key(fallback)) || self.facts.view_coalesces.contains(&node_key(node));
+        let bare = a_number(fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(&node_key(fallback)) || self.facts.view_coalesces.contains(&node_key(node)) || self.facts.word_fallbacks.contains(&node_key(node));
         if self.facts.optional_fallbacks.contains(&node_key(node)) {
             out.push("nikaia_std::index::or_maybe(");
             self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;

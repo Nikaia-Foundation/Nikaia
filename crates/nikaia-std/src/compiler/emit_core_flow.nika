@@ -910,8 +910,9 @@ impl EmitState {
         // the left of a `??` may be a view into a container. **And except for text
         // where the left side is a view of text** (ADR-283), **a variant of an enum
         // this file declares**, **a constructor of a type this file declares**, and
-        // **a struct written out**, or a `bool`.
-        let bare = a_number(fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || (emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(node_key(fallback))) || self.facts.view_coalesces.contains(node_key(node))
+        // **a struct written out**, or a `bool`, **or a name of the word the
+        // left side holds** (#1841).
+        let bare = a_number(fallback) || self.emit_flow_a_declared_variant(world, fallback) || self.emit_flow_a_declared_constructor(world, fallback) || emit_flow_a_struct_written(fallback) || (emit_flow_a_lit_str(fallback) && self.facts.view_fallbacks.contains(node_key(fallback))) || self.facts.view_coalesces.contains(node_key(node)) || self.facts.word_fallbacks.contains(node_key(node))
         // **A fallback that may be `null` too** (Part I 3.5): the first option that
         // has a value, which is the language below's `or_else`, and the answer is
         // an option still.

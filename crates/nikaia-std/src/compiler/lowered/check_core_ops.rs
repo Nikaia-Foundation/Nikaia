@@ -73,6 +73,15 @@ pub(crate) fn check_core_ops_view_of_a_list(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_ops_a_number(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, .. } => args.is_empty() && a_number_name(name),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_ops_variable(value: &Expr) -> bool { matches!(value, Expr::Variable(_, _)) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -707,6 +716,8 @@ pub(crate) fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, worl
         state.facts.lent_map_fallbacks.insert(id_of(expr) as i64);
         return check_core_ops_view("str");
     }
+    let held_word = unviewed_type(&inner);
+    if nullable && check_core_ops_variable(fallback) && a_copy_by_value(&held_word) && (held_word == other || other.is_unknown() && check_core_ops_a_number(&held_word)) { state.facts.word_fallbacks.insert(id_of(expr) as i64); }
     if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && state.a_package_copy(world, &unviewed_type(&inner)) && state.a_value_written_out(world, fallback) { return unviewed_type(&inner); }
     if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && check_core_ops_not_plain(&inner) && state.a_value_written_out(world, fallback) {
         if made_in_the_call(fallback) { state.facts.slot_fallbacks.insert(id_of(expr) as i64, false); } else { Some(state.facts.lent_map_fallbacks.insert(id_of(expr) as i64)); }

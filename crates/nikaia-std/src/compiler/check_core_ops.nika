@@ -158,6 +158,14 @@ fn check_core_ops_view_of_a_list(ty: ref Ty) -> bool sync {
 }
 
 /// A name.
+/// A number type, viewed or not: the word a number literal becomes (#1841).
+fn check_core_ops_a_number(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, args, .. } => args.len() == 0 && a_number_name(name),
+        else => false,
+    }
+}
+
 fn check_core_ops_variable(value: ref Expr) -> bool sync {
     return match value {
         Expr::Variable(_, _) => true,
@@ -1048,6 +1056,15 @@ fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref Check
     if nullable && from_a_map && check_core_ops_variable(fallback) && (check_core_ops_plain_text(inner) && check_core_ops_plain_text(other) || inner == check_core_ops_view("str") && other == check_core_ops_view("str")) {
         state.facts.lent_map_fallbacks.insert(id_of(expr) as i64)
         return check_core_ops_view("str")
+    }
+    // **A name of the word the left side holds is that word** (Part I 3.5,
+    // #1841): `m[k] ?? zero` over a map of `f64` passes `zero` as it is, and
+    // `index::or` copies the `f64` out of the `Option<&f64>`. So is a name of
+    // a number literal, whose type the checker leaves to its use (`let d = 9`):
+    // `d.into()` made it an `i32` below.
+    let held_word = unviewed_type(inner)
+    if nullable && check_core_ops_variable(fallback) && a_copy_by_value(held_word) && (held_word == other || other.is_unknown() && check_core_ops_a_number(held_word)) {
+        state.facts.word_fallbacks.insert(id_of(expr) as i64)
     }
     // **A value written out beside a view of a word is the word** (ADR-279
     // D8): `index::or` copies a `T: Copy` out of `&Option<T>` and
