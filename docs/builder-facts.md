@@ -56,7 +56,12 @@ together with the specification section and an example test.
   build the before binary from HEAD's own sources first; a stale copy cost
   a run 30 turns chasing a regression HEAD never had. (issue-1483)
 * A rebuild while `nikaia test` runs fails tests at random: rerun the failed
-  ones alone before calling them failures. (issue-1414)
+  ones alone before calling them failures. Under `--both-settings` it shows
+  as `FAILED (the settings disagree)` on tests that pass alone (the settings
+  ran different binaries), or as `Error: running .../nikaia (deleted)`; a
+  test that spawns `nikaia` (every `drive_*`) runs its own ancestor, so run
+  a filter of many such tests with your `$S/old/nikaia` copy. (issue-1414,
+  #1837)
 * **The checkout is shared.** A file another agent has modified: stage only
   your hunks (`git diff FILE > $S/p.diff`, delete theirs from the copy, `git
   apply --cached`, check with `git diff --cached FILE`; `git add -p` is

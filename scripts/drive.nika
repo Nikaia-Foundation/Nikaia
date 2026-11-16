@@ -3073,10 +3073,11 @@ fn drive_improve_existing() -> String throws {
 // The answers of a report's `Issue:` VALUE (joined with `;`) that are still
 // open: an answer whose kind before its first `: ` ends in `(built)` is
 // left out, and so is one that says nothing was missing in other words than
-// `complete` (`meets I1-I13`, #1753: #1740's run wrote it and it was filed);
+// `complete` (`meets I1-I13`, #1753: #1740's run wrote it and it was filed;
+// `fits docs/issues.md`, #1837: #1820's run wrote it, in any case);
 // empty when none is left. A part that does not open with a kind
-// (`complete`, `meets`, `none`, `broke`, `rules-gap`, `wrong`, `I<n>`) is the
-// previous answer's prose cut at its own `;` and stays with it (#1827: the
+// (`complete`, `meets`, `fits`, `none`, `broke`, `rules-gap`, `wrong`,
+// `I<n>`) is the previous answer's prose cut at its own `;` and stays with it (#1827: the
 // second half of #1819's `rules-gap (built)` answer was filed alone).
 fn drive_issue_answers(value: String) -> Vec[String] {
 	let mut parts: Vec[String] = []
@@ -3085,7 +3086,7 @@ fn drive_issue_answers(value: String) -> Vec[String] {
 		let low = t.to_lowercase()
 		let cs: Vec[scalar] = low.chars().collect()
 		let mut kind = cs.len() > 1 && cs[0] == 'i' && cs[1] >= '0' && cs[1] <= '9'
-		for word in ["complete", "meets", "none", "broke", "rules-gap", "wrong", "-"] {
+		for word in ["complete", "meets", "fits", "none", "broke", "rules-gap", "wrong", "-"] {
 			if low.starts_with(word) { kind = true }
 		}
 		if !kind && parts.len() > 0 {
@@ -3100,8 +3101,8 @@ fn drive_issue_answers(value: String) -> Vec[String] {
 		let t = part.trim()
 		let colon = t.find(": ") ?? t.len()
 		if f"{t[0..<colon]}".trim().ends_with("(built)") { continue }
-		let word = drive_word(f"{t}")
-		if word == "complete" || word == "meets" || word == "none" || word == "-" { continue }
+		let word = drive_word(f"{t}").to_lowercase()
+		if word == "complete" || word == "meets" || word == "fits" || word == "none" || word == "-" { continue }
 		if t != "" { open.push(f"{t}") }
 	}
 	return open
