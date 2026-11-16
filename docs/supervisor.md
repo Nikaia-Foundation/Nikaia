@@ -69,7 +69,8 @@ reports under *Briefs and reports*.
   -- --dry-run DIR` prints one `CI` line; never the MCP `actions_list` (tens of
   k tokens). CI logs: the proxy refuses the blob download; failing test names
   come from `gh api .../check-runs/<job id>/annotations`. A red run gets a
-  fix-forward brief (or a revert) from the supervisor.
+  fix-forward from the supervisor (a `ready` issue, its `#N` line first in the
+  lane's `batch.txt`), or a revert.
 
 ## Trunk, CI and issues
 
@@ -319,9 +320,9 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   | :--- | :--- | :--- |
   | `PUSHED` | - | nothing: the driver ran `release.nika` itself (not under `--no-bump`, nor while HEAD holds untested commits: then the next push releases) |
   | `STOP` | - | restart the driver (time limit, `--max` reached) |
-  | `CUT` | the report | accept it with a `Supervisor:` line, or file what it names; restart (`brief missing`: `DIR/batch.txt`, write or drop the brief; `Result: blocked`: file or decide what `Found:` names, set the issue `blocked` on it) |
+  | `CUT` | the report | accept it with a `Supervisor:` line, or file what it names; restart (`brief missing`: `DIR/batch.txt`, put the issue's `#N` line in its place or drop the line; `Result: blocked`: file or decide what `Found:` names, set the issue `blocked` on it) |
   | `OWNER` | the report (`DIR/owner.txt` for the open questions) | tell the owner the question; restart |
-  | `RED` | `DIR/qa-input.txt` (suite red after two QA rounds); - (CI red on `develop`: the line names the jobs) | write the fix-forward brief, queued first; restart |
+  | `RED` | `DIR/qa-input.txt` (suite red after two QA rounds); - (CI red on `develop`: the line names the jobs) | file the fix-forward as a `ready` issue (the failed jobs, the push's commits) and put its `#N` line first in `DIR/batch.txt` (`batch.nika` writes its brief); restart |
   | `MERGE` | - | merge `origin/develop` by hand and resolve the sources the line names (`merge left open`: finish or abort it now); restart |
   | `BATCH` | - | no `ready` issue left in the lane (every focus area empty): decide or file the waiting ones (`ready`); restart |
   | `ESCALATE` | - | fix the cause the line names; restart |
@@ -333,7 +334,7 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   pending` when CI is green, and on `CUT`, `BATCH DONE` and a `RED` with no
   builder queued waits for the batch's suite and stops (`ESCALATE <stop line>:
   <what to do>`, by kind, #1887): the supervisor acts on the issues (files
-  or decides the waiting ones; for `RED` the fix-forward, queued first) and
+  or decides the waiting ones; for `RED` the fix-forward issue, its `#N` line queued first) and
   starts it again. It
   prints one line per agent run and stops with one final line, exit 2, on an
   escalation: an `OWNER` line, `ESCALATE` of `agent.nika`, a stop line,

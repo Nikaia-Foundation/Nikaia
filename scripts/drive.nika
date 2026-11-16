@@ -75,7 +75,7 @@
 //                                 (`ESCALATE <stop line>: <what to do>`,
 //                                 drive_stop_next, exit 2); the supervisor
 //                                 acts on the issues (files or decides the
-//                                 waiting ones, a fix-forward for RED) and
+//                                 waiting ones, a fix-forward issue for RED) and
 //                                 starts the driver again
 //
 // Output: one line per agent run (`builder done ...`).
@@ -97,7 +97,8 @@
 // Escalation: one final line, exit 2, on an OWNER line, an ESCALATE of
 // agent.nika, a stop line (above), `--max` agent runs (default 8), a merge
 // conflict on a rejected push, a suite still red after 2 QA rounds. A RED line
-// with a builder queued goes on with it (the supervisor's fix-forward brief).
+// with a builder queued goes on with it (the supervisor's fix-forward, a
+// `#N` line queued first in DIR/batch.txt, which batch.nika briefs itself).
 // Each ESCALATE line names the drive.nika commit that ran (drive_wake).
 //
 // `--ignore-ci-red`: a RED line of the cycle (CI red on develop) does not
@@ -288,9 +289,11 @@ fn drive_wake(dir: String, line: String) throws {
 //     PUSHED    read=-                do=nothing (the driver released, drive_release)
 //     STOP      read=-                do=restart the driver (time limit, --max)
 //     CUT       read=<the report>     do=accept with a Supervisor line, or file it
-//                                     (Result: blocked: file or decide what Found names, block the issue on it)
+//                                     (Result: blocked: file or decide what Found names, block the issue on it;
+//                                     brief missing: put an issue's #N line in its place, or drop it)
 //     OWNER     read=<the report>     do=tell the owner (DIR/owner.txt for open ones)
-//     RED       read=DIR/qa-input.txt do=write the fix-forward (read=- for CI red on develop)
+//     RED       read=DIR/qa-input.txt do=file the fix-forward as a ready issue, its #N line first
+//                                     in DIR/batch.txt (read=- for CI red on develop)
 //     MERGE     read=-                do=resolve the named sources, restart
 //     BATCH     read=-                do=decide or file the waiting issues (ready), restart
 //     PROVED    read=DIR/proved.log   do=find and file the commit that lowered the proof figure
@@ -314,7 +317,7 @@ fn drive_wake_line(dir: String, said: String) -> String throws {
 		let brief = drive_wake_brief((body.strip_prefix("CUT ") ?? "").clone())
 		if body.contains(": brief missing") {
 			read = drive_wake_in(dir, "batch.txt")
-			act = "write the brief or drop it from batch.txt, then restart the driver"
+			act = "put the issue's `#N` line in its place or drop the line from batch.txt, then restart the driver"
 		} else if body.contains(": Result: blocked") {
 			read = drive_wake_report(dir, brief)
 			act = "file or decide what `Found:` names, set the issue `blocked` on it, then restart the driver"
@@ -335,11 +338,11 @@ fn drive_wake_line(dir: String, said: String) -> String throws {
 		}
 	} else if body.starts_with("RED ") {
 		kind = "RED"
-		act = "write a fix-forward brief for the failed jobs it names, queued first, then restart the driver"
+		act = "file the failed jobs it names as a `ready` issue with the push's commits, its `#N` line first in batch.txt, then restart the driver"
 	} else if body.starts_with("drive: suite red after") {
 		kind = "RED"
 		read = drive_wake_in(dir, "qa-input.txt")
-		act = "write a fix-forward brief from it, queued first, then restart the driver"
+		act = "file it as a `ready` issue, its `#N` line first in batch.txt, then restart the driver"
 	} else if body.contains("merge left open") {
 		kind = "MERGE"
 		act = "finish or abort the merge in the shared checkout now, then restart the driver"
@@ -642,7 +645,7 @@ fn drive_word(value: String) -> String {
 //   ESCALATE <why> | STOP <line> | BUMP | NEXT <abs brief>
 // STOP (CUT, BATCH DONE, or RED with no builder queued): the driver stops for
 // the supervisor, who acts on the issues (drive_stop_next). A RED with a builder queued goes
-// on with it (the supervisor's fix-forward brief).
+// on with it (the supervisor's fix-forward, a `#N` line queued first).
 // `ignore_red` (--ignore-ci-red): a RED line leads nowhere; NEXT and BATCH DONE
 // go on as if CI were green, and BUMP still waits for a green CI line.
 fn drive_action(lines: Vec[String], ignore_red: bool) -> String {
@@ -3516,20 +3519,20 @@ fn drive_stop_next(stop: String) -> String {
 		return "the supervisor files or decides what `Found:` names and sets the issue `blocked` on it"
 	}
 	if stop.starts_with("CUT") && stop.contains(": brief missing") {
-		return "the supervisor writes the brief or drops it from batch.txt"
+		return "the supervisor puts the issue's `#N` line in its place or drops the line from batch.txt"
 	}
 	if stop.starts_with("CUT") {
 		return "the supervisor accepts the report with a Supervisor line or files what it names"
 	}
 	if stop.starts_with("RED") {
-		return "the supervisor queues a fix-forward for the failed jobs first"
+		return "the supervisor files the failed jobs as a `ready` issue, its `#N` line first in batch.txt"
 	}
 	return "no ready issue left in the lane, the supervisor decides or files the waiting ones (`ready`)"
 }
 
 // The batch ends at a stop line: its suite runs and is waited for (pushed when
 // green), then the driver stops for the supervisor, who acts on the issues
-// (drive_stop_next; a fix-forward for RED). A dry run prints `DRY-RUN STOP <stop>`.
+// (drive_stop_next; a fix-forward issue queued first for RED). A dry run prints `DRY-RUN STOP <stop>`.
 fn drive_stop(exe: String, dry: bool, dir: String, stop: String) throws {
 	drive_suite(exe, dry, dir)
 	drive_say(dry, "wait for the suite (drive_settle), then stop for the supervisor (exit 2)")
