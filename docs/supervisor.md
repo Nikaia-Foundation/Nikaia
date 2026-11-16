@@ -296,7 +296,7 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
 * **Woken only for what matters** (owner, 2026-11-15). The driver prints
   every `ESCALATE`, `STOP` and `PUSHED` line a second time as `WAKE <line>`
   (`drive_wake`). A watcher the main session puts on the driver's log greps
-  `^WAKE ` and nothing else; builder runs, `FOUND`, `FILED`, `IMPROVE` and
+  `^WAKE ` and nothing else; builder runs, `FOUND`, `FILED`, `IMPROVE*` and
   `SUITE` lines wake nobody and are read when the driver ends (its background
   task's end wakes the session in any case).
 * **The cycle of one DIR.** `nikaia run scripts/drive.nika -- DIR` with
@@ -479,8 +479,8 @@ own driver run:
   *A missing form stops the work*). A brief with a `Blocks:` line goes before
   the lane's own picks. Its own `NK` block, no version raise (`--no-bump`).
 * **Improvement lane, `docs/briefs/improve/`** (owner, 2026-11-15): the
-  issues labelled `improve`, which the driver files from the reports'
-  `Issue:`, `Deviation:`, `Needs:` and `Friction:` (*The report*). The lane
+  issues labelled `improve`, which the driver files from the new points of
+  the reports' `Issue:`, `Needs:` and `Friction:` (*The report*). The lane
   judges each: a general fix (a rule in `docs/`, a script, the driver, a
   brief template, a check that turns builders red for nothing) it builds; noise
   (one run's slip, already fixed, a wish against an ADR) it closes with a
@@ -690,11 +690,18 @@ or `PUSH REJECTED <sha>, report <path>`, plus `NEEDS: <short>` when `Needs`
 is not `none`.
 
 The driver files issues from the report itself (owner, 2026-11-15): each
-`Found:` as an issue labelled `bugs` for the bug lane, and, once per report, an
-`Issue:` that is not `complete`, a `Deviation:`, `Needs:` or `Friction:` other
-than `none` as one issue labelled `improve` for the improvement lane (*Lanes*),
-and posts each `Comment: #N <text>` as a comment on issue N (#1698: a `Needs:
-supervisor: comment on #N` became an improvement issue no builder could do,
+`Found:` as an issue labelled `bugs` for the bug lane, and, once per report, the
+new points of `Issue:` (each answer that is not `complete`), `Needs:` and
+`Friction:` as one issue labelled `improve` for the improvement lane (*Lanes*).
+Only new points (#1818, `drive_improve_sorted`, `--improve-plan` shows it): a
+`Deviation:` stays in the report (`IMPROVE-DROP`), read when the cut is
+accepted; a `broke I<n>` answer is a comment on the run's issue
+(`IMPROVE-BROKE #N`); a point the report says it closed or built, or that
+names a rules file under `docs/`, `scripts/` or `.claude/` the run's commit
+changed, is dropped; one an open or recently closed improvement issue already
+has (its title or a `## Reported` line, by word overlap) is a comment there
+(`IMPROVE-DUP #M`). The driver also posts each `Comment: #N <text>` as a
+comment on issue N (#1698: a `Needs: supervisor: comment on #N` became an improvement issue no builder could do,
 having no GitHub). A `Comment:` without its `#N` goes to the improvement issue.
 Nobody has to ask a builder what went badly. The supervisor reads the reports'
 fields before the next batch, writes the `Supervisor:` line, comments on or
