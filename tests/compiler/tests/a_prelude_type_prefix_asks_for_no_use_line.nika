@@ -1,0 +1,7 @@
+// `Bytes::from` is no function `std` writes down (NK1171), and `Bytes` is a
+// type that needs no `use`: no NK1117 asking for `use std::Bytes`, which
+// NK1156 would then refuse (#1865).
+fn main() throws {
+    let out: Vec[u8] = [97]
+    print(Bytes::from(out))
+}

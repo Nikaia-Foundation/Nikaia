@@ -1,0 +1,9 @@
+error[NK1171]: `Bytes` has no function called `from`.
+  --> tests/a_prelude_type_prefix_asks_for_no_use_line.nika:6:5
+   |
+ 6 |     print(Bytes::from(out))
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: What can be called is what is written down: `Bytes::from` is in no declaration, ledger or description this program reads.
+   = help: Only what is written down for `Bytes` can be called; a Rust function or method of the same name is not reached.
+1 type error
