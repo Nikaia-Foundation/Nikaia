@@ -668,7 +668,11 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
         state.a_handle_is_not_made_here(name, span);
         return check_core_call_named(name);
     }
-    if is_hull(name) { return state.hull(name, args.len() as i64, &found, span); }
+    if is_hull(name) {
+        let built = state.hull(name, args.len() as i64, &found, span);
+        check_core_call_on_weighs(state, &built, "new");
+        return built;
+    }
     if !have { return check_core_call_unresolved(state, world, host, func, name, args, &found, config, &passed, shadowed, span); }
     let contract: FnContract = match callee { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     let described = check_core_call_described(state, world, host, name, &key, &contract, args, &found, config, &passed, span);

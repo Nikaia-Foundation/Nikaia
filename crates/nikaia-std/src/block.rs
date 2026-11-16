@@ -295,6 +295,7 @@ shallow_only!(
     f32,
     f64,
     std::time::Duration,
+    std::time::Instant,
 );
 
 impl DeepSize for String {

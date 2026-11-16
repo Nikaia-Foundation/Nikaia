@@ -31,9 +31,11 @@
 // `--focus-next FILE [SKIPPED...]`, `--focus-log DIR AREA BRIEF...` (the
 // block's comment), `--focus-issue FILE NAME|DIR...`, `--blocks DIR`,
 // `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add),
-// `--fixed-in LOG N...` (drive_fixed_in),
+// `--fixed-in LOG N...` (drive_fixed_in), `--queue-plan LIST [OPEN...]`
+// (drive_queue_plan: LIST in drive_queue's `=== #N ===` record form, OPEN the
+// dependencies taken as open),
 // `--wip-after RESULT FIXES N`, `--found-issue NAME N FOUND NEEDS`,
-// `--improve-issue NAME N REPORT [DIR]`, `--time-up` (drive_time_up: `up` or `not up`).
+// `--improve-issue NAME N REPORT [DIR]`, `--improve-plan NAME N REPORT EXISTING`, `--time-up` (drive_time_up: `up` or `not up`).
 //
 // Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time;
 // before each cycle the area's ready issues (the area being DIR's last name)
@@ -52,13 +54,18 @@
 //                                 <brief>: Found: ...`, then filed as an
 //                                 issue (`ready` or `decision`, the area,
 //                                 `bugs`; `FILED #N <brief>`,
-//                                 drive_found_file); the report's `Issue:`,
-//                                 `Deviation:`, `Needs:` and `Friction:`
+//                                 drive_found_file); the report's new
+//                                 `Issue:`, `Needs:` and `Friction:` points
 //                                 filed as one issue for the improvement
 //                                 lane (`ready`, `improve`; `IMPROVE #N
 //                                 <brief>`, drive_improve_file; its body
 //                                 names the run's report and commit,
-//                                 #1706); each
+//                                 #1706), a `broke` answer said on the
+//                                 run's issue (`IMPROVE-BROKE #N`), a
+//                                 point an improvement issue has added
+//                                 there (`IMPROVE-DUP #M`), a deviation or
+//                                 a point the run settled dropped
+//                                 (`IMPROVE-DROP`, #1818); each
 //                                 `Comment: #N <text>` posted on issue N
 //                                 (`COMMENT #N <brief>`, drive_comment_file,
 //                                 #1698); the batch goes on
@@ -2311,20 +2318,18 @@ fn drive_issue_new(title: String, body: String, labels: Vec[String]) -> String t
 }
 
 // What a report says went badly besides its `Found:` (owner, 2026-11-15:
-// nobody has to ask a builder again): `Issue:` when not `complete`,
-// `Deviation:`, `Needs:` and `Friction:` when not `none`, as
-// `<field>: <text>` lines; empty when all is well. An `Issue:` answer the
-// run has already built in its own commit (`rules-gap (built): ...`,
-// docs/issues.md) stays in the report for the supervisor's count but is not
-// filed (#1739: #1707's run added its rule to I9 and its answer was filed
-// again as #1724).
-fn drive_improve_items(text: String) -> Vec[String] {
+// nobody has to ask a builder again), one point each: every open `Issue:`
+// answer (drive_issue_answers), `Needs:` and `Friction:` when not `none`, and
+// a `Comment:` without an issue number, as `<field>: <text>`. `Deviation:` is
+// no point (#1818): it stays in the report, which the supervisor reads when
+// it accepts a cut.
+fn drive_improve_points(text: String) -> Vec[String] {
 	let mut items: Vec[String] = []
-	for key in ["Issue", "Deviation", "Needs", "Friction"] {
-		let field = drive_field(text.clone(), key.clone())
-		let value = if key == "Issue" { drive_issue_open(field) } else { field }
+	for answer in drive_issue_answers(drive_field(text.clone(), "Issue")) { items.push(f"Issue: {answer}") }
+	for key in ["Needs", "Friction"] {
+		let value = drive_field(text.clone(), key.clone())
 		let word = drive_word(value.clone())
-		if value == "" || word == "none" || word == "complete" || word == "-" { continue }
+		if value == "" || word == "none" || word == "-" { continue }
 		// A gap filed as the report's Found (drive_founds, #1744).
 		if key == "Needs" && drive_founds(text.clone()) == [drive_needs_gap(text.clone())] { continue }
 		items.push(f"{key}: {value}")
@@ -2337,22 +2342,262 @@ fn drive_improve_items(text: String) -> Vec[String] {
 	return items
 }
 
+// Where each point of a report goes (#1818: eleven improvement issues were
+// closed unworked on 2026-11-16, each a point a rule covered, the run had
+// built, a deviation or a duplicate), one `<where>\t<point>` line per point
+// of drive_improve_points, `Deviation:` first as `drop deviation`:
+//   `comment #N`   an `Issue:` answer that the run's issue N broke a rule
+//                  (`broke I3: ...`, `I4b not followed: ...`): the author
+//                  fixes the issue (docs/issues.md), so it is said there;
+//   `drop settled` the point says the run closed or built it itself
+//                  (drive_improve_settled);
+//   `drop built F` the point names a rules file F (under `docs/`,
+//                  `scripts/`, `.claude/`) the run's own commit changed
+//                  (`Files:`, `Partial:`);
+//   `dup #M`       the point matches the title or a `## Reported` line of
+//                  improvement issue M in EXISTING (drive_improve_existing,
+//                  drive_improve_dup): it is added there as a comment;
+//   `file`         a new point: filed (drive_improve_file).
+// ISSUE is the run's issue, "" for a brief without one (its `broke` answers
+// are then filed, having no issue to go to).
+fn drive_improve_sorted(text: String, issue: String, existing: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	let deviation = drive_field(text.clone(), "Deviation")
+	let word = drive_word(deviation.clone())
+	if deviation != "" && word != "none" && word != "-" { out.push(f"drop deviation\tDeviation: {deviation}") }
+	let touched = drive_improve_touched(text.clone())
+	for point in drive_improve_points(text) {
+		out.push(f"{drive_improve_where(point.clone(), issue.clone(), touched.clone(), existing.clone())}\t{point}")
+	}
+	return out
+}
+
+// The first column of a line of drive_improve_sorted: where its point goes.
+fn drive_improve_place(line: String) -> String {
+	return line.split("\t").collect()[0].clone()
+}
+
+// The point of a line of drive_improve_sorted, after its first column.
+fn drive_improve_point(line: String) -> String {
+	return (line.strip_prefix(drive_improve_place(line.clone()) + "\t") ?? "").clone()
+}
+
+// Where POINT goes, the first column of drive_improve_sorted.
+fn drive_improve_where(point: String, issue: String, touched: Vec[String], existing: String) -> String {
+	if issue != "" && drive_improve_broke(point.clone()) { return f"comment #{issue}" }
+	if drive_improve_settled(point.clone()) { return "drop settled" }
+	let tokens = drive_improve_tokens(point.clone())
+	for path in touched {
+		let parts = path.split("/").collect()
+		let base = parts[parts.len() - 1]
+		if tokens.contains(path.clone()) || tokens.contains(f"{base}") { return f"drop built {path}" }
+	}
+	let dup = drive_improve_dup(point, existing)
+	if dup != "" { return f"dup #{dup}" }
+	return "file"
+}
+
+// The points of drive_improve_sorted that are filed as a new issue (`file`),
+// without their first column.
+fn drive_improve_items(text: String, issue: String, existing: String) -> Vec[String] {
+	let mut items: Vec[String] = []
+	for line in drive_improve_sorted(text, issue, existing) {
+		if drive_improve_place(line.clone()) == "file" { items.push(f"{drive_improve_point(line.clone())}") }
+	}
+	return items
+}
+
+// Whether POINT is an `Issue:` answer saying only that the run's issue broke
+// a rule: its kind (before the first `: `) starts with `broke` or says `not
+// followed`.
+fn drive_improve_broke(point: String) -> bool {
+	let rest = point.strip_prefix("Issue: ") ?? ""
+	if rest == "" { return false }
+	let colon = rest.find(": ") ?? rest.len()
+	let kind = f"{rest[0..<colon]}".trim().to_lowercase()
+	return kind.starts_with("broke") || kind.contains("not followed")
+}
+
+// Whether POINT says the run settled it itself: closed, noise, nothing to
+// build, or built in this run (whole words, any case; `was built already`
+// says the issue asked for what existed and is a point).
+fn drive_improve_settled(point: String) -> bool {
+	let words = drive_improve_words_all(point)
+	let line = f" {words.join(" ")} "
+	for mark in [
+		" closed ",
+		" noise ",
+		" nothing to build ",
+		" built in this run ",
+		" built in the same run ",
+		" this run built ",
+		" built here ",
+		" i built ",
+	] {
+		if line.contains(mark.clone()) { return true }
+	}
+	return false
+}
+
+// The rules files (under `docs/`, `scripts/`, `.claude/`) the run's commit
+// changed, from the report's `Files:` and `Partial:`.
+fn drive_improve_touched(text: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	for key in ["Files", "Partial"] {
+		for value in drive_fields(text.clone(), key.clone()) {
+			for path in value.replace(",", " ").split(" ") {
+				let p = path.trim()
+				if p.starts_with("docs/") || p.starts_with("scripts/") || p.starts_with(".claude/") { out.push(f"{p}") }
+			}
+		}
+	}
+	return out
+}
+
+// The words of POINT as written, split at blanks and stripped of backticks,
+// brackets and the punctuation that ends a word: `docs/issues.md`, `I9`.
+fn drive_improve_tokens(point: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	let mut spaced = point.clone()
+	for c in ["`", ",", ";", "(", ")", "\"", "'"] { spaced = spaced.replace(c.clone(), " ") }
+	for word in spaced.split(" ") {
+		let mut t = f"{word.trim()}"
+		while t.ends_with(".") || t.ends_with(":") { t = f"{t.strip_suffix(".") ?? t.strip_suffix(":") ?? ""}" }
+		if t != "" { out.push(t) }
+	}
+	return out
+}
+
+// The lower-case words of TEXT (runs of letters and digits), in order.
+fn drive_improve_words_all(text: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	let mut word: String = ""
+	for c in f"{text.to_lowercase()} ".chars() {
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
+			word = f"{word}{c}"
+			continue
+		}
+		if word != "" { out.push(word.clone()) }
+		word = ""
+	}
+	return out
+}
+
+// The distinct words of TEXT that carry its meaning for drive_improve_dup:
+// four letters or more, not a word every point has.
+fn drive_improve_words(text: String) -> Vec[String] {
+	let stop: Vec[String] = [
+		"after",
+		"that",
+		"this",
+		"with",
+		"from",
+		"when",
+		"what",
+		"which",
+		"have",
+		"been",
+		"were",
+		"there",
+		"their",
+		"into",
+		"than",
+		"then",
+		"does",
+		"only",
+		"issue",
+		"issues",
+		"friction",
+		"needs",
+		"none",
+	]
+	let mut out: Vec[String] = []
+	for w in drive_improve_words_all(text) {
+		if w.len() >= 4 && !stop.contains(w.clone()) && !out.contains(w.clone()) { out.push(w) }
+	}
+	return out
+}
+
+// Whether the texts A and B say the same point: they share at least four
+// words of drive_improve_words, and those are at least 60 % of the shorter
+// one's.
+fn drive_improve_alike(a: String, b: String) -> bool {
+	let x = drive_improve_words(a)
+	let y = drive_improve_words(b)
+	let mut shared = 0
+	for w in x {
+		if y.contains(w) { shared = shared + 1 }
+	}
+	let fewer = if x.len() < y.len() { x.len() } else { y.len() }
+	return shared >= 4 && shared * 10 >= fewer * 6
+}
+
+// The improvement issue in EXISTING (drive_improve_existing: `#M<TAB>title`
+// lines, each followed by `<TAB>- <field>: <text>` lines of its `##
+// Reported`) whose title or a reported line says POINT
+// (drive_improve_alike), compared without the `<field>: ` and `After #N: `
+// heads; "" when none.
+fn drive_improve_dup(point: String, existing: String) -> String {
+	let said = drive_improve_unheaded(point)
+	let mut number: String = ""
+	for line in existing.split("\n") {
+		if line.starts_with("#") {
+			let tab = line.find("\t") ?? line.len()
+			number = f"{line["#".len()..<tab]}"
+			if tab == line.len() { continue }
+			let title = f"{drive_improve_point(line.clone())}"
+			let colon = title.find(": ") ?? title.len()
+			let text = if title.starts_with("After ") && colon < title.len() { f"{title[colon + ": ".len()..]}" } else { title }
+			if drive_improve_alike(said.clone(), text) { return number }
+		} else if line.starts_with("\t- ") && number != "" {
+			let reported = drive_improve_unheaded(f"{line["\t- ".len()..]}")
+			if drive_improve_alike(said.clone(), reported) { return number }
+		}
+	}
+	return ""
+}
+
+// POINT without its `<field>: ` head (`Friction: x` gives `x`).
+fn drive_improve_unheaded(point: String) -> String {
+	let colon = point.find(": ") ?? point.len()
+	if colon == point.len() || colon > "Comment (no issue number)".len() { return point }
+	return f"{point[colon + ": ".len()..]}"
+}
+
+// The open improvement issues and those closed in the last 14 days, as
+// drive_improve_dup reads them (`gh api`, the pull requests left out); ""
+// when the calls fail, so every point is then filed.
+fn drive_improve_existing() -> String throws {
+	let since = process::run("date", ["-u", "-d", "14 days ago", "+%Y-%m-%dT%H:%M:%SZ"]).stdout.trim().clone()
+	let jq = ".[] | select(.pull_request == null) | select(.state == \"open\" or .closed_at >= \"" + since + "\") | (\"#\" + (.number | tostring) + \"\\t\" + .title), ((.body // \"\") | (split(\"## Reported\")[1] // \"\") | split(\"\\n## \")[0] | split(\"\\n\")[] | select(startswith(\"- \")) | \"\\t\" + .)"
+	let repo = drive_repo()
+	let mut out: String = ""
+	for query in ["state=open", f"state=closed&since={since}"] {
+		let got = process::run(
+			"gh",
+			["api", "--paginate", f"repos/{repo}/issues?labels=improve&per_page=100&{query}", "--jq", jq.clone()],
+		)
+		if got.ok { out = out + got.stdout + "\n" }
+	}
+	return out
+}
+
 // The answers of a report's `Issue:` VALUE (joined with `;`) that are still
 // open: an answer whose kind before its first `: ` ends in `(built)` is
 // left out, and so is one that says nothing was missing in other words than
 // `complete` (`meets I1-I13`, #1753: #1740's run wrote it and it was filed);
-// "" when none is left.
-fn drive_issue_open(value: String) -> String {
+// empty when none is left.
+fn drive_issue_answers(value: String) -> Vec[String] {
 	let mut open: Vec[String] = []
 	for part in value.split(";") {
 		let t = part.trim()
 		let colon = t.find(": ") ?? t.len()
 		if f"{t[0..<colon]}".trim().ends_with("(built)") { continue }
 		let word = drive_word(f"{t}")
-		if word == "complete" || word == "meets" { continue }
+		if word == "complete" || word == "meets" || word == "none" || word == "-" { continue }
 		if t != "" { open.push(f"{t}") }
 	}
-	return open.join("; ")
+	return open
 }
 
 // The issue a report's `Comment:` value names, `#1531 group D waits ...` gives
@@ -2502,19 +2747,44 @@ fn drive_improve_title(name: String, issue: String, item: String) -> String {
 	return drive_found_title(f"After {from}: {text}")
 }
 
-// Files what a report says went badly (drive_improve_items) as one issue
-// labelled `ready` and `improve` for the improvement lane (owner,
-// 2026-11-15); `<brief>: improve #N` goes into DIR/found.txt (a report with
-// that line is not filed again) and `IMPROVE #N <brief>` is printed.
+// Files what a report says went badly as drive_improve_sorted sorts it
+// (#1818): the `file` points as one issue labelled `ready` and `improve` for
+// the improvement lane (owner, 2026-11-15; `<brief>: improve #N` goes into
+// DIR/found.txt, a report with that line is not filed again, and `IMPROVE #N
+// <brief>` is printed), the points for an issue as one comment there
+// (drive_improve_comment: `IMPROVE-BROKE #N` on the run's issue,
+// `IMPROVE-DUP #M` on an improvement issue that has the point), a dropped
+// point as `IMPROVE-DROP <brief> <why>: <point>`. The existing improvement
+// issues are read only when a point is left to file.
 fn drive_improve_file(dir: String, brief: String) throws {
 	let report = drive_report_of(brief.clone())
 	if report == "" { return }
 	let text = drive_read(report.clone())
-	let items = drive_improve_items(text.clone())
-	if items.len() == 0 { return }
 	let name = drive_stem(brief.clone())
-	if drive_read(f"{dir}/found.txt").contains(f"{name}: improve #") { return }
 	let issue = drive_issue(brief)
+	let mut sorted = drive_improve_sorted(text.clone(), issue.clone(), "")
+	if drive_improve_items(text.clone(), issue.clone(), "").len() > 0 {
+		sorted = drive_improve_sorted(text.clone(), issue.clone(), drive_improve_existing())
+	}
+	let mut targets: Vec[String] = []
+	for line in sorted {
+		let place = drive_improve_place(line.clone())
+		if place.starts_with("drop") { println(f"IMPROVE-DROP {name} {place.strip_prefix("drop ") ?? ""}: {drive_improve_point(line.clone())}") }
+		if (place.starts_with("comment #") || place.starts_with("dup #")) && !targets.contains(place.clone()) { targets.push(place) }
+	}
+	for target in targets {
+		let mut points: Vec[String] = []
+		for line in sorted {
+			if drive_improve_place(line.clone()) == target { points.push(f"{drive_improve_point(line.clone())}") }
+		}
+		drive_improve_comment(dir.clone(), name.clone(), issue.clone(), target, points)
+	}
+	let mut items: Vec[String] = []
+	for line in sorted {
+		if drive_improve_place(line.clone()) == "file" { items.push(f"{drive_improve_point(line.clone())}") }
+	}
+	if items.len() == 0 { return }
+	if drive_read(f"{dir}/found.txt").contains(f"{name}: improve #") { return }
 	let title = drive_improve_title(name.clone(), issue.clone(), items[0].clone())
 	let numbers = drive_filed_numbers(dir.clone(), name.clone(), drive_founds(text.clone()).len())
 	let founds = drive_improve_founds(text.clone(), numbers)
@@ -2526,6 +2796,38 @@ fn drive_improve_file(dir: String, brief: String) throws {
 	}
 	drive_append(f"{dir}/found.txt", f"{name}: improve #{number}")
 	println(f"IMPROVE #{number} {name}")
+}
+
+// The body of the comment for POINTS of the run of NAME (issue ISSUE) that go
+// to an issue (drive_improve_sorted's TARGET): on the run's own issue
+// (`comment #N`), the rules the run found it broke, which its author fixes
+// (docs/issues.md, *How a run judges its issue*); on an improvement issue
+// (`dup #M`), the same points raised again (#1818).
+fn drive_improve_comment_body(name: String, issue: String, target: String, points: Vec[String]) -> String {
+	let from = if issue == "" { f"the run of `{name}`" } else { f"the run of `{name}` (#{issue})" }
+	let mut body = if target.starts_with("comment #") {
+		f"The report of {from} judged this issue against `docs/issues.md`; the author fixes the issue by the rule it names (*How a run judges its issue*):\n\n"
+	} else {
+		f"The report of {from} raised this point again; the driver adds it here instead of filing a new improvement issue (#1818):\n\n"
+	}
+	for p in points { body = body + f"- {p}\n" }
+	return body + drive_footer()
+}
+
+// Posts POINTS on the issue drive_improve_sorted's TARGET names
+// (drive_improve_comment_body); `<name>: improve-comment #N` goes into
+// DIR/found.txt (not posted again) and `IMPROVE-BROKE #N <name>` (the run's
+// issue) or `IMPROVE-DUP #M <name>` is printed.
+fn drive_improve_comment(dir: String, name: String, issue: String, target: String, points: Vec[String]) throws {
+	let n = target.split("#").collect()[1].clone()
+	if drive_read(f"{dir}/found.txt").contains(f"{name}: improve-comment #{n}\n") { return }
+	if !drive_comment(n.clone(), drive_improve_comment_body(name.clone(), issue, target.clone(), points)) {
+		println(f"comment failed for {name} on #{n}")
+		return
+	}
+	drive_append(f"{dir}/found.txt", f"{name}: improve-comment #{n}")
+	let kind = if target.starts_with("dup") { "IMPROVE-DUP" } else { "IMPROVE-BROKE" }
+	println(f"{kind} #{n} {name}")
 }
 
 // A report's `Found:` (a defect outside the builder's step) does not stop the
@@ -2937,7 +3239,10 @@ fn drive_queue_drop(batch: String, closed: Vec[String]) -> String {
 // `#N` line without a report whose issue is closed goes; prints
 // `DROPPED #N closed` for each. So does one a commit on `develop` finishes
 // since it was queued (`DROPPED #N fixed on develop`, drive_fixed_on_develop;
-// #1682: #1665 was queued, fixed by a commit, then briefed).
+// #1682: #1665 was queued, fixed by a commit, then briefed). So does one
+// that waits for an open issue, by its body or its last run ended blocked
+// (`DROPPED #N waits for #M`, drive_waits_of, drive_wait_block; #1819:
+// #1628 was queued again while #1786 and #1634 were open).
 fn drive_queue_prune(dir: String) throws {
 	let repo = drive_repo()
 	let path = f"{dir}/batch.txt"
@@ -2945,6 +3250,8 @@ fn drive_queue_prune(dir: String) throws {
 	let mut closed: Vec[String] = []
 	let mut waiting: Vec[String] = []
 	let mut waiting_tags: Vec[String] = []
+	let mut blocked: Vec[String] = []
+	let mut blocked_lines: Vec[String] = []
 	for l in old.split("\n") {
 		let w = l.trim().clone()
 		if !w.starts_with("#") { continue }
@@ -2955,9 +3262,22 @@ fn drive_queue_prune(dir: String) throws {
 		let mut name = f"issue-{n}"
 		if words.len() > 1 && words[1].trim() != "" { name = name + "-" + words[1].trim().clone() }
 		if fs::exists(f"{dir}/{name}.md.report.md", fs::Root::Anywhere) { continue }
-		let got = process::run("gh", ["api", f"repos/{repo}/issues/{n}", "--jq", ".state"])
-		if got.ok && got.stdout.trim() == "closed" {
+		let got = process::run("gh", ["api", f"repos/{repo}/issues/{n}", "--jq", ".state + \"\\n\" + (.body // \"\")"])
+		let first: Vec[String] = got.stdout.split("\n").collect()
+		if got.ok && first[0].trim() == "closed" {
 			closed.push(tag)
+			continue
+		}
+		let mut open: Vec[String] = []
+		if got.ok {
+			for m in drive_waits_of(dir.clone(), n.clone(), got.stdout.clone()) {
+				if drive_issue_open(m.clone()) { open.push(m) }
+			}
+		}
+		let line = drive_waits_line(n.clone(), open.clone(), open)
+		if line != "" {
+			blocked.push(tag)
+			blocked_lines.push(line)
 		} else {
 			waiting.push(n)
 			waiting_tags.push(tag)
@@ -2965,12 +3285,19 @@ fn drive_queue_prune(dir: String) throws {
 	}
 	let fixed = drive_fixed_on_develop(waiting.clone())
 	let mut gone: Vec[String] = closed.clone()
+	for tag in blocked.clone() { gone.push(tag) }
 	for i in 0..<waiting.len() {
 		if fixed.contains(waiting[i].clone()) { gone.push(waiting_tags[i].clone()) }
 	}
 	if gone.len() == 0 { return }
 	fs::write(path, fs::Root::Anywhere, drive_queue_drop(old, gone))
 	for tag in closed { println(f"DROPPED {tag} closed") }
+	for i in 0..<blocked.len() {
+		let line = blocked_lines[i].clone()
+		println(line.replace("SKIPPED", "DROPPED"))
+		let words: Vec[String] = line.split(" ").collect()
+		drive_wait_block((words[1].strip_prefix("#") ?? "").clone(), line)
+	}
 	for i in 0..<waiting.len() {
 		if fixed.contains(waiting[i].clone()) { println(f"DROPPED {waiting_tags[i]} fixed on develop") }
 	}
@@ -3006,12 +3333,194 @@ fn drive_fixed_on_develop(numbers: Vec[String]) -> Vec[String] throws {
 	return drive_fixed_in(got.stdout, numbers)
 }
 
+// The issue numbers a text names as `#N` (digits right after the `#`).
+fn drive_hash_numbers(text: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	let pieces: Vec[String] = text.split("#").collect()
+	for i in 1..<pieces.len() {
+		let piece = pieces[i].clone()
+		let mut n = String()
+		for c in piece.chars() {
+			if c < '0' || c > '9' { break }
+			n.push(c)
+		}
+		if n != "" && !out.contains(n.clone()) { out.push(n) }
+	}
+	return out
+}
+
+// The `#N` list a TEXT starts with, after a `:`, `*` or backticks: `: #1,
+// #2 and #3 land` gives 1, 2 and 3; `the #4` gives none.
+fn drive_hash_list(text: String) -> Vec[String] {
+	let rest = text.replace(":", " ").replace("`", " ").replace("*", " ").replace(",", " ")
+	let mut list = ""
+	for w in rest.split(" ") {
+		let t = w.trim()
+		if t == "" || (t == "and" && list != "") { continue }
+		if !t.starts_with("#") { break }
+		list = list + " " + t
+	}
+	return drive_hash_numbers(list)
+}
+
+// The issues an issue BODY says it waits for (#1819): on a line starting
+// (after list marks, `[ ]`, `**` and backticks) with `Needs`, `After`,
+// `Blocked by`, `Waits for`, `Waiting for` or `Depends on` (any case, a `:`
+// allowed), and elsewhere in a line after `blocked by`, `waits for`,
+// `waiting for` or `depends on`, the `#N` list right after the words
+// (drive_hash_list). `Needs: supervisor decision` and a prose `after #N` name none.
+fn drive_depends_on(body: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	let starts = ["needs", "after", "blocked by", "waits for", "waiting for", "depends on"]
+	let inside = ["blocked by", "waits for", "waiting for", "depends on"]
+	for raw in body.split("\n") {
+		let mut line = raw.trim().to_lowercase()
+		let mut stripping = true
+		while stripping {
+			stripping = false
+			for mark in ["- ", "* ", "> ", "[ ] ", "[x] ", "**", "`"] {
+				if line.starts_with(mark) {
+					line = (line.strip_prefix(mark) ?? "").trim().clone()
+					stripping = true
+				}
+			}
+		}
+		let mut named: Vec[String] = []
+		for word in starts {
+			if line.starts_with(word) { named = drive_hash_list((line.strip_prefix(word) ?? "").clone()) }
+		}
+		for word in inside {
+			let parts: Vec[String] = line.split(word).collect()
+			for i in 1..<parts.len() {
+				for n in drive_hash_list(parts[i].clone()) { named.push(n) }
+			}
+		}
+		for n in named {
+			if !out.contains(n.clone()) { out.push(n.clone()) }
+		}
+	}
+	return out
+}
+
+// The issues a REPORT that ended `Result: blocked` names under `Needs:` and
+// `Found:` (#1819: #1628 ran again while #1786 and #1634 were open); none
+// for another result.
+fn drive_blocked_on(report: String) -> Vec[String] {
+	let mut blocked = false
+	let mut lines: Vec[String] = []
+	for raw in report.split("\n") {
+		let l = raw.trim().clone()
+		if l.starts_with("Result:") {
+			let word = (l.strip_prefix("Result:") ?? "").trim().to_lowercase()
+			blocked = word.starts_with("blocked")
+		}
+		if l.starts_with("Needs:") || l.starts_with("Found:") { lines.push(l) }
+	}
+	if !blocked { return [] }
+	return drive_hash_numbers(lines.join(" "))
+}
+
+// The last report of brief NAME in DIR: `NAME.report.md`, else the highest
+// `NAME.run<k>.report.md` (the reports the supervisor renamed to run it
+// again, docs/supervisor.md), else "".
+fn drive_last_report(dir: String, name: String) -> String throws {
+	let now = f"{dir}/{name}.report.md"
+	if fs::exists(now.clone(), fs::Root::Anywhere) { return now }
+	let mut last = ""
+	let mut k = 1
+	while fs::exists(f"{dir}/{name}.run{k}.report.md", fs::Root::Anywhere) {
+		last = f"{dir}/{name}.run{k}.report.md"
+		k += 1
+	}
+	return last
+}
+
+// What issue N waits for (#1819): the dependencies its BODY names
+// (drive_depends_on) and those its brief's last run in DIR, ended blocked,
+// names (drive_blocked_on), without N itself.
+fn drive_waits_of(dir: String, n: String, body: String) -> Vec[String] throws {
+	let mut out = drive_depends_on(body)
+	let report = drive_last_report(dir, f"issue-{n}.md")
+	if report != "" {
+		for m in drive_blocked_on(drive_read(report)) {
+			if !out.contains(m.clone()) { out.push(m) }
+		}
+	}
+	let mut kept: Vec[String] = []
+	for m in out {
+		if m != n { kept.push(m.clone()) }
+	}
+	return kept
+}
+
+// Whether issue N is open on GitHub; a failed call counts as not open, so it
+// holds up nothing.
+fn drive_issue_open(n: String) -> bool throws {
+	let got = process::run("gh", ["api", f"repos/{drive_repo()}/issues/{n}", "--jq", ".state"])
+	return got.ok && got.stdout.trim() == "open"
+}
+
+// The `=== #N ===` records of drive_queue's issue list LIST as pairs of the
+// number and the body.
+fn drive_queue_records(list: String) -> Vec[(String, String)] {
+	let mut out: Vec[(String, String)] = []
+	let mut n = String()
+	let mut body: Vec[String] = []
+	for l in list.split("\n") {
+		let t = l.trim()
+		if t.starts_with("=== #") && t.ends_with(" ===") {
+			if n != "" { out.push((n.clone(), body.join("\n"))) }
+			n = (t.strip_prefix("=== #") ?? "").replace(" ===", "").trim().clone()
+			body = []
+		} else {
+			body.push(l.clone())
+		}
+	}
+	if n != "" { out.push((n, body.join("\n"))) }
+	return out
+}
+
+// `SKIPPED #N waits for #A, #B` when any of WAITS is among OPEN, else "".
+fn drive_waits_line(n: String, waits: Vec[String], open: Vec[String]) -> String {
+	let mut named: Vec[String] = []
+	for m in waits {
+		if open.contains(m.clone()) { named.push(f"#{m}") }
+	}
+	if named.len() == 0 { return "" }
+	let list = named.join(", ")
+	return f"SKIPPED #{n} waits for {list}"
+}
+
+// The queue plan of an issue LIST (drive_queue_records) in DIR, OPEN the
+// dependencies still open: a `SKIPPED #N waits for #M` line for each issue
+// that waits for an open one (drive_waits_of), a `QUEUE #N` line for the rest.
+fn drive_queue_plan(dir: String, list: String, open: Vec[String]) -> Vec[String] throws {
+	let mut out: Vec[String] = []
+	for (n, body) in drive_queue_records(list) {
+		let line = drive_waits_line(n.clone(), drive_waits_of(dir.clone(), n.clone(), body), open.clone())
+		if line == "" { out.push(f"QUEUE #{n}") } else { out.push(line) }
+	}
+	return out
+}
+
+// An issue that waits for an open one (#1819): `ready` swapped for
+// `blocked`, with a comment naming what it waits for (LINE, drive_waits_line).
+fn drive_wait_block(n: String, line: String) throws {
+	let what = (line.strip_prefix(f"SKIPPED #{n} ") ?? "").clone()
+	drive_label_remove(n.clone(), "ready")
+	drive_label_add(n.clone(), "blocked")
+	drive_comment(n, f"Driver: not queued, this issue {what}, which is still open (#1819). Set `ready` again when it is closed.{drive_footer()}")
+}
+
 // Queues the lane's ready issues (owner, 2026-11-06): the open issues
 // labelled `ready` and AREA, without `wip` (one being worked on), go into DIR/batch.txt as `#N` lines, oldest
 // first (drive_queue_add); prints `QUEUED #N AREA` for each new one. One a
 // commit on `develop` already finishes is left out (`SKIPPED #N fixed on
-// develop`, drive_fixed_on_develop, #1678). Closed ones still queued are
-// dropped first (drive_queue_prune).
+// develop`, drive_fixed_on_develop, #1678); so is one that waits for an open
+// issue (`SKIPPED #N waits for #M`, drive_queue_plan, #1819), whose `ready`
+// is swapped for `blocked` with a comment naming #M (drive_wait_block), so
+// it is skipped once. Closed ones still queued are dropped first
+// (drive_queue_prune), and so are those that wait for an open issue.
 fn drive_queue(dir: String, area: String) throws {
 	drive_queue_prune(dir.clone())
 	let repo = drive_repo()
@@ -3021,21 +3530,31 @@ fn drive_queue(dir: String, area: String) throws {
 			"api",
 			f"repos/{repo}/issues?state=open&labels=ready,{area}&per_page=100&sort=created&direction=asc",
 			"--jq",
-			".[] | select(.pull_request == null and ([.labels[].name] | index(\"wip\") | not)) | .number",
+			".[] | select(.pull_request == null and ([.labels[].name] | index(\"wip\") | not)) | \"=== #\\(.number) ===\\n\\(.body // \"\")\"",
 		],
 	)
 	if !got.ok { return }
+	let list = got.stdout
 	let mut open: Vec[String] = []
-	for n in got.stdout.trim().split("\n") {
-		if n.trim() != "" { open.push(n.trim().clone()) }
+	let mut waits: Vec[String] = []
+	for (n, body) in drive_queue_records(list.clone()) {
+		open.push(n.clone())
+		for m in drive_waits_of(dir.clone(), n.clone(), body) {
+			if !waits.contains(m.clone()) && drive_issue_open(m.clone()) { waits.push(m) }
+		}
 	}
-	let fixed = drive_fixed_on_develop(open.clone())
+	let fixed = drive_fixed_on_develop(open)
 	let mut numbers: Vec[String] = []
-	for n in open {
-		if fixed.contains(n.clone()) {
+	for line in drive_queue_plan(dir.clone(), list, waits) {
+		let n = (line.strip_prefix("QUEUE #") ?? "").clone()
+		if n == "" {
+			println(line.clone())
+			let words: Vec[String] = line.split(" ").collect()
+			drive_wait_block((words[1].strip_prefix("#") ?? "").clone(), line.clone())
+		} else if fixed.contains(n.clone()) {
 			println(f"SKIPPED #{n} fixed on develop")
 		} else {
-			numbers.push(n.clone())
+			numbers.push(n)
 		}
 	}
 	if numbers.len() == 0 { return }
@@ -3294,6 +3813,13 @@ fn main() throws {
 		println(drive_fixed_in(drive_read(args[2]), numbers).join(" "))
 		return
 	}
+	if args.len() >= 3 && args[1] == "--queue-plan" {
+		let mut open: Vec[String] = []
+		for k in 3..<args.len() { open.push(args[k].clone()) }
+		let dir = process::run("dirname", [args[2].clone()]).stdout.trim().clone()
+		for line in drive_queue_plan(dir, drive_read(args[2]), open) { println(line) }
+		return
+	}
 	if args.len() == 5 && args[1] == "--wip-after" {
 		println(drive_wip_after(args[2].clone(), args[3].clone(), args[4].clone()))
 		return
@@ -3318,7 +3844,7 @@ fn main() throws {
 	}
 	if (args.len() == 5 || args.len() == 6) && args[1] == "--improve-issue" {
 		let text = drive_read(args[4].clone())
-		let items = drive_improve_items(text.clone())
+		let items = drive_improve_items(text.clone(), args[3].clone(), "")
 		if items.len() == 0 {
 			println("none")
 			return
@@ -3334,6 +3860,29 @@ fn main() throws {
 		let founds = drive_improve_founds(text.clone(), numbers)
 		let source = founds + drive_improve_source(f"{args[2]}.md.report.md", text)
 		print(drive_improve_body(args[2].clone(), args[3].clone(), items, source))
+		return
+	}
+	// Where each point of the report REPORT of run NAME (issue N) goes
+	// (drive_improve_sorted, #1818), EXISTING a file of improvement issues
+	// as drive_improve_existing gives them: one `<where>\t<point>` line per
+	// point, then the body of each comment drive_improve_file would post.
+	if args.len() == 6 && args[1] == "--improve-plan" {
+		let sorted = drive_improve_sorted(drive_read(args[4].clone()), args[3].clone(), drive_read(args[5].clone()))
+		if sorted.len() == 0 { println("none") }
+		let mut targets: Vec[String] = []
+		for line in sorted {
+			println(line.clone())
+			let place = drive_improve_place(line.clone())
+			if (place.starts_with("comment #") || place.starts_with("dup #")) && !targets.contains(place.clone()) { targets.push(place) }
+		}
+		for target in targets {
+			let mut points: Vec[String] = []
+			for line in sorted {
+				if drive_improve_place(line.clone()) == target { points.push(f"{drive_improve_point(line.clone())}") }
+			}
+			println(f"== {target}")
+			print(drive_improve_comment_body(args[2].clone(), args[3].clone(), target, points))
+		}
 		return
 	}
 	// The comments a report asks for (#1698), without posting them: per

@@ -1364,13 +1364,14 @@ pub(crate) fn check_core_call_on_parameters_in(state: &CheckState, ty: &Ty) -> c
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_weighs(state: &mut CheckState, on: &Ty, entry: &str) {
+pub fn check_core_call_on_weighs(state: &mut CheckState, on: &Ty, entry: &str) {
     let current = nikaia_std::block::Text::from(match state.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return }.to_string());
     let base = match on.unseen() {
         Ty::Named { ref name, .. } => type_last_segment(name),
         _ => return,
     };
-    if base != "Sender" && !(base == "SharedMut" && (entry == "set" || entry == "set(after)")) { return; }
+    let locked = base == "SharedMut" || base == "Locked";
+    if base != "Sender" && !(locked && (entry == "set" || entry == "set(after)" || entry == "new")) { return; }
     let found = check_core_call_on_parameters_in(&state, &on.unseen());
     if found.is_empty() { return; }
     let mut held: collections::BTreeSet<String> = nikaia_std::index::or(match state.facts.weighed.get(&current) {

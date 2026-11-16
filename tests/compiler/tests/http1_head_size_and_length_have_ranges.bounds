@@ -1,0 +1,7 @@
+bounds in tests/http1_head_size_and_length_have_ranges.nika: 0 indexes, 0 proved; 3 operations, 3 proved
+    13  buffer.len() - size    proved
+    13  size - 4               proved
+    13  length - buffer.len()  proved
+  outside  13  `buffer.len() - size`, `size` from `http1::Buffer::head`: proved by the bounds walk's ranges
+  outside  13  `length - buffer.len()`, `length` from `http1::Buffer::head`: proved by the bounds walk's ranges
+  outside  13  `size - 4`, `size` from `http1::Buffer::head`: proved by the bounds walk's ranges

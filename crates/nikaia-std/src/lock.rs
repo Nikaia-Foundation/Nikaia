@@ -219,6 +219,19 @@ impl<T> Local<T> {
         }
     }
 
+    /// **`SharedMut(value)` as the compiler writes it** (ADR-327 D9, #1751):
+    /// the value's deep size, as `size` measures it, moves from the creator
+    /// to the shared value at its creation, as `set` moves it, so what the
+    /// value frees inside its block was counted there.
+    pub fn weighed(value: T, size: impl FnOnce(&T) -> usize) -> Self {
+        let size = size(&value);
+        Self {
+            inner: RefCell::new(crate::block::Housed::moved_in(value, size)),
+            poisoned: std::cell::Cell::new(false),
+            rebuild: None,
+        }
+    }
+
     /// `SharedMut::supervised(fn { … })` as the compiler writes it: the kept
     /// function a program hands over.
     pub fn supervised_kept<F: Fn() -> T + ?Sized + 'static>(
@@ -474,6 +487,16 @@ impl<T> Crossing<T> {
     pub fn new(value: T) -> Self {
         Self {
             inner: Mutex::new(crate::block::Housed::new(value)),
+            held_by: AtomicU64::new(NOBODY),
+            rebuild: None,
+        }
+    }
+
+    /// [`Local::weighed`], where the value crosses threads (#1751).
+    pub fn weighed(value: T, size: impl FnOnce(&T) -> usize) -> Self {
+        let size = size(&value);
+        Self {
+            inner: Mutex::new(crate::block::Housed::moved_in(value, size)),
             held_by: AtomicU64::new(NOBODY),
             rebuild: None,
         }
