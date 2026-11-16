@@ -1,0 +1,24 @@
+// A cut of a `Vec[u8]` compared with `Bytes`, either side (#1871): the cut
+// is the slice it is below, and compares with `Bytes` as a view or a value.
+fn made(n: i64) -> Bytes {
+    let mut g = String()
+    g.push_str(">TH")
+    if n > 5 {
+        g.push_str("x")
+    }
+    return g.bytes.clone()
+}
+
+fn main() throws {
+    let v: Vec[u8] = [62, 84, 72]
+    let h = ">TH".bytes
+    let b = ">TX".bytes
+    let o = made(1)
+    println(f"{v[0..<3] == h}")
+    println(f"{h == v[0..<3]}")
+    println(f"{v[0..<3] != h}")
+    println(f"{v[0..<3] == o}")
+    println(f"{o == v[0..<3]}")
+    println(f"{v[0..<2] == b[0..<2]}")
+    println(f"{b[0..<3] == v[0..<3]}")
+}
