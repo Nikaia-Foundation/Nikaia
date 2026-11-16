@@ -50,6 +50,15 @@ pub(crate) fn check_arguments_a_path(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_arguments_bytes(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, .. } => name == "Bytes" && args.is_empty(),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_arguments_made_a_path(wrap: &FactWrap) -> bool { matches!(wrap, FactWrap::Path) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -408,6 +417,10 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             if check_arguments_a_path(&found_here) {
                 let node = id_of(value) as i64;
                 if state.facts.path_holes.get(&node).is_none() { state.facts.path_holes.insert(node, vec![true]); }
+                continue;
+            }
+            if check_arguments_bytes(&found_here) {
+                state.facts.printed_bytes.insert(id_of(value) as i64);
                 continue;
             }
         }

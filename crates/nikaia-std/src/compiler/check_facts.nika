@@ -491,6 +491,8 @@ pub struct CheckFacts {
     pub path_comparisons: collections::BTreeSet[i64],
     pub mixed_comparisons: collections::BTreeMap[i64, bool],
     pub path_holes: collections::BTreeMap[i64, Vec[bool]],
+    /// A print call's argument that is `Bytes`, written as it is (ADR-019 D7).
+    pub printed_bytes: collections::BTreeSet[i64],
     pub flattened_reaches: collections::BTreeSet[i64],
     pub copied_reaches: collections::BTreeSet[i64],
     pub viewed_reaches: collections::BTreeMap[i64, FactViewed],
@@ -869,6 +871,7 @@ impl CheckFacts {
             path_comparisons: collections::BTreeSet(),
             mixed_comparisons: collections::BTreeMap(),
             path_holes: collections::BTreeMap(),
+            printed_bytes: collections::BTreeSet(),
             flattened_reaches: collections::BTreeSet(),
             copied_reaches: collections::BTreeSet(),
             viewed_reaches: collections::BTreeMap(),

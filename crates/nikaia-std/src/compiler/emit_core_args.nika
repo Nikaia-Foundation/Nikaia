@@ -2593,7 +2593,7 @@ impl EmitState {
     }
 
     /// `println(..)` and its three: a file's name is written as its bytes
-    /// (ADR-319 D4), an `f".."` is a format string, a plain string has its braces
+    /// (ADR-319 D4), `Bytes` as they are (ADR-019 D7), an `f".."` is a format string, a plain string has its braces
     /// escaped (ADR-309 D4), anything else goes through `{}`. **A failed write
     /// is an `io::IoError`** (ADR-392): each is `std`'s fallible writer, given
     /// `format_args!`, and its failure leaves as any call's does: `emit_call`
@@ -2618,6 +2618,19 @@ impl EmitState {
                     Expr::LitInterpolated { parts, .. } => self.emit_core_joined_name(world, walk, out, host, parts, names, depth, flow, scope),
                     else => self.emit_expr(world, walk, out, host, given, depth, flow, scope),
                 }
+                out.push(f"), {to_err}, {newline})")
+                if !fails {
+                    out.push(".unwrap_or(())")
+                }
+                return
+            }
+            // **`Bytes` are written as they are** (ADR-019 D7), through the
+            // buffer text goes through.
+            if self.facts.printed_bytes.contains(key) {
+                let to_err = text.starts_with("e")
+                let newline = text.ends_with("ln")
+                out.push("nikaia_std::io::print_bytes(&(")
+                self.emit_expr(world, walk, out, host, given, depth, flow, scope)
                 out.push(f"), {to_err}, {newline})")
                 if !fails {
                     out.push(".unwrap_or(())")

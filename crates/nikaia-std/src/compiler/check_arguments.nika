@@ -60,6 +60,14 @@ fn check_arguments_a_path(ty: ref Ty) -> bool sync {
     }
 }
 
+/// Whether a type is `Bytes`, owned or a view (ADR-019 D7).
+fn check_arguments_bytes(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, args, .. } => name == "Bytes" && args.len() == 0,
+        else => false,
+    }
+}
+
 /// Whether a wrap makes text a `PathBuf` (`FactWrap::Path`, ADR-319 D2).
 fn check_arguments_made_a_path(wrap: ref FactWrap) -> bool sync {
     return match wrap {
@@ -649,6 +657,11 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 if state.facts.path_holes.get(node) == null {
                     state.facts.path_holes.insert(node, [true])
                 }
+                continue
+            }
+            // **`Bytes` are printed as they are** (ADR-019 D7).
+            if check_arguments_bytes(found_here) {
+                state.facts.printed_bytes.insert(id_of(value) as i64)
                 continue
             }
         }

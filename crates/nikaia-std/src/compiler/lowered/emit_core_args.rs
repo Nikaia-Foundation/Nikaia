@@ -1719,6 +1719,15 @@ impl EmitState {
                 if !fails { out.push(".unwrap_or(())"); }
                 return Ok(());
             }
+            if self.facts.printed_bytes.contains(&key) {
+                let to_err = text.starts_with('e');
+                let newline = text.ends_with("ln");
+                out.push("nikaia_std::io::print_bytes(&(");
+                self.emit_expr(world, walk, out, host, &given, depth, flow, scope)?;
+                out.push(&format!("), {}, {})", to_err, newline));
+                if !fails { out.push(".unwrap_or(())"); }
+                return Ok(());
+            }
             match given {
                 Expr::LitInterpolated { parts, .. } => {
                     out.push(&format!("{}(", callee));
