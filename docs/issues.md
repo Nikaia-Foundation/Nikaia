@@ -32,6 +32,16 @@ it, like the checks in `docs/supervisor.md`.
   a partial run's issue is queued again, from a stale comment in
   `drive.nika`, and `drive_queue_add` skips a `#N` still in `batch.txt`
   (#1697).
+* **I4b. Code in an issue is written the way a program writes it**
+  (#1730): a probe, a sketch of a new API, or an example use, in a bug or
+  a feature. It is checked with `scripts/probe.nika --check` (stubs for what
+  does not exist yet) before the issue is filed, and the result is quoted.
+  Types are named the way a program names them (`Vec[Row]`,
+  `HashMap[String, Value]`). The specification's own words (`Seq`, `Map`,
+  ADR-105 D4) cannot be written in a program. A form the grammar refuses
+  is named as one the issue needs (I6). A sketch written in it is not
+  (#1730: #116's sketch wrote `db::Value.Text`, `println(v)` of an enum,
+  which is NK1201, and `Seq`/`Map`; the builder respelled them all).
 
 ## A bug (something specified or plainly meant does not work)
 
@@ -206,6 +216,10 @@ it, like the checks in `docs/supervisor.md`.
   A section that says where the work stands (a branch, uncommitted files)
   is checked against `git log` and `git branch -r` before each run (#1470:
   it named a stale branch and files already committed).
+  So is each open *To build* item, before a brief is written for it:
+  `git log --grep` on its topic. An item that another issue's work has already
+  built is ticked, and the commit is named (#1730: #116's item 9 was
+  already built when its run started).
 
 ## How a run judges its issue
 
