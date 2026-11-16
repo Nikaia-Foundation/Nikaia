@@ -1,0 +1,21 @@
+# The Rust half of the Benchmarks Game programs (#1611): each the fastest Rust
+# entry the game lists for its problem, copied with its header, a binary of its
+# own. A workspace of its own, out of the repository's; `game.nika` builds it.
+[package]
+name = "game-bench"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "n-body"
+path = "n-body/rust-9.rs"
+
+# The game's `rustc -C opt-level=3 -C codegen-units=1`; its
+# `-C target-cpu=ivybridge` is passed by `game.nika` in `RUSTFLAGS`.
+[profile.release]
+opt-level = 3
+codegen-units = 1
+incremental = false
+
+[workspace]

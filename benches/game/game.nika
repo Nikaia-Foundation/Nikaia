@@ -1,0 +1,272 @@
+// The Benchmarks Game programs against the fastest Rust entry of each (#1611):
+// it builds every program at both overflow-check settings, checks that all of
+// one problem print the same output byte for byte, counts each with callgrind
+// and prints the table, with each program's length in tokens.
+//
+//     nikaia run benches/game/game.nika              every problem
+//     nikaia run benches/game/game.nika -- n-body    one
+//
+// `$NIKAIA` names the compiler; else the `nikaia` on the path, else a release
+// build of the repository's own.
+//
+// Counts, not a clock (docs/measuring.md): instructions and mispredicted
+// branches (`--branch-sim=yes`, conditional and indirect) over the whole
+// process, divided by the problem's unit (a step, a row). The Rust entry is
+// built as the game builds it (`opt-level = 3`, one codegen unit, its
+// `target-cpu`); the Nikaia program as a user builds it, with the same
+// `opt-level` and unit count, once for the default CPU level and once for
+// `x86-64-v3`, the least level that holds the game's `ivybridge`.
+use std::cli
+use std::fs
+use std::process
+use std::text
+
+// One problem of the game.
+struct Game {
+	// The game's name for it, also the directory under `benches/game/` and
+	// the Rust binary's name.
+	name: String,
+	// The arguments every program of it runs with.
+	args: String,
+	// What the counts are divided by, and its name in the table.
+	units: i64,
+	unit: String,
+	// The Nikaia program, from the repository's root.
+	nikaia: String,
+	// The Rust entry: its source and the `target-cpu` the game builds it for.
+	rust: String,
+	label: String,
+	cpu: String,
+}
+
+fn games() -> Vec[Game] {
+	return [
+		Game {
+			name: "n-body",
+			args: "1000000",
+			units: 1000000,
+			unit: "step",
+			nikaia: "examples/n-body/src/main.nika",
+			rust: "benches/game/n-body/rust-9.rs",
+			label: "Rust #9",
+			cpu: "ivybridge",
+		},
+	]
+}
+
+fn root() -> String throws {
+	return process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
+}
+
+fn toolchain(repo: String) -> String throws {
+	let exe = sh("echo ${NIKAIA:-$(command -v nikaia)}").stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	must(
+		f"cargo build -q --release -p nikaia --manifest-path {repo}/Cargo.toml",
+		"the compiler's release build",
+	)
+	return f"{repo}/target/release/nikaia"
+}
+
+fn sh(script: String) -> process::Output throws {
+	return process::run("sh", ["-c", script])
+}
+
+fn must(script: String, what: String) throws {
+	let r = sh(script)
+	if r.code != 0 {
+		println(f"{what} failed:\n{r.stdout}{r.stderr}")
+		process::exit(1)
+	}
+}
+
+// --- the builds ------------------------------------------------------------
+
+// One program at both settings.
+struct Program {
+	name: String,
+	on: String,
+	off: String,
+	// The source counted for tokens; empty where the row above counted it.
+	source: String,
+}
+
+// The Rust entries, each setting in a target directory of its own.
+fn build_rust(repo: String, work: String, game: Game) -> Program throws {
+	for setting in ["on", "off"] {
+		must(
+			f"RUSTFLAGS='-C target-cpu={game.cpu} -C overflow-checks={setting}' CARGO_TARGET_DIR={work}/rust-{game.cpu}-{setting} cargo build -q --release --bin {game.name} --manifest-path {repo}/benches/game/Cargo.toml",
+			f"cargo build of {game.name} ({setting})",
+		)
+	}
+	return Program {
+		name: f"{game.label}, `target-cpu={game.cpu}`",
+		on: f"{work}/rust-{game.cpu}-on/release/{game.name}",
+		off: f"{work}/rust-{game.cpu}-off/release/{game.name}",
+		source: game.rust.clone(),
+	}
+}
+
+// The Nikaia program as a project of its own at the CPU level `cpu`; the
+// binaries are copied out to `{work}/bin/{name}.{cpu}.on` and `.off`.
+fn build_nikaia(
+	nikaia: String,
+	repo: String,
+	work: String,
+	game: Game,
+	cpu: String,
+) -> Program throws {
+	let dir = f"{work}/{game.name}"
+	must(f"mkdir -p {dir}/src {work}/bin && cp {repo}/{game.nikaia} {dir}/src/main.nika", "copy")
+	fs::write(
+		f"{dir}/nikaia.toml",
+		fs::Root::Anywhere,
+		"[package]
+name = \"game\"
+version = \"0.1.0\"
+
+[build.x86_64-linux]
+opt-level = 3
+codegen-units = 1
+incremental = false
+",
+	)
+	for setting in ["on", "off"] {
+		must(
+			f"cd {dir} && RUSTFLAGS='-C overflow-checks={setting}' {nikaia} build --cpu={cpu} >build.log 2>&1 && cp target/nikaia/bin/game {work}/bin/{game.name}.{cpu}.{setting}",
+			f"nikaia build of {game.name} ({cpu}, {setting}, log in {dir}/build.log)",
+		)
+	}
+	let mut source = String()
+	if cpu == "x86-64" {
+		source.push_str(game.nikaia)
+	}
+	return Program {
+		name: f"Nikaia, `--cpu={cpu}`",
+		on: f"{work}/bin/{game.name}.{cpu}.on",
+		off: f"{work}/bin/{game.name}.{cpu}.off",
+		source: source,
+	}
+}
+
+// --- the same output, then the counts --------------------------------------
+
+// Every program at both settings prints the first one's output.
+fn same_output(work: String, programs: Vec[Program], args: String) throws {
+	let want = f"{work}/out/want"
+	must(f"{programs[0].on} {args} > {want}", f"{programs[0].on} {args}")
+	for p in programs {
+		for bin in [p.on.clone(), p.off.clone()] {
+			let r = sh(f"{bin} {args} | cmp -s - {want}")
+			if r.code != 0 {
+				println(f"FAIL: {bin} {args} prints another output than {programs[0].on}")
+				process::exit(1)
+			}
+		}
+	}
+}
+
+struct Count {
+	instructions: i64,
+	mispredicted: i64,
+}
+
+// Instructions and mispredicted branches of one run, from callgrind's totals
+// (`events: Ir Bc Bcm Bi Bim`).
+fn count(work: String, bin: String, args: String) -> Count throws {
+	let file = f"{work}/out/callgrind.out"
+	must(
+		f"valgrind --tool=callgrind --branch-sim=yes --callgrind-out-file={file} {bin} {args} > /dev/null 2>{work}/out/valgrind.log",
+		f"callgrind of {bin}",
+	)
+	let totals = sh(f"grep -E '^(totals|summary):' {file} | head -1").stdout.trim().clone()
+	let fields: Vec[String] = totals.split_whitespace().collect()
+	return Count {
+		instructions: text::parse_i64(fields[1]) ?? 0,
+		mispredicted: (text::parse_i64(fields[3]) ?? 0) + (text::parse_i64(fields[5]) ?? 0),
+	}
+}
+
+// `n / units` to `places` decimals, rounded.
+fn per(n: i64, units: i64, places: i64) -> String {
+	let mut scale = 1
+	for _ in 0..<places {
+		scale = scale * 10
+	}
+	let scaled = (n * scale + units / 2) / units
+	let fraction = f"{scaled % scale}"
+	if places == 0 { return f"{scaled}" }
+	return f"{scaled / scale}.{"0".repeat(places - fraction.len())}{fraction}"
+}
+
+fn tokens(repo: String, nikaia: String, source: String) -> String throws {
+	if source.len() == 0 { return "" }
+	let r = process::run(
+		nikaia,
+		["run", f"{repo}/scripts/tokens.nika", "--", f"{repo}/{source}"]; dir: repo,
+	)
+	let fields: Vec[String] = r.stdout.trim().split_whitespace().collect()
+	return fields[0].clone()
+}
+
+// One problem's rows: each program counted at both settings, the last column
+// its instructions with checks off against the Rust entry's.
+fn measure(nikaia: String, repo: String, work: String, game: Game) -> String throws {
+	let programs: Vec[Program] = [
+		build_rust(repo, work, game),
+		build_nikaia(nikaia, repo, work, game, "x86-64"),
+		build_nikaia(nikaia, repo, work, game, "x86-64-v3"),
+	]
+	same_output(work, programs, game.args)
+	let mut out = String()
+	let mut rust = 0
+	for p in programs {
+		let on = count(work, p.on, game.args)
+		let off = count(work, p.off, game.args)
+		if rust == 0 {
+			rust = off.instructions
+		}
+		let i_on = per(on.instructions, game.units, 1)
+		let m_on = per(on.mispredicted, game.units, 3)
+		let i_off = per(off.instructions, game.units, 1)
+		let m_off = per(off.mispredicted, game.units, 3)
+		let against = per(off.instructions, rust, 2)
+		let length = tokens(repo, nikaia, p.source.clone())
+		out.push_str(f"| {game.name} | {p.name} | {i_on} | {m_on} | {i_off} | {m_off} | {against} | {length} |\n")
+	}
+	return out
+}
+
+fn main() throws {
+	let repo = root()
+	let mut args = cli::args()
+	args.nth(0)
+	let only = args.nth(0) ?? ""
+	let nikaia = toolchain(repo.clone())
+	let work = f"{repo}/target/game-bench"
+	must(f"mkdir -p {work}/bin {work}/out", "mkdir")
+	must("command -v valgrind", "game.nika needs valgrind (callgrind):")
+
+	let mut table = String()
+	let mut said = String()
+	for game in games() {
+		if only.len() > 0 && game.name != only {
+			continue
+		}
+		table.push_str(measure(nikaia, repo, work, game))
+		said.push_str(f"{game.name}: per {game.unit}, `{game.name} {game.args}`, output `{sh(f"{work}/bin/{game.name}.x86-64.on {game.args}").stdout.trim().replace("\n", " ")}`\n")
+	}
+	let spec = f"{repo}/docs/specification/10-nikaia-light.md"
+	let version = sh(f"sed -n 's/^\\*\\*Version:\\*\\* \\([0-9.]*\\).*/\\1/p' {spec}").stdout
+		.trim()
+		.clone()
+	let rustc = sh("rustc --version | cut -d' ' -f1-2").stdout.trim().clone()
+	let cpu = sh("grep -m1 'model name' /proc/cpuinfo | cut -d: -f2").stdout.trim().clone()
+	println(f"Nikaia {version}, {rustc}, {cpu}")
+	println("callgrind; every program of a problem prints the same, byte for byte, at both settings")
+	print(said)
+	println("")
+	println("| problem | program | instructions, checks on | mispredicted, on | instructions, checks off | mispredicted, off | instructions off / Rust | tokens |")
+	println("|---|---|---:|---:|---:|---:|---:|---:|")
+	print(table)
+}
