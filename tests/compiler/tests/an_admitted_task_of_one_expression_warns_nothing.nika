@@ -1,0 +1,19 @@
+// A detached task with its own strategy whose body is one expression lowers
+// without rustc's "unnecessary braces" warning (ADR-async-5 D15, #1554).
+struct Tight {}
+
+impl task::Admission for Tight {
+	fn decide(mut self, _load: task::Load) -> task::Decision sync {
+		return task::Decision { start: 1, budget: 262144 }
+	}
+}
+
+fn work() -> i64 {
+	return 3
+}
+
+fn main() throws {
+	let t = async(detached, admission: Tight {}) fn { work() }
+	let got = t.join() catch { 0 }
+	println(f"got {got}")
+}

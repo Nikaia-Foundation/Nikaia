@@ -1615,14 +1615,15 @@ impl EmitState {
             if fallback_inside {
                 walk.async_bound = "__nikaia_deadline"
             }
+            // The strategy's wait opens the body's own block, so a body of
+            // one expression is not a block in a block (rustc's
+            // `unused_braces`, #1554).
+            let mut opening: String? = null
             if first != "" {
-                out.push(f"{{ {first}")
+                opening = "nikaia_std::task::admission_first(__nikaia_admission).await;"
             }
-            self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return)
+            self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return, opening)
             walk.async_bound = ""
-            if first != "" {
-                out.push(" }")
-            }
             out.push(")")
         }
         if opened {

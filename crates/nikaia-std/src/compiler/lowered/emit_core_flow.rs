@@ -1031,10 +1031,10 @@ impl EmitState {
             let inside = EmitFlow { statement: flow.statement, ..EmitFlow::plain() };
             let inside_scope = EmitScope::plain();
             if fallback_inside { walk.async_bound = String::from("__nikaia_deadline"); }
-            if first != "" { out.push(&format!("{{ {}", first)); }
-            self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, &EmitTail::Return)?;
+            let mut opening: Option<String> = None;
+            if first != "" { opening = Some(String::from("nikaia_std::task::admission_first(__nikaia_admission).await;")); }
+            self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, inside, &inside_scope, &EmitTail::Return, opening)?;
             walk.async_bound = String::from("");
-            if first != "" { out.push(" }"); }
             out.push(")");
         }
         if opened { out.push(" }"); }
