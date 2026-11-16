@@ -326,6 +326,8 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   | `MERGE` | - | merge `origin/develop` by hand and resolve the sources the line names (`merge left open`: finish or abort it now); restart |
   | `BATCH` | - | no `ready` issue left in the lane (every focus area empty): decide or file the waiting ones (`ready`); restart |
   | `ESCALATE` | - | fix the cause the line names; restart |
+  | `PROVED` | `DIR/proved.log` | find the commit of the range that lowered the proof figure and file it for the prover lane; the driver goes on |
+  | (the driver's task ended, no `WAKE` line) | the log's last 20 lines | the driver crashed: fix or file the cause the lines show; restart |
 * **The cycle of one DIR.** `nikaia run scripts/drive.nika -- DIR` with
   `run_in_background` (`--max N` agent runs, default 8; `--dry-run` shows the
   next step; the bug lane with `--no-bump`). It loops on `cycle.nika`: runs
