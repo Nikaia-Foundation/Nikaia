@@ -67,6 +67,13 @@ it, like the checks in `docs/supervisor.md`.
   uses it fails, the probe is that program (#1716: #1686's http failure
   showed only when hello-http was built at "yes", the http library alone
   built).
+  It says where it ran: the shared checkout with other agents at work, or a
+  tree nobody else touched. A symptom of a rebuild, a cache, a changed
+  lowered file or a refusal in a file the run did not edit is first checked
+  against the inputs others touched during the run (`git status --short`
+  before and after, the files' mtimes): an input changed mid-run makes the
+  rebuild correct and the report no bug (#1762: #1759 had neither probe nor
+  this context, and its cause was another agent's edit).
   The probe is copied whole from the file that ran, never retyped: its
   `use` lines, its error type, and the manifest table each key sits in
   (#1726: #1715's probe threw text, lacked `use std::time` and put
