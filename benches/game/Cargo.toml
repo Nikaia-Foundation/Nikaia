@@ -31,10 +31,14 @@ path = "fasta/rust-7.rs"
 name = "k-nucleotide"
 path = "k-nucleotide/rust-7.rs"
 
+[[bin]]
+name = "reverse-complement"
+path = "reverse-complement/rust-1.rs"
+
 # The game's Rust entries link against its `rust-libs`; spectral-norm's and
 # fannkuch-redux's need rayon, binary-trees' rayon and bumpalo, fasta's
 # num_cpus and spin, k-nucleotide's futures, tokio-threadpool, itertools, num
-# and hashbrown.
+# and hashbrown, reverse-complement's memchr and rayon.
 [dependencies]
 rayon = "1"
 bumpalo = "3"
@@ -45,6 +49,7 @@ tokio-threadpool = "0.1"
 itertools = "0.14"
 num = "0.4"
 hashbrown = "0.15"
+memchr = "2"
 
 # The game's `rustc -C opt-level=3 -C codegen-units=1`; its
 # `-C target-cpu=ivybridge` is passed by `game.nika` in `RUSTFLAGS`.

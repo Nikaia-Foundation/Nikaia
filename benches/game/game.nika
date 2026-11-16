@@ -157,6 +157,26 @@ fn games() -> Vec[Game] {
 			shown: "",
 			input: "fasta 250000",
 		},
+		// The input is fasta's output at 2500000 (25000000 letters, the
+		// unit, in 25.4 MB); the game's is fasta's at 25000000, ten times
+		// that, which a callgrind run of the plain program does not finish
+		// in a minute. The entry reverses blocks of each sequence on rayon's
+		// pool, so it gets a row on one thread too.
+		Game {
+			name: "reverse-complement",
+			args: "",
+			units: 25000000,
+			unit: "letter",
+			nikaia: "benches/game/reverse-complement/main.nika",
+			speed: "benches/game/reverse-complement/speed.nika",
+			rust: "benches/game/reverse-complement/rust-1.rs",
+			label: "Rust entry 1",
+			cpu: "ivybridge",
+			one_thread: "RAYON_NUM_THREADS=1",
+			rust_env: "",
+			shown: "md5sum | cut -c1-32",
+			input: "fasta 2500000",
+		},
 	]
 }
 
