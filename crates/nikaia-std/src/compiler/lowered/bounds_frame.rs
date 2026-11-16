@@ -301,6 +301,8 @@ pub(crate) struct FieldsScan {
     pub(crate) self_type: String,
     pub(crate) typed: collections::BTreeMap<String, String>,
     pub(crate) calls: collections::BTreeMap<String, String>,
+    pub(crate) items: collections::BTreeMap<String, String>,
+    pub(crate) field_types: collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -317,7 +319,7 @@ pub struct BoundsBeside {
 pub fn bounds_beside(program: &Program, words: &winnow_grammar::InternerContext) -> BoundsBeside {
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
     for item in program.items.iter() { derived_item_names(&item.node, words, &mut names); }
-    let mut scan = FieldsScan { live: collections::BTreeMap::new(), walked: false, wrote: false, here: false, recording: true, lost: collections::BTreeSet::new(), changed: collections::BTreeSet::new(), self_type: String::from(""), typed: collections::BTreeMap::new(), calls: collections::BTreeMap::new() };
+    let mut scan = FieldsScan { live: collections::BTreeMap::new(), walked: false, wrote: false, here: false, recording: true, lost: collections::BTreeSet::new(), changed: collections::BTreeSet::new(), self_type: String::from(""), typed: collections::BTreeMap::new(), calls: collections::BTreeMap::new(), items: collections::BTreeMap::new(), field_types: fields_types(program, words) };
     let mut reached: collections::BTreeSet<String> = collections::BTreeSet::new();
     let has_main = fields_declared(program, words, false, &mut scan, &mut reached);
     let mut declared: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -330,6 +332,89 @@ pub fn bounds_beside(program: &Program, words: &winnow_grammar::InternerContext)
 pub(crate) fn fields_plain(ty: &Type, words: &winnow_grammar::InternerContext) -> String {
     if !ty.generics.is_empty() || ty.is_nullable || ty.is_tuple { return String::from(""); }
     rules_last_name(words.resolve(ty.name))
+}
+
+pub(crate) fn fields_item_type(ty: &Type, words: &winnow_grammar::InternerContext) -> String {
+    let list = rules_last_name(words.resolve(ty.name));
+    if ty.generics.len() != 1 || ty.is_nullable || ty.is_tuple || list != "Vec" && list != "List" { return String::from(""); }
+    fields_plain(unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, words)
+}
+
+pub(crate) fn fields_types(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeMap<String, String> {
+    let mut out: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Struct { name, generics, fields, .. } => {
+                let name = *name;
+                if !generics.is_empty() { continue; }
+                let owner = rules_last_name(words.resolve(name));
+                for field in fields.iter() {
+                    let f = words.resolve(field.name);
+                    let plain = fields_plain(&field.ty, words);
+                    if !plain.is_empty() { out.insert(format!("{}.{}", owner, f), plain); }
+                    let inner = fields_item_type(&field.ty, words);
+                    if !inner.is_empty() { out.insert(format!("{}.{}[]", owner, f), inner); }
+                }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub(crate) fn fields_type_of(expr: &Expr, words: &winnow_grammar::InternerContext, scan: &FieldsScan) -> String {
+    match expr {
+        Expr::Variable(v, _) => {
+            let v = *v;
+            let name = words.resolve(v);
+            if name == "self" { return nikaia_std::block::Text::from(scan.self_type.to_string()); }
+            return nikaia_std::index::or(match scan.typed.get(name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || "".into());
+        },
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            let of = fields_type_of(base, words, scan);
+            if of.is_empty() { return String::from(""); }
+            return nikaia_std::index::or(match scan.field_types.get(&format!("{}.{}", of, words.resolve(name))) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || "".into());
+        },
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); return fields_items_of(base, words, scan) },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if words.resolve(method) == "clone" && args.is_empty() { return fields_type_of(receiver, words, scan); }
+            return String::from("");
+        },
+        _ => return String::from(""),
+    }
+}
+
+pub(crate) fn fields_items_of(expr: &Expr, words: &winnow_grammar::InternerContext, scan: &FieldsScan) -> String {
+    match expr {
+        Expr::Variable(v, _) => { let v = *v; return nikaia_std::index::or(match scan.items.get(words.resolve(v)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into()) },
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            let of = fields_type_of(base, words, scan);
+            if of.is_empty() { return String::from(""); }
+            return nikaia_std::index::or(match scan.field_types.get(&format!("{}.{}[]", of, words.resolve(name))) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || "".into());
+        },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let m = words.resolve(method);
+            if (m == "clone" || m == "iter") && args.is_empty() { return fields_items_of(receiver, words, scan); }
+            return String::from("");
+        },
+        _ => return String::from(""),
+    }
 }
 
 pub(crate) fn fields_returns(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeMap<String, String> {
@@ -351,8 +436,21 @@ pub(crate) fn fields_returns(program: &Program, words: &winnow_grammar::Interner
 
 pub(crate) fn fields_let(name: &str, ty: Option<&Type>, value: &Expr, words: &winnow_grammar::InternerContext, scan: &mut FieldsScan) {
     if ty.is_some() {
-        let plain = fields_plain(match ty { Some(__nikaia_value) => __nikaia_value, None => return }, words);
+        let declared = match ty { Some(__nikaia_value) => __nikaia_value, None => return };
+        let plain = fields_plain(declared, words);
         if !plain.is_empty() { scan.typed.insert(nikaia_std::block::Text::from(name.to_string()), plain); }
+        let inner = fields_item_type(declared, words);
+        if !inner.is_empty() { scan.items.insert(nikaia_std::block::Text::from(name.to_string()), inner); }
+        return;
+    }
+    let of = fields_type_of(value, words, &scan);
+    if !of.is_empty() {
+        scan.typed.insert(nikaia_std::block::Text::from(name.to_string()), of);
+        return;
+    }
+    let inner = fields_items_of(value, words, &scan);
+    if !inner.is_empty() {
+        scan.items.insert(nikaia_std::block::Text::from(name.to_string()), inner);
         return;
     }
     match value {
@@ -377,7 +475,7 @@ pub(crate) fn fields_let(name: &str, ty: Option<&Type>, value: &Expr, words: &wi
 }
 
 pub(crate) fn fields_seen(program: &Program, beside: &[&BoundsBeside], words: &winnow_grammar::InternerContext) -> FieldsSeen {
-    let mut scan = FieldsScan { live: collections::BTreeMap::new(), walked: false, wrote: false, here: true, recording: false, lost: collections::BTreeSet::new(), changed: collections::BTreeSet::new(), self_type: String::from(""), typed: collections::BTreeMap::new(), calls: collections::BTreeMap::new() };
+    let mut scan = FieldsScan { live: collections::BTreeMap::new(), walked: false, wrote: false, here: true, recording: false, lost: collections::BTreeSet::new(), changed: collections::BTreeSet::new(), self_type: String::from(""), typed: collections::BTreeMap::new(), calls: collections::BTreeMap::new(), items: collections::BTreeMap::new(), field_types: collections::BTreeMap::new() };
     let mut reached: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut a_program = fields_declared(program, words, true, &mut scan, &mut reached);
     for other in beside.iter() {
@@ -440,9 +538,12 @@ pub(crate) fn fields_item(item: &Spanned<Item>, words: &winnow_grammar::Interner
         Item::Fn { args, config, body, .. } => {
             let had = scan.typed.copy_owned();
             let had_calls = scan.calls.copy_owned();
+            let had_items = scan.items.copy_owned();
             for arg in args.iter() {
                 scan.calls.remove(words.resolve(arg.name));
                 if arg.ty.generics.is_empty() { scan.typed.insert(nikaia_std::block::Text::from(words.resolve(arg.name).to_string()), rules_last_name(words.resolve(arg.ty.name))); } else { scan.typed.remove(words.resolve(arg.name)); }
+                let inner = fields_item_type(&arg.ty, words);
+                if inner.is_empty() { scan.items.remove(words.resolve(arg.name)); } else { scan.items.insert(nikaia_std::block::Text::from(words.resolve(arg.name).to_string()), inner); }
             }
             scan.walked = false;
             for param in config.iter() { fields_expr(&param.default, words, scan); }
@@ -453,6 +554,7 @@ pub(crate) fn fields_item(item: &Spanned<Item>, words: &winnow_grammar::Interner
             scan.walked = false;
             scan.typed = had;
             scan.calls = had_calls;
+            scan.items = had_items;
         },
         Item::Impl { target, methods, .. } => {
             let was = nikaia_std::block::Text::from(scan.self_type.to_string());
@@ -513,7 +615,13 @@ pub(crate) fn fields_mark(base: &Expr, name: &str, words: &winnow_grammar::Inter
                 return;
             }
         },
-        _ => { },
+        _ => {
+            let of = fields_type_of(base, words, &scan);
+            if !of.is_empty() {
+                scan.changed.insert(format!("{}.{}", of, name));
+                return;
+            }
+        },
     }
     scan.changed.insert(nikaia_std::block::Text::from(name.to_string()));
 }
@@ -546,6 +654,7 @@ pub(crate) fn fields_stmt(stmt: &Stmt, words: &winnow_grammar::InternerContext, 
                 let n = *n;
                 scan.typed.remove(words.resolve(n));
                 scan.calls.remove(words.resolve(n));
+                scan.items.remove(words.resolve(n));
             }
             if names.len() == 1 { fields_let(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }), (ty).as_ref(), value, words, scan); }
         },
@@ -586,12 +695,19 @@ pub(crate) fn fields_stmt(stmt: &Stmt, words: &winnow_grammar::InternerContext, 
                 Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); fields_expr(base, words, scan); },
                 _ => { fields_expr(iter, words, scan); },
             }
+            let inner = fields_items_of(iter, words, &scan);
             for n in bindings.iter() {
                 let n = *n;
                 scan.typed.remove(words.resolve(n));
                 scan.calls.remove(words.resolve(n));
+                scan.items.remove(words.resolve(n));
             }
+            if bindings.len() == 1 && !inner.is_empty() { scan.typed.insert(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }).to_string()), inner); }
             fields_block(body, words, scan);
+            for n in bindings.iter() {
+                let n = *n;
+                scan.typed.remove(words.resolve(n));
+            }
         },
         Stmt::While { cond, body } => {
             fields_expr(cond, words, scan);
