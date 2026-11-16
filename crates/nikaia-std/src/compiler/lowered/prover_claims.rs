@@ -21,6 +21,8 @@ pub struct OutsideIndex {
     pub proved: bool,
     pub guard_at: i64,
     pub guard: String,
+    pub operation: bool,
+    pub stated: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

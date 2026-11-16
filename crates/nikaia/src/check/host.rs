@@ -440,6 +440,7 @@ impl CheckWalkedPasses for Host<'_> {
             &facts.outside,
             &facts.zero_divisors,
             &facts.arithmetic,
+            &facts.divisions,
             &facts.unfit_numbers,
         );
         let runner = |call: &Expr, callee: &str, args: &[i64]| {

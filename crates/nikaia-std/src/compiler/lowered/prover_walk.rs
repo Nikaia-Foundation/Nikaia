@@ -1712,9 +1712,16 @@ pub(crate) fn prover_unwritten_check(walk: &mut ProverWalk, expr: &Expr, span: S
             }
             prover_refuted_check(walk, goal, &written_of(expr), "is out of bounds", String::from("An index is in `0..<len()`: if the read is right, the code before it is wrong."), span, scope, ask, model);
         },
-        Expr::Binary { op, rhs, span: op_at, .. } => {
-            let rhs = nikaia_std::boxed::open(rhs);
+        Expr::Binary { op, lhs, rhs, span: op_at, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
             if *op == BinaryOp::Add || *op == BinaryOp::Sub || *op == BinaryOp::Mul {
+                if !walk.state.collecting && walk.state.arithmetic.contains_key(&(op_at.start as i64)) {
+                    let left = from_outside(lhs, &scope.tainted, words, library, &walk.state, holes_of);
+                    if left || from_outside(rhs, &scope.tainted, words, library, &walk.state, holes_of) {
+                        let goal = prover_overflow_goal(walk, expr, op_at.start as i64, scope, words);
+                        if left { prover_outside_operation(walk, expr, lhs, goal, &span, scope, words, library, holes_of, ask, written_of); } else { prover_outside_operation(walk, expr, rhs, goal, &span, scope, words, library, holes_of, ask, written_of); }
+                    }
+                }
                 prover_overflow_check(walk, expr, op_at.start as i64, span, scope, at, words, ask, model, written_of);
                 return;
             }
@@ -1722,6 +1729,10 @@ pub(crate) fn prover_unwritten_check(walk: &mut ProverWalk, expr: &Expr, span: S
             match rhs {
                 Expr::LitInt { .. } => { return; },
                 _ => { },
+            }
+            if !walk.state.collecting && from_outside(rhs, &scope.tainted, words, library, &walk.state, holes_of) {
+                let goal = prover_division_goal(walk, lhs, rhs, op_at.start as i64, scope, words);
+                prover_outside_operation(walk, expr, rhs, goal, &span, scope, words, library, holes_of, ask, written_of);
             }
             let d = match lin_term(rhs, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return };
             if walk.arena.constant(d).is_some() { return; }
@@ -1782,10 +1793,10 @@ pub(crate) fn prover_outside_index(walk: &mut ProverWalk, expr: &Expr, base: &Ex
     let first = prover_outside_name(&walk, goal, index, scope, words, written_of);
     let source = outside_source(index, &scope.tainted, &scope.sources, words, library, &walk.state, holes_of);
     if goal.is_some() && prover_proves_here(walk, nikaia_std::index::or(goal, || 0), scope, ask) {
-        ({ let __nikaia_arg2 = format!("`{}`", written_of(expr)); let __nikaia_arg5 = scope.guard_of(&walk.arena, nikaia_std::index::or(goal, || 0)); prover_outside_record(walk, &span, __nikaia_arg2, &first, (source).as_deref(), __nikaia_arg5, true) });
+        ({ let __nikaia_arg2 = format!("`{}`", written_of(expr)); let __nikaia_arg5 = scope.guard_of(&walk.arena, nikaia_std::index::or(goal, || 0)); prover_outside_record(walk, &span, __nikaia_arg2, &first, (source).as_deref(), __nikaia_arg5, true, false, true) });
         return;
     }
-    prover_outside_record(walk, &span, format!("`{}`", written_of(expr)), &first, (source).as_deref(), None, false);
+    prover_outside_record(walk, &span, format!("`{}`", written_of(expr)), &first, (source).as_deref(), None, false, false, goal.is_some());
     let mut notes: Vec<String> = vec![outside_note(&first, (source).as_deref())];
     if goal.is_some() {
         let found = model(&walk.arena, &scope.facts, nikaia_std::index::or(goal, || 0));
@@ -1804,7 +1815,8 @@ pub(crate) fn prover_outside_index(walk: &mut ProverWalk, expr: &Expr, base: &Ex
     walk.findings.push(Finding { code: String::from("NK1302"), span, message: format!("`{}` is not proved in bounds, and `{}` comes from outside the program.", written_of(expr), first), notes, help: Some(outside_help(&first, &guard)), warning: false, labels: vec![] });
 }
 
-pub fn prover_outside_record(walk: &mut ProverWalk, span: &Span, written: String, name: &str, source: Option<&str>, guard: Option<(i64, String)>, proved: bool) {
+#[allow(clippy::too_many_arguments)]
+pub fn prover_outside_record(walk: &mut ProverWalk, span: &Span, written: String, name: &str, source: Option<&str>, guard: Option<(i64, String)>, proved: bool, operation: bool, stated: bool) {
     let mut guard_at: i64 = -1;
     let mut condition: String = String::from("");
     match guard {
@@ -1818,7 +1830,65 @@ pub fn prover_outside_record(walk: &mut ProverWalk, span: &Span, written: String
     walk.outside.insert((at, nikaia_std::block::Text::from(written.to_string())), OutsideIndex { at, written, name: nikaia_std::block::Text::from(name.to_string()), source: nikaia_std::index::or(match source {
         Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
         None => None,
-    }, || "".into()), proved, guard_at, guard: condition });
+    }, || "".into()), proved, guard_at, guard: condition, operation, stated });
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn prover_outside_operation(walk: &mut ProverWalk, expr: &Expr, reached: &Expr, goal: Option<i64>, span: &Span, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &impl Fn(&Expr) -> Vec<Expr>, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, written_of: &impl Fn(&Expr) -> String) {
+    let first = prover_outside_name(&walk, goal, reached, scope, words, written_of);
+    let source = outside_source(reached, &scope.tainted, &scope.sources, words, library, &walk.state, holes_of);
+    if goal.is_some() && prover_proves_here(walk, nikaia_std::index::or(goal, || 0), scope, ask) {
+        ({ let __nikaia_arg2 = format!("`{}`", written_of(expr)); let __nikaia_arg5 = scope.guard_of(&walk.arena, nikaia_std::index::or(goal, || 0)); prover_outside_record(walk, &span, __nikaia_arg2, &first, (source).as_deref(), __nikaia_arg5, true, true, true) });
+        return;
+    }
+    prover_outside_record(walk, &span, format!("`{}`", written_of(expr)), &first, (source).as_deref(), None, false, true, goal.is_some());
+}
+
+pub(crate) fn prover_division_goal(walk: &mut ProverWalk, lhs: &Expr, rhs: &Expr, op_at: i64, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> Option<i64> {
+    let d = match lin_term(rhs, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let zero = walk.arena.int(0);
+    let mut goal = walk.arena.unequal(d, zero);
+    let ty = nikaia_std::index::or(match *nikaia_std::index::get(&walk.state.divisions, &op_at) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || "".into());
+    let least: i64 = match &*ty {
+        "u8" => 0,
+        "u32" => 0,
+        "u64" => 0,
+        "i32" => -2147483648,
+        _ => -4611686018427387904i64,
+    };
+    if least < 0 {
+        let minus_one = walk.arena.int(-1);
+        let mut apart = walk.arena.unequal(d, minus_one);
+        let dividend = lin_term(lhs, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes);
+        if dividend.is_some() {
+            let low = walk.arena.int(least);
+            let higher = walk.arena.lt(low, nikaia_std::index::or(dividend, || 0));
+            apart = { let __nikaia_value = walk.arena.or(vec![apart, higher]); __nikaia_value };
+        }
+        goal = { let __nikaia_value = walk.arena.and(vec![goal, apart]); __nikaia_value };
+    }
+    Some(goal)
+}
+
+pub(crate) fn prover_overflow_goal(walk: &mut ProverWalk, expr: &Expr, op_at: i64, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> Option<i64> {
+    let ty = match match *nikaia_std::index::get(&walk.state.arithmetic, &op_at) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let (lo, hi) = match prover_stated_range(&ty) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if !walk.state.unfit_numbers.is_empty() { return None; }
+    let term = match lin_term(expr, words, &|name| { scope.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, scope, name) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let low = walk.arena.int(lo);
+    let mut goal = walk.arena.le(low, term);
+    if hi.is_some() {
+        let high = walk.arena.int(nikaia_std::index::or(hi, || 0));
+        let below = walk.arena.le(term, high);
+        goal = { let __nikaia_value = walk.arena.and(vec![goal, below]); __nikaia_value };
+    }
+    Some(goal)
 }
 
 pub(crate) fn prover_proves_here(walk: &mut ProverWalk, goal: i64, scope: &ProverScope, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer) -> bool {

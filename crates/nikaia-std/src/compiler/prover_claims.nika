@@ -35,9 +35,10 @@ pub struct UnwrittenCheck {
 }
 
 /// **An index that data from outside the program reaches, and what became
-/// of it** (ADR-396 D5), for `--bounds`: where it stands - the index, or the
-/// call that hands it the value - the name and its source, and whether the
-/// walk proved it, with the guard that did where one did.
+/// of it** (ADR-396 D5), and likewise an operation (D7), for `--bounds`:
+/// where it stands - the index, the operation, or the call that hands it
+/// the value - the name and its source, and whether the walk proved it,
+/// with the guard that did where one did.
 pub struct OutsideIndex {
     /// The byte of the index or of the call.
     pub at: i64,
@@ -54,6 +55,12 @@ pub struct OutsideIndex {
     pub guard_at: i64,
     /// That guard's condition, written.
     pub guard: String,
+    /// **A `/`, `%`, `+`, `-` or `*`, not an index** (ADR-396 D7, #1660):
+    /// a divisor not zero, a result inside its type. Not refused yet (D8).
+    pub operation: bool,
+    /// Whether the walk could state the bound as a goal: an `i64`'s `+`,
+    /// `-` and `*` it cannot, nor an operand it reads no whole number of.
+    pub stated: bool,
 }
 
 /// One claim of a precondition (ADR-269 D15).
