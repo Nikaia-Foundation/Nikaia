@@ -9,4 +9,4 @@ bounds in tests/a_shift_a_flip_and_a_quotient_are_numbers_the_walk_bounds.nika: 
     34  x / 1073741824 + 1 + (x >> 63)  proved
     34  x / 1073741824 + 1              proved
   derived  halved: 0 <= l, proved at the calls on lines 43
-  derived  pick: 0 <= l, l <= pairs.len(), l < pairs.len(), proved at the calls on lines 41
+  derived  pick: 0 <= l, l <= pairs.len(), l < pairs.len(), l < 2 * half.len(), proved at the calls on lines 41

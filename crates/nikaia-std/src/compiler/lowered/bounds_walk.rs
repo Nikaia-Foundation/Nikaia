@@ -1960,6 +1960,7 @@ pub(crate) fn bounding_derived_call(walk: &mut BoundsWalk, expr: &Expr, name: &s
             let mut right_reads: collections::BTreeSet<String> = collections::BTreeSet::new();
             let left = match bounding_derived_side(walk, &callee.params, &claim.left, false, claim.each, args, on, facts, &mut given, &mut left_reads, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let right = if claim.fixed.is_some() { walk.arena.int(nikaia_std::index::or(claim.fixed, || 0)) } else { match bounding_derived_side(walk, &callee.params, &claim.right, claim.length, claim.each, args, on, facts, &mut given, &mut right_reads, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue } };
+            let right = if claim.length { bounding_scaled(walk, &claim, right) } else { right };
             if left_reads.iter().any(|name| { right_reads.contains(name) }) { continue; }
             let side = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
             let goal = bounding_each_guarded(walk, side);
@@ -2050,12 +2051,28 @@ pub(crate) fn bounding_derived_each(walk: &mut BoundsWalk, params: &[String], pa
     None
 }
 
+pub(crate) fn bounding_scaled(walk: &mut BoundsWalk, claim: &DerivedClaim, length: i64) -> i64 {
+    let mut term = length;
+    if claim.scale != 1 {
+        let times = walk.arena.int(claim.scale);
+        term = walk.arena.mul(times, term);
+    }
+    if claim.offset != 0 {
+        let by = walk.arena.int(claim.offset);
+        term = walk.arena.add(term, by);
+    }
+    term
+}
+
 pub(crate) fn bounding_derived_entry(walk: &mut BoundsWalk, facts: &mut BoundsFacts, args: &[FnArg], body: &Block, context: &BoundsContext) {
     let key = match derived_key(args, body) { Some(__nikaia_value) => __nikaia_value, None => return };
     let held = match *nikaia_std::index::get(&context.around.derived.entry, &key) { Some(__nikaia_value) => __nikaia_value, None => return };
     for claim in held.iter() {
         let left = if claim.left == "" { walk.arena.int(0) } else if claim.each { walk.arena.var(&bounding_element_of(&claim.left)) } else { walk.arena.var(&claim.left) };
-        let right = if claim.fixed.is_some() { walk.arena.int(nikaia_std::index::or(claim.fixed, || 0)) } else if claim.length { walk.arena.var(&length_of(&claim.right)) } else if claim.each { walk.arena.var(&bounding_element_of(&claim.right)) } else { walk.arena.var(&claim.right) };
+        let right = if claim.fixed.is_some() { walk.arena.int(nikaia_std::index::or(claim.fixed, || 0)) } else if claim.length {
+            let length = walk.arena.var(&length_of(&claim.right));
+            bounding_scaled(walk, claim, length)
+        } else if claim.each { walk.arena.var(&bounding_element_of(&claim.right)) } else { walk.arena.var(&claim.right) };
         let side = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
         let fact = bounding_each_guarded(walk, side);
         bounding_push(&walk, facts, fact);

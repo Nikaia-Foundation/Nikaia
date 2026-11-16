@@ -26,6 +26,8 @@ use std::collections
 /// stands for every value it holds: `0 <= atoms[..]`, `atoms[..] <
 /// values.len()`. Where `fixed` is a number, `right` is that whole number
 /// (#1571): `month < 12`, the length of a list the body writes as a literal.
+/// A length side is `scale * right.len() + offset` (ADR-391 D1, #1673):
+/// `l < 2 * xs.len()`; `1` and `0` everywhere else.
 pub struct DerivedClaim {
 	pub left: String,
 	pub strict: bool,
@@ -33,6 +35,16 @@ pub struct DerivedClaim {
 	pub length: bool,
 	pub each: bool,
 	pub fixed: i64?,
+	pub scale: i64,
+	pub offset: i64,
+}
+
+/// **A position the body reads as a step of a parameter** (#1673):
+/// `param / scale + steps`, where `>> s` is a `scale` of `2^s`.
+struct DerivedStep {
+	param: String,
+	scale: i64,
+	steps: i64,
 }
 
 /// **A private function its callers may bound**: its parameters, the
@@ -136,18 +148,19 @@ pub fn derived_of(
 			everywhere.values.insert(name.clone())
 		}
 	}
+	let steps = derived_step_functions(program, words)
 	let mut position = 0
 	for item in program.items {
 		match item.node {
 			Item::Fn { .. } => {
-				derived_candidate(derived, item.node, position, false, defined, everywhere, words)
+				derived_candidate(derived, item.node, position, false, defined, everywhere, steps, words)
 				position += 1
 			},
 			Item::Impl { trait_name, methods, .. } => {
 				for method in methods {
 					// A trait's method is called wherever the trait is.
 					if trait_name == null {
-						derived_candidate(derived, method.node, position, true, defined, everywhere, words)
+						derived_candidate(derived, method.node, position, true, defined, everywhere, steps, words)
 					}
 					position += 1
 				}
@@ -170,6 +183,7 @@ fn derived_candidate(
 	method: bool,
 	defined: ref collections::BTreeMap[String, i64],
 	everywhere: ref DerivedScan,
+	steps: ref collections::BTreeMap[String, (i64, DerivedStep)],
 	words: ref winnow_grammar::InternerContext,
 ) {
 	match item {
@@ -188,7 +202,7 @@ fn derived_candidate(
 				return
 			}
 			let sites = everywhere.calls[text] ?? return
-			let claims = derived_claims(args, body, method, words)
+			let claims = derived_claims(args, body, method, steps, words)
 			if sites.is_empty() || claims.is_empty() {
 				return
 			}
@@ -318,6 +332,7 @@ fn derived_claims(
 	args: ref Vec[FnArg],
 	body: ref Block,
 	method: bool,
+	steps: ref collections::BTreeMap[String, (i64, DerivedStep)],
 	words: ref winnow_grammar::InternerContext,
 ) -> Vec[DerivedClaim] {
 	let mut ints: Vec[String] = []
@@ -354,6 +369,21 @@ fn derived_claims(
 			else => {},
 		}
 	}
+	// **A `let` of a step of a parameter** (`let v = l >> 1`, #1673).
+	let mut lets: collections::BTreeMap[String, DerivedStep] = collections::BTreeMap()
+	for stmt in body.stmts {
+		match stmt.node {
+			Stmt::Let { names, value, .. } => {
+				if names.len() == 1 {
+					let none: collections::BTreeMap[String, DerivedStep] = collections::BTreeMap()
+					let step = derived_step(value, ints, none, steps, words) ?? continue
+					lets.insert(words.resolve(names[0]).clone(), step)
+				}
+			},
+			else => {},
+		}
+	}
+	let mut scaled: Vec[DerivedClaim] = []
 	let mut compared: collections::BTreeSet[String] = collections::BTreeSet()
 	let mut indexed: collections::BTreeSet[String] = collections::BTreeSet()
 	// **A method's list field read at `0`** (ADR-306 D34): `self.heap[0]`
@@ -397,6 +427,14 @@ fn derived_claims(
 					else => {},
 				}
 				names_in(index, words, compared)
+				let list = match base {
+					Expr::Variable(name, _) => words.resolve(name).clone(),
+					Expr::Field { .. } => if method { path_of(base, words) ?? "" } else { "" },
+					else => "",
+				}
+				if list != "" && lists.contains(list) {
+					derived_scaled(scaled, list, index, ints, lets, steps, words)
+				}
 			},
 			else => {},
 		}
@@ -436,14 +474,14 @@ fn derived_claims(
 	}
 	let mut claims: Vec[DerivedClaim] = []
 	for list in first {
-		claims.push(DerivedClaim { left: "", strict: true, right: list.clone(), length: true, each: false, fixed: null })
+		claims.push(DerivedClaim { left: "", strict: true, right: list.clone(), length: true, each: false, fixed: null, scale: 1, offset: 0 })
 	}
 	for p in ints {
 		if !compared.contains(p) {
 			continue
 		}
 		if !unsigned.contains(p) {
-			claims.push(DerivedClaim { left: "", strict: false, right: p.clone(), length: false, each: false, fixed: null })
+			claims.push(DerivedClaim { left: "", strict: false, right: p.clone(), length: false, each: false, fixed: null, scale: 1, offset: 0 })
 		}
 		for list in lists {
 			if indexed.contains(list) {
@@ -454,6 +492,8 @@ fn derived_claims(
 					length: true,
 					each: false,
 					fixed: null,
+					scale: 1,
+					offset: 0,
 				})
 				claims.push(DerivedClaim {
 					left: p.clone(),
@@ -462,6 +502,8 @@ fn derived_claims(
 					length: true,
 					each: false,
 					fixed: null,
+					scale: 1,
+					offset: 0,
 				})
 			}
 		}
@@ -474,6 +516,8 @@ fn derived_claims(
 					length: false,
 					each: false,
 					fixed: n,
+					scale: 1,
+					offset: 0,
 				})
 				claims.push(DerivedClaim {
 					left: p.clone(),
@@ -482,6 +526,8 @@ fn derived_claims(
 					length: false,
 					each: false,
 					fixed: n,
+					scale: 1,
+					offset: 0,
 				})
 			}
 		}
@@ -494,6 +540,8 @@ fn derived_claims(
 					length: false,
 					each: false,
 					fixed: null,
+					scale: 1,
+					offset: 0,
 				})
 				claims.push(DerivedClaim {
 					left: p.clone(),
@@ -502,6 +550,8 @@ fn derived_claims(
 					length: false,
 					each: false,
 					fixed: null,
+					scale: 1,
+					offset: 0,
 				})
 			}
 		}
@@ -509,10 +559,170 @@ fn derived_claims(
 	for claim in derived_element_claims(args, body, words) {
 		claims.push(claim)
 	}
+	for claim in scaled {
+		claims.push(claim.clone())
+	}
 	while claims.len() > most_claims() {
 		claims.pop()
 	}
 	return claims
+}
+
+/// **A position into `list` read as a step of a parameter** (ADR-391 D1,
+/// #1673): `list[p >> 1]` asks `p < 2 * list.len()`, `list[p / 2 + 1]`
+/// `p < 2 * list.len() - 2`, and `list[p + 1]` `p < list.len() - 1`, of
+/// every caller; `p < list.len()` and `p <= list.len()` are asked already.
+fn derived_scaled(
+	mut scaled: Vec[DerivedClaim],
+	list: ref String,
+	index: ref Expr,
+	ints: ref Vec[String],
+	lets: ref collections::BTreeMap[String, DerivedStep],
+	steps: ref collections::BTreeMap[String, (i64, DerivedStep)],
+	words: ref winnow_grammar::InternerContext,
+) {
+	let step = derived_step(index, ints, lets, steps, words) ?? return
+	// `p - k` asks no more than the `p <= list.len()` asked already.
+	if step.scale == 1 && step.steps <= 0 {
+		return
+	}
+	// `p / c + k < n` where `p < c * n - c * k`, of a whole number `p >= 0`.
+	let claim = DerivedClaim {
+		left: step.param.clone(),
+		strict: true,
+		right: list.clone(),
+		length: true,
+		each: false,
+		fixed: null,
+		scale: step.scale,
+		offset: 0 - step.scale * step.steps,
+	}
+	for was in scaled {
+		if was.left == claim.left && was.right == claim.right && was.scale == claim.scale && was.offset == claim.offset {
+			return
+		}
+	}
+	scaled.push(claim)
+}
+
+/// **`expr` as a step of one of `ints`**: the parameter itself, `>> s` or
+/// `/ c` of it by a number, a number added or taken away, a `let` of such a
+/// step, a cast to a whole number, or a call of a function in `steps` with
+/// such a step for the parameter its `return` reads.
+fn derived_step(
+	expr: ref Expr,
+	ints: ref Vec[String],
+	lets: ref collections::BTreeMap[String, DerivedStep],
+	steps: ref collections::BTreeMap[String, (i64, DerivedStep)],
+	words: ref winnow_grammar::InternerContext,
+) -> DerivedStep? {
+	match expr {
+		Expr::Variable(name, _) => {
+			let text = words.resolve(name)
+			if ints.contains(text) {
+				return DerivedStep { param: text.clone(), scale: 1, steps: 0 }
+			}
+			return lets[text]?.clone()
+		},
+		Expr::Cast { expr, ty, .. } => {
+			if ty.generics.is_empty() && is_whole_number(words.resolve(ty.name)) {
+				return derived_step(expr, ints, lets, steps, words)
+			}
+		},
+		Expr::Binary { op, lhs, rhs, .. } => {
+			let n = derived_number(rhs) ?? return null
+			let inner = derived_step(lhs, ints, lets, steps, words) ?? return null
+			if op == BinaryOp::Add || op == BinaryOp::Sub {
+				let k = if op == BinaryOp::Add { n } else { 0 - n }
+				if k < -64 || k > 64 {
+					return null
+				}
+				return DerivedStep { param: inner.param.clone(), scale: inner.scale, steps: inner.steps + k }
+			}
+			if inner.scale != 1 || inner.steps != 0 {
+				return null
+			}
+			if op == BinaryOp::Shr && n >= 1 && n <= 30 {
+				return DerivedStep { param: inner.param.clone(), scale: 1 << n, steps: 0 }
+			}
+			if op == BinaryOp::Div && n >= 2 && n <= 1073741824 {
+				return DerivedStep { param: inner.param.clone(), scale: n, steps: 0 }
+			}
+		},
+		Expr::Call { func, args, config, .. } => {
+			if !config.is_empty() {
+				return null
+			}
+			let callee = match func {
+				Expr::Variable(name, _) => words.resolve(name).clone(),
+				else => return null,
+			}
+			let found = steps[callee] ?? return null
+			if found.0 < 0 || found.0 >= args.len() as i64 {
+				return null
+			}
+			let inner = derived_step(args[found.0], ints, lets, steps, words) ?? return null
+			if inner.scale != 1 || inner.steps != 0 {
+				return null
+			}
+			return DerivedStep { param: inner.param.clone(), scale: found.1.scale, steps: found.1.steps }
+		},
+		else => {},
+	}
+	return null
+}
+
+/// A whole number written as a literal, not negative.
+fn derived_number(expr: ref Expr) -> i64? {
+	return match expr {
+		Expr::LitInt { value, negative, .. } => integer_as_count(integer(value, negative)),
+		else => null,
+	}
+}
+
+/// **The free functions whose body is one `return` of a step of a
+/// parameter** (`fn var_of(l: u32) -> i64 { return (l >> 1) as i64 }`), by
+/// name: the parameter's place and the step.
+fn derived_step_functions(
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+) -> collections::BTreeMap[String, (i64, DerivedStep)] {
+	let mut out: collections::BTreeMap[String, (i64, DerivedStep)] = collections::BTreeMap()
+	let none: collections::BTreeMap[String, DerivedStep] = collections::BTreeMap()
+	let nothing: collections::BTreeMap[String, (i64, DerivedStep)] = collections::BTreeMap()
+	for item in program.items {
+		match item.node {
+			Item::Fn { name, receiver, args, config, body, .. } => {
+				if receiver != null || !config.is_empty() || body.stmts.len() != 1 {
+					continue
+				}
+				let named = name ?? continue
+				let mut params: Vec[String] = []
+				for arg in args {
+					params.push(words.resolve(arg.name).clone())
+				}
+				for only in body.stmts {
+					match only.node {
+						Stmt::Return(returned) => {
+							let value = returned ?? continue
+							let step = derived_step(value, params, none, nothing, words) ?? continue
+							if step.scale == 1 && step.steps == 0 {
+								continue
+							}
+							for k in 0..<params.len() {
+								if params[k] == step.param {
+									out.insert(words.resolve(named).clone(), (k as i64, step.clone()))
+								}
+							}
+						},
+						else => {},
+					}
+				}
+			},
+			else => {},
+		}
+	}
+	return out
 }
 
 /// **The claims on every value of a list the body reads positions out of**
@@ -583,9 +793,9 @@ fn derived_element_claims(
 	for (s, m) in pairs {
 		if !floors.contains(s) {
 			floors.insert(s.clone())
-			out.push(DerivedClaim { left: "", strict: false, right: s.clone(), length: false, each: true, fixed: null })
+			out.push(DerivedClaim { left: "", strict: false, right: s.clone(), length: false, each: true, fixed: null, scale: 1, offset: 0 })
 		}
-		out.push(DerivedClaim { left: s.clone(), strict: true, right: m.clone(), length: true, each: true, fixed: null })
+		out.push(DerivedClaim { left: s.clone(), strict: true, right: m.clone(), length: true, each: true, fixed: null, scale: 1, offset: 0 })
 	}
 	return out
 }
@@ -692,12 +902,23 @@ pub fn derived_written(claim: ref DerivedClaim) -> String {
 		left = f"{left}[..]"
 	}
 	let op = if claim.strict { "<" } else { "<=" }
-	let right = if claim.fixed != null { (claim.fixed ?? 0).to_string() } else if claim.length { f"{claim.right}.len()" } else if claim.each {
+	let right = if claim.fixed != null { (claim.fixed ?? 0).to_string() } else if claim.length { derived_written_length(claim) } else if claim.each {
 		f"{claim.right}[..]"
 	} else {
 		claim.right.clone()
 	}
 	return f"{left} {op} {right}"
+}
+
+/// A length side as `--bounds` writes it: `2 * xs.len() - 2`.
+fn derived_written_length(claim: ref DerivedClaim) -> String {
+	let mut out = if claim.scale == 1 { f"{claim.right}.len()" } else { f"{claim.scale} * {claim.right}.len()" }
+	if claim.offset > 0 {
+		out = f"{out} + {claim.offset}"
+	} else if claim.offset < 0 {
+		out = f"{out} - {0 - claim.offset}"
+	}
+	return out
 }
 
 /// **The derived preconditions and the call sites that prove each**, one

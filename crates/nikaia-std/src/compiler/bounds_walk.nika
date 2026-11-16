@@ -3429,6 +3429,7 @@ fn bounding_derived_call(
 				)
 					?? continue
 			}
+			let right = if claim.length { bounding_scaled(walk, claim, right) } else { right }
 			// Two reads out of one list stand for every element both: the
 			// goal would compare an element with itself, not `xs[i]` with
 			// `xs[j]`.
@@ -3585,6 +3586,20 @@ fn bounding_derived_each(
 	return null
 }
 
+/// **A claim's length side**, `scale * length + offset` (ADR-391 D1, #1673).
+fn bounding_scaled(mut walk: BoundsWalk, claim: ref DerivedClaim, length: i64) -> i64 {
+	let mut term = length
+	if claim.scale != 1 {
+		let times = walk.arena.int(claim.scale)
+		term = walk.arena.mul(times, term)
+	}
+	if claim.offset != 0 {
+		let by = walk.arena.int(claim.offset)
+		term = walk.arena.add(term, by)
+	}
+	return term
+}
+
 /// **The derived preconditions at a function's entry** (ADR-391 D1): the
 /// claims every call site proved, known as a written top `assert` is.
 fn bounding_derived_entry(
@@ -3604,7 +3619,8 @@ fn bounding_derived_entry(
 			walk.arena.var(claim.left)
 		}
 		let right = if claim.fixed != null { walk.arena.int(claim.fixed ?? 0) } else if claim.length {
-			walk.arena.var(length_of(claim.right))
+			let length = walk.arena.var(length_of(claim.right))
+			bounding_scaled(walk, claim, length)
 		} else if claim.each {
 			walk.arena.var(bounding_element_of(claim.right))
 		} else {
