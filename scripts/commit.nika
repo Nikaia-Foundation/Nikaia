@@ -42,11 +42,13 @@
 //
 // **An unmarked rules answer** (#1773): when the commit changes a rules file
 // (`docs/issues.md`, `CLAUDE.md`, `docs/builder-facts*.md`,
-// `.claude/agents/*.md`) and the report's `Issue:` holds an answer not
+// `.claude/agents/*.md`) or a script (`scripts/`, where the driver and its
+// templates live, #1802) and the report's `Issue:` holds an answer not
 // marked `(built)`, the script prints a `NOTE:` line: the driver files every
-// unmarked answer as an improvement issue, so a rule the commit itself built
-// comes back as one (#1739 filed as #1724, #1726 filed as #1773). It only
-// warns: the run may have built one rule and left another point open.
+// unmarked answer as an improvement issue, so a rule or a template fix the
+// commit itself built comes back as one (#1739 filed as #1724, #1726 filed
+// as #1773, #1791 filed as #1802). It only warns: the run may have built one
+// point and left another open.
 //
 // **Already committed** (#1794): a run interrupted after its commit and
 // resumed finds every listed file unchanged. When none of them differs from
@@ -134,12 +136,12 @@ fn commit_copy_entry(index: String, path: String, stage: bool) -> bool throws {
 
 // "" when fine, else the refusal.
 // The `NOTE:` line for an `Issue:` answer not marked `(built)` when FILES
-// change a rules file; "" otherwise. The answers are split as the driver's
+// change a rules file or a script; "" otherwise. The answers are split as the driver's
 // `drive_issue_open` splits them.
 fn commit_unmarked_rules(report: String, files: Vec[String]) -> String {
     let mut rules = false
     for f in files {
-        if f == "docs/issues.md" || f == "CLAUDE.md" || f.starts_with("docs/builder-facts") || f.starts_with(".claude/agents/") { rules = true }
+        if f == "docs/issues.md" || f == "CLAUDE.md" || f.starts_with("docs/builder-facts") || f.starts_with(".claude/agents/") || f.starts_with("scripts/") { rules = true }
     }
     if !rules { return "" }
     let mut open: Vec[String] = []
@@ -152,7 +154,7 @@ fn commit_unmarked_rules(report: String, files: Vec[String]) -> String {
         }
     }
     if open.len() == 0 { return "" }
-    return f"NOTE: this commit changes a rules file and Issue: has {open.join(", ")} without (built); mark each point this commit built `(built)` (docs/issues.md), or the driver files it again"
+    return f"NOTE: this commit changes a rules file or a script and Issue: has {open.join(", ")} without (built); mark each point this commit built `(built)` (docs/issues.md), or the driver files it again"
 }
 
 // The staged paths not listed: another agent's, left staged (#1792).

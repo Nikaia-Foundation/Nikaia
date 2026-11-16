@@ -1,6 +1,7 @@
 // scripts/commit.nika --dry-run warns when the commit changes a rules file
-// and the report's Issue: holds an answer not marked `(built)` (#1773), and
-// is silent when every such answer is marked or no rules file changes.
+// or a script and the report's Issue: holds an answer not marked `(built)`
+// (#1773, #1802), and is silent when every such answer is marked or neither
+// a rules file nor a script changes.
 use std::fs
 use std::process
 
@@ -32,14 +33,16 @@ fn main() throws {
     let repo = root()
     let nikaia = toolchain()
     process::run("git", ["init", "-q", tmp.clone()])
-    process::run("mkdir", ["-p", f"{tmp}/docs"])
+    process::run("mkdir", ["-p", f"{tmp}/docs", f"{tmp}/scripts"])
     fs::write(f"{tmp}/docs/issues.md", fs::Root::Anywhere, "x\n")
     fs::write(f"{tmp}/a.txt", fs::Root::Anywhere, "x\n")
+    fs::write(f"{tmp}/scripts/drive.nika", fs::Root::Anywhere, "x\n")
     let head = "Result: done\nCommit: a subject\nChangelog: none\n"
     let cases = [
         "Files: docs/issues.md\nIssue: rules-gap: x; wrong I3: y; rules-gap (built): z\n",
         "Files: docs/issues.md\nIssue: rules-gap (built): z\n",
         "Files: a.txt\nIssue: rules-gap: x\n",
+        "Files: scripts/drive.nika\nIssue: wrong I5: x\n",
         "Files: docs/issues.md\nIssue: complete\n",
     ]
     for c in cases {

@@ -378,7 +378,9 @@ rule number a driver-filed issue copied from an earlier report, a slip
 with nothing to build) is not judged again in `Issue:`: the driver files
 each `Issue:` answer as a new improvement issue, and the echo only files
 the closed point once more (#1708: #1703's run closed its I3 label as a
-citation slip and still answered `wrong I3`).
+citation slip and still answered `wrong I3`; #1802: #1791's run closed its
+I5 label as the wrong rule, built the driver template fix itself, and still
+answered `wrong I5` unmarked).
 
 A point the run has already built in its own commit (it added the missing
 rule to this file, or fixed the issue) is answered with `(built)` after its
@@ -386,8 +388,9 @@ kind, `rules-gap (built): <what was missing>`: it stays in the report for the
 supervisor's count, and the driver does not file it (#1739: #1707's run
 added its rule to I9 and its `rules-gap` was filed again as #1724; #1726's
 run forgot the mark too and was filed as #1773, so `scripts/commit.nika` now
-prints a `NOTE:` when a commit changes a rules file
-and `Issue:` holds an unmarked answer).
+prints a `NOTE:` when a commit changes a rules file or a script under
+`scripts/` (the driver's templates, #1802) and `Issue:` holds an unmarked
+answer).
 
 Several answers are joined with `;`. The supervisor counts them per rule and
 per author; a rule that is broken often is made easier to keep, a gap that
