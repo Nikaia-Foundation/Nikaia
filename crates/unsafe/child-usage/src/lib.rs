@@ -12,6 +12,8 @@
 
 #![deny(unsafe_op_in_unsafe_fn)]
 
+pub mod cap;
+
 use std::io;
 use std::process::{Child, ExitStatus};
 use std::time::Duration;

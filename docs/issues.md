@@ -85,6 +85,14 @@ it, like the checks in `docs/supervisor.md`.
   The expected output is written out (the text it prints, or the NK code and
   the gist of its message), never pointed at: "the specified result" or "what
   the spec says" leaves the builder to find it (#1737: #1550's issue).
+  An exact figure in it (a count, a size, a budget) comes from a source
+  the issue names, never a guess: a reference run of the same program that
+  is right (the Cargo build of what fails under `nikaia run`, the setting
+  that works) with its output, or the ADR or section that fixes the
+  number. Without one, the expected output is the property that must hold
+  ("never negative", "the same figure as the Cargo build"), not a number
+  (#1928: #1844 expected `304 at 304`; both builds print a constant 160
+  more, so its run measured the reference itself).
   A proof that differs between two runs (`check` and `lower-std`, one file
   and a package) is reduced to a probe of at most two files, and says whether
   the function is called from more than one file (ADR-391 D1) (#1465).

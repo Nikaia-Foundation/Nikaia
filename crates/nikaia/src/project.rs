@@ -3222,7 +3222,16 @@ impl ProgramHost {
     /// Where `within` is more than zero, it runs in a process group of its
     /// own, and after that many seconds the whole group is killed - the
     /// program and every process it started, which would otherwise hold its
-    /// pipes open - and the run says it timed out (#1672).
+    /// pipes open - and the run says it timed out (#1672). The group ends with
+    /// this compiler too, killed included: a guard process ends it then
+    /// (`child_usage::cap::guard_group`, #1919).
+    ///
+    /// Where `processes` is more than zero, the program and every process it
+    /// starts may hold that many tasks (`child_usage::cap::Cap`): a fork past
+    /// it fails, and the run says it was `capped` where the cap can tell. When
+    /// the program ends, whatever it left running in its group or its cap is
+    /// ended before its pipes are read to their end, so a process left
+    /// behind neither outlives the test nor holds the runner (#1919).
     fn ran(
         &self,
         program: &Path,
@@ -3230,6 +3239,7 @@ impl ProgramHost {
         dir: &Path,
         stdin: &[u8],
         within: i64,
+        processes: i64,
     ) -> Result<project_tests::ProjectTestsRan> {
         use std::io::Write;
         use std::sync::atomic::{AtomicBool, Ordering};
@@ -3248,10 +3258,15 @@ impl ProgramHost {
             use std::os::unix::process::CommandExt;
             command.process_group(0);
         }
+        let cap = child_usage::cap::Cap::new(u32::try_from(processes.max(0)).unwrap_or(u32::MAX));
+        cap.apply(&mut command);
         let expired = std::sync::Arc::new(AtomicBool::new(false));
         let out = command
             .spawn()
             .and_then(|mut child| {
+                let guard = (within > 0)
+                    .then(|| child_usage::cap::guard_group(child.id(), cap.cgroup()).ok())
+                    .flatten();
                 // Written beside the wait, so a program that prints before
                 // it reads does not fill its pipe and stop; one that stops
                 // reading early closes the pipe, which is its business.
@@ -3277,12 +3292,19 @@ impl ProgramHost {
                     });
                     (done, thread)
                 });
-                let out = child.wait_with_output();
+                let out = if processes > 0 {
+                    Self::ended_with_what_it_left(child, &cap)
+                } else {
+                    child.wait_with_output()
+                };
                 if let Some((done, thread)) = watchdog {
                     drop(done);
                     let _ = thread.join();
                 }
                 let _ = writing.join();
+                if let Some(guard) = guard {
+                    guard.release();
+                }
                 out
             })
             .with_context(|| format!("running {}", program.display()))?;
@@ -3291,6 +3313,42 @@ impl ProgramHost {
             stdout: out.stdout.into(),
             stderr: out.stderr.into(),
             timed_out: expired.load(Ordering::SeqCst),
+            capped: if cap.reached() { processes } else { 0 },
+        })
+    }
+
+    /// Read `child`'s two streams on threads of their own, wait until it has
+    /// ended, end what it left in its group and in `cap`, then reap it: its id
+    /// stays taken until then, so the group kill reaches only its own (#1919).
+    fn ended_with_what_it_left(
+        mut child: std::process::Child,
+        cap: &child_usage::cap::Cap,
+    ) -> std::io::Result<std::process::Output> {
+        use std::io::Read;
+        fn read_beside(
+            pipe: Option<impl Read + Send + 'static>,
+        ) -> std::thread::JoinHandle<std::vec::Vec<u8>> {
+            std::thread::spawn(move || {
+                let mut bytes = std::vec::Vec::new();
+                if let Some(mut pipe) = pipe {
+                    let _ = pipe.read_to_end(&mut bytes);
+                }
+                bytes
+            })
+        }
+        let stdout = read_beside(child.stdout.take());
+        let stderr = read_beside(child.stderr.take());
+        let unreaped = child_usage::cap::wait_unreaped(&child);
+        if unreaped.is_ok() {
+            child_usage::kill_group(child.id());
+        }
+        cap.end_all();
+        let status = child.wait()?;
+        unreaped?;
+        Ok(std::process::Output {
+            status,
+            stdout: stdout.join().unwrap_or_default(),
+            stderr: stderr.join().unwrap_or_default(),
         })
     }
 }
@@ -3312,6 +3370,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         own: &Path,
         stdin: &[u8],
         within: i64,
+        processes: i64,
     ) -> HostResult<project_tests::ProjectTestsRan> {
         let mut command = std::process::Command::new(&self.exe);
         command
@@ -3321,7 +3380,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         if verb == "build" {
             command.env("CARGO_TERM_QUIET", "true");
         }
-        self.held(self.ran(&self.exe, command, dir, stdin, within))
+        self.held(self.ran(&self.exe, command, dir, stdin, within, processes))
     }
 
     fn explained(
@@ -3333,7 +3392,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         let mut command = std::process::Command::new(&self.exe);
         command.arg("check").args(args).arg(entry);
         self.held(
-            self.ran(&self.exe, command, own, &[], 0)
+            self.ran(&self.exe, command, own, &[], 0, 0)
                 .map(|out| out.stdout),
         )
     }
@@ -3345,6 +3404,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         own: &Path,
         stdin: &[u8],
         within: i64,
+        processes: i64,
     ) -> HostResult<Option<project_tests::ProjectTestsRan>> {
         let binary = project
             .join("target")
@@ -3356,7 +3416,10 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         }
         let mut command = std::process::Command::new(&binary);
         command.env(nikaia_std::fs::TEST_DIR_VAR, own);
-        self.held(self.ran(&binary, command, dir, stdin, within).map(Some))
+        self.held(
+            self.ran(&binary, command, dir, stdin, within, processes)
+                .map(Some),
+        )
     }
 
     fn batched(
@@ -3374,7 +3437,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
             .env(nikaia_std::fs::TEST_DIR_VAR, own)
             .env(project_batch::project_batch_var(), list)
             .env("CARGO_TERM_QUIET", "true");
-        let built = self.held(self.ran(&self.exe, command, own, &[], within))?;
+        let built = self.held(self.ran(&self.exe, command, own, &[], within, 0))?;
         let binary = project
             .join("target")
             .join("nikaia")
@@ -3394,10 +3457,11 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         own: &Path,
         stdin: &[u8],
         within: i64,
+        processes: i64,
     ) -> HostResult<project_tests::ProjectTestsRan> {
         let mut command = std::process::Command::new(binary);
         command.arg(name).env(nikaia_std::fs::TEST_DIR_VAR, own);
-        self.held(self.ran(binary, command, dir, stdin, within))
+        self.held(self.ran(binary, command, dir, stdin, within, processes))
     }
 }
 
