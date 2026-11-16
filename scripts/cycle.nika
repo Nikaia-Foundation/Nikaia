@@ -142,7 +142,7 @@ fn main() throws {
         if fs::exists(f"{dir}/QUESTION", fs::Root::Anywhere) {
             batch = f"OWNER second: {q}"
         } else {
-            fs::write(f"{dir}/QUESTION", fs::Root::Anywhere, q.clone() + "\n")
+            fs::write(f"{dir}/QUESTION", fs::Root::Anywhere, q + "\n")
         }
     }
     if batch.starts_with("CUT") { println(cycle_cap(batch.clone() + " -> SUPERVISOR")) } else { println(cycle_cap(batch.clone())) }

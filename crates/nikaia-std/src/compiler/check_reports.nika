@@ -154,7 +154,7 @@ impl CheckState {
         self.said_mut.insert(declared)
         let there = CheckLabel { span: without_mut.at.clone(), word: name.clone(), text: declared_text, main: false }
         let here = CheckLabel { span: changed_at.clone(), word: name.clone(), text: how.clone(), main: true }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code: code, message: message, notes: notes, help: help, labels: [there, here] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: changed_at, code: code, message: message, notes: notes, help: help, labels: [there, here], edit: null })
     }
 
     /// **`NK1306`: `mut` on a `for` binding that cannot be changed in place**
@@ -183,7 +183,7 @@ impl CheckState {
             label = "marks a read-only view"
         }
         let there = CheckLabel { span: span.clone(), word: "mut", text: label, main: true }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1306", message: message, notes: [note], help: help, labels: [there] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1306", message: message, notes: [note], help: help, labels: [there], edit: null })
     }
 
     /// **`for mut` over a list the function may not change** (ADR-views-2 D2):
@@ -194,7 +194,7 @@ impl CheckState {
             way_out = f"Write `mut {list}` in the parameter list, or walk a copy of your own: `for mut {head} in {list}.clone()`."
         }
         let label = CheckLabel { span: span.clone(), word: list.clone(), text: "can't be changed here", main: true }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1139", message: f"`for mut {head}` changes the elements of `{list}`, but `{list}` wasn't declared as mutable.", notes: ["A `for mut` binding is the element of the list itself, so a change to it reaches the list."], help: way_out, labels: [label] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1139", message: f"`for mut {head}` changes the elements of `{list}`, but `{list}` wasn't declared as mutable.", notes: ["A `for mut` binding is the element of the list itself, so a change to it reaches the list."], help: way_out, labels: [label], edit: null })
     }
 
     /// **`for mut` over a place that is not a list or an array** (ADR-views-2
@@ -339,6 +339,6 @@ impl CheckState {
         if self.computing_default {
             help = "Fix it as you would fix the program stopping there, or make the option a `T?` and compute the value in the body."
         }
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1244", message: f"`{bound}` stopped while the program was built: {why}.", notes: notes, help: help, labels: labels })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1244", message: f"`{bound}` stopped while the program was built: {why}.", notes: notes, help: help, labels: labels, edit: null })
     }
 }

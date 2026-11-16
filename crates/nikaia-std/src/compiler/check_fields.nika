@@ -126,7 +126,7 @@ impl CheckState {
         }
         self.facts.plain_reaches.insert(fact_key(reach))
         let note = f"`?.` is for a value that may be missing: it reaches the {what} when there's something there and gives `null` otherwise. A type without `?` always has a value, so this is the plain `{plain}`."
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1217", message: f"You don't need `?.` here: a `{on.text()}` is never absent.", notes: [note], help: f"Write `{plain}`.", labels: [] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1217", message: f"You don't need `?.` here: a `{on.text()}` is never absent.", notes: [note], help: f"Write `{plain}`.", labels: [], edit: null })
     }
 
     /// **`??` over a value that is never absent** (`NK1211` over an index,
@@ -158,7 +158,7 @@ impl CheckState {
             return false
         }
         let note = f"`??` replaces a `null`, and a value of type `{seen.text()}` is never `null`: only a type written with `?` can be."
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1216", message: message, notes: [note], help: "Remove `??` and what follows it.", labels: [] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1216", message: message, notes: [note], help: "Remove `??` and what follows it.", labels: [], edit: null })
         return true
     }
 

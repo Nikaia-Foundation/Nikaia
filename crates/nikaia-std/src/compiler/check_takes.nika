@@ -1119,7 +1119,7 @@ impl CheckState {
         if a_view {
             help = f"Assign {part} (or the whole `{subject}`) before its block is left{tail}."
         }
-        return CheckFinding { severity: CheckSeverity::Error, span: span, code: "NK2108", message: message, notes: [kept], help: help, labels: labels }
+        return CheckFinding { severity: CheckSeverity::Error, span: span, code: "NK2108", message: message, notes: [kept], help: help, labels: labels, edit: null }
     }
 }
 
@@ -1262,7 +1262,7 @@ impl CheckState {
         let at = check_span_at(world, expr, span)
         if self.a_clone_that_copies(world, copy) {
             let what: String = dotted_path(world, receiver) ?? "the value"
-            self.a_needless_clone(at, f"`{what}` is a `{copy.text()}`, which copies by itself: `.clone()` makes nothing new.", ["A number, a `bool`, a `char` and a type whose every part copies are copied wherever they are read (ADR-294 D9.1)."], "Delete `.clone()`.")
+            self.a_needless_clone(at, f"`{what}` is a `{copy.text()}`, which copies by itself: `.clone()` makes nothing new.", ["A number, a `bool`, a `char` and a type whose every part copies are copied wherever they are read (ADR-294 D9.1)."], "Delete `.clone()`.", clone_deleted(world, expr, receiver))
             return
         }
         let name = match receiver {
@@ -1289,7 +1289,7 @@ impl CheckState {
                 return
             }
         }
-        self.flow.clones.push(CheckClone { name: name, binding: local.id, seq: self.read_seq, choices: self.branch.clone(), node: node, span: at })
+        self.flow.clones.push(CheckClone { name: name, binding: local.id, seq: self.read_seq, choices: self.branch.clone(), node: node, span: at, edit: clone_deleted(world, expr, receiver) })
     }
 
     /// Whether a clone's value copies by itself: a number, a `bool`, a
@@ -1393,7 +1393,7 @@ impl CheckState {
         }
         let node = id_of(iter) as i64
         self.flow.clones.retain(fn(held) { held.node != node })
-        self.a_needless_clone(check_span_at(world, iter, span), f"`{path}` is copied only to be walked: nothing in the loop changes it or takes it.", ["A `for` over a place lends its elements (ADR-094 D4), so the loop can walk the place itself."], "Delete `.clone()`.")
+        self.a_needless_clone(check_span_at(world, iter, span), f"`{path}` is copied only to be walked: nothing in the loop changes it or takes it.", ["A `for` over a place lends its elements (ADR-094 D4), so the loop can walk the place itself."], "Delete `.clone()`.", clone_deleted(world, iter, receiver))
     }
 
     /// **The clones no read followed**, said where the body ends.
@@ -1416,7 +1416,7 @@ impl CheckState {
             if lent {
                 continue
             }
-            self.a_needless_clone(one.span, f"This `.clone()` is the last use of `{one.name}`: it copies `{one.name}` only to drop it.", [f"Nothing reads `{one.name}` after it, so it can be handed over itself."], f"Hand `{one.name}` itself: write `{one.name}` for `{one.name}.clone()`.")
+            self.a_needless_clone(one.span, f"This `.clone()` is the last use of `{one.name}`: it copies `{one.name}` only to drop it.", [f"Nothing reads `{one.name}` after it, so it can be handed over itself."], f"Hand `{one.name}` itself: write `{one.name}` for `{one.name}.clone()`.", one.edit?.clone())
         }
     }
 
@@ -1442,7 +1442,7 @@ impl CheckState {
     }
 
     // `NK1350`, said once per site.
-    fn a_needless_clone(ref mut self, at: Span, message: String, notes: Vec[String], help: String) sync {
+    fn a_needless_clone(ref mut self, at: Span, message: String, notes: Vec[String], help: String, edit: CheckEdit?) sync {
         for said in self.findings {
             if said.code == "NK1350" && said.span.start == at.start {
                 return
@@ -1450,8 +1450,22 @@ impl CheckState {
         }
         let mut warned = check_refusal("NK1350", at, message, notes, help)
         warned.severity = CheckSeverity::Warning
+        warned.edit = edit
         self.findings.push(warned)
     }
+}
+
+// **The edit `NK1350` suggests** (#1714): the `.clone()` after its receiver,
+// deleted, from the receiver's end to the call's. Only where both spans are
+// known and the receiver starts the call: a receiver whose span leaves out
+// a bracket before it gets no edit.
+fn clone_deleted(world: ref CheckWorld, call: ref Expr, receiver: ref Expr) -> CheckEdit? sync {
+    let whole = world.here.spans.get(id_of(call)) ?? return null
+    let of = world.here.spans.get(id_of(receiver)) ?? return null
+    if of.start != whole.start || of.end >= whole.end {
+        return null
+    }
+    return CheckEdit { span: Span { start: of.end, end: whole.end }, text: "" }
 }
 
 // Whether a binding is a `let`'s: written so, `mut` or not, and no parameter.

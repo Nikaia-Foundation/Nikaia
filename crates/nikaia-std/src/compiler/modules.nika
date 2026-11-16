@@ -235,7 +235,7 @@ pub fn lost_sync(contracts: ref Ledger, theirs: ref collections::BTreeMap[String
             notes.push(f"{pause_path(pause.chain)}, which pauses here.")
         }
         notes.push(f"{site.what} can pause.")
-        let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: site.span.start, end: site.span.end }, code: "NK2211", message: message, notes: notes, help: help, labels: [] }
+        let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: site.span.start, end: site.span.end }, code: "NK2211", message: message, notes: notes, help: help, labels: [], edit: null }
         out.push_str(render(finding, pause.unit))
     }
     return out
@@ -1283,6 +1283,9 @@ fn modules_is_file(path: ref fs::Path) -> bool {
 pub trait ModulesLedgerHost {
     /// The ledger at `path`, where it is there and parses (`Ledger::read_beside`).
     fn read_beside(ref self, path: ref fs::Path) -> Ledger? sync
+    /// The header this compiler writes on a ledger it derives, and nothing
+    /// in it (`Ledger::empty`): its format version and its inference.
+    fn this_compiler(ref self) -> Ledger sync
 }
 
 /// The units of one package, by file name and the SHA-256 of their bytes
@@ -1322,9 +1325,18 @@ pub fn modules_sources_of[H: ModulesLedgerHost](paths: ref Vec[fs::Path], texts:
 /// all is treated as not matching, which is the fail-closed direction
 /// ([ADR-010](../../../docs/specification/adr/adr-010.md) D1): *nothing was
 /// recorded* must not read as *nothing changed*.
+///
+/// **Nor by another inference than this compiler's** (ADR-100 D3, #1621). A
+/// ledger whose recorded `inference` or format `version` is not the one
+/// this compiler writes is an answer to another question about the same
+/// sources, so the package is derived again, as where a hash moved.
 pub fn modules_believed[H: ModulesLedgerHost](dependency: ref ProjectMembersDependency, sources: ref collections::BTreeMap[String, String], host: ref H) -> Ledger? {
     let shipped = modules_shipped_ledger(dependency.root, host) ?? return null
     if !stale_units(shipped, sources).is_empty() {
+        return null
+    }
+    let ours = host.this_compiler()
+    if shipped.version != ours.version || shipped.inference != ours.inference {
         return null
     }
     return published_entries(shipped, dependency.reachable)

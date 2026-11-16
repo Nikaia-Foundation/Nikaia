@@ -130,8 +130,6 @@ goes into the section of its topic, in one line, with the run that paid for it.
 
 ### Lowering and lower-std
 
-* `commit.nika` stages whole files: a defect fix that shares a file with a step is split by putting HEAD's version plus the fix hunks (in the `.nika` and its lowered `.rs`) in place, committing, then restoring the step. Plan the fix as its own commit before starting the step in that file. (issue-1470)
-
 * **Check lowered tools code with `cargo check --profile fast -p nikaia-std
   --features compiler --message-format short`** right after the first
   `lower-std`; without the feature the check is a false green (k3a2).
@@ -297,6 +295,13 @@ goes into the section of its topic, in one line, with the run that paid for it.
   The two can differ: `check --bounds FILE` proved a site D23 reaches that
   `lower-std --bounds` did not (#1465); a figure is claimed only from
   `lower-std`. (issue-1414)
+* **`--asserts` lists `assert` claims only (ADR-361 D7)**; an index or
+  counter the walk leaves checked, with the loop its reason names, shows in
+  `--bounds`. An issue that asks for it under `--asserts` means `--bounds`. (issue-1634)
+* **A `--bounds` reason's wording is quoted verbatim by the `.bounds` files**
+  (23 for the loop reasons): before changing one, `grep -l 'PHRASE'
+  tests/compiler/tests/*.bounds` and bless them all in one `nikaia test` run
+  (one `--filter` per test). (issue-1634)
 * **A `for` binding is a number of the walk** (`CheckFacts.whole_loops`):
   check it before blaming the prover when a guard on `for k in ks` is lost.
   (issue-1414)
@@ -393,6 +398,10 @@ build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
   ?? ...` first; a `String?` field is matched as it is (`null => .., x => ..`);
 * [works] a `ref String?` parameter takes a bare `String` (`ref String?` is
   `NK1261`, write `String?`);
+* [works: ADR-331 D5] a struct field may have a default (`pub edit: Edit? =
+  null,`), and a literal in any file of the package leaves it out: a field
+  added to a struct with many literals (`CheckFinding`) gets one, not an
+  `edit: null` in each; literals in hand-written Rust still name it;
 * [gap: ADR-views-2 §6] `mut` on one name of a tuple (`for (k, mut v) in m`),
   and so `values_mut()` / `iter_mut()`, is `NK1307`: stops the slice;
 * [design: Part I 3.3, 3.4] `a..b` includes `b`, half-open is `a..<b`; the

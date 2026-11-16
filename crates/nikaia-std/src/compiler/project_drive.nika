@@ -84,6 +84,14 @@ pub trait ProjectDriveHost {
     fn compiler(ref self) -> String sync
     /// The refusal of a toolchain older than the emitted Rust needs, or null.
     fn toolchain_is_new_enough(ref self) -> String? sync
+    /// `rustc --version`, as the build already asked it; empty where there
+    /// is no `rustc`.
+    fn rustc_version(ref self) -> String sync
+    /// `project_drive_fresh` of the record at `record` and the digest of
+    /// what Cargo is handed (#1750).
+    fn cargo_fresh(ref self, record: ref fs::Path, handed: ref String) -> String? sync
+    /// `project_drive_record` after a build that succeeded (#1750).
+    fn record_cargo(ref self, record: ref fs::Path, handed: ref String, messages: ref String, generated: ref fs::Path) sync
     /// The triple this build is for.
     fn target_triple(ref self) -> String sync
     /// The machine this compiler runs on, null where it is none it knows.
@@ -372,7 +380,8 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     // is built in is shared and outlives an edit to the compiler, so this
     // line is what makes the program's crates stale after one - and only
     // them, not `std` and what is under it, which the compiler never wrote.
-    host.write_if_changed(switches, f"{build}\n{backend}\n{link_flags.join(" ")}\n{host.compiler()}\n")
+    let switched = f"{build}\n{backend}\n{link_flags.join(" ")}\n{host.compiler()}\n"
+    host.write_if_changed(switches, switched)
 
     // **Before Cargo is handed anything** (ADR-288 D27): its own answer
     // about the floor names a package the author never wrote, which is
@@ -457,7 +466,30 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     // **`nikaia check --rustc` is Cargo's `check`** (#1373): the same
     // lowering and the same reading of what rustc said, with no program made.
     let verb = if subcommand == "check" { "check" } else { "build" }
-    let (built_code, messages) = host.cargo_messages(verb, build_args)
+    // **A build that would build nothing starts no Cargo** (#1750): its
+    // start, its resolution and its fingerprints cost most of a second, and
+    // a test run paid it for every program. The record of the last build
+    // (`project_drive_fresh`) stands for it while what Cargo was handed and
+    // every file it read are what they were. Not for `check` or a build that
+    // asked for no cache.
+    let record = manifest.parent()?.join("cargo-fresh") ?? host.gen_dir().join("cargo-fresh")
+    let recorded = verb == "build" && !no_cache
+    let handed = project_drive_handed(host, verb, build_args, env, unset, shared, manifest, rust, switched)
+    let fresh: String? = match recorded {
+        true => host.cargo_fresh(record, handed),
+        false => null,
+    }
+    let (built_code, messages) = match fresh {
+        null => host.cargo_messages(verb, build_args),
+        said => (0, said.clone()),
+    }
+    // Cargo ran: the record now names this build, or none at all (a
+    // failure, a `check`), so no record stands for a program
+    // Cargo has written since.
+    if fresh == null {
+        let said = if recorded && built_code == 0 { messages.clone() } else { "" }
+        host.record_cargo(record, handed, said, host.gen_dir())
+    }
     let mut code = built_code
     // Cargo is done with what this build added to the user cache, so its
     // size is known: hold the cache to its limit before a `run` starts the
@@ -527,6 +559,121 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
         }
     }
     return (code, binary)
+}
+
+/// What else Cargo reads from the environment that changes what it builds,
+/// and the batch of test programs a build is (`project_batch_var`).
+comptime PROJECT_DRIVE_CARGO_READS: Array[ref String, 10] = ["NIKAIA_TEST_BATCH", "CARGO", "CARGO_HOME", "CARGO_TARGET_DIR", "CARGO_BUILD_RUSTFLAGS", "RUSTC", "RUSTC_WRAPPER", "RUSTFLAGS", "RUSTUP_TOOLCHAIN", "RUSTUP_HOME"]
+
+/// **What Cargo is handed for this build**, as a digest (#1750): the verb and
+/// its arguments (not `--quiet`, which only quiets it), the environment the
+/// wrapper gets and the variables Cargo reads itself, the generated Rust, the
+/// switches (with this compiler's identity) and the toolchain. The manifests
+/// and the lock join it in `project_drive_cargo_key`.
+fn project_drive_handed[H: ProjectDriveHost](host: ref H, verb: ref String, args: ref Vec[String], env: ref Vec[(String, String)], unset: ref Vec[String], shared: bool, manifest: ref fs::Path, rust: ref Vec[String], switched: ref String) -> String sync {
+    let mut text = f"{verb}\n{shared}\n{manifest.display()}\n{host.rustc_version()}\n{switched}"
+    for arg in args {
+        if arg != "--quiet" {
+            text.push_str(f"arg {arg}\n")
+        }
+    }
+    for (name, value) in env {
+        text.push_str(f"env {name}={value}\n")
+    }
+    for name in unset {
+        text.push_str(f"unset {name}\n")
+    }
+    for name in PROJECT_DRIVE_CARGO_READS {
+        let value = env::var(name) ?? ""
+        text.push_str(f"var {name}={value}\n")
+    }
+    for code in rust {
+        text.push_str(f"rust {hash::sha256_hex(code.bytes().collect())}\n")
+    }
+    return hash::sha256_hex(text.bytes().collect())
+}
+
+/// **The key of a build**: what Cargo is handed (`handed`) and the generated
+/// workspace beside the record, its manifest, its lock and each member's
+/// manifest. Read again after a build, since Cargo writes the lock.
+fn project_drive_cargo_key(record: ref fs::Path, handed: ref String) -> String {
+    let mut text = f"{handed}\n"
+    let dir = record.parent() ?? return handed.clone()
+    text.push_str(fs::read_to_string(dir.join("Cargo.toml"), fs::Root::Anywhere) catch { "" })
+    text.push_str(fs::read_to_string(dir.join("Cargo.lock"), fs::Root::Anywhere) catch { "" })
+    let mut names: Vec[String] = (fs::read_dir(dir, fs::Root::Anywhere) catch { [] }).iter().map(fn(name) { name.display() }).collect()
+    names.sort()
+    for name in names {
+        let member = fs::read_to_string(dir.join(name).join("Cargo.toml"), fs::Root::Anywhere) catch { continue }
+        text.push_str(f"member {name}\n{member}")
+    }
+    return hash::sha256_hex(text.bytes().collect())
+}
+
+/// **What the last build of this key said, where it would build nothing
+/// now** (#1750): the record names the key, the program Cargo made, and each
+/// file Cargo's dependency file lists for it (the sources of every path
+/// dependency, `std`'s among them) with its length, time and digest. A file
+/// whose length or time moved is read, and counts as changed only where its
+/// digest did: a test program copied in again is the same program. Null
+/// where anything differs or is gone.
+pub fn project_drive_fresh(record: ref fs::Path, handed: ref String) -> String? {
+    let key = project_drive_cargo_key(record, handed)
+    let held = fs::read_to_string(record, fs::Root::Anywhere) catch { return null }
+    let lines: Vec[String] = held.lines().map(fn(line) { line.clone() }).collect()
+    if lines.len() < 2 || lines[0] != key {
+        return null
+    }
+    let binary: fs::Path = lines[1].clone()
+    if !(fs::metadata(binary, fs::Root::Anywhere) catch { return null }).is_file() {
+        return null
+    }
+    for line in lines.iter().skip(2) {
+        let parts: Vec[String] = line.splitn(4, ":").map(fn(part) { part.clone() }).collect()
+        if parts.len() != 4 {
+            return null
+        }
+        let path: fs::Path = parts[3].clone()
+        let meta = fs::metadata(path, fs::Root::Anywhere) catch { return null }
+        if f"{meta.len()}" == parts[0] && f"{meta.modified().in_nanos()}" == parts[1] {
+            continue
+        }
+        let bytes = fs::read(path, fs::Root::Anywhere) catch { return null }
+        if hash::sha256_hex(bytes.iter().collect()) != parts[2] {
+            return null
+        }
+    }
+    return fs::read_to_string(record.with_extension("messages"), fs::Root::Anywhere) catch { null }
+}
+
+/// **The record a build leaves** for `project_drive_fresh`: none where it
+/// failed (`messages` empty), Cargo named no program, or its dependency file
+/// cannot be read. The Rust under `generated` is left out of it.
+pub fn project_drive_record(record: ref fs::Path, handed: ref String, messages: ref String, generated: ref fs::Path) {
+    fs::remove(record, fs::Root::Anywhere) catch {}
+    let binary = diagnostics_executable_in(messages.clone()) ?? return
+    let key = project_drive_cargo_key(record, handed)
+    let named = binary.display()
+    let dep_info: fs::Path = f"{named}.d"
+    let depends = fs::read_to_string(dep_info, fs::Root::Anywhere) catch { return }
+    let first = depends.lines().next() ?? return
+    let listed = (first.strip_prefix(f"{named}:") ?? return).replace("\\ ", "\u{1f}")
+    let mut text = f"{key}\n{named}\n"
+    let within = f"{generated.display()}/"
+    for word in listed.split(" ") {
+        // The generated Rust is not listed: the wrapper writes a program's
+        // crate while Cargo runs, from the sources listed here, and a batch's
+        // differs from what was written before; the rest is in the key.
+        if word.len() == 0 || (word.starts_with(within) && word.ends_with(".rs")) {
+            continue
+        }
+        let path: fs::Path = word.replace("\u{1f}", " ")
+        let meta = fs::metadata(path, fs::Root::Anywhere) catch { return }
+        let bytes = fs::read(path, fs::Root::Anywhere) catch { return }
+        text.push_str(f"{meta.len()}:{meta.modified().in_nanos()}:{hash::sha256_hex(bytes.iter().collect())}:{path.display()}\n")
+    }
+    fs::write(record.with_extension("messages"), fs::Root::Anywhere, messages.clone()) catch { return }
+    fs::write(record, fs::Root::Anywhere, text) catch {}
 }
 
 /// Where the wrapper writes the generated Rust of package `name`: the
@@ -839,7 +986,7 @@ fn project_drive_splice_checked[H: ProjectDriveHost](host: ref H, rust_library: 
         return 0
     }
     let span = project_drive_splice_span(toml, key)
-    let shown = Shown { warning: false, code: "NK1348", message: message, notes: [], help: help, span: span, labels: [] }
+    let shown = Shown { warning: false, code: "NK1348", message: message, notes: [], help: help, span: span, labels: [], edit: null }
     host.eprint(rendered(shown, path, toml))
     return 1
 }
@@ -924,7 +1071,7 @@ fn project_drive_no_main[H: ProjectDriveHost](host: ref H, entry: ref fs::Path, 
     }
     let message = f"A program starts at its `fn main`, and `{path}` declares none."
     let help: String = "Add `fn main()` to it, or, for a package that is built as a library, name the library under `[build]`: `artifact = \"rust-library\"` or `artifact = \"c-library\"`."
-    let shown = Shown { warning: false, code: "NK1351", message: message, notes: [], help: help, span: Span { start: 0, end: 0 }, labels: [] }
+    let shown = Shown { warning: false, code: "NK1351", message: message, notes: [], help: help, span: Span { start: 0, end: 0 }, labels: [], edit: null }
     host.eprint(rendered(shown, path, source))
     return 1
 }
@@ -934,7 +1081,7 @@ fn project_drive_no_main[H: ProjectDriveHost](host: ref H, entry: ref fs::Path, 
 fn project_drive_features_refused[H: ProjectDriveHost](host: ref H, refusal: ref FeaturesRefusal) -> i32 sync {
     let (path, toml) = host.manifest_text()
     let span = features_span(toml, refusal.feature, refusal.entry)
-    let shown = Shown { warning: false, code: refusal.code.clone(), message: refusal.message.clone(), notes: [], help: refusal.help?.clone(), span: span, labels: [] }
+    let shown = Shown { warning: false, code: refusal.code.clone(), message: refusal.message.clone(), notes: [], help: refusal.help?.clone(), span: span, labels: [], edit: null }
     host.eprint(rendered(shown, path, toml))
     return 1
 }

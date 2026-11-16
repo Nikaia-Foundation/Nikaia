@@ -1,0 +1,17 @@
+REFUSED: a.txt is listed under Partial: but nothing of it is staged
+committed SHA8 local
+mine only
+base
+committed:
+mine
+2
+3
+4
+5
+6
+7
+8
+9
+left in the tree:
+1	1	a.txt
+

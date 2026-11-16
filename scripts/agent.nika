@@ -2,6 +2,10 @@
 //
 //     nikaia run scripts/agent.nika -- BRIEF [--dir DIR] [--dry-run] [--claude CMD]
 //     nikaia run scripts/agent.nika -- --info BRIEF
+//     nikaia run scripts/agent.nika -- --commits N
+//
+// `--commits N` prints the section of the prompt that lists the commits on
+// HEAD naming issue #N (agent_commits, #1682), or an empty line.
 //
 // `--info` prints `agent model turns budget effort` (the frontmatter, defaults
 // filled in) on one line; `batch.nika` reads it for its `NEXT` line.
@@ -80,7 +84,7 @@ fn agent_args(brief: String, body: String, session: String) -> Vec[String] {
     v.push("-p")
     v.push(f"Read your brief at {brief}")
     v.push("--agent")
-    v.push(agent.clone())
+    v.push(agent)
     v.push("--model")
     v.push(agent_front(body.clone(), "model", "sonnet"))
     v.push("--max-turns")
@@ -192,8 +196,15 @@ fn agent_micro(cost: String) -> i64 throws {
     let whole = text::parse_i64(parts[0].clone()) ?? 0
     if parts.len() < 2 { return whole * 1000000 }
     let padded = parts[1].clone() + "000000"
-    let frac = text::parse_i64(padded.bytes[0..6].text()) ?? 0
+    let frac = text::parse_i64(padded.bytes[0..<6].text()) ?? 0
     return whole * 1000000 + frac
+}
+
+// "12.345678" of micro-dollars, the inverse of agent_micro; below zero is 0.
+fn agent_usd(micro: i64) -> String throws {
+    if micro <= 0 { return "0.000000" }
+    let frac = f"{1000000 + micro % 1000000}"
+    return f"{micro / 1000000}." + frac.bytes[1..<7].text()
 }
 
 fn agent_escalate(dir: String, why: String) throws {
@@ -355,8 +366,32 @@ fn agent_issues(body: String, repo: String) -> String throws {
             out.push("")
             out.push(comments.stdout.trim().clone())
         }
+        let commits = agent_commits(n.clone())
+        if commits != "" {
+            out.push("")
+            out.push(commits)
+        }
     }
     if out.len() == 3 { return "" }
+    return out.join("\n")
+}
+
+// The commits among the last 400 on HEAD whose message names #N, as a section
+// for the prompt under the issue; "" when none. A commit with a `Fixes #N[, #M]`
+// line is called out first: such an issue stays open until `promote`, and a
+// fix landed without a comment on the issue (I13) was briefed as work to do
+// (#1682: #1665's item 1 was committed before its run, seen only with `git log`).
+fn agent_commits(n: String) -> String throws {
+    let named = process::run("git", ["log", "-400", "--format=- %h %s", "-E", f"--grep=#{n}([^0-9]|$)"])
+    if !named.ok || named.stdout.trim() == "" { return "" }
+    let mut out: Vec[String] = [f"### Commits on develop that name #{n} (the last 400; read them before planning)", ""]
+    let fixed = process::run("git", ["log", "-400", "--format=%h", "-E", f"--grep=^Fixes .*#{n}([^0-9]|$)"])
+    if fixed.ok && fixed.stdout.trim() != "" {
+        let shas = fixed.stdout.trim().split("\n").collect().join(", ")
+        out.push(f"**Already fixed: {shas} says `Fixes #{n}`.** Check what of the issue is left before building; nothing left is `Result: done` naming that commit, with no commit of your own.")
+        out.push("")
+    }
+    out.push(named.stdout.trim().clone())
     return out.join("\n")
 }
 
@@ -384,6 +419,10 @@ fn main() throws {
     while i < args.len() {
         if args[i] == "--dry-run" { dry = true }
         else if args[i] == "--info" { info = true }
+        else if args[i] == "--commits" && i + 1 < args.len() {
+            println(agent_commits(args[i + 1].clone()))
+            return
+        }
         else if args[i] == "--dir" && i + 1 < args.len() { dir = args[i + 1].clone(); i += 1 }
         else if args[i] == "--claude" && i + 1 < args.len() { claude = args[i + 1].clone(); i += 1 }
         else { brief = args[i].clone() }
@@ -393,7 +432,7 @@ fn main() throws {
         println("usage: nikaia run scripts/agent.nika -- BRIEF [--dir DIR] [--dry-run] [--claude CMD]")
         process::exit(2)
     }
-    let abs = process::run("realpath", [brief.clone()]).stdout.trim().clone()
+    let abs = process::run("realpath", [brief]).stdout.trim().clone()
     if dir == "" { dir = process::run("dirname", [abs.clone()]).stdout.trim().clone() }
     let text = fs::read_to_string(abs.clone(), fs::Root::Anywhere)
     if info {
@@ -481,7 +520,7 @@ fn main() throws {
     let stem = (abs.strip_suffix(".md") ?? "").clone()
     let report = agent_report(abs.clone())
     // A report ends the run: nothing left to resume.
-    if fs::exists(report.clone(), fs::Root::Anywhere) { fs::remove(record.clone(), fs::Root::Anywhere) }
+    if fs::exists(report.clone(), fs::Root::Anywhere) { fs::remove(record, fs::Root::Anywhere) }
     // A run cut off by the time limit prints no JSON: no empty cost line.
     if cost != "" {
         let old_cost = agent_read(f"{dir}/cost.txt")
@@ -495,19 +534,22 @@ fn main() throws {
     // The debrief: the same session, resumed while its cache is warm, answers
     // what held it up, before any escalation stops this script.
     if !out.timed_out && session == wanted {
-        let asked = process::run(claude.clone(), agent_debrief_args(session.clone(), agent_front(text.clone(), "model", "sonnet"), effort.clone()); within: 10.minutes())
+        let asked = process::run(claude, agent_debrief_args(session.clone(), agent_front(text, "model", "sonnet"), effort); within: 10.minutes())
         let mut debrief = f"{abs}.debrief.md"
         if stem != "" { debrief = f"{stem}.debrief.md" }
         fs::write(debrief, fs::Root::Anywhere, agent_result(asked.stdout.clone()) + "\n")
+        // A resumed session's `total_cost_usd` counts the whole session: the
+        // debrief costs what it adds to the run's.
         let more = agent_json(asked.stdout.clone(), "total_cost_usd")
         if more != "" {
             let with_run = agent_read(f"{dir}/cost.txt")
-            fs::write(f"{dir}/cost.txt", fs::Root::Anywhere, with_run + f"{today} {more}\n")
+            let added = agent_usd(agent_micro(more) - agent_micro(cost.clone()))
+            fs::write(f"{dir}/cost.txt", fs::Root::Anywhere, with_run + f"{today} {added}\n")
         }
     }
     if out.timed_out { agent_escalate(dir.clone(), "timed out after 150 minutes") }
     if !out.ok { agent_escalate(dir.clone(), f"claude exited with code {out.code}") }
-    if agent_json(json.clone(), "is_error") != "false" { agent_escalate(dir.clone(), "is_error") }
+    if agent_json(json, "is_error") != "false" { agent_escalate(dir.clone(), "is_error") }
     if reason != "completed" { agent_escalate(dir.clone(), f"terminal_reason {reason}") }
     if !fs::exists(report.clone(), fs::Root::Anywhere) { agent_escalate(dir.clone(), f"no report {report}") }
     if session != wanted { agent_escalate(dir.clone(), f"session_id {session} differs from {wanted}") }
@@ -517,12 +559,12 @@ fn main() throws {
         fs::write(f"{dir}/RED", fs::Root::Anywhere, "")
     } else {
         fs::write(f"{dir}/RED", fs::Root::Anywhere, f"{abs}: {gate}\n")
-        if before != "" { agent_escalate(dir.clone(), f"two red gates in a row: {before} / {abs}: {gate}") }
+        if before != "" { agent_escalate(dir, f"two red gates in a row: {before} / {abs}: {gate}") }
     }
     // The run's row for the Runs table of docs/tokenspeed.md (#858), once per agent
     // id. This only writes the file; the supervisor's commit takes it.
     if exe != "" && fs::exists(transcript.clone(), fs::Root::Anywhere) && fs::exists("docs/tokenspeed.md", fs::Root::Anywhere) {
-        let row = process::run(exe, ["run", "scripts/tokenspeed.nika", "--", "--short", transcript.clone()]).stdout.trim().clone()
+        let row = process::run(exe, ["run", "scripts/tokenspeed.nika", "--", "--short", transcript]).stdout.trim().clone()
         if row.starts_with("| ") {
             let doc = fs::read_to_string("docs/tokenspeed.md", fs::Root::Anywhere)
             fs::write("docs/tokenspeed.md", fs::Root::Anywhere, agent_runs_insert(doc, row))

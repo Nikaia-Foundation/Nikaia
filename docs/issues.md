@@ -25,6 +25,28 @@ it, like the checks in `docs/supervisor.md`.
   outside readers, or brief codes.
 * **I4. Where it belongs**: `Part of #N` for the larger piece, `Found while
   #N` (or the commit) for where it came up, and the issues it depends on.
+* **I4a. A claim of today's behaviour is read in the code** (#1706): a
+  sentence saying what the compiler, a script or the driver does today names
+  the function and file it was read in, or the run that shows it (a probe,
+  I5; a `--bounds` row, I8a). A comment is not the code: #1694's item 3 said
+  a partial run's issue is queued again, from a stale comment in
+  `drive.nika`, and `drive_queue_add` skips a `#N` still in `batch.txt`
+  (#1697).
+  Code is named by its function, never by a line number alone (lines move
+  with every commit), and a value it quotes (an exit code, a printed line)
+  is read in that function (#1733: #1717 cited "line 228" and "exit 4" for
+  the restart; the line was `drive_wake` and exit 4 its time-limit stop,
+  the restart is `drive_restart`).
+* **I4b. Code in an issue is written the way a program writes it**
+  (#1730): a probe, a sketch of a new API, or an example use, in a bug or
+  a feature. It is checked with `scripts/probe.nika --check` (stubs for what
+  does not exist yet) before the issue is filed, and the result is quoted.
+  Types are named the way a program names them (`Vec[Row]`,
+  `HashMap[String, Value]`). The specification's own words (`Seq`, `Map`,
+  ADR-105 D4) cannot be written in a program. A form the grammar refuses
+  is named as one the issue needs (I6). A sketch written in it is not
+  (#1730: #116's sketch wrote `db::Value.Text`, `println(v)` of an enum,
+  which is NK1201, and `Seq`/`Map`; the builder respelled them all).
 
 ## A bug (something specified or plainly meant does not work)
 
@@ -32,21 +54,66 @@ it, like the checks in `docs/supervisor.md`.
   the command, the **expected** output and the **actual** output (the error
   with its code and message, or the `rustc` error on the emitted Rust). It was
   run on the binary of the day the issue was written; the issue says so.
+  The expected output is written out (the text it prints, or the NK code and
+  the gist of its message), never pointed at: "the specified result" or "what
+  the spec says" leaves the builder to find it (#1737: #1550's issue).
   A proof that differs between two runs (`check` and `lower-std`, one file
   and a package) is reduced to a probe of at most two files, and says whether
   the function is called from more than one file (ADR-391 D1) (#1465).
   The probe names what it needs in order to fail (which writes keep a field
   rule alive), so a test grown from it still fails before the fix (#1483).
+  It is the whole command that fails, as run: which package is built and
+  with which setting; where a library builds clean and only a program that
+  uses it fails, the probe is that program (#1716: #1686's http failure
+  showed only when hello-http was built at "yes", the http library alone
+  built).
+  The probe is copied whole from the file that ran, never retyped: its
+  `use` lines, its error type, and the manifest table each key sits in
+  (#1726: #1715's probe threw text, lacked `use std::time` and put
+  `user-parallelism` under `[package]`, where it is ignored, not under
+  `[build]`; it did not compile as written and cost three probe rounds).
+  A `Found:` whose case is half in the run's reach and half a decision is
+  split: the run fixes its part, the issue keeps the other, with its
+  expected result (#1726).
+  One defect per bug issue, each with its own probe: two claims are two
+  issues, and a claim no probe shows is checked against the code first, since
+  a behaviour a function does on purpose is no bug (#1677: a `Found:` merged
+  two claims without a probe, and the second was the describer's rule).
+  A builder's report gives each defect its own `Found:` line for this.
+  Each shape the issue names as failing (a `for` and a `while` form) is
+  run on the binary of the day; a shape that already works is named as
+  working, not as part of the defect, and the cause (I7) is looked for in
+  what the failing shape's path does that the working one's does not (#1695:
+  #1654 named the `while` forms, proved on develop; only the `for` form
+  failed, because `bounding_for` never asked the pair bounds
+  `bounding_while` asks).
 * **I6. The governing decision**: the ADR and its decision (`ADR-282 D7`) or
   the section of Part I-III that says what is right. Without one, the issue
   says "no decision yet" and is a `decision` issue, not a bug
   (`CLAUDE.md`, *A missing form stops the work*).
+  "Unclear whether by design" is neither: before filing, the author reads
+  the refusal's code in the code table of `30-nikaia-tooling.md`, the form's section
+  (`scripts/syntax.nika -- KEYWORD`) and the ADRs that name it, and either
+  cites the one that settles it or says "no decision yet". Where the decision
+  requires what the program got (the refusal or the action), the defect is
+  what does not match it, often the message, and the issue orders that fix,
+  not accepting the form (#1737: #1550 hedged, though Part II 10.1 and
+  ADR-296 D33 require the action; the fix was the message).
   A step that rests on a decision says whether it is built (the function
   that does it) or text only; text only is a dependency, named by its issue
   (I4) and built first (#1453).
+  Code the decision or the issue quotes for the new form (a call, a
+  signature) is spelled as today's grammar accepts it, checked with
+  `scripts/probe.nika --check` on stubs; a spelling the language refuses is
+  corrected in the ADR before the build is ordered, so the builder decides
+  no syntax (#1687: ADR-289 D34 wrote `net::Tls.files(certificate:, key:)`,
+  NK1230 and NK1101).
 * **I7. The cause, as far as known**: the file and function, and how sure
   (traced / suspected / unknown). With several shapes of the probe, which were
   traced to that cause.
+  A named function is one `scripts/where.nika -- NAME` finds today; a cause
+  without one says `unknown`, never a guessed name (#1741: #1729 suspected
+  `own_option_containers`, which does not exist).
   A probe that mixes several conditions (outside input, a guard, a call) is
   also run with each one taken away, and the issue says which variant still
   fails: #1571 blamed the outside input, and the guard alone did not prove.
@@ -81,11 +148,58 @@ it, like the checks in `docs/supervisor.md`.
   probe reduced from the real code: the function and every `ref mut self`
   method of its type, with stub types, kept as the acceptance check; a
   synthetic probe passed while the real code stayed checked (#1470).
+  Such an item also checks for each site that the rule can read the field:
+  a `pub` field gets no found bound when its type can be seen from outside
+  the package (ADR-306 D22). So the issue lists each site's field as private
+  or `pub`, and a `pub` one counts only under an item that makes it private
+  first (#1653: `SvRow`'s list fields are `pub`, so its `sv_*` sites could
+  not move; #1629 made `SvSimplex`'s fields private for that reason).
+  The probe's stub types keep each field's visibility as the real type
+  declares it, so a `pub` site is never stood for by a private stub that
+  proves (#1693: #1652's probe had private fields, its site `pub` ones).
+  An item that asks for a rule over a list's elements ("every element of
+  `a` is below `b.len()`") lists every write to both fields and checks the
+  rule against each: a sentinel value written into an element (`-1` for
+  "none") and a write that shrinks the bounding list (`truncate`, `pop`)
+  each break it, and the item names the form that excludes them, or says
+  none exists yet (a `decision`, I6). Its probe holds those writes, since
+  without writes no field rule is found (#1719: #1668's step asked for an
+  element rule on `place`, which holds `-1`, against `heap`, which shrinks).
+  A probe that stands for sites keeps, at each site, the expression that
+  builds the indexed value (a loop that pushes, an `if` expression, a
+  `.clone()`, a field read), and the issue quotes those lines of one real
+  site beside the probe, so the builder compares them before building; a
+  probe of another form proves no site, and a *Measure* item on it shows
+  no change (#1703: #1655's probe built `cols` by a loop over `ks`, the
+  `sv_*` sites by `if ks.len() == 0 { [] } else { b.row.cols.clone() }`).
+  Each group's probe is shown still checked on the binary of the day (its
+  `--bounds` row in the issue); a probe that already proves counts nothing,
+  and the issue names the real site instead (#1634: its probe was proved by
+  D13 turn counting, and the real sites needed a field-entry fact).
+  This holds for every claim of what the walk does today, not only a counted
+  group: "today it stays checked" carries the probe's `--bounds` row from the
+  binary of the day, and a figure from another prover (the solver) is named
+  as such (#1643: the walk already proved `x % m`, the claim came from the
+  solver, #1689).
 * **I9. A numbered *To build* list.** Each item is one change a builder can
   commit on its own, and names its test: a `.nika` with `.stdout` / `.stderr`
   in `tests/compiler/tests/` (or the package's tests), and the rows it must show
   (#1470: an issue that said `tests/compiler/` sent the builder to the wrong place).
+  Never a Rust test file or a `#[test]` (CLAUDE.md); a builder reads one an
+  older issue still names as that program, and does not report it (#1671).
   The order is the order to build in; an item resting on another says so.
+  An item settles each choice that changes what its result does, or says
+  the builder chooses (#1733: #1717 left open whether a merge with no local
+  commits fast-forwards, and a merge commit alone would have made the suite
+  run).
+  An item that removes or replaces code names what that code does today
+  (I4a) and is checked against the decision it rests on (I6): code the
+  decision itself requires is not ordered away (#1735: #1527's item 3
+  removed http's spawn + join, which is how http answers 500 to a
+  panicking handler, as ADR-326 D4 asks).
+  An item is work a builder can do without GitHub: what to say on another
+  issue is a report's `Comment: #N <text>`, which the driver posts, and an
+  issue whose only point is such a request is closed as noise (#1698, #1707).
   A change to a default or a lowering level names where that level is set
   (`sysroot::tools_build` for `lower-std`, not `Build::default`), the ADRs that
   limit the crate the output lands in (ADR-218 for `nikaia-std`), and the `it`
@@ -113,6 +227,11 @@ it, like the checks in `docs/supervisor.md`.
   An issue that changes which facts the bounds walk asks with shows a
   `--bounds-trace` of its probe on the binary of the day (#1500: the
   trace showed the shared turn variable the rule had missed).
+  The files and the *To build* items cover the whole scope *Done when*
+  names: a *Done when* over "the compiler" or "every site" lists the sites
+  found (count per file, the search that found them), and each kind of
+  site the change touches (a set's `clear` beside its `insert`) is named
+  (#1704: #1674 named 3 files, its *Done when* reached 73 sites in 21).
 * **I12. What was ruled out**: approaches tried and dropped, and why, so the
   builder does not try them again. Empty when nothing was tried.
 
@@ -125,6 +244,16 @@ it, like the checks in `docs/supervisor.md`.
   A section that says where the work stands (a branch, uncommitted files)
   is checked against `git log` and `git branch -r` before each run (#1470:
   it named a stale branch and files already committed).
+  So is each open *To build* item, before a brief is written for it:
+  `git log --grep` on its topic. An item that another issue's work has already
+  built is ticked, and the commit is named (#1730: #116's item 9 was
+  already built when its run started).
+  A bug's probe (I5) is run again on today's `develop` before its run is
+  queued, and the search is by topic, not only by number, since a fix often
+  lands under another issue: a probe that passes goes into the issue with
+  that commit, and the rest of the issue (a pin test, the debt it names) is
+  what the run builds (#1742: #1530's probe passed when its run started,
+  fixed by 995d93f4 under #1507, the day #1530 was filed).
 
 ## How a run judges its issue
 
@@ -137,7 +266,31 @@ issue lacked that would have saved it turns or a wrong turn:
 * `Issue: rules-gap: <what was missing>` — no rule above asks for it. The
   supervisor adds a rule or widens one, citing the run.
 * `Issue: wrong I<n>: <what>` — the issue has it, but it is false (a probe
-  that no longer fails, a wrong file, a wrong ADR).
+  that no longer fails, a wrong file, a wrong ADR). `<n>` is the rule that
+  asks for the false part; a false claim no rule covers is a `rules-gap`
+  (#1706: a wrong claim of how the driver behaves was cited as I5, the probe).
+
+`<n>` is looked up in this file before it is written, never recalled: I3
+is plain language and I4 where it belongs; a probe that passes before any
+change is I5 and so is one that does not parse as written, a decision called
+unbuilt that is built is I6 ("built or text only"), a suspected function
+that does not exist is I7, an item that is wrong is I9 (#1735: #1527's run answered `wrong I3`
+and `wrong I4` for an I5/I6 and an I9 point; #1708 the same slip; #1741:
+#1729's run answered `wrong I3` for a probe that did not parse, I5, and a
+suspected function that does not exist, I7).
+
+A point the run has already closed as noise in its `Body:` (a mislabelled
+rule number a driver-filed issue copied from an earlier report, a slip
+with nothing to build) is not judged again in `Issue:`: the driver files
+each `Issue:` answer as a new improvement issue, and the echo only files
+the closed point once more (#1708: #1703's run closed its I3 label as a
+citation slip and still answered `wrong I3`).
+
+A point the run has already built in its own commit (it added the missing
+rule to this file, or fixed the issue) is answered with `(built)` after its
+kind, `rules-gap (built): <what was missing>`: it stays in the report for the
+supervisor's count, and the driver does not file it (#1739: #1707's run
+added its rule to I9 and its `rules-gap` was filed again as #1724).
 
 Several answers are joined with `;`. The supervisor counts them per rule and
 per author; a rule that is broken often is made easier to keep, a gap that

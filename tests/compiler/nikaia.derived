@@ -4,7 +4,7 @@
 # as recorded here. Part III, 13.5.
 version = 3
 toolchain = "nikaia 0.1.0"
-inference = "stage0-signatures+sync-bodies+throws-bodies+sharing-bodies"
+inference = "stage0-signatures+sync-bodies+throws-bodies+sharing-bodies+provenance-bodies"
 
 [sources]
 "cycle_beside.nika" = "eb73e68a35da6e3c2ce5e00000dcc42c18c2f632873df2b8891836dfca576aa3"
@@ -20,9 +20,12 @@ inference = "stage0-signatures+sync-bodies+throws-bodies+sharing-bodies"
 "named_like_a_method_beside.nika" = "ee6a5af2592151f480de19907e3e90e61943b430797227ec869ba3a254d4ee56"
 "named_like_a_method_beside_caller.nika" = "7249cdadc4bf1d73caef679e937b6cd5bd824813370723f1e12e0c3bb7559def"
 "nest_beside.nika" = "864b137d3bece77cd85814f2cf81951a0c2e8d04c13838f8516379e870f67efe"
+"option_beside.nika" = "1fc1d676d55a227adb925f4c831af00ed9122d0954007f8c7f7b7a58cff87a0c"
 "over.nika" = "ea543c48833709ef5d3b7a2bd1f69f370a68af0e87dd4f231c307e18c127df69"
 "slice_beside.nika" = "5ecabed37e3cca182d53ed792353568ef7f04dc7a44381e90b18c0102e795943"
 "slice_beside_caller.nika" = "9090dbb9bc7dcacd12a83b8ce087546e588dd8ef435e3ae9df8d6408797b9053"
 "taking_beside.nika" = "46b1e0e303cf0d96b4c8e00961d2d64aa5359697ad8c2fdda5129bd5a3eea923"
 "tier_beside.nika" = "137db96d12d9ac05efd5862fd5e168103450bcae69064fc67860fdaee24353cb"
 "tier_beside_keep.nika" = "3088b46b058361a0d3ad90e2c909c1358bed13e882b766199c61f9018a98dee4"
+"trait_keep_beside.nika" = "6339e7bcf4457e2ea6494a98d16d0894b993a810ebaecd27b32b1f23f4ea22dc"
+"trait_of_a_package.nika" = "abd3b98b83ee8a6c2468d12353864633b3ee2c8e817e6c9ef6d10b106093f7b7"

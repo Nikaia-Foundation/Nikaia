@@ -191,6 +191,7 @@ pub struct CheckClone {
     pub choices: Vec<(i64, i64)>,
     pub node: i64,
     pub span: Span,
+    pub edit: Option<CheckEdit>,
 }
 
 impl CheckFlow {

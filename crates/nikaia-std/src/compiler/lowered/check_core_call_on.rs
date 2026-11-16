@@ -700,7 +700,7 @@ pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, wor
         if !lent_here && state.a_view_copied_out(world, &have, &want, Some(given)) { continue; }
         if !is_a_literal(given) && an_integer_that_does_not_widen(&have, &want) {
             let at = check_span_at(world, given, span);
-            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![] });
+            state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![], edit: None });
         }
     }
 }
@@ -725,7 +725,7 @@ pub(crate) fn check_core_call_on_extended(state: &mut CheckState, world: &CheckW
     };
     if numbers || have.fits(&want) { return; }
     let at = check_span_at(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span);
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: format!("`{}` expects elements of `{}` here, but you're passing elements of `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![] });
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at, code: String::from("NK1102"), message: format!("`{}` expects elements of `{}` here, but you're passing elements of `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![], edit: None });
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -831,7 +831,7 @@ pub(crate) fn check_core_call_on_member_one(state: &mut CheckState, world: &Chec
     }
     if check_core_call_on_may_fit(&have, &want) { return; }
     let at_span = check_span_at(world, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, span);
-    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![] });
+    state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![], edit: None });
 }
 
 pub(crate) fn check_core_call_on_extend_literal(key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], expected: &mut Vec<Ty>) {
@@ -1156,7 +1156,7 @@ pub fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         check_core_call_on_quiet(state, receiver);
         if (entry == "message" || entry == "full") && args.is_empty() { return check_core_call_on_named("String"); }
         let listed = members_named(&members);
-        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1171"), message: format!("This is an error, one of {}, and an error has no method called `{}`.", listed, entry), notes: vec![String::from("What every error has is `message()` and `full()`; what one of them has is reached once a `match` has said which it is.")], help: Some(format!("Take it apart first: `match error {{ … }}`, and call `{}` in the arm of the type that has it.", entry)), labels: vec![] });
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1171"), message: format!("This is an error, one of {}, and an error has no method called `{}`.", listed, entry), notes: vec![String::from("What every error has is `message()` and `full()`; what one of them has is reached once a `match` has said which it is.")], help: Some(format!("Take it apart first: `match error {{ … }}`, and call `{}` in the arm of the type that has it.", entry)), labels: vec![], edit: None });
         return Ty::Unknown;
     }
     let has_name = check_core_call_on_has_name(&on);
@@ -1378,7 +1378,7 @@ pub(crate) fn check_core_call_on_weighs(state: &mut CheckState, on: &Ty, entry: 
         Ty::Named { ref name, .. } => type_last_segment(name),
         _ => return,
     };
-    if base != "Sender" && !(base == "SharedMut" && entry == "set") { return; }
+    if base != "Sender" && !(base == "SharedMut" && (entry == "set" || entry == "set(after)")) { return; }
     let found = check_core_call_on_parameters_in(&state, &on.unseen());
     if found.is_empty() { return; }
     let mut held: collections::BTreeSet<String> = nikaia_std::index::or(match state.facts.weighed.get(&current) {

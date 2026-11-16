@@ -8,6 +8,27 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1399] — 2026-11-16
+
+**Builders' changes (#1677, #N[, #N, #1678, #1665, #N**", #1682, #1685, #1689, #1692, #1698, #1699, #1700, #1704, #1706, #1709, #1710, #1714, #1717, #1722)**
+- The driver files each `Found:` line of a report as its own issue, and a Found must name one defect with its probe (#1677).
+- Driver: issues filed from a Found no longer demand a probe.nika snippet and a new tests/compiler test for a docs or scripts defect, and the lane queue skips an issue a develop commit already Fixes (#1678).
+- Driver: a builder's prompt lists the develop commits that name its issue and says so when one already Fixes it, and a queued issue fixed since it was queued is dropped from the batch (#1682).
+- Specification: type lists and examples name `scalar` where they said `char`, which Nikaia does not have.
+- none (an issue rule)
+- Issue rules: an item that counts sites under a field rule lists each field as private or pub (ADR-306 D22, I8a)
+- Driver: a builder's report says what to tell another issue as `Comment: #N <text>`, and the driver posts it there instead of filing an improvement issue.
+- NK2506 no longer refuses a name rebound to a copy (`let items = items.clone()`, `x = x.clone()`): the follow reads the binding a use sees, not every binding of the name.
+- NK2506 no longer refuses a call to `b.put(items)` because some other own type also has a `put` that hands its list to Rust: where the syntax names the receiver's type, only that type's method is followed.
+- commit.nika takes `Partial: <paths>` for files shared with another agent: it commits only the hunks staged of them (#1704)
+- The driver's improvement issues name the run's report and commit; docs/issues.md I4a asks that a claim of today's behaviour be read in the code.
+- commit.nika commits a staged lowered set whole: it refuses an include! of a lowered file the commit lacks or a lowered change without its lowered.rs, and stages the LOWERED_DIGEST of the set as committed (#1709)
+- The driver's Found issues ask for the probe, expected and actual output and the cause, and their Done when names a check (#1710)
+- nikaia fix PATH makes the edits the checker's warnings suggest (first: NK1350's needless .clone() deleted) and names each one; --dry-run prints the diff and writes nothing.
+- nikaia fix PATH makes the edits the checker suggests (first: NK1350's needless .clone() deleted), naming each; --dry-run prints the diff.
+- The driver merges origin/develop before each issue and each suite, not only on a rejected push, and restarts when that merge brought scripts (#1717).
+- Driver: local script tests run on the driver's own copy of the compiler, and a run that loses the compiler to another lane's rebuild is rerun once instead of going red to QA.
+
 ## [0.0.1398] — 2026-11-16
 
 **Bounds walk: a method's found facts through self; the driver accepts a cut itself (#1667, #1694)**

@@ -220,7 +220,7 @@ impl CheckState {
     /// `NK1111`: braces in a plain string that look like a hole. A warning, and
     /// not an error, because `"{ margin: 0 }"` is correct CSS.
     pub fn warn_migration(ref mut self, span: ref Span, message: String, help: String) sync {
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1111", message: message, notes: ["Only `f\"…\"` strings fill in `{…}`; a plain string keeps the braces as they are."], help: help, labels: [] })
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1111", message: message, notes: ["Only `f\"…\"` strings fill in `{…}`; a plain string keeps the braces as they are."], help: help, labels: [], edit: null })
     }
 
     /// The walk under [`Checker::declared`], over a written type and everything

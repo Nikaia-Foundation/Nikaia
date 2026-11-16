@@ -2711,7 +2711,7 @@ fn block(raw: String, indent: i64, chomp: Chomp, folded: bool) -> String sync {
 	// parser reads it.
 	let broken = line.len() == 0 || blank
 	if column > 0 {
-		lines.push(line.clone())
+		lines.push(line)
 	}
 	let n = lines.len() as i64
 	let mut out = String()

@@ -1,0 +1,6 @@
+build: 0, Cargo started: 1
+build again: 0, Cargo started: 0
+build after a change: 0, Cargo started: 1
+the program prints: two
+test: 0, Cargo started: 1
+test again: 0, Cargo started: 0

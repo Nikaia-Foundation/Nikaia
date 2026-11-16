@@ -1,0 +1,51 @@
+// ADR-327 D9 (#1554): a value stored with `set(…; after: seen)` moves its deep size from the setter to the shared value, as a plain `set` does; an overtaken value stays the setter's and is freed against it. A tight task that stores far more than its budget in total runs on.
+struct Tight {}
+
+impl task::Admission for Tight {
+	fn decide(mut self, _load: task::Load) -> task::Decision sync {
+		return task::Decision { start: 1, budget: 262144 }
+	}
+}
+
+// how: 0 plain `set`, 1 `set` after what is there, 2 after what is never there
+fn store(cache: SharedMut[Vec[i64]], how: i64) -> i64 {
+	let mut done = 0
+	for t in 0..<400 {
+		let mut items: Vec[i64] = []
+		for i in 0..<1000 {
+			items.push(i + t)
+		}
+		if how == 0 {
+			cache.set(items)
+		} else if how == 1 {
+			let seen: Vec[i64] = cache.get()
+			cache.set(items; after: seen) catch { 0 }
+		} else {
+			cache.set(items; after: [-1]) catch { 0 }
+		}
+		// placed in the task's own block, so its budget is asked each turn
+		let mut scratch: Vec[i64] = []
+		for i in 0..<9000 {
+			scratch.push(i)
+		}
+		done += scratch.len() / 9000
+	}
+	return done
+}
+
+fn run(how: i64) -> i64 throws {
+	let cache: SharedMut[Vec[i64]] = SharedMut([7])
+	let t = async(detached, admission: Tight {}) fn { store(cache, how) }
+	let done = t.join() catch {
+		println(f"failed: {error}")
+		0
+	}
+	let now: Vec[i64] = cache.get()
+	return done * 10000 + now.len()
+}
+
+fn main() throws {
+	println(f"set: {run(0)}")
+	println(f"set after: {run(1)}")
+	println(f"overtaken: {run(2)}")
+}

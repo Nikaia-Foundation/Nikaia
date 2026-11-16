@@ -461,6 +461,8 @@ pub struct CheckClone {
     /// The call's node, said once.
     pub node: i64,
     pub span: Span,
+    /// The `.clone()` deleted, where that is unambiguous (#1714).
+    pub edit: CheckEdit?,
 }
 
 impl CheckFlow {

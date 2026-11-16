@@ -1859,11 +1859,23 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
                 // edges to its impls are added below. **Every by-value
                 // parameter, code or data**: by value no longer means kept
                 // (D17, #1012; ADR-views-3 D2, a plain parameter is lent).
+                // **And what its signature marks `keep`** (ADR-views-3 D2):
+                // the mark fixes the column for every implementation, in any
+                // package, so a caller through the trait in another package
+                // reads it from the ledger and hands the value over (#116:
+                // `db::Connection::run(keep text: String, ...)` with no impl
+                // in `db` was lent by `db::Raw::execute`).
                 Item::Trait { name, methods, .. } => {
                     let owner = view.text(name)
                     for method in methods {
                         let called = view.text(method.node.name)
-                        graph.insert(f"{owner}::{called}", no_uses())
+                        let mut marked = no_uses()
+                        for arg in method.node.args {
+                            if arg.keep {
+                                marked.kept.insert(view.text(arg.name))
+                            }
+                        }
+                        graph.insert(f"{owner}::{called}", marked)
                     }
                 },
                 // **A `entry` rule is an entry, and its one parameter is the

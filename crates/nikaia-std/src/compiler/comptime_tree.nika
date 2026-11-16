@@ -659,8 +659,15 @@ pub fn comptime_without_foreign(mut items: Vec[Spanned[Item]], words: ref winnow
             Item::Extern { .. } => {},
             Item::Impl { trait_name, target, methods } => {
                 let owner = f"{a_symbols_text(words, target.name)}::"
+                let whole = methods.len()
                 let mut left = methods
                 left.retain(fn(method) { comptime_runs(method.node, words, owner, runs) })
+                // A trait's impl is whole or not there: one that lost a method
+                // is a rustc refusal (E0046), and what calls the lost method
+                // is refused before this program is built.
+                if trait_name != null && left.len() != whole {
+                    continue
+                }
                 let node = Item::Impl { trait_name: trait_name, target: target, methods: left }
                 kept.push(Spanned { node: node, span: item.span, doc: item.doc, attributes: item.attributes })
             },

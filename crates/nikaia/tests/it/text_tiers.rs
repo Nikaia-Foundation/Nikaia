@@ -78,6 +78,19 @@ fn findings(source: &str) -> Vec<nikaia::check::Finding> {
         .collect()
 }
 
+/// The errors of an example's source checked as the build checks it, with
+/// a workshop: `listen`'s option defaults `= 10.seconds()` are computed by
+/// compiling them, and a check without one refuses them with NK1127 (ADR-321 D19).
+fn example_findings(path: &std::path::Path, source: &str) -> Vec<nikaia::check::Finding> {
+    let parsed = parse_to_ast(source).expect("the source parses");
+    let library =
+        nikaia::contracts::Ledger::parse(nikaia::contracts::STD).expect("std ships a ledger");
+    common::corpus_findings(path, &parsed, &library)
+        .into_iter()
+        .filter(|f| f.severity == nikaia::check::Severity::Error)
+        .collect()
+}
+
 /// Both settings, the same output, and no refusal on the way.
 fn runs(purpose: &str, source: &str, expected: &str) {
     assert!(
@@ -807,7 +820,8 @@ fn the_http_example_without_ref_on_its_results_lowers_the_same() {
             &format!("fn {accessor}(ref self, name: ref String) -> ref String?"),
         );
     }
-    assert!(findings(&source).is_empty(), "{:#?}", findings(&source));
+    let found = example_findings(&path, &source);
+    assert!(found.is_empty(), "{found:#?}");
     assert_eq!(
         lowered(&with, Build::default()),
         lowered(&source, Build::default())
@@ -828,7 +842,8 @@ fn the_k_nucleotide_example_without_ref_on_its_parameters_lowers_the_same() {
     let with = source
         .replace("dna: String", "dna: ref String")
         .replace("fragment: String", "fragment: ref String");
-    assert!(findings(&source).is_empty(), "{:#?}", findings(&source));
+    let found = example_findings(&path, &source);
+    assert!(found.is_empty(), "{found:#?}");
     assert_eq!(
         lowered(&with, Build::default()),
         lowered(&source, Build::default())
@@ -896,7 +911,8 @@ fn the_http_example_without_ref_but_on_method_parameters_lowers_the_same() {
     );
     let with = source.replace("(self, name: String)", "(ref self, name: ref String)");
     assert!(with.contains("name: ref String"));
-    assert!(findings(&source).is_empty(), "{:#?}", findings(&source));
+    let found = example_findings(&path, &source);
+    assert!(found.is_empty(), "{found:#?}");
     assert_eq!(
         lowered(&source, Build::default()),
         lowered(&with, Build::default())

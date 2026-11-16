@@ -104,7 +104,7 @@ impl CheckState {
         }
         self.facts.plain_reaches.insert(fact_key(reach));
         let note = format!("`?.` is for a value that may be missing: it reaches the {} when there's something there and gives `null` otherwise. A type without `?` always has a value, so this is the plain `{}`.", what, plain);
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1217"), message: format!("You don't need `?.` here: a `{}` is never absent.", on.text()), notes: vec![note], help: Some(format!("Write `{}`.", plain)), labels: vec![] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1217"), message: format!("You don't need `?.` here: a `{}` is never absent.", on.text()), notes: vec![note], help: Some(format!("Write `{}`.", plain)), labels: vec![], edit: None });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -130,7 +130,7 @@ impl CheckState {
             return false;
         }
         let note = format!("`??` replaces a `null`, and a value of type `{}` is never `null`: only a type written with `?` can be.", seen.text());
-        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1216"), message, notes: vec![note], help: Some(String::from("Remove `??` and what follows it.")), labels: vec![] });
+        self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK1216"), message, notes: vec![note], help: Some(String::from("Remove `??` and what follows it.")), labels: vec![], edit: None });
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

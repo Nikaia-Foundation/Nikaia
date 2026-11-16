@@ -1,0 +1,4 @@
+name = 'Ada', age = 36
+name = 'Grace', age = 18
+2 rows, 2 statements run
+SELECT name, age FROM users WHERE age >= :min_age

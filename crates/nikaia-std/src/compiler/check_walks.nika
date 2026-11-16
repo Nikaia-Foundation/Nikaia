@@ -321,7 +321,7 @@ fn check_walks_window(state: ref CheckState, world: ref CheckWorld, walking: ref
             if clash != null {
                 let verdict = clash ?? Verdict::NotAccountedFor
                 let why = capitalised(verdict.why())
-                out.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: "NK2104", message: "This statement can't run at the same time as a task before it.", notes: [f"{why}.", "A task runs beside the statements after it until it is waited for: the end of its group, or where its value is read."], help: "If it should run after the task, move it after the group's end or after the read of the task's value, or write the task without `async`.", labels: [] })
+                out.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: "NK2104", message: "This statement can't run at the same time as a task before it.", notes: [f"{why}.", "A task runs beside the statements after it until it is waited for: the end of its group, or where its value is read."], help: "If it should run after the task, move it after the group's end or after the read of the task's value, or write the task without `async`.", labels: [], edit: null })
                 break
             }
         }
@@ -341,7 +341,7 @@ impl CheckState {
                         bound.push(world.words.resolve(name).clone())
                     }
                     let name = bound.join("`, `")
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: "NK2104", message: f"A branch of an `overlap` can't declare `{name}`.", notes: ["Each statement in the block runs as its own branch, and the block's value is their results in the order they're written."], help: f"Take the value from the block instead: `let ({name}, …) = overlap {{ … }}`.", labels: [] })
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: "NK2104", message: f"A branch of an `overlap` can't declare `{name}`.", notes: ["Each statement in the block runs as its own branch, and the block's value is their results in the order they're written."], help: f"Take the value from the block instead: `let ({name}, …) = overlap {{ … }}`.", labels: [], edit: null })
                 },
                 else => {},
             }
@@ -370,14 +370,14 @@ impl CheckState {
                 if shared != null {
                     let (name, both) = shared ?? ("", false)
                     let note = if both { f"Both change `{name}`." } else { f"One changes `{name}`, and the other reads it." }
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: block.stmts[j].span.clone(), code: "NK2104", message: "These two branches can't run at the same time.", notes: [note, "`overlap` runs its branches at once, so a binding one changes can't be touched by the other."], help: "If they should run in order, write them as ordinary statements.", labels: [] })
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: block.stmts[j].span.clone(), code: "NK2104", message: "These two branches can't run at the same time.", notes: [note, "`overlap` runs its branches at once, so a binding one changes can't be touched by the other."], help: "If they should run in order, write them as ordinary statements.", labels: [], edit: null })
                     break
                 }
                 let clash = check_walks_clash(operations[i], operations[j])
                 if clash != null {
                     let verdict = clash ?? Verdict::NotAccountedFor
                     let why = capitalised(verdict.why())
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: block.stmts[j].span.clone(), code: "NK2104", message: "These two branches can't run at the same time.", notes: [f"{why}.", "`overlap` runs its branches at once, so they can't depend on each other."], help: "If they should run in order, write them as ordinary statements.", labels: [] })
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: block.stmts[j].span.clone(), code: "NK2104", message: "These two branches can't run at the same time.", notes: [f"{why}.", "`overlap` runs its branches at once, so they can't depend on each other."], help: "If they should run in order, write them as ordinary statements.", labels: [], edit: null })
                     // One finding per branch: a branch that meets two others has
                     // one thing wrong with it, and three messages about it is
                     // the same mistake told three times.
@@ -444,7 +444,7 @@ impl CheckState {
                 if clash != null {
                     let verdict = clash ?? Verdict::NotAccountedFor
                     let why = capitalised(verdict.why())
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: later.span.clone(), code: "NK2104", message: "These two tasks can't run at the same time.", notes: [f"{why}.", "The tasks of a group run at the same time, so they can't depend on each other."], help: "If they should run in order, wait for the first before the second starts, or write them without `async`.", labels: [] })
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: later.span.clone(), code: "NK2104", message: "These two tasks can't run at the same time.", notes: [f"{why}.", "The tasks of a group run at the same time, so they can't depend on each other."], help: "If they should run in order, wait for the first before the second starts, or write them without `async`.", labels: [], edit: null })
                     break
                 }
             }

@@ -1,0 +1,20 @@
+/// A trait and a type of this package, for
+/// `tests/a_package_trait_method_on_its_type.nika` (#116): a caller in
+/// another package calls the trait's method on the type itself.
+pub trait PackageTraitNamed {
+	fn named(self) -> String
+}
+
+pub struct PackageTraitHolder {
+	pub name: String,
+}
+
+impl PackageTraitNamed for PackageTraitHolder {
+	fn named(self) -> String {
+		return self.name.clone()
+	}
+}
+
+pub fn package_trait_holder(name: String) -> PackageTraitHolder {
+	return PackageTraitHolder { name: name }
+}

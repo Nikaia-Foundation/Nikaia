@@ -66,6 +66,7 @@ impl nikaia_std::error::Full for __NikaiaThrows_ProjectTestsRefusal__io_IoError 
 
 
 
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProjectTestsOutcome {
     pub ended_well: bool,
@@ -513,6 +514,12 @@ pub fn project_tests_times_file(cache: &std::path::Path, root: &std::path::Path)
     let shown = format!("{}", nikaia_std::fs::path::display(&(project_members_canonical(root))));
     let name: String = shown.chars().map(|c| { if c.is_alphanumeric() { c } else { '-' } }).collect();
     nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(cache), std::path::Path::new(&("test-times")))), std::path::Path::new(&(name)))
+}
+
+pub fn project_tests_places(cache: &std::path::Path, root: &std::path::Path) -> fs::Path {
+    let shown = format!("{}", nikaia_std::fs::path::display(&(project_members_canonical(root))));
+    let tag: String = hash::sha256_hex(&shown.bytes().collect::<Vec<_>>()).chars().take(16).collect();
+    nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(cache), std::path::Path::new(&("test-places")))), std::path::Path::new(&(tag)))
 }
 
 pub(crate) async fn project_tests_times_read(file: &std::path::Path) -> collections::BTreeMap<String, i64> {

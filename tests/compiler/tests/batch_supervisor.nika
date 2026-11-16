@@ -1,5 +1,6 @@
 // batch.nika: a `Supervisor: <date>: accepted ...` line clears a cut on
-// Result, Gate or Deviation, never on Result: blocked, Pushed or Owner.
+// Result, Gate, Deviation or Pushed: none (nothing to build), never on
+// Result: blocked, Pushed: rejected or Owner.
 use std::fs
 use std::process
 
@@ -39,6 +40,7 @@ fn main() throws {
         ["partial", "Result: partial, rest in #2\nPushed: abc\nDeviation: none\n"],
         ["blocked", "Result: blocked\nPushed: none\nDeviation: none\n"],
         ["rejected", "Result: done\nPushed: rejected\nDeviation: x\n"],
+        ["nothing pushed", "Result: done\nFiles: none\nPushed: none\nDeviation: none\n"],
     ]
     for c in cases {
         fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, c[1].clone())

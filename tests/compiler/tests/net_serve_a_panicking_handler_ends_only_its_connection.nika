@@ -1,0 +1,33 @@
+// #1527, ADR-326 D4: a panic in a task ends only that task. A
+// `Listener.serve` handler that panics on its first connection ends that
+// connection alone (the client reads its close); the server goes on and
+// answers the second connection, and returns after both.
+use std::net
+
+fn echo(mut conn: net::Connection) throws {
+    let got = conn.read()
+    if got.text() == "boom" {
+        panic("the handler gave up")
+    }
+    conn.write(got)
+}
+
+fn clients(at: String) throws {
+    let mut first = net::connect(at)
+    first.write("boom")
+    let gone = first.read()
+    println(f"first: closed after {gone.len()} bytes")
+    let mut second = net::connect(at)
+    second.write("second")
+    let back = second.read()
+    println(f"second: answered {back.text()}")
+}
+
+fn main() throws {
+    let listener = net::listen("127.0.0.1:0")
+    let at = listener.address()
+    let client = spawn fn { clients(at) }
+    listener.serve(fn(mut conn) { echo(conn) }; connections: 2)
+    client.join()
+    println("serve returned after two connections")
+}

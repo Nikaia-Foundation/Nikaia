@@ -41,7 +41,7 @@ fn main() throws {
 	process::run("cp", ["-r", f"{from}/tests/facade", f"{tmp}/yaml/tests"])
 	let cache = f"{repo}/target/nikaia-project-tests/yaml-facade"
 	let mut env: Vec[(String, String)] = []
-	env.push(("CARGO_TARGET_DIR", cache.clone()))
+	env.push(("CARGO_TARGET_DIR", cache))
 	env.push(("CARGO_NET_OFFLINE", "true"))
 	let built = process::run(nikaia, ["build"]; dir: f"{tmp}/yaml", env: env.clone())
 	println(built.stdout.trim().replace(tmp, "TMP"))
@@ -49,7 +49,7 @@ fn main() throws {
 	let ran = process::run(
 		"cargo",
 		["run", "-q"]; dir: f"{tmp}/yaml/tests/facade",
-		env: env.clone(),
+		env: env,
 	)
 	println(ran.stdout.trim())
 	if ran.code != 0 { println(ran.stderr.trim()) }

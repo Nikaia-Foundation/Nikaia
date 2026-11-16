@@ -408,6 +408,10 @@ impl ModulesLedgerHost for LedgerHost {
     fn read_beside(&self, path: &Path) -> Option<crate::contracts::Ledger> {
         crate::contracts::Ledger::read_beside(path)
     }
+
+    fn this_compiler(&self) -> crate::contracts::Ledger {
+        crate::contracts::Ledger::empty()
+    }
 }
 
 /// A whole program: one ledger, one Rust file, one source map.

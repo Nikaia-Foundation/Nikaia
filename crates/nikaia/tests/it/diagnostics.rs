@@ -510,6 +510,7 @@ fn a_finding_is_laid_out_in_characters() {
                 main: true,
             },
         ],
+        edit: None,
     };
     assert_eq!(
         diagnostics::render_finding(&finding, "app.nika", source),

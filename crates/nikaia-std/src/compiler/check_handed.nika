@@ -12,9 +12,10 @@
 // refuses handing one to a Rust owner, `NK2506`).
 //
 // It reads the syntax only and errs on the side of a refusal: a name holds
-// what it was ever bound to anywhere in the function, a result of the
-// package's own function holds what its arguments held, and a method of the
-// package is every method of that name.
+// what its binding holds where it is read, a branch or a loop body adding to
+// what held before it (#1699), a result of the package's own function holds
+// what its arguments held, and a method of the package is every method of
+// that name, unless the syntax names the receiver's type (#1700).
 
 use std::collections
 
@@ -225,83 +226,250 @@ fn check_handed_seed(view: ref ParsedView, item: ref Item, target: String?, clos
     }
 }
 
-/// **One round over one function**: the names its body binds to what a
-/// held name holds, and the parameters of the closed functions it hands one
-/// to. Whether anything new was found.
+/// **One round over one function**: what each use of a name holds where it
+/// stands, and the parameters of the closed functions it hands one to.
+/// Whether anything new was found.
 fn check_handed_round(world: ref CheckWorld, view: ref ParsedView, item: ref Item, target: String?, closed: ref collections::BTreeSet[String], mut held: collections::BTreeMap[String, String]) -> bool sync {
     match item {
         Item::Fn { name, body, .. } => {
             let key = check_handed_name(view, name, target)
-            return check_handed_block(world, view, key, body, closed, held)
+            let mut changed = false
+            let mut state: collections::BTreeMap[String, String] = collections::BTreeMap()
+            for param in check_handed_params(view, item) {
+                let origin = held.get(check_handed_key(key, param))?.clone()
+                if origin != null {
+                    let from = origin ?? ""
+                    if check_handed_insert(held, key, f"*{param}", from) {
+                        changed = true
+                    }
+                    state.insert(param, from)
+                }
+            }
+            if check_handed_block(world, view, key, body, closed, held, state) {
+                changed = true
+            }
+            return changed
         },
         else => {},
     }
     return false
 }
 
+/// Records that `name` of `function` holds what `origin` was handed; an
+/// empty `origin` records a use that holds none, and never overwrites one
+/// that holds. Whether a holding was newly written.
 fn check_handed_insert(mut held: collections::BTreeMap[String, String], function: ref String, name: ref String, origin: ref String) -> bool sync {
     let at = check_handed_key(function, name)
-    if held.contains_key(at) {
-        return false
+    let prior = held.get(at)?.clone()
+    if prior != null {
+        if origin == "" || (prior ?? "") != "" {
+            return false
+        }
     }
     held.insert(at, origin.clone())
-    return true
+    return origin != ""
 }
 
-fn check_handed_block(world: ref CheckWorld, view: ref ParsedView, key: ref String, block: ref Block, closed: ref collections::BTreeSet[String], mut held: collections::BTreeMap[String, String]) -> bool sync {
+/// **What a name holds at a use** (#1699): the walk records each use it
+/// meets by the expression's id (`@id`), so a name rebound to a copy holds
+/// none after the rebind; a use the walk does not meet (a literal's hole)
+/// falls back to what the name held anywhere in the function (`*name`).
+fn check_handed_holds(view: ref ParsedView, key: ref String, name: winnow_grammar::Symbol, number: u32, held: ref collections::BTreeMap[String, String]) -> String? sync {
+    let at = held.get(check_handed_key(key, f"@{number}"))?.clone()
+    if at != null {
+        let origin = at ?? ""
+        return if origin == "" { null } else { origin }
+    }
+    return held.get(check_handed_key(key, f"*{view.text(name)}"))?.clone()
+}
+
+/// Records each name a statement reads with what it holds there.
+fn check_handed_mark(view: ref ParsedView, key: ref String, exprs: ref Vec[ref Expr], state: ref collections::BTreeMap[String, String], mut held: collections::BTreeMap[String, String]) -> bool sync {
     let mut changed = false
-    for stmt in block.stmts {
-        match stmt.node {
-            Stmt::Let { names, value, .. } => {
-                let origin = check_handed_carries(world, view, key, value, held)
-                if origin != null {
-                    let from = origin ?? ""
-                    for bound in names {
-                        if check_handed_insert(held, key, view.text(bound), from) {
-                            changed = true
-                        }
-                    }
-                }
-            },
-            Stmt::Assign { target, value, .. } => {
-                let origin = check_handed_carries(world, view, key, value, held)
-                let root = check_handed_root(view, target)
-                if origin != null && root != null {
-                    if check_handed_insert(held, key, root ?? "", origin ?? "") {
-                        changed = true
-                    }
-                }
-            },
-            Stmt::For { bindings, iter, .. } => {
-                let origin = check_handed_carries(world, view, key, iter, held)
-                if origin != null {
-                    let from = origin ?? ""
-                    for bound in bindings {
-                        if check_handed_insert(held, key, view.text(bound), from) {
-                            changed = true
-                        }
-                    }
+    for expr in exprs {
+        match expr {
+            Expr::Variable(name, id) => {
+                let origin = state.get(view.text(name))?.clone() ?? ""
+                if check_handed_insert(held, key, f"@{id.get()}", origin) {
+                    changed = true
                 }
             },
             else => {},
-        }
-        for expr in check_visit_stmt(stmt.node) {
-            if check_handed_expr(world, view, key, expr, closed, held) {
-                changed = true
-            }
-        }
-        for inner in check_visit_stmt_blocks(stmt.node) {
-            if check_handed_block(world, view, key, inner, closed, held) {
-                changed = true
-            }
         }
     }
     return changed
 }
 
+/// Binds `name` in the walk's state to `origin`, or to nothing.
+fn check_handed_bind(mut state: collections::BTreeMap[String, String], name: ref String, origin: ref String?) sync {
+    if origin != null {
+        state.insert(name.clone(), origin?.clone() ?? "")
+    } else {
+        state.remove(name)
+    }
+}
+
+/// **One block, in order** (#1699): `state` holds the names that hold one
+/// where the walk stands, and a binding replaces what its name held. A
+/// branch or a loop body may not run, so what it leaves is added to what
+/// held before it; a name the block declares leaves with the block.
+fn check_handed_block(world: ref CheckWorld, view: ref ParsedView, key: ref String, block: ref Block, closed: ref collections::BTreeSet[String], mut held: collections::BTreeMap[String, String], mut state: collections::BTreeMap[String, String]) -> bool sync {
+    let mut changed = false
+    let outer = state.clone()
+    let mut declared: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut escaped: collections::BTreeMap[String, String] = collections::BTreeMap()
+    for stmt in block.stmts {
+        let exprs = check_visit_stmt(stmt.node)
+        if check_handed_mark(view, key, exprs, state, held) {
+            changed = true
+        }
+        // The names a part of the statement binds for itself: a `match`
+        // arm's, a lambda's parameters, a `for`'s.
+        let before = state.clone()
+        let mut scoped: Vec[String] = []
+        for expr in exprs {
+            match expr {
+                Expr::Match { value, arms, .. } => {
+                    let origin = check_handed_carries(world, view, key, value, held)
+                    for arm in arms {
+                        for bound in check_handed_pattern_names(view, arm.pattern) {
+                            check_handed_bind(state, bound, origin)
+                            scoped.push(bound)
+                        }
+                    }
+                },
+                // `rows.for_each fn(row) { … }`: the lambda is handed the parts.
+                Expr::MethodCall { receiver, args, .. } => {
+                    let origin = check_handed_carries(world, view, key, receiver, held)
+                    for arg in args {
+                        match arg {
+                            Expr::Closure { params, .. } => {
+                                for param in params {
+                                    let text = view.text(param)
+                                    check_handed_bind(state, text, origin)
+                                    scoped.push(text)
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+        let mut looping = false
+        match stmt.node {
+            Stmt::For { bindings, iter, .. } => {
+                looping = true
+                let origin = check_handed_carries(world, view, key, iter, held)
+                for bound in bindings {
+                    let text = view.text(bound)
+                    check_handed_bind(state, text, origin)
+                    scoped.push(text)
+                }
+            },
+            Stmt::While { .. } => {
+                looping = true
+            },
+            else => {},
+        }
+        for name in scoped {
+            let origin = state.get(name)?.clone()
+            if origin != null && check_handed_insert(held, key, f"*{name}", origin ?? "") {
+                changed = true
+            }
+        }
+        if scoped.len() > 0 && check_handed_mark(view, key, exprs, state, held) {
+            changed = true
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            // A loop's body runs again with what its last turn left.
+            let mut again = true
+            while again {
+                let entry = state.len()
+                if check_handed_block(world, view, key, inner, closed, held, state) {
+                    changed = true
+                }
+                again = looping && state.len() > entry
+            }
+        }
+        if looping && check_handed_mark(view, key, exprs, state, held) {
+            changed = true
+        }
+        for name in scoped {
+            check_handed_bind(state, name, before.get(name)?.clone())
+        }
+        for expr in exprs {
+            if check_handed_expr(world, view, key, expr, closed, held) {
+                changed = true
+            }
+        }
+        match stmt.node {
+            Stmt::Let { names, value, .. } => {
+                let origin = check_handed_carries(world, view, key, value, held)
+                for bound in names {
+                    let text = view.text(bound)
+                    if !declared.contains(text) {
+                        let shadowed = state.get(text)?.clone()
+                        if shadowed != null {
+                            escaped.insert(text.clone(), shadowed ?? "")
+                        }
+                        declared.insert(text.clone())
+                    }
+                    check_handed_bind(state, text, origin)
+                    if origin != null && check_handed_insert(held, key, f"*{text}", origin ?? "") {
+                        changed = true
+                    }
+                }
+            },
+            Stmt::Assign { target, value, .. } => {
+                let origin = check_handed_carries(world, view, key, value, held)
+                let root = check_handed_root(view, target) ?? continue
+                match target {
+                    Expr::Variable(_, _) => check_handed_bind(state, root, origin),
+                    else => {
+                        if origin != null {
+                            state.insert(root.clone(), origin?.clone() ?? "")
+                        }
+                    },
+                }
+                if origin != null && check_handed_insert(held, key, f"*{root}", origin ?? "") {
+                    changed = true
+                }
+            },
+            else => {},
+        }
+    }
+    // Leaving the block: what it declared goes, what held before stays.
+    let mut left: collections::BTreeMap[String, String] = outer.clone()
+    for (name, origin) in state {
+        if !declared.contains(name) && !left.contains_key(name) {
+            left.insert(name.clone(), origin.clone())
+        }
+    }
+    for (name, origin) in escaped {
+        if !left.contains_key(name) {
+            left.insert(name.clone(), origin.clone())
+        }
+    }
+    let mut gone: Vec[String] = []
+    for (name, _) in state {
+        if !left.contains_key(name) {
+            gone.push(name.clone())
+        }
+    }
+    for name in gone {
+        state.remove(name)
+    }
+    for (name, origin) in left {
+        state.insert(name.clone(), origin.clone())
+    }
+    return changed
+}
+
 /// What one expression hands on: a held value to a closed function's
-/// parameter, the parts a `match` binds of one, the parameters of a lambda
-/// a method of one is given.
+/// parameter (the parts a `match` or a lambda binds of one are the walk's,
+/// `check_handed_block`).
 fn check_handed_expr(world: ref CheckWorld, view: ref ParsedView, key: ref String, expr: ref Expr, closed: ref collections::BTreeSet[String], mut held: collections::BTreeMap[String, String]) -> bool sync {
     let mut changed = false
     match expr {
@@ -324,8 +492,21 @@ fn check_handed_expr(world: ref CheckWorld, view: ref ParsedView, key: ref Strin
         Expr::MethodCall { receiver, method, args, .. } => {
             let word = view.text(method)
             let from_receiver = check_handed_carries(world, view, key, receiver, held)
+            // A receiver whose own type the syntax names reaches that type's
+            // method alone (#1700).
+            let mut only: String? = null
+            let owner = check_handed_owner(view, key, receiver)
+            if owner != null {
+                let named = f"{owner ?? ""}::{word}"
+                if check_handed_defines(world, view, named) {
+                    only = named
+                }
+            }
             for callee in closed {
                 if !callee.ends_with(f"::{word}") {
+                    continue
+                }
+                if only != null && callee != (only ?? "") {
                     continue
                 }
                 let params = check_handed_params_of(world, view, callee)
@@ -345,35 +526,181 @@ fn check_handed_expr(world: ref CheckWorld, view: ref ParsedView, key: ref Strin
                     }
                 }
             }
-            // `rows.for_each fn(row) { … }`: the lambda is handed the parts.
-            if from_receiver != null {
-                for arg in args {
-                    match arg {
-                        Expr::Closure { params, .. } => {
-                            for param in params {
-                                if check_handed_insert(held, key, view.text(param), from_receiver ?? "") {
-                                    changed = true
-                                }
+        },
+        else => {},
+    }
+    return changed
+}
+
+/// **The own type a method call's receiver is, as the syntax names it**
+/// (#1700): `self` in a method of `B`, a literal `B { … }`, or a name every
+/// binding of which in the function names `B` (a parameter `b: B`, a `let b =
+/// B { … }` or `let b: B`). Null where the syntax does not say.
+fn check_handed_owner(view: ref ParsedView, key: ref String, receiver: ref Expr) -> String? sync {
+    match receiver {
+        Expr::StructLit { name, .. } => return view.text(name),
+        Expr::Variable(name, _) => {
+            let text = view.text(name)
+            if text == "self" {
+                let parts: Vec[ref String] = key.split("::").collect()
+                return if parts.len() == 2 { parts[0].clone() } else { null }
+            }
+            return check_handed_typed_in(view, key, text)
+        },
+        else => {},
+    }
+    return null
+}
+
+/// Whether the package defines the function or method `named`.
+fn check_handed_defines(world: ref CheckWorld, view: ref ParsedView, named: ref String) -> bool sync {
+    if check_handed_params_in(view, named) != null {
+        return true
+    }
+    for unit in world.beside {
+        if check_handed_params_in(unit, named) != null {
+            return true
+        }
+    }
+    return false
+}
+
+/// The type every binding of `name` in the function `key` of a file names.
+fn check_handed_typed_in(view: ref ParsedView, key: ref String, name: ref String) -> String? sync {
+    for item in view.items {
+        match item.node {
+            Item::Fn { name: own, .. } => {
+                if check_handed_name(view, own, null) == key {
+                    return check_handed_typed(view, item.node, name)
+                }
+            },
+            Item::Impl { target, methods, .. } => {
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name: own, .. } => {
+                            if check_handed_name(view, own, view.text(target.name)) == key {
+                                return check_handed_typed(view, method.node, name)
                             }
                         },
                         else => {},
                     }
                 }
-            }
-        },
-        Expr::Match { value, arms, .. } => {
-            let origin = check_handed_carries(world, view, key, value, held) ?? return false
-            for arm in arms {
-                for bound in check_handed_pattern_names(view, arm.pattern) {
-                    if check_handed_insert(held, key, bound, origin) {
-                        changed = true
-                    }
+            },
+            else => {},
+        }
+    }
+    return null
+}
+
+fn check_handed_typed(view: ref ParsedView, item: ref Item, name: ref String) -> String? sync {
+    let mut found: Vec[String] = []
+    match item {
+        Item::Fn { args, body, .. } => {
+            for arg in args {
+                if view.text(arg.name) == name {
+                    found.push(check_handed_type_name(view, arg.ty) ?? return null)
                 }
             }
+            if !check_handed_typed_block(view, body, name, found) {
+                return null
+            }
         },
-        else => {},
+        else => return null,
     }
-    return changed
+    if found.len() == 0 {
+        return null
+    }
+    for each in found {
+        if each != found[0] {
+            return null
+        }
+    }
+    return found[0].clone()
+}
+
+/// A plain named type, `B` or `ref B`: no arguments, no `?`, no tuple, no code.
+fn check_handed_type_name(view: ref ParsedView, ty: ref Type) -> String? sync {
+    if ty.is_tuple || ty.is_nullable || ty.code != null || ty.generics.len() > 0 {
+        return null
+    }
+    return view.text(ty.name)
+}
+
+/// Adds the type each `let` of `name` in a block names to `found`; false
+/// where a binding of it names none (a `let` of a call, a `for`, a pattern,
+/// a lambda's parameter).
+fn check_handed_typed_block(view: ref ParsedView, block: ref Block, name: ref String, mut found: Vec[String]) -> bool sync {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Let { names, ty, value, .. } => {
+                for bound in names {
+                    if view.text(bound) == name {
+                        if names.len() != 1 {
+                            return false
+                        }
+                        if ty != null {
+                            found.push(check_handed_type_name(view, ty ?? return false) ?? return false)
+                        } else {
+                            match value {
+                                Expr::StructLit { name: built, .. } => found.push(view.text(built)),
+                                else => return false,
+                            }
+                        }
+                    }
+                }
+            },
+            Stmt::Comptime { name: bound, .. } => {
+                if view.text(bound) == name {
+                    return false
+                }
+            },
+            Stmt::For { bindings, .. } => {
+                for bound in bindings {
+                    if view.text(bound) == name {
+                        return false
+                    }
+                }
+            },
+            else => {},
+        }
+        for expr in check_visit_stmt(stmt.node) {
+            match expr {
+                Expr::Match { arms, .. } => {
+                    for arm in arms {
+                        if check_handed_pattern_names(view, arm.pattern).contains(name) {
+                            return false
+                        }
+                    }
+                },
+                Expr::Closure { params, .. } => {
+                    for param in params {
+                        if view.text(param) == name {
+                            return false
+                        }
+                    }
+                },
+                Expr::Select(arms, _) => {
+                    for arm in arms {
+                        if arm.binding != null && view.text(arm.binding ?? return false) == name {
+                            return false
+                        }
+                    }
+                },
+                Expr::TryCatch { .. } => {
+                    if name == "error" {
+                        return false
+                    }
+                },
+                else => {},
+            }
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            if !check_handed_typed_block(view, inner, name, found) {
+                return false
+            }
+        }
+    }
+    return true
 }
 
 /// The own function a call names, by its key: `helper`, `Bag::make`.
@@ -449,7 +776,7 @@ fn check_handed_root(view: ref ParsedView, place: ref Expr) -> String? sync {
 /// the package's own function given one, a branch's last value.
 pub fn check_handed_carries(world: ref CheckWorld, view: ref ParsedView, key: ref String, expr: ref Expr, held: ref collections::BTreeMap[String, String]) -> String? sync {
     match expr {
-        Expr::Variable(name, _) => return held.get(check_handed_key(key, view.text(name)))?.clone(),
+        Expr::Variable(name, id) => return check_handed_holds(view, key, name, id.get(), held),
         Expr::Field { base, .. } => return check_handed_carries(world, view, key, base, held),
         Expr::SafeField { base, .. } => return check_handed_carries(world, view, key, base, held),
         Expr::Index { base, .. } => return check_handed_carries(world, view, key, base, held),
@@ -544,10 +871,9 @@ fn check_handed_carries_block(world: ref CheckWorld, view: ref ParsedView, key: 
 /// stands in it.
 pub fn check_handed_written(world: ref CheckWorld, key: ref String, expr: ref Expr, held: ref collections::BTreeMap[String, String]) -> String? sync {
     match expr {
-        Expr::Variable(name, _) => {
-            let text = world.here.text(name)
-            if held.contains_key(check_handed_key(key, text)) {
-                return text
+        Expr::Variable(name, id) => {
+            if check_handed_holds(world.here, key, name, id.get(), held) != null {
+                return world.here.text(name)
             }
             return null
         },
