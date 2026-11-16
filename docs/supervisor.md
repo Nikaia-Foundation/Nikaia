@@ -676,7 +676,7 @@ The builder writes exactly `<full brief path>.report.md`, these fields only:
     Needs: none | <NK code, supervisor decision, owner decision>
     Changelog: none | <one sentence for the version heading>
     Owner: none | <one question for the owner, never a role>   (batch.nika: `OWNER <brief>: <text>`; cycle.nika writes the first to DIR/QUESTION, a second while it exists prints `OWNER second: ...`)
-    Friction: none | <one sentence: what cost turns or tokens needlessly (a tool, a rule, noise such as a red check that was not the run's)>
+    Friction: none | <one sentence: what cost turns or tokens needlessly (a tool, a rule, noise such as a red check that was not the run's); a claim that the compiler refuses or lacks something names each shape tried, its snippet and the code it drew, #1728>
     Comment: #N <text>   (optional, one line each: what to say on issue N, which the run is not about; drive.nika posts it there, #1698)
     Cache: none | <large entries newly created, MB>
     Disk freed: <GB>
