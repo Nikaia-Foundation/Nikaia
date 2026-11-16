@@ -265,6 +265,29 @@ fn emit_tables_structs_beside(beside: ref Vec[ParsedView]) -> collections::BTree
     return out
 }
 
+/// **The names of Rust's prelude types the package declares itself**
+/// (#1846): a `struct Result` or an `enum Option` of any file of the package
+/// hides the prelude's in the Rust below, so the emitter spells those
+/// `::core::result::Result` and `::core::option::Option` there
+/// (`EmitState::rust_result`, `rust_option`). No ADR reserves the names.
+fn emit_tables_prelude_taken(units: ref Vec[ParsedView]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for unit in units {
+        for item in unit.items {
+            let declared = match item.node {
+                Item::Struct { name, .. } => unit.text(name),
+                Item::Enum { name, .. } => unit.text(name),
+                Item::Trait { name, .. } => unit.text(name),
+                else => String(),
+            }
+            if declared == "Result" || declared == "Option" {
+                out.insert(declared)
+            }
+        }
+    }
+    return out
+}
+
 /// The types the units declare an `impl Error for …` for (`declared_errors`).
 fn emit_tables_declared_errors(units: ref Vec[ParsedView]) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()

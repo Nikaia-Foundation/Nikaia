@@ -191,7 +191,7 @@ impl EmitState {
                     fatal_arms = format!("{}            {}::{}(e) => nikaia_std::process::Ending::fatal_code(e),\n", fatal_arms, name, variant);
                 }
             }
-            if !arms.is_empty() { out.push(&format!("impl{} nikaia_std::process::Ending for {}{} {{\n    fn exit_code(&self) -> Option<i32> {{\n        match self {{\n{}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n    fn fatal_code(&self) -> Option<i32> {{\n        match self {{\n{}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n", decl, name, params, arms, fatal_arms)); }
+            if !arms.is_empty() { out.push(&format!("impl{} nikaia_std::process::Ending for {}{} {{\n    fn exit_code(&self) -> {}<i32> {{\n        match self {{\n{}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n    fn fatal_code(&self) -> {}<i32> {{\n        match self {{\n{}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n", decl, name, params, self.rust_option(), arms, self.rust_option(), fatal_arms)); }
         }
     }
     pub(crate) fn channel_of(&self, world: &EmitWorld<'_, '_, '_, '_>, thrown: &[String], elided: bool, params: &str, static_params: &str, borrows: bool) -> String {

@@ -213,7 +213,7 @@ impl EmitState {
                 types.push("String")
                 passing.push("&{}")
             } else if ty == "Option<&str>" {
-                types.push("Option<String>")
+                types.push(f"{self.rust_option()}<String>")
                 passing.push("{}.as_deref()")
             } else if ty.starts_with("&[") && ty.ends_with("]") {
                 let element = (ty.strip_prefix("&[") ?? "").strip_suffix("]") ?? ""

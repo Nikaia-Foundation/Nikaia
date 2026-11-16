@@ -26,13 +26,13 @@ pub(crate) fn rust_value(value: &BuildValue, float_text: &dyn Fn(f64) -> String)
             return Some(tuple_spelled(&written));
         },
         BuildValue::Variant { ty, variant, payload } => {
-            if payload.is_empty() { return Some(format!("{}::{}", ty, variant)); }
+            if payload.is_empty() { return Some(format!("{}::{}", variant_path(ty), variant)); }
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for held in payload.iter() {
                 let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
-            return Some(format!("{}::{}({})", ty, variant, nikaia_std::block::Text::from(written.join(", "))));
+            return Some(format!("{}::{}({})", variant_path(ty), variant, nikaia_std::block::Text::from(written.join(", "))));
         },
         BuildValue::Struct { name, fields } => {
             let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -339,7 +339,7 @@ pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '
             return Some(format!("{} {{ {} }}", name, nikaia_std::block::Text::from(written.join(", "))));
         },
         BuildValue::Variant { ty, variant, payload } => {
-            if payload.is_empty() { return Some(format!("{}::{}", ty, variant)); }
+            if payload.is_empty() { return Some(format!("{}::{}", variant_path(ty), variant)); }
             let declared = nikaia_std::index::or(payloads(ty, variant), || vec![].into());
             #[allow(unused_mut)] let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
@@ -349,7 +349,7 @@ pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '
                 written.push(text);
                 at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
-            return Some(format!("{}::{}({})", ty, variant, nikaia_std::block::Text::from(written.join(", "))));
+            return Some(format!("{}::{}({})", variant_path(ty), variant, nikaia_std::block::Text::from(written.join(", "))));
         },
         BuildValue::Tuple(parts) => {
             let declared: Vec<Ty> = match wanted {
@@ -428,5 +428,12 @@ impl CheckState {
         }
         CheckTable { found: true, below: format!("Fixed<{}>", value_below), written: format!("Fixed::new({}, &[{}], &[{}], &[{}])", table.seed, nikaia_std::block::Text::from(disps.join(", ")), nikaia_std::block::Text::from(written_keys.join(", ")), nikaia_std::block::Text::from(written_values.join(", "))), said: false }
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn variant_path(ty: &str) -> String {
+    if ty == "Option" { return String::from("::core::option::Option"); }
+    nikaia_std::block::Text::from(ty.to_string())
 }
 

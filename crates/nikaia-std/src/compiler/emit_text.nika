@@ -194,7 +194,7 @@ fn held_nullable(literal: ref String, inner: ref Ty) -> String {
 fn plain_rust_spelling(ty: ref Ty) -> String {
     return match ty {
         Ty::Named { name, args, view } => plain_named(name, args, view),
-        Ty::Nullable(inner) => f"Option<{plain_rust_spelling(inner)}>",
+        Ty::Nullable(inner) => f"::core::option::Option<{plain_rust_spelling(inner)}>",
         else => "_",
     }
 }

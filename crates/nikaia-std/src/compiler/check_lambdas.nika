@@ -55,7 +55,7 @@ fn kept_result_spelling(ty: ref Ty) -> String? sync {
     return match ty {
         Ty::Nullable(inner) => {
             let name = integer_named(inner) ?? return null
-            f"Option<{name}>"
+            f"::core::option::Option<{name}>"
         },
         else => integer_named(ty),
     }

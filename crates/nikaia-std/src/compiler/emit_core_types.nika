@@ -143,10 +143,10 @@ impl EmitState {
             // `(A, B)?` is an `Option<(A, B)>` (ADR-364), and a view of one
             // an `Option<&(A, B)>`, as a lent `T?` is (#1256).
             if ty.is_nullable && ty.is_view {
-                return f"Option<{lifetimes.reference()}({parts.join(", ")})>"
+                return f"{self.rust_option()}<{lifetimes.reference()}({parts.join(", ")})>"
             }
             if ty.is_nullable {
-                return f"Option<({parts.join(", ")})>"
+                return f"{self.rust_option()}<({parts.join(", ")})>"
             }
             return f"({parts.join(", ")})"
         }
@@ -179,9 +179,9 @@ impl EmitState {
             let written = self.emit_core_ty_named(world, walk, crossings, overlaps && !runs, inner, name, lifetimes, count)
             if runs && written.ends_with(">") {
                 let open: String = (written.strip_suffix(">") ?? "").clone()
-                return f"Option<{open} + '_>>"
+                return f"{self.rust_option()}<{open} + '_>>"
             }
-            return f"Option<{written}>"
+            return f"{self.rust_option()}<{written}>"
         }
         // A parameter that is code (ADR-277 D6, D11, D13).
         if ty.code != null {
@@ -197,12 +197,12 @@ impl EmitState {
                 // function's own result is (#1016).
                 let inner = a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, result, lifetimes, count))
                 if code.can_throw {
-                    outcome = f"Result<{inner}, std::boxed::Box<dyn std::error::Error>>"
+                    outcome = f"{self.rust_result()}<{inner}, std::boxed::Box<dyn std::error::Error>>"
                 } else {
                     outcome = inner
                 }
             } else if code.can_throw {
-                outcome = "Result<(), std::boxed::Box<dyn std::error::Error>>"
+                outcome = f"{self.rust_result()}<(), std::boxed::Box<dyn std::error::Error>>"
             }
             let runs = walk.in_parameter && walk.code_parameter_runs
             // **A view handed back from two views or none says which it is
@@ -232,7 +232,7 @@ impl EmitState {
                     let inner = a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, result, EmitLifetimes::Call, count))
                     let mut each = inner.clone()
                     if code.can_throw {
-                        each = f"Result<{inner}, std::boxed::Box<dyn std::error::Error>>"
+                        each = f"{self.rust_result()}<{inner}, std::boxed::Box<dyn std::error::Error>>"
                     }
                     if runs {
                         if code.is_sync {
@@ -317,7 +317,7 @@ impl EmitState {
             let mut inner: Type = ty.clone()
             inner.is_nullable = false
             let written = self.emit_core_ty_named(world, walk, crossings, overlaps, inner, name, lifetimes, count)
-            return f"Option<{written}>"
+            return f"{self.rust_option()}<{written}>"
         }
 
         // `ref Array[T]` is a run of elements somebody else keeps (ADR-184 D3).

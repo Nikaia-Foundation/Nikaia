@@ -35,6 +35,7 @@ pub struct EmitState {
     pub fold_callees: collections::BTreeSet<String>,
     pub structs: collections::BTreeSet<String>,
     pub structs_beside: collections::BTreeSet<String>,
+    pub prelude_taken: collections::BTreeSet<String>,
     pub proven_indices: collections::BTreeSet<i64>,
     pub proven_arithmetic: collections::BTreeMap<i64, String>,
     pub proven_negations: collections::BTreeMap<i64, String>,
@@ -147,5 +148,16 @@ pub struct EmitWalk {
 
 impl EmitWalk {
     pub fn fresh() -> EmitWalk { EmitWalk { plain_tasks: collections::BTreeSet::new(), boxed_scope: false, dropped_catch: -1, compared_receiver: -1, reached_copy: false, either_prelude: vec![], in_a_kept_call: false, in_parameter: false, grammar_rule_types: collections::BTreeMap::new(), grammar_rules: collections::BTreeSet::new(), grammar_values: collections::BTreeMap::new(), grammar_members: vec![], grammar_bytes: false, grammar_raw: false, grammar_nested: false, preluded: collections::BTreeSet::new(), wrappers: vec![], holding: None, hold_args: None, keep_function: String::from(""), dyn_code: false, nonnegative: collections::BTreeMap::new(), specialising: None, slotted: false, at_field: None, field_names: collections::BTreeMap::new(), field_types: collections::BTreeMap::new(), field_owners: collections::BTreeMap::new(), field_copy: None, type_names: collections::BTreeMap::new(), code_parameter_runs: false, held: collections::BTreeMap::new(), boxed_args: None, method_callee: None, hoisted_args: None, hoisted_lets: None, variant_counts: None, hull_count: None, trusting: false, unpinned: false, believing: false, place: emit_seeds_place(), floor: false, uncopied: -1, path_types: String::from(""), async_groups: vec![], async_pending: vec![], async_handles: collections::BTreeMap::new(), async_keeps: false, async_kept: vec![], async_rests: vec![], async_joining: collections::BTreeMap::new(), async_pausing: false, async_fallback: false, async_within: String::from(""), async_admission: String::from(""), async_bound: String::from(""), async_deadlines: vec![], async_gates: vec![], slots: vec![], slot_count: 0, statements_open: 0, kept_names: collections::BTreeMap::new() } }
+}
+
+impl EmitState {
+    pub(crate) fn rust_option(&self) -> String {
+        if self.prelude_taken.contains("Option") { return String::from("::core::option::Option"); }
+        String::from("Option")
+    }
+    pub(crate) fn rust_result(&self) -> String {
+        if self.prelude_taken.contains("Result") { return String::from("::core::result::Result"); }
+        String::from("Result")
+    }
 }
 

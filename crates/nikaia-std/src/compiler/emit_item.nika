@@ -161,7 +161,7 @@ impl EmitState {
     fn emit_trait_returned[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, given: ref Type?, foreign: bool) -> String sync {
         let ty = given ?? return "()"
         if foreign && emit_base(emit_text(world, ty.name)) == "CStr" {
-            return "Option<nikaia_std::foreign::CText>"
+            return f"{self.rust_option()}<nikaia_std::foreign::CText>"
         }
         if foreign && self.handle_named(world, ty) != null {
             return f"*mut {self.pointed_at(world, ty)}"
@@ -560,7 +560,7 @@ impl EmitState {
         // **`impl Fatal for T` is a marker** (ADR-345 D1); it answers `Ending`
         // for the status it sets (ADR-345 D4, ADR-346 D6).
         if has_trait && trait_text == "Fatal" && !emit_item_declares_trait(world, "Fatal") {
-            out.push(f"impl{declares} nikaia_std::process::Ending for {target_name}{applied} {{\n    fn exit_code(&self) -> Option<i32> {{\n        None\n    }}\n    fn fatal_code(&self) -> Option<i32> {{\n        Some(1)\n    }}\n}}\n\n")
+            out.push(f"impl{declares} nikaia_std::process::Ending for {target_name}{applied} {{\n    fn exit_code(&self) -> {self.rust_option()}<i32> {{\n        None\n    }}\n    fn fatal_code(&self) -> {self.rust_option()}<i32> {{\n        Some(1)\n    }}\n}}\n\n")
             return
         }
         // **`impl Cleanup for T` is the type's own `cleanup` and a one-line
@@ -578,7 +578,7 @@ impl EmitState {
                 bridge = "CleanupSend"
                 send = " + Send"
             }
-            out.push(f"impl{declares} nikaia_std::cleanup::{bridge} for {target_name}{applied} {{\n    fn cleanup(&mut self) -> std::pin::Pin<std::boxed::Box<dyn std::future::Future<Output = Result<(), ::std::string::String>>{send} + '_>> {{\n        std::boxed::Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({target_name}::cleanup(self){awaited}) }})\n    }}\n}}\n")
+            out.push(f"impl{declares} nikaia_std::cleanup::{bridge} for {target_name}{applied} {{\n    fn cleanup(&mut self) -> std::pin::Pin<std::boxed::Box<dyn std::future::Future<Output = {self.rust_result()}<(), ::std::string::String>>{send} + '_>> {{\n        std::boxed::Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({target_name}::cleanup(self){awaited}) }})\n    }}\n}}\n")
             return
         }
         // **`impl Eq`, `impl Ord` and `impl Hash` are the language's**
@@ -596,7 +596,7 @@ impl EmitState {
             } else if trait_text == "Hash" {
                 out.push(f"impl{declares} std::hash::Hash for {me} {{\n    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {{ {target_name}::hash(self, state) }}\n}}\n")
             } else {
-                out.push(f"impl{declares} PartialOrd for {me} {{\n    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {{ Some(std::cmp::Ord::cmp(self, other)) }}\n}}\nimpl{declares} Ord for {me} {{\n    fn cmp(&self, other: &Self) -> std::cmp::Ordering {{ {target_name}::compare(self, other) }}\n}}\n")
+                out.push(f"impl{declares} PartialOrd for {me} {{\n    fn partial_cmp(&self, other: &Self) -> {self.rust_option()}<std::cmp::Ordering> {{ Some(std::cmp::Ord::cmp(self, other)) }}\n}}\nimpl{declares} Ord for {me} {{\n    fn cmp(&self, other: &Self) -> std::cmp::Ordering {{ {target_name}::compare(self, other) }}\n}}\n")
             }
             return
         }
@@ -757,7 +757,7 @@ impl EmitState {
         }
         let mut outcome = returned.clone()
         if method.can_throw {
-            outcome = f"Result<{returned}, std::boxed::Box<dyn std::error::Error>>"
+            outcome = f"{self.rust_result()}<{returned}, std::boxed::Box<dyn std::error::Error>>"
         }
         // **A method that may pause is declared in the return-position form**
         // (ADR-288 D26); `+ Send` follows the executor, not the type.

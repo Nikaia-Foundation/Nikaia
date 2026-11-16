@@ -75,7 +75,7 @@ fn check_core_comptime_declared_below(state: ref CheckState, world: ref CheckWor
         Ty::Nullable(inner) => {
             let none: BuildValue? = null
             let held = check_core_comptime_declared_below(state, world, inner, none) ?? return null
-            return f"Option<{held}>"
+            return f"::core::option::Option<{held}>"
         },
         else => {}
     }
@@ -490,7 +490,7 @@ fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: ref C
         }
         if written != null && !optional && check_core_comptime_nullable(want ?? Ty::Unknown) {
             let text = written ?? ""
-            written = f"Option::Some({text})"
+            written = f"::core::option::Option::Some({text})"
         }
     }
     if crossed {

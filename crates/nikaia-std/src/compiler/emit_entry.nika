@@ -67,7 +67,7 @@ impl EmitState {
         }
         let mut ret: String = ""
         if fails {
-            ret = f" -> Result<(), {channel}>"
+            ret = f" -> {self.rust_result()}<(), {channel}>"
         }
         let mut start: String = "start"
         if !call_pauses(self.own_contracts, "main") && !concurrent {

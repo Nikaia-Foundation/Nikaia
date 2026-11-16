@@ -77,8 +77,8 @@ impl EmitState {
         if ty.is_tuple {
             let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for part in ty.generics.iter() { parts.push(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, &lifetimes, &count)); }
-            if ty.is_nullable && ty.is_view { return format!("Option<{}({})>", lifetimes.reference(), nikaia_std::block::Text::from(parts.join(", "))); }
-            if ty.is_nullable { return format!("Option<({})>", nikaia_std::block::Text::from(parts.join(", "))); }
+            if ty.is_nullable && ty.is_view { return format!("{}<{}({})>", self.rust_option(), lifetimes.reference(), nikaia_std::block::Text::from(parts.join(", "))); }
+            if ty.is_nullable { return format!("{}<({})>", self.rust_option(), nikaia_std::block::Text::from(parts.join(", "))); }
             return format!("({})", nikaia_std::block::Text::from(parts.join(", ")));
         }
         let parameter = nikaia_std::block::Text::from(nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_string());
@@ -101,9 +101,9 @@ impl EmitState {
             let written = self.emit_core_ty_named(world, walk, crossings, overlaps && !runs, &inner, name, &lifetimes, &count);
             if runs && written.ends_with('>') {
                 let open: String = nikaia_std::block::Text::from(nikaia_std::index::or(written.strip_suffix('>'), || "").to_string());
-                return format!("Option<{} + '_>>", open);
+                return format!("{}<{} + '_>>", self.rust_option(), open);
             }
-            return format!("Option<{}>", written);
+            return format!("{}<{}>", self.rust_option(), written);
         }
         if (*ty.code).is_some() {
             let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
@@ -113,8 +113,8 @@ impl EmitState {
             if (*code.result).is_some() {
                 let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
                 let inner = a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, result, &lifetimes, &count));
-                if code.can_throw { outcome = format!("Result<{}, std::boxed::Box<dyn std::error::Error>>", inner); } else { outcome = inner; }
-            } else if code.can_throw { outcome = String::from("Result<(), std::boxed::Box<dyn std::error::Error>>"); }
+                if code.can_throw { outcome = format!("{}<{}, std::boxed::Box<dyn std::error::Error>>", self.rust_result(), inner); } else { outcome = inner; }
+            } else if code.can_throw { outcome = format!("{}<(), std::boxed::Box<dyn std::error::Error>>", self.rust_result()); }
             let runs = walk.in_parameter && walk.code_parameter_runs;
             if (*code.result).is_some() {
                 let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
@@ -129,7 +129,7 @@ impl EmitState {
                     for part in ty.generics.iter() { called.push(a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, part, &EmitLifetimes::Call, &count))); }
                     let inner = a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, result, &EmitLifetimes::Call, &count));
                     let mut each = nikaia_std::block::Text::from(inner.to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut called = called;
-                    if code.can_throw { each = format!("Result<{}, std::boxed::Box<dyn std::error::Error>>", inner); }
+                    if code.can_throw { each = format!("{}<{}, std::boxed::Box<dyn std::error::Error>>", self.rust_result(), inner); }
                     if runs {
                         if code.is_sync { return format!("impl for<'call> Fn({}) -> {}", nikaia_std::block::Text::from(called.join(", ")), each); }
                         return format!("impl for<'call> AsyncFn({}) -> {}", nikaia_std::block::Text::from(called.join(", ")), each);
@@ -185,7 +185,7 @@ impl EmitState {
             let mut inner: Type = ty.clone();
             inner.is_nullable = false;
             let written = self.emit_core_ty_named(world, walk, crossings, overlaps, &inner, name, &lifetimes, &count);
-            return format!("Option<{}>", written);
+            return format!("{}<{}>", self.rust_option(), written);
         }
         if self.writes_a_run(world, ty) {
             let mut element: String = String::from("u8");

@@ -28,7 +28,7 @@ impl EmitState {
         let mut user_code: &'static str = "Sequential";
         if concurrent { user_code = "Concurrent"; }
         let mut ret: String = String::from("");
-        if fails { ret = format!(" -> Result<(), {}>", channel); }
+        if fails { ret = format!(" -> {}<(), {}>", self.rust_result(), channel); }
         let mut start: &'static str = "start";
         if !call_pauses(&self.own_contracts, "main") && !concurrent { start = "on_demand"; }
         let mut text: String = String::from("\n// ADR-303 D4: the runtime is running before the program's first\n// statement, so an operation inside it costs no thread wake-up. What\n// starts is what `user_parallelism` allows (ADR-037 D2): the I/O\n// worker always, a pool for user code only at `yes`.\n");

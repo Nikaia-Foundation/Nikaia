@@ -110,7 +110,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_trait_returned<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, given: Option<&Type>, foreign: bool) -> String {
         let ty = match given { Some(__nikaia_value) => __nikaia_value, None => return String::from("()") };
-        if foreign && emit_base(&emit_text(world, ty.name)) == "CStr" { return String::from("Option<nikaia_std::foreign::CText>"); }
+        if foreign && emit_base(&emit_text(world, ty.name)) == "CStr" { return format!("{}<nikaia_std::foreign::CText>", self.rust_option()); }
         if foreign && self.handle_named(world, ty).is_some() { return format!("*mut {}", self.pointed_at(world, ty)); }
         if foreign { return self.emit_foreign_ty(world, walk, host, ty); }
         let written = self.emit_item_ty(world, walk, host, ty, &EmitLifetimes::Elided);
@@ -403,7 +403,7 @@ impl EmitState {
         let mut declares = emit_angled(&head_parts); #[allow(unused_mut, clippy::redundant_locals)] let mut target_parts = target_parts;
         let mut applied = emit_angled(&target_parts);
         if has_trait && trait_text == "Fatal" && !emit_item_declares_trait(world, "Fatal") {
-            out.push(&format!("impl{} nikaia_std::process::Ending for {}{} {{\n    fn exit_code(&self) -> Option<i32> {{\n        None\n    }}\n    fn fatal_code(&self) -> Option<i32> {{\n        Some(1)\n    }}\n}}\n\n", declares, target_name, applied));
+            out.push(&format!("impl{} nikaia_std::process::Ending for {}{} {{\n    fn exit_code(&self) -> {}<i32> {{\n        None\n    }}\n    fn fatal_code(&self) -> {}<i32> {{\n        Some(1)\n    }}\n}}\n\n", declares, target_name, applied, self.rust_option(), self.rust_option()));
             return Ok(());
         }
         if has_trait && trait_text == "Cleanup" {
@@ -417,7 +417,7 @@ impl EmitState {
                 bridge = "CleanupSend";
                 send = " + Send";
             }
-            out.push(&format!("impl{} nikaia_std::cleanup::{} for {}{} {{\n    fn cleanup(&mut self) -> std::pin::Pin<std::boxed::Box<dyn std::future::Future<Output = Result<(), ::std::string::String>>{} + '_>> {{\n        std::boxed::Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({}::cleanup(self){}) }})\n    }}\n}}\n", declares, bridge, target_name, applied, send, target_name, awaited));
+            out.push(&format!("impl{} nikaia_std::cleanup::{} for {}{} {{\n    fn cleanup(&mut self) -> std::pin::Pin<std::boxed::Box<dyn std::future::Future<Output = {}<(), ::std::string::String>>{} + '_>> {{\n        std::boxed::Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({}::cleanup(self){}) }})\n    }}\n}}\n", declares, bridge, target_name, applied, self.rust_result(), send, target_name, awaited));
             return Ok(());
         }
         if has_trait && (trait_text == "Eq" || trait_text == "Ord" || trait_text == "Hash") && !emit_item_declares_trait(world, &trait_text) {
@@ -425,7 +425,7 @@ impl EmitState {
             for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, None, None)?; }
             out.push("}\n");
             let me = format!("{}{}", target_name, applied);
-            if trait_text == "Eq" { out.push(&format!("impl{} PartialEq for {} {{\n    fn eq(&self, other: &Self) -> bool {{ {}::eq(self, other) }}\n}}\nimpl{} Eq for {} {{}}\n", declares, me, target_name, declares, me)); } else if trait_text == "Hash" { out.push(&format!("impl{} std::hash::Hash for {} {{\n    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {{ {}::hash(self, state) }}\n}}\n", declares, me, target_name)); } else { out.push(&format!("impl{} PartialOrd for {} {{\n    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {{ Some(std::cmp::Ord::cmp(self, other)) }}\n}}\nimpl{} Ord for {} {{\n    fn cmp(&self, other: &Self) -> std::cmp::Ordering {{ {}::compare(self, other) }}\n}}\n", declares, me, declares, me, target_name)); }
+            if trait_text == "Eq" { out.push(&format!("impl{} PartialEq for {} {{\n    fn eq(&self, other: &Self) -> bool {{ {}::eq(self, other) }}\n}}\nimpl{} Eq for {} {{}}\n", declares, me, target_name, declares, me)); } else if trait_text == "Hash" { out.push(&format!("impl{} std::hash::Hash for {} {{\n    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {{ {}::hash(self, state) }}\n}}\n", declares, me, target_name)); } else { out.push(&format!("impl{} PartialOrd for {} {{\n    fn partial_cmp(&self, other: &Self) -> {}<std::cmp::Ordering> {{ Some(std::cmp::Ord::cmp(self, other)) }}\n}}\nimpl{} Ord for {} {{\n    fn cmp(&self, other: &Self) -> std::cmp::Ordering {{ {}::compare(self, other) }}\n}}\n", declares, me, self.rust_option(), declares, me, target_name)); }
             return Ok(());
         }
         let hidden = self.seeds.arity(&target_name);
@@ -554,7 +554,7 @@ impl EmitState {
             }
         }
         let mut outcome = nikaia_std::block::Text::from(returned.to_string());
-        if method.can_throw { outcome = format!("Result<{}, std::boxed::Box<dyn std::error::Error>>", returned); }
+        if method.can_throw { outcome = format!("{}<{}, std::boxed::Box<dyn std::error::Error>>", self.rust_result(), returned); }
         let mut ret: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
         if !is_sync {
             let send = if host.user_parallelism() { " + Send" } else { "" };

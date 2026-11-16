@@ -169,7 +169,8 @@ impl EmitState {
         }
         // **Put back into an option, it stays the option it is**: the wrap
         // the slot asked for is already written, and its `)` follows.
-        let lent = if copied || other { "Option::as_ref(&" } else { "Option::as_deref(&" }
+        let option = self.rust_option()
+        let lent = if copied || other { f"{option}::as_ref(&" } else { f"{option}::as_deref(&" }
         if !operand {
             if out.buf.ends_with("Some(&") {
                 out.buf = (out.buf.strip_suffix("Some(&") ?? "").clone()
@@ -179,7 +180,11 @@ impl EmitState {
             }
             if out.buf.ends_with("Some(") {
                 out.buf = (out.buf.strip_suffix("Some(") ?? "").clone()
-                out.push(if a_reference { "Option::as_ref(" } else { "std::convert::identity(" })
+                if a_reference {
+                    out.push(f"{option}::as_ref(")
+                } else {
+                    out.push("std::convert::identity(")
+                }
                 out.append(name)
                 return
             }

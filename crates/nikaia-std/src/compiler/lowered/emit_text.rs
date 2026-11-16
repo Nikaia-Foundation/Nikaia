@@ -127,7 +127,7 @@ pub(crate) fn held_nullable(literal: &str, inner: &Ty) -> String {
 pub(crate) fn plain_rust_spelling(ty: &Ty) -> String {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; plain_named(name, args, view) },
-        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); format!("Option<{}>", plain_rust_spelling(inner)) },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); format!("::core::option::Option<{}>", plain_rust_spelling(inner)) },
         _ => String::from("_"),
     }
 }

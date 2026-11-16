@@ -223,7 +223,7 @@ impl EmitState {
         let inside = EmitFlow { in_lambda: !pauses, statement: flow.statement, ..EmitFlow::plain() };
         if fails {
             let channel = nikaia_std::block::Text::from(scope.tasks_channel.to_string());
-            out.push(&format!("-> Result<(), {}> {{ ", channel));
+            out.push(&format!("-> {}<(), {}> {{ ", self.rust_result(), channel));
             let failing = EmitFlow { can_throw: true, ..inside };
             let failing_scope = EmitScope { origin: nikaia_std::block::Text::from(scope.origin.to_string()), function: nikaia_std::block::Text::from(scope.tasks_function.to_string()), channel: nikaia_std::block::Text::from(channel.to_string()), changed: changed, tasks_channel: nikaia_std::block::Text::from(channel.to_string()), tasks_function: nikaia_std::block::Text::from(scope.tasks_function.to_string()), ..EmitScope::plain() };
             self.emit_core_block(world, walk, out, host, body, depth, failing, &failing_scope, &EmitTail::Value)?;

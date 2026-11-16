@@ -360,7 +360,7 @@ impl EmitState {
                 }
             }
             if arms.len() > 0 {
-                out.push(f"impl{decl} nikaia_std::process::Ending for {name}{params} {{\n    fn exit_code(&self) -> Option<i32> {{\n        match self {{\n{arms}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n    fn fatal_code(&self) -> Option<i32> {{\n        match self {{\n{fatal_arms}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n")
+                out.push(f"impl{decl} nikaia_std::process::Ending for {name}{params} {{\n    fn exit_code(&self) -> {self.rust_option()}<i32> {{\n        match self {{\n{arms}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n    fn fatal_code(&self) -> {self.rust_option()}<i32> {{\n        match self {{\n{fatal_arms}            #[allow(unreachable_patterns)] _ => None,\n        }}\n    }}\n}}\n\n")
             }
         }
     }

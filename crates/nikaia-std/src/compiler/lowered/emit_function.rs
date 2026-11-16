@@ -623,7 +623,7 @@ impl EmitState {
                     }
                 }
                 let mut ret: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
-                if throws_ { ret = format!(" -> Result<{}, {}>", returned, channel); } else if ret_type.is_some() { ret = format!(" -> {}", returned); }
+                if throws_ { ret = format!(" -> {}<{}, {}>", self.rust_result(), returned, channel); } else if ret_type.is_some() { ret = format!(" -> {}", returned); }
                 let a_copy = walk.specialising.is_some() && (walk.slotted || self.copy_substitutes(&nikaia_std::block::Text::from(nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string())));
                 let weighed = self.facts.weighed_of(&key);
                 if !a_copy && !weighed.is_empty() {

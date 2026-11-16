@@ -55,7 +55,7 @@ pub(crate) fn check_core_comptime_declared_below(state: &CheckState, world: &Che
             let inner = nikaia_std::boxed::open(inner);
             let none: Option<BuildValue> = None;
             let held = match check_core_comptime_declared_below(state, world, inner, (none).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            return Some(format!("Option<{}>", held));
+            return Some(format!("::core::option::Option<{}>", held));
         },
         _ => { },
     }
@@ -389,7 +389,7 @@ pub(crate) fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, 
         };
         if written.is_some() && !optional && check_core_comptime_nullable(nikaia_std::index::or(want.as_ref(), || &Ty::Unknown)) {
             let text = nikaia_std::index::or(written, || "".into());
-            written = Some(format!("Option::Some({})", text));
+            written = Some(format!("::core::option::Option::Some({})", text));
         }
     }
     if crossed {

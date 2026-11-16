@@ -1046,7 +1046,7 @@ impl EmitState {
                 }
                 let mut ret: String = ""
                 if throws_ {
-                    ret = f" -> Result<{returned}, {channel}>"
+                    ret = f" -> {self.rust_result()}<{returned}, {channel}>"
                 } else if ret_type != null {
                     ret = f" -> {returned}"
                 }

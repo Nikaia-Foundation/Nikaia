@@ -58,7 +58,7 @@ pub(crate) fn kept_result_spelling(ty: &Ty) -> Option<String> {
         Ty::Nullable(inner) => {
             let inner = nikaia_std::boxed::open(inner);
             let name = match integer_named(inner) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            Some(format!("Option<{}>", name))
+            Some(format!("::core::option::Option<{}>", name))
         },
         _ => integer_named(ty),
     }

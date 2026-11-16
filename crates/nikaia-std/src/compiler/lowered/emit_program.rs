@@ -138,7 +138,7 @@ impl EmitState {
                 types.push(String::from("String"));
                 passing.push(String::from("&{}"));
             } else if ty == "Option<&str>" {
-                types.push(String::from("Option<String>"));
+                types.push(format!("{}<String>", self.rust_option()));
                 passing.push(String::from("{}.as_deref()"));
             } else if ty.starts_with("&[") && ty.ends_with(']') {
                 let element = nikaia_std::index::or(nikaia_std::index::or(ty.strip_prefix("&["), || "").strip_suffix(']'), || "");

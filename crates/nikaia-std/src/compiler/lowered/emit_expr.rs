@@ -110,17 +110,18 @@ impl EmitState {
             }
             return;
         }
-        let lent = if copied || other { "Option::as_ref(&" } else { "Option::as_deref(&" };
+        let option = self.rust_option();
+        let lent = if copied || other { format!("{}::as_ref(&", option) } else { format!("{}::as_deref(&", option) };
         if !operand {
             if out.buf.ends_with("Some(&") {
                 out.buf = nikaia_std::block::Text::from(nikaia_std::index::or(out.buf.strip_suffix("Some(&"), || "").to_string());
-                out.push(lent);
+                out.push(&lent);
                 out.append(&name);
                 return;
             }
             if out.buf.ends_with("Some(") {
                 out.buf = nikaia_std::block::Text::from(nikaia_std::index::or(out.buf.strip_suffix("Some("), || "").to_string());
-                out.push(if a_reference { "Option::as_ref(" } else { "std::convert::identity(" });
+                if a_reference { out.push(&format!("{}::as_ref(", option)); } else { out.push("std::convert::identity("); }
                 out.append(&name);
                 return;
             }

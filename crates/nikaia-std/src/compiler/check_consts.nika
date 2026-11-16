@@ -37,14 +37,14 @@ fn rust_value(value: ref BuildValue, float_text: fn(f64) -> String sync) -> Stri
         },
         BuildValue::Variant { ty, variant, payload } => {
             if payload.len() == 0 {
-                return f"{ty}::{variant}"
+                return f"{variant_path(ty)}::{variant}"
             }
             let mut written: Vec[String] = []
             for held in payload {
                 let text = rust_value(held, float_text) ?? return null
                 written.push(text)
             }
-            return f"{ty}::{variant}({written.join(", ")})"
+            return f"{variant_path(ty)}::{variant}({written.join(", ")})"
         },
         BuildValue::Struct { name, fields } => {
             let mut written: Vec[String] = []
@@ -451,7 +451,7 @@ fn written_below(state: ref CheckState, world: ref CheckWorld, value: ref BuildV
         },
         BuildValue::Variant { ty, variant, payload } => {
             if payload.len() == 0 {
-                return f"{ty}::{variant}"
+                return f"{variant_path(ty)}::{variant}"
             }
             let declared = payloads(ty, variant) ?? []
             let mut written: Vec[String] = []
@@ -462,7 +462,7 @@ fn written_below(state: ref CheckState, world: ref CheckWorld, value: ref BuildV
                 written.push(text)
                 at = at + 1
             }
-            return f"{ty}::{variant}({written.join(", ")})"
+            return f"{variant_path(ty)}::{variant}({written.join(", ")})"
         },
         // **A tuple, each part against the part the declaration names.**
         BuildValue::Tuple(parts) => {
@@ -555,4 +555,14 @@ impl CheckState {
         }
         return CheckTable { found: true, below: f"Fixed<{value_below}>", written: f"Fixed::new({table.seed}, &[{disps.join(", ")}], &[{written_keys.join(", ")}], &[{written_values.join(", ")}])", said: false }
     }
+}
+
+/// **The path a value's enum is written by below** (#1846): the language's
+/// option by its path, since a program's own `Option` hides the prelude's
+/// name; any other enum by its name.
+fn variant_path(ty: ref String) -> String sync {
+    if ty == "Option" {
+        return "::core::option::Option"
+    }
+    return ty.clone()
 }

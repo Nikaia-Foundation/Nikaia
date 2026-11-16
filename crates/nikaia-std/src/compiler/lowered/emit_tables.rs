@@ -180,6 +180,22 @@ pub(crate) fn emit_tables_structs_beside(beside: &[ParsedView<'_, '_, '_, '_, '_
     out
 }
 
+pub(crate) fn emit_tables_prelude_taken(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for unit in units.iter() {
+        for item in unit.items.iter() {
+            let declared = match &item.node {
+                Item::Struct { name, .. } => { let name = *name; unit.text(name) },
+                Item::Enum { name, .. } => { let name = *name; unit.text(name) },
+                Item::Trait { name, .. } => { let name = *name; unit.text(name) },
+                _ => String::new(),
+            };
+            if declared == "Result" || declared == "Option" { out.insert(declared); }
+        }
+    }
+    out
+}
+
 pub(crate) fn emit_tables_declared_errors(units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for unit in units.iter() { out.extend(declared_errors(unit.words, unit.items)); }

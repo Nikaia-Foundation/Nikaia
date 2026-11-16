@@ -340,7 +340,7 @@ impl EmitState {
         // its body's error is handed back, and the scope throws it at its end.
         if fails {
             let channel = scope.tasks_channel.clone()
-            out.push(f"-> Result<(), {channel}> {{ ")
+            out.push(f"-> {self.rust_result()}<(), {channel}> {{ ")
             let failing = inside with { can_throw: true }
             let failing_scope = EmitScope::plain() with { origin: scope.origin.clone(), function: scope.tasks_function.clone(), channel: channel.clone(), changed: changed, tasks_channel: channel.clone(), tasks_function: scope.tasks_function.clone() }
             self.emit_core_block(world, walk, out, host, body, depth, failing, failing_scope, EmitTail::Value)
