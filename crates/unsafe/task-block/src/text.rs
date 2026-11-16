@@ -103,7 +103,7 @@ impl Text {
     /// `Vec`, goes out of line through [`Text::push_slow`]. With the
     /// encoding and the growth inlined, the body kept six callee-saved
     /// registers and was called out of line from fasta's loops.
-    #[inline]
+    #[inline(always)]
     pub fn push(&mut self, c: char) {
         let len = self.bytes.len();
         if c.is_ascii() && len < self.bytes.capacity() {
