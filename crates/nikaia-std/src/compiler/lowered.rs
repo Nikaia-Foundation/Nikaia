@@ -3728,7 +3728,10 @@ pub mod emit_out {
     pub use super::{EmitMapEntry, emit_out_locate, emit_out_placed, EmitOut};
 }
 pub mod emit_pattern {}
-pub mod emit_program {}
+pub mod emit_program {
+    #[allow(unused_imports)]
+    pub use super::{EMIT_PROGRAM_COUNTING_HEAP};
+}
 pub mod emit_reach {
     #[allow(unused_imports)]
     pub use super::{ReachIndex};
@@ -4231,4 +4234,4 @@ pub mod json {
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "7d69da0022702329c58486d3121c6cf1ee80321dee8f34aeafcaf65979a8c3ca";
+pub const LOWERED_DIGEST: &str = "71b2c753c60f9d9da5e8ac7841de054a1dbce393acb1e87c1d6d21e1ce360dfb";

@@ -21,6 +21,7 @@ use anyhow::{Context, Result};
 
 use crate::comptime_run::{run_bundle, rustc, unique_beside, write_if_changed};
 use nikaia_std::compiler::comptime_bundle::comptime_bundle_host_deps;
+use nikaia_std::compiler::emit_program::EMIT_PROGRAM_COUNTING_HEAP;
 
 /// What compiling the program came to.
 pub(crate) struct Built {
@@ -79,6 +80,12 @@ pub(crate) fn compile(
     // **The bundle is linked because the program names it**: an `--extern`
     // nothing names is never loaded, and `std` would be linked statically from
     // its `rlib` instead. At the end, so no line of the program moves.
+    //
+    // **The bundle declares the program's allocator** (ADR-327 D9, #1844): a
+    // dynamic library allocates with its own, so the program's two lines are
+    // blanked, line for line, and its allocations and the library's are
+    // counted by the one allocator.
+    let rust = rust.replacen(EMIT_PROGRAM_COUNTING_HEAP, "\n", 1);
     write_if_changed(
         &source,
         &format!("{rust}\nextern crate nikaia_bundle as _;\n"),

@@ -746,8 +746,10 @@ new points of `Issue:` (each answer that is not `complete`), `Needs:` and
 `Friction:` as one issue labelled `improve` for the improvement lane (*Lanes*).
 Only new points (#1818, `drive_improve_sorted`, `--improve-plan` shows it): a
 `Deviation:` stays in the report (`IMPROVE-DROP`), read when the cut is
-accepted; a `broke I<n>` answer is a comment on the run's issue
-(`IMPROVE-BROKE #N`); a point the report says it closed or built, or that
+accepted; a `broke I<n>` answer, and a `wrong I<n>` answer or any other
+that the issue's suspected cause or diagnosis was wrong, is a comment on the
+run's issue (`IMPROVE-BROKE #N`; owner, 2026-11-16: a wrong guess is not an
+improvement issue of its own, the count above shows when it recurs); a point the report says it closed or built, or that
 names a rules file under `docs/`, `scripts/` or `.claude/` the run's commit
 changed, is dropped; one an open or recently closed improvement issue already
 has (its title or a `## Reported` line, by word overlap) is a comment there

@@ -61,7 +61,7 @@
 //                                 lane (`ready`, `improve`; `IMPROVE #N
 //                                 <brief>`, drive_improve_file; its body
 //                                 names the run's report and commit,
-//                                 #1706), a `broke` answer said on the
+//                                 #1706), a `broke` or `wrong` answer said on the
 //                                 run's issue (`IMPROVE-BROKE #N`), a
 //                                 point an improvement issue has added
 //                                 there (`IMPROVE-DUP #M`), a deviation or
@@ -399,6 +399,7 @@ fn drive_escalate(why: String) throws {
 		drive_settle(exe, lane)
 	}
 	drive_unlock()
+	drive_merge_unlock()
 	drive_wake(lane, f"ESCALATE drive: {why}")
 	process::exit(2)
 }
@@ -410,6 +411,7 @@ fn drive_escalate(why: String) throws {
 fn drive_restart(exe: String, line: String) throws {
 	println(line)
 	drive_unlock()
+	drive_merge_unlock()
 	let mut args: Vec[String] = []
 	for a in cli::args() { args.push(a) }
 	let mut again: Vec[String] = ["run", "scripts/drive.nika", "--"]
@@ -586,6 +588,85 @@ fn drive_lock(dir: String) throws {
 		}
 		process::run("sleep", ["60"])
 	}
+}
+
+// The merge lock of this checkout (#1916): two lane drivers in one checkout
+// merged `origin/develop` at once and broke each other's index (`index.lock`
+// exists, a merge commit failed, a merge left open). It is held for a whole
+// fetch, merge and regeneration (drive_pull, drive_merge_fetched) and for the
+// tree worktree's ledger refresh (drive_ledgers), which share
+// `target/ledger-tree`.
+fn drive_merge_lock_dir() -> String {
+	return "target/merge.lock"
+}
+
+// Seconds the merge waits for `.git/index.lock` and `.git/MERGE_HEAD` to go
+// before it escalates: NIKAIA_DRIVE_MERGE_WAIT, default 1800.
+fn drive_merge_wait() -> i64 throws {
+	return text::parse_i64(env::var("NIKAIA_DRIVE_MERGE_WAIT") ?? "") ?? 1800
+}
+
+// Takes the merge lock for WHAT (`merging origin/develop ...`): waits in 5 s
+// steps while another live driver holds it (printing `MERGE waiting for
+// target/merge.lock: <owner>` once), takes over a dead one's; an owner file
+// not yet written counts as live for twelve steps. Then waits for git's own
+// `index.lock` and `MERGE_HEAD` to go (another tool's commit, a builder's
+// `git add`), printing `MERGE waiting for .git/<file>` once, and escalates
+// only after drive_merge_wait seconds. Already held by this driver: returns.
+fn drive_merge_lock(what: String) throws {
+	let me = drive_pid()
+	let dir = drive_merge_lock_dir()
+	let mut blank: i64 = 0
+	let mut said = false
+	while true {
+		process::run("mkdir", ["-p", "target"])
+		if process::run("mkdir", [dir.clone()]).ok {
+			fs::write(dir + "/owner", fs::Root::Anywhere, f"{me} {what}\n")
+			break
+		}
+		let owner = drive_read(dir + "/owner").trim()
+		let pid = owner.split(" ").collect()[0]
+		if pid == me { break }
+		if pid == "" { blank += 1 }
+		let live = if pid == "" { blank <= 12 } else { process::run("kill", ["-0", pid.clone()]).ok }
+		if !live {
+			process::run("rm", ["-rf", dir.clone()])
+			continue
+		}
+		if !said {
+			println(f"MERGE waiting for {dir}: {owner}")
+			said = true
+		}
+		process::run("sleep", ["5"])
+	}
+	let git_dir = process::run("git", ["rev-parse", "--git-dir"]).stdout.trim().clone()
+	let limit = drive_merge_wait()
+	let start = drive_now()
+	let mut told: Vec[String] = []
+	while true {
+		let mut busy: String = ""
+		for f in ["index.lock", "MERGE_HEAD"] {
+			if busy == "" && fs::exists(f"{git_dir}/{f}", fs::Root::Anywhere) { busy = f.clone() }
+		}
+		if busy == "" { return }
+		if drive_now() - start >= limit {
+			drive_escalate(f"{what}: .git/{busy} stayed for {limit} s; another merge or commit in this checkout did not finish")
+		}
+		if !told.contains(busy.clone()) {
+			println(f"MERGE waiting for .git/{busy}")
+			told.push(busy)
+		}
+		process::run("sleep", ["1"])
+	}
+}
+
+// Releases the merge lock if this driver holds it; drive_escalate and
+// drive_restart call it too.
+fn drive_merge_unlock() throws {
+	let owner = drive_read(drive_merge_lock_dir() + "/owner")
+	if owner == "" { return }
+	if owner.split(" ").collect()[0].trim()
+		== drive_pid() { process::run("rm", ["-rf", drive_merge_lock_dir()]) }
 }
 
 // The brief's name: the last path component without `.md`.
@@ -769,13 +850,8 @@ fn drive_push(dir: String, sha: String) -> String throws {
 		// The merge is regenerated before the checks (#1333): lowered files and
 		// badges depend on both sides, and on 2026-11-07 a merge pushed without
 		// them left develop red (`lowered/sv_smtlib.rs`, `self-hosted.svg`).
-		let exe = process::run("realpath", [drive_exe()]).stdout.trim().clone()
-		drive_merge_fetched(
-			"push rejected",
-			f"'{exe}' lower-std",
-			"cargo build -q --profile fast -p nikaia",
-			"python3 scripts/badges.py",
-		)
+		drive_merge_lock("push rejected")
+		drive_merge_fetched("push rejected", drive_merge_lower(), drive_merge_build(), "python3 scripts/badges.py")
 		let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 		let failed = drive_merge_check(base, merge.clone())
 		if failed != "" {
@@ -1102,7 +1178,8 @@ fn drive_merge_check(base: String, merge: String) -> String throws {
 }
 
 // Before each issue and each suite (#1717): `origin/develop` fetched and
-// merged into HEAD, so a lane that has not pushed for a while still runs the
+// merged into HEAD under the merge lock (drive_merge_lock, #1916: another
+// driver of this checkout merging is waited for), so a lane that has not pushed for a while still runs the
 // scripts and the compiler other sessions pushed. Nothing new prints nothing.
 // HEAD an ancestor of it (no local commits): a fast-forward, which leaves no
 // merge commit for the suite to test; else drive_merge_fetched with LOWER,
@@ -1112,6 +1189,14 @@ fn drive_merge_check(base: String, merge: String) -> String throws {
 // skipped: git fetch origin develop failed` and merges nothing. Returns the
 // `scripts/*.nika` the merge brought, space-separated, "" for none.
 fn drive_pull(cause: String, lower: String, build: String, badges: String) -> String throws {
+	drive_merge_lock(cause.clone())
+	let scripts = drive_pull_locked(cause, lower, build, badges)
+	drive_merge_unlock()
+	return scripts
+}
+
+// drive_pull under the merge lock.
+fn drive_pull_locked(cause: String, lower: String, build: String, badges: String) -> String throws {
 	let fetched = process::run("git", ["fetch", "-q", "origin", "develop"])
 	if !fetched.ok {
 		println("MERGE skipped: git fetch origin develop failed")
@@ -1140,7 +1225,8 @@ fn drive_pull(cause: String, lower: String, build: String, badges: String) -> St
 		}
 		drive_autostash_settle(cause)
 	} else {
-		drive_merge_fetched(cause, lower, build, badges)
+		drive_merge_try(cause.clone(), lower, build, badges, true)
+		drive_autostash_settle(cause)
 	}
 	let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 	println(f"MERGE {drive_short(head)} pulled {count} commits")
@@ -1152,17 +1238,37 @@ fn drive_pull(cause: String, lower: String, build: String, badges: String) -> St
 // suite still running is handled (drive_settle, in the lane holding the
 // lock), then drive_restart. WHEN says where (`before the next issue`).
 fn drive_pull_or_restart(exe: String, when: String) throws {
-	let real = process::run("realpath", [exe.clone()]).stdout.trim().clone()
-	let scripts = drive_pull(
-		f"merging origin/develop {when}",
-		f"'{real}' lower-std",
-		"cargo build -q --profile fast -p nikaia",
-		"python3 scripts/badges.py",
-	)
+	let cause = f"merging origin/develop {when}"
+	drive_merge_lock(cause.clone())
+	let scripts = drive_pull(cause, drive_merge_lower(), drive_merge_build(), "python3 scripts/badges.py")
 	if scripts == "" { return }
 	let lane = drive_lock_lane()
 	if lane != "" && drive_testing() != "" { drive_settle(exe.clone(), lane) }
 	drive_restart(exe, f"RESTART drive: the merge brought {scripts}")
+}
+
+// The BUILD of a merge's regeneration, run in the tree worktree
+// (drive_merge_regenerate): the compiler of the merged tree, in the tree
+// target directory, never the checkout's `target/fast` a builder rebuilds.
+fn drive_merge_build() -> String throws {
+	let target = process::run("realpath", ["-m", drive_tree_target()]).stdout.trim().clone()
+	return f"CARGO_TARGET_DIR='{target}' cargo build -q --profile fast -p nikaia"
+}
+
+// The LOWER of a merge's regeneration: the binary of the tree target
+// directory, built from a committed tree only (#1916: the checkout's
+// `target/fast/nikaia`, just built by a builder from its uncommitted change,
+// refused files unchanged on develop with NK1117). Before the merge's own
+// build it is the compiler of the last tree built there; none yet, it is built
+// from HEAD first. Called under the merge lock.
+fn drive_merge_lower() -> String throws {
+	let target = process::run("realpath", ["-m", drive_tree_target()]).stdout.trim().clone()
+	let exe = f"{target}/fast/nikaia"
+	if !fs::exists(exe.clone(), fs::Root::Anywhere) {
+		let head = process::run("git", ["rev-parse", f"HEAD^{{tree}}"]).stdout.trim().clone()
+		drive_tree_exe(head)
+	}
+	return f"'{exe}' lower-std"
 }
 
 // True when this driver's background suite has finished (its exit file is
@@ -1181,10 +1287,13 @@ fn drive_suite_done() -> bool throws {
 // BUILD and BADGES (#1333); a conflict only in the generated lowered files is
 // resolved by drive_merge_relower; a merge git refused for generated files in
 // the way moves them aside and is tried once more (#1820); any other conflict,
-// or a failed resolution, aborts and escalates.
+// or a failed resolution, aborts and escalates. All under the merge lock
+// (drive_merge_lock, #1916).
 fn drive_merge_fetched(cause: String, lower: String, build: String, badges: String) throws {
+	drive_merge_lock(cause.clone())
 	drive_merge_try(cause.clone(), lower, build, badges, true)
 	drive_autostash_settle(cause)
+	drive_merge_unlock()
 }
 
 // After a merge (drive_pull's fast-forward, drive_merge_fetched): git puts
@@ -1367,20 +1476,12 @@ fn drive_lowered_paths() -> Vec[String] {
 	return [drive_lowered_dir(), drive_lowered_dir() + ".rs"]
 }
 
-// The paths under the lowered files that differ from the index or are new,
-// one per line (`git status --porcelain`, the path after the status).
-fn drive_lowered_status() -> String throws {
-	let mut args: Vec[String] = ["status", "--porcelain", "--untracked-files=all", "--"]
-	for p in drive_lowered_paths() { args.push(p) }
-	return process::run("git", args).stdout
-}
-
-// A fingerprint of the lowered files' contents, to see the lowering settle.
-fn drive_lowered_print() -> String throws {
+// A fingerprint of the lowered files' contents under DIR, to see the lowering settle.
+fn drive_lowered_print(dir: String) -> String throws {
 	let dirs = drive_lowered_paths().join(" ")
 	return process::run(
 		"sh",
-		["-c", f"find {dirs} -type f | sort | xargs sha256sum | sha256sum"],
+		["-c", f"cd '{dir}' && find {dirs} -type f | sort | xargs sha256sum | sha256sum"],
 	).stdout.trim().clone()
 }
 
@@ -1404,11 +1505,14 @@ fn drive_merge_relower(cause: String, unmerged: String, lower: String, build: St
 // or measured the combination (develop red on 2026-11-07, 576d862e). When the
 // merge conflicted or brought a change under `crates/` or `tools/`
 // (drive_merge_generates), runs BUILD on the merged files first (only when
-// that build fails, LOWER with the driver's binary from before the merge: on
+// that build fails, LOWER with the binary from before the merge: on
 // 2026-11-15 that binary lowered a clean merge into code that did not
 // compile), then BUILD and LOWER until the lowered files stop changing (the old
 // binary emits with the old emitter, 2026-11-08: one round reverted unrelated
-// files), stages the changed lowered paths and nothing else, and runs BADGES
+// files). BUILD and LOWER run in the tree worktree moved to the merged index
+// (drive_tree_move, #1916), never on the shared checkout's working tree, which
+// holds the other agents' modified sources. The lowered paths they changed
+// there are copied into the checkout and staged, nothing else, and runs BADGES
 // on an export of the staged tree (as drive_badges does on HEAD, #1348),
 // staging the changed `assets/badges/*.svg`, then the ledgers of the merged
 // tree (drive_ledgers_refresh, #1591), staging the changed ledger files. Then
@@ -1429,15 +1533,27 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 			return
 		}
 	}
-	// Lowered files already untracked before the merge are not ours to add.
-	let mut before: Vec[String] = []
-	for line in drive_lowered_status().split("\n") {
-		if line.starts_with("?? ") { before.push(line.trim().clone()) }
+	// The conflicted lowered paths take their side into the index, so the
+	// merged index is a tree to lower from.
+	if unmerged != "" {
+		let mut theirs: Vec[String] = ["add", "--"]
+		for p in unmerged.split(" ") { theirs.push(p.clone()) }
+		if !process::run("git", theirs).ok { drive_merge_abort_paths(cause, unmerged, "re-lowering failed (git add of their side)") }
 	}
+	let merged = process::run("git", ["write-tree"])
+	if !merged.ok { drive_merge_abort_paths(cause, unmerged, "git write-tree of the merge failed") }
+	// BUILD and LOWER run in the tree worktree moved to the merged index
+	// (#1916): the shared checkout holds the other agents' modified `.nika`,
+	// which a `lower-std` there lowered into the merge (`bounds_walk.rs`
+	// E0502), and a builder may write them again while the merge runs.
+	let wt = drive_tree_move(merged.stdout.trim().clone(), "MERGE not regenerated")
+	if wt == "" { drive_merge_abort_paths(cause, unmerged, "re-lowering failed (no worktree of the merged tree)") }
+	// The binary there is about to be rebuilt from other sources than its stamp names.
+	process::run("rm", ["-f", process::run("realpath", ["-m", drive_tree_target()]).stdout.trim() + "/fast/nikaia.crates"])
 	let mut failed: String = ""
-	let first = process::run("sh", ["-c", f"{build} 2>&1"])
+	let first = process::run("sh", ["-c", f"cd '{wt}' && {build} 2>&1"])
 	if !first.ok {
-		let old_lowered = process::run("sh", ["-c", f"{lower} 2>&1"])
+		let old_lowered = process::run("sh", ["-c", f"cd '{wt}' && {lower} 2>&1"])
 		if !old_lowered.ok {
 			failed = "lower-std before the build"
 			println(drive_tail(first.stdout + old_lowered.stdout, 30))
@@ -1451,46 +1567,46 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 			break
 		}
 		rounds += 1
-		let built = process::run("sh", ["-c", f"{build} 2>&1"])
+		let built = process::run("sh", ["-c", f"cd '{wt}' && {build} 2>&1"])
 		if !built.ok {
 			failed = "the build of the re-lowered files"
 			println(drive_tail(built.stdout, 30))
 			break
 		}
-		let old = drive_lowered_print()
-		let lowered = process::run("sh", ["-c", f"{lower} 2>&1"])
+		let old = drive_lowered_print(wt.clone())
+		let lowered = process::run("sh", ["-c", f"cd '{wt}' && {lower} 2>&1"])
 		if !lowered.ok {
 			failed = "lower-std"
 			println(drive_tail(lowered.stdout, 30))
 			break
 		}
-		settled = drive_lowered_print() == old
+		settled = drive_lowered_print(wt.clone()) == old
 	}
-	// What the regeneration changed against the merged index, for the line
-	// printed: the lowered paths it rewrote and the ones it wrote new.
+	if failed != "" { drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({failed})") }
+	// The lowered paths the regeneration rewrote, wrote new or removed in the
+	// worktree, against the merged index, are copied into the checkout and
+	// staged; nothing else of the checkout is touched.
 	let mut changed: Vec[String] = []
-	let mut diff_args: Vec[String] = ["diff", "--name-only", "--"]
-	for p in drive_lowered_paths() { diff_args.push(p) }
-	for line in process::run("git", diff_args).stdout.split("\n") {
-		if line.trim() != "" { changed.push(line.trim().clone()) }
-	}
-	// Every changed lowered path is staged, also on failure: `git merge
-	// --abort` then resets them with the merge.
-	let mut add: Vec[String] = ["add", "--"]
-	for line in drive_lowered_status().split("\n") {
+	let mut status: Vec[String] = ["-C", wt.clone(), "status", "--porcelain", "--untracked-files=all", "--"]
+	for p in drive_lowered_paths() { status.push(p) }
+	let mut add: Vec[String] = ["add", "-A", "--"]
+	for line in process::run("git", status).stdout.split("\n") {
 		let l = line.trim()
-		if l == "" || before.contains(l.clone()) { continue }
+		if l == "" { continue }
 		let words = l.split(" ").collect()
 		let path = words[words.len() - 1].clone()
-		if l.starts_with("??") { changed.push(path.clone()) }
+		let copied = if l.starts_with("D") {
+			process::run("rm", ["-f", path.clone()]).ok
+		} else {
+			process::run("sh", ["-c", f"mkdir -p \"$(dirname '{path}')\" && cp '{wt}/{path}' '{path}'"]).ok
+		}
+		if !copied { drive_merge_abort_paths(cause, unmerged, f"re-lowering failed (copying {path} from the worktree)") }
+		changed.push(path.clone())
 		add.push(path)
 	}
-	if unmerged != "" {
-		for p in unmerged.split(" ") { add.push(p.clone()) }
+	if changed.len() > 0 && !process::run("git", add).ok {
+		drive_merge_abort_paths(cause, unmerged, "re-lowering failed (git add of the lowered files)")
 	}
-	let added = process::run("git", add)
-	if failed == "" && !added.ok { failed = "git add of the lowered files" }
-	if failed != "" { drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({failed})") }
 	let tree = process::run("git", ["write-tree"])
 	if !tree.ok { drive_merge_abort_paths(cause, unmerged, "git write-tree of the merge failed") }
 	let copy = process::run("mktemp", ["-d"]).stdout.trim().clone()
@@ -1751,8 +1867,13 @@ fn drive_ledgers(build: String) throws {
 		println(drive_tail(built.stdout, 20))
 		return
 	}
+	// The tree worktree is shared with the merges (drive_merge_lock).
+	drive_merge_lock("refreshing the ledgers")
 	let paths = drive_ledgers_refresh("HEAD")
-	if paths.len() == 0 { return }
+	if paths.len() == 0 {
+		drive_merge_unlock()
+		return
+	}
 	let mut add: Vec[String] = ["add", "--"]
 	let mut commit: Vec[String] = ["commit", "-q", "-m", "ledgers: regenerate for the tree under test", "--"]
 	for p in paths.clone() {
@@ -1762,6 +1883,7 @@ fn drive_ledgers(build: String) throws {
 	process::run("git", add)
 	let done = process::run("git", commit)
 	if !done.ok { drive_escalate(f"committing the ledgers failed: {done.stderr.trim()}") }
+	drive_merge_unlock()
 	println(f"LEDGERS regenerated and committed: {paths.join(" ")}")
 }
 
@@ -1771,18 +1893,18 @@ fn drive_ledgers(build: String) throws {
 // that is not the one under test.
 fn drive_tree_dir() -> String { return "target/ledger-tree" }
 
-// Builds the compiler of the git tree TREE in a detached worktree of its own,
-// `target/ledger-tree`, made once and moved to TREE with `read-tree -u` (only
-// the changed files are rewritten, so the build stays incremental), with its
-// own target directory `target/ledger-target`; the path of the binary, or ""
-// with the reason printed when it cannot be built.
-fn drive_tree_exe(tree: String) -> String throws {
+// Moves the tree worktree `target/ledger-tree` (made once, detached) to the
+// git tree TREE with `read-tree -u` (only the changed files are rewritten, so
+// a build there stays incremental) and removes the lowered files left
+// untracked there by an earlier lowering; its absolute path, or "" with
+// `WHY: <reason>` printed.
+fn drive_tree_move(tree: String, why: String) -> String throws {
 	let wt = drive_tree_dir()
 	if !fs::exists(f"{wt}/.git", fs::Root::Anywhere) {
 		process::run("git", ["worktree", "prune"])
 		let made = process::run("git", ["worktree", "add", "--detach", "-f", wt.clone(), "HEAD"])
 		if !made.ok {
-			println(f"LEDGERS not refreshed: no worktree for the tree: {made.stderr.trim()}")
+			println(f"{why}: no worktree for the tree: {made.stderr.trim()}")
 			return ""
 		}
 	}
@@ -1790,14 +1912,27 @@ fn drive_tree_exe(tree: String) -> String throws {
 	let top = process::run("git", ["-C", wt.clone(), "rev-parse", "--show-toplevel"]).stdout.trim().clone()
 	let want = process::run("realpath", [wt.clone()]).stdout.trim().clone()
 	if top != want {
-		println(f"LEDGERS not refreshed: {wt} is not a worktree of its own")
+		println(f"{why}: {wt} is not a worktree of its own")
 		return ""
 	}
-	let moved = process::run("git", ["-C", wt, "read-tree", "--reset", "-u", tree.clone()])
+	let moved = process::run("git", ["-C", wt.clone(), "read-tree", "--reset", "-u", tree.clone()])
 	if !moved.ok {
-		println(f"LEDGERS not refreshed: the worktree did not take {tree}: {moved.stderr.trim()}")
+		println(f"{why}: the worktree did not take {tree}: {moved.stderr.trim()}")
 		return ""
 	}
+	let mut clean: Vec[String] = ["-C", wt, "clean", "-fdq", "--"]
+	for p in drive_lowered_paths() { clean.push(p) }
+	process::run("git", clean)
+	return want
+}
+
+// Builds the compiler of the git tree TREE in a detached worktree of its own,
+// `target/ledger-tree`, moved to TREE by drive_tree_move, with its
+// own target directory `target/ledger-target`; the path of the binary, or ""
+// with the reason printed when it cannot be built.
+fn drive_tree_exe(tree: String) -> String throws {
+	let want = drive_tree_move(tree.clone(), "LEDGERS not refreshed")
+	if want == "" { return "" }
 	let target = process::run("realpath", ["-m", drive_tree_target()]).stdout.trim().clone()
 	// The `crates/` tree the binary was built from, for drive_proved_start;
 	// gone while a build runs, so a failed one is never taken for the tree.
@@ -3027,7 +3162,9 @@ fn drive_improve_points(text: String) -> Vec[String] {
 // built, a deviation or a duplicate), one `<where>\t<point>` line per point
 // of drive_improve_points, `Deviation:` first as `drop deviation`:
 //   `comment #N`   an `Issue:` answer that the run's issue N broke a rule
-//                  (`broke I3: ...`, `I4b not followed: ...`): the author
+//                  or claimed what was false
+//                  (`broke I3: ...`, `I4b not followed: ...`, `wrong I7:
+//                  ...`, a wrong suspected cause): the author
 //                  fixes the issue (docs/issues.md), so it is said there;
 //   `drop settled` the point says the run closed or built it itself
 //                  (drive_improve_settled);
@@ -3087,15 +3224,25 @@ fn drive_improve_items(text: String, issue: String, existing: String) -> Vec[Str
 	return items
 }
 
-// Whether POINT is an `Issue:` answer saying only that the run's issue broke
-// a rule: its kind (before the first `: `) starts with `broke` or says `not
-// followed`.
+// Whether POINT is an `Issue:` answer about the run's issue alone: it broke a
+// rule (its kind, before the first `: `, starts with `broke` or says `not
+// followed`), or what it claims was false, its suspected cause above all (the
+// kind starts with `wrong` or says `missed`, or the answer speaks of the
+// issue's diagnosis or suspicion). A wrong guess is said on that issue, not
+// filed as an improvement issue of its own (owner, 2026-11-16: #1917, #1926,
+// #1927, #1928 each filed one run's wrong cause); the supervisor counts these
+// answers per rule (docs/supervisor.md) and files a rule change only when the
+// pattern recurs. A `rules-gap` is a point about the rules and is filed.
 fn drive_improve_broke(point: String) -> bool {
 	let rest = point.strip_prefix("Issue: ") ?? ""
 	if rest == "" { return false }
 	let colon = rest.find(": ") ?? rest.len()
 	let kind = f"{rest[0..<colon]}".trim().to_lowercase()
-	return kind.starts_with("broke") || kind.contains("not followed")
+	if kind.starts_with("rules-gap") { return false }
+	if kind.starts_with("broke") || kind.contains("not followed") { return true }
+	if kind.starts_with("wrong") || kind.contains("missed") { return true }
+	let low = rest.to_lowercase()
+	return low.contains("diagnosis") || low.contains("suspect")
 }
 
 // Whether POINT says the run settled it itself: closed, noise, nothing to

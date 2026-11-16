@@ -2440,6 +2440,9 @@ impl Project {
             && Some(self.settings.build.target) == crate::emit::host_target()
             && self.settings.panic_strategy() == "unwind"
             && self.settings.build.reentrancy_check.is_on()
+            // **The bundle holds the counting allocator** (#1844): a program
+            // that skips its frees at exit declares its own, which Cargo builds.
+            && !self.settings.build.skip_free_at_exit
             // **A CPU level is `std`'s too** (ADR-002 D6): the library this
             // path links was built at the baseline, so `--cpu` takes Cargo's.
             && self.settings.words.cpu.is_none()
