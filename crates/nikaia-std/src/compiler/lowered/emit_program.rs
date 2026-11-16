@@ -158,9 +158,11 @@ impl EmitState {
         if entry.is_empty() { return; }
         out.push(&entry);
         if self.as_a_module() { return; }
-        if host.skip_free_at_exit() { out.push(&emit_program_allocator()); } else if host.counts_heap() { out.push("\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n"); }
+        if host.skip_free_at_exit() { out.push(&emit_program_allocator()); } else if host.counts_heap() { out.push(&format!("\n{}\n", EMIT_PROGRAM_COUNTING_HEAP)); }
     }
 }
+
+pub const EMIT_PROGRAM_COUNTING_HEAP: &str = "#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;";
 
 pub(crate) fn emit_program_param_type(param: &str) -> String {
     let parts: Vec<&str> = param.split(": ").collect::<Vec<_>>();
