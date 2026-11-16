@@ -86,7 +86,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   driver files each `Found:` line as an issue for the bug lane, and
   `Issue:`, `Deviation:`, `Needs:` and `Friction:` (what cost you turns for
   nothing: a tool, a rule, a red check that was not yours) as one issue for the
-  improvement lane. Say friction there, not in `Body:`. Any of these lines
+  improvement lane. Say friction there, not in `Body:`. Each line stands
+  alone, since each becomes another issue: it says its point, never "see
+  Found" or "see Body" (the improvement issue quotes the Found lines, but
+  not which one is meant, #1783). Any of these lines
   that says the compiler refuses or lacks something ("every way draws
   NK2105", "cannot be written") carries, in the line, each shape tried as
   its snippet and the code it drew (`` `x = y; y = [2]` NK2105; ... ``):

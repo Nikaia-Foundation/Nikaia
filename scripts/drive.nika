@@ -33,7 +33,7 @@
 // `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add),
 // `--fixed-in LOG N...` (drive_fixed_in),
 // `--wip-after RESULT FIXES N`, `--found-issue NAME N FOUND NEEDS`,
-// `--improve-issue NAME N REPORT`, `--time-up` (drive_time_up: `up` or `not up`).
+// `--improve-issue NAME N REPORT [DIR]`, `--time-up` (drive_time_up: `up` or `not up`).
 //
 // Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time;
 // before each cycle the area's ready issues (the area being DIR's last name)
@@ -2397,10 +2397,45 @@ fn drive_improve_source(report: String, text: String) -> String {
 		+ "A `local` commit reaches `develop` only when its batch's suite is green: find it by its subject (`git log -400 --all --grep`); on no branch, it was not pushed, so judge its points from the report and the code as it is.\n"
 }
 
+// The numbers of the issues filed from the COUNT Founds of the run of NAME,
+// read from DIR/found.txt (`<name>: filed #N`, drive_found_file), in the
+// order of the Founds; empty when not each of them was filed, since a failed
+// call leaves no line and the numbers could not be paired.
+fn drive_filed_numbers(dir: String, name: String, count: int) -> Vec[String] throws {
+	let mut all: Vec[String] = []
+	let prefix = f"{name}: filed #"
+	for line in drive_read(f"{dir}/found.txt").split("\n") {
+		if line.starts_with(prefix) { all.push((line.strip_prefix(prefix) ?? "").trim().clone()) }
+	}
+	let mut out: Vec[String] = []
+	if all.len() < count { return out }
+	for i in all.len() - count..<all.len() { out.push(all[i].clone()) }
+	return out
+}
+
+// The run's Founds for an improvement issue from TEXT, with the issue each
+// was filed as (NUMBERS, drive_filed_numbers, when paired): an item that
+// points at one ("see Found") is then read in the issue itself (#1783:
+// #1749's `Issue:` said "see Found" and the next run had to look the defect
+// up in the report); "" without a Found.
+fn drive_improve_founds(text: String, numbers: Vec[String]) -> String {
+	let founds = drive_founds(text)
+	if founds.len() == 0 { return "" }
+	let mut out = "\n## The run's Found lines\n\nEach is filed as its own issue for the bug lane; an item above that points at a Found means one of these.\n\n"
+	let mut i = 0
+	for f in founds {
+		let filed = if numbers.len() == founds.len() { f" (filed #{numbers[i]})" } else { "" }
+		out = out + f"- Found{filed}: {f}\n"
+		i = i + 1
+	}
+	return out
+}
+
 // The body of an issue filed for the improvement lane from ITEMS of the
 // report of NAME (issue ISSUE): where it came from, the items, where the
-// run's work is (SOURCE, drive_improve_source), a *To build* and a *Done
-// when* for the lane, then the footer.
+// run's Found lines and where its work is (SOURCE, drive_improve_founds and
+// drive_improve_source), a *To build* and a *Done when* for the lane, then
+// the footer.
 fn drive_improve_body(name: String, issue: String, items: Vec[String], source: String) -> String {
 	let from = if issue == "" { f"the run of `{name}`" } else { f"the run of `{name}` (#{issue})" }
 	let mut body = f"Filed by the driver from the report of {from} for the improvement lane (owner, 2026-11-15).\n\n## Reported\n\n"
@@ -2436,7 +2471,9 @@ fn drive_improve_file(dir: String, brief: String) throws {
 	if drive_read(f"{dir}/found.txt").contains(f"{name}: improve #") { return }
 	let issue = drive_issue(brief)
 	let title = drive_improve_title(name.clone(), issue.clone(), items[0].clone())
-	let body = drive_improve_body(name.clone(), issue, items, drive_improve_source(report, text))
+	let numbers = drive_filed_numbers(dir.clone(), name.clone(), drive_founds(text.clone()).len())
+	let founds = drive_improve_founds(text.clone(), numbers)
+	let body = drive_improve_body(name.clone(), issue, items, founds + drive_improve_source(report, text))
 	let number = drive_issue_new(title, body, ["ready", "improve"])
 	if number == "" {
 		println(f"improve file failed for {name}")
@@ -3234,7 +3271,7 @@ fn main() throws {
 		}
 		return
 	}
-	if args.len() == 5 && args[1] == "--improve-issue" {
+	if (args.len() == 5 || args.len() == 6) && args[1] == "--improve-issue" {
 		let text = drive_read(args[4].clone())
 		let items = drive_improve_items(text.clone())
 		if items.len() == 0 {
@@ -3245,7 +3282,12 @@ fn main() throws {
 		println("ready,improve")
 		// The report is named by the brief, as the lane directory holds it
 		// (`NAME.md.report.md`), so the output does not carry a temp path.
-		let source = drive_improve_source(f"{args[2]}.md.report.md", text)
+		// A sixth argument names the batch directory whose found.txt holds
+		// the numbers the Founds were filed as (drive_filed_numbers).
+		let mut numbers: Vec[String] = []
+		if args.len() == 6 { numbers = drive_filed_numbers(args[5].clone(), args[2].clone(), drive_founds(text.clone()).len()) }
+		let founds = drive_improve_founds(text.clone(), numbers)
+		let source = founds + drive_improve_source(f"{args[2]}.md.report.md", text)
 		print(drive_improve_body(args[2].clone(), args[3].clone(), items, source))
 		return
 	}
