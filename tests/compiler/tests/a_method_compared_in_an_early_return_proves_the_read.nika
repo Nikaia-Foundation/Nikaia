@@ -1,0 +1,37 @@
+// A method's found relation, read in a condition, proves an index
+// (ADR-306 D23, D31, #1785): `if self.level() <= at { return }` says what
+// `let d = self.level()` and `if d <= at` say, and `self.marks[at]` is
+// proved. A list that shrinks after the guard takes the fact with it.
+
+struct Levels {
+	marks: Vec[i64],
+}
+
+impl Levels {
+	fn level(ref self) -> i64 {
+		return self.marks.len()
+	}
+
+	fn mark_at(ref self, at: i64) -> i64 {
+		if self.level() <= at || at < 0 {
+			return -1
+		}
+		return self.marks[at]
+	}
+
+	fn drop_at(ref mut self, at: i64) -> i64 {
+		if at < 0 || !(at < self.level()) {
+			return -1
+		}
+		self.marks.clear()
+		return self.marks[at]
+	}
+}
+
+fn main() throws {
+	let mut levels = Levels { marks: [3, 5, 8] }
+	println(levels.mark_at(1))
+	println(levels.mark_at(3))
+	println(levels.mark_at(-1))
+	println(levels.drop_at(4))
+}
