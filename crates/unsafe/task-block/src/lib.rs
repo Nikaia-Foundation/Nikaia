@@ -676,6 +676,16 @@ pub fn enter(block: &Block) -> Entered {
     }
 }
 
+/// **No block in place until the guard is dropped** (D9): what the runtime
+/// builds and frees for its own bookkeeping - a task's slot, its body's box,
+/// its place in a queue - counts against no task.
+#[inline]
+pub fn outside() -> Entered {
+    Entered {
+        previous: CURRENT.with(|current| current.replace(std::ptr::null())),
+    }
+}
+
 impl Drop for Entered {
     #[inline]
     fn drop(&mut self) {
@@ -823,7 +833,7 @@ impl Place {
     /// Whether `ptr` is in the running task's block, where this handle
     /// places.
     #[inline(always)]
-    pub(crate) fn holds(self, ptr: *mut u8) -> bool {
+    pub fn holds(self, ptr: *mut u8) -> bool {
         self.block()
             .is_some_and(|block| block.ours(ptr) || block.chained(ptr))
     }

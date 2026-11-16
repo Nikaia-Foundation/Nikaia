@@ -1,0 +1,59 @@
+// ADR-327 D9 (#1554): a map handed over moves its whole table's weight, so a
+// tight producer that sends 20000 small maps does not drift over its budget.
+use std::channel
+use std::collections
+
+struct Tight {}
+
+impl task::Admission for Tight {
+	fn decide(mut self, _load: task::Load) -> task::Decision sync {
+		return task::Decision { start: 1, budget: 262144 }
+	}
+}
+
+struct Batch {
+	m: collections::HashMap[i64, i64],
+}
+
+fn produce(tx: channel::Sender[Batch]) -> i64 {
+	for t in 0..<20000 {
+		let mut m: collections::HashMap[i64, i64] = collections::HashMap()
+		for i in 0..<15 {
+			m.insert(i, t)
+		}
+		tx.send(Batch { m: m })
+	}
+	return 1
+}
+
+fn drain(rx: channel::Receiver[Batch]) -> i64 {
+	let mut n = 0
+	while true {
+		let b = rx.recv() ?? break
+		n += b.m.len()
+	}
+	return n
+}
+
+fn joiner(tx: channel::Sender[Batch]) -> i64 throws {
+	let p = async(detached) fn { produce(tx) }
+	return p.join() catch {
+		println(f"producer failed: {error}")
+		0
+	}
+}
+
+fn main() throws {
+	let (tx, rx) = channel::bounded[Batch](4)
+	let c = async(detached) fn { drain(rx) }
+	let j = async(detached, admission: Tight {}) fn { joiner(tx) }
+	let joined = j.join() catch {
+		println(f"joiner failed: {error}")
+		0
+	}
+	let got = c.join() catch {
+		println(f"drain failed: {error}")
+		0
+	}
+	println(f"joined {joined}, drained {got}")
+}
