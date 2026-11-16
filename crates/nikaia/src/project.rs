@@ -182,6 +182,11 @@ impl Settings {
             )
             .map_err(|e| anyhow!("{e}"))?,
         )
+        .map(|mut settings| {
+            // The application's `[allow]` (ADR-raw-sinks-1 D4, D5).
+            settings.words.allow = manifest.file().allow.clone();
+            settings
+        })
     }
 
     /// The parsed values beside the checked `words`: the symbol prefix, the
@@ -216,6 +221,17 @@ impl Settings {
         (self.words.refuted_claims, self.words.unproved_claims) =
             project_settings::project_settings_refutations(&self.words, refuted, unproved)
                 .map_err(refusal)?;
+        Ok(())
+    }
+
+    /// **The command line's `--raw-sinks` over the manifest's, and each
+    /// `--allow` after the manifest's `[allow]`** (ADR-raw-sinks-1 D3-D5).
+    pub fn sinks(&mut self, raw_sinks: Option<&str>, allow: &[String]) -> Result<()> {
+        self.words.raw_sinks = project_settings::project_settings_raw_sinks(&self.words, raw_sinks)
+            .map_err(refusal)?;
+        let flags: Vec<String> = allow.iter().map(|word| word.to_text()).collect();
+        self.words.allow = project_settings::project_settings_allowed(&self.words.allow, &flags)
+            .map_err(refusal)?;
         Ok(())
     }
 

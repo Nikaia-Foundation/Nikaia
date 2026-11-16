@@ -207,7 +207,8 @@ impl Manifest {
     }
 }
 
-/// The six sections `tools/manifest.nika` reads, their entries, and the keys
+/// The sections `compiler/manifest.nika` reads (`[allow.packages]` as its
+/// own), their entries, and the keys
 /// of an entry that is a table, in the file's order: the document in plain
 /// words. Whether `--target` takes a `[build.<target>]` name is
 /// `emit::Target::parse`'s answer, handed over as `machine`.
@@ -220,8 +221,19 @@ fn items_of(document: &toml::Value) -> Vec<decide::ManifestItem> {
         "build",
         "features",
         "rust-library",
+        "allow",
+        "allow.packages",
     ] {
-        let Some(value) = document.get(section) else {
+        // `[allow.packages.NAME]` is one level deeper than the reader looks:
+        // its tables are handed over as the section `allow.packages`
+        // (ADR-raw-sinks-1 D5).
+        let found = match section {
+            "allow.packages" => document
+                .get("allow")
+                .and_then(|allow| allow.get("packages")),
+            _ => document.get(section),
+        };
+        let Some(value) = found else {
             continue;
         };
         items.push(item(section, "", "", value, false));
