@@ -35,10 +35,17 @@ path = "k-nucleotide/rust-7.rs"
 name = "reverse-complement"
 path = "reverse-complement/rust-1.rs"
 
+# Not a game entry: the library people use against the json package (#1620),
+# one binary for the three inputs.
+[[bin]]
+name = "json"
+path = "json/rust-tree.rs"
+
 # The game's Rust entries link against its `rust-libs`; spectral-norm's and
 # fannkuch-redux's need rayon, binary-trees' rayon and bumpalo, fasta's
 # num_cpus and spin, k-nucleotide's futures, tokio-threadpool, itertools, num
-# and hashbrown, reverse-complement's memchr and rayon.
+# and hashbrown, reverse-complement's memchr and rayon; json's serde and
+# serde_json, with the features `json/rust-tree.rs` names.
 [dependencies]
 rayon = "1"
 bumpalo = "3"
@@ -50,6 +57,8 @@ itertools = "0.14"
 num = "0.4"
 hashbrown = "0.15"
 memchr = "2"
+serde = "1"
+serde_json = { version = "1", features = ["preserve_order", "arbitrary_precision", "unbounded_depth"] }
 
 # The game's `rustc -C opt-level=3 -C codegen-units=1`; its
 # `-C target-cpu=ivybridge` is passed by `game.nika` in `RUSTFLAGS`.

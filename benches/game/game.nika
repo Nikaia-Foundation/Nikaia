@@ -5,6 +5,7 @@
 //
 //     nikaia run benches/game/game.nika              every problem
 //     nikaia run benches/game/game.nika -- n-body    one
+//     nikaia run benches/game/game.nika -- json      json-small, -large, -deep
 //
 // `$NIKAIA` names the compiler; else the `nikaia` on the path, else a release
 // build of the repository's own.
@@ -28,7 +29,8 @@ struct Game {
 	name: String,
 	// The arguments every program of it runs with.
 	args: String,
-	// What the counts are divided by, and its name in the table.
+	// What the counts are divided by, and its name in the table; 0 is the
+	// size of the standard input in bytes.
 	units: i64,
 	unit: String,
 	// The Nikaia program, from the repository's root, as a Nikaia programmer
@@ -51,9 +53,15 @@ struct Game {
 	// where it is too long to show (empty: shown whole).
 	shown: String,
 	// Where the programs read standard input: another problem and its
-	// arguments (`fasta 250000`), whose Rust entry's output is the input
-	// (empty: none).
+	// arguments (`fasta 250000`), whose Rust entry's output is the input,
+	// or a Nikaia program and its arguments (`benches/game/json/input.nika
+	// large`), whose output is (empty: none).
 	input: String,
+	// The Rust binary, where it is not `name` (one serves several problems).
+	bin: String = "",
+	// An official package the Nikaia programs take in, `packages/{package}`
+	// (empty: none).
+	package: String = "",
 }
 
 fn games() -> Vec[Game] {
@@ -177,7 +185,35 @@ fn games() -> Vec[Game] {
 			shown: "md5sum | cut -c1-32",
 			input: "fasta 2500000",
 		},
+		// Not a game problem: the json package against serde_json, the
+		// library a Rust program uses (#1620). Standard input read into the
+		// tree, `json::Value` and `serde_json::Value`, and written back
+		// without blanks; the inputs are generated (`json/input.nika`), each
+		// counted per byte of it.
+		json_game("small"),
+		json_game("large"),
+		json_game("deep"),
 	]
+}
+
+fn json_game(input: String) -> Game {
+	return Game {
+		name: f"json-{input}",
+		args: "",
+		units: 0,
+		unit: "byte of input",
+		nikaia: "benches/game/json/tree.nika",
+		speed: "",
+		rust: "benches/game/json/rust-tree.rs",
+		label: "serde_json 1 (`preserve_order`, `arbitrary_precision`)",
+		cpu: "x86-64",
+		one_thread: "",
+		rust_env: "",
+		shown: "md5sum | cut -c1-32",
+		input: f"benches/game/json/input.nika {input}",
+		bin: "json",
+		package: "json",
+	}
 }
 
 fn root() -> String throws {
@@ -221,9 +257,13 @@ struct Program {
 
 // The Rust entries, each setting in a target directory of its own.
 fn build_rust(repo: String, work: String, game: Game) -> Program throws {
+	let mut bin = game.bin.clone()
+	if bin.len() == 0 {
+		bin = game.name.clone()
+	}
 	for setting in ["on", "off"] {
 		must(
-			f"RUSTFLAGS='-C target-cpu={game.cpu} -C overflow-checks={setting}' CARGO_TARGET_DIR={work}/rust-{game.cpu}-{setting} cargo build -q --release --bin {game.name} --manifest-path {repo}/benches/game/Cargo.toml",
+			f"RUSTFLAGS='-C target-cpu={game.cpu} -C overflow-checks={setting}' CARGO_TARGET_DIR={work}/rust-{game.cpu}-{setting} cargo build -q --release --bin {bin} --manifest-path {repo}/benches/game/Cargo.toml",
 			f"cargo build of {game.name} ({setting})",
 		)
 	}
@@ -235,8 +275,8 @@ fn build_rust(repo: String, work: String, game: Game) -> Program throws {
 	}
 	return Program {
 		name: f"{game.label}{held}, `target-cpu={game.cpu}`",
-		on: f"{work}/rust-{game.cpu}-on/release/{game.name}",
-		off: f"{work}/rust-{game.cpu}-off/release/{game.name}",
+		on: f"{work}/rust-{game.cpu}-on/release/{bin}",
+		off: f"{work}/rust-{game.cpu}-off/release/{bin}",
 		env: env,
 		source: game.rust.clone(),
 	}
@@ -257,12 +297,17 @@ fn nikaia_env(work: String, game: Game) -> String throws {
 }
 
 // The arguments every program of `game` runs with, its standard input put
-// in place: the Rust entry of the problem `game.input` names is built and
-// run, and its output written to `{work}/out/{name}.input`.
-fn run_args(repo: String, work: String, game: Game) -> String throws {
+// in place: the Rust entry of the problem `game.input` names, or the Nikaia
+// program it names, is built and run, and its output written to
+// `{work}/out/{name}.input`.
+fn run_args(nikaia: String, repo: String, work: String, game: Game) -> String throws {
 	if game.input.len() == 0 { return game.args.clone() }
 	let words: Vec[String] = game.input.split_whitespace().collect()
 	let file = f"{work}/out/{game.name}.input"
+	if words[0].ends_with(".nika") {
+		let maker = build_nikaia(nikaia, repo, work, game, words[0], "-input", "x86-64")
+		must(f"{maker.off} {words[1]} > {file}", f"the input of {game.name} ({game.input})")
+	}
 	for source in games() {
 		if source.name == words[0] {
 			let maker = build_rust(repo, work, source)
@@ -293,7 +338,7 @@ fn build_nikaia(
 	fs::write(
 		f"{dir}/nikaia.toml",
 		fs::Root::Anywhere,
-		"[package]
+		f"[package]
 name = \"game\"
 version = \"0.1.0\"
 
@@ -301,7 +346,7 @@ version = \"0.1.0\"
 opt-level = 3
 codegen-units = 1
 incremental = false
-",
+{uses(repo, game)}",
 	)
 	for setting in ["on", "off"] {
 		must(
@@ -324,6 +369,12 @@ incremental = false
 		env: nikaia_env(work, game),
 		source: source,
 	}
+}
+
+// The manifest's table of the package `game` takes in, else nothing.
+fn uses(repo: String, game: Game) -> String {
+	if game.package.len() == 0 { return String() }
+	return f"\n[dependencies]\n{game.package} = {{ path = \"{repo}/packages/{game.package}\" }}\n"
 }
 
 // --- the same output, then the counts --------------------------------------
@@ -388,7 +439,14 @@ fn tokens(repo: String, nikaia: String, source: String) -> String throws {
 
 // One problem's rows: each program counted at both settings, the last column
 // its instructions with checks off against the Rust entry's.
-fn measure(nikaia: String, repo: String, work: String, game: Game, args: String) -> String throws {
+fn measure(
+	nikaia: String,
+	repo: String,
+	work: String,
+	game: Game,
+	args: String,
+	units: i64,
+) -> String throws {
 	let rust_entry = build_rust(repo, work, game)
 	let mut programs: Vec[Program] = [rust_entry.clone()]
 	if game.one_thread.len() > 0 {
@@ -417,10 +475,10 @@ fn measure(nikaia: String, repo: String, work: String, game: Game, args: String)
 		if rust == 0 {
 			rust = off.instructions
 		}
-		let i_on = per(on.instructions, game.units, 1)
-		let m_on = per(on.mispredicted, game.units, 3)
-		let i_off = per(off.instructions, game.units, 1)
-		let m_off = per(off.mispredicted, game.units, 3)
+		let i_on = per(on.instructions, units, 1)
+		let m_on = per(on.mispredicted, units, 3)
+		let i_off = per(off.instructions, units, 1)
+		let m_off = per(off.mispredicted, units, 3)
 		let against = per(off.instructions, rust, 2)
 		let length = tokens(repo, nikaia, p.source.clone())
 		out.push_str(f"| {game.name} | {p.name} | {i_on} | {m_on} | {i_off} | {m_off} | {against} | {length} |\n")
@@ -441,11 +499,15 @@ fn main() throws {
 	let mut table = String()
 	let mut said = String()
 	for game in games() {
-		if only.len() > 0 && game.name != only {
+		if only.len() > 0 && game.name != only && !game.name.starts_with(f"{only}-") {
 			continue
 		}
-		let args = run_args(repo, work, game)
-		table.push_str(measure(nikaia, repo, work, game, args))
+		let args = run_args(nikaia, repo, work, game)
+		let mut units = game.units
+		if units == 0 {
+			units = text::parse_i64(sh(f"wc -c < {work}/out/{game.name}.input").stdout.trim()) ?? 1
+		}
+		table.push_str(measure(nikaia, repo, work, game, args, units))
 		let mut run = f"{nikaia_env(work, game)}{work}/bin/{game.name}.x86-64.on {args}"
 		let mut what = "output"
 		if game.shown.len() > 0 {

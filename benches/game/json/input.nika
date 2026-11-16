@@ -1,0 +1,160 @@
+// The inputs of the json rows (#1620), generated so that the same bytes come
+// out on every machine and no data file is kept in the repository:
+//
+//     nikaia run input.nika -- small     one request body, about 1 KB of records
+//     nikaia run input.nika -- large     about 10 MB of records and coordinates
+//     nikaia run input.nika -- deep      chains nested to the json package's limit
+//
+// A record is shaped like a message of a social network's API (twitter.json of
+// the nativejson-benchmark): numbers whole and with fraction and exponent,
+// strings with escapes and text outside ASCII, `true`, `false` and `null`,
+// nested objects and arrays. Between records, a line of coordinates as
+// canada.json holds them: arrays of number pairs. Blanks and line breaks are
+// put where a pretty printer puts them, so the readers skip them too.
+use std::cli
+
+// A linear congruential generator, so that the text is the same everywhere.
+struct Random {
+	seed: i64,
+}
+
+impl Random {
+	fn below(mut self, n: i64) -> i64 sync {
+		self.seed = (self.seed * 1103515245 + 12345) % 2147483648
+		return (self.seed / 65536) % n
+	}
+}
+
+fn word(mut r: Random) -> String {
+	let words = [
+		"lorem",
+		"ipsum",
+		"dolor",
+		"sit",
+		"amet",
+		"café",
+		"naïve",
+		"über",
+		"東京",
+		"😀",
+		"tab\there",
+		"quote\"d",
+		"back\\slash",
+		"line\nbreak",
+	]
+	return words[r.below(words.len() as i64)].clone()
+}
+
+// A JSON string of a few words, escaped as JSON wants it.
+fn text(mut r: Random, words: i64) -> String {
+	let mut out = String()
+	out.push('"')
+	for i in 0..<words {
+		if i > 0 {
+			out.push(' ')
+		}
+		for c in word(r).chars() {
+			if c == '"' {
+				out.push_str("\\\"")
+			} else if c == '\\' {
+				out.push_str("\\\\")
+			} else if c == '\n' {
+				out.push_str("\\n")
+			} else if c == '\t' {
+				out.push_str("\\t")
+			} else {
+				out.push(c)
+			}
+		}
+	}
+	out.push('"')
+	return out
+}
+
+// A number with a fraction, as text: `-12.0457`, `3.5e-3`.
+fn fraction(mut r: Random) -> String {
+	let mut out = String()
+	if r.below(2) == 0 {
+		out.push('-')
+	}
+	out.push_str(f"{r.below(1000)}.{r.below(10000)}")
+	if r.below(8) == 0 {
+		out.push_str(f"e-{r.below(9) + 1}")
+	}
+	return out
+}
+
+fn record(mut r: Random, id: i64, mut out: String) {
+	out.push_str(f"{{\n  \"id\": {id},\n  \"id_str\": \"{id}\",\n  \"created_at\": \"Mon Sep 24 03:35:{r.below(60)} +0000 2012\",\n")
+	out.push_str(f"  \"text\": {text(r, 3 + r.below(12))},\n")
+	out.push_str(f"  \"truncated\": {if r.below(2) == 0 { "true" } else { "false" }},\n")
+	out.push_str(f"  \"in_reply_to\": {if r.below(3) == 0 { f"{r.below(100000000)}" } else { "null" }},\n")
+	out.push_str(f"  \"user\": {{\n    \"name\": {text(r, 2)},\n    \"followers_count\": {r.below(1000000)},\n    \"verified\": {if r.below(4) == 0 { "true" } else { "false" }},\n    \"score\": {fraction(r)},\n    \"urls\": []\n  }},\n")
+	out.push_str("  \"entities\": {\n    \"hashtags\": [")
+	let tags = r.below(4)
+	for i in 0..<tags {
+		if i > 0 {
+			out.push_str(", ")
+		}
+		out.push_str(f"{{\"text\": {text(r, 1)}, \"indices\": [{r.below(140)}, {r.below(140)}]}}")
+	}
+	out.push_str("],\n    \"mentions\": {}\n  },\n")
+	out.push_str(f"  \"coordinates\": [{fraction(r)}, {fraction(r)}]\n}}")
+}
+
+fn coordinates(mut r: Random, pairs: i64, mut out: String) {
+	out.push('[')
+	for i in 0..<pairs {
+		if i > 0 {
+			out.push(',')
+		}
+		out.push_str(f"[{fraction(r)},{fraction(r)}]")
+	}
+	out.push(']')
+}
+
+// `{"a":[{"a":[ ... 0 ... ]}]}` with `levels` arrays and objects in turn.
+fn chain(levels: i64, mut out: String) {
+	for i in 0..<levels {
+		out.push_str(if i % 2 == 0 { "{\"a\":" } else { "[" })
+	}
+	out.push('0')
+	for i in 0..<levels {
+		out.push_str(if (levels - 1 - i) % 2 == 0 { "}" } else { "]" })
+	}
+}
+
+fn main() throws {
+	let which = cli::args().nth(1) ?? "small"
+	let mut r = Random { seed: 42 }
+	let mut out = String()
+	if which != "deep" {
+		let size = if which == "large" { 10000000 } else { 1000 }
+		out.push_str("[\n")
+		let mut id = 0
+		while out.len() < size {
+			if id > 0 {
+				out.push_str(",\n")
+			}
+			if id % 10 == 9 {
+				coordinates(r, 200, out)
+			} else {
+				record(r, 250000000000000 + id, out)
+			}
+			id += 1
+		}
+		out.push_str("\n]")
+	} else {
+		// The package refuses a value deeper than 512 levels below the top
+		// one, the top array is the first, so each chain holds 511.
+		out.push('[')
+		for i in 0..<400 {
+			if i > 0 {
+				out.push(',')
+			}
+			chain(511, out)
+		}
+		out.push(']')
+	}
+	println(out)
+}
