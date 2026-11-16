@@ -140,7 +140,10 @@ it, like the checks in `docs/supervisor.md`.
   traced to that cause.
   A named function is one `scripts/where.nika -- NAME` finds today; a cause
   without one says `unknown`, never a guessed name (#1741: #1729 suspected
-  `own_option_containers`, which does not exist).
+  `own_option_containers`, which does not exist). The file named beside it
+  is the one `where.nika` reports for that function, copied from its
+  output, never recalled (#1779: #1628 named `prover_walk.nika` for
+  `outside_source`, which lives in `prover_calls.nika`).
   A traced cause is followed outward before filing: the other forms that
   reach the same function (a closure, a `std` method that takes one, the
   same call on a fixed-size `Array`) are run on the binary of the day,
@@ -326,7 +329,10 @@ suspected function that does not exist, I7; #1745: #1731's run answered
 `broke I3` for an issue filed `ready` without its decision, I6; #1761:
 #1754's run answered `broke I3` for shapes of the cause left unnamed, I7;
 #1771: #1621's run answered `wrong I3` for a false claim of what git tracks,
-I4a, and `rules-gap` for a fix of what an ADR specifies, I6; #1746:
+I4a, and `rules-gap` for a fix of what an ADR specifies, I6; #1779:
+#1628's run answered `broke I4` for a probe that was a fragment without
+its `fn`, `main` and `use` lines, I5 (copied whole), and `wrong I5` for a
+blamed cause and a wrong file, I7; #1746:
 #1533's run answered `rules-gap` for an item that left open what bounds the
 wait before a body's first byte, `broke I9`).
 
