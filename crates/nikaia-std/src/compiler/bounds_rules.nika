@@ -335,6 +335,13 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                             out.push(BoundsRule { owner: owner.clone(), kind: "result", a: m.clone(), b: b.clone(), times: 1 })
                         }
                     }
+                    // `capped`: `0 <= a[i] <= len(b)` of a list a statement
+                    // names beside `b`, where `b` may shrink: each shrink
+                    // keeps it where every element is proved within the new
+                    // length (ADR-306 D21, #1785).
+                    if a != b && paired.contains(f"{a}|{b}") {
+                        out.push(BoundsRule { owner: owner.clone(), kind: "capped", a: a.clone(), b: b.clone(), times: 1 })
+                    }
                 }
                 // `inner`: every value of every inner list of `a` lies in
                 // `0..b.len()`, where every literal builds `a` of empty
@@ -1665,6 +1672,23 @@ fn rules_give(mut walk: BoundsWalk, mut facts: BoundsFacts, root: ref String, ow
             if floored.insert(rule.b.clone()) {
                 bounding_push(walk, facts, b_floor)
             }
+        } else if rule.kind == "capped" {
+            // Of every value of `a`: `0 <=` it beside the facts, made once,
+            // and `<= len(b)` standing while `b`'s length does
+            // (`rules_capped_stand`, ADR-306 D21, #1785).
+            if !walk.pinned.contains(root) {
+                let name = bounding_element_of(f"{root}.{rule.a}")
+                let each = walk.arena.var(name)
+                if elements {
+                    let low_each = walk.arena.ge(each, zero)
+                    let low = bounding_each_guarded(walk, low_each)
+                    walk.rule_facts.push((name.clone(), low))
+                }
+                rules_capped_stand(walk, facts, name, each, b, length_of(f"{root}.{rule.b}"))
+            }
+            if floored.insert(rule.b.clone()) {
+                bounding_push(walk, facts, b_floor)
+            }
         } else if rule.kind == "cap" {
             // `a <= len(b)` of a whole-number field `a` (#1642).
             let a = walk.arena.var(f"{root}.{rule.a}")
@@ -1677,6 +1701,130 @@ fn rules_give(mut walk: BoundsWalk, mut facts: BoundsFacts, root: ref String, ow
             bounding_push(walk, facts, b_floor)
         }
     }
+}
+
+/// **`each(a) <= len(b)` of a `capped` rule stands while `b`'s length
+/// does** (ADR-306 D21, #1785): beside the facts, as an `index` rule's
+/// bound, with a fresh name `cap#k` at most the length among the facts.
+/// A change of the length forgets that fact, a growth carries it
+/// (`bounding_shift`, and a loop that only grows the list keeps it as
+/// its invariant), and `rules_standing` asks for it at each use; a
+/// shrink by one position takes it away (`rules_capped_call`). A marker
+/// given before stays known beside it: the walk state is one for every
+/// branch, and a branch that gives the rule again (after a call on
+/// `self`) must not take the bound from the facts of one that did not.
+fn rules_capped_stand(mut walk: BoundsWalk, mut facts: BoundsFacts, element: ref String, each: i64, len: i64, length: ref String) {
+    let marker = f"cap#{walk.codes}"
+    walk.codes += 1
+    let m = walk.arena.var(marker)
+    let below = walk.arena.le(m, len)
+    bounding_push(walk, facts, below)
+    let high_each = walk.arena.le(each, len)
+    let high = bounding_each_guarded(walk, high_each)
+    if !walk.rule_facts.iter().any(fn(known) { known.1 == high }) {
+        walk.rule_facts.push((element.clone(), high))
+    }
+    walk.capped.push((marker, length.clone(), element.clone(), high))
+}
+
+/// The standing bound of `element` against `length` taken away: of the
+/// length named, or of every length where `element` is empty.
+fn rules_capped_drop(mut walk: BoundsWalk, element: ref String, length: ref String) {
+    let mut kept: Vec[(String, String, String, i64)] = []
+    let mut gone: collections::BTreeSet[i64] = collections::BTreeSet()
+    for entry in walk.capped {
+        if entry.1 == length && (element.is_empty() || entry.2 == element) {
+            gone.insert(entry.3)
+        } else {
+            kept.push(entry.clone())
+        }
+    }
+    if gone.is_empty() {
+        return
+    }
+    walk.capped = kept
+    let mut left: Vec[(String, i64)] = []
+    for (each, fact) in walk.rule_facts {
+        if !gone.contains(fact) {
+            left.push((each.clone(), fact))
+        }
+    }
+    walk.rule_facts = left
+}
+
+/// **Whether a fact beside the facts holds here** (#1785): each does, but
+/// a `capped` bound only while its `cap#k` stands among `facts` beside the
+/// length it names.
+fn rules_standing(walk: ref BoundsWalk, facts: ref BoundsFacts, fact: i64) -> bool {
+    let mut marked = false
+    for (marker, length, _, high) in walk.capped {
+        if high == fact {
+            if facts.facts.iter().any(fn(f) { walk.arena.mentions(f, marker) && walk.arena.mentions(f, length) }) {
+                return true
+            }
+            marked = true
+        }
+    }
+    return !marked
+}
+
+/// **The markers of `capped` bounds against `name`'s length that a loop or
+/// a branch keeps** (#1785): `cap#k <= len` stays true where `changed`
+/// only adds to the list (no `falls`), so the bound stands past it, even
+/// where a counted loop named the length it was reached with instead.
+fn rules_capped_grown(mut walk: BoundsWalk, facts: ref BoundsFacts, name: ref String, changed: ref BoundsChanged) -> Vec[i64] {
+    let mut out: Vec[i64] = []
+    if changed.falls.contains(name) || changed.values.contains(name) {
+        return out
+    }
+    let length = length_of(name)
+    // The names a counted loop gave the length it was reached with
+    // (`#k:` of `bounding_turn_bounds`), each still tied to the length: one
+    // a shrink since forgot the tie of names no length.
+    let mut names = [length.clone()]
+    for k in 0..<walk.entries {
+        let entry = f"#{k}:{length}"
+        if facts.facts.iter().any(fn(f) { walk.arena.mentions(f, entry) && walk.arena.mentions(f, length) }) {
+            names.push(entry)
+        }
+    }
+    for (marker, of, _, _) in walk.capped.clone() {
+        if of != length || !facts.facts.iter().any(fn(f) { walk.arena.mentions(f, marker) && names.iter().any(fn(n) { walk.arena.mentions(f, n) }) }) {
+            continue
+        }
+        let m = walk.arena.var(marker)
+        let len = walk.arena.var(length)
+        out.push(walk.arena.le(m, len))
+    }
+    return out
+}
+
+/// **A method called on the list `name`** (#1785): `remove` and
+/// `swap_remove` shorten it by one, which `bounding_shift` carries, so a
+/// `capped` bound against its length stands no more.
+fn rules_capped_call(mut walk: BoundsWalk, name: ref String, method: ref String) {
+    if method == "remove" || method == "swap_remove" {
+        rules_capped_drop(walk, "", length_of(name))
+    }
+}
+
+/// **Whether a `capped` rule holds of `root` here** (ADR-306 D21, #1785):
+/// standing, or `each(root.a) <= len(root.b)` proved of every element.
+fn rules_capped_holds(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, root: ref String, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+    let element = bounding_element_of(f"{root}.{rule.a}")
+    let length = length_of(f"{root}.{rule.b}")
+    for entry in walk.capped {
+        if entry.1 == length && entry.2 == element && rules_standing(walk, facts, entry.3) {
+            return true
+        }
+    }
+    let each = walk.arena.var(element)
+    let len = walk.arena.var(length)
+    let high_each = walk.arena.le(each, len)
+    let goal = bounding_each_guarded(walk, high_each)
+    let proved = bounding_proves(walk, facts, goal, ask)
+    bounding_traced(walk, facts, goal, proved)
+    return proved
 }
 
 /// Whether `kind` is a bound of one whole-number field (#1642): `floor`,
@@ -1827,7 +1975,7 @@ fn rules_element_facts(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref S
         }
     }
     for (each, fact) in walk.rule_facts.clone() {
-        if each == element {
+        if each == element && rules_standing(walk, facts, fact) {
             stated.push(walk.arena.substitute(fact, given))
         }
     }
@@ -1895,6 +2043,10 @@ fn rules_exit(mut walk: BoundsWalk, facts: ref BoundsFacts, returned: ref Expr?,
             if rule.owner == self_owner && !walk.rule_failed.contains(at) && !rules_field_holds(walk, facts, rule, "self", ask) {
                 walk.rule_failed.insert(at)
             }
+        } else if rule.kind == "capped" {
+            if rule.owner == self_owner && !walk.rule_failed.contains(at) && !rules_capped_holds(walk, facts, rule, "self", ask) {
+                walk.rule_failed.insert(at)
+            }
         } else if walk.checked_results.contains(at) && !throwing {
             // A `return` with no value hands back no position of `self.b`.
             if returned == null {
@@ -1918,6 +2070,9 @@ fn rules_lengths_hold(mut walk: BoundsWalk, facts: ref BoundsFacts, root: ref St
             walk.rule_failed.insert(at)
         }
         if rules_of_a_field(rule.kind) && rule.owner == owner && !walk.rule_failed.contains(at) && !rules_field_holds(walk, facts, rule, root, ask) {
+            walk.rule_failed.insert(at)
+        }
+        if rule.kind == "capped" && rule.owner == owner && !walk.rule_failed.contains(at) && !rules_capped_holds(walk, facts, rule, root, ask) {
             walk.rule_failed.insert(at)
         }
     }
@@ -2069,19 +2224,12 @@ fn rules_ascending_facts(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref
         else => return,
     }
     let path = list ?? return
-    let mut ordered = false
-    for (root, owner) in walk.rule_roots {
-        for (at, rule) in walk.rules.iter().enumerate() {
-            if rule.kind == "ascending" && rule.owner == owner && path == f"{root}.{rule.a}" && !(walk.checking && walk.rule_failed.contains(at)) {
-                ordered = true
-            }
-        }
-    }
-    if !ordered {
+    if !rules_ordered(walk, path) {
         return
     }
     if last_at != null {
         let k = bounding_lin(walk, last_at ?? return, facts, context, program, words) ?? return
+        rules_order_read(walk, facts, name, path, k)
         let one = walk.arena.int(1)
         let next = walk.arena.add(k, one)
         let len = walk.arena.var(length_of(path))
@@ -2096,6 +2244,62 @@ fn rules_ascending_facts(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref
     let fact = bounding_each_guarded(walk, below)
     facts.ints.insert(name.clone())
     bounding_push(walk, facts, fact)
+}
+
+/// Whether the list `path` is of an `ascending` rule that holds here.
+fn rules_ordered(walk: ref BoundsWalk, path: ref String) -> bool {
+    for (root, owner) in walk.rule_roots {
+        for (at, rule) in walk.rules.iter().enumerate() {
+            if rule.kind == "ascending" && rule.owner == owner && path == f"{root}.{rule.a}" && !(walk.checking && walk.rule_failed.contains(at)) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+/// **`let name = path[at]` of an `ascending` list** (ADR-306 D21, #1785):
+/// every element before `at` is at most `name`, while neither the length,
+/// `name` nor `at` changes. A fresh `ord#k` equal to their sum stands among
+/// the facts for as long; `rules_truncated` reads it.
+fn rules_order_read(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String, path: ref String, at: i64) {
+    let marker = f"ord#{walk.codes}"
+    walk.codes += 1
+    let m = walk.arena.var(marker)
+    let v = walk.arena.var(name)
+    let len = walk.arena.var(length_of(path))
+    let both = walk.arena.add(v, at)
+    let sum = walk.arena.add(both, len)
+    let fact = walk.arena.equal(m, sum)
+    facts.ints.insert(name.clone())
+    bounding_push(walk, facts, fact)
+    walk.ordered.push((marker, path.clone(), at, name.clone()))
+}
+
+/// **`path.truncate(to)` of an `ascending` list after `let v = path[at]`
+/// with `to <= at`** (ADR-306 D21, #1785): every element left is at most
+/// `v`. The facts that holds, read before the call, to state after it.
+fn rules_truncated(mut walk: BoundsWalk, facts: ref BoundsFacts, name: ref String, method: ref String, args: ref Vec[Expr], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> Vec[i64] {
+    let mut out: Vec[i64] = []
+    if method != "truncate" || args.len() != 1 || walk.ordered.is_empty() || !rules_ordered(walk, name) {
+        return out
+    }
+    let to = bounding_lin(walk, args[0], facts, context, program, words) ?? return out
+    let length = length_of(name)
+    for (marker, path, at, v) in walk.ordered.clone() {
+        if path != name || !facts.facts.iter().any(fn(f) { walk.arena.mentions(f, marker) && walk.arena.mentions(f, v) && walk.arena.mentions(f, length) }) {
+            continue
+        }
+        let goal = walk.arena.le(to, at)
+        if !bounding_proves(walk, facts, goal, ask) {
+            continue
+        }
+        let each = walk.arena.var(bounding_element_of(name))
+        let n = walk.arena.var(v)
+        let below = walk.arena.le(each, n)
+        out.push(bounding_each_guarded(walk, below))
+    }
+    return out
 }
 
 /// **An element of a list of `self` written in a checked body**
@@ -2122,6 +2326,13 @@ fn rules_element_write(mut walk: BoundsWalk, facts: ref BoundsFacts, target: ref
             // An element written breaks an order (#1688).
             if rule.kind == "ascending" && (list ?? "") == a {
                 walk.rule_failed.insert(at)
+                continue
+            }
+            // A value of `a` up to `b`'s length (#1785).
+            if rule.kind == "capped" && (list ?? "") == a {
+                if op != null || !rules_up_to(walk, facts, value, root, rule.b, context, program, words, ask) {
+                    walk.rule_failed.insert(at)
+                }
                 continue
             }
             // A value of `a`, or of an inner list of it (ADR-306 D28).
@@ -2214,6 +2425,9 @@ fn rules_at_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref String?, me
             if rules_of_a_field(rule.kind) && rule.owner == self_owner && !walk.rule_failed.contains(at) && !rules_field_holds(walk, facts, rule, "self", ask) {
                 walk.rule_failed.insert(at)
             }
+            if rule.kind == "capped" && rule.owner == self_owner && !walk.rule_failed.contains(at) && !rules_capped_holds(walk, facts, rule, "self", ask) {
+                walk.rule_failed.insert(at)
+            }
         }
         return
     }
@@ -2302,6 +2516,27 @@ fn rules_at_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref String?, me
             }
             if (rule.kind == "index" || rule.kind == "inner") && on == b {
                 if !rules_adds(method) && !keeps_length(method) {
+                    walk.rule_failed.insert(at)
+                }
+                continue
+            }
+            if rule.kind == "capped" {
+                // A push puts at most `b`'s length; a shrink of `b` of
+                // `self`, or of the value a builder builds, the exits ask
+                // for; of any other value, only a growth keeps it (#1785).
+                let open = root == "self" || walk.rule_built.contains(root)
+                let kept = if on == a {
+                    if method == "push" && args.len() == 1 {
+                        rules_up_to(walk, facts, args[0], root, rule.b, context, program, words, ask)
+                    } else {
+                        rules_takes_away(method) || (keeps_length(method) && method != "fill")
+                    }
+                } else if on == b {
+                    open || rules_adds(method) || keeps_length(method)
+                } else {
+                    !rules_writes(changed, a) && (open || !rules_writes(changed, b))
+                }
+                if !kept {
                     walk.rule_failed.insert(at)
                 }
                 continue

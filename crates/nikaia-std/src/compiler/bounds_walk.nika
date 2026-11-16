@@ -340,6 +340,14 @@ struct BoundsWalk {
 	/// facts, not among the newest `most_facts()`, and join a question that
 	/// names that element (`bounding_known`).
 	rule_facts: Vec[(String, i64)],
+	/// **The `capped` bounds among `rule_facts`** (ADR-306 D21, #1785): the
+	/// fresh name that stands at most the length while it lasts, the length,
+	/// the element and the bound (`rules_capped_stand`).
+	capped: Vec[(String, String, String, i64)],
+	/// **The elements read out of an `ascending` list by position**
+	/// (#1785): the fresh name that stands while it lasts, the list, the
+	/// position and the name read (`rules_order_read`).
+	ordered: Vec[(String, String, i64, String)],
 	/// Whether this walk checks `rules` in a method: the index of each rule
 	/// the method is not proved to keep goes into `rule_failed`; the
 	/// `result` rules of the method are `checked_results`.
@@ -760,6 +768,8 @@ fn bounding_new(
 		rules: [],
 		rule_roots: collections::BTreeMap(),
 		rule_facts: [],
+		capped: [],
+		ordered: [],
 		checking: false,
 		checked_results: collections::BTreeSet(),
 		rule_failed: collections::BTreeSet(),
@@ -1711,7 +1721,7 @@ fn bounding_known(walk: ref BoundsWalk, facts: ref BoundsFacts, asked: i64) -> V
 			walk.arena.variables(fact, read)
 		}
 		for (each, fact) in walk.rule_facts {
-			if read.contains(each) {
+			if read.contains(each) && rules_standing(walk, facts, fact) {
 				all.push(fact)
 			}
 		}
@@ -2944,7 +2954,13 @@ fn bounding_after_change(mut walk: BoundsWalk, mut facts: BoundsFacts, changed: 
 			}
 	}
 	for name in changed.lengths {
+		// A `capped` rule's marker stands through a list that only grows
+		// (#1785).
+		let grown = rules_capped_grown(walk, facts, name, changed)
 		bounding_forget_length(walk, facts, name)
+		for fact in grown {
+			bounding_push(walk, facts, fact)
+		}
 	}
 	for name in changed.parts {
 		bounding_forget_parts(walk, facts, name)
@@ -7426,7 +7442,18 @@ fn bounding_arm_facts(
 			return null
 		}
 		// Both sides apart, so that each can hold of every arm alone.
-		return [walk.arena.le(n, term), walk.arena.ge(n, term)]
+		let mut sides = [walk.arena.le(n, term), walk.arena.ge(n, term)]
+		// An element read gives what a rule says of every element, as a
+		// `let` of it does (ADR-306 D21, #1785): `if xs.len() > 0 { xs[0] }
+		// else { b.len() }` of a list capped by `b`'s length.
+		let mut read = facts.clone()
+		rules_element_facts(walk, read, name, value, words)
+		for fact in read.facts {
+			if walk.arena.mentions(fact, name) && !sides.contains(fact) {
+				sides.push(fact)
+			}
+		}
+		return sides
 	}
 	// The checker marks only a `let` value's call a whole number; an arm's
 	// is one where the callee is found to hand back one (`context.returns`,
@@ -7880,7 +7907,7 @@ fn bounding_for(
 				}
 			}
 			for (each, fact) in walk.rule_facts.clone() {
-				if each == element {
+				if each == element && rules_standing(walk, facts, fact) {
 					stated.push(walk.arena.substitute(fact, given))
 					of_every = true
 				}
@@ -9153,7 +9180,9 @@ fn bounding_method_call(
 		}
 		// **A method that may change its receiver changes the paths of
 		// fields from it** (ADR-306 D17): one of this program's that takes
-		// its receiver `mut`, or one `keeps_length` does not know.
+		// its receiver `mut`, or one `keeps_length` does not know. What a
+		// `truncate` leaves of an ordered list is read first (#1785).
+		let left = rules_truncated(walk, facts, name, method, args, context, program, words, ask)
 		if context.around.changing_receivers.contains(method) || !keeps_length(method) {
 			bounding_forget_parts(walk, facts, name)
 		} else if !keeps_items(method) {
@@ -9162,6 +9191,10 @@ fn bounding_method_call(
 			bounding_forget_element(walk, facts, f"{name}|*|", false)
 		}
 		bounding_method(walk, facts, name, method, args, context, program, words, ask)
+		for fact in left {
+			bounding_push(walk, facts, fact)
+		}
+		rules_capped_call(walk, name, method)
 	}
 	// **Only a `mut` parameter changes what it is handed** (ADR-094 D3):
 	// every other argument is `ref`, or a `Bytes` or a text view that no
