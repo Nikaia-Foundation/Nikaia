@@ -12,6 +12,10 @@ Filed by the driver from the `Found:` of the run of `issue-1267` (#1267) (owner,
 
 a Bytes field filled from a[1..] fails at rustc (Into &[u8] -> Bytes), not covered by the issue
 
+## Cause not marked
+
+The Found does not say how sure its cause is (docs/issues.md I7): a cause it names is a hypothesis, unknown until checked. The second item checks it (`nikaia run scripts/where.nika`, a probe, callgrind) before anything is built on it; a cause shown false is answered `wrong I7: ...` in the report.
+
 ## To build
 
 - [ ] Run the Found's probe on today's `develop` first: the run that wrote it may have used a binary older than the tip, so it may be fixed already (#1822: #1788 was filed from a probe a fix under #1754 had already made pass). A probe that passes there names the commit that fixed it (`git log -400 --grep` by topic, since a fix often lands under another issue's number), and the run builds only a `tests/compiler/tests/` test that pins it (docs/issues.md I13).
@@ -37,6 +41,10 @@ a short gap
 
 supervisor decision
 
+## Cause not marked
+
+The Found does not say how sure its cause is (docs/issues.md I7): a cause it names is a hypothesis, unknown until checked. The second item checks it (`nikaia run scripts/where.nika`, a probe, callgrind) before anything is built on it; a cause shown false is answered `wrong I7: ...` in the report.
+
 ## To build
 
 - [ ] Run the Found's probe on today's `develop` first: the run that wrote it may have used a binary older than the tip, so it may be fixed already (#1822: #1788 was filed from a probe a fix under #1754 had already made pass). A probe that passes there names the commit that fixed it (`git log -400 --grep` by topic, since a fix often lands under another issue's number), and the run builds only a `tests/compiler/tests/` test that pins it (docs/issues.md I13).
@@ -57,6 +65,10 @@ Filed by the driver from the `Found:` of the run of `v45-y` (owner, 2026-11-06).
 ## Found
 
 a struct result's fields: no decision yet in ADR-306
+
+## Cause not marked
+
+The Found does not say how sure its cause is (docs/issues.md I7): a cause it names is a hypothesis, unknown until checked. The second item checks it (`nikaia run scripts/where.nika`, a probe, callgrind) before anything is built on it; a cause shown false is answered `wrong I7: ...` in the report.
 
 ## To build
 
@@ -83,6 +95,10 @@ a churn of SharedMut runs over the budget: /tmp/claude-0/x/scratchpad/issue-1751
 
 The Found names a file in the run's scratchpad, which is gone when this issue is built (docs/issues.md I5, #1824): take the probe from the run's commit message if it holds one, else write it again from the Found and its ADR before the first item.
 
+## Cause not marked
+
+The Found does not say how sure its cause is (docs/issues.md I7): a cause it names is a hypothesis, unknown until checked. The second item checks it (`nikaia run scripts/where.nika`, a probe, callgrind) before anything is built on it; a cause shown false is answered `wrong I7: ...` in the report.
+
 ## To build
 
 - [ ] Run the Found's probe on today's `develop` first: the run that wrote it may have used a binary older than the tip, so it may be fixed already (#1822: #1788 was filed from a probe a fix under #1754 had already made pass). A probe that passes there names the commit that fixed it (`git log -400 --grep` by topic, since a fix often lands under another issue's number), and the run builds only a `tests/compiler/tests/` test that pins it (docs/issues.md I13).
@@ -102,6 +118,10 @@ Filed by the driver from the `Found:` of the run of `issue-1675` (#1675) (owner,
 ## Found
 
 guide/views.md example uses the old ref syntax
+
+## Cause not marked
+
+The Found does not say how sure its cause is (docs/issues.md I7): a cause it names is a hypothesis, unknown until checked. The second item checks it (`nikaia run scripts/where.nika`, a probe, callgrind) before anything is built on it; a cause shown false is answered `wrong I7: ...` in the report.
 
 ## To build
 
@@ -123,6 +143,10 @@ Filed by the driver from the `Found:` of the run of `issue-1675` (#1675) (owner,
 
 NK1131 refuses a lent field
 
+## Cause not marked
+
+The Found does not say how sure its cause is (docs/issues.md I7): a cause it names is a hypothesis, unknown until checked. The second item checks it (`nikaia run scripts/where.nika`, a probe, callgrind) before anything is built on it; a cause shown false is answered `wrong I7: ...` in the report.
+
 ## To build
 
 - [ ] Run the Found's probe on today's `develop` first: the run that wrote it may have used a binary older than the tip, so it may be fixed already (#1822: #1788 was filed from a probe a fix under #1754 had already made pass). A probe that passes there names the commit that fixed it (`git log -400 --grep` by topic, since a fix often lands under another issue's number), and the run builds only a `tests/compiler/tests/` test that pins it (docs/issues.md I13).
@@ -136,13 +160,12 @@ The probe or check gives the expected output the first item names from its ADR o
 
 ---
 _Generated by [Claude Code](https://claude.ai/code)_
-After #1624: wrong I8: item 3 was built already
+After #1624: pre-push red on a badge that was not mine
 ready,improve
 Filed by the driver from the report of the run of `issue-1624` (#1624) for the improvement lane (owner, 2026-11-15).
 
 ## Reported
 
-- Issue: wrong I8: item 3 was built already
 - Friction: pre-push red on a badge that was not mine
 
 ## Source
@@ -223,41 +246,7 @@ Each point is built as a general fix, moved to the bug lane, or closed as noise 
 
 ---
 _Generated by [Claude Code](https://claude.ai/code)_
-After #1707: wrong I5: the probe passed
-ready,improve
-Filed by the driver from the report of the run of `issue-1707` (#1707) for the improvement lane (owner, 2026-11-15).
-
-## Reported
-
-- Issue: wrong I5: the probe passed
-
-## Source
-
-The run's report: `issue-1707.md.report.md` (untracked, in the driver's checkout; quoted whole below, since the file may be gone).
-The run committed nothing.
-
-<details><summary>The run's report</summary>
-
-````text
-Result: done
-Issue: rules-gap (built): no rule said an item needs no GitHub; wrong I5: the probe passed
-Friction: none
-````
-
-</details>
-
-## To build
-
-- [ ] Judge each point: a general fix (a rule in `docs/`, a script, the driver, a template, a check that turns builders red for nothing), a compiler defect (relabel `bugs`), or noise.
-- [ ] Build the general fix, or close the point with a one-line reason.
-
-## Done when
-
-Each point is built as a general fix, moved to the bug lane, or closed as noise with its reason.
-
-
----
-_Generated by [Claude Code](https://claude.ai/code)_
+none
 none
 none
 none
