@@ -1,0 +1,5 @@
+fn main() throws {
+    let payer = SharedMut(100)
+    let paid = payer.get()
+    println(paid == 100)
+}

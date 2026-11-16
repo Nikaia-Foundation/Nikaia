@@ -87,6 +87,9 @@ pub struct Decision {
     pub fallback: Fallback?,
     /// Every place a second handle on this allocation is made (ADR-312 D5).
     pub duplications: Vec[String],
+    /// Where a `let`, a tuple or a variant takes the handle at its last use,
+    /// so no second one is made (ADR-312 D2, #1651).
+    pub moved: Vec[String],
     /// Where a `get` copies the whole value out of the lock (ADR-281 D16).
     pub copied_out: Vec[String],
     /// Why a word-sized value that crosses kept its lock (ADR-281 D18).
@@ -180,6 +183,9 @@ pub fn sharing_report(sharing: ref Sharing) -> String {
         }
         for site in decision.duplications {
             out.push_str(ref f"             duplicated: {site}\n")
+        }
+        for site in decision.moved {
+            out.push_str(ref f"             moved: {site}\n")
         }
         if decision.count != Count::Plain {
             atomic += 1
@@ -463,6 +469,9 @@ pub struct Slots {
     /// Where a second handle on a slot's allocation is made (ADR-312 D5):
     /// the slot key, and what a reader is told about the place.
     pub duplicated: Vec[(String, String)],
+    /// Where a `let`, a tuple or a variant takes the handle at its last use
+    /// (ADR-312 D2, #1651): the slot key, and the place.
+    pub moved: Vec[(String, String)],
     /// The slots a door over several locks names (ADR-281 D18): a
     /// compare-and-swap cannot be held, so their classes keep the lock.
     pub held_together: Vec[String],
@@ -473,7 +482,7 @@ pub struct Slots {
 
 impl Slots {
     pub fn new(declared_here: collections::BTreeSet[String]) -> Slots {
-        return Slots { declared_here: declared_here, handles: collections::BTreeMap(), index: collections::BTreeMap(), parent: [], forced: [], duplicated: [], held_together: [], copies: [] }
+        return Slots { declared_here: declared_here, handles: collections::BTreeMap(), index: collections::BTreeMap(), parent: [], forced: [], duplicated: [], moved: [], held_together: [], copies: [] }
     }
 
     /// The slot's number in the union-find, made where it has none.
@@ -539,6 +548,14 @@ impl Slots {
         let key = slot(function, value)
         self.id(key)
         self.duplicated.push((key, site))
+    }
+
+    /// This slot's handle is handed on here at its last use (ADR-312 D2):
+    /// the same handle, so no second one is made.
+    pub fn moves(ref mut self, function: ref String, value: ref String, site: String) {
+        let key = slot(function, value)
+        self.id(key)
+        self.moved.push((key, site))
     }
 
     /// **A slot another file owns keeps the atomic floor**
@@ -621,6 +638,7 @@ pub fn decided(mut slots: Slots) -> Sharing {
         }
     }
     let duplicated = sites_by_slot(slots.duplicated)
+    let moved_at = sites_by_slot(slots.moved)
     let copied_out = sites_by_slot(slots.copies)
 
     let mut decisions: Vec[Decision] = []
@@ -646,7 +664,7 @@ pub fn decided(mut slots: Slots) -> Sharing {
         }
         counts.insert(key.clone(), count)
         if !handle.internal {
-            decisions.push(Decision { function: handle.function.clone(), value: handle.value.clone(), ty: handle.ty.text(), count: count, why: why, fallback: fallback, duplications: duplicated[key]?.clone() ?? [], copied_out: copied_out[key]?.clone() ?? [], kept_its_lock: lock_kept(count, a_word, held.contains(root)) })
+            decisions.push(Decision { function: handle.function.clone(), value: handle.value.clone(), ty: handle.ty.text(), count: count, why: why, fallback: fallback, duplications: duplicated[key]?.clone() ?? [], moved: moved_at[key]?.clone() ?? [], copied_out: copied_out[key]?.clone() ?? [], kept_its_lock: lock_kept(count, a_word, held.contains(root)) })
         }
     }
 
@@ -788,6 +806,23 @@ fn declared_here(names: ref winnow_grammar::InternerContext, items: ref Vec[Span
                     }
                 }
                 out.insert(owner)
+            }
+            else => {}
+        }
+    }
+    return out
+}
+
+// Every variant the unit declares, as `Enum::Variant` (#1651).
+fn variants_here(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in items {
+        match item.node {
+            Item::Enum { name, variants, .. } => {
+                let owner = names.resolve(name).clone()
+                for one in variants {
+                    out.insert(f"{owner}::{names.resolve(one.name)}")
+                }
             }
             else => {}
         }
@@ -990,6 +1025,9 @@ pub struct SharingWalk {
     pub own_keys: collections::BTreeMap[String, String],
     /// Where the checker found a handle moved or duplicated.
     pub moves: SharingMoves,
+    /// Every variant this unit declares, as `Enum::Variant`: a call of one
+    /// puts its arguments into the value it makes (#1651).
+    pub variants: collections::BTreeSet[String],
 }
 
 /// **Which handovers of a handle duplicate it** (ADR-312 D2, D5, #1502), as
@@ -1025,7 +1063,7 @@ pub fn sharing_moves_of(facts: ref CheckFacts) -> SharingMoves {
 /// Where nothing can cross, every count is plain (ADR-312 D10), applied to the
 /// finished answer so the duplication sites are kept as they were found.
 pub fn sharing_of(program: ref Program, asked: ref Asked, holes_of: fn(ref Expr) -> Vec[Expr] sync, ty_of: fn(ref Type) -> Ty sync, crossings_are_possible: bool, moves: SharingMoves) -> Sharing {
-    let mut walk = SharingWalk { slots: Slots(declared_here(asked.names, program.items)), parallel: collections::BTreeSet(), function: "", scope: collections::BTreeMap(), library_keys: collections::BTreeMap(), own_keys: collections::BTreeMap(), moves: moves }
+    let mut walk = SharingWalk { slots: Slots(declared_here(asked.names, program.items)), parallel: collections::BTreeSet(), function: "", scope: collections::BTreeMap(), library_keys: collections::BTreeMap(), own_keys: collections::BTreeMap(), moves: moves, variants: variants_here(asked.names, program.items) }
     for item in program.items {
         match item.node {
             Item::Fn { .. } => sharing_function(item.node, "", asked, holes_of, ty_of, walk),
@@ -1182,6 +1220,7 @@ fn let_binding(named: String, written: ref Type?, value: ref Expr, asked: ref As
         let function = walk.function.clone()
         walk.slots.note(function, named, ty.clone(), false, false)
         if aliased != null {
+            a_handle_given(value, asked, f"bound to `{named}`", walk)
             walk.slots.join(slot(function, named), slot(function, aliased ?? ""))
         } else {
             let source = slot_of(value, asked, walk)
@@ -1320,6 +1359,11 @@ fn sharing_expression(expr: ref Expr, asked: ref Asked, holes_of: fn(ref Expr) -
                     walk.slots.held_together.push(slot(walk.function, handle))
                 }
             }
+            if walk.variants.contains(path) {
+                for arg in args {
+                    a_handle_given(arg, asked, f"put into variant `{path}`", walk)
+                }
+            }
             sharing_arguments(SharingCall { callee: callee, is_method: false }, args, config, asked, holes_of, ty_of, walk)
             sharing_expression(func, asked, holes_of, ty_of, walk)
         }
@@ -1392,6 +1436,7 @@ fn sharing_expression(expr: ref Expr, asked: ref Asked, holes_of: fn(ref Expr) -
         }
         Expr::Tuple(parts, _) => {
             for part in parts {
+                a_handle_given(part, asked, "put into a tuple", walk)
                 sharing_expression(part, asked, holes_of, ty_of, walk)
             }
         }
@@ -1420,6 +1465,19 @@ fn sharing_expression(expr: ref Expr, asked: ref Asked, holes_of: fn(ref Expr) -
             }
         }
         else => {}
+    }
+}
+
+// **A handle a `let`, a tuple or a variant takes is named there** (ADR-312
+// D1, D2, D5, #1651): duplicated where the checker found its name read
+// again, moved at its last use. Nothing is said where no check ran.
+fn a_handle_given(value: ref Expr, asked: ref Asked, place: String, mut walk: SharingWalk) {
+    let named = named_handle(value, asked.names, walk.scope) ?? return
+    let at = node_key(value)
+    if walk.moves.stored.contains(at) {
+        walk.slots.duplicates(walk.function, named, f"{place}, which holds a handle of its own")
+    } else if walk.moves.moved.contains(at) {
+        walk.slots.moves(walk.function, named, f"{place} at its last use, the same handle")
     }
 }
 
