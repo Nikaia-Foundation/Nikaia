@@ -683,7 +683,7 @@ fn drive_merge_fetched(cause: String, lower: String, build: String, badges: Stri
 	).stdout.trim().split("\n").collect().join(" ")
 	if unmerged == "" { drive_merge_abort(cause) }
 	for p in unmerged.split(" ") {
-		if !p.starts_with(drive_lowered_dir() + "/") { drive_merge_abort(cause) }
+		if !drive_is_lowered(p.clone()) { drive_merge_abort(cause) }
 	}
 	drive_merge_relower(cause, unmerged, lower, build, badges)
 }
@@ -702,6 +702,13 @@ fn drive_merge_generates(paths: Vec[String]) -> bool {
 
 fn drive_lowered_dir() -> String {
 	return "crates/nikaia-std/src/compiler/lowered"
+}
+
+// True for a file the lowering writes: one under the lowered directory, or
+// its index `lowered.rs` beside it (a conflict only in the index's digest line
+// escalated on 2026-11-16 before this).
+fn drive_is_lowered(path: String) -> bool {
+	return path.starts_with(drive_lowered_dir() + "/") || path == drive_lowered_dir() + ".rs"
 }
 
 // The lowered files the lowering writes: the directory and its index.
