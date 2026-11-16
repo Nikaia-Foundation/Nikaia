@@ -306,7 +306,8 @@ issue lacked that would have saved it turns or a wrong turn:
 
 `<n>` is looked up in this file before it is written, never recalled: I3
 is plain language and I4 where it belongs; a probe that passes before any
-change is I5 and so is one that does not parse as written, a decision called
+change is I5 and so is one that does not parse or check as written (#1768:
+#1673's run answered `wrong I3` for a probe writing `List[i64]`, NK1135), a decision called
 unbuilt that is built is I6 ("built or text only"), a suspected function
 that does not exist is I7, an item that is wrong or leaves open a choice
 that changes its result without saying the builder chooses is I9 (#1735: #1527's run answered `wrong I3`
