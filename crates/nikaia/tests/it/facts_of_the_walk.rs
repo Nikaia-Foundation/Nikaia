@@ -51,7 +51,7 @@ fn far(c: scalar) -> i32 {
     return c as i32 * 4096
 }
 
-fn number(n: i64) -> i64 {
+pub fn number(n: i64) -> i64 {
     return n - 48
 }
 
