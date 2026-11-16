@@ -6273,12 +6273,16 @@ fields = ["pub code: i64", "pub ok: bool", "pub stdout: String", "pub stderr: St
 # program writes, and `""` in `Output`.
 #
 # The wait gives the thread up, so other tasks run while the program does.
+#
+# **It keeps every list and text it is handed** (ADR-views-3 D14, #1797):
+# `args`, `env`, `env_remove` and `stdin` are owned below, so a parameter
+# handed to one is moved, not lent.
 [fn."process::run"]
 pub = true
 panics = false
 throws = ["io::IoError"]
 provenance = "untrusted"
-keeps = ["args"]
+keeps = ["args", "env", "env_remove", "stdin"]
 signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured, trusted: bool = false) -> process::Output"
 
 # A program started and not yet waited for (#1177): what `process::spawn`
