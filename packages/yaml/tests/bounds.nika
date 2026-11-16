@@ -45,7 +45,6 @@ fn justified() -> Vec[(String, String)] {
 		("1 + entries.iter().map(", memory.clone()),
 		("self.made", f"{memory}: the nodes alias expansion made, at most `limit`"),
 		("self.expanded", f"{memory}: the nodes alias expansion made, at most `limit`"),
-		("e.offset - 1", "a byte offset into the input, never negative (the walk does not follow `error_of`'s result into its field)"),
 		("n + d", f"{input}: an indentation and an indicator digit"),
 		("from + (", f"{input}: an offset into the scalar's text"),
 		("self.column", "a column of the text the library writes, which its length bounds"),

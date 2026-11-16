@@ -1,0 +1,12 @@
+bounds in tests/a_struct_results_field_carries_the_callees_found_facts.nika: 1 indexes, 0 proved; 9 operations, 6 proved
+    21  at + 1            checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+    50  e.offset - 1      proved
+    51  xs[e.offset - 1]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    51  e.offset - 1      proved
+    52  e.line - 1        proved
+    54  g.offset - 1      proved
+    56  l.offset - 1      checked: a field no rule of its type bounds: the walk finds `a <= b` only of two private fields a method compares (ADR-369 D4, #1681), and a count of work done has none (#1531)
+    59  f.offset - 1      proved
+    61  k - 1             proved
+    64  m.offset - 1      checked: a field no rule of its type bounds: the walk finds `a <= b` only of two private fields a method compares (ADR-369 D4, #1681), and a count of work done has none (#1531)
+  derived  up: 0 <= at, proved at the calls on lines 53
