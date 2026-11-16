@@ -1,0 +1,8 @@
+== merging
+REFUSED: a merge is in progress (.git/MERGE_HEAD exists): wait until it is gone, check your edits are back, then run this again
+HEAD moved: false
+== merged
+committed SHA8 local
+parents: 1
+b.txt: origin
+a.txt: mine

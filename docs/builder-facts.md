@@ -79,6 +79,11 @@ together with the specification section and an example test.
   autostash. Never type the edit again (the autostash pop then conflicts);
   wait in one call for the merge to end (Monitor until `.git/MERGE_HEAD`
   is gone), check the edit is back, then run the cycle again. (#1830)
+  Meanwhile `commit.nika` refuses (`a merge is in progress`): a commit
+  then would be a merge commit that drops the merged side (#1901). An
+  edit still missing after the merge ended (or was aborted) is in an
+  autostash git could not put back: `git stash list`, then `git stash
+  show -p stash@{N}`, not `git fsck` (#1901).
   Where the merge also changed a lowered file of yours, putting the edit
   back conflicts there: the driver gives that file HEAD's copy, unstages
   what git staged, and prints `MERGE autostash conflicted in ...`; run
