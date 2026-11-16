@@ -27,7 +27,14 @@ it, like the checks in `docs/supervisor.md`.
   #N` (or the commit) for where it came up, and the issues it depends on,
   each on a line `Needs #N` (or `After`, `Blocked by`, `Waits for`,
   `Depends on`): the driver does not queue an issue while one so named is
-  open (`drive_depends_on`, #1819).
+  open (`drive_depends_on`, #1819). An item resting on a part another
+  issue builds (a shared file, a harness, a README an epic's frame item
+  makes) names that part's issue the same way, and the part is its own
+  issue: `Needs #N` on a parent that closes only after its children never
+  lets them run, and without it each child's builder meets the part
+  missing (#1853: #1615 and #1618 asked for `benches/game/README.md`,
+  which #1611's open frame item was to make). Otherwise the item says the
+  builder makes the part itself.
 * **I4a. A claim of today's behaviour is read in the code** (#1706): a
   sentence saying what the compiler, a script or the driver does today names
   the function and file it was read in, or the run that shows it (a probe,
