@@ -1,0 +1,52 @@
+// release.nika (#1896): a specification part with another lane's paragraph in
+// the working file gets only its version and date lines staged; the
+// paragraph stays in the working file, unstaged.
+use std::fs
+use std::process
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/release.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/release.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn git(tmp: String, args: Vec[String]) -> String throws {
+    return process::run("git", args; dir: tmp).stdout
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let part = "docs/specification/30-nikaia-tooling.md"
+    process::run("mkdir", ["-p", f"{tmp}/docs/specification"])
+    git(tmp.clone(), ["init", "-q"])
+    git(tmp.clone(), ["config", "user.email", "t@t"])
+    git(tmp.clone(), ["config", "user.name", "t"])
+    fs::write(f"{tmp}/{part}", fs::Root::Anywhere, "# Tooling\n\n**Version:** 0.0.1 (Draft)\n**Date:** 2026-11-01\n\n## D14\n\nOld text.\n")
+    git(tmp.clone(), ["add", part.clone()])
+    git(tmp.clone(), ["commit", "-q", "-m", "base"])
+    // The other lane's paragraph and the release's bump, both in the working file.
+    fs::write(f"{tmp}/{part}", fs::Root::Anywhere, "# Tooling\n\n**Version:** 0.0.2 (Draft)\n**Date:** 2026-11-16\n\n## D14\n\nOld text.\n\n## D15\n\nUnfinished paragraph.\n")
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/release.nika", "--", "--stage-version", part.clone()]; dir: tmp.clone())
+    println(f"staged: {out.stdout.trim()}")
+    println("index:")
+    print(git(tmp.clone(), ["show", f":{part}"]))
+    println("unstaged:")
+    for line in git(tmp.clone(), ["diff", "--unified=0", part.clone()]).split("\n") {
+        if line.starts_with("+") && !line.starts_with("+++") { println(line) }
+    }
+    println("working file:")
+    print(fs::read_to_string(f"{tmp}/{part}", fs::Root::Anywhere))
+    process::run("rm", ["-rf", tmp])
+}
