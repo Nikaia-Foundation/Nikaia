@@ -167,7 +167,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_closure<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        let mut names: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut names: Vec<String> = vec![];
         for p in params.iter() {
             let p = *p;
             names.push(emit_local_name(&self.facts.comptime_names, &emit_text(world, p)));
@@ -183,7 +183,21 @@ impl EmitState {
         if a_task && !fails { if pauses { out.push("nikaia_std::task::plain_paused("); } else { out.push("nikaia_std::task::plain("); } }
         if pauses { out.push("async "); }
         let pattern = self.facts.filter_patterns.contains(&node_key(node));
-        if pattern && names.len() == 1 { out.push(&format!("|&{}| ", *unsafe { nikaia_std::proven::read(&names, (0) as usize) })); } else if self.facts.copied_entry_lambdas.contains(&node_key(node)) && names.len() == 1 { out.push("|__nikaia_slot| "); } else {
+        let mut takes_out = false;
+        let mut place: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+        while place < names.len() as i64 {
+            if self.facts.copied_item_params.contains(&(node_key(node), place)) { takes_out = true; }
+            place = unsafe { nikaia_std::proven::add::<i64>(place, 1) };
+        }
+        if pattern && names.len() == 1 { out.push(&format!("|&{}| ", *unsafe { nikaia_std::proven::read(&names, (0) as usize) })); } else if takes_out {
+            #[allow(unused_mut)] let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            let mut at = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
+            for name in names.iter() {
+                if self.facts.copied_item_params.contains(&(node_key(node), at)) { written.push(format!("&{}", name)); } else { written.push(nikaia_std::block::Text::from(name.to_string())); }
+                at += 1;
+            }
+            out.push(&format!("|{}| ", nikaia_std::block::Text::from(written.join(", "))));
+        } else if self.facts.copied_entry_lambdas.contains(&node_key(node)) && names.len() == 1 { out.push("|__nikaia_slot| "); } else {
             let by_use: Vec<Ty> = nikaia_std::index::or(match self.facts.lambda_params_by_use.get(&node_key(node)) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
@@ -699,7 +713,10 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_try_catch<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, guarded_expr: &Expr, handler: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let dropped = walk.dropped_catch == node_key(guarded_expr) || self.facts.dropped_catches.contains(&node_key(guarded_expr));
-        out.push("match ");
+        let passing = self.fatal_passing(world, guarded_expr, handler);
+        let unread = !host.block_mentions(handler, "error") && passing.is_empty() && !emit_catch_is_a_scope(world, guarded_expr);
+        let an_else = unread && self.block_pauses(world, handler);
+        if an_else && dropped { out.push("if let Ok(_) = "); } else if an_else { out.push("if let Ok(value) = "); } else { out.push("match "); }
         let mut guarded = flow.guarded();
         let a_scope_call = emit_catch_is_a_scope(world, guarded_expr);
         if a_scope_call { guarded = flow.joined_here(); }
@@ -749,9 +766,9 @@ impl EmitState {
         if nested && a_block && !bound_here { out.push("; Ok::<_, Box<dyn std::error::Error>>(__nikaia_value) }"); } else if nested && !bound_here { out.push(") }"); }
         let a_scope = a_scope_call && walk.boxed_scope;
         walk.boxed_scope = false;
-        let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1)));
+        let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1))); #[allow(clippy::redundant_locals)] let passing = passing;
         let close = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
-        let mut bound: &'static str = "_error";
+        let mut bound: &'static str = "_error"; #[allow(clippy::redundant_locals)] let passing = passing;
         if host.block_mentions(handler, "error") { bound = "error"; }
         let caught = bound == "error";
         let mut named = caught && self.caught_channel_is_named(world, guarded_expr);
@@ -788,11 +805,15 @@ impl EmitState {
         let inside_scope = EmitScope { caught_sum: sum, ..scope.clone() };
         let mut opening: Option<String> = None;
         if named { opening = Some(String::from("let (error, __nikaia_site) = error.split();")); } else if boxed && fallback { opening = Some(String::from("let error: Box<dyn std::error::Error> = nikaia_std::task::handed(error.into());")); } else if boxed { opening = Some(String::from("let error: Box<dyn std::error::Error> = error.into();")); }
-        if dropped { out.push(&format!(" {{\n{}Ok(_) => {{}},\n", pad)); } else if self.facts.nullable_catches.contains(&node_key(guarded_expr)) { out.push(&format!(" {{\n{}Ok(value) => Some(value),\n", pad)); } else if self.facts.owned_catches.contains(&node_key(guarded_expr)) {
+        if an_else {
+            if dropped { out.push(" {} else "); } else if self.facts.nullable_catches.contains(&node_key(guarded_expr)) { out.push(" { Some(value) } else "); } else if self.facts.owned_catches.contains(&node_key(guarded_expr)) {
+                let copy = if self.on_block_types() { "copy_owned" } else { "to_owned" };
+                out.push(&format!(" {{ value.{}() }} else ", copy));
+            } else { out.push(" { value } else "); }
+        } else if dropped { out.push(&format!(" {{\n{}Ok(_) => {{}},\n", pad)); } else if self.facts.nullable_catches.contains(&node_key(guarded_expr)) { out.push(&format!(" {{\n{}Ok(value) => Some(value),\n", pad)); } else if self.facts.owned_catches.contains(&node_key(guarded_expr)) {
             let copy = if self.on_block_types() { "copy_owned" } else { "to_owned" };
             out.push(&format!(" {{\n{}Ok(value) => value.{}(),\n", pad, copy));
         } else { out.push(&format!(" {{\n{}Ok(value) => value,\n", pad)); }
-        let passing = self.fatal_passing(world, guarded_expr, handler);
         let mut handler_takes: String = format!("Err({}) => ", bound); #[allow(clippy::redundant_locals)] let passing = passing;
         if !passing.is_empty() && nikaia_std::index::or(call_callee_name(world.words, world.aliases, guarded_expr), || "".into()) == "supervisor::run" {
             out.push(&format!("{}Err(nikaia_std::supervisor::Stopped::Handed(error)) => return Err(error.into()),\n", pad));
@@ -829,11 +850,12 @@ impl EmitState {
                 }
             }
         }
-        out.push(&format!("{}{}", pad, handler_takes));
+        if !an_else { out.push(&format!("{}{}", pad, handler_takes)); }
         let mut handler_tail = EmitTail::Value;
         if dropped { handler_tail = EmitTail::Statement; }
-        self.emit_stmt_block_opening_with(world, walk, out, host, handler, depth + 1, inside, &inside_scope, &handler_tail, opening)?;
-        out.push(&format!(",\n{}}}", close));
+        let handler_depth = if an_else { depth } else { depth + 1 };
+        self.emit_stmt_block_opening_with(world, walk, out, host, handler, handler_depth, inside, &inside_scope, &handler_tail, opening)?;
+        if !an_else { out.push(&format!(",\n{}}}", close)); }
         Ok(())
     }
     pub fn fatal_passing(&self, world: &EmitWorld<'_, '_, '_, '_>, guarded: &Expr, handler: &Block) -> Vec<String> {
@@ -1026,7 +1048,7 @@ impl EmitState {
                 out.push(&format!("; Ok::<_, {}>(__nikaia_value) }}).await?", scope.channel));
             } else { out.append(&inner); }
             out.push(&format!("; Ok::<_, {}>(__nikaia_task) }}", scope.channel));
-            out.push(&format!(", |e: &{}| {{ use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})", scope.channel));
+            out.push(&format!(", |e: &{}| {{ #[allow(unused_imports)] use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})", scope.channel));
         } else {
             let inside = EmitFlow { statement: flow.statement, ..EmitFlow::plain() };
             let inside_scope = EmitScope::plain();

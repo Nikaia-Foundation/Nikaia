@@ -124,11 +124,17 @@ pub struct CheckFlow {
     pub option_values: Vec[i64],
     /// Which of them is a text literal, in the same order.
     pub option_literals: Vec[bool],
+    /// Each of them as the author wrote it (`check_walked_written`), in the
+    /// same order, and the callee as written before its `(`: what `NK1101`
+    /// shows as the corrected call when the names belong to positional
+    /// parameters (#1696).
+    pub option_written: Vec[String],
+    pub call_written: String,
     /// **The options a method call names after its `;`** (#1446), by its
     /// receiver's node, until the call resolves: each one's name, type,
-    /// address and whether it is a text literal. A witness (`within:`,
+    /// address, whether it is a text literal and how it is written. A witness (`within:`,
     /// `after:`), `on_timeout:` and a DSL driver's options are not among them.
-    pub method_passed: collections::BTreeMap[i64, Vec[(String, Ty, i64, bool)]],
+    pub method_passed: collections::BTreeMap[i64, Vec[(String, Ty, i64, bool, String)]],
     /// **The options a resolved method call moves** (#1595), by its
     /// receiver's node, for the walk that holds their values to hand over:
     /// each one's name, type and what the refusal says it was passed to.
@@ -241,6 +247,9 @@ pub struct CheckFlow {
     /// Those of `map_read_sites` that are a list's `get`, by the call's id
     /// (#1609): the same `Option<&T>`, said of a list.
     pub list_gets: collections::BTreeSet[i64],
+    /// A list's `first()` or `last()` of an element that is neither copied
+    /// nor a tuple: a view of what the list keeps (#1731).
+    pub list_ends: collections::BTreeSet[i64],
     /// A list's `get`, `first` or `last` of a tuple, by the call's id: a view
     /// of the element below (`Option<&T>`).
     pub lent_list_reads: collections::BTreeSet[i64],
@@ -462,6 +471,8 @@ impl CheckFlow {
             computes: computes,
             option_values: Vec(),
             option_literals: Vec(),
+            option_written: Vec(),
+            call_written: "",
             method_passed: collections::BTreeMap(),
             method_moved: collections::BTreeMap(),
             unrolling: null,
@@ -506,6 +517,7 @@ impl CheckFlow {
             map_read_sites: collections::BTreeSet(),
             map_views: collections::BTreeSet(),
             list_gets: collections::BTreeSet(),
+            list_ends: collections::BTreeSet(),
             lent_list_reads: collections::BTreeSet(),
             owned_call_bases: collections::BTreeSet(),
             std_gets: collections::BTreeSet(),

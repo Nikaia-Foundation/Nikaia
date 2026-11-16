@@ -1,0 +1,48 @@
+// A `String?` result that reads an element off a lent list or map hands back
+// a view of it, as `xs[0]` does for a `String` result (ADR-282 D12, D13;
+// ADR-views-3 D12; #1711): no `ref` (NK1261) and no `?.clone()` (NK1102).
+use std::collections
+
+fn make(t: String) -> String {
+    let mut g = String()
+    g.push_str(t)
+    return g
+}
+
+fn find(m: collections::HashMap[String, String], k: String) -> String? {
+    return m.get(k)
+}
+
+fn look(m: collections::BTreeMap[String, String], k: String) -> String? {
+    return m[k]
+}
+
+fn at(xs: Vec[String], i: i64) -> String? {
+    return xs.get(i)
+}
+
+fn head(xs: Vec[String]) -> String? {
+    return xs.first()
+}
+
+fn tail(xs: Vec[String]) -> String? {
+    xs.last()
+}
+
+fn main() throws {
+    let mut m: collections::HashMap[String, String] = collections::HashMap()
+    m.insert(make("a"), make("b"))
+    let mut t: collections::BTreeMap[String, String] = collections::BTreeMap()
+    t.insert(make("c"), make("d"))
+    let mut xs: Vec[String] = []
+    xs.push(make("x"))
+    xs.push(make("y"))
+    println(find(m, "a") ?? "none")
+    println(find(m, "z") ?? "none")
+    println(look(t, "c") ?? "none")
+    println(at(xs, 1) ?? "none")
+    println(at(xs, 5) ?? "none")
+    println(head(xs) ?? "none")
+    println(tail(xs) ?? "none")
+    println(f"{m.len()} {t.len()} {xs.len()}")
+}

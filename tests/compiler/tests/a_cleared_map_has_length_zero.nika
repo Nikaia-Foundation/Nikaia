@@ -1,0 +1,11 @@
+// The bounds walk reads `m.clear()` on a map as `m.len() == 0` (#1674),
+// as for a list: the index below is proved.
+use std::collections
+
+fn main() throws {
+    let mut m: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+    m.insert(1, 2)
+    m.clear()
+    let a = [7]
+    println(a[m.len()])
+}

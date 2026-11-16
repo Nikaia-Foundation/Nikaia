@@ -1,0 +1,22 @@
+// A lambda handed `ref T` of a list of number literals with no written type
+// gets the list's open number (ADR-285 D34, #1748): `retain`, `sort_by` and
+// `sort_by_key` as `map` does. And `retain` on a typed list of numbers takes
+// the item out, so `compare` and `eq` read it as the number.
+
+fn main() throws {
+    let mut xs = [3, 1, 2, 5, 4]
+    xs.sort_by_key(fn(a) { a.compare(a) })
+    xs.sort_by(fn(a, b) { b.compare(a) })
+    println(xs.iter().map(fn(x) { f"{x}" }).join(","))
+    xs.sort_by_key(fn(a) { 0 - a * 2 })
+    xs.retain(fn(a) { a.compare(1) == Ordering::Greater && a < 5 })
+    println(xs.iter().map(fn(x) { f"{x}" }).join(","))
+    xs.sort_by(fn(a, b) { if a > b { Ordering::Greater } else { a.compare(b) } })
+    xs.retain(fn(a) { !a.eq(3) })
+    println(xs.iter().map(fn(x) { f"{x}" }).join(","))
+
+    let mut ys: Vec[i64] = [3, 1, 2, 5, 4]
+    ys.retain(fn(a) { a.compare(1) == Ordering::Greater && !a.eq(4) })
+    ys.sort_by(fn(a, b) { a.compare(b) })
+    println(ys.iter().map(fn(y) { f"{y}" }).join(","))
+}

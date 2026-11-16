@@ -212,10 +212,21 @@ impl CheckState {
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return false };
         if !expected.is_a_view() { return false; }
-        let (receiver, method, args) = match value {
-            Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, method, args) },
-            _ => return false,
-        };
+        match value {
+            Expr::MethodCall { receiver, method, args, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                let called = world.words.resolve(method);
+                let a_get = called == "get" && args.len() == 1;
+                let an_end = (called == "first" || called == "last") && args.is_empty();
+                (a_get || an_end) && self.a_lent_container(world, receiver, a_get, true)
+            },
+            Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); self.a_lent_container(world, base, true, false) },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_lent_container(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, maps: bool, lists: bool) -> bool {
         let name = match receiver {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => return false,
@@ -226,10 +237,15 @@ impl CheckState {
             Ty::Named { ref name, view, .. } => (a_type_base(name), view),
             _ => return false,
         };
-        let called = world.words.resolve(method);
-        let a_list = container == "Vec" && (called == "get" && args.len() == 1 || (called == "first" || called == "last") && args.is_empty());
-        let a_map = (container == "BTreeMap" || container == "HashMap") && called == "get" && args.len() == 1;
-        held.kind == CheckKind::Parameter && a_view && (a_list || a_map)
+        let a_list = lists && container == "Vec";
+        let a_map = maps && (container == "BTreeMap" || container == "HashMap");
+        if held.kind != CheckKind::Parameter || !(a_list || a_map) { return false; }
+        if a_view { return true; }
+        let key = match match self.current.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        !nikaia_std::list::contains(&check_function_keeps(world, &key), &name)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

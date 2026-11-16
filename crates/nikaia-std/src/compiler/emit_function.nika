@@ -1288,7 +1288,7 @@ impl EmitState {
                             walk.async_groups = outer_groups
                             walk.async_pausing = outer_pausing
                             walk.async_pending = []
-                            walk.async_handles = collections::BTreeMap()
+                            walk.async_handles.clear()
                             if pausing == "" && inner.buf.contains(".await") {
                                 throw EmitRefused { message: "The compiler can't translate `async e` yet in a function that pauses (#988).", at: body.stmts[0].span.start }
                             }

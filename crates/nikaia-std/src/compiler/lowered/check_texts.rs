@@ -563,12 +563,12 @@ impl CheckState {
                 self.findings.push(check_refusal("NK1200", &later, format!("You're using `{}` as {} `{}` and here as {} `{}`.", open.name, an_or_a(first), first, an_or_a(second), second), vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("Declare its type, `let {}: u8 = '{}'`, and convert with `as` where the other one is needed.", open.name, open.written))));
             } else if first_byte.is_some() { self.facts.byte_literals.insert(open.literal); } else if a_high_byte(&open.written).is_some() { self.findings.push(check_texts_a_byte_as_a_scalar(&open.written, Some(&nikaia_std::block::Text::from(open.name.to_string())), &open.at)); }
         }
-        self.flow.open_chars = collections::BTreeMap::new();
+        self.flow.open_chars.clear();
         for (literal, held) in self.flow.high_bytes.iter() {
             let literal = nikaia_std::num::value(literal);
             if !self.facts.byte_literals.contains(&literal) { self.findings.push(check_texts_a_byte_as_a_scalar(&held.0, None, &held.1)); }
         }
-        self.flow.high_bytes = collections::BTreeMap::new();
+        self.flow.high_bytes.clear();
     }
 }
 

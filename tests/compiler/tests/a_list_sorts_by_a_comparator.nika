@@ -1,0 +1,50 @@
+// `sort_by` puts a list in the order its comparator says (Part I 5.4 names it
+// an immediate context, #1738): on a `Vec`, an array and a `mut xs: Array[T]`.
+// It is stable: elements the comparator calls `Equal` keep their order.
+struct Person {
+    name: String,
+    age: i64
+}
+
+fn named(s: String) -> String {
+    let mut g = String()
+    g.push_str(s)
+    return g
+}
+
+fn descending(mut xs: Array[i64]) {
+    xs.sort_by(fn(a, b) { b.compare(a) })
+}
+
+fn show(xs: Array[i64]) -> String {
+    let mut out = ""
+    for x in xs {
+        out = f"{out}{x} "
+    }
+    return out
+}
+
+fn main() throws {
+    let mut xs: Vec[i64] = [3, 1, 2]
+    xs.sort_by(fn(a, b) { b.compare(a) })
+    println(show(xs))
+    let mut people: Vec[Person] = []
+    people.push(Person { name: named("bo"), age: 3 })
+    people.push(Person { name: named("al"), age: 3 })
+    people.push(Person { name: named("cy"), age: 1 })
+    people.sort_by fn(a, b) { a.age.compare(b.age) }
+    for p in people {
+        println(f"{p.name} {p.age}")
+    }
+    let mut words: Vec[String] = ["pear", "fig", "apple"]
+    words.sort_by(fn(a, b) { a.len().compare(b.len()) })
+    for w in words {
+        println(w)
+    }
+    let mut arr: Array[i64, 3] = [5, 4, 6]
+    arr.sort_by(fn(a, b) { a.compare(b) })
+    println(show(arr))
+    let mut run: Vec[i64] = [7, 9, 8]
+    descending(run)
+    println(show(run))
+}

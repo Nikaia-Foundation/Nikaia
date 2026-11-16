@@ -1,0 +1,6 @@
+bounds in tests/a_methods_found_facts_through_self.nika: 3 indexes, 3 proved; 2 operations, 2 proved
+    12  self.items.len() - 1  proved
+    28  s.items[i]            proved
+    31  s.items[n - 1]        proved
+    31  n - 1                 proved
+    34  s.items[j]            proved

@@ -1,0 +1,4 @@
+bounds in tests/a_list_pair_pushed_together_under_an_if_in_a_for_is_proved.nika: 1 indexes, 1 proved; 2 operations, 0 proved
+    12  row.ks[0]  proved
+    26  i += 1     checked: a counter the loop on line 21 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+    40  i += 1     checked: a counter the loop on line 35 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)

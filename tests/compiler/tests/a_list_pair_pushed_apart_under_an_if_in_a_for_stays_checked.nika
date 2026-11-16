@@ -1,0 +1,35 @@
+// #1654 (ADR-306 D23, ADR-361 D13): a `for` with a path that pushes only
+// one list of a `Row` does not keep their lengths equal, so `row.ks[0]`
+// under `row.cols.len() == 1` stays checked.
+struct Row {
+	cols: Vec[u32],
+	ks: Vec[i64],
+	constant: i64,
+}
+
+fn first_k(row: ref Row) -> i64 {
+	if row.cols.len() == 1 && row.ks[0] == 1 {
+		return 1
+	}
+	return 0
+}
+
+fn dense(ks: ref Vec[i64], c: i64) -> Row {
+	let mut r = Row { cols: [], ks: [], constant: c }
+	let mut i: u32 = 0
+	for k in ks {
+		if k != 0 {
+			r.cols.push(i)
+			r.ks.push(k)
+		} else {
+			r.ks.push(k)
+		}
+		i += 1
+	}
+	return r
+}
+
+fn main() throws {
+	println(first_k(dense([0, 1], 0)))
+	println(first_k(dense([1], 0)))
+}

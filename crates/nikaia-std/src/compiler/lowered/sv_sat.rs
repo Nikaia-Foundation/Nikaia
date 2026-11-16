@@ -269,8 +269,8 @@ impl SvSat {
                 let c = name as i64;
                 let at = c + 3;
                 if *nikaia_std::index::get(&self.arena, nikaia_std::index::at(at)) == f {
-                    { let __nikaia_stored = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(at + 1)); unsafe { nikaia_std::proven::write(&mut self.arena, (at) as usize, __nikaia_stored) }; }
-                    { let __nikaia_stored = f; unsafe { nikaia_std::proven::write(&mut self.arena, (at + 1) as usize, __nikaia_stored) }; }
+                    { let __nikaia_stored = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(at, 1) })); unsafe { nikaia_std::proven::write(&mut self.arena, (at) as usize, __nikaia_stored) }; }
+                    { let __nikaia_stored = f; unsafe { nikaia_std::proven::write(&mut self.arena, (nikaia_std::proven::add::<i64>(at, 1)) as usize, __nikaia_stored) }; }
                 }
                 let first = *unsafe { nikaia_std::proven::read(&self.arena, (at) as usize) };
                 if first != blocker && self.lit_value(first) > 0 {
@@ -285,14 +285,14 @@ impl SvSat {
                 while k < size {
                     let l = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(at + k));
                     if self.lit_value(l) >= 0 {
-                        { let __nikaia_stored = l; unsafe { nikaia_std::proven::write(&mut self.arena, (at + 1) as usize, __nikaia_stored) }; }
-                        { let __nikaia_stored = f; unsafe { nikaia_std::proven::write(&mut self.arena, (at + k) as usize, __nikaia_stored) }; }
+                        { let __nikaia_stored = l; unsafe { nikaia_std::proven::write(&mut self.arena, (nikaia_std::proven::add::<i64>(at, 1)) as usize, __nikaia_stored) }; }
+                        { let __nikaia_stored = f; unsafe { nikaia_std::proven::write(&mut self.arena, (nikaia_std::proven::add::<i64>(at, k)) as usize, __nikaia_stored) }; }
                         self.watch_clause[nikaia_std::index::at(l as i64)].push(name);
                         self.watch_blocker[nikaia_std::index::at(l as i64)].push(first);
                         moved = true;
                         break;
                     }
-                    k += 1;
+                    k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
                 }
                 if moved { continue; }
                 { let __nikaia_stored = name; nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_clause, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }

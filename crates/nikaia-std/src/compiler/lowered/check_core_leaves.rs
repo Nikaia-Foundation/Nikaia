@@ -553,6 +553,24 @@ pub fn check_core_a_field(value: &Expr) -> bool { matches!(value, Expr::Field { 
 
 pub fn check_core_a_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
 
+pub fn check_core_a_text_option_into_a_view(found: &Ty, expected: &Ty) -> bool {
+    let wanted = match expected {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
+            Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && (name == TEXT_VIEW || name == TEXT) },
+            _ => false,
+        } },
+        _ => false,
+    };
+    if !wanted { return false; }
+    match found {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
+            Ty::Named { name, args, .. } => args.is_empty() && (name == TEXT || name == TEXT_VIEW),
+            _ => false,
+        } },
+        _ => false,
+    }
+}
+
 pub(crate) fn check_core_lambda_held(ty: &Ty) -> Ty {
     match ty {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
@@ -615,6 +633,10 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
             state.facts.lent_returns.remove(&(span.start as i64));
             state.facts.lent_option_results.insert(node_key(given));
         }
+        if !state.flow.expected_either && check_core_a_text_option_into_a_view(&found, &nikaia_std::index::or(match state.expected.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || Ty::Unknown)) { state.facts.text_option_results.insert(node_key(given)); }
     }
     state.flow.lambda_expected = None;
     let inside = state.flow.lambda_returns.len() as i64;
@@ -631,9 +653,13 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut read_off_a_loan = false;
     if lending { found = view_of_type(&found); } else if value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
-        if state.a_get_off_a_lent_parameter(world, given) { found = view_of_type(&found); } else if state.a_from_call_of_a_parameter(world, given) {
+        if state.a_get_off_a_lent_parameter(world, given) {
+            found = view_of_type(&found);
+            read_off_a_loan = true;
+        } else if state.a_from_call_of_a_parameter(world, given) {
             let owned = viewed_from_type(&found);
             if owned.len() == 1 { found = (*unsafe { nikaia_std::proven::read(&owned, (0) as usize) }).clone(); }
         }
@@ -654,7 +680,7 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
                 state.facts.wrapped.insert(id_of(given) as i64, wrap);
             }
         } else {
-            state.a_map_read_kept(world, &found, &expected, given, span);
+            if !read_off_a_loan { state.a_map_read_kept(world, &found, &expected, given, span); }
             let how = check_widened_slot(state, world, host, &found, &expected, std::convert::identity(value), span);
             if how.is_some() {
                 let wrap = match how { Some(__nikaia_value) => __nikaia_value, None => return };

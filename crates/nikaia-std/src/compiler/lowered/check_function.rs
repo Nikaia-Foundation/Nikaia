@@ -496,7 +496,7 @@ pub(crate) fn check_function_handed_back<H: CheckHost>(state: &mut CheckState, w
                     check_core_a_field_of_a_borrowed_subject(state, world, host, value, &at, "handed back");
                     check_core_a_field_of_a_lent_place_handed_back(state, world, host, value, &at);
                 }
-                tail_view = state.lent_arms_handed_back(world, value, check_function_is_nullable(&want));
+                tail_view = state.lent_arms_handed_back(world, value, check_function_is_nullable(&want)) || state.a_get_off_a_lent_parameter(world, value);
                 if !tail_lent && !tail_view { check_core_lent_places_in_arms_handed_back(state, world, host, value, &at); }
             }
             state.number_asked(world, value, &want, &at, true);
@@ -517,6 +517,7 @@ pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, w
     if lending || tail_view { shown = view_of_type(&shown); }
     match &last.node {
         Stmt::Expr(value) => {
+            if !state.flow.expected_either && check_core_a_text_option_into_a_view(&shown, expected) { state.facts.text_option_results.insert(node_key(value)); }
             if lending && nullable && tail_nullable && check_core_a_field(value) { state.facts.lent_option_results.insert(node_key(value)); } else if lending && nullable { state.facts.lent_reads.insert(id_of(value) as i64); } else if lending { state.facts.lent_returns.insert(span.start as i64); }
             if !lending {
                 if !tail_view { state.narrowed_reads_given_back(value); }
@@ -671,13 +672,13 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.scope.push(frame);
     let tail_span = check_function_last_span(body);
     let outer_lists = state.flow.empty_lists.copy_owned();
-    state.flow.empty_lists = collections::BTreeMap::new();
+    state.flow.empty_lists.clear();
     let outer_numbers = state.flow.open_numbers.copy_owned();
-    state.flow.open_numbers = collections::BTreeMap::new();
+    state.flow.open_numbers.clear();
     let outer_chars = state.flow.open_chars.copy_owned();
-    state.flow.open_chars = collections::BTreeMap::new();
+    state.flow.open_chars.clear();
     let outer_bytes = state.flow.high_bytes.copy_owned();
-    state.flow.high_bytes = collections::BTreeMap::new();
+    state.flow.high_bytes.clear();
     let outer_grown = state.flow.grown_text.copy_owned();
     state.flow.grown_text = check_function_grown_text(&world.here, body);
     let outer_mixed = state.flow.mixed_text.copy_owned();
@@ -713,9 +714,9 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.data_handed_over_is_used_again();
     state.needless_clones_said();
     state.reads_on_paths.clear();
-    state.flow.read_index = collections::BTreeMap::new();
-    state.lent_lets = collections::BTreeSet::new();
-    state.got_past_a_jump = collections::BTreeSet::new();
+    state.flow.read_index.clear();
+    state.lent_lets.clear();
+    state.got_past_a_jump.clear();
     state.a_task_took_what_is_used_again();
     state.expected = outer;
     state.flow.expected_either = outer_either;

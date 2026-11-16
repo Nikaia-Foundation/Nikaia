@@ -290,6 +290,12 @@ fn reserved_word_note(has_found: bool, found: ref String, c: ref Array[scalar], 
     }
     let letters: Vec[scalar] = token.chars().collect()
     let width = letters.len()
+    // `pub` in front of a declaration word marks what follows (#1736): in
+    // `name* pub rule x`, a name in its place only reads `rule x` as more of
+    // the open pattern, which is not the mistake.
+    if token == "pub" && a_declaration_word(word_after(c, at + width)) {
+        return null
+    }
     let mut with_a_name = upto(c, at)
     let mut placed = 0
     while placed < width {
@@ -301,6 +307,29 @@ fn reserved_word_note(has_found: bool, found: ref String, c: ref Array[scalar], 
         return f"`{token}` is a reserved word, so it can't be used as a name here."
     }
     return null
+}
+
+// The word that starts after the blanks from `from`, or "" where none does.
+fn word_after(c: ref Array[scalar], from: i64) -> String {
+    let mut at = from
+    while at < c.len() && (c[at] == ' ' || c[at] == '\t' || c[at] == '\n' || c[at] == '\r') {
+        at += 1
+    }
+    let start = at
+    while at < c.len() && (c[at].is_alphanumeric() || c[at] == '_') {
+        at += 1
+    }
+    return slice(c, start, at)
+}
+
+// A word that begins a declaration `pub` can stand in front of.
+fn a_declaration_word(word: ref String) -> bool {
+    for each in ["rule", "entry", "grammar", "fn", "struct", "enum", "trait", "comptime", "extern", "sync", "async", "use", "dsl", "test", "impl"] {
+        if each == word {
+            return true
+        }
+    }
+    return false
 }
 
 // The strings in order, each once.

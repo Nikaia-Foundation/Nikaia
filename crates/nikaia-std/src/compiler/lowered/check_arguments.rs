@@ -32,6 +32,15 @@ pub(crate) fn check_arguments_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nulla
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_arguments_a_plain_string_option(ty: &Ty) -> bool {
+    match ty {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); a_plain_string(inner) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_arguments_a_path(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, .. } => name == "fs::Path",
@@ -111,6 +120,37 @@ pub(crate) fn check_arguments_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
+pub(crate) fn check_arguments_named_for_positional(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, signature: &Signature, wanted: &[(String, Ty)], given: &[Expr], passed: &[(String, Ty)], help: String, span: &Span) -> CheckFinding {
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    for (n, _) in wanted.iter() { names.push(nikaia_std::block::Text::from(n.to_string())); }
+    let mut takes: String = String::from("no arguments"); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+    if !names.is_empty() { takes = names_listed(&names); }
+    let message = format!("`{}` takes {} by position, but you passed {} and {} by position.", key, takes, counted(passed.len() as i64, "named argument"), given.len() as i64);
+    let declared = format!("It's declared as `{}{}`.", key, signature.text());
+    if (unsafe { nikaia_std::proven::add::<i64>(given.len() as i64, passed.len() as i64) }) != wanted.len() as i64 { return check_refusal("NK1101", span, message, vec![declared], Some(help)); }
+    #[allow(unused_mut)] let mut texts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for value in given.iter() { texts.push(check_walked_written(value, world.words)); }
+    let mut at = given.len() as i64;
+    while at < wanted.len() as i64 {
+        let mut found: i64 = -1;
+        let mut index: i64 = 0;
+        while index < passed.len() as i64 {
+            if unsafe { nikaia_std::proven::read(&passed, (index) as usize) }.0 == unsafe { nikaia_std::proven::read(&wanted, (at) as usize) }.0 { found = index; }
+            index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
+        }
+        if found < 0 { return check_refusal("NK1101", span, message, vec![declared], Some(help)); }
+        if found < state.flow.option_written.len() as i64 { texts.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&state.flow.option_written, (found) as usize) }).to_string())); } else { texts.push(String::from("…")); }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+    }
+    let mut call: String = nikaia_std::block::Text::from(key.to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut texts = texts;
+    if state.flow.call_written != "" { call = nikaia_std::block::Text::from(state.flow.call_written.to_string()); }
+    let reason: String = String::from("The subject of a call is passed by position; only the options after the `;` are named (Part I 5.1)."); #[allow(unused_mut, clippy::redundant_locals)] let mut texts = texts;
+    check_refusal("NK1101", span, message, vec![declared, reason], Some(format!("Write `{}({})`.", call, nikaia_std::block::Text::from(texts.join(", ")))))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
 pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], keeps: &[(String, bool, String)], span: &Span) -> Ty {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     let wanted = call_arguments(signature);
@@ -120,6 +160,10 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let mut takes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for (n, t) in wanted.iter() { takes.push(format!("`{}: {}`", n, t.text())); }
             help = format!("It takes {}{}.", nikaia_std::block::Text::from(takes.join(", ")), a_root_is_one_of_two(&wanted));
+        }
+        if !passed.is_empty() {
+            state.findings.push(check_arguments_named_for_positional(&state, world, key, signature, &wanted, given, passed, help, span));
+            return signature.result_or_unit();
         }
         state.findings.push(check_refusal("NK1101", span, format!("`{}` takes {}, but you passed {}.", key, counted(wanted.len() as i64, "argument"), found.len() as i64), vec![format!("It's declared as `{}{}`.", key, signature.text())], Some(help)));
         return signature.result_or_unit();
@@ -134,6 +178,22 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         for option in lowered_options(contract) {
             if option.name != *name || known { continue; }
             known = true;
+            if at < state.flow.option_values.len() as i64 && check_arguments_nullable(&option.ty) && option.ty.is_a_view() && !found_option.is_a_view() {
+                let value = *unsafe { nikaia_std::proven::read(&state.flow.option_values, (at) as usize) };
+                let wanted_inner = match option.ty {
+                    Ty::Nullable(ref held) => { let held = nikaia_std::boxed::open(held); held.owned() },
+                    _ => option.ty.owned(),
+                };
+                let found_inner = match found_option {
+                    Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held.clone() },
+                    _ => found_option.clone(),
+                };
+                if !found_inner.is_unknown() && found_inner.fits(&wanted_inner) {
+                    state.facts.lent_options.insert(value);
+                    if !check_arguments_nullable(found_option) { state.facts.nullable_args.insert(value, FactWrap::Constructor); }
+                    continue;
+                }
+            }
             if at < state.flow.option_values.len() as i64 && check_arguments_nullable(&option.ty) && !check_arguments_nullable(found_option) {
                 let inner = match option.ty {
                     Ty::Nullable(ref held) => { let held = nikaia_std::boxed::open(held); held.clone() },
@@ -147,6 +207,11 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             if found_option.fits(&option.ty) { continue; }
             if at < state.flow.option_literals.len() as i64 && *unsafe { nikaia_std::proven::read(&state.flow.option_literals, (at) as usize) } && a_plain_string(&option.ty) {
                 state.facts.owned_texts.insert(*nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at)));
+                continue;
+            }
+            if at < state.flow.option_literals.len() as i64 && *unsafe { nikaia_std::proven::read(&state.flow.option_literals, (at) as usize) } && check_arguments_a_plain_string_option(&option.ty) {
+                state.facts.owned_texts.insert(*nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at)));
+                state.facts.nullable_args.insert(*unsafe { nikaia_std::proven::read(&state.flow.option_values, (at) as usize) }, FactWrap::Constructor);
                 continue;
             }
             if at < state.flow.option_values.len() as i64 && option.ty.is_a_view() && !found_option.is_a_view() && found_option.fits(&option.ty.owned()) {

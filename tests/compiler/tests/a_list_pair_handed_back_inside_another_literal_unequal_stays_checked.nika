@@ -1,0 +1,33 @@
+// #1653 (ADR-306 D23, ADR-369 D4): a builder that pushes two `ks` and no
+// `cols` and hands its `Row` back inside another literal breaks
+// `cols.len() == ks.len()`, so `row.ks[0]` keeps its check.
+struct Row {
+	cols: Vec[u32],
+	ks: Vec[i64],
+	constant: i64,
+}
+
+struct Reading {
+	form: Row,
+	scale: i64,
+}
+
+fn first_k(row: ref Row) -> i64 {
+	if row.cols.len() == 1 && row.ks[0] == 1 {
+		return 1
+	}
+	return 0
+}
+
+fn named(row: ref Row) -> Reading {
+	let mut form = Row { cols: row.cols.clone(), ks: [], constant: 0 }
+	form.ks.push(1)
+	form.ks.push(2)
+	return Reading { form: form, scale: 1 }
+}
+
+fn main() throws {
+	let row = Row { cols: [7], ks: [1], constant: 0 }
+	println(first_k(row))
+	println(first_k(named(row).form))
+}

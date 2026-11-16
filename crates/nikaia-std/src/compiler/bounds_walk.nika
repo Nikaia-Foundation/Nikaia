@@ -130,6 +130,10 @@ pub struct BoundsReturns {
 	/// lists it is at most as long as.
 	pub at_least: collections::BTreeSet[i64],
 	pub within: collections::BTreeSet[i64],
+	/// **A method's receiver, as one more argument** (ADR-306 D34): the
+	/// list fields of `self` a position past the last argument names, the
+	/// first of them at `args.len()`; empty for a free function.
+	pub fields: Vec[String],
 }
 
 /// **What a callee's ledger entry ensures** (ADR-314 D3): each condition read
@@ -342,6 +346,10 @@ struct BoundsWalk {
 	/// method of its type is called on it, not given; empty in any other
 	/// body.
 	rule_built: collections::BTreeSet[String],
+	/// The `node_key` of that builder's literal, -1 where none: a literal
+	/// asks its `length` rules where it stands (`rules_literal_holds`),
+	/// but not this one.
+	rule_built_literal: i64,
 	/// **The postcondition this walk looks for** (ADR-306 D23): the name of
 	/// each list parameter by position, empty for any other and when the
 	/// walk looks for none; whether the function returns a list (`each`).
@@ -547,7 +555,7 @@ fn bounds_rounds(
 		if !walk.shape.roots.is_empty() {
 			walk.assumed = context.around.field_bounds.clone()
 		}
-		walk.assumed_ends = collections::BTreeMap()
+		walk.assumed_ends.clear()
 		walk.proven = no_proofs()
 		bounding_pass(walk, args, body, context, program, words, ask)
 	}
@@ -582,7 +590,7 @@ pub fn bounds_fields(
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
-	context.around.field_bounds = collections::BTreeMap()
+	context.around.field_bounds.clear()
 	if context.around.fields.is_empty() {
 		return
 	}
@@ -623,7 +631,7 @@ pub fn bounds_fields(
 			return
 		}
 	}
-	context.around.field_bounds = collections::BTreeMap()
+	context.around.field_bounds.clear()
 }
 
 /// One round of [`bounds_fields`]: what every body wrote into each field,
@@ -640,7 +648,7 @@ fn fields_round(
 	// The rules that hold depend on the context alone, not on the body
 	// walked: found once a round, by the first body that needs them, not
 	// once a body (#1581).
-	context.around.held = collections::BTreeMap()
+	context.around.held.clear()
 	for item in bodies {
 		match item.node {
 			Item::Fn { args, body, .. } => {
@@ -661,7 +669,7 @@ fn fields_round(
 			else => {},
 		}
 	}
-	context.around.held = collections::BTreeMap()
+	context.around.held.clear()
 	let mut out: collections::BTreeMap[String, Range] = collections::BTreeMap()
 	for (key, bound) in written {
 		if !lost.contains(key) {
@@ -746,6 +754,7 @@ fn bounding_new(
 		checked_results: collections::BTreeSet(),
 		rule_failed: collections::BTreeSet(),
 		rule_built: collections::BTreeSet(),
+		rule_built_literal: -1,
 		lists: collections::BTreeSet(),
 		return_params: [],
 		return_each: false,
@@ -821,12 +830,12 @@ fn bounding_pass(
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
-	walk.written = collections::BTreeMap()
-	walk.poisoned = collections::BTreeSet()
-	walk.written_ends = collections::BTreeMap()
+	walk.written.clear()
+	walk.poisoned.clear()
+	walk.written_ends.clear()
 	walk.return_below = null
-	walk.return_names = collections::BTreeSet()
-	walk.return_seen = collections::BTreeSet()
+	walk.return_names.clear()
+	walk.return_seen.clear()
 	walk.return_lost = false
 	walk.return_range = null
 	walk.return_unranged = false
@@ -866,7 +875,11 @@ fn bounding_pass(
 	// **The rules between list fields** (ADR-369 D4), of `self` and of each
 	// parameter of a type that has them.
 	rules_given(walk, facts, args, words)
-	let leaves = bounding_block(walk, body, facts, context, program, words, ask)
+	// The body's statements walked as a block's, but what it ends with is
+	// asked with the facts of its own names still held, as a `return` there
+	// would be (#1653): a builder's tail hands back a local.
+	let mut bound: Vec[String] = []
+	let leaves = bounding_stmts(walk, body, 0, facts, bound, context, program, words, ask)
 	if !leaves {
 		// What the body ends with is what it hands back.
 		rules_exit(walk, facts, rules_tail(body), false, context, program, words, ask)
@@ -1021,43 +1034,29 @@ fn bounding_relations_of(
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> Vec[(bool, i64)] {
 	let mut out: Vec[(bool, i64)] = []
-	match value {
-		Expr::Call { func, args, config, .. } => {
-			if !config.is_empty() {
-				return out
-			}
-			let callee = bounding_callee(func, words) ?? return out
-			if walk.shape.bound.contains(callee) {
-				return out
-			}
-			let found = context.returns.get(callee) ?? return out
-			if found.each || found.pending {
-				return out
-			}
-			for k in found.at_least {
-				if k < 0 || k >= args.len() {
-					continue
-				}
-				let term = bounding_lin(walk, args[k], facts, context, program, words) ?? continue
-				if !walk.arena.mentions(term, name) {
-					out.push((true, term))
-					continue
-				}
-				let least = bounding_term(walk, term, facts, ask).lo ?? continue
-				out.push((true, walk.arena.int(least)))
-			}
-			for k in found.within {
-				if k < 0 || k >= args.len() {
-					continue
-				}
-				let path = bounding_argument_path(args[k], words) ?? continue
-				if walk.pinned.contains(path_root(path)) || path_within(path, name) || path_within(name, path) {
-					continue
-				}
-				out.push((false, bounding_length_named(walk, path, false)))
-			}
-		},
-		else => {},
+	if bounding_found_options(value) {
+		return out
+	}
+	let callee = bounding_found_key(walk, value, context, words) ?? return out
+	let found = context.returns.get(callee) ?? return out
+	if found.each || found.pending {
+		return out
+	}
+	for k in found.at_least {
+		let term = bounding_found_term(walk, value, k, facts, context, program, words) ?? continue
+		if !walk.arena.mentions(term, name) {
+			out.push((true, term))
+			continue
+		}
+		let least = bounding_term(walk, term, facts, ask).lo ?? continue
+		out.push((true, walk.arena.int(least)))
+	}
+	for k in found.within {
+		let path = bounding_found_path(value, found, k, words) ?? continue
+		if walk.pinned.contains(path_root(path)) || path_within(path, name) || path_within(name, path) {
+			continue
+		}
+		out.push((false, bounding_length_named(walk, path, false)))
 	}
 	return out
 }
@@ -1074,34 +1073,23 @@ fn bounding_relation_grows(
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
-	return match value {
-		Expr::Call { func, args, config, .. } => {
-			if !config.is_empty() {
-				return false
-			}
-			let callee = bounding_callee(func, words) ?? return false
-			if walk.shape.bound.contains(callee) {
-				return false
-			}
-			let found = context.returns.get(callee) ?? return false
-			if found.each || found.pending {
-				return false
-			}
-			let now = walk.arena.var(name)
-			for k in found.at_least {
-				if k < 0 || k >= args.len() {
-					continue
-				}
-				let term = bounding_lin(walk, args[k], facts, context, program, words) ?? continue
-				let goal = walk.arena.ge(term, now)
-				if bounding_proves(walk, facts, goal, ask) {
-					return true
-				}
-			}
-			false
-		},
-		else => false,
+	if bounding_found_options(value) {
+		return false
 	}
+	let callee = bounding_found_key(walk, value, context, words) ?? return false
+	let found = context.returns.get(callee) ?? return false
+	if found.each || found.pending {
+		return false
+	}
+	let now = walk.arena.var(name)
+	for k in found.at_least {
+		let term = bounding_found_term(walk, value, k, facts, context, program, words) ?? continue
+		let goal = walk.arena.ge(term, now)
+		if bounding_proves(walk, facts, goal, ask) {
+			return true
+		}
+	}
+	return false
 }
 
 /// The relations [`bounding_relations_of`] found, as facts of `name`.
@@ -1875,6 +1863,16 @@ fn bounding_range_shaped(
 				let key = elements_key(walk.shape, receiver, words) ?? return null
 				return bounding_assumed(walk, key)
 			}
+			// **A method's value lies where its every return is found
+			// to** (ADR-306 D34), as a free function's below.
+			if !bounding_found_options(expr) {
+				let callee = bounding_found_key(walk, expr, context, words) ?? return null
+				let found = context.returns.get(callee) ?? return null
+				if found.each || found.pending {
+					return null
+				}
+				return found.range?.clone()
+			}
 		},
 		Expr::Index { base, .. } => {
 			let key = elements_key(walk.shape, base, words) ?? return null
@@ -2638,7 +2636,7 @@ fn bounding_settle(mut walk: BoundsWalk, mut facts: BoundsFacts) {
 			parts.push(part)
 		}
 	}
-	walk.defining = collections::BTreeMap()
+	walk.defining.clear()
 	for part in parts {
 		if !facts.facts.contains(part) {
 			bounding_push(walk, facts, part)
@@ -3368,6 +3366,10 @@ fn bounding_derived_call(
 			// What holds of every value of a list handed for a side over
 			// its values (ADR-306 D21).
 			let mut given: Vec[i64] = []
+			// The elements an argument read out of a list stands for, of
+			// each side (#1668).
+			let mut left_reads: collections::BTreeSet[String] = collections::BTreeSet()
+			let mut right_reads: collections::BTreeSet[String] = collections::BTreeSet()
 			let left = bounding_derived_side(
 				walk,
 				callee.params,
@@ -3378,6 +3380,7 @@ fn bounding_derived_call(
 				on,
 				facts,
 				given,
+				left_reads,
 				context,
 				program,
 				words,
@@ -3395,11 +3398,18 @@ fn bounding_derived_call(
 					on,
 					facts,
 					given,
+					right_reads,
 					context,
 					program,
 					words,
 				)
 					?? continue
+			}
+			// Two reads out of one list stand for every element both: the
+			// goal would compare an element with itself, not `xs[i]` with
+			// `xs[j]`.
+			if left_reads.iter().any(fn(name) { right_reads.contains(name) }) {
+				continue
 			}
 			let side = if claim.strict { walk.arena.lt(left, right) } else {
 				walk.arena.le(left, right)
@@ -3441,7 +3451,10 @@ fn bounding_derived_call(
 /// `self` is the receiver's field, where the receiver is a path. Where
 /// `each` and not `length`, `param` is a list or a path of fields from one,
 /// and the side is every value the list handed holds: what the walk knows
-/// of those goes into `given`.
+/// of those goes into `given`. An argument read out of a list whose every
+/// element facts bound (`self.place[v]`) is every element of it, as an
+/// index read out of one is (`rules_element_inside`, ADR-306 D22), and its
+/// element goes into `reads` (#1668).
 fn bounding_derived_side(
 	mut walk: BoundsWalk,
 	params: ref Vec[String],
@@ -3452,6 +3465,7 @@ fn bounding_derived_side(
 	on: ref String?,
 	facts: ref BoundsFacts,
 	mut given: Vec[i64],
+	mut reads: collections::BTreeSet[String],
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
@@ -3478,6 +3492,11 @@ fn bounding_derived_side(
 			continue
 		}
 		if !length {
+			let element = rules_element_read(walk, args[k], facts, words)
+			if element != null {
+				walk.arena.variables(element ?? 0, reads)
+				return element
+			}
 			return bounding_lin(walk, args[k], facts, context, program, words)
 		}
 		let path = path_of(args[k], words) ?? return null
@@ -4479,7 +4498,7 @@ fn bounding_stmt(
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
-	walk.defining = collections::BTreeMap()
+	walk.defining.clear()
 	match stmt {
 		Stmt::Let { names, ty, value, .. } => {
 			bounding_let(walk, names, ty, value, facts, context, program, words, ask)
@@ -7089,6 +7108,8 @@ fn bounding_arm_facts(
 	// which both readers below look up).
 	let call = match value {
 		Expr::Call { .. } => true,
+		// A method's, read as a free function (ADR-306 D34).
+		Expr::MethodCall { .. } => true,
 		else => false,
 	}
 	if !call {
@@ -7395,6 +7416,13 @@ fn bounding_for(
 			}
 		}
 	}
+	// **Two counters a turn raises together keep their gap** (#1634,
+	// #1654): `n - n@ <= m - m@` at each head, whatever counts the turns;
+	// both ways for two lists every path pushes both or neither (`if k != 0
+	// { cols.push(i); ks.push(k) }`), so their lengths stay equal.
+	for fact in bounding_pair_bounds(walk, inner, pairs, "") {
+		turn_facts.push(fact)
+	}
 	// **A name that only takes the binding's values follows it** (ADR-361
 	// D13, #1516): `prev = i` the one change of `prev` in the body of `for
 	// i in low..<high`, with `prev` below `low` where the loop is reached.
@@ -7622,6 +7650,12 @@ fn bounding_for(
 		}
 		past = bounding_turn_bounds(walk, facts, counters, all_turns ?? 0)
 	}
+	// A loop no `break` leaves is left at a head, where the pairs' gaps
+	// hold; the values they were reached with are named before the change.
+	let mut paired: Vec[i64] = []
+	if !breaks(body, words) {
+		paired = bounding_pair_bounds(walk, facts, pairs, "")
+	}
 	let mut left: Vec[(String, i64)] = []
 	for x in followers {
 		let e = bounding_rename(walk, facts, x)
@@ -7652,6 +7686,9 @@ fn bounding_for(
 	}
 	for list in filled {
 		bounding_shift(walk, facts, length_of(list), count)
+	}
+	for fact in paired {
+		bounding_push(walk, facts, fact)
 	}
 }
 
@@ -8499,8 +8536,14 @@ fn bounding_if_join(
 
 /// The facts of a branch's end that read a name the `if` changed and do
 /// not hold past it already.
+///
+/// **A name the walk made inside the branch, pinned there to a number, is
+/// read as that number** (#1655): a loop's entry length (`#29:cols.len()
+/// == 0`) is unknown to the other branch, so `cols.len() - #29:cols.len()
+/// >= ks.len()` is also offered as `cols.len() - 0 >= ks.len()`, which the
+/// branch holds as well and the other one may prove.
 fn bounding_join_candidates(
-	walk: ref BoundsWalk,
+	mut walk: BoundsWalk,
 	facts: ref BoundsFacts,
 	changed: ref BoundsChanged,
 	branch: ref BoundsFacts,
@@ -8515,6 +8558,67 @@ fn bounding_join_candidates(
 				out.push(fact)
 				break
 			}
+		}
+	}
+	let pinned = bounding_pinned(walk, branch)
+	if pinned.is_empty() {
+		return out
+	}
+	let mut settled: Vec[i64] = []
+	for fact in out {
+		let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+		walk.arena.variables(fact, read)
+		let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
+		for v in read {
+			if pinned.contains_key(v) {
+				given.insert(v.clone(), walk.arena.int(pinned[v] ?? 0))
+			}
+		}
+		if given.is_empty() {
+			continue
+		}
+		let plain = walk.arena.substitute(fact, given)
+		if !out.contains(plain) && !settled.contains(plain) && !facts.facts.contains(plain) {
+			settled.push(plain)
+		}
+	}
+	for fact in settled {
+		out.push(fact)
+	}
+	return out
+}
+
+/// The names the walk made (`#` in them: a loop's entry value, a renamed
+/// value) that a fact of `branch` pins to a number, `x == n`.
+fn bounding_pinned(walk: ref BoundsWalk, branch: ref BoundsFacts) -> collections::BTreeMap[String, i64] {
+	let mut out: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	for fact in branch.facts {
+		match walk.arena.at(fact) {
+			SolverTerm::Eq(a, b) => {
+				let mut name: String? = null
+				let mut value: i64? = null
+				match walk.arena.at(a) {
+					SolverTerm::Var(v) => {
+						name = v.clone()
+						value = walk.arena.constant(b)
+					},
+					else => {
+						match walk.arena.at(b) {
+							SolverTerm::Var(v) => {
+								name = v.clone()
+								value = walk.arena.constant(a)
+							},
+							else => {},
+						}
+					},
+				}
+				let n = name ?? continue
+				let k = value ?? continue
+				if n.contains("#") {
+					out.insert(n, k)
+				}
+			},
+			else => {},
 		}
 	}
 	return out
@@ -8892,11 +8996,16 @@ fn bounding_children(
 			words,
 			ask,
 		),
-		Expr::StructLit { fields, .. } => {
+		Expr::StructLit { name, fields, .. } => {
 			for field in fields {
 				bounding_maybe_expr(walk, field.value, facts, context, program, words, ask)
 			}
 			bounding_field_inits(walk, fields, facts, context, program, words, ask)
+			// A list given by a name keeps the `length` rules only where
+			// the names are as long (#1652).
+			if walk.checking && node_key(expr) != walk.rule_built_literal {
+				rules_literal_holds(walk, words.resolve(name), fields, facts, words, ask)
+			}
 		},
 		Expr::With { base, fields, .. } => {
 			bounding_expr(walk, base, facts, context, program, words, ask)
@@ -9347,10 +9456,31 @@ pub fn bounds_returns(
 ) {
 	let mut assumed: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
 	let mut bodies: Vec[ref Spanned[Item]] = []
+	let mut keys: Vec[String] = []
 	// A name two free functions share is no candidate: a call is resolved
 	// by its name alone.
 	let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
 	let mut twice: collections::BTreeSet[String] = collections::BTreeSet()
+	// **Each type's list fields** (ADR-306 D34): a method's `self.X`
+	// counts as the list parameters do.
+	let mut list_fields: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+	for item in program.items {
+		match item.node {
+			Item::Struct { name, generics, fields, .. } => {
+				if !generics.is_empty() {
+					continue
+				}
+				let mut lists: Vec[String] = []
+				for field in fields {
+					if bounding_is_list_type(field.ty, words) {
+						lists.push(words.resolve(field.name).clone())
+					}
+				}
+				list_fields.insert(words.resolve(name).clone(), lists)
+			},
+			else => {},
+		}
+	}
 	for item in program.items {
 		match item.node {
 			Item::Fn { name, receiver, .. } => {
@@ -9399,8 +9529,64 @@ pub fn bounds_returns(
 					pending: true,
 					at_least: at_least,
 					within: within,
+					fields: [],
 				})
 				bodies.push(item)
+				keys.push(words.resolve(symbol).clone())
+			},
+			// **A method, read as a free function with `self` as one more
+			// argument** (ADR-306 D34): of an inherent `impl` of a type
+			// declared here, keyed `Type.method` (`bounding_found_key`).
+			Item::Impl { trait_name, target, methods } => {
+				if trait_name != null || !target.generics.is_empty() {
+					continue
+				}
+				let owner = words.resolve(target.name).clone()
+				let lists = list_fields.get(owner)?.clone() ?? continue
+				for method in methods {
+					match method.node {
+						Item::Fn { name, generics, receiver, args, config, spread, ret_type, .. } => {
+							let taken = receiver ?? continue
+							if !config.is_empty() || spread != null || !generics.is_empty() || taken.is_keep {
+								continue
+							}
+							let symbol = name ?? continue
+							let each = bounding_returns_each(ret_type ?? continue, words) ?? continue
+							let mut below: collections::BTreeSet[i64] = collections::BTreeSet()
+							let mut at_least: collections::BTreeSet[i64] = collections::BTreeSet()
+							for k in 0..<args.len() {
+								if bounding_is_list_type(args[k].ty, words) {
+									below.insert(k)
+								} else if !each && args[k].ty.generics.is_empty() && is_whole_number(words.resolve(args[k].ty.name)) {
+									at_least.insert(k)
+								}
+							}
+							let mut within = if each { collections::BTreeSet() } else { below.clone() }
+							for j in 0..<lists.len() {
+								below.insert(args.len() + j)
+								// A field keeps its length where `self` is not
+								// taken `mut`.
+								if !each && !taken.is_mut {
+									within.insert(args.len() + j)
+								}
+							}
+							let key = f"{owner}.{words.resolve(symbol)}"
+							assumed.insert(key.clone(), BoundsReturns {
+								each: each,
+								below: below,
+								sized: collections::BTreeSet(),
+								range: null,
+								pending: true,
+								at_least: at_least,
+								within: within,
+								fields: lists.clone(),
+							})
+							bodies.push(method)
+							keys.push(key)
+						},
+						else => {},
+					}
+				}
 			},
 			else => {},
 		}
@@ -9418,7 +9604,7 @@ pub fn bounds_returns(
 	// one's base cases are what its values start from; the rounds below
 	// assume them and keep those proved.
 	context.returns = assumed.clone()
-	let mut collected = bounding_returns_round(context, bodies, assumed, program, words, ask)
+	let mut collected = bounding_returns_round(context, bodies, keys, assumed, program, words, ask)
 	// **A whole number's interval through a chain of calls** (D32): one
 	// found while its callees' were pending is found again with theirs
 	// known. A pending call has none, so what is collected needs no
@@ -9433,7 +9619,7 @@ pub fn bounds_returns(
 			}
 		}
 		context.returns = known.clone()
-		let again = bounding_returns_round(context, bodies, known, program, words, ask)
+		let again = bounding_returns_round(context, bodies, keys, known, program, words, ask)
 		let before = bounding_returns_ranged(collected)
 		collected = again
 		if bounding_returns_ranged(collected) == before {
@@ -9453,7 +9639,7 @@ pub fn bounds_returns(
 	let rounds = bounding_returns_count(assumed) + 1
 	for _round in 0..<rounds {
 		context.returns = assumed.clone()
-		let found = bounding_returns_round(context, bodies, assumed, program, words, ask)
+		let found = bounding_returns_round(context, bodies, keys, assumed, program, words, ask)
 		if bounding_returns_count(found) == bounding_returns_count(assumed) {
 			bounding_returns_settle(context, found)
 			return
@@ -9466,7 +9652,7 @@ pub fn bounds_returns(
 /// **The returns found, settled**: the functions a `let` root may be bound
 /// to a call of are those found to return a list (ADR-306 D24).
 fn bounding_returns_settle(mut context: BoundsContext, found: collections::BTreeMap[String, BoundsReturns]) {
-	context.around.returning = collections::BTreeSet()
+	context.around.returning.clear()
 	for (name, wanted) in found {
 		if wanted.each {
 			context.around.returning.insert(name.clone())
@@ -9483,6 +9669,7 @@ fn bounding_returns_settle(mut context: BoundsContext, found: collections::BTree
 fn bounding_returns_round(
 	mut context: BoundsContext,
 	bodies: ref Vec[ref Spanned[Item]],
+	keys: ref Vec[String],
 	assumed: ref collections::BTreeMap[String, BoundsReturns],
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
@@ -9491,12 +9678,15 @@ fn bounding_returns_round(
 	let mut found: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
 	// **The rules that hold, found once a round** (#1581): its bodies all
 	// walk the same context.
-	context.around.held = collections::BTreeMap()
-	for item in bodies {
+	context.around.held.clear()
+	for at in 0..<bodies.len() {
+		let item = bodies[at]
 		match item.node {
-			Item::Fn { name, args, body, .. } => {
-				let key = words.resolve(name ?? continue).clone()
+			Item::Fn { args, body, receiver, .. } => {
+				let key = keys[at].clone()
 				let wanted = assumed.get(key) ?? continue
+				// `self`'s list fields, past the last argument (ADR-306 D34).
+				let taken_mut = receiver?.is_mut ?? false
 				let mut walk = bounding_new(args, body, bp_names(nonnegative_locals(body), words), context, program, words)
 				for k in 0..<args.len() {
 					let param = words.resolve(args[k].name).clone()
@@ -9505,6 +9695,10 @@ fn bounding_returns_round(
 					} else {
 						walk.return_params.push("")
 					}
+				}
+				for field in wanted.fields {
+					let k = walk.return_params.len()
+					walk.return_params.push(if wanted.below.contains(k) { f"self.{field}" } else { "" })
 				}
 				walk.return_each = wanted.each
 				walk.return_ranging = !wanted.each
@@ -9530,6 +9724,11 @@ fn bounding_returns_round(
 					}
 					walk.return_scalars.push(scalar)
 					walk.return_lens.push(list)
+				}
+				for field in wanted.fields {
+					let k = walk.return_lens.len()
+					walk.return_scalars.push("")
+					walk.return_lens.push(if wanted.within.contains(k) && !taken_mut { f"self.{field}" } else { "" })
 				}
 				let proven = bounds_rounds(walk, args, body, context, program, words, ask)
 				for (of, holding) in proven.held {
@@ -9580,13 +9779,14 @@ fn bounding_returns_round(
 						pending: false,
 						at_least: at_least,
 						within: within,
+						fields: wanted.fields.clone(),
 					})
 				}
 			},
 			else => {},
 		}
 	}
-	context.around.held = collections::BTreeMap()
+	context.around.held.clear()
 	return found
 }
 
@@ -9796,29 +9996,110 @@ fn bounding_returned_below(
 	words: ref winnow_grammar::InternerContext,
 ) -> collections::BTreeMap[String, bool] {
 	let mut out: collections::BTreeMap[String, bool] = collections::BTreeMap()
-	match value {
-		Expr::Call { func, args, .. } => {
-			let callee = bounding_callee(func, words) ?? return out
-			if walk.shape.bound.contains(callee) {
-				return out
-			}
-			let found = context.returns.get(callee) ?? return out
-			if found.each != each {
-				return out
-			}
-			for k in found.below {
-				if k < 0 || k >= args.len() {
-					continue
-				}
-				let path = bounding_argument_path(args[k], words) ?? continue
-				if !walk.pinned.contains(path_root(path)) {
-					out.insert(path, found.sized.contains(k))
-				}
-			}
-		},
-		else => {},
+	let callee = bounding_found_key(walk, value, context, words) ?? return out
+	let found = context.returns.get(callee) ?? return out
+	if found.each != each {
+		return out
+	}
+	for k in found.below {
+		let path = bounding_found_path(value, found, k, words) ?? continue
+		if !walk.pinned.contains(path_root(path)) {
+			out.insert(path, found.sized.contains(k))
+		}
 	}
 	return out
+}
+
+/// **The callee a call is found of** (ADR-306 D23, D34): a free function's
+/// name the walk does not bind again, or `Type.method` of a method, the type
+/// as `std_receivers` names the receiver's.
+fn bounding_found_key(
+	walk: ref BoundsWalk,
+	value: ref Expr,
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+) -> String? {
+	return match value {
+		Expr::Call { func, .. } => {
+			let callee = bounding_callee(func, words) ?? return null
+			if walk.shape.bound.contains(callee) {
+				return null
+			}
+			callee
+		},
+		Expr::MethodCall { method, .. } => {
+			let owner = context.std_receivers.get(node_key(value)) ?? return null
+			f"{owner}.{words.resolve(method)}"
+		},
+		else => null,
+	}
+}
+
+/// Whether a call names options (`f(x, limit: 3)`).
+fn bounding_found_options(value: ref Expr) -> bool {
+	return match value {
+		Expr::Call { config, .. } => !config.is_empty(),
+		Expr::MethodCall { config, .. } => !config.is_empty(),
+		else => false,
+	}
+}
+
+/// **The path a found callee's position `k` names at a call**: the
+/// argument there, or past the last argument, the receiver's field
+/// (`BoundsReturns.fields`, ADR-306 D34).
+fn bounding_found_path(
+	value: ref Expr,
+	found: ref BoundsReturns,
+	k: i64,
+	words: ref winnow_grammar::InternerContext,
+) -> String? {
+	return match value {
+		Expr::Call { args, .. } => {
+			if k < 0 || k >= args.len() {
+				return null
+			}
+			bounding_argument_path(args[k], words)
+		},
+		Expr::MethodCall { receiver, args, .. } => {
+			if k >= 0 && k < args.len() {
+				return bounding_argument_path(args[k], words)
+			}
+			let j = k - args.len()
+			if j < 0 || j >= found.fields.len() {
+				return null
+			}
+			let on = path_of(receiver, words) ?? return null
+			f"{on}.{found.fields[j]}"
+		},
+		else => null,
+	}
+}
+
+/// **The term of a found callee's argument `k` at a call** (ADR-306 D31).
+fn bounding_found_term(
+	mut walk: BoundsWalk,
+	value: ref Expr,
+	k: i64,
+	facts: ref BoundsFacts,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+) -> i64? {
+	return match value {
+		Expr::Call { args, .. } => {
+			if k < 0 || k >= args.len() {
+				return null
+			}
+			bounding_lin(walk, args[k], facts, context, program, words)
+		},
+		Expr::MethodCall { args, .. } => {
+			if k < 0 || k >= args.len() {
+				return null
+			}
+			bounding_lin(walk, args[k], facts, context, program, words)
+		},
+		else => null,
+	}
 }
 
 /// **The range a call's list is found to hold its values in** (ADR-306

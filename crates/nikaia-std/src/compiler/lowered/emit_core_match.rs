@@ -691,9 +691,7 @@ impl EmitState {
         }
         let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1))); #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
         let inner = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 2))); #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
-        let close = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
         let count = members.len() as i64;
-        out.push("match error {\n");
         let mut blocks = unsafe { nikaia_std::proven::add::<i64>(count, 1) };
         if catch_all == 0 { blocks = count; }
         for m in 0..blocks {
@@ -711,10 +709,11 @@ impl EmitState {
                 inside = EmitFlow { caught_named: own, ..flow };
                 let named_member: Option<String> = Some(nikaia_std::block::Text::from(member.to_string()));
                 inside_scope = EmitScope { caught_member: named_member, ..scope.clone() };
-                out.push(&format!("{}error if nikaia_std::error::holds::<{}>(&*error) => {{ let error = nikaia_std::error::opened::<{}>(error); ", pad, bare, bare));
+                let ask = if m == 0 { "if" } else { " else if" };
+                out.push(&format!("{} nikaia_std::error::holds::<{}>(&*error) {{ let error = nikaia_std::error::opened::<{}>(error); ", ask, bare, bare));
                 if own { out.push("let (error, __nikaia_site) = nikaia_std::error::Thrown::from(error).split(); "); }
                 out.push("match error {\n");
-            } else { out.push(&format!("{}error => {{ match error {{\n", pad)); }
+            } else if count == 0 { out.push("{ match error {\n"); } else { out.push(" else { match error {\n"); }
             for pass in 0..2 {
                 let mut k: i64 = 0;
                 for arm in arms.iter() {
@@ -734,10 +733,9 @@ impl EmitState {
                     out.push(",\n");
                 }
             }
-            out.push(&format!("{}}} }},\n", pad));
+            out.push(&format!("{}}} }}", pad));
         }
-        if catch_all == 0 { out.push(&format!("{}_ => unreachable!(\"the set a function value carries is closed (ADR-351)\"),\n", pad)); }
-        out.push(&format!("{}}}", close));
+        if catch_all == 0 && count == 0 { out.push("{ unreachable!(\"the set a function value carries is closed (ADR-351)\") }"); } else if catch_all == 0 { out.push(" else { unreachable!(\"the set a function value carries is closed (ADR-351)\") }"); }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

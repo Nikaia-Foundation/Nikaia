@@ -720,13 +720,13 @@ impl CheckState {
                 self.findings.push(check_texts_a_byte_as_a_scalar(open.written, open.name.clone(), open.at))
             }
         }
-        self.flow.open_chars = collections::BTreeMap()
+        self.flow.open_chars.clear()
         for (literal, held) in self.flow.high_bytes {
             if !self.facts.byte_literals.contains(literal) {
                 self.findings.push(check_texts_a_byte_as_a_scalar(held.0, null, held.1))
             }
         }
-        self.flow.high_bytes = collections::BTreeMap()
+        self.flow.high_bytes.clear()
     }
 }
 

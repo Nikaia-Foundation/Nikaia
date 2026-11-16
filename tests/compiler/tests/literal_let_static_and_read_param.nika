@@ -1,0 +1,16 @@
+// A name bound to a literal, handed to a `String?` parameter and to a
+// `String` parameter only read (#1740): one binding, text of its own.
+fn optional(a: i64, s: String?) throws {
+    println(a)
+    println(s ?? "none")
+}
+
+fn plain(s: String) throws {
+    println(s)
+}
+
+fn main() throws {
+    let s = "literal"
+    optional(1, s)
+    plain(s)
+}

@@ -24,7 +24,7 @@ pub(crate) fn sv_row_of(terms: Vec<SvTerm>, constant: i64) -> Option<SvRow> {
     for t in sorted.iter() {
         let t = *t;
         let last = unsafe { nikaia_std::proven::sub::<i64>(cols.len() as i64, 1) };
-        if !cols.is_empty() && *unsafe { nikaia_std::proven::read(&cols, (last) as usize) } == t.col { { let __nikaia_stored = match (*nikaia_std::index::get(&ks, nikaia_std::index::at(last))).checked_add(t.k) { Some(__nikaia_value) => __nikaia_value, None => return None }; unsafe { nikaia_std::proven::write(&mut ks, (last) as usize, __nikaia_stored) }; } } else {
+        if !cols.is_empty() && *unsafe { nikaia_std::proven::read(&cols, (last) as usize) } == t.col { { let __nikaia_stored = match (*unsafe { nikaia_std::proven::read(&ks, (last) as usize) }).checked_add(t.k) { Some(__nikaia_value) => __nikaia_value, None => return None }; unsafe { nikaia_std::proven::write(&mut ks, (last) as usize, __nikaia_stored) }; } } else {
             cols.push(t.col);
             ks.push(t.k);
         }
@@ -32,7 +32,7 @@ pub(crate) fn sv_row_of(terms: Vec<SvTerm>, constant: i64) -> Option<SvRow> {
     let mut row = SvRow { cols: vec![], ks: vec![], constant };
     let mut i: i64 = 0;
     while ((i) as usize) < cols.len() {
-        if *nikaia_std::index::get(&ks, (i) as usize) != 0 {
+        if *unsafe { nikaia_std::proven::read(&ks, (i) as usize) } != 0 {
             row.cols.push(*unsafe { nikaia_std::proven::read(&cols, (i) as usize) });
             row.ks.push(*unsafe { nikaia_std::proven::read(&ks, (i) as usize) });
         }

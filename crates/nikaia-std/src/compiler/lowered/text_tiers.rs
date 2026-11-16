@@ -201,6 +201,7 @@ pub(crate) struct FnDecl {
     pub(crate) params: Vec<Type>,
     pub(crate) changes: Vec<bool>,
     pub(crate) keeps: Vec<bool>,
+    pub(crate) text_options: collections::BTreeSet<String>,
     pub(crate) result: Option<Type>,
     published: bool,
     pub(crate) of_a_trait: bool,
@@ -282,7 +283,7 @@ pub(crate) fn declare_rules(def: &GrammarDef, names: &winnow_grammar::InternerCo
     for rule in def.rules.iter() {
         let key = format!("{}::{}", gname, names.resolve(rule.name));
         declared.rules.insert(nikaia_std::block::Text::from(key.to_string()));
-        declared.fns.insert(key, FnDecl { params: vec![], changes: vec![], keeps: vec![], result: match rule.ret_type.as_ref() {
+        declared.fns.insert(key, FnDecl { params: vec![], changes: vec![], keeps: vec![], text_options: collections::BTreeSet::new(), result: match rule.ret_type.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, published: def.public && rule.is_entry, of_a_trait: false, changes_self: false });
@@ -290,8 +291,8 @@ pub(crate) fn declare_rules(def: &GrammarDef, names: &winnow_grammar::InternerCo
 }
 
 pub(crate) fn declare_function(item: &Item, target: Option<&str>, names: &winnow_grammar::InternerContext, declared: &mut TextDeclared, of_a_trait: bool) {
-    let (name, receiver, args, ret_type, is_public) = match item {
-        Item::Fn { name, receiver, args, ret_type, is_public, .. } => { let is_public = *is_public; let name = *name; (name, receiver, args, ret_type, is_public) },
+    let (name, receiver, args, config, ret_type, is_public) = match item {
+        Item::Fn { name, receiver, args, config, ret_type, is_public, .. } => { let is_public = *is_public; let name = *name; (name, receiver, args, config, ret_type, is_public) },
         _ => return,
     };
     let changes_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
@@ -306,7 +307,9 @@ pub(crate) fn declare_function(item: &Item, target: Option<&str>, names: &winnow
         changes.push(arg.mutable);
         keeps.push(arg.keep);
     }
-    declared.fns.insert(key, FnDecl { params, changes, keeps, result: match ret_type {
+    let mut text_options: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for option in config.iter() { if plain_string(names, &option.ty) { text_options.insert(nikaia_std::block::Text::from(names.resolve(option.name).to_string())); } }
+    declared.fns.insert(key, FnDecl { params, changes, keeps, text_options, result: match ret_type {
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
     }, published: is_public || of_a_trait, of_a_trait, changes_self });
@@ -2659,7 +2662,82 @@ pub(crate) fn lent_list_parameter(name: &str, walk: &TierWalk) -> bool {
 pub(crate) fn handed_kinds(value: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     if same_kinds(kinds, &owned_kinds()) && lent_field(value, ask, walk) { return view_kinds(); }
     if same_kinds(kinds, &owned_kinds()) && result_plain_text(ask, &walk) && made_element(value, ask, walk) { return view_kinds(); }
+    if result_nullable_text(ask, &walk) && lent_nullable_element(value, ask, walk) { return view_kinds(); }
+    if result_plain_text(ask, &walk) && lent_read_with_fallback(value, ask, walk) { return view_kinds(); }
     kinds.clone()
+}
+
+pub(crate) fn lent_read_with_fallback(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
+    match value {
+        Expr::Coalesce { value: first, fallback, .. } => {
+            let first = nikaia_std::boxed::open(first); let fallback = nikaia_std::boxed::open(fallback);
+            let an_end = match first {
+                Expr::MethodCall { method, .. } => { let method = *method; ask.names.resolve(method) != "get" },
+                _ => false,
+            };
+            if !lent_nullable_element(first, ask, walk) { return false; }
+            if an_end { return a_literal_text(fallback); }
+            a_literal_text(fallback) || tier_a_jump(fallback) || lent_read_with_fallback(fallback, ask, walk)
+        },
+        _ => false,
+    }
+}
+
+pub(crate) fn result_nullable_text(ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &TierWalk) -> bool {
+    let key = match match walk.result.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let function = match match *nikaia_std::index::get(&walk.declared.fns, &key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let result = match function.result { Some(__nikaia_value) => __nikaia_value, None => return false };
+    plain_string(ask.names, &result) && result.is_nullable && !result.is_view && !function.of_a_trait
+}
+
+pub(crate) fn lent_nullable_element(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
+    match value {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let called = ask.names.resolve(method);
+            let a_get = called == "get" && args.len() == 1;
+            let an_end = (called == "first" || called == "last") && args.is_empty();
+            (a_get || an_end) && lent_text_container(receiver, !an_end, true, ask, walk)
+        },
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); lent_text_container(base, true, false, ask, walk) },
+        _ => false,
+    }
+}
+
+pub(crate) fn lent_by_default(name: &str, walk: &TierWalk) -> bool {
+    let local = match tier_local(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let declared = match local.declared { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let (key, at) = match declared.owner {
+        TextOwner::Param(ref key, at) => (nikaia_std::block::Text::from(key.to_string()), at),
+        _ => return false,
+    };
+    let function = match match *nikaia_std::index::get(&walk.declared.fns, &key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if function.of_a_trait || at >= function.params.len() as i64 || *nikaia_std::index::get(&function.changes, nikaia_std::index::at(at)) { return false; }
+    if at < function.keeps.len() as i64 && *nikaia_std::index::get(&function.keeps, nikaia_std::index::at(at)) { return false; }
+    !declared.ty.is_nullable && !declared.ty.is_mut
+}
+
+pub(crate) fn lent_text_container(base: &Expr, maps: bool, lists: bool, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
+    let name = match base {
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(ask.names.resolve(name).to_string()) },
+        _ => return false,
+    };
+    if !lent_list_parameter(&name, &walk) && !lent_by_default(&name, &walk) { return false; }
+    let list = match place_of(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let container = last_segment(ask.names.resolve(list.ty.name));
+    let mut at: i64 = 0;
+    if is_a_map_name(&container) && maps && list.ty.generics.len() == 2 { at = 1; } else if !(lists && (container == "Vec" || container == "Array") && list.ty.generics.len() == 1) { return false; }
+    let element = nikaia_std::index::get(&list.ty.generics, (at) as usize);
+    plain_string(ask.names, &element) && !element.is_nullable
 }
 
 pub(crate) fn lent_root(base: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
@@ -3060,7 +3138,7 @@ pub(crate) fn late_function(item: &Item, ask: &TierAsk<'_, '_, '_, '_, '_>, late
 }
 
 pub(crate) fn late_body(body: &Block, names: &[String], ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) {
-    late.bound = collections::BTreeMap::new();
+    late.bound.clear();
     late.frames = vec![];
     late.loops = 0;
     late.leaving = 0;
@@ -3068,10 +3146,10 @@ pub(crate) fn late_body(body: &Block, names: &[String], ask: &TierAsk<'_, '_, '_
     late.pending = vec![];
     late.branch_args = vec![];
     late.branches = 0;
-    late.views = collections::BTreeMap::new();
-    late.viewers = collections::BTreeMap::new();
-    late.held = collections::BTreeMap::new();
-    late.temporaries = collections::BTreeSet::new();
+    late.views.clear();
+    late.viewers.clear();
+    late.held.clear();
+    late.temporaries.clear();
     late_open(late);
     late.params_from = late.serial;
     for name in names.iter() { late_bind(nikaia_std::block::Text::from(name.to_string()), late); }
@@ -3723,6 +3801,7 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &m
             let func = nikaia_std::boxed::open(func);
             let kinds = call_kinds(func, args, ask, walk);
             std_option_lists(func, config, ask, walk);
+            program_option_texts(func, config, ask, walk);
             kinds
         },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); field_kinds(expr, base, ask, walk) },
@@ -4153,6 +4232,16 @@ pub(crate) fn std_option_lists(func: &Expr, config: &[ConfigArg], ask: &TierAsk<
             if a_followed(ask.names, &whole.ty) && holds_text(ask.names, &whole.ty) { demote_inside(&whole.owner, &whole.ty, &mut vec![], ask, walk); }
         }
     }
+}
+
+pub(crate) fn program_option_texts(func: &Expr, config: &[ConfigArg], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    if config.is_empty() { return; }
+    let callee = match tier_callee(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let function = match match *nikaia_std::index::get(&walk.declared.fns, &callee) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    for option in config.iter() { if function.text_options.contains(ask.names.resolve(option.name)) { owned_literal_lets(&option.value, ask, walk); } }
 }
 
 pub(crate) fn std_whole_list(value: &Expr, want: &Ty, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
@@ -4700,8 +4789,8 @@ pub(crate) fn changed_adopted(a: &collections::BTreeMap<i64, Declaring>, b: &col
 }
 
 pub(crate) fn fresh_tier_frame(walk: &mut TierWalk) {
-    walk.locals = collections::BTreeMap::new();
-    walk.ties = collections::BTreeMap::new();
+    walk.locals.clear();
+    walk.ties.clear();
     walk.frames = vec![];
     walk.result = None;
     walk.in_hole = false;
@@ -4711,8 +4800,8 @@ pub(crate) fn fresh_tier_frame(walk: &mut TierWalk) {
 
 pub(crate) fn walk_body(body: &Block, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     walk.function = String::from("");
-    walk.locals = collections::BTreeMap::new();
-    walk.ties = collections::BTreeMap::new();
+    walk.locals.clear();
+    walk.ties.clear();
     walk.frames = vec![];
     walk.result = None;
     walk.in_hole = false;
@@ -4728,8 +4817,8 @@ pub(crate) fn walk_grammar(def: &GrammarDef, ask: &TierAsk<'_, '_, '_, '_, '_>, 
     for rule in def.rules.iter() {
         let key = format!("{}::{}", gname, ask.names.resolve(rule.name));
         for alt in rule.alts.iter() {
-            walk.locals = collections::BTreeMap::new();
-            walk.ties = collections::BTreeMap::new();
+            walk.locals.clear();
+            walk.ties.clear();
             walk.frames = vec![];
             walk.result = Some(nikaia_std::block::Text::from(key.to_string()));
             walk.in_hole = false;
@@ -4887,8 +4976,8 @@ pub(crate) fn walk_function(item: &Item, target: Option<&str>, ask: &TierAsk<'_,
     };
     let key = tier_key(target, &own_name((name).as_ref(), ask.names));
     walk.function = own_name((name).as_ref(), ask.names);
-    walk.locals = collections::BTreeMap::new();
-    walk.ties = collections::BTreeMap::new();
+    walk.locals.clear();
+    walk.ties.clear();
     walk.frames = vec![];
     walk.result = Some(nikaia_std::block::Text::from(key.to_string()));
     walk.in_hole = false;
@@ -5067,6 +5156,18 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
         }
     }
     for word in only_read.iter() { out.remove(word); }
+    for (_, kept) in flows.literal_lets.iter() {
+        let mut owned = false;
+        for word in kept.iter() { if only_read.contains(word) { owned = true; } }
+        if owned {
+            for word in kept.iter() {
+                if lasting_tier(&nikaia_std::index::or(match *nikaia_std::index::get(&out, word) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || Tier::Owned)) { out.remove(word); }
+            }
+        }
+    }
     for word in flows.viewed.iter() { out.insert(nikaia_std::block::Text::from(word.to_string()), Tier::View); }
     for (word, count) in flows.arm_uses.iter() {
         let count = nikaia_std::num::value(count);
@@ -6390,7 +6491,7 @@ pub(crate) fn hb_text_field_roots(item: &Item, words: &winnow_grammar::InternerC
         let value = *value;
         let root = match hb_field_chain_root(value, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if !ret_from.is_empty() && !ret_from.iter().any(|named| { words.resolve(*named) == root }) { continue; }
-        let element = hb_an_element_read(value);
+        let element = hb_an_element_read(value) || hb_an_element_call(value, words);
         let mut list = false;
         if element && free {
             let mut at = 0;
@@ -6399,6 +6500,7 @@ pub(crate) fn hb_text_field_roots(item: &Item, words: &winnow_grammar::InternerC
                 at += 1;
             }
         }
+        if hb_an_element_call(value, words) && !list { continue; }
         let lendable = args.iter().any(|arg| { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && (*arg.ty.code).is_none() && (private.contains(words.resolve(arg.ty.name)) || list) && hb_type_may_be_a_view(&arg.ty, words, &none) });
         let only_read = if list { hb_only_field_reads(&root, &visited, &reads, &measured, words) } else { hb_only_field_reads(&root, &visited, &reads, &nothing, words) };
         if lendable && !rebinds(body, &root, words) && only_read { out.insert(root); }
@@ -6428,7 +6530,20 @@ pub(crate) fn hb_chain_variable_id(value: &Expr) -> i64 {
     match value {
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); hb_chain_variable_id(base) },
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); hb_chain_variable_id(base) },
+        Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); id_of(receiver) as i64 },
         _ => id_of(value) as i64,
+    }
+}
+
+pub(crate) fn hb_an_element_call(value: &Expr, words: &winnow_grammar::InternerContext) -> bool {
+    match value {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let word = words.resolve(method);
+            let named = matches!(receiver, Expr::Variable(..));
+            named && (word == "get" && args.len() == 1 || (word == "first" || word == "last") && args.is_empty())
+        },
+        _ => false,
     }
 }
 
@@ -6447,6 +6562,11 @@ pub(crate) fn hb_field_chain_root(value: &Expr, words: &winnow_grammar::Interner
     let base = match value {
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); base },
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); base },
+        Expr::MethodCall { receiver, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            if !hb_an_element_call(value, words) { return None; }
+            receiver
+        },
         _ => return None,
     };
     match base {

@@ -1,0 +1,10 @@
+// The first rule has no action, so its pattern is still open at `pub`; the
+// refusal says the action is missing, not that `pub` was meant as a name (#1736).
+grammar G {
+    entry rule all -> Vec[String] = name*
+    pub rule name -> String = w:until(";") ";" -> { w.clone() }
+}
+
+fn main() throws {
+    println("x")
+}

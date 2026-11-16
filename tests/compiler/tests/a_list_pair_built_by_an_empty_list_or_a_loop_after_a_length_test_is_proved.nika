@@ -1,0 +1,45 @@
+// #1655 (ADR-306 D23, ADR-369 D4): `ks` set in the arms of a `match`, and
+// `cols` built after it by `if ks.len() == 0 { cols = [] } else { for k
+// in ks { cols.push(..) } }`: each branch leaves the lists as long as each
+// other, so the one construction of `Row` keeps the rule and `row.ks[0]`
+// under `row.cols.len() == 1` is proved.
+struct Row {
+	cols: Vec[u32],
+	ks: Vec[i64],
+	constant: i64,
+}
+
+fn first_k(row: ref Row) -> i64 {
+	if row.cols.len() == 1 && row.ks[0] == 1 {
+		return 1
+	}
+	return 0
+}
+
+enum Shape { Empty, Single(i64), Many(Vec[i64]) }
+
+fn shaped(s: Shape) -> Row {
+	let mut ks: Vec[i64] = []
+	match s {
+		Shape::Empty => { ks = [] }
+		Shape::Single(k) => { ks = [k] }
+		Shape::Many(all) => { ks = all }
+	}
+	let mut cols: Vec[u32] = []
+	if ks.len() == 0 {
+		cols = []
+	} else {
+		let mut i: u32 = 0
+		for k in ks {
+			cols.push(i)
+			i += 1
+		}
+	}
+	return Row { cols: cols, ks: ks, constant: 0 }
+}
+
+fn main() throws {
+	println(first_k(shaped(Shape::Empty)))
+	println(first_k(shaped(Shape::Single(1))))
+	println(first_k(shaped(Shape::Many([1, 2]))))
+}

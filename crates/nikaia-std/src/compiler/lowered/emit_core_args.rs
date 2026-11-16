@@ -184,6 +184,8 @@ pub(crate) fn emit_arg_plain_option(ty: &Ty) -> bool {
     }
 }
 
+pub(crate) fn emit_arg_nullable_option(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
+
 pub(crate) fn emit_arg_opening_plain(ty: &Ty) -> String {
     match ty {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
@@ -939,10 +941,14 @@ impl EmitState {
     pub(crate) fn emit_call_option<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, option: &ConfigContract, config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         for passed in config.iter() {
             if emit_text(world, passed.name) == option.name {
-                if self.facts.lent_options.contains(&node_key(&passed.value)) { out.push("&"); }
                 let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(&passed.value))?;
+                let lent = self.facts.lent_options.contains(&node_key(&passed.value));
+                let opened = lent && before == "" && emit_arg_nullable_option(&option.ty);
                 out.push(&before);
+                if lent && !opened { out.push("&"); }
+                if opened { out.push("("); }
                 self.emit_expr(world, walk, out, host, &passed.value, depth, flow, scope)?;
+                if opened { out.push(").as_deref()"); }
                 out.push(&after);
                 return Ok(());
             }
@@ -1342,13 +1348,13 @@ impl EmitState {
         }
         if waits < 0 && fallback { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate the fallback of `async e` yet where nothing names its binding or only another task does (#986): name it in a statement of this group."), at: Some(span.start as i64) }, &"emit_async_binding")); }
         if waits < 0 {
-            walk.async_joining = collections::BTreeMap::new();
+            walk.async_joining.clear();
             if named != "" { walk.async_handles.insert(named, nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&inside, (0) as usize) }).to_string())); }
             return Ok(true);
         }
         let mut kept = EmitOut::empty();
         self.emit_stmt_written(world, walk, &mut kept, host, node, span, depth, &tail, here, scope)?;
-        walk.async_joining = collections::BTreeMap::new();
+        walk.async_joining.clear();
         walk.async_pending.push((nikaia_std::block::Text::from(kept.buf.to_string()), named, waits));
         Ok(true)
     }

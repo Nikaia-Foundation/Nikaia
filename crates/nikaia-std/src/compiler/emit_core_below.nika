@@ -404,30 +404,50 @@ impl EmitState {
         match stmt {
             Stmt::Expr(value) => {
                 for each in visited_in_expr(value) {
-                    match each {
-                        Expr::Call { func, .. } => {
-                            let key = call_pausing_key(world.words, world.aliases, self.own_contracts, world.library, func)
-                            if key != null {
-                                return true
-                            }
-                        },
-                        Expr::MethodCall { receiver, .. } => {
-                            if self.method_pauses(node_key(receiver)) {
-                                return true
-                            }
-                        },
-                        Expr::SafeMethod { receiver, .. } => {
-                            if self.method_pauses(node_key(receiver)) {
-                                return true
-                            }
-                        },
-                        else => {},
+                    if self.expr_pauses(world, each) {
+                        return true
                     }
                 }
                 return false
             },
             else => return false,
         }
+    }
+
+    /// Whether a **`catch` handler** can pause (#1715): any call in it by
+    /// the key it resolves to, or a method call the checker said pauses.
+    pub fn block_pauses(ref self, world: ref EmitWorld, block: ref Block) -> bool {
+        for each in visited_in_block(block) {
+            if self.expr_pauses(world, each) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether this one expression pauses: a free call by the key it
+    /// resolves to, a method call by what the checker said about it.
+    fn expr_pauses(ref self, world: ref EmitWorld, each: ref Expr) -> bool {
+        match each {
+            Expr::Call { func, .. } => {
+                let key = call_pausing_key(world.words, world.aliases, self.own_contracts, world.library, func)
+                if key != null {
+                    return true
+                }
+            },
+            Expr::MethodCall { receiver, .. } => {
+                if self.method_pauses(node_key(receiver)) {
+                    return true
+                }
+            },
+            Expr::SafeMethod { receiver, .. } => {
+                if self.method_pauses(node_key(receiver)) {
+                    return true
+                }
+            },
+            else => {},
+        }
+        return false
     }
 
     /// Declare the keeps a statement needs, once.

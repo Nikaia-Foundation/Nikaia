@@ -62,8 +62,8 @@ impl CheckState {
             receivers.push(receiver);
             sums.insert(head, receivers);
         }
-        self.flow.open_sums = collections::BTreeMap::new();
-        self.flow.open_numbers = collections::BTreeMap::new();
+        self.flow.open_sums.clear();
+        self.flow.open_numbers.clear();
         for (head_at, members) in groups.iter() {
             let head_at = nikaia_std::num::value(head_at);
             let mut head = nikaia_std::index::get(&members, 0).1.clone();

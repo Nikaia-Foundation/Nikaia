@@ -1,0 +1,10 @@
+bounds in tests/an_element_of_a_list_of_positions_proves_a_callees_precondition.nika: 4 indexes, 4 proved; 1 operations, 1 proved
+    12  self.heap[i]         proved
+    21  self.heap.len() - 1  proved
+    26  self.place[v]        proved
+    32  self.place[a]        proved
+    32  self.place[b]        proved
+  derived  between: 0 <= from, from <= self.heap.len(), from < self.heap.len(), 0 <= to, to <= self.heap.len(), to < self.heap.len(), proved at the calls on lines 32
+  derived  set: 0 <= i, i <= self.heap.len(), i < self.heap.len(), proved at the calls on lines 26
+  derived  span: 0 <= a, a <= self.place.len(), a <= b, a < b, 0 <= b, proved at the calls on lines 43
+  derived  touch: 0 <= v, proved at the calls on lines 42
