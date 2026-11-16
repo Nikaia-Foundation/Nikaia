@@ -324,7 +324,10 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   the owner in German, per *Decision rounds*, with the issue. After the answer
   the supervisor re-queues: the build brief first in `batch.txt`, the blocked
   brief's report renamed `BRIEF.run1.report.md` (so `batch.nika` sees it
-  unrun), `DIR/QUESTION` deleted.
+  unrun), `DIR/QUESTION` deleted. A `#N` brief whose last run ended blocked
+  naming an open `#M` under `Needs:`/`Found:` is dropped from the batch
+  again, `ready` swapped for `blocked` (`DROPPED #N waits for #M`, #1819):
+  re-queue it once #M is closed.
 * **By hand**: `nikaia run scripts/batch.nika -- DIR` after a hand-back
   (`--tokens BRIEF TOKENS CALLS` records the harness figures in
   `DIR/tokens.txt`); `nikaia run scripts/status.nika -- DIR` (CI, batch and

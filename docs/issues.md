@@ -24,7 +24,10 @@ it, like the checks in `docs/supervisor.md`.
   alone; a function name beside what it does. No internal targets, dates for
   outside readers, or brief codes.
 * **I4. Where it belongs**: `Part of #N` for the larger piece, `Found while
-  #N` (or the commit) for where it came up, and the issues it depends on.
+  #N` (or the commit) for where it came up, and the issues it depends on,
+  each on a line `Needs #N` (or `After`, `Blocked by`, `Waits for`,
+  `Depends on`): the driver does not queue an issue while one so named is
+  open (`drive_depends_on`, #1819).
 * **I4a. A claim of today's behaviour is read in the code** (#1706): a
   sentence saying what the compiler, a script or the driver does today names
   the function and file it was read in, or the run that shows it (a probe,
