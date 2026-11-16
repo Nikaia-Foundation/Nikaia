@@ -31,7 +31,10 @@ it, like the checks in `docs/supervisor.md`.
   I5; a `--bounds` row, I8a). A comment is not the code: #1694's item 3 said
   a partial run's issue is queued again, from a stale comment in
   `drive.nika`, and `drive_queue_add` skips a `#N` still in `batch.txt`
-  (#1697).
+  (#1697). A claim of what the repository holds (a file tracked, ignored or
+  generated) is read the same way, with `git ls-files` or `git check-ignore
+  -v` (#1771: #1621 said a dependency's ledger is gitignored, and
+  `examples/http/nikaia.contracts` and `nikaia.derived` are tracked).
   Code is named by its function, never by a line number alone (lines move
   with every commit), and a value it quotes (an exit code, a printed line)
   is read in that function (#1733: #1717 cited "line 228" and "exit 4" for
@@ -117,6 +120,12 @@ it, like the checks in `docs/supervisor.md`.
   what does not match it, often the message, and the issue orders that fix,
   not accepting the form (#1737: #1550 hedged, though Part II 10.1 and
   ADR-296 D33 require the action; the fix was the message).
+  Where the governing decision specifies, on purpose, the behaviour the issue
+  wants changed, the issue is no bug either: it is a `decision` issue that
+  names the decision to amend and the options with their results, and the
+  build waits for the amendment (#1771: #1621 was filed `ready` to fix what
+  ADR-100 D3 specifies, "believed while the hashes match", and its first
+  run stopped for the decision).
   A step that rests on a decision says whether it is built (the function
   that does it) or text only; text only is a dependency, named by its issue
   (I4) and built first (#1453).
@@ -315,7 +324,9 @@ and `wrong I4` for an I5/I6 and an I9 point; #1708 the same slip; #1741:
 #1729's run answered `wrong I3` for a probe that did not parse, I5, and a
 suspected function that does not exist, I7; #1745: #1731's run answered
 `broke I3` for an issue filed `ready` without its decision, I6; #1761:
-#1754's run answered `broke I3` for shapes of the cause left unnamed, I7; #1746:
+#1754's run answered `broke I3` for shapes of the cause left unnamed, I7;
+#1771: #1621's run answered `wrong I3` for a false claim of what git tracks,
+I4a, and `rules-gap` for a fix of what an ADR specifies, I6; #1746:
 #1533's run answered `rules-gap` for an item that left open what bounds the
 wait before a body's first byte, `broke I9`).
 
