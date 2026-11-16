@@ -381,25 +381,41 @@ impl EmitState {
     fn emit_core_hold_chain_base[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, at: ref Expr, whole: i64, viewed: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         match at {
             Expr::MethodCall { receiver, method, .. } => {
-                let views = viewed || views_what_it_is_called_on(emit_text(world, method))
+                // **A file name's text is text of its own** (#1894): `entry.to_text()`
+                // and `display()` make a `Text` that dies at the `;` as a call's does.
+                let name = emit_text(world, method)
+                if viewed && node_key(at) != whole && (name == "to_text" || name == "display") && self.facts.path_methods.contains_key(node_key(receiver)) {
+                    self.emit_core_hold_base(world, walk, out, host, at, depth, flow, scope)
+                    return
+                }
+                let views = viewed || views_what_it_is_called_on(name)
                 self.emit_core_hold_chain_base(world, walk, out, host, receiver, whole, views, depth, flow, scope)
             },
+            // **A field or an element of a call's result dies with it** (#1894):
+            // `mk().out.split(" ")` holds `mk()`, and the chain reads its field.
+            Expr::Field { base, .. } => self.emit_core_hold_chain_base(world, walk, out, host, base, whole, viewed, depth, flow, scope),
+            Expr::Index { base, .. } => self.emit_core_hold_chain_base(world, walk, out, host, base, whole, viewed, depth, flow, scope),
             else => {
                 if !viewed || node_key(at) == whole || !(emit_read_a_call(at) || self.emit_core_a_concatenation(at)) {
                     return
                 }
-                // A statement written twice (a scratch pass, then the real one)
-                // holds the same receiver twice: the second time it is written
-                // out again, not read back from the first.
-                let key = node_key(at)
-                walk.held.remove(key)
-                let name = f"__nikaia_held_{walk.held.len()}"
-                out.push(f"let {name} = ")
-                self.emit_expr(world, walk, out, host, at, depth, flow, scope)
-                out.push(f";\n{"    ".repeat(depth)}")
-                walk.held.insert(key, name)
+                self.emit_core_hold_base(world, walk, out, host, at, depth, flow, scope)
             }
         }
+    }
+
+    /// Binds `at` to a name before the statement, and the chain reads the name.
+    fn emit_core_hold_base[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, at: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // A statement written twice (a scratch pass, then the real one)
+        // holds the same receiver twice: the second time it is written
+        // out again, not read back from the first.
+        let key = node_key(at)
+        walk.held.remove(key)
+        let name = f"__nikaia_held_{walk.held.len()}"
+        out.push(f"let {name} = ")
+        self.emit_expr(world, walk, out, host, at, depth, flow, scope)
+        out.push(f";\n{"    ".repeat(depth)}")
+        walk.held.insert(key, name)
     }
 
     /// The receiver of a method call: the expression, or the name a `?.` already
