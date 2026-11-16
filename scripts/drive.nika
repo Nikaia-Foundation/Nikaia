@@ -4888,6 +4888,9 @@ fn main() throws {
 		println("BUILD cargo build --profile fast -p nikaia")
 		process::exit(1)
 	}
+	// A suite a run ended by the time limit handed over is this run's, as in
+	// drive_focus; without it every restart merged and started a new suite.
+	if !dry { drive_adopt() }
 	let mut runs: i64 = 0
 	let mut bumps: i64 = 0
 	let own = drive_read("scripts/drive.nika")
