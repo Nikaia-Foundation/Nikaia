@@ -1,0 +1,7 @@
+bounds in tests/found_facts_through_a_nullable_result.nika: 5 indexes, 5 proved; 1 operations, 1 proved
+     9  xs[i]   proved
+    12  i += 1  proved
+    19  xs[i]   proved
+    26  xs[o]   proved
+    30  xs[j]   proved
+    32  xs[m]   proved

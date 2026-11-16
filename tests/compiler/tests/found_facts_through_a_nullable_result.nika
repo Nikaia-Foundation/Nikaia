@@ -1,0 +1,37 @@
+/// A found postcondition on the value inside a `T?` result holds for what a
+/// caller unwraps from it (ADR-306 D23, #1758): `pick` hands back `null` or a
+/// loop index below `xs.len()`, so the value a `let` narrowed by `!= null`, a
+/// `?? return`, a `match` arm's name, or a `??` whose default is in range
+/// hands on indexes `xs`.
+fn pick(xs: ref Vec[i64]) -> i64? sync {
+	let mut i = 0
+	while i < xs.len() {
+		if xs[i] > 3 {
+			return i
+		}
+		i += 1
+	}
+	return null
+}
+
+fn find(xs: ref Vec[i64]) -> i64 sync {
+	let i = pick(xs) ?? return -1
+	return xs[i]
+}
+
+fn main() throws {
+	let xs: Vec[i64] = [1, 5, 2]
+	let o = pick(xs)
+	if o != null {
+		println(xs[o])
+	}
+	if xs.len() > 0 {
+		let j = pick(xs) ?? 0
+		println(xs[j])
+	}
+	match pick(xs) {
+		null => println("none"),
+		m => println(xs[m]),
+	}
+	println(find(xs))
+}

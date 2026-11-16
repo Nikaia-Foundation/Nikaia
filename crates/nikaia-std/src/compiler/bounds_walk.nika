@@ -7499,6 +7499,9 @@ fn bounding_let(
 	bounding_expr(walk, value, facts, context, program, words, ask)
 	let value_lin = bounding_lin(walk, value, facts, context, program, words)
 	bounding_settle(walk, facts)
+	// The call a `?? return` unwraps (#1758): what it is found to return
+	// holds of the name.
+	let unwrapped = bounding_unwrapped(value)
 	// **A number the walk bounds without a linear term**: a value read out
 	// of a list, a `%` (ADR-306 D7, D8).
 	let mut value_range: Range? = null
@@ -7522,10 +7525,11 @@ fn bounding_let(
 		else => false,
 	}
 	let whole = bounding_declared_whole(ty, words)
-		?? (value_lin != null || value_range != null || whole_field)
+		?? (value_lin != null || value_range != null || whole_field
+			|| bounding_found_whole(walk, unwrapped, context, words))
 	let mut relations: Vec[(bool, i64)] = []
 	if names.len() == 1 && value_lin == null {
-		relations = bounding_relations_of(walk, facts, words.resolve(names[0]), value, context, program, words, ask)
+		relations = bounding_relations_of(walk, facts, words.resolve(names[0]), unwrapped, context, program, words, ask)
 	}
 	// **The lengths the callee is found to hand back** (ADR-306 D23, #1756),
 	// and of a struct result's fields (ADR-306 D35), stated before the name
@@ -7574,7 +7578,7 @@ fn bounding_let(
 	// a method's result inside a list, an element of a list of positions.
 	rules_result_facts(walk, facts, name, value, context, words)
 	// **What the callee is found to return** (ADR-306 D23).
-	bounding_returned_facts(walk, facts, name, value, context, words)
+	bounding_returned_facts(walk, facts, name, unwrapped, context, words)
 	// **What the callee is found to hold of its arguments** (ADR-306 D31).
 	bounding_relations_push(walk, facts, name, relations)
 	// **What each field of its struct result is found to hold** (ADR-306
@@ -7752,6 +7756,17 @@ fn bounding_choice_facts(
 				own.push(bounding_arm_facts(walk, facts, name, arm_value, context, program, words, ask) ?? return [])
 				states.push(facts.clone())
 			}
+		},
+		// **`x ?? d` is the value `x` holds or `d`** (#1758): of a call
+		// with a nullable result, what it is found to return of the one.
+		Expr::Coalesce { value: held, fallback, .. } => {
+			if bounding_leaves(fallback) {
+				return []
+			}
+			own.push(bounding_arm_facts(walk, facts, name, held, context, program, words, ask) ?? return [])
+			states.push(facts.clone())
+			own.push(bounding_arm_facts(walk, facts, name, fallback, context, program, words, ask) ?? return [])
+			states.push(facts.clone())
 		},
 		else => return [],
 	}
@@ -7956,6 +7971,42 @@ fn bounding_leaves(expr: ref Expr) -> bool {
 		Expr::Break(_) => true,
 		else => false,
 	}
+}
+
+/// **The value a `?? return` unwraps** (#1758): `x` of `x ?? return`, `??
+/// continue`, `?? break`, which is read only where it holds a value;
+/// `value` itself otherwise.
+fn bounding_unwrapped(value: ref Expr) -> ref Expr {
+	return match value {
+		Expr::Coalesce { value: inner, fallback, .. } => {
+			if bounding_leaves(fallback) {
+				return bounding_unwrapped(inner)
+			}
+			value
+		},
+		else => value,
+	}
+}
+
+/// **Whether a call's whole-number result is found** (ADR-306 D23, #1758):
+/// a nullable one's too, which the checker does not mark a whole number.
+fn bounding_found_whole(
+	walk: ref BoundsWalk,
+	value: ref Expr,
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+) -> bool {
+	let call = match value {
+		Expr::Call { .. } => true,
+		Expr::MethodCall { .. } => true,
+		else => false,
+	}
+	if !call {
+		return false
+	}
+	let callee = bounding_found_key(walk, value, context, words) ?? return false
+	let found = context.returns.get(callee) ?? return false
+	return !found.each && found.plain
 }
 
 /// Whether a declared type is a whole number; nothing where none is
@@ -9189,6 +9240,24 @@ fn bounding_expr(
 				for name in hidden {
 					bounding_forget(walk, inner, name)
 					inner.ints.remove(name)
+				}
+				// **An arm's bare name is the value matched** (#1758): of a
+				// call's nullable result, the value it holds, of which what
+				// the callee is found to return holds.
+				match arm.pattern {
+					MatchPattern::Path(segments) => {
+						if segments.len() == 1 && bounding_found_whole(walk, value, context, words) {
+							let name = words.resolve(segments[0]).clone()
+							let held = bounding_arm_facts(walk, facts, name, value, context, program, words, ask) ?? []
+							if !held.is_empty() {
+								inner.ints.insert(name.clone())
+								for fact in held {
+									bounding_push(walk, inner, fact)
+								}
+							}
+						}
+					},
+					else => {},
 				}
 				bounding_maybe_expr(walk, arm.guard, inner, context, program, words, ask)
 				// **An arm's block ends with what it changed** (#1702), as an
@@ -10616,7 +10685,7 @@ fn bounds_returns(
 					continue
 				}
 				let ret = ret_type ?? continue
-				let kind = bounding_returns_each(ret, words)
+				let kind = bounding_returns_kind(ret, words)
 				let measures = bounding_returns_measures(ret, list_fields, words)
 				// **A struct's whole-number fields, each its own entry** (ADR-306
 				// D35), read as a whole number is.
@@ -10721,7 +10790,7 @@ fn bounds_returns(
 							}
 							let symbol = name ?? continue
 							let ret = ret_type ?? continue
-							let kind = bounding_returns_each(ret, words)
+							let kind = bounding_returns_kind(ret, words)
 							let measures = bounding_returns_measures(ret, list_fields, words)
 							// **A struct's whole-number fields, each its own entry** (ADR-306
 							// D35), read as a whole number is.
@@ -11111,6 +11180,18 @@ fn bounding_returns_each(ty: ref Type, words: ref winnow_grammar::InternerContex
 	return null
 }
 
+/// **What a function's result is found as** (ADR-306 D23): as
+/// [`bounding_returns_each`], and a nullable whole number, `i64?`, as a whole
+/// number (#1758): what is found of every present value it hands back holds
+/// of what a caller unwraps from it (`??`, a `match` arm's name, a `let`
+/// narrowed by `!= null`); a `return null` gives the bound nothing.
+fn bounding_returns_kind(ty: ref Type, words: ref winnow_grammar::InternerContext) -> bool? {
+	if ty.is_nullable && !ty.is_tuple && ty.generics.is_empty() && is_whole_number(words.resolve(ty.name)) {
+		return false
+	}
+	return bounding_returns_each(ty, words)
+}
+
 /// How many whole-number results of `returns` have an interval (D32).
 fn bounding_returns_ranged(returns: ref collections::BTreeMap[String, BoundsReturns]) -> i64 {
 	let mut out = 0
@@ -11157,6 +11238,12 @@ fn bounding_returned(
 	if throwing {
 		return
 	}
+	// **A `return null` of a nullable result** (#1758) hands back no
+	// value, so it bounds nothing the found facts say of one.
+	if bounding_null_returned(returned) {
+		walk.return_seen.insert(node_key(returned ?? return))
+		return
+	}
 	bounding_return_lengths(walk, facts, returned, context, program, words, ask)
 	if !walk.return_field.is_empty() {
 		// **One field of the struct handed back** (ADR-306 D35): its value
@@ -11177,6 +11264,15 @@ fn bounding_returned(
 		return
 	}
 	bounding_returned_value(walk, facts, returned, context, program, words, ask)
+}
+
+/// Whether a `return` hands back `null`.
+fn bounding_null_returned(returned: ref Expr?) -> bool {
+	let given = returned ?? return false
+	return match given {
+		Expr::LitNull(_) => true,
+		else => false,
+	}
 }
 
 /// **A value handed back, against what the walk looks for** (ADR-306 D23,
