@@ -1,0 +1,42 @@
+// ADR-327 D9, D10 (#1844): what a task builds counts against its budget,
+// under `nikaia run` too. Without Cargo, `run` links `std` as a dynamic
+// library, and the library's own code (a set's `insert`) allocated with an
+// allocator of its own, so a set a task built was counted by nobody: a tight
+// task held one twenty times its budget and still took a value, and every
+// set it sent left a debt in its count. A task that holds more than its
+// budget panics where it takes a value (D9), whichever collection holds it.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+/// A program whose tight task fills `kind` with 100000 numbers, then takes
+/// one value from a channel.
+fn program(kind: String, made: String, insert: String) -> String {
+	let mut text = String()
+	text.push_str("use std::channel\nuse std::collections\n\nstruct Tight {}\n\n")
+	text.push_str("impl task::Admission for Tight {\n\tfn decide(mut self, _load: task::Load) -> task::Decision sync {\n\t\treturn task::Decision { start: 1, budget: 262144 }\n\t}\n}\n\n")
+	text.push_str("fn hold(rx: channel::Receiver[i64]) -> i64 {\n\tlet mut m: collections::" + kind + " = collections::" + made + "()\n")
+	text.push_str("\tfor i in 0..<100000 {\n\t\tm." + insert + "\n\t}\n\tlet got = rx.recv() ?? 0\n\treturn m.len() + got\n}\n\n")
+	text.push_str("fn main() throws {\n\tlet (tx, rx) = channel::bounded[i64](1)\n\ttx.send(1)\n\tlet j = async(detached, admission: Tight {}) fn { hold(rx) }\n")
+	text.push_str("\tlet n = j.join() catch {\n\t\tprintln(f\"refused: {error}\")\n\t\t0\n\t}\n\tprintln(f\"held {n}\")\n}\n")
+	return text
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let kinds: Vec[(String, String, String)] = [("HashSet[i64]", "HashSet", "insert(i)"), ("BTreeSet[i64]", "BTreeSet", "insert(i)"), ("HashMap[i64, i64]", "HashMap", "insert(i, i)"), ("BTreeMap[i64, i64]", "BTreeMap", "insert(i, i)")]
+	for (kind, made, insert) in kinds {
+		fs::write(f"{tmp}/hold.nika", fs::Root::Anywhere, program(kind, made, insert))
+		let out = process::run(toolchain(), ["run", "hold.nika"]; dir: tmp)
+		println(f"{kind}: {out.stdout.trim()}")
+		if !out.ok {
+			println(out.stderr)
+		}
+	}
+	process::run("rm", ["-rf", tmp])
+}

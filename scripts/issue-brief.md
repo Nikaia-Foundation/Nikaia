@@ -29,6 +29,7 @@ ending with the Claude Code footer), rule I13.
 * A defect you meet on the way to the issue's goal (a compiler or lowering bug in the path) you fix, with a test, as its own commit; so is one off the path but inside the issue's area that fits this run (owner, 2026-11-06), named in `Body:`. `Found:` is only for what lies outside the area, cannot be fixed this run or needs a decision; the driver files it as an issue.
 * A form Nikaia, `std` or the toolchain lacks stops the work, unless an ADR or Part I-III refuses it (name it): `Result: blocked`, `Found:` the gap with a probe, `Needs: supervisor decision`.
 * Disk: `NIKAIA_CACHE_LIMIT=2G`; at the end delete your own clone's `target/` and `target/release/nikaia-scratch`.
+* A cause the issue marks `suspected`, or does not mark (`docs/issues.md` I7), is a hypothesis: run the check that settles it (`nikaia run scripts/where.nika -- NAME`, the probe with a trace, callgrind for a cost) before you build on it (owner, 2026-11-16). Shown false: say so in `Issue:` as `wrong I7: <what the check showed>` (the driver comments it on the issue) and follow the real cause.
 * No cause after about 40 turns: stop, `Result: partial` with what you ruled out, the probe, and the suspected file and function.
 
 ## Report (at most 15 lines, to exactly `{REPORT}`)

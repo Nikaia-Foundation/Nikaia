@@ -68,7 +68,7 @@ pub trait ComptimeBundleHost {
     fn run_child(&self, binary: &std::path::Path, level: &str, libraries: &[fs::Path], name: &str) -> Result<ComptimeBundleRan, std::boxed::Box<dyn std::error::Error>>;
 }
 
-pub(crate) const COMPTIME_BUNDLE_RUN_SOURCE: &str = "// GENERATED: the library `nikaia run` links a program against.\npub extern crate nikaia_std;\npub extern crate winnow;\npub extern crate winnow_grammar;\n";
+pub(crate) const COMPTIME_BUNDLE_RUN_SOURCE: &str = "// GENERATED: the library `nikaia run` links a program against.\npub extern crate nikaia_std;\npub extern crate winnow;\npub extern crate winnow_grammar;\n\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n";
 
 pub(crate) const COMPTIME_BUNDLE_NAMED: [&str; 3] = ["nikaia_std", "winnow", "winnow_grammar"];
 
@@ -224,8 +224,8 @@ pub(crate) fn comptime_bundle_read_record(text: &str, fingerprint: &str) -> Opti
     let dylib: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (1) as usize) });
     let deps: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (2) as usize) });
     let libdir: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (3) as usize) });
-    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(4).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple13654| {
-        let (name, rlib) = __nikaia_tuple13654;
+    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(4).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple14125| {
+        let (name, rlib) = __nikaia_tuple14125;
         (nikaia_std::block::Text::from(name.to_string()), comptime_bundle_path(nikaia_std::either_text::either(rlib)))
     }).collect::<Vec<_>>();
     if (rlibs.len() as i64) != COMPTIME_BUNDLE_NAMED.len() as i64 { return None; }
