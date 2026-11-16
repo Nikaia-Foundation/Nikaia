@@ -389,6 +389,10 @@ struct BoundsWalk {
 	checking: bool,
 	checked_results: collections::BTreeSet[i64],
 	rule_failed: collections::BTreeSet[i64],
+	/// **The rules of `self` each loop around the walk was given at its
+	/// head**, innermost last (`rules_loop_entry`, #1925): asked for at each
+	/// end of its turn (`bounding_turn_end`).
+	rule_loops: Vec[Vec[i64]],
 	/// **The value a builder builds** (`rules_builder`, ADR-306 D25): its
 	/// `length` rules are asked for where it is handed back and before each
 	/// method of its type is called on it, not given; empty in any other
@@ -834,6 +838,7 @@ fn bounding_new(
 		checking: false,
 		checked_results: collections::BTreeSet(),
 		rule_failed: collections::BTreeSet(),
+		rule_loops: [],
 		rule_built: collections::BTreeSet(),
 		rule_built_literal: -1,
 		lists: collections::BTreeSet(),
@@ -6101,6 +6106,7 @@ fn bounding_turn_end(
 	leaves: bool,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
+	rules_turn_end(walk, facts, ask)
 	if walk.turns.is_empty() {
 		return
 	}
@@ -6202,7 +6208,9 @@ fn bounding_while(
 	for fact in bounding_pair_bounds(walk, facts, pairs, counter) {
 		turn_facts.push(fact)
 	}
+	let kept = rules_loop_entry(walk, facts, changed, ask)
 	bounding_loop_change(walk, facts, changed, cands)
+	rules_loop_give(walk, facts, kept, changed)
 	for fact in invariant {
 		bounding_push(walk, facts, fact)
 	}
@@ -6215,9 +6223,11 @@ fn bounding_while(
 	for fact in turn_facts {
 		bounding_push(walk, inner, fact)
 	}
+	walk.rule_loops.push(kept)
 	if !bounding_block(walk, body, inner, context, program, words, ask) {
 		bounding_turn_end(walk, inner, false, false, ask)
 	}
+	walk.rule_loops.pop()
 	// **Past a loop no `break` leaves, its turn's facts hold too**: it is
 	// left only at a head, by the condition (ADR-306 D23, D25: two lists a
 	// turn grows by fixed steps keep their lengths' relation).
@@ -8073,6 +8083,7 @@ fn bounding_for(
 ) {
 	bounding_expr(walk, iter, facts, context, program, words, ask)
 	let changed = bounding_changed(body, context, words)
+	let kept = rules_loop_entry(walk, facts, changed, ask)
 	// `for k in low..<high`: the binding, its ends as terms, and whether the
 	// range takes its end.
 	let mut counted = false
@@ -8198,6 +8209,7 @@ fn bounding_for(
 		entered.push((x.clone(), e))
 	}
 	bounding_loop_change(walk, inner, changed, cands)
+	rules_loop_give(walk, inner, kept, changed)
 	for binding in bindings {
 		let bound = words.resolve(binding)
 		bounding_forget(walk, inner, bound)
@@ -8344,9 +8356,11 @@ fn bounding_for(
 			}
 		}
 	}
+	walk.rule_loops.push(kept.clone())
 	if !bounding_block(walk, body, inner, context, program, words, ask) {
 		bounding_turn_end(walk, inner, false, false, ask)
 	}
+	walk.rule_loops.pop()
 	if classed != null {
 		walk.loop_classes.remove(classed ?? "")
 	}
@@ -8426,6 +8440,7 @@ fn bounding_for(
 		left.push((x.clone(), e))
 	}
 	bounding_loop_change(walk, facts, outer, cands)
+	rules_loop_give(walk, facts, kept, outer)
 	for fact in invariant {
 		bounding_push(walk, facts, fact)
 	}

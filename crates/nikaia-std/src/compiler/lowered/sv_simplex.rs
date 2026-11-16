@@ -213,7 +213,7 @@ impl SvSimplex {
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         let s = self.new_var(-1);
-        { let __nikaia_stored = form.clone(); nikaia_std::index::set(&mut self.var_form, nikaia_std::index::at(s), __nikaia_stored); }
+        { let __nikaia_stored = form.clone(); unsafe { nikaia_std::proven::write(&mut self.var_form, (s) as usize, __nikaia_stored) }; }
         terms.push(SvTerm { col: match u32::try_from(s).ok() { Some(__nikaia_value) => __nikaia_value, None => return None }, k: -1 });
         let mut row = match sv_row_of(terms, 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let cols = row.cols.copy_owned();
@@ -225,7 +225,7 @@ impl SvSimplex {
         self.rows.push(row);
         self.basic.push(s);
         let r = unsafe { nikaia_std::proven::sub::<i64>(self.rows.len() as i64, 1) };
-        { let __nikaia_stored = r; nikaia_std::index::set(&mut self.row_of, nikaia_std::index::at(s), __nikaia_stored); }
+        { let __nikaia_stored = r; unsafe { nikaia_std::proven::write(&mut self.row_of, (s) as usize, __nikaia_stored) }; }
         { let __nikaia_stored = match self.row_value(r) { Some(__nikaia_value) => __nikaia_value, None => return None }; nikaia_std::index::set(&mut self.values, nikaia_std::index::at(s), __nikaia_stored); }
         self.slack_of.insert(key, s);
         Some(s)
@@ -386,7 +386,7 @@ impl SvSimplex {
         while ((r) as usize) < self.rows.len() {
             let b = *nikaia_std::index::get(&self.basic, (r) as usize);
             let below = nikaia_std::index::get(&self.lower, nikaia_std::index::at(b)).set && sv_delta_cmp(nikaia_std::index::get(&self.values, nikaia_std::index::at(b)), &unsafe { nikaia_std::proven::read(&self.lower, (b) as usize) }.value) < 0;
-            let above = nikaia_std::index::get(&self.upper, nikaia_std::index::at(b)).set && sv_delta_cmp(nikaia_std::index::get(&self.values, nikaia_std::index::at(b)), &unsafe { nikaia_std::proven::read(&self.upper, (b) as usize) }.value) > 0;
+            let above = unsafe { nikaia_std::proven::read(&self.upper, (b) as usize) }.set && sv_delta_cmp(nikaia_std::index::get(&self.values, nikaia_std::index::at(b)), &unsafe { nikaia_std::proven::read(&self.upper, (b) as usize) }.value) > 0;
             if (below || above) && (best.var < 0 || b < best.var) { best = SvViolation { row: r, var: b, below }; }
             r = unsafe { nikaia_std::proven::add::<i64>(r, 1) };
         }
@@ -403,7 +403,7 @@ impl SvSimplex {
             i += 1;
             if v == b { continue; }
             let can_rise = !nikaia_std::index::get(&self.upper, nikaia_std::index::at(v)).set || sv_delta_cmp(nikaia_std::index::get(&self.values, nikaia_std::index::at(v)), &unsafe { nikaia_std::proven::read(&self.upper, (v) as usize) }.value) < 0;
-            let can_fall = !nikaia_std::index::get(&self.lower, nikaia_std::index::at(v)).set || sv_delta_cmp(nikaia_std::index::get(&self.values, nikaia_std::index::at(v)), &unsafe { nikaia_std::proven::read(&self.lower, (v) as usize) }.value) > 0;
+            let can_fall = !unsafe { nikaia_std::proven::read(&self.lower, (v) as usize) }.set || sv_delta_cmp(nikaia_std::index::get(&self.values, nikaia_std::index::at(v)), &unsafe { nikaia_std::proven::read(&self.lower, (v) as usize) }.value) > 0;
             let rises_with = a > 0;
             let ok = if rises_with == below { can_rise } else { can_fall };
             if !ok { continue; }
@@ -469,8 +469,8 @@ impl SvSimplex {
         let mut v: i64 = 0;
         while ((v) as usize) < self.var_col.len() {
             let value = (*nikaia_std::index::get(&self.values, (v) as usize)).clone();
-            let lo = (*nikaia_std::index::get(&self.lower, (v) as usize)).clone();
-            let hi = (*nikaia_std::index::get(&self.upper, (v) as usize)).clone();
+            let lo = (*unsafe { nikaia_std::proven::read(&self.lower, (v) as usize) }).clone();
+            let hi = (*unsafe { nikaia_std::proven::read(&self.upper, (v) as usize) }).clone();
             if lo.set && sv_rat_cmp(&value.c, &lo.value.c) > 0 && sv_rat_cmp(&value.k, &lo.value.k) < 0 {
                 let gap = match sv_rat_sub(&value.c, &lo.value.c) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 let slope = match sv_rat_sub(&lo.value.k, &value.k) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -722,7 +722,7 @@ impl SvSimplex {
     pub(crate) fn active(&self, u: i64) -> Option<SvActive> {
         let lo = (*nikaia_std::index::get(&self.lower, nikaia_std::index::at(u))).clone();
         if lo.set && lo.value.k.num == 0 && sv_delta_cmp(nikaia_std::index::get(&self.values, nikaia_std::index::at(u)), &lo.value) == 0 { return Some(SvActive { side: lo, upper: false }); }
-        let up = (*nikaia_std::index::get(&self.upper, nikaia_std::index::at(u))).clone();
+        let up = (*unsafe { nikaia_std::proven::read(&self.upper, (u) as usize) }).clone();
         if up.set && up.value.k.num == 0 && sv_delta_cmp(nikaia_std::index::get(&self.values, nikaia_std::index::at(u)), &up.value) == 0 { return Some(SvActive { side: up, upper: true }); }
         None
     }
@@ -761,7 +761,7 @@ impl SvSimplex {
             let k = *nikaia_std::index::get(&row.ks, (i) as usize);
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             let lo = (*nikaia_std::index::get(&self.lower, nikaia_std::index::at(v))).clone();
-            let hi = (*nikaia_std::index::get(&self.upper, nikaia_std::index::at(v))).clone();
+            let hi = (*unsafe { nikaia_std::proven::read(&self.upper, (v) as usize) }).clone();
             let fixed = lo.set && hi.set && lo.value.k.num == 0 && hi.value.k.num == 0 && sv_rat_cmp(&lo.value.c, &hi.value.c) == 0;
             if !fixed {
                 g = match sv_gcd(g, k) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -793,8 +793,8 @@ impl SvSimplex {
         let mut v: i64 = 0;
         while ((v) as usize) < self.var_col.len() {
             let value = (*nikaia_std::index::get(&self.values, (v) as usize)).clone();
-            let basic = *unsafe { nikaia_std::proven::read(&self.var_col, (v) as usize) } >= 0 && *nikaia_std::index::get(&self.row_of, (v) as usize) >= 0;
-            if basic && value.c.den != 1 && value.k.num == 0 && !self.row_real(*nikaia_std::index::get(&self.row_of, (v) as usize)) { return v; }
+            let basic = *unsafe { nikaia_std::proven::read(&self.var_col, (v) as usize) } >= 0 && *unsafe { nikaia_std::proven::read(&self.row_of, (v) as usize) } >= 0;
+            if basic && value.c.den != 1 && value.k.num == 0 && !self.row_real(*unsafe { nikaia_std::proven::read(&self.row_of, (v) as usize) }) { return v; }
             v = unsafe { nikaia_std::proven::add::<i64>(v, 1) };
         }
         -1

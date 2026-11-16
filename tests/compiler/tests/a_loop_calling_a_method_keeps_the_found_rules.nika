@@ -1,0 +1,82 @@
+/// A loop whose body calls a method of the type keeps the rules found
+/// between its lists (#1925, ADR-369 D4). The head forgets the lengths the
+/// loop changes, and a checked method asks each `length` rule before such
+/// a call; a rule that holds where the loop is entered and at the end of
+/// each turn holds at every head, so the head has it again. Then `add`'s
+/// result is a position of `rows`, in the loop and past it.
+struct Table {
+	keys: Vec[i64],
+	rows: Vec[i64],
+}
+
+impl Table {
+	fn add(mut self, key: i64) -> i64 sync {
+		let at = self.keys.len()
+		self.keys.push(key)
+		self.rows.push(-1)
+		return at
+	}
+
+	fn fill(mut self, n: i64) sync {
+		let mut i = 0
+		while i < n {
+			let at = self.add(i)
+			self.rows[at] = i
+			i += 1
+		}
+	}
+
+	fn fill_each(mut self, keys: ref Vec[i64]) sync {
+		for k in keys {
+			self.keys.push(k)
+			self.rows.push(k)
+			let at = self.add(k)
+			self.rows[at] = k
+		}
+	}
+
+	fn mark(mut self, key: i64, row: i64) sync {
+		let at = self.add(key)
+		self.rows[at] = row
+	}
+}
+
+/// A loop that grows one list alone breaks the rule at the end of its turn,
+/// so it is not found and the write keeps its check.
+struct Loose {
+	keys: Vec[i64],
+	rows: Vec[i64],
+}
+
+impl Loose {
+	fn add(mut self, key: i64) -> i64 sync {
+		let at = self.keys.len()
+		self.keys.push(key)
+		self.rows.push(-1)
+		return at
+	}
+
+	fn spill(mut self, keys: ref Vec[i64]) sync {
+		for k in keys {
+			let _at = self.add(k)
+			self.keys.push(k)
+		}
+	}
+
+	fn mark(mut self, key: i64, row: i64) sync {
+		let at = self.add(key)
+		self.rows[at] = row
+	}
+}
+
+fn main() throws {
+	let mut t = Table { keys: [], rows: [] }
+	t.fill(3)
+	t.fill_each([7, 8])
+	t.mark(9, 4)
+	println(f"{t.keys.len()} {t.rows.len()} {t.rows[0]} {t.rows[2]} {t.rows[7]}")
+	let mut l = Loose { keys: [], rows: [] }
+	l.mark(5, 6)
+	l.spill([1, 2])
+	println(f"{l.keys.len()} {l.rows.len()} {l.rows[1]}")
+}
