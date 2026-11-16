@@ -2244,11 +2244,16 @@ fn drive_issue_new(title: String, body: String, labels: Vec[String]) -> String t
 // What a report says went badly besides its `Found:` (owner, 2026-11-15:
 // nobody has to ask a builder again): `Issue:` when not `complete`,
 // `Deviation:`, `Needs:` and `Friction:` when not `none`, as
-// `<field>: <text>` lines; empty when all is well.
+// `<field>: <text>` lines; empty when all is well. An `Issue:` answer the
+// run has already built in its own commit (`rules-gap (built): ...`,
+// docs/issues.md) stays in the report for the supervisor's count but is not
+// filed (#1739: #1707's run added its rule to I9 and its answer was filed
+// again as #1724).
 fn drive_improve_items(text: String) -> Vec[String] {
 	let mut items: Vec[String] = []
 	for key in ["Issue", "Deviation", "Needs", "Friction"] {
-		let value = drive_field(text.clone(), key.clone())
+		let field = drive_field(text.clone(), key.clone())
+		let value = if key == "Issue" { drive_issue_open(field) } else { field }
 		let word = drive_word(value.clone())
 		if value == "" || word == "none" || word == "complete" || word == "-" { continue }
 		items.push(f"{key}: {value}")
@@ -2259,6 +2264,20 @@ fn drive_improve_items(text: String) -> Vec[String] {
 		}
 	}
 	return items
+}
+
+// The answers of a report's `Issue:` VALUE (joined with `;`) that are still
+// open: an answer whose kind before its first `: ` ends in `(built)` is
+// left out; "" when none is left.
+fn drive_issue_open(value: String) -> String {
+	let mut open: Vec[String] = []
+	for part in value.split(";") {
+		let t = part.trim()
+		let colon = t.find(": ") ?? t.len()
+		if f"{t[0..<colon]}".trim().ends_with("(built)") { continue }
+		if t != "" { open.push(f"{t}") }
+	}
+	return open.join("; ")
 }
 
 // The issue a report's `Comment:` value names, `#1531 group D waits ...` gives

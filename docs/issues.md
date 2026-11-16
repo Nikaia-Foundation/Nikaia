@@ -274,6 +274,12 @@ each `Issue:` answer as a new improvement issue, and the echo only files
 the closed point once more (#1708: #1703's run closed its I3 label as a
 citation slip and still answered `wrong I3`).
 
+A point the run has already built in its own commit (it added the missing
+rule to this file, or fixed the issue) is answered with `(built)` after its
+kind, `rules-gap (built): <what was missing>`: it stays in the report for the
+supervisor's count, and the driver does not file it (#1739: #1707's run
+added its rule to I9 and its `rules-gap` was filed again as #1724).
+
 Several answers are joined with `;`. The supervisor counts them per rule and
 per author; a rule that is broken often is made easier to keep, a gap that
 comes back twice is a rule.

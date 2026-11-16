@@ -6,7 +6,8 @@
 // `Deviation:`, `Needs:` and `Friction:`, and `none` for a clean report;
 // --comment-issue (#1698): the comment it posts on issue N for a report's
 // `Comment: #N <text>`, and a `Comment:` without a number filed as improvement;
-// an improvement issue names the run's report and commit (#1706).
+// an improvement issue names the run's report and commit (#1706); an `Issue:`
+// answer marked `(built)` is not filed (#1739).
 use std::fs
 use std::process
 
@@ -53,6 +54,11 @@ fn main() throws {
     let said = process::run("mktemp", []).stdout.trim().clone()
     fs::write(said.clone(), fs::Root::Anywhere, "Result: done\nNeeds: none\nComment: #1531 group D waits on group C, from #1634\nComment: none\nComment: on the plan, no number\n")
     drive(repo.clone(), nikaia.clone(), ["--comment-issue", "issue-1676", "1676", said.clone()])
-    drive(repo, nikaia, ["--improve-issue", "issue-1676", "", said.clone()])
-    process::run("rm", ["-f", bad, good, said])
+    drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1676", "", said.clone()])
+    let built = process::run("mktemp", []).stdout.trim().clone()
+    fs::write(built.clone(), fs::Root::Anywhere, "Result: done\nIssue: rules-gap (built): no rule said an item needs no GitHub; wrong I5: the probe passed\nFriction: none\n")
+    drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1707", "1707", built.clone()])
+    fs::write(built.clone(), fs::Root::Anywhere, "Result: done\nIssue: rules-gap (built): no rule said an item needs no GitHub\nFriction: none\n")
+    drive(repo, nikaia, ["--improve-issue", "issue-1708", "1708", built.clone()])
+    process::run("rm", ["-f", bad, good, said, built])
 }
