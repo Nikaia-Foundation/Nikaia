@@ -992,6 +992,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let items: Option<i64> = state.open_items_of(world, receiver);
     let outer_params = state.flow.open_params.copy_owned();
     state.flow.open_params = state.open_walk_params(world, contract, args, items);
+    state.open_walk_copied_params(contract, args, items);
     let outer_lent = state.flow.lent_params.copy_owned();
     state.flow.lent_params = state.lent_walk_params(world, contract, entry, receiver, args);
     if key == "Entry::and_modify" && args.len() == 1 && expected.len() == 1 {
@@ -1009,6 +1010,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
             }
         }
     }
+    if key == "Vec::retain" && args.len() == 1 && expected.len() == 1 && check_core_call_on_retain_copies(on, unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { { let __nikaia_stored = check_core_call_on_unviewed_fn(unsafe { nikaia_std::proven::read(&expected, (0) as usize) }); unsafe { nikaia_std::proven::write(&mut expected, (0) as usize, __nikaia_stored) }; } }
     let callee: Option<FnContract> = Some(contract.clone());
     state.call_keepers = nikaia_std::index::or(match world.keepers.get(key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1286,6 +1288,18 @@ pub(crate) fn check_core_call_on_one_param(world: &CheckWorld<'_, '_, '_, '_, '_
         Expr::Closure { params, .. } => { if params.len() == 1 { Some(nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&params, (0) as usize) }).to_string())) } else { None } },
         _ => None,
     }
+}
+
+pub(crate) fn check_core_call_on_retain_copies(on: &Ty, arg: &Expr) -> bool {
+    let item: Ty = match on {
+        Ty::Named { name, args, .. } => { if (name == "Vec" || name == "List") && args.len() == 1 { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { return false; } },
+        _ => return false,
+    };
+    let one = match arg {
+        Expr::Closure { params, .. } => params.len() == 1,
+        _ => false,
+    };
+    one && !item.is_unknown() && !item.is_a_view() && !moves(&item)
 }
 
 pub(crate) fn check_core_call_on_unviewed_fn(want: &Ty) -> Ty {

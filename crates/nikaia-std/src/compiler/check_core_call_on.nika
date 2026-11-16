@@ -1295,6 +1295,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     let items: i64? = state.open_items_of(world, receiver)
     let outer_params = state.flow.open_params.clone()
     state.flow.open_params = state.open_walk_params(world, contract, args, items)
+    state.open_walk_copied_params(contract, args, items)
     // **And a lambda handed a lent item is lent it** (#626).
     let outer_lent = state.flow.lent_params.clone()
     state.flow.lent_params = state.lent_walk_params(world, contract, entry, receiver, args)
@@ -1317,6 +1318,11 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
                 state.flow.open_params.insert((lambda_param ?? "").clone(), values)
             }
         }
+    }
+    // **`retain` takes out an item that copies** (ADR-231 D2): its lambda's
+    // parameter is the item the pattern `&a` copies out, not a view of it.
+    if key == "Vec::retain" && args.len() == 1 && expected.len() == 1 && check_core_call_on_retain_copies(on, args[0]) {
+        expected[0] = check_core_call_on_unviewed_fn(expected[0])
     }
     let callee: FnContract? = contract.clone()
     state.call_keepers = world.keepers.get(key)?.clone() ?? collections::BTreeMap()
@@ -1695,6 +1701,27 @@ fn check_core_call_on_one_param(world: ref CheckWorld, arg: ref Expr) -> String?
 }
 
 /// A `fn` type whose parameter is no view: the slot copied in.
+/// Whether `retain`'s lambda takes out a list's item that copies and is
+/// not a view: the pattern `&a` of `check_core_method_called`, by the same
+/// test, so the parameter is the item (#1748).
+fn check_core_call_on_retain_copies(on: ref Ty, arg: ref Expr) -> bool {
+    let item: Ty = match on {
+        Ty::Named { name, args, .. } => {
+            if (name == "Vec" || name == "List") && args.len() == 1 {
+                args[0].clone()
+            } else {
+                return false
+            }
+        },
+        else => return false,
+    }
+    let one = match arg {
+        Expr::Closure { params, .. } => params.len() == 1,
+        else => false,
+    }
+    return one && !item.is_unknown() && !item.is_a_view() && !moves(item)
+}
+
 fn check_core_call_on_unviewed_fn(want: ref Ty) -> Ty {
     return match want {
         Ty::Fn { params, result, is_sync, can_throw } => {

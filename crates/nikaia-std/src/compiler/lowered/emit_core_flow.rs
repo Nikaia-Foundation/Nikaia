@@ -167,7 +167,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_closure<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        let mut names: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut names: Vec<String> = vec![];
         for p in params.iter() {
             let p = *p;
             names.push(emit_local_name(&self.facts.comptime_names, &emit_text(world, p)));
@@ -183,7 +183,21 @@ impl EmitState {
         if a_task && !fails { if pauses { out.push("nikaia_std::task::plain_paused("); } else { out.push("nikaia_std::task::plain("); } }
         if pauses { out.push("async "); }
         let pattern = self.facts.filter_patterns.contains(&node_key(node));
-        if pattern && names.len() == 1 { out.push(&format!("|&{}| ", *unsafe { nikaia_std::proven::read(&names, (0) as usize) })); } else if self.facts.copied_entry_lambdas.contains(&node_key(node)) && names.len() == 1 { out.push("|__nikaia_slot| "); } else {
+        let mut takes_out = false;
+        let mut place: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+        while place < names.len() as i64 {
+            if self.facts.copied_item_params.contains(&(node_key(node), place)) { takes_out = true; }
+            place = unsafe { nikaia_std::proven::add::<i64>(place, 1) };
+        }
+        if pattern && names.len() == 1 { out.push(&format!("|&{}| ", *unsafe { nikaia_std::proven::read(&names, (0) as usize) })); } else if takes_out {
+            #[allow(unused_mut)] let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            let mut at = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
+            for name in names.iter() {
+                if self.facts.copied_item_params.contains(&(node_key(node), at)) { written.push(format!("&{}", name)); } else { written.push(nikaia_std::block::Text::from(name.to_string())); }
+                at += 1;
+            }
+            out.push(&format!("|{}| ", nikaia_std::block::Text::from(written.join(", "))));
+        } else if self.facts.copied_entry_lambdas.contains(&node_key(node)) && names.len() == 1 { out.push("|__nikaia_slot| "); } else {
             let by_use: Vec<Ty> = nikaia_std::index::or(match self.facts.lambda_params_by_use.get(&node_key(node)) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,

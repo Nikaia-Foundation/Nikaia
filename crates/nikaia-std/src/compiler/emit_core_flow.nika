@@ -277,8 +277,29 @@ impl EmitState {
         // **`filter` is handed a reference to its item** (ADR-231 D2): where the
         // item copies, the pattern takes it out.
         let pattern = self.facts.filter_patterns.contains(node_key(node))
+        // **A view of an open number's item is taken out** (#1748).
+        let mut takes_out = false
+        let mut place = 0
+        while place < names.len() as i64 {
+            if self.facts.copied_item_params.contains((node_key(node), place)) {
+                takes_out = true
+            }
+            place += 1
+        }
         if pattern && names.len() == 1 {
             out.push(f"|&{names[0]}| ")
+        } else if takes_out {
+            let mut written: Vec[String] = []
+            let mut at = 0
+            for name in names {
+                if self.facts.copied_item_params.contains((node_key(node), at)) {
+                    written.push(f"&{name}")
+                } else {
+                    written.push(name.clone())
+                }
+                at += 1
+            }
+            out.push(f"|{written.join(", ")}| ")
         } else if self.facts.copied_entry_lambdas.contains(node_key(node)) && names.len() == 1 {
             out.push("|__nikaia_slot| ")
         } else {
