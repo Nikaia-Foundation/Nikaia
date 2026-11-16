@@ -32,6 +32,11 @@ it, like the checks in `docs/supervisor.md`.
   a partial run's issue is queued again, from a stale comment in
   `drive.nika`, and `drive_queue_add` skips a `#N` still in `batch.txt`
   (#1697).
+  Code is named by its function, never by a line number alone (lines move
+  with every commit), and a value it quotes (an exit code, a printed line)
+  is read in that function (#1733: #1717 cited "line 228" and "exit 4" for
+  the restart; the line was `drive_wake` and exit 4 its time-limit stop,
+  the restart is `drive_restart`).
 * **I4b. Code in an issue is written the way a program writes it**
   (#1730): a probe, a sketch of a new API, or an example use, in a bug or
   a feature. It is checked with `scripts/probe.nika --check` (stubs for what
@@ -169,6 +174,10 @@ it, like the checks in `docs/supervisor.md`.
   Never a Rust test file or a `#[test]` (CLAUDE.md); a builder reads one an
   older issue still names as that program, and does not report it (#1671).
   The order is the order to build in; an item resting on another says so.
+  An item settles each choice that changes what its result does, or says
+  the builder chooses (#1733: #1717 left open whether a merge with no local
+  commits fast-forwards, and a merge commit alone would have made the suite
+  run).
   An item is work a builder can do without GitHub: what to say on another
   issue is a report's `Comment: #N <text>`, which the driver posts, and an
   issue whose only point is such a request is closed as noise (#1698, #1707).
