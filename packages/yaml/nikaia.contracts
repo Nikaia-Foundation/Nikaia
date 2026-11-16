@@ -879,7 +879,7 @@ signature = "(s: Style) -> ref String"
 
 [fn."syntax_error"]
 sync = true
-panics = true
+panics = false
 touches = []
 views = ["input: borrowed", "rendered: borrowed"]
 signature = "(input: ref Bytes, rendered: String, depth: i64) -> Error"
