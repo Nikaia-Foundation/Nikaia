@@ -1770,11 +1770,13 @@ fn rules_standing(walk: ref BoundsWalk, facts: ref BoundsFacts, fact: i64) -> bo
 
 /// **The markers of `capped` bounds against `name`'s length that a loop or
 /// a branch keeps** (#1785): `cap#k <= len` stays true where `changed`
-/// only adds to the list (no `falls`), so the bound stands past it, even
-/// where a counted loop named the length it was reached with instead.
+/// only adds to the list, or shortens it only through methods of its own
+/// value, each of which keeps the rule (no `bare_falls`, #1808), so the
+/// bound stands past it, even where a counted loop named the length it was
+/// reached with instead.
 fn rules_capped_grown(mut walk: BoundsWalk, facts: ref BoundsFacts, name: ref String, changed: ref BoundsChanged) -> Vec[i64] {
     let mut out: Vec[i64] = []
-    if changed.falls.contains(name) || changed.values.contains(name) {
+    if changed.bare_falls.contains(name) || changed.values.contains(name) {
         return out
     }
     let length = length_of(name)

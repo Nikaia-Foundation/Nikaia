@@ -217,6 +217,13 @@ pub struct BoundsChanged {
 	/// by a method that only adds to the list. A list in `lengths` and not
 	/// here only grows.
 	pub falls: collections::BTreeSet[String],
+	/// **Of `falls`, those that may fall otherwise than through a method of
+	/// this program called on the value the list is a field of** (#1808):
+	/// such a method keeps its type's rules at every exit (ADR-306 D21), so
+	/// a `capped` bound against the list's length stands past it
+	/// (`rules_capped_grown`). Each fall goes into both sets
+	/// (`changed_falls`); only `changed_by_method` leaves one out here.
+	pub bare_falls: collections::BTreeSet[String],
 	/// Places written through an element (#781), as `list|at|.fields`:
 	/// the same fields of every element of `list` may change.
 	pub elements: collections::BTreeSet[String],
@@ -478,8 +485,16 @@ fn nothing_changed() -> BoundsChanged {
 		jumps: collections::BTreeSet(),
 		drops: collections::BTreeSet(),
 		falls: collections::BTreeSet(),
+		bare_falls: collections::BTreeSet(),
 		elements: collections::BTreeSet(),
 	}
+}
+
+/// `name`'s length may fall, otherwise than through a method of its own
+/// value (`BoundsChanged.bare_falls`, #1808).
+fn changed_falls(mut out: BoundsChanged, name: ref String) {
+	out.falls.insert(name.clone())
+	out.bare_falls.insert(name.clone())
 }
 
 /// **Every index and every operation the walk proves in one body**, a
@@ -8119,11 +8134,13 @@ fn bounding_for(
 		jumps: changed.jumps.clone(),
 		drops: changed.drops.clone(),
 		falls: changed.falls.clone(),
+		bare_falls: changed.bare_falls.clone(),
 		elements: changed.elements.clone(),
 	}
 	for list in filled {
 		outer.lengths.remove(list)
 		outer.falls.remove(list)
+		outer.bare_falls.remove(list)
 	}
 	// **Past the loop, its counters are bounded by the turns it ended**
 	// (ADR-361 D10, D13): with no `break`, the loop leaves at the head of
@@ -9639,6 +9656,7 @@ fn bounding_extend(mut changed: BoundsChanged, other: BoundsChanged) {
 	changed.jumps.extend(other.jumps.clone())
 	changed.drops.extend(other.drops.clone())
 	changed.falls.extend(other.falls.clone())
+	changed.bare_falls.extend(other.bare_falls.clone())
 	changed.elements.extend(other.elements.clone())
 }
 
@@ -9696,7 +9714,7 @@ fn changed_in_block(
 						out.drops.insert(name.clone())
 					}
 					out.lengths.insert(name.clone())
-					out.falls.insert(name.clone())
+					changed_falls(out, name)
 					out.values.insert(name)
 				}
 				bounding_element_changed(target, words, out)
@@ -9901,7 +9919,7 @@ fn changed_by(
 				// A vector's load reads its bytes and changes nothing.
 				if hands_on(callee, at) && !context.simd_loads.contains_key(node_key(func)) {
 					out.lengths.insert(handed.clone())
-					out.falls.insert(handed.clone())
+					changed_falls(out, handed)
 					out.jumps.insert(handed.clone())
 					out.drops.insert(handed.clone())
 					out.values.insert(handed)
@@ -9924,7 +9942,23 @@ fn changed_by_method(
 	// A method of this program changes what its frame names (ADR-391 D2).
 	let frame = called_frame(call, method, context)
 	if frame != null {
-		changed_by_frame(frame ?? nothing_changed(), receiver, args, words, out)
+		let mut got = nothing_changed()
+		changed_by_frame(frame ?? nothing_changed(), receiver, args, words, got)
+		// A field of the receiver the method shortens falls through a method
+		// of its own value, which keeps its type's rules (#1808).
+		let on = path_of(receiver, words)
+		if on != null {
+			let root = on ?? ""
+			let mut bare: collections::BTreeSet[String] = collections::BTreeSet()
+			for path in got.bare_falls {
+				let field = path.strip_prefix(root)?.strip_prefix(".") ?? ""
+				if field.is_empty() || field.contains(".") {
+					bare.insert(path.clone())
+				}
+			}
+			got.bare_falls = bare
+		}
+		bounding_extend(out, got)
 		return
 	}
 	if context.around.changing_receivers.contains(method) || !keeps_length(method) {
@@ -9936,7 +9970,7 @@ fn changed_by_method(
 		if !keeps_length(method) {
 			out.lengths.insert(name.clone())
 			if !only_adds(method) {
-				out.falls.insert(name.clone())
+				changed_falls(out, name)
 			}
 		}
 		// A method that may change its receiver changes the paths of fields
@@ -9956,7 +9990,7 @@ fn changed_by_method(
 			out.values.insert(text.clone())
 			out.jumps.insert(text.clone())
 			out.drops.insert(text.clone())
-			out.falls.insert(text.clone())
+			changed_falls(out, text)
 			out.lengths.insert(text)
 		}
 	}

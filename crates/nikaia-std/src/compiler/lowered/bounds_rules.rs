@@ -1265,7 +1265,7 @@ pub(crate) fn rules_standing(walk: &BoundsWalk, facts: &BoundsFacts, fact: i64) 
 
 pub(crate) fn rules_capped_grown(walk: &mut BoundsWalk, facts: &BoundsFacts, name: &str, changed: &BoundsChanged) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
-    if changed.falls.contains(name) || changed.values.contains(name) { return out; }
+    if changed.bare_falls.contains(name) || changed.values.contains(name) { return out; }
     let length = length_of(name);
     let mut names = vec![nikaia_std::block::Text::from(length.to_string())];
     for k in 0..walk.entries {

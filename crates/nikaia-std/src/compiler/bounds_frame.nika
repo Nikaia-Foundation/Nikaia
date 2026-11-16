@@ -315,7 +315,7 @@ fn frame_put(
 	} else if kind == 1 {
 		out.lengths.insert(mapped)
 	} else if kind == 3 {
-		out.falls.insert(mapped)
+		changed_falls(out, mapped)
 	} else {
 		out.parts.insert(mapped)
 	}
@@ -502,14 +502,14 @@ pub fn frame_at_call(
 		out.values.insert(on.clone())
 		out.jumps.insert(on.clone())
 		out.drops.insert(on.clone())
-		out.falls.insert(on.clone())
+		changed_falls(out, on)
 		out.lengths.insert(on)
 	}
 	for path in frame.lengths {
 		out.lengths.insert(frame_onto(path, receiver, handed) ?? continue)
 	}
 	for path in frame.falls {
-		out.falls.insert(frame_onto(path, receiver, handed) ?? continue)
+		changed_falls(out, frame_onto(path, receiver, handed) ?? continue)
 	}
 	for path in frame.parts {
 		out.parts.insert(frame_onto(path, receiver, handed) ?? continue)

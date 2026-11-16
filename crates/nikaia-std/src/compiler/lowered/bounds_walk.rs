@@ -86,6 +86,7 @@ pub struct BoundsChanged {
     pub jumps: collections::BTreeSet<String>,
     pub drops: collections::BTreeSet<String>,
     pub falls: collections::BTreeSet<String>,
+    pub bare_falls: collections::BTreeSet<String>,
     pub elements: collections::BTreeSet<String>,
 }
 
@@ -174,7 +175,12 @@ pub(crate) fn call_depth() -> i64 { 4 }
 
 pub(crate) fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), loops: collections::BTreeMap::new(), derived: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), fields_lost: collections::BTreeSet::new(), returned: None, trace: vec![], held: collections::BTreeMap::new() } }
 
-pub(crate) fn nothing_changed() -> BoundsChanged { BoundsChanged { values: collections::BTreeSet::new(), lengths: collections::BTreeSet::new(), parts: collections::BTreeSet::new(), jumps: collections::BTreeSet::new(), drops: collections::BTreeSet::new(), falls: collections::BTreeSet::new(), elements: collections::BTreeSet::new() } }
+pub(crate) fn nothing_changed() -> BoundsChanged { BoundsChanged { values: collections::BTreeSet::new(), lengths: collections::BTreeSet::new(), parts: collections::BTreeSet::new(), jumps: collections::BTreeSet::new(), drops: collections::BTreeSet::new(), falls: collections::BTreeSet::new(), bare_falls: collections::BTreeSet::new(), elements: collections::BTreeSet::new() } }
+
+pub(crate) fn changed_falls(out: &mut BoundsChanged, name: &str) {
+    out.falls.insert(nikaia_std::block::Text::from(name.to_string()));
+    out.bare_falls.insert(nikaia_std::block::Text::from(name.to_string()));
+}
 
 pub fn bounds_aggressive(args: &[FnArg], body: &Block, nonnegative: collections::BTreeSet<String>, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> BoundsProven {
     let mut walk = bounding_new(args, body, nonnegative, context, program, words);
@@ -4667,10 +4673,11 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
             filled = lists;
         }
     }
-    let mut outer = BoundsChanged { values: changed.values.copy_owned(), lengths: changed.lengths.copy_owned(), parts: changed.parts.copy_owned(), jumps: changed.jumps.copy_owned(), drops: changed.drops.copy_owned(), falls: changed.falls.copy_owned(), elements: changed.elements.copy_owned() };
+    let mut outer = BoundsChanged { values: changed.values.copy_owned(), lengths: changed.lengths.copy_owned(), parts: changed.parts.copy_owned(), jumps: changed.jumps.copy_owned(), drops: changed.drops.copy_owned(), falls: changed.falls.copy_owned(), bare_falls: changed.bare_falls.copy_owned(), elements: changed.elements.copy_owned() };
     for list in filled.iter() {
         outer.lengths.remove(list);
         outer.falls.remove(list);
+        outer.bare_falls.remove(list);
     }
     let mut past: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if walk.through_loops && all_turns.is_some() && !breaks(body, words) {
@@ -5518,6 +5525,7 @@ pub(crate) fn bounding_extend(changed: &mut BoundsChanged, other: &BoundsChanged
     changed.jumps.extend(other.jumps.iter().cloned());
     changed.drops.extend(other.drops.iter().cloned());
     changed.falls.extend(other.falls.iter().cloned());
+    changed.bare_falls.extend(other.bare_falls.iter().cloned());
     changed.elements.extend(other.elements.iter().cloned());
 }
 
@@ -5548,7 +5556,7 @@ pub(crate) fn changed_in_block(block: &Block, context: &BoundsContext, words: &w
                     if !bounding_steps_up(&name, (op).as_ref(), value, words) { out.jumps.insert(nikaia_std::block::Text::from(name.to_string())); }
                     if !bounding_steps_down(&name, (op).as_ref(), value, words) { out.drops.insert(nikaia_std::block::Text::from(name.to_string())); }
                     out.lengths.insert(nikaia_std::block::Text::from(name.to_string()));
-                    out.falls.insert(nikaia_std::block::Text::from(name.to_string()));
+                    changed_falls(out, &name);
                     out.values.insert(name);
                 }
                 bounding_element_changed(target, words, out);
@@ -5705,7 +5713,7 @@ pub(crate) fn changed_by(expr: &Expr, context: &BoundsContext, words: &winnow_gr
                 let handed = match path_of(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if hands_on((callee).as_ref(), at) && !context.simd_loads.contains_key(&node_key(func)) {
                     out.lengths.insert(nikaia_std::block::Text::from(handed.to_string()));
-                    out.falls.insert(nikaia_std::block::Text::from(handed.to_string()));
+                    changed_falls(out, &handed);
                     out.jumps.insert(nikaia_std::block::Text::from(handed.to_string()));
                     out.drops.insert(nikaia_std::block::Text::from(handed.to_string()));
                     out.values.insert(handed);
@@ -5719,7 +5727,22 @@ pub(crate) fn changed_by(expr: &Expr, context: &BoundsContext, words: &winnow_gr
 pub(crate) fn changed_by_method(call: &Expr, receiver: &Expr, method: &str, args: &[Expr], context: &BoundsContext, words: &winnow_grammar::InternerContext, out: &mut BoundsChanged) {
     let frame = called_frame(call, method, context);
     if frame.is_some() {
-        changed_by_frame(&nikaia_std::index::or(frame, || nothing_changed().into()), receiver, args, words, out);
+        let mut got = nothing_changed();
+        changed_by_frame(&nikaia_std::index::or(frame, || nothing_changed().into()), receiver, args, words, &mut got);
+        let on = path_of(receiver, words);
+        if on.is_some() {
+            let root = nikaia_std::index::or(on, || "".into());
+            let mut bare: collections::BTreeSet<String> = collections::BTreeSet::new();
+            for path in got.bare_falls.iter() {
+                let field = nikaia_std::index::or(match path.strip_prefix(&*root) {
+                    Some(__nikaia_it) => __nikaia_it.strip_prefix("."),
+                    None => None,
+                }, || "");
+                if field.is_empty() || field.contains('.') { bare.insert(nikaia_std::block::Text::from(path.to_string())); }
+            }
+            got.bare_falls = bare;
+        }
+        bounding_extend(out, &got);
         return;
     }
     if context.around.changing_receivers.contains(method) || !keeps_length(method) { bounding_element_changed(receiver, words, out); }
@@ -5728,7 +5751,7 @@ pub(crate) fn changed_by_method(call: &Expr, receiver: &Expr, method: &str, args
         let name = nikaia_std::index::or(receiver_path, || "".into());
         if !keeps_length(method) {
             out.lengths.insert(nikaia_std::block::Text::from(name.to_string()));
-            if !only_adds(method) { out.falls.insert(nikaia_std::block::Text::from(name.to_string())); }
+            if !only_adds(method) { changed_falls(out, &name); }
         }
         if context.around.changing_receivers.contains(method) || !keeps_length(method) { out.parts.insert(name); } else if !keeps_items(method) { out.elements.insert(format!("{}|*|", name)); }
     }
@@ -5739,7 +5762,7 @@ pub(crate) fn changed_by_method(call: &Expr, receiver: &Expr, method: &str, args
             out.values.insert(nikaia_std::block::Text::from(text.to_string()));
             out.jumps.insert(nikaia_std::block::Text::from(text.to_string()));
             out.drops.insert(nikaia_std::block::Text::from(text.to_string()));
-            out.falls.insert(nikaia_std::block::Text::from(text.to_string()));
+            changed_falls(out, &text);
             out.lengths.insert(text);
         }
     }
