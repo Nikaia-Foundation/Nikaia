@@ -82,6 +82,18 @@ fn games() -> Vec[Game] {
 			cpu: "ivybridge",
 			one_thread: "RAYON_NUM_THREADS=1",
 		},
+		Game {
+			name: "binary-trees",
+			args: "16",
+			units: 14985902,
+			unit: "tree node",
+			nikaia: "benches/game/binary-trees/main.nika",
+			speed: "",
+			rust: "benches/game/binary-trees/rust-5.rs",
+			label: "Rust #5",
+			cpu: "ivybridge",
+			one_thread: "RAYON_NUM_THREADS=1",
+		},
 	]
 }
 

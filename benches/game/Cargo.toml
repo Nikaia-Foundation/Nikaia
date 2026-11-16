@@ -19,10 +19,15 @@ path = "spectral-norm/rust-6.rs"
 name = "fannkuch-redux"
 path = "fannkuch-redux/rust-6.rs"
 
+[[bin]]
+name = "binary-trees"
+path = "binary-trees/rust-5.rs"
+
 # The game's Rust entries link against its `rust-libs`; spectral-norm's and
-# fannkuch-redux's need rayon.
+# fannkuch-redux's need rayon, binary-trees' rayon and bumpalo.
 [dependencies]
 rayon = "1"
+bumpalo = "3"
 
 # The game's `rustc -C opt-level=3 -C codegen-units=1`; its
 # `-C target-cpu=ivybridge` is passed by `game.nika` in `RUSTFLAGS`.
