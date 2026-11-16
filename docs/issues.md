@@ -210,6 +210,11 @@ it, like the checks in `docs/supervisor.md`.
   was meant; its probe broke I5 too, not copied from a file that ran).
   When the last item may end in filed issues instead of code, the issue
   says which code step carries `Fixes #N` (#1453).
+  It never asks the run for the numbers of issues its own findings
+  become ("each loss names its issue"): a builder files no issue, and the
+  driver numbers its `Found:` lines only after the run. It asks for a
+  `Found:` line per finding instead, which the driver files and links
+  (#1843: #1611's and #1613's runs could not meet it).
 * **I8a. Measured sizes** (2026-11-08, #1397, #1414): an item that promises to
   remove sites gives the count it measured per group, with one probe per group,
   and checks the group against the governing ADR's *does not decide* list; an
@@ -314,6 +319,10 @@ it, like the checks in `docs/supervisor.md`.
   output that must stay byte-identical). A move into Nikaia names the Rust it
   replaces and the `std` counterparts it needs (Part III 17); a missing one
   is its own issue, linked.
+  A file an earlier issue is still to create (`After #N`) is named as that
+  issue's output ("the harness #1612 builds"), never by a guessed path;
+  when #N closes, the author puts the path it built in its place (#1843:
+  #1613 named `benches/game/game.sh`, which #1612 built as `game.nika`).
   It names the limits the work will run into: a cap the code keeps (the
   walk's 48 facts, `most_facts()`), a set that is silently trimmed (#1470).
   A change to a pass every build runs (the bounds walk runs in each
