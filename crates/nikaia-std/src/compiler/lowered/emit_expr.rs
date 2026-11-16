@@ -210,7 +210,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_expr_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let at = node_key(node);
-        if self.facts.lent_reads.contains(&at) { out.push("&"); }
+        if self.facts.lent_reads.contains(&at) && !self.emit_stmt_a_kept_name(world, &walk, node) { out.push("&"); }
         match node {
             Expr::LitInt { value, negative, .. } => {
                 let negative = *negative; let value = *value;

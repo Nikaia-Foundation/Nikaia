@@ -781,7 +781,7 @@ pub(crate) fn is_the_buffer(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_,
             ends_in_the_buffer(then_branch, ask, walk) && ends_in_the_buffer(other, ask, walk)
         },
         Expr::Match { arms, .. } => {
-            for arm in arms.iter() { if !is_the_buffer(&arm.body, ask, walk) { return false; } }
+            for arm in arms.iter() { if ask.viewed.contains(&node_key(&arm.body)) || !is_the_buffer(&arm.body, ask, walk) { return false; } }
             !arms.is_empty()
         },
         Expr::Block(block, _) => ends_in_the_buffer(block, ask, walk),
@@ -791,7 +791,7 @@ pub(crate) fn is_the_buffer(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_,
 
 pub(crate) fn ends_in_the_buffer(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     let tail = match ending_of(block) { Some(__nikaia_value) => __nikaia_value, None => return false };
-    is_the_buffer(&tail, ask, walk)
+    !ask.viewed.contains(&node_key(&tail)) && is_the_buffer(&tail, ask, walk)
 }
 
 pub(crate) fn struct_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> Option<String> {
