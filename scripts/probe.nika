@@ -11,6 +11,12 @@
 // Prints the output and the diagnostics, at most 60 lines, then `exit <code>`,
 // and exits with nikaia's own code. A probe for a
 // report or an issue is the snippet and these lines.
+//
+// A binary older than a compiler source in the tree (`crates/*/src`, the
+// `.nika` and the lowered `.rs`, the Rust of the compiler) may predate HEAD:
+// the probe then says so in a first `note:` line, with the newest such file
+// and the build that brings it in, before a refusal is read as a defect
+// (#1866: a probe read NK1297 for f64 lanes HEAD already took).
 
 use std::cli
 use std::fs
@@ -58,6 +64,24 @@ fn probe_source(file: String, parts: Vec[String]) -> String throws {
 	return f"fn main() throws {{\n{src}\n}}\n"
 }
 
+// The `note:` line for a binary older than a compiler source, or "" when
+// none is newer (or no binary is there: the run itself then says so).
+fn probe_stale_note() -> String throws {
+	let exe = "target/fast/nikaia"
+	if !fs::exists(exe, fs::Root::Anywhere) { return "" }
+	let found = process::run(
+		"sh",
+		[
+			"-c",
+			f"find crates/*/src -newer {exe} -type f \\( -name '*.rs' -o -name '*.nika' \\) 2>/dev/null",
+		],
+	)
+	let newer: Vec[String] = found.stdout.trim().split("\n").filter(fn(l) { l.len() > 0 }).collect()
+	if newer.len() == 0 { return "" }
+	let first = newer[0].clone()
+	return f"note: {exe} is older than {newer.len()} compiler source file(s) in the tree (e.g. {first}): it may predate HEAD, so build it (cargo build --profile fast -p nikaia) before reading a refusal as a defect"
+}
+
 fn main() throws {
 	let mut args: Vec[String] = []
 	for a in cli::args() { args.push(a) }
@@ -87,6 +111,8 @@ fn main() throws {
 		"sh",
 		["-c", f"NIKAIA_CACHE_LIMIT=2G target/fast/nikaia {verb} target/probe/main.nika"],
 	)
+	let note = probe_stale_note()
+	if note != "" { println(note) }
 	let all = out.stdout + out.stderr
 	let lines: Vec[String] = all.trim().split("\n").collect()
 	let mut n = 0
