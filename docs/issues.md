@@ -72,6 +72,12 @@ it, like the checks in `docs/supervisor.md`.
   (#1726: #1715's probe threw text, lacked `use std::time` and put
   `user-parallelism` under `[package]`, where it is ignored, not under
   `[build]`; it did not compile as written and cost three probe rounds).
+  A probe of a missing method or `std` entry stops at that name, so the
+  rest of it is never checked: it is run once more with a method that
+  exists in its place (`sort_by_key` for `sort_by`), and it writes
+  Nikaia's names, not Rust's (#1749: #1738's `sort_by` probe compared with
+  `b.cmp(a)`, where Nikaia's method is `compare`, ADR-341 D2, so it could
+  not give its expected output even once the entry was built).
   A `Found:` whose case is half in the run's reach and half a decision is
   split: the run fixes its part, the issue keeps the other, with its
   expected result (#1726).
@@ -79,6 +85,11 @@ it, like the checks in `docs/supervisor.md`.
   issues, and a claim no probe shows is checked against the code first, since
   a behaviour a function does on purpose is no bug (#1677: a `Found:` merged
   two claims without a probe, and the second was the describer's rule).
+  A cost (a read more per call) is no defect either: it is left out, or
+  filed alone as a measuring issue with its count (`docs/measuring.md`)
+  (#1752: #1554 put seven claims in one point, among them a closure
+  capture `block.rs` keeps on purpose and a thread-local read per
+  allocation).
   A builder's report gives each defect its own `Found:` line for this.
   Each shape the issue names as failing (a `for` and a `while` form) is
   run on the binary of the day; a shape that already works is named as
@@ -122,6 +133,11 @@ it, like the checks in `docs/supervisor.md`.
 
 * **I8. Done when**: one sentence saying what is true when the issue is
   finished, checkable without the author.
+  The result it names is written out (the action the program then takes,
+  or the NK code and the gist of the refusal), never pointed at: "gives the
+  specified result" leaves the builder to choose between them (#1747:
+  #1736's *Done when* left open whether the action or ADR-296 D25's refusal
+  was meant; its probe broke I5 too, not copied from a file that ran).
   When the last item may end in filed issues instead of code, the issue
   says which code step carries `Fixes #N` (#1453).
 * **I8a. Measured sizes** (2026-11-08, #1397, #1414): an item that promises to
@@ -260,7 +276,11 @@ it, like the checks in `docs/supervisor.md`.
 After its run a builder answers, in its report and in its debrief, what the
 issue lacked that would have saved it turns or a wrong turn:
 
-* `Issue: complete` — nothing was missing.
+* `Issue: complete` — nothing was missing. Write that word, not `meets
+  I1-I13`, and nothing after it: a note for the run's own issue is a
+  `Comment: #N <text>` line, which the driver posts there; inside `Issue:`
+  it is filed as an improvement issue (#1753: #1740's run wrote `meets
+  I1-I13; comment: all three cases fixed ...`).
 * `Issue: broke I<n>: <what was missing>` — a rule above asks for it and the
   issue does not have it. The author fixes the issue; nothing changes here.
 * `Issue: rules-gap: <what was missing>` — no rule above asks for it. The
@@ -274,10 +294,14 @@ issue lacked that would have saved it turns or a wrong turn:
 is plain language and I4 where it belongs; a probe that passes before any
 change is I5 and so is one that does not parse as written, a decision called
 unbuilt that is built is I6 ("built or text only"), a suspected function
-that does not exist is I7, an item that is wrong is I9 (#1735: #1527's run answered `wrong I3`
+that does not exist is I7, an item that is wrong or leaves open a choice
+that changes its result without saying the builder chooses is I9 (#1735: #1527's run answered `wrong I3`
 and `wrong I4` for an I5/I6 and an I9 point; #1708 the same slip; #1741:
 #1729's run answered `wrong I3` for a probe that did not parse, I5, and a
-suspected function that does not exist, I7).
+suspected function that does not exist, I7; #1745: #1731's run answered
+`broke I3` for an issue filed `ready` without its decision, I6; #1746:
+#1533's run answered `rules-gap` for an item that left open what bounds the
+wait before a body's first byte, `broke I9`).
 
 A point the run has already closed as noise in its `Body:` (a mislabelled
 rule number a driver-filed issue copied from an earlier report, a slip

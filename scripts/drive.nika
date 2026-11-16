@@ -420,12 +420,29 @@ fn drive_fields(body: String, key: String) -> Vec[String] {
 }
 
 // The `Found:` values of a report that name a defect (not empty, not `none`).
+// A report with none whose `Needs:` names its gap (`Needs: supervisor
+// decision: <gap>`) gives that gap (drive_needs_gap) as its one Found, so it
+// is filed as a `decision` issue (drive_found_labels), not buried in the
+// improvement issue (#1744: #1557's run put its ADR-306 question there).
 fn drive_founds(text: String) -> Vec[String] {
 	let mut out: Vec[String] = []
-	for f in drive_fields(text, "Found") {
+	for f in drive_fields(text.clone(), "Found") {
 		if f != "" && drive_word(f.clone()) != "none" { out.push(f) }
 	}
+	if out.len() == 0 {
+		let gap = drive_needs_gap(text)
+		if gap != "" { out.push(gap) }
+	}
 	return out
+}
+
+// The gap a report's `Needs: supervisor decision: <gap>` names, without the
+// words before it; "" when `Needs:` says no more than `supervisor decision`
+// or asks for something else.
+fn drive_needs_gap(text: String) -> String {
+	let needs = drive_field(text, "Needs")
+	let rest = (needs.strip_prefix("supervisor decision") ?? "").trim()
+	return (rest.strip_prefix(":") ?? "").trim().clone()
 }
 
 fn drive_word(value: String) -> String {
@@ -2152,12 +2169,16 @@ fn drive_wip_end(dry: bool, brief: String) throws {
 // The labels of an issue filed from a report's `Found:`: `ready` and `bugs`
 // (the bug lane takes it, owner 2026-11-15; the improvement lane relabels
 // what is no compiler defect), `decision` instead of `ready` when `Needs:`
-// asks for something. Never a second lane label: one lane label per issue
-// says which lane builds it (owner, 2026-11-15); the body names the run it
-// came from.
-fn drive_found_labels(needs: String) -> Vec[String] {
+// asks for something or the Found itself says `no decision yet` (the words
+// docs/issues.md I6 asks of an issue without its governing decision; #1745:
+// #1731 was filed `ready` from a Found that asked for a decision beside a
+// `Needs: none`). Never a second lane label: one lane label per issue says
+// which lane builds it (owner, 2026-11-15); the body names the run it came
+// from.
+fn drive_found_labels(found: String, needs: String) -> Vec[String] {
 	let mut status: String = "decision"
-	if needs == "" || drive_word(needs) == "none" { status = "ready" }
+	if (needs == "" || drive_word(needs) == "none")
+		&& !found.to_lowercase().contains("no decision yet") { status = "ready" }
 	return [status, "bugs"]
 }
 
@@ -2212,7 +2233,7 @@ fn drive_found_file(dir: String, brief: String) throws {
 		let number = drive_issue_new(
 			drive_found_title(found),
 			body,
-			drive_found_labels(needs.clone()),
+			drive_found_labels(found.clone(), needs.clone()),
 		)
 		if number == "" {
 			println(f"file failed for {name}")
@@ -2256,6 +2277,8 @@ fn drive_improve_items(text: String) -> Vec[String] {
 		let value = if key == "Issue" { drive_issue_open(field) } else { field }
 		let word = drive_word(value.clone())
 		if value == "" || word == "none" || word == "complete" || word == "-" { continue }
+		// A gap filed as the report's Found (drive_founds, #1744).
+		if key == "Needs" && drive_founds(text.clone()) == [drive_needs_gap(text.clone())] { continue }
 		items.push(f"{key}: {value}")
 	}
 	for c in drive_fields(text, "Comment") {
@@ -2268,13 +2291,17 @@ fn drive_improve_items(text: String) -> Vec[String] {
 
 // The answers of a report's `Issue:` VALUE (joined with `;`) that are still
 // open: an answer whose kind before its first `: ` ends in `(built)` is
-// left out; "" when none is left.
+// left out, and so is one that says nothing was missing in other words than
+// `complete` (`meets I1-I13`, #1753: #1740's run wrote it and it was filed);
+// "" when none is left.
 fn drive_issue_open(value: String) -> String {
 	let mut open: Vec[String] = []
 	for part in value.split(";") {
 		let t = part.trim()
 		let colon = t.find(": ") ?? t.len()
 		if f"{t[0..<colon]}".trim().ends_with("(built)") { continue }
+		let word = drive_word(f"{t}")
+		if word == "complete" || word == "meets" { continue }
 		if t != "" { open.push(f"{t}") }
 	}
 	return open.join("; ")
@@ -3178,7 +3205,7 @@ fn main() throws {
 	}
 	if args.len() == 6 && args[1] == "--found-issue" {
 		println(drive_found_title(args[4].clone()))
-		println(drive_found_labels(args[5].clone()).join(","))
+		println(drive_found_labels(args[4].clone(), args[5].clone()).join(","))
 		print(drive_found_body(args[2].clone(), args[3].clone(), args[4].clone(), args[5].clone()))
 		return
 	}
