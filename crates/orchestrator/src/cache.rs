@@ -1052,6 +1052,13 @@ fn cargo_holds(entry: &Path) -> bool {
     false
 }
 
+/// Whether `file` is now locked exclusively by this process, taken without
+/// waiting (`flock`; without it, always): a test place kept from one run to
+/// the next is used by one run at a time (#1750).
+pub fn lock_exclusive(file: &std::fs::File) -> bool {
+    lock::exclusive(file)
+}
+
 /// Advisory locks, taken without waiting: `flock`, the call Cargo locks its
 /// target directory with. A lock is released when its file is closed.
 #[cfg(unix)]
