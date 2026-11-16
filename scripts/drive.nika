@@ -484,12 +484,16 @@ fn drive_run_minutes(dir: String) -> i64 throws {
 // NIKAIA_DRIVE_LIMIT_MIN (drive_time_up); else, where the minutes left until
 // the task ends (NIKAIA_DRIVE_TASK_MIN, default 120: the 2 h after which the
 // harness ends the driver and its agent) are fewer than a run of DIR takes
-// (drive_run_minutes), what says so.
+// (drive_run_minutes, at most NIKAIA_DRIVE_LIMIT_MIN), what says so.
 fn drive_time_check(dir: String) -> String throws {
 	if drive_time_up() { return "up" }
 	let task = text::parse_i64(env::var("NIKAIA_DRIVE_TASK_MIN") ?? "") ?? 120
 	let left = (task * 60 - drive_elapsed()) / 60
-	let run = drive_run_minutes(dir)
+	// A run longer than the time limit fits no task: it is counted as the
+	// limit, so a fresh driver still starts one (a lane whose runs were cut
+	// off would otherwise stop at every start).
+	let limit = text::parse_i64(env::var("NIKAIA_DRIVE_LIMIT_MIN") ?? "") ?? 105
+	let run = drive_run_minutes(dir).min(limit)
 	if left >= run { return "" }
 	return f"{left} min left of {task}, a run of {dir} takes {run} min"
 }
