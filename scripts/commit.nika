@@ -47,6 +47,13 @@
 // unmarked answer as an improvement issue, so a rule the commit itself built
 // comes back as one (#1739 filed as #1724, #1726 filed as #1773). It only
 // warns: the run may have built one rule and left another point open.
+//
+// **Already committed** (#1794): a run interrupted after its commit and
+// resumed finds every listed file unchanged. When none of them differs from
+// HEAD (a `Partial:` file has nothing staged) and one of HEAD's last 50
+// commits has the report's `Commit:` subject and touches every listed path,
+// the script commits nothing, writes `Pushed: local <that sha>` and prints
+// `already committed <sha8> local`; otherwise it refuses as before.
 
 use std::cli
 use std::fs
@@ -168,6 +175,31 @@ fn commit_check(files: Vec[String], partial: Vec[String]) -> String throws {
     return ""
 }
 
+// The sha of an earlier commit of this report (#1794), "" when there is none:
+// the listed paths match HEAD and one of HEAD's last 50 commits has SUBJECT
+// and touches each of them.
+fn commit_earlier(subject: String, files: Vec[String], partial: Vec[String]) -> String throws {
+    let mut all = files.clone()
+    all.extend(partial.clone())
+    for f in files {
+        if commit_git(["status", "--porcelain", "--", f.clone()]) != "" { return "" }
+    }
+    for f in partial {
+        if commit_git(["diff", "--cached", "--name-only", "--", f.clone()]) != "" { return "" }
+    }
+    for line in commit_git(["log", "-50", "--format=%H%x09%s", "HEAD"]).split("\n") {
+        let (sha, s) = line.split_once("\t") ?? continue
+        if s != subject { continue }
+        let touched: Vec[String] = commit_git(["show", "--name-only", "--format=", sha.clone()]).split("\n").map(fn(w) { w.trim().clone() }).collect()
+        let mut every = true
+        for f in all {
+            if !touched.contains(f.clone()) { every = false }
+        }
+        if every { return sha.clone() }
+    }
+    return ""
+}
+
 fn commit_sha(text: String) -> String {
     let mut data: Vec[u8] = []
     for b in text.bytes() { data.push(b) }
@@ -272,6 +304,12 @@ fn main() throws {
         process::exit(1)
     }
     let why = commit_check(files.clone(), partial.clone())
+    let earlier = if why == "" { "" } else { commit_earlier(commit_field(report.clone(), "Commit:"), files.clone(), partial.clone()) }
+    if earlier != "" {
+        if !dry { commit_put_pushed(path, report, f"local {earlier}") }
+        println(f"already committed {commit_git(["rev-parse", "--short=8", earlier.clone()])} local")
+        return
+    }
     if why != "" {
         println(why)
         process::exit(1)

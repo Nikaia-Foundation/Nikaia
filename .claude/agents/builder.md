@@ -161,7 +161,7 @@ You build one small slice of an issue in the Nikaia repository and end.
   change means another session rewrote it; run `lower-std` again first (m3a,
   2026-10-28: one 8-minute round lost on a reset tree). Never `git reset`,
   `git stash`, `git checkout .` or `git restore .` in the shared checkout (they
-  throw away the other agents' work). Never reset `lowered/` by hand (`git checkout ...lowered/`), never
+  throw away the other agents' work). Never reset `lowered/` by hand (`git checkout ...lowered/`; the one exception: a rustc error in another agent's lowered file, `docs/builder-facts.md` #1794), never
   `git clone` or a second `target/` (a cold build is about 10 minutes of 4
   cores), never `sleep`/`pgrep` loops. A build only to try one case is a
   wasted cycle.
