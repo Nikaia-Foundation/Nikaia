@@ -1,0 +1,17 @@
+/// A whole number handed to `push` stays one the prover reads (ADR-361 D15,
+/// #1848): `at.push(i)` lends `i` to the list, it does not hide it, so
+/// `i >= 0` past the loop is proved from its start and its direction.
+pub fn f(m: i64) -> i64 {
+	let mut at: Vec[i64] = []
+	let mut i = 0
+	while i < m {
+		at.push(i)
+		i += 1
+	}
+	assert(i >= 0)
+	return at.len() as i64
+}
+
+fn main() throws {
+	println(f(2))
+}
