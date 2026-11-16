@@ -1,0 +1,11 @@
+// A `Seen[T]` reads like the `T` it carries (Part I, ADR-281 D22): the
+// field of what `get` took out of a shared value is read directly, and
+// bound first too (#1638).
+struct Noisy { name: String, size: i64 }
+
+fn main() throws {
+	let s = SharedMut(Noisy { name: "x", size: 3 })
+	println(s.get().name)
+	let v = s.get()
+	println(f"{v.name} {v.size + 1}")
+}

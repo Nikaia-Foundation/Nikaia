@@ -253,8 +253,22 @@ pub fn check_core_field[H: CheckHost](mut state: CheckState, world: ref CheckWor
     return check_narrow_path_read(state, world, expr, got, span)
 }
 
+/// **A part of a seen value is seen** (ADR-281 D22): the stamp put back on
+/// the part's type where the value it was read from carried one.
+fn stamped_if(seen: bool, got: Ty) -> Ty sync {
+    if !seen || got.is_unknown() || got.is_seen() {
+        return got
+    }
+    return Ty::Named { name: SEEN.clone(), args: [got], view: false }
+}
+
 fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, safe: bool, base: ref Expr, name: winnow_grammar::Symbol, span: ref Span) -> Ty sync {
-    let on = check_core_expr(state, world, host, base, span)
+    // **A `Seen[T]` reads like the `T` it carries, and its parts are seen
+    // too** (Part I 6.3, ADR-281 D22, #1638): `s.get().name` is the field of
+    // what came out of the lock, and the stamp sticks to it (`NK2205`).
+    let read = check_core_expr(state, world, host, base, span)
+    let seen_base = read.is_seen()
+    let on = read.unseen()
     // **A field of a call's owned result is moved out, not lent** (#1191).
     let owned_result = match on {
         Ty::Named { view, .. } => !view,
@@ -295,11 +309,11 @@ fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref Check
                         if part.is_unknown() {
                             return Ty::Unknown
                         }
-                        return state.a_safe_reach(world, base, part, inner.is_a_view())
+                        return stamped_if(seen_base, state.a_safe_reach(world, base, part, inner.is_a_view()))
                     },
                     else => {}
                 }
-                return state.a_safe_field(world, inner, base, field, expr, span)
+                return stamped_if(seen_base, state.a_safe_field(world, inner, base, field, expr, span))
             },
             Ty::Unknown => {
                 return Ty::Unknown
@@ -328,7 +342,7 @@ fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref Check
     }
     match on {
         Ty::Tuple(parts) => {
-            return check_core_places_tuple_part(state, parts, field, span)
+            return stamped_if(seen_base, check_core_places_tuple_part(state, parts, field, span))
         },
         else => {}
     }
@@ -359,7 +373,7 @@ fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref Check
         else => {}
     }
     check_core_places_array_length(state, id_of(expr) as i64, got)
-    return got
+    return stamped_if(seen_base, got)
 }
 
 /// **The length an `Array[T, N]` says** (#711): the `N` of the array read at
