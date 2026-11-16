@@ -1,0 +1,28 @@
+// An `Exit` thrown in an error sum ends the program with its code, also when
+// a caller whose set has an unnamed member boxes that sum (ADR-345 D4,
+// #1820): the driver's restart ended with "Error: the program ends with exit
+// code 2" and exit code 1 before.
+use std::fs
+use std::process
+
+// Throws io and Exit: its channel is the sum of the two.
+fn restart(code: i64) throws {
+	fs::write("/dev/null", fs::Root::Anywhere, "x")
+	process::exit(code)
+}
+
+// Declared `throws` and throwing nothing: what it throws is not named.
+fn stem(path: String) -> String throws {
+	return path.replace(".md", "")
+}
+
+// Fails in the box: one of its failures has no name.
+fn pull() throws {
+	println(stem("a.md"))
+	restart(0)
+}
+
+fn main() throws {
+	pull()
+	println("after")
+}

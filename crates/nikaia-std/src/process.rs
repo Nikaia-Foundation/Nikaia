@@ -643,24 +643,40 @@ pub trait Ending {
     }
 }
 
-type FatalProbe = fn(&(dyn std::error::Error + 'static)) -> Option<i32>;
+type EndingProbe = fn(&(dyn std::error::Error + 'static)) -> Option<i32>;
 
-/// The program's own fatal types, for the opaque channel, which cannot ask a
-/// trait: `main` registers each before its first statement.
+/// One registered type's two questions: its exit code and its fatal code.
+struct FatalProbe {
+    exit: EndingProbe,
+    fatal: EndingProbe,
+}
+
+/// The program's own fatal types, and its error sums with a fatal member, for
+/// the opaque channel, which cannot ask a trait: `main` registers each before
+/// its first statement.
 static FATAL: std::sync::Mutex<Vec<FatalProbe>> = std::sync::Mutex::new(Vec::new());
 
 /// **Register a program's fatal type** (ADR-345 D1) so that a box holding it
-/// is known to be fatal.
+/// is known to be fatal. A sum that holds an `Exit` is registered too, so that
+/// a box holding the sum still ends `main` with the code (ADR-345 D4, #1820).
 pub fn fatal<T: Ending + std::error::Error + 'static>() {
     FATAL
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .push(|error| error.downcast_ref::<T>().and_then(Ending::fatal_code));
+        .push(FatalProbe {
+            exit: |error| error.downcast_ref::<T>().and_then(Ending::exit_code),
+            fatal: |error| error.downcast_ref::<T>().and_then(Ending::fatal_code),
+        });
 }
 
 fn registered_fatal(error: &(dyn std::error::Error + 'static)) -> Option<i32> {
     let probes = FATAL.lock().unwrap_or_else(|e| e.into_inner());
-    probes.iter().find_map(|probe| probe(error))
+    probes.iter().find_map(|probe| (probe.fatal)(error))
+}
+
+fn registered_exit(error: &(dyn std::error::Error + 'static)) -> Option<i32> {
+    let probes = FATAL.lock().unwrap_or_else(|e| e.into_inner());
+    probes.iter().find_map(|probe| (probe.exit)(error))
 }
 
 impl Ending for Exit {
@@ -692,7 +708,11 @@ impl Ending for Box<dyn std::error::Error> {
         if let Some(exit) = inner.downcast_ref::<Exit>() {
             return exit.exit_code();
         }
-        known(inner).and_then(|known| known.exit_code())
+        if let Some(known) = known(inner) {
+            return known.exit_code();
+        }
+        let error: &(dyn std::error::Error + 'static) = &**self;
+        registered_exit(error).or_else(|| registered_exit(inner))
     }
 
     fn fatal_code(&self) -> Option<i32> {
