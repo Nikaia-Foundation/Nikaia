@@ -227,7 +227,7 @@ fn a_string_option_the_body_only_reads_is_lent() {
                    }\n\n\
                    fn main() throws {\n\
                    \x20   let ws = [f\"a\", f\"b\"]\n\
-                   \x20   let dash = \"-\"\n\
+                   \x20   let dash = f\"-\"\n\
                    \x20   println(join(ws))\n\
                    \x20   println(join(ws; sep: \"+\"))\n\
                    \x20   println(join(ws; sep: dash))\n\
