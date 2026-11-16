@@ -1,0 +1,3 @@
+bounds in tests/simd_made_where_it_stands.nika: 2 indexes, 2 proved; 0 operations, 0 proved
+    25  list[1]  proved
+    25  more[0]  proved

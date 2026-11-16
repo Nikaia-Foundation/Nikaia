@@ -601,6 +601,7 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
             Expr::Closure { .. } => { closure = true; },
             _ => { },
         }
+        if check_simd_wanted(world, given, (state.expected).as_ref()).is_some() { closure = true; }
         if !lending {
             check_core_a_field_of_a_borrowed_subject(state, world, host, given, span, "handed back");
             let before = state.findings.len() as i64;

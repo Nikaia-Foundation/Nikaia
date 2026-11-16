@@ -219,6 +219,27 @@ pub fn check_simd_a_call(world: ref CheckWorld, value: ref Expr) -> bool sync {
     }
 }
 
+/// **The type a constructor of `std::simd` takes where it stands** (D3):
+/// `want` where it is a vector or a mask, else nothing - a field's, a
+/// parameter's, an assigned place's or a result's declared type.
+pub fn check_simd_wanted(world: ref CheckWorld, value: ref Expr, want: ref Ty?) -> Ty? sync {
+    let ty: Ty = want?.clone() ?? return null
+    if !check_simd_a_call(world, value) || check_simd_kind(ty).len() == 0 {
+        return null
+    }
+    return ty
+}
+
+/// **The vector a list's elements are**, where the list is declared a
+/// `Vec` or an `Array` of one (D3); nothing for any other type.
+pub fn check_simd_element(declared: ref Ty?) -> Ty? sync {
+    let ty: Ty = declared?.clone() ?? return null
+    return match ty {
+        Ty::Named { name, args, view } => if !view && (name == "Vec" || name == "Array") && args.len() > 0 && check_simd_kind(args[0]).len() > 0 { args[0].clone() } else { null },
+        else => null,
+    }
+}
+
 /// **The vector a constructor makes** (D3): the type it is written down as,
 /// or for `simd::Fixed::from([…])` a `Fixed` of as many lanes as the list
 /// holds, whose lane type the use decides.

@@ -196,6 +196,30 @@ pub fn check_simd_a_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub fn check_simd_wanted(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, want: Option<&Ty>) -> Option<Ty> {
+    let ty: Ty = match match want {
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if !check_simd_a_call(world, value) || check_simd_kind(&ty).is_empty() { return None; }
+    Some(ty)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_simd_element(declared: Option<&Ty>) -> Option<Ty> {
+    let ty: Ty = match match declared {
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    match ty {
+        Ty::Named { ref name, ref args, view } => if !view && (name == "Vec" || name == "Array") && !args.is_empty() && !check_simd_kind(unsafe { nikaia_std::proven::read(&args, (0) as usize) }).is_empty() { Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone()) } else { None },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn check_simd_made(wanted: Option<&Ty>, name: &str, args: &[Expr]) -> Ty {
     let given: Ty = nikaia_std::index::or(match wanted {
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),

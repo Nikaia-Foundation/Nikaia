@@ -426,7 +426,13 @@ pub fn check_core_arguments_given[H: CheckHost](mut state: CheckState, world: re
             let wanted = if declared_here && !bound.is_empty() { substitute(expected[at], bound) } else { expected[at].clone() }
             out.push(check_core_args_lambda(state, world, host, arg, wanted, declared_here, callee, at, false, span))
         } else {
+            // **A vector made in the argument is of the parameter's type**
+            // (ADR-377 D3): `g(simd::splat(1))`.
+            if at < expected.len() {
+                state.flow.lambda_expected = check_simd_wanted(world, arg, expected[at])
+            }
             out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, false, span))
+            state.flow.lambda_expected = null
         }
         if declared_here && at < expected.len() {
             bind(expected[at], out[at], bound)
@@ -755,6 +761,10 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
     for item in items {
         if check_core_args_a_closure(item) {
             state.flow.lambda_expected = element?.clone()
+        } else {
+            // **A vector made in a list of vectors is of the element type**
+            // (ADR-377 D3).
+            state.flow.lambda_expected = check_simd_wanted(world, item, check_simd_element(declared))
         }
         let found = check_core_expr(state, world, host, item, span)
         state.flow.lambda_expected = null

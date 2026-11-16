@@ -1,0 +1,26 @@
+// A constructor of `std::simd` takes its type from where it stands (ADR-377
+// D3): a field, a list of vectors, an argument, an assigned place and a
+// result, as it does from a `let` that declares one.
+use std::simd
+
+struct Pair {
+    a: simd::Fixed[f64, 4],
+    b: simd::Fixed[u8, 16],
+}
+
+fn total(x: simd::Fixed[u8, 16]) -> u8 {
+    return x.wrapping_sum()
+}
+
+fn halves() -> simd::Fixed[f64, 4] {
+    return simd::splat(0.5)
+}
+
+fn main() throws {
+    let p = Pair { a: simd::splat(1.5), b: simd::splat(2) }
+    let list: Array[simd::Fixed[f64, 4], 2] = [simd::splat(1.0), simd::Fixed::from([1.0, 2.0, 3.0, 4.0])]
+    let more: Vec[simd::Fixed[u8, 16]] = [simd::splat(3)]
+    let mut x: simd::Fixed[u8, 16] = simd::splat(4)
+    x = simd::splat(1)
+    println(f"{p.a.sum()} {p.b.wrapping_sum()} {list[1].sum()} {more[0].wrapping_sum()} {total(simd::splat(5))} {x.wrapping_sum()} {halves().sum()}")
+}

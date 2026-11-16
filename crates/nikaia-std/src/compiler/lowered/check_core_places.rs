@@ -546,7 +546,12 @@ pub(crate) fn check_core_places_a_literal_field<H: CheckHost>(state: &mut CheckS
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || Ty::Unknown);
-    if check_core_places_a_closure((init.value).as_ref()) { state.flow.lambda_expected = expected; }
+    let mut made_here = false;
+    if init.value.is_some() {
+        let made: &Expr = match init.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
+        made_here = check_simd_wanted(world, made, (expected).as_ref()).is_some();
+    }
+    if check_core_places_a_closure((init.value).as_ref()) || made_here { state.flow.lambda_expected = expected; }
     let given = check_core_places_given(state, world, host, (init.value).as_ref(), &field, span);
     state.flow.lambda_expected = None;
     if init.value.is_some() && check_core_places_lent_field(&field_ty, &given) {
