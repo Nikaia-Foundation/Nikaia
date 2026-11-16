@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1414] — 2026-11-16
+
+**Builders' changes (#1930)**
+- Bounds: a field another file writes on a local of another type (bound to a call, a literal or a declared type) no longer drops a struct rule over a field of that name (ADR-369 D4).
+
 ## [0.0.1413] — 2026-11-16
 
 **Builders' changes (#1916, #1918)**
