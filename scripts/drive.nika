@@ -2383,18 +2383,28 @@ fn drive_comment_file(dir: String, brief: String) throws {
 // #1697 run looked for #1694's commit on develop for turns, and it was on no
 // branch): the report at REPORT, and from its TEXT the commit's subject
 // (`Commit:`) and the `Pushed:` it had when the issue was filed, which is
-// `local <sha>` before the batch's suite pushes it.
+// `local <sha>` before the batch's suite pushes it. The report itself is
+// quoted whole (drive_improve_quoted): it is untracked and goes when
+// docs/briefs/ is cleaned, so the issue must not depend on it (#1791: #1769's
+// issue named the #1675 report, gone by the time its run read it).
 fn drive_improve_source(report: String, text: String) -> String {
 	let commit = drive_field(text.clone(), "Commit")
-	let pushed = drive_field(text, "Pushed")
-	let mut out = f"\n## Source\n\nThe run's report: `{report}` (untracked, in the driver's checkout).\n"
+	let pushed = drive_field(text.clone(), "Pushed")
+	let mut out = f"\n## Source\n\nThe run's report: `{report}` (untracked, in the driver's checkout; quoted whole below, since the file may be gone).\n"
 	if commit == "" || drive_word(commit.clone()) == "none" {
-		return out + "The run committed nothing.\n"
+		return out + "The run committed nothing.\n" + drive_improve_quoted(text)
 	}
 	let state = if pushed == "" { "no `Pushed:`" } else { f"`Pushed: {pushed}`" }
 	out = out + f"The run's commit: `{commit}` ({state} when this issue was filed). "
 	return out
 		+ "A `local` commit reaches `develop` only when its batch's suite is green: find it by its subject (`git log -400 --all --grep`); on no branch, it was not pushed, so judge its points from the report and the code as it is.\n"
+		+ drive_improve_quoted(text)
+}
+
+// The report TEXT as a folded block of an issue body, fenced with four
+// backticks so a field's own backticks stay inside it.
+fn drive_improve_quoted(text: String) -> String {
+	return f"\n<details><summary>The run's report</summary>\n\n````text\n{text.trim()}\n````\n\n</details>\n"
 }
 
 // The numbers of the issues filed from the COUNT Founds of the run of NAME,

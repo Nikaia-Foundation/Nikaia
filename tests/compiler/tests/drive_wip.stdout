@@ -117,8 +117,22 @@ Filed by the driver from the report of the run of `issue-1624` (#1624) for the i
 
 ## Source
 
-The run's report: `issue-1624.md.report.md` (untracked, in the driver's checkout).
+The run's report: `issue-1624.md.report.md` (untracked, in the driver's checkout; quoted whole below, since the file may be gone).
 The run's commit: `drive: a partial run stays in batch.txt` (`Pushed: local 1a827e65` when this issue was filed). A `local` commit reaches `develop` only when its batch's suite is green: find it by its subject (`git log -400 --all --grep`); on no branch, it was not pushed, so judge its points from the report and the code as it is.
+
+<details><summary>The run's report</summary>
+
+````text
+Result: done
+Commit: drive: a partial run stays in batch.txt
+Pushed: local 1a827e65
+Issue: wrong I8: item 3 was built already
+Deviation: none
+Needs: none
+Friction: pre-push red on a badge that was not mine
+````
+
+</details>
 
 ## To build
 
@@ -152,8 +166,20 @@ Filed by the driver from the report of the run of `issue-1676` for the improveme
 
 ## Source
 
-The run's report: `issue-1676.md.report.md` (untracked, in the driver's checkout).
+The run's report: `issue-1676.md.report.md` (untracked, in the driver's checkout; quoted whole below, since the file may be gone).
 The run committed nothing.
+
+<details><summary>The run's report</summary>
+
+````text
+Result: done
+Needs: none
+Comment: #1531 group D waits on group C, from #1634
+Comment: none
+Comment: on the plan, no number
+````
+
+</details>
 
 ## To build
 
@@ -177,8 +203,18 @@ Filed by the driver from the report of the run of `issue-1707` (#1707) for the i
 
 ## Source
 
-The run's report: `issue-1707.md.report.md` (untracked, in the driver's checkout).
+The run's report: `issue-1707.md.report.md` (untracked, in the driver's checkout; quoted whole below, since the file may be gone).
 The run committed nothing.
+
+<details><summary>The run's report</summary>
+
+````text
+Result: done
+Issue: rules-gap (built): no rule said an item needs no GitHub; wrong I5: the probe passed
+Friction: none
+````
+
+</details>
 
 ## To build
 
@@ -212,8 +248,21 @@ Each is filed as its own issue for the bug lane; an item above that points at a 
 
 ## Source
 
-The run's report: `issue-1749.md.report.md` (untracked, in the driver's checkout).
+The run's report: `issue-1749.md.report.md` (untracked, in the driver's checkout; quoted whole below, since the file may be gone).
 The run committed nothing.
+
+<details><summary>The run's report</summary>
+
+````text
+Result: done
+Found: `xs.sort_by(f)` on an untyped list is NK1171
+Found: none
+Found: a stale guide example
+Issue: broke I5: the second defect, see Found
+Friction: none
+````
+
+</details>
 
 ## To build
 
@@ -244,8 +293,21 @@ Each is filed as its own issue for the bug lane; an item above that points at a 
 
 ## Source
 
-The run's report: `issue-1749.md.report.md` (untracked, in the driver's checkout).
+The run's report: `issue-1749.md.report.md` (untracked, in the driver's checkout; quoted whole below, since the file may be gone).
 The run committed nothing.
+
+<details><summary>The run's report</summary>
+
+````text
+Result: done
+Found: `xs.sort_by(f)` on an untyped list is NK1171
+Found: none
+Found: a stale guide example
+Issue: broke I5: the second defect, see Found
+Friction: none
+````
+
+</details>
 
 ## To build
 

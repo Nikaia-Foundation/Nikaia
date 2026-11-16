@@ -13,7 +13,8 @@
 // a Found that says `no decision yet` is labelled `decision` (#1745);
 // --found-issues: a report's `Needs:` goes with its only Found, not with
 // each of several (#1769); an improvement issue quotes the run's Found
-// lines, with the issue numbers found.txt pairs them with (#1783).
+// lines, with the issue numbers found.txt pairs them with (#1783), and
+// the whole report, which may be gone from docs/briefs/ (#1791).
 use std::fs
 use std::process
 
