@@ -1,16 +1,16 @@
-bounds in tests/a_parameter_below_a_multiple_of_a_length_is_derived.nika: 5 indexes, 5 proved; 7 operations, 6 proved
-     8  xs[l >> 1]     proved
-    12  xs[at + 1]     proved
-    12  at + 1         checked: a parameter whose callers do not prove a bound (ADR-391 D1)
-    26  self.value[v]  proved
-    33  2 * xs.len()   proved
-    35  l += 1         proved
-    39  xs.len() - 1   proved
-    41  at += 1        proved
-    46  2 * (…)        proved
-    48  k += 2         proved
-    50  sat.value[0]   proved
-    50  sat.value[1]   proved
-  derived  half: 0 <= l, l < 2 * xs.len(), proved at the calls on lines 34
-  derived  next: 0 <= at, at <= xs.len(), at < xs.len(), at < xs.len() - 1, proved at the calls on lines 40
-  derived  set: l < 2 * self.value.len(), proved at the calls on lines 47
+bounds in tests/a_parameter_below_a_multiple_of_a_length_is_derived.nika: 5 indexes, 5 proved; 7 operations, 7 proved
+     9  xs[l >> 1]     proved
+    13  xs[at + 1]     proved
+    13  at + 1         proved
+    27  self.value[v]  proved
+    34  2 * xs.len()   proved
+    36  l += 1         proved
+    40  xs.len() - 1   proved
+    42  at += 1        proved
+    47  2 * (…)        proved
+    49  k += 2         proved
+    51  sat.value[0]   proved
+    51  sat.value[1]   proved
+  derived  half: 0 <= l, l < 2 * xs.len(), proved at the calls on lines 35
+  derived  next: 0 <= at, at <= xs.len(), at < xs.len(), at < xs.len() - 1, proved at the calls on lines 41
+  derived  set: l < 2 * self.value.len(), proved at the calls on lines 48

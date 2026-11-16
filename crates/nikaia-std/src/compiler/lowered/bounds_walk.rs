@@ -2091,6 +2091,7 @@ pub(crate) fn bounding_derived_entry(walk: &mut BoundsWalk, facts: &mut BoundsFa
     for claim in held.iter() {
         let left = if claim.left == "" { walk.arena.int(0) } else if claim.each { walk.arena.var(&bounding_element_of(&claim.left)) } else { walk.arena.var(&claim.left) };
         let right = if claim.fixed.is_some() { walk.arena.int(nikaia_std::index::or(claim.fixed, || 0)) } else if claim.length {
+            walk.typed.insert(length_of(&claim.right), String::from("i64"));
             let length = walk.arena.var(&length_of(&claim.right));
             bounding_scaled(walk, claim, length)
         } else if claim.each { walk.arena.var(&bounding_element_of(&claim.right)) } else { walk.arena.var(&claim.right) };

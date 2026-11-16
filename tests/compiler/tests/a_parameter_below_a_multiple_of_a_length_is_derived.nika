@@ -1,7 +1,8 @@
 /// A precondition derived from the callers (ADR-391 D1) may bound a
 /// parameter by a multiple of a length plus a number (#1673): every caller
 /// hands `half` an `l` below `2 * xs.len()`, so `xs[l >> 1]` needs no check;
-/// `next` reads `xs[at + 1]` under `at < xs.len() - 1`; and `Sat::set`
+/// `next` reads `xs[at + 1]` under `at < xs.len() - 1`, which proves `at + 1`
+/// fits as well, the length being an `i64` (#1767); and `Sat::set`
 /// reads its field through a function that halves (`var_of`), as
 /// `sv_sat.nika`'s `assign` does.
 fn half(xs: ref Vec[i64], l: i64) -> i64 sync {
