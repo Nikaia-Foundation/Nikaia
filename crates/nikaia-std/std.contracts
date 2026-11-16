@@ -3484,6 +3484,15 @@ panics = false
 sync = "sync(f)"
 signature = "[T, K](mut self: ref Array[T, ?], f: fn(ref T) -> K)"
 
+# Put the elements in the order the comparator says, in place: `f(a, b)` is
+# `Less` where `a` goes before `b`. It is **stable**, as a list's is. A
+# comparator that pauses has no counterpart and is refused (ADR-233 D2).
+[fn."Array::sort_by"]
+pub = true
+panics = false
+sync = "sync(f)"
+signature = "[T](mut self: ref Array[T, ?], f: fn(ref T, ref T) -> Ordering)"
+
 # Exchange the elements at two positions, in place. A position past the end
 # aborts, as an index does.
 [fn."Array::swap"]
@@ -4460,6 +4469,18 @@ pub = true
 panics = false
 sync = "sync(f)"
 signature = "[T, K](mut self: ref Vec[T], f: fn(ref T) -> K)"
+
+# Put the elements in the order the comparator says, in place: `f(a, b)` is
+# `Less` where `a` goes before `b`, so `fn(a, b) { b.cmp(a) }` sorts
+# descending (Part I 5.4 names it an immediate context). It is **stable**:
+# elements the comparator calls `Equal` keep their order. A comparator that
+# pauses has no counterpart in `nikaia_std::seq` and is refused, as `retain`'s
+# is (ADR-233 D2).
+[fn."Vec::sort_by"]
+pub = true
+panics = false
+sync = "sync(f)"
+signature = "[T](mut self: ref Vec[T], f: fn(ref T, ref T) -> Ordering)"
 
 # The text's UTF-8, one byte at a time ([ADR-285](../../docs/specification/adr/adr-285.md) D4).
 #
