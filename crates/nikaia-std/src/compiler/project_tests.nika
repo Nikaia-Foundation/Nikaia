@@ -580,21 +580,23 @@ pub fn project_tests_time_limit() -> i64 {
     }
 }
 
-/// **How long a test program's build may take** (#1774):
-/// `NIKAIA_TEST_BUILD_TIME_LIMIT` seconds, 1800 where it is not set. A build
-/// that takes longer - one stuck on a Cargo lock a nested `cargo` waits for
-/// (#1727) never ends - is ended, with every process it started, and its
-/// program fails with its name, so the run goes on and names it. The limit
-/// is its own, not a multiple of the run's: a cold build compiles `std` and
-/// takes minutes where a run takes seconds, so it sits far above any build
-/// that finishes and below a CI job's hour. A batch build that runs past it
-/// is dropped, and its programs are built alone. Zero or less, or a value
-/// that is no number, gives the default.
+/// **How long a test program's build may take** (#1774, #1775):
+/// `NIKAIA_TEST_BUILD_TIME_LIMIT` seconds, ten times the run's limit
+/// (`project_tests_time_limit`, so 3000 s) where it is not set or is no
+/// number; zero or less sets no limit. A build that takes longer - one stuck
+/// on a Cargo lock a nested `cargo` waits for (#1727) never ends - is ended,
+/// with every process it started, and its program fails with its name, so
+/// the run goes on and names it. Ten runs' time leaves a cold build, which
+/// compiles `std` in minutes, room to end. A batch build that runs past it
+/// is dropped, and its programs are built alone.
 pub fn project_tests_build_time_limit() -> i64 {
-    let given = text::parse_i64((env::var("NIKAIA_TEST_BUILD_TIME_LIMIT") ?? "").trim()) ?? 0
-    return match given > 0 {
-        true => given,
-        false => 1800,
+    let given = text::parse_i64((env::var("NIKAIA_TEST_BUILD_TIME_LIMIT") ?? "").trim())
+    return match given {
+        null => 10 * project_tests_time_limit(),
+        seconds => match seconds > 0 {
+            true => seconds,
+            false => 0,
+        },
     }
 }
 
@@ -605,11 +607,13 @@ pub fn project_tests_timed_out_outcome(limit: i64, stdout: Bytes, said: String) 
     return ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout: stdout, stderr: shown, files: [], bounds: [] }
 }
 
-/// **A test program whose build ran past its time limit** (#1774): it
-/// failed unrun, and says so first on standard error, before what the build
-/// wrote.
+/// **A test program whose build ran past its time limit** (#1774, #1775):
+/// it failed unrun, and says so first on standard error, with the switch
+/// that sets the limit and the likely cause, another `cargo` holding the
+/// build lock (#1727), and how to see it, before what the build wrote.
 pub fn project_tests_build_timed_out_outcome(limit: i64, said: String) -> ProjectTestsOutcome {
-    let shown = f"build timed out after {limit} s\n{said}"
+    let hint = "hint: a build that hangs often waits on a Cargo lock another cargo holds; check once with `ps -ef --forest | grep -B2 -E 'cargo (rustc|build) .*--target-dir'`, or raise NIKAIA_TEST_BUILD_TIME_LIMIT (0: no limit)"
+    let shown = f"build timed out after {limit} s\n{hint}\n{said}"
     return ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout: Bytes([]), stderr: shown, files: [], bounds: [] }
 }
 

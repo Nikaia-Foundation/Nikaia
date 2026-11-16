@@ -491,10 +491,13 @@ pub fn project_tests_time_limit() -> i64 {
 }
 
 pub fn project_tests_build_time_limit() -> i64 {
-    let given = nikaia_std::index::or(text::parse_i64(nikaia_std::index::or(env::var("NIKAIA_TEST_BUILD_TIME_LIMIT"), || "".into()).trim()), || 0);
-    match given > 0 {
-        true => given,
-        false => 1800,
+    let given = text::parse_i64(nikaia_std::index::or(env::var("NIKAIA_TEST_BUILD_TIME_LIMIT"), || "".into()).trim());
+    match given {
+        None => 10 * project_tests_time_limit(),
+        Some(seconds) => match seconds > 0 {
+            true => seconds,
+            false => 0,
+        },
     }
 }
 
@@ -504,7 +507,8 @@ pub fn project_tests_timed_out_outcome(limit: i64, stdout: Bytes, said: &str) ->
 }
 
 pub fn project_tests_build_timed_out_outcome(limit: i64, said: &str) -> ProjectTestsOutcome {
-    let shown = format!("build timed out after {} s\n{}", limit, said);
+    let hint = "hint: a build that hangs often waits on a Cargo lock another cargo holds; check once with `ps -ef --forest | grep -B2 -E 'cargo (rustc|build) .*--target-dir'`, or raise NIKAIA_TEST_BUILD_TIME_LIMIT (0: no limit)";
+    let shown = format!("build timed out after {} s\n{}\n{}", limit, hint, said);
     ProjectTestsOutcome { ended_well: false, stopped: false, passed: false, stdout: Bytes(vec![]), stderr: shown, files: vec![], bounds: vec![] }
 }
 
