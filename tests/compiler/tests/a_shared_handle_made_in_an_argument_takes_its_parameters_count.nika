@@ -1,0 +1,37 @@
+// A shared value made right in a call's argument, a method's argument or a
+// `return` is the parameter's (or the result's) allocation: it takes the
+// count the sharing analysis gave that slot, so rustc gets the type the
+// function asks (ADR-037 D7, ADR-312, #1638). Each name goes twice: `get`
+// hands out a copy, which goes after the line that read it.
+struct Noisy { name: String }
+
+impl Drop for Noisy {
+	fn drop(mut self) {
+		println(f"{self.name} goes") catch { }
+	}
+}
+
+struct Taker { }
+
+impl Taker {
+	fn take(self, s: SharedMut[Noisy]) {
+		println(f"took {s.get().name}") catch { }
+	}
+}
+
+fn hand_on(s: SharedMut[Noisy], loud: bool) {
+	if loud {
+		println(f"handed {s.get().name}") catch { }
+	}
+}
+
+fn make() -> SharedMut[Noisy] {
+	return SharedMut(Noisy { name: "made" })
+}
+
+fn main() throws {
+	hand_on(SharedMut(Noisy { name: "x" }), true)
+	let t = Taker { }
+	t.take(SharedMut(Noisy { name: "y" }))
+	hand_on(make(), true)
+}

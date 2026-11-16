@@ -3362,7 +3362,8 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         project: &Path,
         own: &Path,
         list: &Path,
-    ) -> HostResult<Option<PathBuf>> {
+        within: i64,
+    ) -> HostResult<project_tests::ProjectTestsBatchBuilt> {
         let mut command = std::process::Command::new(&self.exe);
         command
             .args(["build", "--user-parallelism", setting, "--project"])
@@ -3370,13 +3371,16 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
             .env(nikaia_std::fs::TEST_DIR_VAR, own)
             .env(project_batch::project_batch_var(), list)
             .env("CARGO_TERM_QUIET", "true");
-        let built = self.held(self.ran(&self.exe, command, own, &[], 0))?;
+        let built = self.held(self.ran(&self.exe, command, own, &[], within))?;
         let binary = project
             .join("target")
             .join("nikaia")
             .join("bin")
             .join(format!("program_test{}", std::env::consts::EXE_SUFFIX));
-        Ok((built.code == 0 && binary.is_file()).then_some(binary))
+        Ok(project_tests::ProjectTestsBatchBuilt {
+            binary: (built.code == 0 && !built.timed_out && binary.is_file()).then_some(binary),
+            timed_out: built.timed_out,
+        })
     }
 
     fn ran_batched(

@@ -31,7 +31,10 @@ it, like the checks in `docs/supervisor.md`.
   I5; a `--bounds` row, I8a). A comment is not the code: #1694's item 3 said
   a partial run's issue is queued again, from a stale comment in
   `drive.nika`, and `drive_queue_add` skips a `#N` still in `batch.txt`
-  (#1697).
+  (#1697). A claim of what the repository holds (a file tracked, ignored or
+  generated) is read the same way, with `git ls-files` or `git check-ignore
+  -v` (#1771: #1621 said a dependency's ledger is gitignored, and
+  `examples/http/nikaia.contracts` and `nikaia.derived` are tracked).
   Code is named by its function, never by a line number alone (lines move
   with every commit), and a value it quotes (an exit code, a printed line)
   is read in that function (#1733: #1717 cited "line 228" and "exit 4" for
@@ -47,6 +50,16 @@ it, like the checks in `docs/supervisor.md`.
   is named as one the issue needs (I6). A sketch written in it is not
   (#1730: #116's sketch wrote `db::Value.Text`, `println(v)` of an enum,
   which is NK1201, and `Seq`/`Map`; the builder respelled them all).
+* **I4c. A failure of a script names the commit that ran, and is checked
+  against `develop`** (#1801): an issue filed from a driver or script
+  failure quotes the commit the run used (an ESCALATE line ends with
+  `(drive.nika <sha8>)`, `drive_wake` in `scripts/drive.nika`; a driver
+  keeps the script it started with until a merge brings a new one). Before
+  filing, `git log <sha8>..origin/develop -- <script>` and `git log -S
+  <function>` show whether a later commit already changed it; where one
+  did, the issue names that commit and orders only what is still missing
+  (often a test), or is not filed (#1801: #1784 was filed after its fix
+  57de760b0 had landed, and its run built only a test).
 
 ## A bug (something specified or plainly meant does not work)
 
@@ -54,6 +67,11 @@ it, like the checks in `docs/supervisor.md`.
   the command, the **expected** output and the **actual** output (the error
   with its code and message, or the `rustc` error on the emitted Rust). It was
   run on the binary of the day the issue was written; the issue says so.
+  A lowering or proof difference names the commit it was seen on (subject
+  and sha, the binary built from it), and its probe is an uncached
+  `lower-std` of a `git archive HEAD` copy, not a `probe.nika` snippet:
+  without the commit nobody can bisect it once the tree moves on (#1793:
+  #1763's `Found:` named neither).
   The expected output is written out (the text it prints, or the NK code and
   the gist of its message), never pointed at: "the specified result" or "what
   the spec says" leaves the builder to find it (#1737: #1550's issue).
@@ -67,6 +85,13 @@ it, like the checks in `docs/supervisor.md`.
   uses it fails, the probe is that program (#1716: #1686's http failure
   showed only when hello-http was built at "yes", the http library alone
   built).
+  It says where it ran: the shared checkout with other agents at work, or a
+  tree nobody else touched. A symptom of a rebuild, a cache, a changed
+  lowered file or a refusal in a file the run did not edit is first checked
+  against the inputs others touched during the run (`git status --short`
+  before and after, the files' mtimes): an input changed mid-run makes the
+  rebuild correct and the report no bug (#1762: #1759 had neither probe nor
+  this context, and its cause was another agent's edit).
   The probe is copied whole from the file that ran, never retyped: its
   `use` lines, its error type, and the manifest table each key sits in
   (#1726: #1715's probe threw text, lacked `use std::time` and put
@@ -78,6 +103,13 @@ it, like the checks in `docs/supervisor.md`.
   Nikaia's names, not Rust's (#1749: #1738's `sort_by` probe compared with
   `b.cmp(a)`, where Nikaia's method is `compare`, ADR-341 D2, so it could
   not give its expected output even once the entry was built).
+  A site the bounds walk leaves checked in the toolchain is named by its
+  `.nika` file and line, never by the lowered `.rs` it became, and its
+  probe is `lower-std --bounds --bounds-trace FILE.nika:LINE` with the
+  rows it printed (the goal and the facts asked), or a reduction that
+  `check --bounds` shows on a scratch file; a probe that needs a whole
+  `lower-std --bounds` to show the line costs every reader minutes and
+  shows no cause (#1780: #1776's `Found:` named lines of `fixed.rs`).
   A `Found:` whose case is half in the run's reach and half a decision is
   split: the run fixes its part, the issue keeps the other, with its
   expected result (#1726).
@@ -110,6 +142,12 @@ it, like the checks in `docs/supervisor.md`.
   what does not match it, often the message, and the issue orders that fix,
   not accepting the form (#1737: #1550 hedged, though Part II 10.1 and
   ADR-296 D33 require the action; the fix was the message).
+  Where the governing decision specifies, on purpose, the behaviour the issue
+  wants changed, the issue is no bug either: it is a `decision` issue that
+  names the decision to amend and the options with their results, and the
+  build waits for the amendment (#1771: #1621 was filed `ready` to fix what
+  ADR-100 D3 specifies, "believed while the hashes match", and its first
+  run stopped for the decision).
   A step that rests on a decision says whether it is built (the function
   that does it) or text only; text only is a dependency, named by its issue
   (I4) and built first (#1453).
@@ -124,7 +162,24 @@ it, like the checks in `docs/supervisor.md`.
   traced to that cause.
   A named function is one `scripts/where.nika -- NAME` finds today; a cause
   without one says `unknown`, never a guessed name (#1741: #1729 suspected
-  `own_option_containers`, which does not exist).
+  `own_option_containers`, which does not exist). The file named beside it
+  is the one `where.nika` reports for that function, copied from its
+  output, never recalled (#1779: #1628 named `prover_walk.nika` for
+  `outside_source`, which lives in `prover_calls.nika`).
+  A traced cause is followed outward before filing: the other forms that
+  reach the same function (a closure, a `std` method that takes one, the
+  same call on a fixed-size `Array`) are run on the binary of the day,
+  and each that fails is named as a shape of this defect, with its probe
+  line; a `Found:` line does the same (#1761: #1754's `Found:` named only
+  the `if`-arm refusal, and the same cause made `fn(a) { a }`, `sort_by`
+  on typed lists and `Array::sort_by_key` rustc errors).
+  A cause that says a function *lacks* a case is checked against every other
+  place that handles that case (grep the case: `Div`, `quotient`), and for
+  a bounds refusal against the site's goal and facts from `lower-std
+  --bounds --bounds-trace FILE.nika:LINE`, which name the missing fact
+  (#1792: #1786 suspected `lin_term` in `prove_terms.nika` lacked `/` and
+  `%`; the walk's quotient rule existed, and the missing fact was the `u8`
+  type's upper bound).
   A probe that mixes several conditions (outside input, a guard, a call) is
   also run with each one taken away, and the issue says which variant still
   fails: #1571 blamed the outside input, and the guard alone did not prove.
@@ -160,6 +215,12 @@ it, like the checks in `docs/supervisor.md`.
   An item that promises every listed site proved has traced each site
   (`--bounds-trace`) for all the facts it needs; a site that also needs a
   fact the walk lacks (`a.min(n)`) is listed under that gap (#1496).
+  A *Done when* that promises the issue's own probe proved is held to
+  the same: the probe is traced for every fact it needs, and a fact no
+  item builds is named as a gap (a `decision`, I6) or the promise is
+  narrowed to what the items reach (#1782: #1688 promised its probe
+  proved by an "ascending" rule alone; the probe also needed each element
+  of `limits` capped by `len(trail)`, which no rule gives).
   A site in a method of a type with field rules (ADR-306 D21, D28) has a
   probe reduced from the real code: the function and every `ref mut self`
   method of its type, with stub types, kept as the acceptance check; a
@@ -292,14 +353,23 @@ issue lacked that would have saved it turns or a wrong turn:
 
 `<n>` is looked up in this file before it is written, never recalled: I3
 is plain language and I4 where it belongs; a probe that passes before any
-change is I5 and so is one that does not parse as written, a decision called
+change is I5 and so is one that does not parse or check as written (#1768:
+#1673's run answered `wrong I3` for a probe writing `List[i64]`, NK1135), a decision called
 unbuilt that is built is I6 ("built or text only"), a suspected function
 that does not exist is I7, an item that is wrong or leaves open a choice
 that changes its result without saying the builder chooses is I9 (#1735: #1527's run answered `wrong I3`
 and `wrong I4` for an I5/I6 and an I9 point; #1708 the same slip; #1741:
 #1729's run answered `wrong I3` for a probe that did not parse, I5, and a
 suspected function that does not exist, I7; #1745: #1731's run answered
-`broke I3` for an issue filed `ready` without its decision, I6; #1746:
+`broke I3` for an issue filed `ready` without its decision, I6; #1761:
+#1754's run answered `broke I3` for shapes of the cause left unnamed, I7;
+#1771: #1621's run answered `wrong I3` for a false claim of what git tracks,
+I4a, and `rules-gap` for a fix of what an ADR specifies, I6; #1779:
+#1628's run answered `broke I4` for a probe that was a fragment without
+its `fn`, `main` and `use` lines, I5 (copied whole), and `wrong I5` for a
+blamed cause and a wrong file, I7; #1780: #1776's run answered `broke
+I3` for a `Found:` that named no cause, I7 (`unknown` at least), and
+whose probe was a whole `lower-std --bounds`, I5; #1746:
 #1533's run answered `rules-gap` for an item that left open what bounds the
 wait before a body's first byte, `broke I9`).
 
@@ -308,13 +378,19 @@ rule number a driver-filed issue copied from an earlier report, a slip
 with nothing to build) is not judged again in `Issue:`: the driver files
 each `Issue:` answer as a new improvement issue, and the echo only files
 the closed point once more (#1708: #1703's run closed its I3 label as a
-citation slip and still answered `wrong I3`).
+citation slip and still answered `wrong I3`; #1802: #1791's run closed its
+I5 label as the wrong rule, built the driver template fix itself, and still
+answered `wrong I5` unmarked).
 
 A point the run has already built in its own commit (it added the missing
 rule to this file, or fixed the issue) is answered with `(built)` after its
 kind, `rules-gap (built): <what was missing>`: it stays in the report for the
 supervisor's count, and the driver does not file it (#1739: #1707's run
-added its rule to I9 and its `rules-gap` was filed again as #1724).
+added its rule to I9 and its `rules-gap` was filed again as #1724; #1726's
+run forgot the mark too and was filed as #1773, so `scripts/commit.nika` now
+prints a `NOTE:` when a commit changes a rules file or a script under
+`scripts/` (the driver's templates, #1802) and `Issue:` holds an unmarked
+answer).
 
 Several answers are joined with `;`. The supervisor counts them per rule and
 per author; a rule that is broken often is made easier to keep, a gap that

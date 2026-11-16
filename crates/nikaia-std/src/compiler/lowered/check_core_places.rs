@@ -171,9 +171,18 @@ pub fn check_core_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn stamped_if(seen: bool, got: Ty) -> Ty {
+    if !seen || got.is_unknown() || got.is_seen() { return got; }
+    Ty::Named { name: nikaia_std::block::Text::from(SEEN.to_string()), args: vec![got], view: false }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, base: &Expr, name: winnow_grammar::Symbol, span: &Span) -> Ty {
-    let on = check_core_expr(state, world, host, base, span);
+    let read = check_core_expr(state, world, host, base, span);
+    let seen_base = read.is_seen();
+    let on = read.unseen();
     let owned_result = match on {
         Ty::Named { view, .. } => !view,
         _ => false,
@@ -205,11 +214,11 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
                     Ty::Tuple(ref parts) => {
                         let part = check_core_places_tuple_part(state, parts, &field, span);
                         if part.is_unknown() { return Ty::Unknown; }
-                        return state.a_safe_reach(world, base, &part, inner.is_a_view());
+                        return stamped_if(seen_base, state.a_safe_reach(world, base, &part, inner.is_a_view()));
                     },
                     _ => { },
                 }
-                return state.a_safe_field(world, inner, base, &field, expr, span);
+                return stamped_if(seen_base, state.a_safe_field(world, inner, base, &field, expr, span));
             },
             Ty::Unknown => { return Ty::Unknown; },
             _ => { state.reaches_through_a_plain_value(world, &on, base, &field, false, expr, span); },
@@ -232,7 +241,7 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
         return Ty::Unknown;
     }
     match on {
-        Ty::Tuple(ref parts) => { return check_core_places_tuple_part(state, parts, &field, span); },
+        Ty::Tuple(ref parts) => { return stamped_if(seen_base, check_core_places_tuple_part(state, parts, &field, span)); },
         _ => { },
     }
     let mut seen: Ty = on.clone();
@@ -255,7 +264,7 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
         _ => { },
     }
     check_core_places_array_length(state, id_of(expr) as i64, &got);
-    got
+    stamped_if(seen_base, got)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

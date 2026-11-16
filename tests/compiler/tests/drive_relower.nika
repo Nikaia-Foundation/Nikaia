@@ -9,7 +9,9 @@
 // could be pushed; one of documentation only is merged as it is. A clean
 // merge that brought a change under `examples/` has its ledgers refreshed
 // (#1591; here a stub `scripts/ledgers.nika` that writes one) and committed
-// in the merge too.
+// in the merge too. A conflict only in the lowered index `lowered.rs` beside
+// the lowered directory (both sides moved its digest line) is re-lowered too
+// (#1784), and named once.
 use std::fs
 use std::process
 
@@ -37,7 +39,8 @@ fn sh(dir: String, script: String) -> String throws {
 // `other` pushes, `work` commits, keeps an uncommitted change and fetches.
 // KIND "lowered": both sides change the lowered file, theirs a new source;
 // "both": both also change the same source; "clean": theirs a new source,
-// ours another file; "docs": theirs only a note in `docs/`.
+// ours another file; "docs": theirs only a note in `docs/`; "index": both
+// change only the lowered index `lowered.rs`, theirs a new source.
 fn setup(tmp: String, name: String, kind: String) -> String throws {
     let base = f"{tmp}/{name}"
     let low = "crates/nikaia-std/src/compiler/lowered"
@@ -52,9 +55,11 @@ fn setup(tmp: String, name: String, kind: String) -> String throws {
     if kind == "docs" { theirs = "mkdir -p docs; echo theirs > docs/x.md; " }
     if kind == "example" { theirs = "mkdir -p examples/a/src; echo theirs > examples/a/src/main.nika; " }
     if lowered { theirs = f"echo theirs > {low}/a.rs; {theirs}" }
+    if kind == "index" { theirs = f"echo theirs > {low}.rs; {theirs}" }
     sh(other, f"{id}; {theirs}git add -A; git commit -q -m theirs; git push -q origin develop")
     let mut ours = if kind == "both" { "echo ours > crates/src/a.nika; " } else { "echo ours > ours.txt; " }
     if lowered { ours = f"echo ours > {low}/a.rs; {ours}" }
+    if kind == "index" { ours = f"echo ours > {low}.rs; {ours}" }
     sh(work.clone(), f"{ours}git add -A; git commit -q -m ours; echo local > notes.txt; git fetch -q origin develop")
     return work
 }
@@ -81,7 +86,7 @@ fn case(nikaia: String, repo: String, tmp: String, name: String, kind: String, l
     println(f"== {name}")
     println(out.stdout.trim().replace(head, "SHA"))
     println(f"exit ok: {out.ok}")
-    let state = sh(work, "git log --format=%s -1; git log --format=%p -1 | wc -w; test -f .git/MERGE_HEAD && echo merge open || echo no merge open; git status --porcelain --untracked-files=all; git show --format= --name-only HEAD | sort; cat crates/nikaia-std/src/compiler/lowered/a.rs; cat assets/badges/self-hosted.svg; echo; cat notes.txt; cat examples/a/nikaia.contracts 2>/dev/null || true")
+    let state = sh(work, "git log --format=%s -1; git log --format=%p -1 | wc -w; test -f .git/MERGE_HEAD && echo merge open || echo no merge open; git status --porcelain --untracked-files=all; git show --format= --name-only HEAD | sort; cat crates/nikaia-std/src/compiler/lowered/a.rs; cat crates/nikaia-std/src/compiler/lowered.rs; cat assets/badges/self-hosted.svg; echo; cat notes.txt; cat examples/a/nikaia.contracts 2>/dev/null || true")
     println(state)
 }
 
@@ -98,6 +103,8 @@ fn main() throws {
     case(nikaia.clone(), repo.clone(), tmp.clone(), "clean, a source", "clean", lower.clone())
     case(nikaia.clone(), repo.clone(), tmp.clone(), "clean, docs only", "docs", lower.clone())
     case(nikaia.clone(), repo.clone(), tmp.clone(), "clean, lowering fails", "clean", f"echo new > {low}/new.rs; false")
-    case(nikaia, repo, tmp.clone(), "clean, an example", "example", lower)
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "clean, an example", "example", lower.clone())
+    // The stub lowering of the index: its digest from the sources.
+    case(nikaia, repo, tmp.clone(), "index only", "index", f"{lower}; cat crates/src/*.nika | wc -l > {low}.rs")
     process::run("rm", ["-rf", tmp])
 }

@@ -2451,10 +2451,16 @@ impl EmitState {
     }
 
     /// The count a hull's allocation is counted with: the one an enclosing
-    /// argument handed down, taken, or else the function's own answer.
-    fn emit_call_hull_count[H: EmitHost](ref self, host: ref H, mut walk: EmitWalk, scope: ref EmitScope) -> Count {
+    /// argument handed down, taken; else the one of the slot it is made into
+    /// (a parameter, the result, a field: #1638), by the value put into it;
+    /// or else the function's own answer.
+    fn emit_call_hull_count[H: EmitHost](ref self, host: ref H, mut walk: EmitWalk, scope: ref EmitScope, value: ref Expr) -> Count {
         let given = walk.hull_count
         walk.hull_count = null
+        let made = made_slot(node_key(value))
+        if given == null && self.shared.contains_key(f"{scope.function}::{made}") {
+            return self.count_at(host.crossings_are_possible(), scope.function, made)
+        }
         return given ?? self.count_at(host.crossings_are_possible(), scope.function, scope.bound)
     }
 
@@ -2468,7 +2474,7 @@ impl EmitState {
                 if emit_text(world, segments[0]) != "SharedMut" || emit_text(world, segments[1]) != "supervised" {
                     return false
                 }
-                let count = self.emit_call_hull_count(host, walk, scope)
+                let count = self.emit_call_hull_count(host, walk, scope, args[0])
                 let hulls = self.hull_new(world, host.crossings_are_possible(), walk.trusting, "SharedMut", count) ?? return false
                 if hulls.len() != 2 {
                     return false
@@ -2526,7 +2532,7 @@ impl EmitState {
         // shape `written_name` would give the *type* - so the constructor and the
         // annotation cannot disagree about a value.
         if args.len() == 1 {
-            let count = self.emit_call_hull_count(host, walk, scope)
+            let count = self.emit_call_hull_count(host, walk, scope, args[0])
             let hulls = self.hull_new(world, host.crossings_are_possible(), walk.trusting, text, count)
             if hulls != null {
                 let paths = hulls ?? return false

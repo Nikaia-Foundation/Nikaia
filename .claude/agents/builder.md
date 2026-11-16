@@ -77,14 +77,19 @@ You build one small slice of an issue in the Nikaia repository and end.
   a shape that works is left out, and the line names the suspected file and
   function, or says the cause is unknown (#1695: #1654's Found named the
   `while` forms, already proved, and no cause: `bounding_for` lacked the pair
-  bounds `bounding_while` asks). A correct program your own change
+  bounds `bounding_while` asks). A traced cause is run in its other
+  forms too (a closure, a `std` method taking one, the `Array` twin), and
+  each that fails is named in the line (#1761, `docs/issues.md` I7). A correct program your own change
   refuses (a fail-closed check's false refusal) is a defect too: one
   `Found:` line per shape, with its probe, never a `Deviation:`, which
   goes to the improvement lane without a probe (#1680, #1701). The
   driver files each `Found:` line as an issue for the bug lane, and
   `Issue:`, `Deviation:`, `Needs:` and `Friction:` (what cost you turns for
   nothing: a tool, a rule, a red check that was not yours) as one issue for the
-  improvement lane. Say friction there, not in `Body:`. Any of these lines
+  improvement lane. Say friction there, not in `Body:`. Each line stands
+  alone, since each becomes another issue: it says its point, never "see
+  Found" or "see Body" (the improvement issue quotes the Found lines, but
+  not which one is meant, #1783). Any of these lines
   that says the compiler refuses or lacks something ("every way draws
   NK2105", "cannot be written") carries, in the line, each shape tried as
   its snippet and the code it drew (`` `x = y; y = [2]` NK2105; ... ``):
@@ -143,7 +148,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   `match` shape had its own cause, found only after a build). Then
   implement all of them and build once. Catch slips without a build:
   Catch Rust slips with `cargo check --release -p nikaia --message-format
-  short` (under a minute). Then **the cycle, as one tool call**, exactly:
+  short` (under a minute). Then **the cycle, as one tool call**, with
+  `run_in_background` and `timeout: 3600000` (the background default ends a
+  cold cycle, one with a re-proving `lower-std` or after a deleted `target/`,
+  before it is done, #1800), exactly:
 
       target/fast/nikaia lower-std 2>&1 | grep -E '^(error|Error)|-->' | head -30; cargo build --profile fast -p nikaia --message-format short 2>&1 | grep -E '^error' | head; target/fast/nikaia lower-std 2>&1 | grep -E '^(error|Error)|-->' | head; git status --short crates/nikaia-std/src/compiler/lowered crates/nikaia-std/src/compiler/lowered.rs
 
@@ -156,7 +164,7 @@ You build one small slice of an issue in the Nikaia repository and end.
   change means another session rewrote it; run `lower-std` again first (m3a,
   2026-10-28: one 8-minute round lost on a reset tree). Never `git reset`,
   `git stash`, `git checkout .` or `git restore .` in the shared checkout (they
-  throw away the other agents' work). Never reset `lowered/` by hand (`git checkout ...lowered/`), never
+  throw away the other agents' work). Never reset `lowered/` by hand (`git checkout ...lowered/`; the one exception: a rustc error in another agent's lowered file, `docs/builder-facts.md` #1794), never
   `git clone` or a second `target/` (a cold build is about 10 minutes of 4
   cores), never `sleep`/`pgrep` loops. A build only to try one case is a
   wasted cycle.
@@ -214,7 +222,8 @@ You build one small slice of an issue in the Nikaia repository and end.
   it into the message as `Fixes none`, y2c 2026-10-31; leave the line out or
   write `Part: #N`); then run `target/fast/nikaia run
   scripts/commit.nika -- REPORT` (`--dry-run` shows the message). It refuses an
-  unchanged listed file or a staged file not listed, adds exactly the listed
+  unchanged listed file, commits through a private index (a file another
+  agent staged stays staged and is named, never committed, #1792), adds exactly the listed
   files, writes the message (subject, `Changelog:`, `Fixes`, the trailer
   lines under the report's last field `Attribution:`), commits without
   pushing, writes `Pushed: local <sha>`

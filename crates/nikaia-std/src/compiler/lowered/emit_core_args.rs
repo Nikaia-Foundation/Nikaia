@@ -1604,9 +1604,11 @@ impl EmitState {
             _ => false,
         }
     }
-    pub(crate) fn emit_call_hull_count<H: EmitHost>(&self, host: &H, walk: &mut EmitWalk, scope: &EmitScope) -> Count {
+    pub(crate) fn emit_call_hull_count<H: EmitHost>(&self, host: &H, walk: &mut EmitWalk, scope: &EmitScope, value: &Expr) -> Count {
         let given = walk.hull_count;
         walk.hull_count = None;
+        let made = made_slot(node_key(value));
+        if given.is_none() && self.shared.contains_key(&format!("{}::{}", scope.function, made)) { return self.count_at(host.crossings_are_possible(), &scope.function, &made); }
         nikaia_std::index::or(given, || self.count_at(host.crossings_are_possible(), &scope.function, &scope.bound).into())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -1617,7 +1619,7 @@ impl EmitState {
             Expr::Path(segments, _) => {
                 if segments.len() != 2 || args.len() != 1 { return Ok(false); }
                 if emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) != "SharedMut" || emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) != "supervised" { return Ok(false); }
-                let count = self.emit_call_hull_count(host, walk, scope);
+                let count = self.emit_call_hull_count(host, walk, scope, unsafe { nikaia_std::proven::read(&args, (0) as usize) });
                 let hulls = match self.hull_new(world, host.crossings_are_possible(), walk.trusting, "SharedMut", &count) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                 if hulls.len() != 2 { return Ok(false); }
                 out.push(&format!("{}::new({}::supervised_kept(", *unsafe { nikaia_std::proven::read(&hulls, (0) as usize) }, *unsafe { nikaia_std::proven::read(&hulls, (1) as usize) }));
@@ -1658,7 +1660,7 @@ impl EmitState {
             return Ok(true);
         }
         if args.len() == 1 {
-            let count = self.emit_call_hull_count(host, walk, scope);
+            let count = self.emit_call_hull_count(host, walk, scope, unsafe { nikaia_std::proven::read(&args, (0) as usize) });
             let hulls = self.hull_new(world, host.crossings_are_possible(), walk.trusting, text, &count);
             if hulls.is_some() {
                 let paths = match hulls { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };

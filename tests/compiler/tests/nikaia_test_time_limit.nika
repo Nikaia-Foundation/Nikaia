@@ -3,6 +3,7 @@
 // it with its name and `timed out after N s`, and goes on with the next.
 // `waits_on_a_child` starts a `sleep` that shares its output streams: killed
 // alone, the program would leave the `sleep` holding the runner's pipes.
+// The build gets no limit (0, #1775): ten times 2 s could end a cold build.
 use std::fs
 use std::process
 
@@ -22,7 +23,7 @@ fn main() throws {
     fs::write(f"{tmp}/tests/fine.stdout", fs::Root::Anywhere, "fine\n")
     fs::write(f"{tmp}/tests/spins.nika", fs::Root::Anywhere, "fn main() {\n    while true {}\n}\n")
     fs::write(f"{tmp}/tests/waits_on_a_child.nika", fs::Root::Anywhere, "use std::process\n\nfn main() throws {\n    process::run(\"sleep\", [\"600\"]; stdout: process::Stream::Inherited, stderr: process::Stream::Inherited)\n}\n")
-    let out = process::run(nikaia, ["test"]; dir: tmp.clone(), env: [("NIKAIA_TEST_TIME_LIMIT", "2")])
+    let out = process::run(nikaia, ["test"]; dir: tmp.clone(), env: [("NIKAIA_TEST_TIME_LIMIT", "2"), ("NIKAIA_TEST_BUILD_TIME_LIMIT", "0")])
     println(f"exit {out.code}")
     for line in f"{out.stdout}{out.stderr}".lines() {
         if line.starts_with("program ") || line.starts_with("--- ") || line.starts_with("timed out") || line.starts_with("test result") {

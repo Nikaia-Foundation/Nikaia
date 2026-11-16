@@ -1,0 +1,12 @@
+exit 1
+program "builds_long" (tests/builds_long.nika) ... FAILED
+--- program "builds_long" (tests/builds_long.nika)
+test result: FAILED. 0 passed; 1 failed
+build timed out after 2 s
+hint: a build that hangs often waits on a Cargo lock another cargo holds; check once with `ps -ef --forest | grep -B2 -E 'cargo (rustc|build) .*--target-dir'`, or raise NIKAIA_TEST_BUILD_TIME_LIMIT (0: no limit)
+exit 1
+program "builds_long" (tests/builds_long.nika) ... FAILED
+--- program "builds_long" (tests/builds_long.nika)
+test result: FAILED. 0 passed; 1 failed
+build timed out after 10 s
+hint: a build that hangs often waits on a Cargo lock another cargo holds; check once with `ps -ef --forest | grep -B2 -E 'cargo (rustc|build) .*--target-dir'`, or raise NIKAIA_TEST_BUILD_TIME_LIMIT (0: no limit)

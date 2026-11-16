@@ -35,6 +35,7 @@ pub trait CliTestHost {
 pub fn cli_commands_test<H: CliTestHost>(host: &H, root: &std::path::Path, user_parallelism: &str, blocks: bool, outputs: bool, own: bool, both_settings: bool, bless: bool, stderr: bool, filters: &[String]) -> Result<i32, Box<dyn std::error::Error>> {
     if !blocks && !outputs && !own && !filters.is_empty() {
         nikaia_std::io::println(format_args!("no tests: no test's name holds any of the `--filter` texts {}", nikaia_std::block::Text::from(filters.join(", "))))?;
+        if filters.iter().any(|text| { text.contains('|') || text.contains('*') || text.contains('^') || text.contains('$') }) { nikaia_std::io::println(format_args!("`--filter` matches plain text, not a pattern: give one `--filter` per name"))?; }
         return Ok(1);
     }
     if !blocks && !outputs && !own {

@@ -20,6 +20,7 @@ pub struct ProveComptimes {
     pub outside: ProverOutside,
     pub zero_divisors: collections::BTreeSet<i64>,
     pub arithmetic: collections::BTreeMap<i64, String>,
+    pub divisions: collections::BTreeMap<i64, String>,
     pub unfit_numbers: collections::BTreeSet<i64>,
 }
 
@@ -30,8 +31,8 @@ pub struct ProveWalked {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn prove_comptimes_of(program: &Program, words: &winnow_grammar::InternerContext, values: &collections::BTreeMap<i64, (String, String)>, whole_lets: &collections::BTreeMap<i64, String>, method_callees: &collections::BTreeMap<i64, String>, field_owners: &collections::BTreeMap<i64, String>, outside: &ProverOutside, zero_divisors: &collections::BTreeSet<i64>, arithmetic: &collections::BTreeMap<i64, String>, unfit_numbers: &collections::BTreeSet<i64>) -> ProveComptimes {
-    let mut found = ProveComptimes { by_name: collections::BTreeMap::new(), at: collections::BTreeMap::new(), whole_lets: whole_lets.copy_owned(), method_callees: method_callees.copy_owned(), field_owners: field_owners.copy_owned(), outside: outside.clone(), zero_divisors: zero_divisors.copy_owned(), arithmetic: arithmetic.copy_owned(), unfit_numbers: unfit_numbers.copy_owned() };
+pub fn prove_comptimes_of(program: &Program, words: &winnow_grammar::InternerContext, values: &collections::BTreeMap<i64, (String, String)>, whole_lets: &collections::BTreeMap<i64, String>, method_callees: &collections::BTreeMap<i64, String>, field_owners: &collections::BTreeMap<i64, String>, outside: &ProverOutside, zero_divisors: &collections::BTreeSet<i64>, arithmetic: &collections::BTreeMap<i64, String>, divisions: &collections::BTreeMap<i64, String>, unfit_numbers: &collections::BTreeSet<i64>) -> ProveComptimes {
+    let mut found = ProveComptimes { by_name: collections::BTreeMap::new(), at: collections::BTreeMap::new(), whole_lets: whole_lets.copy_owned(), method_callees: method_callees.copy_owned(), field_owners: field_owners.copy_owned(), outside: outside.clone(), zero_divisors: zero_divisors.copy_owned(), arithmetic: arithmetic.copy_owned(), divisions: divisions.copy_owned(), unfit_numbers: unfit_numbers.copy_owned() };
     for (at, (below, written)) in values.iter() {
         let at = nikaia_std::num::value(at);
         if !prove_whole(below) { continue; }
@@ -111,6 +112,7 @@ pub(crate) fn prove_state(pinned: &collections::BTreeMap<String, i64>, comptimes
     state.field_owners = comptimes.field_owners.copy_owned();
     state.outside = comptimes.outside.clone();
     state.arithmetic = comptimes.arithmetic.copy_owned();
+    state.divisions = comptimes.divisions.copy_owned();
     state.unfit_numbers = comptimes.unfit_numbers.copy_owned();
     state.not_run = not_run.copy_owned();
     state.stopped = stopped.copy_owned();

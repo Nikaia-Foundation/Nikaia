@@ -1,0 +1,60 @@
+// A `let` bound to a choice of names of text of their own that are read after
+// it holds a view of them (ADR-282 D13, #712), not the text moved: handed back,
+// that view lives in the caller's keep (ADR-283), as `let v = if c { a } else {
+// "q" }` does, instead of failing in rustc (#1658).
+
+fn make(s: String) -> String {
+    let mut g = String()
+    g.push_str(s)
+    return g
+}
+
+fn pick(x: i64) -> String {
+    let a = make("a")
+    let b = make("b")
+    let named = if a != "" { a } else { b }
+    if x > 1 || a == b {
+        return ""
+    }
+    return named
+}
+
+fn picked_by_match(x: i64) -> String {
+    let a = make("c")
+    let b = make("d")
+    let named = match x {
+        0 => a,
+        else => b,
+    }
+    if a == b {
+        return ""
+    }
+    return named
+}
+
+fn one_read_later(x: i64) -> String throws {
+    let a = make("e")
+    let b = make("f")
+    let named = if x == 0 { a } else { b }
+    println(a)
+    return named
+}
+
+fn copied(x: i64) -> String {
+    let a = make("g")
+    let b = make("h")
+    let named = if x == 0 { a } else { b }
+    if a == b {
+        return ""
+    }
+    return named.clone()
+}
+
+fn main() throws {
+    println(pick(0))
+    println(picked_by_match(0))
+    println(picked_by_match(1))
+    println(one_read_later(0))
+    println(one_read_later(1))
+    println(copied(1))
+}

@@ -35,6 +35,9 @@
 // unchanged brief without a report resumes that session once (`resumed` is
 // appended to the record), with the same model and tools, if its transcript is
 // still there; a resume that fails at once (no JSON) falls back to a fresh run.
+// While a process still runs the record's session (a killed driver's claude),
+// a start of the brief is refused (`refused: BRIEF is still running`, exit 2)
+// rather than run a second builder beside it (#1796).
 //
 // `effort: low|medium|high` (owner, 2026-11-01; missing: `medium`) goes to
 // claude as `--effort`, the debrief too; `low` for an easy step (one step of a
@@ -134,6 +137,21 @@ fn agent_resumable(abs: String, record: String, sum: String) -> String throws {
     if fs::exists(agent_report(abs), fs::Root::Anywhere) { return "" }
     if !fs::exists(agent_transcript(words[0].clone()), fs::Root::Anywhere) { return "" }
     return words[0].clone()
+}
+
+// The pid of a process still running the record's session (its `claude`,
+// started with `--session-id` or `--resume` and the id), else "". A driver
+// killed or restarted mid-run leaves that claude alive; resuming or restarting
+// the brief beside it puts two builders in one session, scratchpad and files
+// (#1796).
+fn agent_live(record: String) -> String throws {
+    let id = record.trim().split(" ").collect()[0].clone()
+    if id == "" { return "" }
+    let ps = process::run("ps", ["-eww", "-o", "pid=,args="]).stdout.clone()
+    for l in ps.split("\n") {
+        if l.contains(id.clone()) { return l.trim().split(" ").collect()[0].clone() }
+    }
+    return ""
 }
 
 // The debrief's question, asked in the run's own session without tools.
@@ -465,6 +483,11 @@ fn main() throws {
     let record = f"{abs}.session"
     let sum = process::run("cksum", [abs.clone()]).stdout.trim().split(" ").collect()[0].clone()
     let mut resumed = agent_resumable(abs.clone(), agent_read(record.clone()), sum.clone())
+    let live = agent_live(agent_read(record.clone()))
+    if live != "" {
+        println(f"refused: {abs} is still running (pid {live}, its session in {record}); wait for it to end or kill it")
+        process::exit(2)
+    }
     if dry {
         if resumed != "" { claude_args = agent_resume_args(abs.clone(), text.clone(), resumed.clone()) }
         println(claude + " " + claude_args.join(" "))

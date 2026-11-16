@@ -33,7 +33,7 @@
 // `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add),
 // `--fixed-in LOG N...` (drive_fixed_in),
 // `--wip-after RESULT FIXES N`, `--found-issue NAME N FOUND NEEDS`,
-// `--improve-issue NAME N REPORT`, `--time-up` (drive_time_up: `up` or `not up`).
+// `--improve-issue NAME N REPORT [DIR]`, `--time-up` (drive_time_up: `up` or `not up`).
 //
 // Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time;
 // before each cycle the area's ready issues (the area being DIR's last name)
@@ -84,6 +84,7 @@
 // agent.nika, a stop line (above), `--max` agent runs (default 8), a merge
 // conflict on a rejected push, a suite still red after 2 QA rounds. A RED line
 // with a builder queued goes on with it (the supervisor's fix-forward brief).
+// Each ESCALATE line names the drive.nika commit that ran (drive_wake).
 //
 // `--ignore-ci-red`: a RED line of the cycle (CI red on develop) does not
 // stop the driver; NEXT and BATCH DONE go on as if CI were green, and a BUMP
@@ -241,9 +242,29 @@ fn drive_exe() -> String throws {
 // what matters): the line itself, then `WAKE <line>`. The session's watcher
 // on the log greps `^WAKE ` and nothing else; the end of the background task
 // wakes it anyway. Only ESCALATE, STOP and PUSHED go through here.
+// An ESCALATE line ends with the commit of the scripts/drive.nika this run
+// loaded, ` (drive.nika <sha8>)` (`+edited` where the tree's copy differs
+// from that commit; nothing outside a checkout holding the script): a run
+// keeps the script it started with until a merge brings a new one
+// (drive_restart), so an escalation can come from a script older than
+// develop, and the issue filed from it says which (#1801, docs/issues.md I4c).
 fn drive_wake(line: String) throws {
-	println(line)
-	println(f"WAKE {line}")
+	let mut said = line.clone()
+	if line.starts_with("ESCALATE ") {
+		let sha = drive_script_commit()
+		if sha != "" { said = f"{line} (drive.nika {sha})" }
+	}
+	println(said)
+	println(f"WAKE {said}")
+}
+
+// The last commit of scripts/drive.nika in this checkout, `+edited` where
+// the working tree's copy differs from it; "" where there is none.
+fn drive_script_commit() -> String throws {
+	let sha = process::run("git", ["log", "-1", "--format=%h", "--", "scripts/drive.nika"]).stdout.trim().clone()
+	if sha == "" { return "" }
+	if process::run("git", ["diff", "--quiet", "HEAD", "--", "scripts/drive.nika"]).code != 0 { return sha + "+edited" }
+	return sha
 }
 
 fn drive_escalate(why: String) throws {
@@ -2001,7 +2022,9 @@ fn drive_sweep() -> i64 throws {
 
 // The cleanup after each batch, and before agents start when the disk runs
 // low (#1521): target/debug and target/nikaia-example-tests (the driver uses
-// neither), the sandboxes of dead `nikaia test` runs, and `nikaia cache
+// neither; target/debug is kept while a cargo started in this checkout
+// without `--profile`, `--release` or `--target-dir` runs, a builder's
+// clippy, #1800), the sandboxes of dead `nikaia test` runs, and `nikaia cache
 // prune` on target/nikaia-project-tests at the driver's limit, 2G (the tests'
 // cache is pruned, never removed whole); still under 6 GB after that and with
 // no cargo or rustc building into them, cargo's incremental caches (target/fast and
@@ -2010,11 +2033,23 @@ fn drive_sweep() -> i64 throws {
 fn drive_cleanup(exe: String, dry: bool) throws {
 	drive_say(
 		dry,
-		f"rm -rf target/debug target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free",
+		f"rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free",
 	)
 	if dry { return }
 	let before = drive_free()
-	process::run("rm", ["-rf", "target/debug", "target/nikaia-example-tests"])
+	// A cargo building into target/debug: one whose working directory is in
+	// this checkout and that names no other profile or target directory.
+	let debug_busy = process::run(
+		"sh",
+		["-c", "here=$(pwd -P); for p in $(ps -eo pid=,comm= | awk '$2 == \"cargo\" {print $1}'); do d=$(readlink /proc/$p/cwd) || continue; case \"$d/\" in \"$here\"/*) tr '\\0' ' ' < /proc/$p/cmdline | grep -qE -- '--profile|--release|--target-dir' || echo $p;; esac; done"],
+	).stdout.trim() != ""
+	let mut debug: String = "target/debug"
+	if debug_busy {
+		debug = "target/debug kept (a cargo builds into it)"
+	} else {
+		process::run("rm", ["-rf", "target/debug"])
+	}
+	process::run("rm", ["-rf", "target/nikaia-example-tests"])
 	let swept = drive_sweep()
 	let mut pruned: String = "no cache"
 	if exe != "" && fs::exists("target/nikaia-project-tests", fs::Root::Anywhere) {
@@ -2038,7 +2073,7 @@ fn drive_cleanup(exe: String, dry: bool) throws {
 		incremental = ", target/*/incremental"
 	}
 	let after = drive_free()
-	println(f"CLEANUP freed {after - before} MB, {after} MB free: target/debug, target/nikaia-example-tests, {swept} stale sandboxes, {pruned}{incremental}")
+	println(f"CLEANUP freed {after - before} MB, {after} MB free: {debug}, target/nikaia-example-tests, {swept} stale sandboxes, {pruned}{incremental}")
 }
 
 // Free disk before agents start: under 6 GB the cleanup runs at once, and
@@ -2204,16 +2239,28 @@ fn drive_found_title(found: String) -> String {
 // The body of an issue filed from a report's `Found:`: where it came from (the
 // brief, its issue), the Found, `Needs:` when it asks for something, a *To
 // build* and a *Done when* for the builder that takes it (docs/issues.md),
-// then the footer.
+// then the footer. The fix item names where a non-compiler Found is fixed
+// (#1769: a stale guide example read as a compiler defect to fix).
 fn drive_found_body(name: String, issue: String, found: String, needs: String) -> String {
 	let from = if issue == "" { f"the run of `{name}`" } else { f"the run of `{name}` (#{issue})" }
 	let mut body = f"Filed by the driver from the `Found:` of {from} (owner, 2026-11-06).\n\n## Found\n\n{found.trim()}\n"
 	if needs != ""
 		&& drive_word(needs) != "none" { body = body + f"\n## Needs\n\n{needs.trim()}\n" }
 	body = body
-		+ "\n## To build\n\n- [ ] Reproduce the Found: a compiler, lowering or `std` defect with a probe (`nikaia run scripts/probe.nika -- SNIPPET`), a defect in `docs/` or `scripts/` with the command or check that shows it; a behaviour the code does on purpose (name the function or ADR) closes it as by design. The Found line may lack them (#1710): the commit message, or the report's `Body:` when closed, gives the probe or check with its expected output, the ADR or Part I-III section that says so, and its actual output (docs/issues.md I5, I6), and the cause, file and function, traced or suspected (I7).\n- [ ] Fix it where it lives, with a test in `tests/compiler/tests/`, unless a check that already runs (name it, e.g. `check-adr-refs.py` for a docs citation) turns red on it.\n"
+		+ "\n## To build\n\n- [ ] Reproduce the Found: a compiler, lowering or `std` defect with a probe (`nikaia run scripts/probe.nika -- SNIPPET`; a lowered file that differs, with an uncached `lower-std` of a `git archive HEAD` copy, `NIKAIA_LOWER_CACHE_SALT` fresh and `--sysroot COPY/crates`, its `lowered/` diffed against the copy's, never the shared working tree's, #1793), a defect in `docs/`, `guide/`, `website/` or `scripts/` (a stale example, a wrong rule) with the command or check that shows it; a behaviour the code does on purpose (name the function or ADR) closes it as by design. The Found line may lack them (#1710): the commit message, or the report's `Body:` when closed, gives the probe or check with its expected output, the ADR or Part I-III section that says so, and its actual output (docs/issues.md I5, I6), and the cause, file and function, traced or suspected (I7).\n- [ ] Fix it in the file where it lives: a compiler, lowering or `std` defect in the compiler, a stale page example or rule in its page or `docs/` file, a script defect in the script. Add a test in `tests/compiler/tests/` unless a check that already runs turns red on it (name it: pre-push's `page-examples` for `guide/` and `website/`, `check-adr-refs.py` for a docs citation).\n"
 	body = body + "\n## Done when\n\nThe probe or check gives the expected output the first item names from its ADR or Part I-III section, and a `tests/compiler/tests/` test (or the named check) that failed on the unfixed tree is green; or the issue is closed as by design, naming the function or ADR.\n"
 	return body + drive_footer()
+}
+
+// The report's `Needs:` as it goes with each of its COUNT Founds: whole
+// when there is one, "" when there are several, since a report has one
+// `Needs:` and it cannot say which Found it asks for (#1769: #1675's run
+// gave a stale guide example the `Needs:` of its other Found). A Found that
+// waits on a decision says `no decision yet` itself (drive_found_labels); the
+// `Needs:` still reaches the improvement issue (drive_improve_items).
+fn drive_found_needs(count: int, needs: String) -> String {
+	if count == 1 { return needs }
+	return ""
 }
 
 // Files a report's `Found:` as an issue (owner, 2026-11-06): labels
@@ -2225,10 +2272,11 @@ fn drive_found_file(dir: String, brief: String) throws {
 	let report = drive_report_of(brief.clone())
 	if report == "" { return }
 	let text = drive_read(report)
-	let needs = drive_field(text.clone(), "Needs")
+	let founds = drive_founds(text.clone())
+	let needs = drive_found_needs(founds.len(), drive_field(text, "Needs"))
 	let name = drive_stem(brief.clone())
 	let issue = drive_issue(brief)
-	for found in drive_founds(text) {
+	for found in founds {
 		let body = drive_found_body(name.clone(), issue.clone(), found.clone(), needs.clone())
 		let number = drive_issue_new(
 			drive_found_title(found),
@@ -2370,24 +2418,69 @@ fn drive_comment_file(dir: String, brief: String) throws {
 // #1697 run looked for #1694's commit on develop for turns, and it was on no
 // branch): the report at REPORT, and from its TEXT the commit's subject
 // (`Commit:`) and the `Pushed:` it had when the issue was filed, which is
-// `local <sha>` before the batch's suite pushes it.
+// `local <sha>` before the batch's suite pushes it. The report itself is
+// quoted whole (drive_improve_quoted): it is untracked and goes when
+// docs/briefs/ is cleaned, so the issue must not depend on it (#1791: #1769's
+// issue named the #1675 report, gone by the time its run read it).
 fn drive_improve_source(report: String, text: String) -> String {
 	let commit = drive_field(text.clone(), "Commit")
-	let pushed = drive_field(text, "Pushed")
-	let mut out = f"\n## Source\n\nThe run's report: `{report}` (untracked, in the driver's checkout).\n"
+	let pushed = drive_field(text.clone(), "Pushed")
+	let mut out = f"\n## Source\n\nThe run's report: `{report}` (untracked, in the driver's checkout; quoted whole below, since the file may be gone).\n"
 	if commit == "" || drive_word(commit.clone()) == "none" {
-		return out + "The run committed nothing.\n"
+		return out + "The run committed nothing.\n" + drive_improve_quoted(text)
 	}
 	let state = if pushed == "" { "no `Pushed:`" } else { f"`Pushed: {pushed}`" }
 	out = out + f"The run's commit: `{commit}` ({state} when this issue was filed). "
 	return out
 		+ "A `local` commit reaches `develop` only when its batch's suite is green: find it by its subject (`git log -400 --all --grep`); on no branch, it was not pushed, so judge its points from the report and the code as it is.\n"
+		+ drive_improve_quoted(text)
+}
+
+// The report TEXT as a folded block of an issue body, fenced with four
+// backticks so a field's own backticks stay inside it.
+fn drive_improve_quoted(text: String) -> String {
+	return f"\n<details><summary>The run's report</summary>\n\n````text\n{text.trim()}\n````\n\n</details>\n"
+}
+
+// The numbers of the issues filed from the COUNT Founds of the run of NAME,
+// read from DIR/found.txt (`<name>: filed #N`, drive_found_file), in the
+// order of the Founds; empty when not each of them was filed, since a failed
+// call leaves no line and the numbers could not be paired.
+fn drive_filed_numbers(dir: String, name: String, count: int) -> Vec[String] throws {
+	let mut all: Vec[String] = []
+	let prefix = f"{name}: filed #"
+	for line in drive_read(f"{dir}/found.txt").split("\n") {
+		if line.starts_with(prefix) { all.push((line.strip_prefix(prefix) ?? "").trim().clone()) }
+	}
+	let mut out: Vec[String] = []
+	if all.len() < count { return out }
+	for i in all.len() - count..<all.len() { out.push(all[i].clone()) }
+	return out
+}
+
+// The run's Founds for an improvement issue from TEXT, with the issue each
+// was filed as (NUMBERS, drive_filed_numbers, when paired): an item that
+// points at one ("see Found") is then read in the issue itself (#1783:
+// #1749's `Issue:` said "see Found" and the next run had to look the defect
+// up in the report); "" without a Found.
+fn drive_improve_founds(text: String, numbers: Vec[String]) -> String {
+	let founds = drive_founds(text)
+	if founds.len() == 0 { return "" }
+	let mut out = "\n## The run's Found lines\n\nEach is filed as its own issue for the bug lane; an item above that points at a Found means one of these.\n\n"
+	let mut i = 0
+	for f in founds {
+		let filed = if numbers.len() == founds.len() { f" (filed #{numbers[i]})" } else { "" }
+		out = out + f"- Found{filed}: {f}\n"
+		i = i + 1
+	}
+	return out
 }
 
 // The body of an issue filed for the improvement lane from ITEMS of the
 // report of NAME (issue ISSUE): where it came from, the items, where the
-// run's work is (SOURCE, drive_improve_source), a *To build* and a *Done
-// when* for the lane, then the footer.
+// run's Found lines and where its work is (SOURCE, drive_improve_founds and
+// drive_improve_source), a *To build* and a *Done when* for the lane, then
+// the footer.
 fn drive_improve_body(name: String, issue: String, items: Vec[String], source: String) -> String {
 	let from = if issue == "" { f"the run of `{name}`" } else { f"the run of `{name}` (#{issue})" }
 	let mut body = f"Filed by the driver from the report of {from} for the improvement lane (owner, 2026-11-15).\n\n## Reported\n\n"
@@ -2423,7 +2516,9 @@ fn drive_improve_file(dir: String, brief: String) throws {
 	if drive_read(f"{dir}/found.txt").contains(f"{name}: improve #") { return }
 	let issue = drive_issue(brief)
 	let title = drive_improve_title(name.clone(), issue.clone(), items[0].clone())
-	let body = drive_improve_body(name.clone(), issue, items, drive_improve_source(report, text))
+	let numbers = drive_filed_numbers(dir.clone(), name.clone(), drive_founds(text.clone()).len())
+	let founds = drive_improve_founds(text.clone(), numbers)
+	let body = drive_improve_body(name.clone(), issue, items, founds + drive_improve_source(report, text))
 	let number = drive_issue_new(title, body, ["ready", "improve"])
 	if number == "" {
 		println(f"improve file failed for {name}")
@@ -3209,7 +3304,19 @@ fn main() throws {
 		print(drive_found_body(args[2].clone(), args[3].clone(), args[4].clone(), args[5].clone()))
 		return
 	}
-	if args.len() == 5 && args[1] == "--improve-issue" {
+	// Each issue drive_found_file would file from the report REPORT of run
+	// NAME (issue ISSUE): labels, then body (#1769).
+	if args.len() == 5 && args[1] == "--found-issues" {
+		let text = drive_read(args[4].clone())
+		let founds = drive_founds(text.clone())
+		let needs = drive_found_needs(founds.len(), drive_field(text, "Needs"))
+		for found in founds {
+			println(drive_found_labels(found.clone(), needs.clone()).join(","))
+			print(drive_found_body(args[2].clone(), args[3].clone(), found, needs.clone()))
+		}
+		return
+	}
+	if (args.len() == 5 || args.len() == 6) && args[1] == "--improve-issue" {
 		let text = drive_read(args[4].clone())
 		let items = drive_improve_items(text.clone())
 		if items.len() == 0 {
@@ -3220,7 +3327,12 @@ fn main() throws {
 		println("ready,improve")
 		// The report is named by the brief, as the lane directory holds it
 		// (`NAME.md.report.md`), so the output does not carry a temp path.
-		let source = drive_improve_source(f"{args[2]}.md.report.md", text)
+		// A sixth argument names the batch directory whose found.txt holds
+		// the numbers the Founds were filed as (drive_filed_numbers).
+		let mut numbers: Vec[String] = []
+		if args.len() == 6 { numbers = drive_filed_numbers(args[5].clone(), args[2].clone(), drive_founds(text.clone()).len()) }
+		let founds = drive_improve_founds(text.clone(), numbers)
+		let source = founds + drive_improve_source(f"{args[2]}.md.report.md", text)
 		print(drive_improve_body(args[2].clone(), args[3].clone(), items, source))
 		return
 	}

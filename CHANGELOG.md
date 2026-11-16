@@ -8,6 +8,25 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1400] — 2026-11-16
+
+**Builders' changes (#1732, #1744, #1745, #1753, #1760, #1773, #1774, #1775, #1784, #1792, #1793, #1794, #1796, #1801, #1802)**
+- Builders' Found lines name the output a probe should give and the ADR, section or compiler message that says so (#1732)
+- The driver files a report's `Needs: supervisor decision: <gap>` that has no `Found:` line as a `decision` issue, instead of burying the question in the improvement issue.
+- The driver files a report's `Found:` line that says `no decision yet` as a `decision` issue, even when `Needs:` is none.
+- Driver: an `Issue: meets I1-I13` answer is no longer filed as an improvement issue; builder facts name the `text_tiers::` it tests for checker lending changes.
+- `nikaia test --filter 'a|b'` that matches nothing now also says that `--filter` matches plain text and is given once per name.
+- commit.nika warns when a commit changes a rules file and the report's Issue: holds an answer not marked (built), which the driver would file again.
+- nikaia test ends a test program's build after NIKAIA_TEST_BUILD_TIME_LIMIT seconds (default 1800) and fails it as "build timed out after N s", so a build stuck on a Cargo lock names its program instead of hanging the run; a batch build past it is dropped and its programs built alone.
+- nikaia test: a test program's build limit, NIKAIA_TEST_BUILD_TIME_LIMIT, now defaults to ten times NIKAIA_TEST_TIME_LIMIT (3000 s) and 0 sets none; a build that runs out of time says so with a hint to check for another cargo holding the build lock.
+- none (a test only; the fix shipped with 57de760b0)
+- scripts/commit.nika no longer refuses another agent's staged file: it commits only the report's Files:/Partial: through a private index and names the files it left staged
+- Rules: a Found on a lowered-file difference names the commit it ran on and is reproduced by an uncached lower-std of a HEAD copy (docs/issues.md I5, the driver's Found template, builder facts).
+- scripts/commit.nika recognises a report an earlier, interrupted attempt already committed (same subject, listed files unchanged and touched by that commit) and writes its sha into the report instead of refusing.
+- Driver: agent.nika refuses to start or resume a brief while a process still runs its recorded session (a killed driver's claude), rather than put two builders in one session and checkout.
+- Driver: each ESCALATE line ends with the commit of the drive.nika that ran, and docs/issues.md I4c has an issue from a script failure checked against develop before it is filed
+- commit.nika's NOTE about an Issue: answer not marked (built) now also fires when the commit changes a script under scripts/, not only a rules file.
+
 ## [0.0.1399] — 2026-11-16
 
 **Builders' changes (#1677, #N[, #N, #1678, #1665, #N**", #1682, #1685, #1689, #1692, #1698, #1699, #1700, #1704, #1706, #1709, #1710, #1714, #1717, #1722)**
