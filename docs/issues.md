@@ -111,6 +111,9 @@ it, like the checks in `docs/supervisor.md`.
 * **I7. The cause, as far as known**: the file and function, and how sure
   (traced / suspected / unknown). With several shapes of the probe, which were
   traced to that cause.
+  A named function is one `scripts/where.nika -- NAME` finds today; a cause
+  without one says `unknown`, never a guessed name (#1741: #1729 suspected
+  `own_option_containers`, which does not exist).
   A probe that mixes several conditions (outside input, a guard, a call) is
   also run with each one taken away, and the issue says which variant still
   fails: #1571 blamed the outside input, and the guard alone did not prove.
@@ -263,9 +266,12 @@ issue lacked that would have saved it turns or a wrong turn:
 
 `<n>` is looked up in this file before it is written, never recalled: I3
 is plain language and I4 where it belongs; a probe that passes before any
-change is I5, a decision called unbuilt that is built is I6 ("built or text
-only"), an item that is wrong is I9 (#1735: #1527's run answered `wrong I3`
-and `wrong I4` for an I5/I6 and an I9 point; #1708 the same slip).
+change is I5 and so is one that does not parse as written, a decision called
+unbuilt that is built is I6 ("built or text only"), a suspected function
+that does not exist is I7, an item that is wrong is I9 (#1735: #1527's run answered `wrong I3`
+and `wrong I4` for an I5/I6 and an I9 point; #1708 the same slip; #1741:
+#1729's run answered `wrong I3` for a probe that did not parse, I5, and a
+suspected function that does not exist, I7).
 
 A point the run has already closed as noise in its `Body:` (a mislabelled
 rule number a driver-filed issue copied from an earlier report, a slip
