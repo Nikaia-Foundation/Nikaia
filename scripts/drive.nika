@@ -2001,7 +2001,9 @@ fn drive_sweep() -> i64 throws {
 
 // The cleanup after each batch, and before agents start when the disk runs
 // low (#1521): target/debug and target/nikaia-example-tests (the driver uses
-// neither), the sandboxes of dead `nikaia test` runs, and `nikaia cache
+// neither; target/debug is kept while a cargo started in this checkout
+// without `--profile`, `--release` or `--target-dir` runs, a builder's
+// clippy, #1800), the sandboxes of dead `nikaia test` runs, and `nikaia cache
 // prune` on target/nikaia-project-tests at the driver's limit, 2G (the tests'
 // cache is pruned, never removed whole); still under 6 GB after that and with
 // no cargo or rustc building into them, cargo's incremental caches (target/fast and
@@ -2010,11 +2012,23 @@ fn drive_sweep() -> i64 throws {
 fn drive_cleanup(exe: String, dry: bool) throws {
 	drive_say(
 		dry,
-		f"rm -rf target/debug target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free",
+		f"rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free",
 	)
 	if dry { return }
 	let before = drive_free()
-	process::run("rm", ["-rf", "target/debug", "target/nikaia-example-tests"])
+	// A cargo building into target/debug: one whose working directory is in
+	// this checkout and that names no other profile or target directory.
+	let debug_busy = process::run(
+		"sh",
+		["-c", "here=$(pwd -P); for p in $(ps -eo pid=,comm= | awk '$2 == \"cargo\" {print $1}'); do d=$(readlink /proc/$p/cwd) || continue; case \"$d/\" in \"$here\"/*) tr '\\0' ' ' < /proc/$p/cmdline | grep -qE -- '--profile|--release|--target-dir' || echo $p;; esac; done"],
+	).stdout.trim() != ""
+	let mut debug: String = "target/debug"
+	if debug_busy {
+		debug = "target/debug kept (a cargo builds into it)"
+	} else {
+		process::run("rm", ["-rf", "target/debug"])
+	}
+	process::run("rm", ["-rf", "target/nikaia-example-tests"])
 	let swept = drive_sweep()
 	let mut pruned: String = "no cache"
 	if exe != "" && fs::exists("target/nikaia-project-tests", fs::Root::Anywhere) {
@@ -2038,7 +2052,7 @@ fn drive_cleanup(exe: String, dry: bool) throws {
 		incremental = ", target/*/incremental"
 	}
 	let after = drive_free()
-	println(f"CLEANUP freed {after - before} MB, {after} MB free: target/debug, target/nikaia-example-tests, {swept} stale sandboxes, {pruned}{incremental}")
+	println(f"CLEANUP freed {after - before} MB, {after} MB free: {debug}, target/nikaia-example-tests, {swept} stale sandboxes, {pruned}{incremental}")
 }
 
 // Free disk before agents start: under 6 GB the cleanup runs at once, and

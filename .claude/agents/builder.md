@@ -148,7 +148,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   `match` shape had its own cause, found only after a build). Then
   implement all of them and build once. Catch slips without a build:
   Catch Rust slips with `cargo check --release -p nikaia --message-format
-  short` (under a minute). Then **the cycle, as one tool call**, exactly:
+  short` (under a minute). Then **the cycle, as one tool call**, with
+  `run_in_background` and `timeout: 3600000` (the background default ends a
+  cold cycle, one with a re-proving `lower-std` or after a deleted `target/`,
+  before it is done, #1800), exactly:
 
       target/fast/nikaia lower-std 2>&1 | grep -E '^(error|Error)|-->' | head -30; cargo build --profile fast -p nikaia --message-format short 2>&1 | grep -E '^error' | head; target/fast/nikaia lower-std 2>&1 | grep -E '^(error|Error)|-->' | head; git status --short crates/nikaia-std/src/compiler/lowered crates/nikaia-std/src/compiler/lowered.rs
 
