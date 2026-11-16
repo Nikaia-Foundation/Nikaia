@@ -29,7 +29,7 @@ fn main() throws {
         "STOP drive: time limit after 106 min",
         "ESCALATE drive: --max 8 agent runs reached (drive.nika SHA)",
         "ESCALATE CUT b1.md: Result: partial -> SUPERVISOR: the supervisor accepts the report with a Supervisor line or files what it names (drive.nika SHA)",
-        "ESCALATE CUT b1.md: Result: blocked -> SUPERVISOR: the supervisor files or decides what `Found:` names and sets the issue `blocked` on it (drive.nika SHA)",
+        "ESCALATE CUT b1.md: Result: blocked -> SUPERVISOR: the supervisor files or decides what `Found:` names and writes its `#M` under the report's `Needs:`; the driver then drops the brief and blocks the issue until `#M` is closed (drive.nika SHA)",
         "ESCALATE CUT b2.md: brief missing -> SUPERVISOR: the supervisor puts the issue's `#N` line in its place or drops the line from batch.txt (drive.nika SHA)",
         "ESCALATE OWNER b0: which model? (drive.nika SHA)",
         "ESCALATE OWNER second: b1.md: which model? (drive.nika SHA)",

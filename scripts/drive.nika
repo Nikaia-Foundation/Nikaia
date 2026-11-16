@@ -289,7 +289,8 @@ fn drive_wake(dir: String, line: String) throws {
 //     PUSHED    read=-                do=nothing (the driver released, drive_release)
 //     STOP      read=-                do=restart the driver (time limit, --max)
 //     CUT       read=<the report>     do=accept with a Supervisor line, or file it
-//                                     (Result: blocked: file or decide what Found names, block the issue on it;
+//                                     (Result: blocked, never accepted: file or decide what Found names, its #M
+//                                     under the report's Needs:, restart: the driver drops it, drive_queue_prune;
 //                                     brief missing: put an issue's #N line in its place, or drop it)
 //     OWNER     read=<the report>     do=tell the owner (DIR/owner.txt for open ones)
 //     RED       read=DIR/qa-input.txt do=file the fix-forward as a ready issue, its #N line first
@@ -320,7 +321,7 @@ fn drive_wake_line(dir: String, said: String) -> String throws {
 			act = "put the issue's `#N` line in its place or drop the line from batch.txt, then restart the driver"
 		} else if body.contains(": Result: blocked") {
 			read = drive_wake_report(dir, brief)
-			act = "file or decide what `Found:` names, set the issue `blocked` on it, then restart the driver"
+			act = "file or decide what `Found:` names and write its `#M` under the report's `Needs:`, then restart the driver, which drops the brief and blocks the issue until `#M` is closed (#1857)"
 		} else {
 			read = drive_wake_report(dir, brief)
 			act = "accept it with a Supervisor line in the report or file what it names, then restart the driver"
@@ -3551,7 +3552,7 @@ fn drive_found(dir: String, brief: String) -> String throws {
 // (#1887): the work order is the issue, which the driver queues itself.
 fn drive_stop_next(stop: String) -> String {
 	if stop.starts_with("CUT") && stop.contains(": Result: blocked") {
-		return "the supervisor files or decides what `Found:` names and sets the issue `blocked` on it"
+		return "the supervisor files or decides what `Found:` names and writes its `#M` under the report's `Needs:`; the driver then drops the brief and blocks the issue until `#M` is closed"
 	}
 	if stop.starts_with("CUT") && stop.contains(": brief missing") {
 		return "the supervisor puts the issue's `#N` line in its place or drops the line from batch.txt"
@@ -3934,6 +3935,15 @@ fn drive_queue_add(batch: String, numbers: Vec[String]) -> String {
 	return f"{text}\n"
 }
 
+// Moves the report of brief NAME in DIR aside, to the first free
+// `NAME.run<k>.report.md` (the name drive_last_report reads), so the brief
+// runs again once queued again, and its waits still hold it until then.
+fn drive_report_aside(dir: String, name: String) throws {
+	let mut k = 1
+	while fs::exists(f"{dir}/{name}.run{k}.report.md", fs::Root::Anywhere) { k += 1 }
+	process::run("mv", [f"{dir}/{name}.report.md", f"{dir}/{name}.run{k}.report.md"])
+}
+
 // BATCH without the `#N` lines whose N is in CLOSED (the first word of a
 // line, as drive_queue_add reads it).
 fn drive_queue_drop(batch: String, closed: Vec[String]) -> String {
@@ -3958,7 +3968,11 @@ fn drive_queue_drop(batch: String, closed: Vec[String]) -> String {
 // #1682: #1665 was queued, fixed by a commit, then briefed). So does one
 // that waits for an open issue, by its body or its last run ended blocked
 // (`DROPPED #N waits for #M`, drive_waits_of, drive_wait_block; #1819:
-// #1628 was queued again while #1786 and #1634 were open).
+// #1628 was queued again while #1786 and #1634 were open). So does a line
+// whose report ended `Result: blocked` on an open issue it names or the
+// driver filed from its Founds (drive_report_waits), its report moved aside
+// (drive_report_aside), instead of a CUT a Supervisor line cannot clear
+// (#1857).
 fn drive_queue_prune(dir: String) throws {
 	let repo = drive_repo()
 	let path = f"{dir}/batch.txt"
@@ -3977,7 +3991,21 @@ fn drive_queue_prune(dir: String) throws {
 		if n == "" { continue }
 		let mut name = f"issue-{n}"
 		if words.len() > 1 && words[1].trim() != "" { name = name + "-" + words[1].trim().clone() }
-		if fs::exists(f"{dir}/{name}.md.report.md", fs::Root::Anywhere) { continue }
+		let report = f"{dir}/{name}.md.report.md"
+		if fs::exists(report.clone(), fs::Root::Anywhere) {
+			// A run ended blocked on open issues (#1857): dropped, not cut.
+			let mut held: Vec[String] = []
+			for m in drive_report_waits(dir.clone(), f"{name}.md", drive_read(report)) {
+				if m != n && drive_issue_open(m.clone()) { held.push(m) }
+			}
+			let line = drive_waits_line(n.clone(), held.clone(), held)
+			if line != "" {
+				drive_report_aside(dir.clone(), f"{name}.md")
+				blocked.push(tag)
+				blocked_lines.push(line)
+			}
+			continue
+		}
 		let got = process::run("gh", ["api", f"repos/{repo}/issues/{n}", "--jq", ".state + \"\\n\" + (.body // \"\")"])
 		let first: Vec[String] = got.stdout.split("\n").collect()
 		if got.ok && first[0].trim() == "closed" {
@@ -4173,14 +4201,31 @@ fn drive_last_report(dir: String, name: String) -> String throws {
 	return last
 }
 
+// The issues the run of brief NAME (`issue-N[-suffix].md`) in DIR waits for,
+// by its REPORT text: those it names (drive_blocked_on) and, when it ended
+// `Result: blocked`, those the driver filed from its Founds (`<stem>: filed
+// #M` in DIR/found.txt, drive_found_file, drive_filed_numbers; #1857: #1664's
+// gaps were filed as #1848 and #1849 after the report was written, so it
+// named none, and the driver cut on it again after each restart).
+fn drive_report_waits(dir: String, name: String, report: String) -> Vec[String] throws {
+	let mut out = drive_blocked_on(report.clone())
+	if !drive_field(report.clone(), "Result").to_lowercase().starts_with("blocked") { return out }
+	let founds = drive_founds(report)
+	if founds.len() == 0 { return out }
+	for m in drive_filed_numbers(dir, drive_stem(name), founds.len()) {
+		if !out.contains(m.clone()) { out.push(m) }
+	}
+	return out
+}
+
 // What issue N waits for (#1819): the dependencies its BODY names
-// (drive_depends_on) and those its brief's last run in DIR, ended blocked,
-// names (drive_blocked_on), without N itself.
+// (drive_depends_on) and those its brief's last run in DIR waits for
+// (drive_report_waits), without N itself.
 fn drive_waits_of(dir: String, n: String, body: String) -> Vec[String] throws {
 	let mut out = drive_depends_on(body)
-	let report = drive_last_report(dir, f"issue-{n}.md")
+	let report = drive_last_report(dir.clone(), f"issue-{n}.md")
 	if report != "" {
-		for m in drive_blocked_on(drive_read(report)) {
+		for m in drive_report_waits(dir, f"issue-{n}.md", drive_read(report)) {
 			if !out.contains(m.clone()) { out.push(m) }
 		}
 	}

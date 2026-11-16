@@ -320,7 +320,7 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   | :--- | :--- | :--- |
   | `PUSHED` | - | nothing: the driver ran `release.nika` itself (not under `--no-bump`, nor while HEAD holds untested commits: then the next push releases) |
   | `STOP` | - | restart the driver (time limit, `--max` reached) |
-  | `CUT` | the report | accept it with a `Supervisor:` line, or file what it names; restart (`brief missing`: `DIR/batch.txt`, put the issue's `#N` line in its place or drop the line; `Result: blocked`: file or decide what `Found:` names, set the issue `blocked` on it) |
+  | `CUT` | the report | accept it with a `Supervisor:` line, or file what it names; restart (`brief missing`: `DIR/batch.txt`, put the issue's `#N` line in its place or drop the line; `Result: blocked`, which no `Supervisor:` line clears: file or decide what `Found:` names and write its `#M` under the report's `Needs:`; the restarted driver drops the brief and blocks the issue until `#M` is closed, as it does by itself when it filed the Founds, #1857) |
   | `OWNER` | the report (`DIR/owner.txt` for the open questions) | tell the owner the question; restart |
   | `RED` | `DIR/qa-input.txt` (suite red after two QA rounds); - (CI red on `develop`: the line names the jobs) | file the fix-forward as a `ready` issue (the failed jobs, the push's commits) and put its `#N` line first in `DIR/batch.txt` (`batch.nika` writes its brief); restart |
   | `MERGE` | - | merge `origin/develop` by hand and resolve the sources the line names (`merge left open`: finish or abort it now); restart |
