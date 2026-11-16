@@ -286,6 +286,10 @@ it, like the checks in `docs/supervisor.md`.
   probe reduced from the real code: the function and every `ref mut self`
   method of its type, with stub types, kept as the acceptance check; a
   synthetic probe passed while the real code stayed checked (#1470).
+  The reduction keeps the site's control forms: a `match` at the site is
+  a `match` in the probe, never an `if` that stands for it, since each
+  form has its own join in the walk (#1889: #1702's probe was the `if`
+  form, its `sv_check` site a `match`, which had no join at all).
   Such an item also checks for each site that the rule can read the field:
   a `pub` field gets no found bound when its type can be seen from outside
   the package (ADR-306 D22). So the issue lists each site's field as private
