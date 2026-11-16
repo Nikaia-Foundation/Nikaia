@@ -1,0 +1,40 @@
+// `sort_by_key` and `sort_by` on a typed list of numbers hand the lambda the
+// item, not a view of it (#1754): an `if` whose arms are `0 - a` and `a`
+// is one number, and the item is read out with the pattern `&a`.
+
+struct P {
+    x: i64,
+}
+
+fn main() throws {
+    let mut xs: Vec[i64] = [3, 1, 2]
+    xs.sort_by_key(fn(a) { if a > 1 { 0 - a } else { a } })
+    for x in xs {
+        println(x)
+    }
+    xs.sort_by_key(fn(a) { a })
+    xs.sort_by(fn(a, b) { b.compare(a) })
+    for x in xs {
+        println(x)
+    }
+    let mut ar: Array[i64, 3] = [5, 9, 7]
+    ar.sort_by_key(fn(a) { match a > 6 { true => 0 - a, false => a } })
+    for x in ar {
+        println(x)
+    }
+    let mut bs: Vec[u8] = [3, 1, 2]
+    bs.sort_by_key(fn(b) { if b > 1 { b } else { 9 } })
+    for b in bs {
+        println(b)
+    }
+    let mut ss: Vec[String] = ["ccc", "a", "bb"]
+    ss.sort_by_key(fn(s) { s.len() })
+    for s in ss {
+        println(s)
+    }
+    let mut ps: Vec[P] = [P { x: 2 }, P { x: 1 }]
+    ps.sort_by_key(fn(p) { p.x })
+    for p in ps {
+        println(p.x)
+    }
+}
