@@ -184,6 +184,14 @@ it, like the checks in `docs/supervisor.md`.
 * **I7. The cause, as far as known**: the file and function, and how sure
   (traced / suspected / unknown). With several shapes of the probe, which were
   traced to that cause.
+  `traced` means the issue shows the trace: the path followed to the
+  function (a `--bounds-trace`, the lowered line, a stack), and for a cost
+  the instructions counted there (callgrind per function, the
+  disassembly of the named code, `docs/measuring.md`); a cause read off a
+  name, or "not measured further", is `suspected` at most, with the check
+  that would settle it (#1884: #1852 said "traced to the per-call
+  thread_local read, not measured further"; the read was 3-4 inlined
+  instructions, and the program cost less than plain Rust).
   A named function is one `scripts/where.nika -- NAME` finds today; a cause
   without one says `unknown`, never a guessed name (#1741: #1729 suspected
   `own_option_containers`, which does not exist). The file named beside it
