@@ -509,6 +509,12 @@ The score in [`priorities.md`](priorities.md) decides; every brief names its
 score terms in 2-3 lines. Each lane has its own `DIR` with `batch.txt`, its
 own driver run:
 
+* **One lane per session** (owner, 2026-11-17): a main session runs the
+  driver of exactly one lane. When it starts that lane's driver for the
+  first time, it first describes the lane in this list, in two to four lines
+  in the form of the entries here: its `DIR`, its label and what it takes. A
+  lane already described here is not described again. A lane without a
+  session is idle, and its issues wait for one.
 * **Main lane, `docs/briefs/`: self-hosting moves only** (owner, 2026-10-31).
   A batch holds at least two moves; the one exception is a fix-forward for a
   red `develop`. A compiler defect that blocks a move is fixed by the move's
@@ -556,7 +562,8 @@ own driver run:
 lanes of `docs/briefs/focus.txt` (main and bugs) in turn, a block of
 up to `block` briefs each, a `Blocks:` bug brief before any block. `CUT`
 and `RED` stop the driver for the supervisor's next briefs; an area with no
-unrun brief is skipped. `docs/briefs/focus-log.md` holds one line per block.
+unrun brief is skipped. `docs/briefs/focus-log.md` holds one line per block. It
+runs more than one lane, so it is not used (*One lane per session*).
 
 ## Briefs and reports
 
